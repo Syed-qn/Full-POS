@@ -19,6 +19,7 @@ import app.sla.models  # noqa: F401
 import app.coupons.models  # noqa: F401
 import app.cod.models  # noqa: F401
 import app.marketing.models  # noqa: F401
+import app.predictions.models  # noqa: F401
 
 
 @pytest.fixture(scope="session")
