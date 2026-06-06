@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, TimestampMixin
@@ -23,4 +23,4 @@ class Message(Base, TimestampMixin):
     wa_message_id: Mapped[str | None] = mapped_column(String(256), index=True)
     type: Mapped[str] = mapped_column(String(32))
     payload: Mapped[dict] = mapped_column(JSONB)
-    ts: Mapped[int] = mapped_column(Integer, default=0)
+    ts: Mapped[int] = mapped_column(BigInteger, default=0)  # unix epoch — BigInteger avoids 2038 overflow
