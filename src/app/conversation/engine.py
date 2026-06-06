@@ -564,9 +564,16 @@ async def _handle_status_query(
     inbound: InboundMessage,
     restaurant_id: int,
 ) -> None:
-    """Reply to 'where is my order' with the current order status and ETA."""
+    """Reply to 'where is my order' with the current order status and ETA.
+
+    For en-route statuses (assigned / picked_up / arriving) the reply is
+    built by ``build_tracking_reply`` which uses the rider's latest GPS ping
+    and the geo provider to compute a live ETA.
+    """
     from datetime import datetime, timezone
 
+    from app.dispatch.tracking import build_tracking_reply
+    from app.geo.factory import get_geo_provider
     from app.ordering.fsm import OrderStatus
     from app.ordering.models import Customer, Order
 
@@ -610,40 +617,47 @@ async def _handle_status_query(
         )
         return
 
-    status_messages = {
-        str(OrderStatus.DRAFT): "Your order is being assembled.",
-        str(OrderStatus.PENDING_CONFIRMATION): "Your order is waiting for your confirmation.",
-        str(OrderStatus.CONFIRMED): (
-            f"Your order #{order.order_number} is confirmed and will be ready "
-            f"in about 40 minutes."
-        ),
-        str(OrderStatus.PREPARING): (
-            f"Your order #{order.order_number} is being prepared in the kitchen."
-        ),
-        str(OrderStatus.READY): (
-            f"Your order #{order.order_number} is ready and waiting for the rider."
-        ),
-        str(OrderStatus.ASSIGNED): (
-            f"Your order #{order.order_number} has been assigned to a rider."
-        ),
-        str(OrderStatus.PICKED_UP): f"Your order #{order.order_number} is on its way!",
-        str(OrderStatus.ARRIVING): f"Your order #{order.order_number} is arriving shortly!",
-        str(OrderStatus.ON_RESALE): (
-            "Your order was cancelled. Please contact the restaurant for more information."
-        ),
+    _en_route = {
+        str(OrderStatus.ASSIGNED),
+        str(OrderStatus.PICKED_UP),
+        str(OrderStatus.ARRIVING),
     }
-    body = status_messages.get(str(order.status), f"Order status: {order.status}.")
 
-    if order.sla_deadline:
-        remaining = int(
-            (order.sla_deadline - datetime.now(timezone.utc)).total_seconds() / 60
+    if str(order.status) in _en_route:
+        # Delegate to build_tracking_reply for live rider ETA via GPS + geo provider.
+        body = await build_tracking_reply(
+            session, order=order, geo=get_geo_provider()
         )
-        if 0 < remaining <= 40 and str(order.status) in (
-            str(OrderStatus.CONFIRMED),
-            str(OrderStatus.PREPARING),
-            str(OrderStatus.READY),
-        ):
-            body += f" Estimated time remaining: ~{remaining} minutes."
+    else:
+        status_messages = {
+            str(OrderStatus.DRAFT): "Your order is being assembled.",
+            str(OrderStatus.PENDING_CONFIRMATION): "Your order is waiting for your confirmation.",
+            str(OrderStatus.CONFIRMED): (
+                f"Your order #{order.order_number} is confirmed and will be ready "
+                f"in about 40 minutes."
+            ),
+            str(OrderStatus.PREPARING): (
+                f"Your order #{order.order_number} is being prepared in the kitchen."
+            ),
+            str(OrderStatus.READY): (
+                f"Your order #{order.order_number} is ready and waiting for the rider."
+            ),
+            str(OrderStatus.ON_RESALE): (
+                "Your order was cancelled. Please contact the restaurant for more information."
+            ),
+        }
+        body = status_messages.get(str(order.status), f"Order status: {order.status}.")
+
+        if order.sla_deadline:
+            remaining = int(
+                (order.sla_deadline - datetime.now(timezone.utc)).total_seconds() / 60
+            )
+            if 0 < remaining <= 40 and str(order.status) in (
+                str(OrderStatus.CONFIRMED),
+                str(OrderStatus.PREPARING),
+                str(OrderStatus.READY),
+            ):
+                body += f" Estimated time remaining: ~{remaining} minutes."
 
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
