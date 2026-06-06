@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.cod.router import router as cod_router
 from app.config import get_settings
 from app.identity.router import router as identity_router
 from app.menu.router import router as menu_router
@@ -13,6 +14,7 @@ def create_app() -> FastAPI:
     app.include_router(menu_router)
     app.include_router(ordering_router)
     app.include_router(webhook_router)
+    app.include_router(cod_router)
 
     settings = get_settings()
     if settings.whatsapp_provider == "mock":
