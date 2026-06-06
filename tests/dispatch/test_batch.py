@@ -62,3 +62,42 @@ def test_sla_buffer_applied_per_stop():
 
 def test_empty_input_returns_empty():
     assert build_batches([], max_per_batch=MAX_PER_BATCH, proximity_km=1.0) == []
+
+
+def test_priority_order_gets_own_batch():
+    """A priority order must get its own single-order batch even when normal orders are nearby."""
+    priority_order = OrderCandidate(
+        order_id=10,
+        lat=25.2048,
+        lon=55.2708,
+        ready_at=BASE,
+        minutes_elapsed=5.0,
+        priority="priority",
+    )
+    normal_1 = _order(11, 25.2049, 55.2709)  # ~15 m away — would batch with normal
+    normal_2 = _order(12, 25.2050, 55.2710)  # ~30 m away — would batch with normal
+    batches = build_batches(
+        [priority_order, normal_1, normal_2], max_per_batch=MAX_PER_BATCH, proximity_km=1.0
+    )
+    # priority order -> own batch; 2 normal nearby -> 1 batch = 2 total
+    assert len(batches) == 2
+    priority_batch = next(b for b in batches if b.orders[0].order_id == 10)
+    assert len(priority_batch.orders) == 1
+    normal_batch = next(b for b in batches if b.orders[0].order_id != 10)
+    assert len(normal_batch.orders) == 2
+
+
+def test_active_order_count_field_on_order_candidate():
+    """OrderCandidate priority field defaults to 'normal' for backward compat."""
+    oc = _order(99, 25.0, 55.0)
+    assert oc.priority == "normal"
+
+    oc_priority = OrderCandidate(
+        order_id=100,
+        lat=25.0,
+        lon=55.0,
+        ready_at=BASE,
+        minutes_elapsed=3.0,
+        priority="priority",
+    )
+    assert oc_priority.priority == "priority"

@@ -26,7 +26,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
@@ -66,12 +66,27 @@ async def _restaurant_lock(restaurant_id: int):
         yield True
 
 
+async def _active_order_count(session: AsyncSession, rider_id: int) -> int:
+    """Count orders currently assigned to this rider and not yet delivered/cancelled."""
+    result = await session.execute(
+        select(func.count(Order.id)).where(
+            Order.rider_id == rider_id,
+            Order.status.in_(["assigned", "picked_up", "arriving"]),
+        )
+    )
+    return result.scalar_one()
+
+
 async def run_dispatch_engine(
     session: AsyncSession, *, restaurant_id: int
 ) -> DispatchResult:
     """Assign ready orders to nearest available riders. Idempotent per call."""
     async with _restaurant_lock(restaurant_id):
         return await _dispatch(session, restaurant_id)
+
+
+# Alias used by dispatch router (spec §4.3)
+run_dispatch = run_dispatch_engine
 
 
 async def _latest_rider_positions(
@@ -136,6 +151,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             lon=dropoffs.get(o.id, (restaurant.lat, restaurant.lng))[1],
             ready_at=o.updated_at or now,
             minutes_elapsed=0.0,
+            priority=o.priority or "normal",
         )
         for o in ready
     ]
@@ -186,7 +202,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                         restaurant.lat,
                         restaurant.lng,
                     ),
-                    active_orders=0,
+                    active_orders=await _active_order_count(session, rd.id),
                     on_time_pct=float(rd.performance.get("on_time_pct", 100.0)),
                 )
                 for rd in riders

@@ -31,6 +31,7 @@ class OrderCandidate:
     lon: float
     ready_at: datetime
     minutes_elapsed: float  # since sla_confirmed_at
+    priority: str = "normal"  # "normal" | "priority"
 
 
 @dataclass
@@ -79,11 +80,18 @@ def build_batches(
         return []
 
     remaining = sorted(orders, key=lambda o: o.ready_at)
-    batches: list[PlannedBatch] = []
 
-    for order in remaining:
+    # Spec §4.3.2: priority orders bypass batching — each gets its own single-order batch.
+    priority_orders = [o for o in remaining if o.priority != "normal"]
+    normal_orders = [o for o in remaining if o.priority == "normal"]
+    # Priority orders each get a dedicated batch; they are sealed — no normal order joins them.
+    priority_batches: list[PlannedBatch] = [PlannedBatch(orders=[o]) for o in priority_orders]
+    # Normal orders go through proximity logic into their own set of batches.
+    normal_batches: list[PlannedBatch] = []
+
+    for order in normal_orders:
         placed = False
-        for batch in batches:
+        for batch in normal_batches:
             if len(batch.orders) >= max_per_batch:
                 continue
             seed = batch.seed
@@ -102,6 +110,8 @@ def build_batches(
                 placed = True
                 break
         if not placed:
-            batches.append(PlannedBatch(orders=[order]))
+            normal_batches.append(PlannedBatch(orders=[order]))
+
+    batches = priority_batches + normal_batches
 
     return batches
