@@ -1,4 +1,3 @@
-# apps/workers/celery_app.py
 from celery import Celery
 
 from app.config import get_settings
@@ -9,4 +8,11 @@ celery_app = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
 )
-celery_app.conf.update(task_default_queue="default", timezone="Asia/Dubai")
+celery_app.conf.update(
+    task_default_queue="default",
+    timezone="Asia/Dubai",
+    task_routes={
+        "outbox.deliver": {"queue": "outbox"},
+    },
+)
+celery_app.autodiscover_tasks(["app.outbox"], related_name="worker")
