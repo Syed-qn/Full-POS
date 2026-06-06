@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -165,6 +166,32 @@ async def delete_dish(
     await session.delete(dish)
     await session.commit()
     session.expire_all()
+
+
+class AvailabilityIn(BaseModel):
+    is_available: bool
+
+
+@router.patch("/dishes/{dish_id}/availability", response_model=DishOut)
+async def toggle_availability(
+    dish_id: int,
+    body: AvailabilityIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    dish = await session.get(Dish, dish_id)
+    if dish is None or dish.restaurant_id != restaurant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "dish not found")
+    before = {"is_available": dish.is_available}
+    dish.is_available = body.is_available
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant.id, entity="dish",
+        entity_id=str(dish.id), action="availability_toggled",
+        before=before, after={"is_available": body.is_available},
+    )
+    await session.commit()
+    await session.refresh(dish)
+    return dish
 
 
 @router.post("/menus/{menu_id}/activate", response_model=MenuOut)

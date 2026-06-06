@@ -50,3 +50,16 @@ async def test_duplicate_dish_number_409(client, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 409
+
+
+async def test_toggle_availability(client, auth_headers):
+    menu = await _upload(client, auth_headers)
+    await client.post(f"/api/v1/menus/{menu['id']}/activate", headers=auth_headers)
+    dish = menu["dishes"][0]
+
+    resp = await client.patch(
+        f"/api/v1/dishes/{dish['id']}/availability",
+        json={"is_available": False}, headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["is_available"] is False
