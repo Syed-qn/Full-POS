@@ -1,4 +1,3 @@
-import pytest
 from app.llm.fake import FakeDescriber, FakeIntentClassifier, FakeArbiter
 from app.llm.port import DescriberPort, IntentClassifierPort, ArbiterPort
 
@@ -6,7 +5,7 @@ from app.llm.port import DescriberPort, IntentClassifierPort, ArbiterPort
 def test_fake_describer_returns_max_3_lines():
     describer = FakeDescriber()
     result = describer.describe("Chicken Biryani", "Fragrant basmati rice cooked with tender chicken.")
-    lines = [l for l in result.strip().split("\n") if l.strip()]
+    lines = [ln for ln in result.strip().split("\n") if ln.strip()]
     assert 1 <= len(lines) <= 3
 
 
@@ -27,7 +26,6 @@ def test_fake_intent_classifier_returns_known_intent():
 async def test_fake_arbiter_returns_one_of_candidates():
     arbiter = FakeArbiter()
     from decimal import Decimal
-    from app.menu.models import Dish, Menu
     # Create minimal Dish-like objects
     class MockDish:
         dish_number = 110
