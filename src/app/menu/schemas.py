@@ -38,3 +38,14 @@ class DishPatch(BaseModel):
     price_aed: Decimal | None = None
     category: str | None = None
     description: str | None = None
+
+
+class DiffOut(BaseModel):
+    price_changes: list[dict]
+    added: list[dict]
+    removed: list[dict]
+    conflicts: list[dict]
+
+
+class MenuWithDiffOut(MenuOut):
+    diff_vs_active: DiffOut | None = None

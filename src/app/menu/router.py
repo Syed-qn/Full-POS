@@ -7,10 +7,11 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.llm.factory import get_menu_extractor
-from app.llm.port import MenuExtractor, UploadedFile
+from app.llm.port import DishDraft, MenuExtractor, UploadedFile
 from app.menu import service
+from app.menu.diff import diff_menus
 from app.menu.models import Dish, Menu
-from app.menu.schemas import DishIn, DishOut, DishPatch, MenuOut
+from app.menu.schemas import DiffOut, DishIn, DishOut, DishPatch, MenuOut, MenuWithDiffOut
 from app.menu.service import MenuIncompleteError
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
@@ -27,7 +28,7 @@ async def _load_menu(
     return menu
 
 
-@router.post("/menus", response_model=MenuOut, status_code=201)
+@router.post("/menus", response_model=MenuWithDiffOut, status_code=201)
 async def upload_menu(
     files: list[UploadFile],
     restaurant: Restaurant = Depends(current_restaurant),
@@ -43,13 +44,36 @@ async def upload_menu(
         for f in files
     ]
     try:
-        return await service.create_menu_from_upload(
+        menu = await service.create_menu_from_upload(
             session, restaurant_id=restaurant.id, files=uploaded, extractor=extractor
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"menu extraction failed: {exc}")
+    active = await service.get_active_menu(session, restaurant.id)
+    out = MenuWithDiffOut.model_validate(menu)
+    if active is not None and active.id != menu.id:
+        report = diff_menus(
+            active.dishes,
+            [
+                DishDraft(
+                    dish_number=d.dish_number, name=d.name, price_aed=d.price_aed,
+                    category=d.category, description=d.description,
+                )
+                for d in menu.dishes
+            ],
+        )
+        out.diff_vs_active = DiffOut(
+            price_changes=[
+                {**c, "old_price": str(c["old_price"]), "new_price": str(c["new_price"])}
+                for c in report.price_changes
+            ],
+            added=[d.model_dump(mode="json") for d in report.added],
+            removed=report.removed,
+            conflicts=report.conflicts,
+        )
+    return out
 
 
 @router.get("/menus/{menu_id}", response_model=MenuOut)
