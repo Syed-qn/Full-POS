@@ -1,3 +1,5 @@
+import copy
+
 from sqlalchemy import BigInteger, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -25,7 +27,7 @@ class Restaurant(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(255))
     lat: Mapped[float] = mapped_column(Float)
     lng: Mapped[float] = mapped_column(Float)
-    settings: Mapped[dict] = mapped_column(JSONB, default=lambda: dict(DEFAULT_SETTINGS))
+    settings: Mapped[dict] = mapped_column(JSONB, default=lambda: copy.deepcopy(DEFAULT_SETTINGS))
 
 
 class Rider(Base, TimestampMixin):

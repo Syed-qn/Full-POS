@@ -1,9 +1,7 @@
 # tests/conftest.py
 import os
 
-os.environ["APP_DATABASE_URL"] = (
-    "postgresql+asyncpg://app:app@localhost:5433/restaurant_test"
-)
+os.environ.setdefault("APP_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:5433/restaurant_test")
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

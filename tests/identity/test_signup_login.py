@@ -49,3 +49,46 @@ async def test_login_wrong_password_401(client):
 async def test_me_without_token_401(client):
     resp = await client.get("/api/v1/me")
     assert resp.status_code == 401
+
+
+async def test_signup_rejects_out_of_range_coordinates(client):
+    bad = {**SIGNUP, "lat": 999.0}
+    resp = await client.post("/api/v1/auth/signup", json=bad)
+    assert resp.status_code == 422
+
+
+async def test_me_with_expired_token_401(client):
+    import jwt as pyjwt
+    from datetime import datetime, timedelta, timezone
+
+    from app.config import get_settings
+
+    s = get_settings()
+    expired = pyjwt.encode(
+        {"sub": "1", "exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
+        s.jwt_secret.get_secret_value(),
+        algorithm="HS256",
+    )
+    resp = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {expired}"})
+    assert resp.status_code == 401
+
+
+async def test_me_with_wrong_scheme_401(client):
+    resp = await client.get("/api/v1/me", headers={"Authorization": "Token abc123"})
+    assert resp.status_code == 401
+
+
+async def test_me_with_missing_sub_token_401(client):
+    import jwt as pyjwt
+    from datetime import datetime, timedelta, timezone
+
+    from app.config import get_settings
+
+    s = get_settings()
+    token = pyjwt.encode(
+        {"exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
+        s.jwt_secret.get_secret_value(),
+        algorithm="HS256",
+    )
+    resp = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401

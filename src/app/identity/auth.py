@@ -30,6 +30,6 @@ def decode_access_token(token: str) -> int:
     s = get_settings()
     try:
         payload = jwt.decode(token, s.jwt_secret.get_secret_value(), algorithms=[_ALGO])
-    except jwt.PyJWTError as exc:
+        return int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError) as exc:
         raise ValueError("invalid token") from exc
-    return int(payload["sub"])

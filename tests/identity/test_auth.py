@@ -23,3 +23,19 @@ def test_jwt_roundtrip():
 def test_jwt_garbage_rejected():
     with pytest.raises(ValueError):
         decode_access_token("not.a.token")
+
+
+def test_token_missing_sub_rejected():
+    import jwt as pyjwt
+    from datetime import datetime, timedelta, timezone
+
+    from app.config import get_settings
+
+    s = get_settings()
+    token = pyjwt.encode(
+        {"exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
+        s.jwt_secret.get_secret_value(),
+        algorithm="HS256",
+    )
+    with pytest.raises(ValueError):
+        decode_access_token(token)
