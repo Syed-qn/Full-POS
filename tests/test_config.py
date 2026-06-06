@@ -12,4 +12,4 @@ def test_defaults_load_without_env_file():
 def test_env_prefix_overrides(monkeypatch):
     monkeypatch.setenv("APP_JWT_SECRET", "s3cret")
     s = Settings(_env_file=None)
-    assert s.jwt_secret == "s3cret"
+    assert s.jwt_secret.get_secret_value() == "s3cret"

@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,10 +10,10 @@ class Settings(BaseSettings):
     env: str = "dev"
     database_url: str = "postgresql+asyncpg://app:app@localhost:5433/restaurant"
     redis_url: str = "redis://localhost:6380/0"
-    jwt_secret: str = "dev-secret-change-me"
+    jwt_secret: SecretStr = SecretStr("dev-secret-change-me")
     jwt_ttl_minutes: int = 60
     llm_provider: str = "fake"  # fake | claude
-    anthropic_api_key: str = ""
+    anthropic_api_key: SecretStr = SecretStr("")
     claude_model: str = "claude-opus-4-8"
     upload_dir: str = "var/uploads"
 

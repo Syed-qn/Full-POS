@@ -1,7 +1,0 @@
-pyproject.toml
-src/app/__init__.py
-src/restaurant_platform.egg-info/PKG-INFO
-src/restaurant_platform.egg-info/SOURCES.txt
-src/restaurant_platform.egg-info/dependency_links.txt
-src/restaurant_platform.egg-info/requires.txt
-src/restaurant_platform.egg-info/top_level.txt
