@@ -22,3 +22,21 @@ class DishDraft(BaseModel):
 
 class MenuExtractor(Protocol):
     async def extract_menu(self, files: list[UploadedFile]) -> list[DishDraft]: ...
+
+
+class DescriberPort(Protocol):
+    def describe(self, name: str, raw_description: str, price_hint: str | None = None) -> str:
+        """Return ≤3-line customer-facing description. NEVER include price."""
+        ...
+
+
+class IntentClassifierPort(Protocol):
+    def classify(self, text: str) -> str:
+        """Return one of: order_item | dish_question | cancel | modify | status | other."""
+        ...
+
+
+class ArbiterPort(Protocol):
+    async def arbitrate(self, query: str, candidates: list) -> object | None:
+        """Given ambiguous matches, return the single best Dish or None."""
+        ...

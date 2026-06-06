@@ -31,3 +31,39 @@ class FakeExtractor:
 
     async def extract_menu(self, files: list[UploadedFile]) -> list[DishDraft]:
         return list(self._canned) if self._canned is not None else list(_DEFAULT)
+
+
+class FakeDescriber:
+    """Test double: returns a deterministic 1-line description, never includes price."""
+
+    def describe(self, name: str, raw_description: str, price_hint: str | None = None) -> str:
+        # Truncate raw description to 80 chars; strip price-like patterns
+        import re
+        safe = re.sub(r"\b(?:AED|aed|\d+\.\d{2})\b", "", raw_description).strip()
+        return f"{name}. {safe[:80]}"
+
+
+class FakeIntentClassifier:
+    """Test double: rule-based classification for known test phrases."""
+
+    _RULES = [
+        ({"cancel"}, "cancel"),
+        ({"modify", "change"}, "modify"),
+        ({"where", "status", "order"}, "status"),
+        ({"what is", "describe", "tell me about"}, "dish_question"),
+        ({"want", "order", "add", "get"}, "order_item"),
+    ]
+
+    def classify(self, text: str) -> str:
+        lower = text.lower()
+        for keywords, intent in self._RULES:
+            if any(k in lower for k in keywords):
+                return intent
+        return "other"
+
+
+class FakeArbiter:
+    """Test double: always returns the first candidate (deterministic)."""
+
+    async def arbitrate(self, query: str, candidates: list) -> object | None:
+        return candidates[0] if candidates else None

@@ -1,4 +1,5 @@
 import base64
+import re as _re
 
 from anthropic import AsyncAnthropic
 from pydantic import ValidationError
@@ -97,3 +98,88 @@ class ClaudeExtractor:
                 except ValidationError as exc:
                     raise RuntimeError(f"Malformed dish from model: {exc}") from exc
         raise RuntimeError("Claude returned no tool_use block")
+
+
+class ClaudeDescriber:
+    """Production describer via Claude API. Max 3 lines, never includes price."""
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    def describe(self, name: str, raw_description: str, price_hint: str | None = None) -> str:
+        prompt = (
+            f"Write a customer-facing description for this dish:\n"
+            f"Name: {name}\n"
+            f"Details: {raw_description}\n\n"
+            f"Rules: maximum 3 lines, no price, no currency amounts, "
+            f"no 'AED', factual and appetising."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=128,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        # Safety strip — remove any price-like patterns that slipped through
+        safe = _re.sub(r"\b(?:AED|aed|\d+\.\d{2})\b", "", raw).strip()
+        return safe
+
+
+class ClaudeIntentClassifier:
+    """Production intent classifier via Claude API."""
+
+    _VALID = frozenset({"order_item", "dish_question", "cancel", "modify", "status", "other"})
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    def classify(self, text: str) -> str:
+        prompt = (
+            f"Classify this WhatsApp message from a restaurant customer.\n"
+            f"Message: {text!r}\n\n"
+            f"Reply with exactly one word from: "
+            f"order_item, dish_question, cancel, modify, status, other"
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=16,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = message.content[0].text.strip().lower()
+        return result if result in self._VALID else "other"
+
+
+class ClaudeArbiter:
+    """Production arbiter: given ambiguous dish candidates, returns best match."""
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def arbitrate(self, query: str, candidates: list) -> object | None:
+        if not candidates:
+            return None
+        options = "\n".join(
+            f"{i + 1}. {c.dish_number}. {c.name}" for i, c in enumerate(candidates)
+        )
+        prompt = (
+            f"A customer typed: {query!r}\n"
+            f"These menu items might match:\n{options}\n\n"
+            f"Which number (1-{len(candidates)}) is the best match? "
+            f"Reply with just the number, or 0 if none match."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=8,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(candidates):
+                return candidates[idx]
+        except ValueError:
+            pass
+        return None
