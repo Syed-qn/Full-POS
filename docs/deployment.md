@@ -42,7 +42,8 @@ compose network (you do not need to set those two in `.env`).
 |----------|----------|--------|-------|
 | `APP_ENV` | yes | no | Set to `prod`. |
 | `APP_DATABASE_URL` | auto | — | Overridden by compose to `...@db:5432/...`. Only set for non-compose deploys. |
-| `APP_REDIS_URL` | auto | — | Overridden by compose to `redis://redis:6379/0`. |
+| `APP_REDIS_URL` | auto | — | Overridden by compose to `redis://:${REDIS_PASSWORD}@redis:6379/0`. |
+| `REDIS_PASSWORD` | yes | **YES** | Redis auth (broker + backend). Compose fails fast if unset. |
 | `APP_JWT_SECRET` | yes | **YES** | Manager-dashboard JWT signing key. Generate a long random value. |
 | `APP_JWT_TTL_MINUTES` | no | no | Token lifetime (default 60). |
 | `APP_LLM_PROVIDER` | yes | no | `fake` \| `claude`. Use `claude` in prod for menu/ordering AI. |
