@@ -1,0 +1,26 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-default);
+}
+.table td {
+  padding: 0 12px;
+  height: 44px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+.clickable {
+  cursor: pointer;
+}
+.clickable:hover {
+  background: var(--bg-surface-raised);
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px 12px;
+}

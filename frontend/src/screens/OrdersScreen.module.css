@@ -1,0 +1,25 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.filterBar {
+  display: flex;
+  gap: 12px;
+}
+.search {
+  flex: 1;
+  max-width: 320px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--text-primary);
+}
+.search:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+.mono {
+  font-family: var(--font-mono);
+}
