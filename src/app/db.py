@@ -38,3 +38,7 @@ def get_session_factory():
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with get_session_factory()() as session:
         yield session
+
+
+# Convenience alias for Celery workers
+async_session_factory = get_session_factory()
