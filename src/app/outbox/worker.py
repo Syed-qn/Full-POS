@@ -11,9 +11,20 @@ from app.whatsapp.port import OutboundMessage, OutboundMessageType, WhatsAppPort
 logger = logging.getLogger(__name__)
 
 _MAX_ATTEMPTS = 3
+_TASK_MAX_RETRIES = 5
 
 # Statuses a delivery worker must never (re)send.
 _TERMINAL_STATUSES = ("sent", "dead")
+
+
+def _backoff_countdown(retries: int) -> int:
+    """Return countdown seconds: base 10s, doubles each retry (10,20,40,80,160)."""
+    return 10 * (2 ** retries)
+
+
+def _is_permanent_failure(status_code: int) -> bool:
+    """4xx (except 429) = permanent failure; 5xx/network = transient."""
+    return 400 <= status_code < 500 and status_code != 429
 
 
 async def claim_pending_outbox_ids(
@@ -77,13 +88,52 @@ async def _deliver_one(
         await session.commit()
 
 
-@shared_task(name="outbox.deliver", bind=True, max_retries=0)
+async def _mark_dead(outbox_id: int, *, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    """Mark an outbox message as dead (unrecoverable) in the DB."""
+    async with session_factory() as session:
+        row = await session.get(OutboxMessage, outbox_id)
+        if row is not None and row.status not in _TERMINAL_STATUSES:
+            row.status = "dead"
+            row.attempts += 1
+            await session.commit()
+
+
+@shared_task(name="outbox.deliver", bind=True, max_retries=_TASK_MAX_RETRIES)
 def deliver_outbox_message(self, outbox_id: int) -> None:
-    """Celery task: deliver one outbox message via the configured provider."""
+    """Celery task: deliver one outbox message via the configured provider.
+
+    Uses exponential back-off (10s, 20s, 40s, 80s, 160s).  After max_retries
+    the message is marked ``dead`` and no further retries occur.
+    """
     from app.db import async_session_factory
     from app.whatsapp.factory import get_whatsapp_provider
 
     provider = get_whatsapp_provider()
-    asyncio.run(
-        _deliver_one(outbox_id, provider=provider, session_factory=async_session_factory)
-    )
+    try:
+        asyncio.run(
+            _deliver_one(outbox_id, provider=provider, session_factory=async_session_factory)
+        )
+    except Exception as exc:
+        # Check for permanent 4xx failures (not 429) — mark dead immediately.
+        status_code: int | None = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code is not None and _is_permanent_failure(status_code):
+            logger.error(
+                "outbox permanent failure id=%s status=%s — marking dead", outbox_id, status_code
+            )
+            asyncio.run(_mark_dead(outbox_id, session_factory=async_session_factory))
+            return
+
+        # Transient error — retry with exponential back-off or mark dead.
+        if self.request.retries >= _TASK_MAX_RETRIES:
+            logger.error(
+                "outbox max retries reached for id=%s — marking dead", outbox_id
+            )
+            asyncio.run(_mark_dead(outbox_id, session_factory=async_session_factory))
+            return
+
+        countdown = _backoff_countdown(self.request.retries)
+        logger.warning(
+            "outbox transient failure id=%s retries=%s countdown=%ss: %s",
+            outbox_id, self.request.retries, countdown, exc,
+        )
+        raise self.retry(exc=exc, countdown=countdown)
