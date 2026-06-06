@@ -58,6 +58,14 @@ compose network (you do not need to set those two in `.env`).
 | `APP_GEO_PROVIDER` | yes | no | `fake` \| `google_maps`. Use `google_maps` in prod. |
 | `APP_GOOGLE_MAPS_API_KEY` | if `google_maps` | **YES** | Google Maps Distance Matrix key. |
 
+| `APP_CORS_ALLOW_ORIGINS` | no | no | Comma-separated list of allowed CORS origins (e.g. `https://dashboard.yourdomain.com`). Empty = no CORS headers. |
+| `APP_HSTS_ENABLED` | no | no | Set to `true` in prod to add `Strict-Transport-Security` header. Default `false`. |
+| `APP_RATE_LIMIT_ENABLED` | no | no | Enable Redis token-bucket rate limiting on auth + webhook. Default `true`. |
+| `APP_AUTH_RATE_LIMIT` | no | no | Auth endpoint rate limit spec, e.g. `5/minute`. |
+| `APP_WEBHOOK_RATE_LIMIT` | no | no | Webhook endpoint rate limit spec, e.g. `120/minute`. |
+| `APP_WEBHOOK_REPLAY_WINDOW_SECONDS` | no | no | Reject inbound Meta messages older than N seconds. Default `300`. |
+| `APP_LOG_LEVEL` | no | no | Log level (default `info`). |
+
 Compose-level (set in `.env` or shell, not `APP_`-prefixed):
 
 | Variable | Default | Notes |
@@ -158,3 +166,40 @@ via the Docker logging driver.
 Brings the stack up, waits for `api` to be healthy, asserts `/health` returns
 `ok` and the webhook GET handshake echoes the challenge, then tears the stack
 down. See the script header for overridable env vars.
+
+## 9. Metrics
+
+The API exposes Prometheus metrics at **`/metrics`** (plain text, no auth).
+
+> **Important:** Never publish `/metrics` to the internet. Scrape it from inside the cluster only (Prometheus → api:8000/metrics over the compose network).
+
+Ops provisioning at `ops/prometheus/prometheus.yml` and `ops/grafana/dashboards/restaurant-ops.json`.
+
+Key series:
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `http_requests_total` | method, endpoint, status_code | Request count by route template |
+| `http_request_duration_seconds` | method, endpoint | Latency histogram |
+| `outbox_deliveries_total` | status (sent/retry/dead) | Outbox delivery outcomes |
+| `sla_breaches_total` | restaurant_id | 40-min SLA breaches |
+| `rate_limit_rejections_total` | endpoint | Rate-limit 429 rejections |
+
+## 10. Pre-deploy gates
+
+Run these before every production deploy:
+
+```bash
+# 1. Full test suite (deprecation-strict)
+.venv/bin/pytest -W error::DeprecationWarning -q
+
+# 2. Lint
+.venv/bin/ruff check src apps tests
+
+# 3. Migration round-trip
+APP_DATABASE_URL=postgresql+asyncpg://...@db:5432/restaurant_migtest .venv/bin/alembic upgrade head
+.venv/bin/alembic downgrade base && .venv/bin/alembic upgrade head
+
+# 4. Secrets audit (requires prod-level secrets)
+APP_ENVIRONMENT=production .venv/bin/python -m ops.secrets_audit
+```
