@@ -1,0 +1,21 @@
+.tile {
+  min-width: 150px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.delta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

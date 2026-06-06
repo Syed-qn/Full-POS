@@ -1,0 +1,14 @@
+.timer {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  transition: color 400ms ease-out;
+}
+.urgent {
+  font-size: 26px;
+  letter-spacing: 0.04em;
+}
+.breach {
+  animation: pulse-critical 1s infinite;
+}
