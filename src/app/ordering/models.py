@@ -6,10 +6,12 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,6 +21,8 @@ from app.db import Base, TimestampMixin
 
 class Customer(Base, TimestampMixin):
     __tablename__ = "customers"
+    # (restaurant_id, phone) is THE customer-resolution lookup — unique per tenant
+    __table_args__ = (UniqueConstraint("restaurant_id", "phone", name="uq_customers_restaurant_phone"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
@@ -51,6 +55,8 @@ class CustomerAddress(Base, TimestampMixin):
 
 class Order(Base, TimestampMixin):
     __tablename__ = "orders"
+    # open-orders-for-restaurant is the hot dispatch/SLA query path
+    __table_args__ = (Index("ix_orders_restaurant_status", "restaurant_id", "status"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)

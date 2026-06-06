@@ -31,6 +31,10 @@ def include_object(object, name, type_, reflected, compare_to):
     """
     if type_ == "table" and reflected and compare_to is None:
         return False
+    # Same for raw-SQL indexes created in migrations but absent from models
+    # (e.g. GIN trigram ix_dishes_name_normalized_trgm) — don't drop them.
+    if type_ == "index" and reflected and compare_to is None:
+        return False
     return True
 
 
