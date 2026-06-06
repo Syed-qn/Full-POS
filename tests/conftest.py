@@ -20,6 +20,9 @@ import app.ordering.models  # noqa: F401
 async def engine():
     eng = create_async_engine(os.environ["APP_DATABASE_URL"])
     async with eng.begin() as conn:
+        # pg_trgm is created by migrations in prod; schema here is built via
+        # create_all, so install the extension for similarity()-based matching.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield eng
