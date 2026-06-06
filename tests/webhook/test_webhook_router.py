@@ -137,3 +137,33 @@ async def test_post_webhook_duplicate_event_is_ignored(client, db_session):
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     assert len(rows) == 1  # not doubled
+
+
+async def test_post_webhook_dispatches_celery_task(client, db_session):
+    """After successful webhook processing, outbox.deliver must be dispatched."""
+    from unittest.mock import patch
+    from sqlalchemy import select
+    from app.outbox.models import OutboxMessage
+
+    await _seed_restaurant_and_menu(client, db_session)
+
+    dispatched_ids: list[int] = []
+
+    def fake_apply_async(args, kwargs=None, queue=None, **kw):
+        dispatched_ids.append(args[0])
+
+    body, sig = _signed_body(_TEXT_PAYLOAD)
+    with patch(
+        "app.webhook.router.deliver_outbox_message.apply_async",
+        side_effect=fake_apply_async,
+    ):
+        resp = await client.post(
+            "/webhooks/whatsapp",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+        )
+    assert resp.status_code == 200
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].id in dispatched_ids
