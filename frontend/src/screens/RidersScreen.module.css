@@ -1,0 +1,10 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px 0;
+}
