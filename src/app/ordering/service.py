@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
+from app.audit.service import record_audit
 from app.ordering.fsm import OrderStatus
 from app.ordering.fsm import transition as fsm_transition
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
@@ -181,3 +183,150 @@ async def finalize_confirmation(
     order.sla_deadline = now + timedelta(minutes=40)
     order.promised_eta = order.sla_deadline
     await session.flush()
+
+
+# Statuses at/after which the kitchen is locked in — modification is forbidden.
+_NON_MODIFIABLE_STATUSES = {
+    OrderStatus.READY,
+    OrderStatus.ASSIGNED,
+    OrderStatus.PICKED_UP,
+    OrderStatus.ARRIVING,
+    OrderStatus.DELIVERED,
+    OrderStatus.CANCELLED,
+    OrderStatus.UNDELIVERABLE,
+    OrderStatus.ON_RESALE,
+    OrderStatus.RESOLD,
+    OrderStatus.WRITTEN_OFF,
+}
+
+
+async def modify_order(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    new_items: list[dict],
+    actor: str,
+) -> None:
+    """Replace all items on an order, recalculate totals, restart the SLA clock.
+
+    Allowed only before status reaches 'ready' (spec §4.5). Once the customer
+    confirms the modification the 40-minute clock restarts. Caller must commit.
+    """
+    if order.status in _NON_MODIFIABLE_STATUSES:
+        raise ValueError(
+            f"Order modification not allowed at status '{order.status}'. "
+            f"Modifications are blocked once an order reaches 'ready'."
+        )
+
+    before_snapshot = {
+        "status": str(order.status),
+        "subtotal": str(order.subtotal),
+        "total": str(order.total),
+        "sla_deadline": order.sla_deadline.isoformat() if order.sla_deadline else None,
+    }
+
+    existing_items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    for item in existing_items:
+        await session.delete(item)
+    await session.flush()
+
+    subtotal = Decimal("0.00")
+    for entry in new_items:
+        dish = entry["dish"]
+        qty = entry.get("qty", 1)
+        notes = entry.get("notes")
+        item = OrderItem(
+            order_id=order.id,
+            dish_id=dish.id,
+            dish_number=dish.dish_number,
+            dish_name=dish.name,
+            price_aed=dish.price_aed,
+            qty=qty,
+            notes=notes,
+        )
+        session.add(item)
+        subtotal += dish.price_aed * qty
+
+    order.subtotal = subtotal
+    order.total = subtotal + order.delivery_fee_aed
+
+    # Restart the SLA clock after the customer confirms the modification.
+    now = datetime.now(timezone.utc)
+    order.sla_confirmed_at = now
+    order.sla_deadline = now + timedelta(minutes=40)
+    order.promised_eta = order.sla_deadline
+    await session.flush()
+
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=order.restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="order_modified",
+        before=before_snapshot,
+        after={
+            "subtotal": str(order.subtotal),
+            "total": str(order.total),
+            "sla_deadline": order.sla_deadline.isoformat(),
+        },
+    )
+
+
+async def cancel_order(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    actor: str,
+    reason: str | None = None,
+) -> Order | None:
+    """Cancel an order.
+
+    Before cooking (status != preparing) → plain transition to CANCELLED.
+    After cooking started (status == preparing) → transition original to
+    ON_RESALE and create a resale copy carrying an exclusion hash so the same
+    phone/address combination is barred from buying the resold food.
+
+    Returns the resale Order if one was created, else None. Caller must commit.
+    """
+    order.cancellation_reason = reason
+    order.cancelled_at = datetime.now(timezone.utc)
+
+    if order.status == OrderStatus.PREPARING:
+        await fsm_transition(
+            session, order, OrderStatus.ON_RESALE, actor=actor,
+            extra_audit={"reason": reason or ""},
+        )
+
+        customer = await session.get(Customer, order.customer_id)
+        phone = customer.phone if customer else ""
+        addr_id = str(order.address_id or "")
+        exclusion_hash = hashlib.sha256(f"{phone}:{addr_id}".encode()).hexdigest()
+
+        resale = Order(
+            restaurant_id=order.restaurant_id,
+            customer_id=order.customer_id,
+            order_number=f"{order.order_number}-RS",
+            status=OrderStatus.ON_RESALE,
+            priority=order.priority,
+            weather_delay_disclosed=order.weather_delay_disclosed,
+            delivery_fee_aed=order.delivery_fee_aed,
+            subtotal=order.subtotal,
+            total=order.total,
+            address_id=order.address_id,
+            distance_km=order.distance_km,
+            additional_details=order.additional_details,
+            resale_of_order_id=order.id,
+            exclusion_hash=exclusion_hash,
+        )
+        session.add(resale)
+        await session.flush()
+        return resale
+
+    await fsm_transition(
+        session, order, OrderStatus.CANCELLED, actor=actor,
+        extra_audit={"reason": reason or ""},
+    )
+    return None
