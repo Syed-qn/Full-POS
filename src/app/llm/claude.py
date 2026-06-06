@@ -193,3 +193,74 @@ class ClaudeArbiter:
         except ValueError:
             pass
         return None
+
+
+class ClaudeForecastAdjuster:
+    """Production ForecastAdjuster: plain-English override -> parsed_effect DSL.
+
+    Constrained JSON-only output; any parse/API fault degrades to ``{}`` so a
+    malformed manager note never raises into the forecast pipeline.
+    """
+
+    _ALLOWED_HORIZONS = frozenset(
+        {"breakfast", "lunch", "dinner", "midnight", "morning", "evening"}
+    )
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+
+        self._client = _get_anthropic_client()
+
+    def parse_override(self, text: str) -> dict:
+        import json
+
+        prompt = (
+            "A restaurant manager wrote a plain-English forecast override. "
+            "Convert it into a JSON object with these OPTIONAL keys ONLY:\n"
+            '  "horizon": one of breakfast|lunch|dinner|midnight|morning|evening, or null\n'
+            '  "dow": integer 0-6 (Monday=0 .. Sunday=6), or null\n'
+            '  "order_count_delta": integer (default 0)\n'
+            '  "order_count_mult": float (default 1.0)\n'
+            '  "revenue_mult": float (default 1.0)\n'
+            '  "dish_demand_delta": object mapping dish_id string -> integer\n\n'
+            f"Manager note: {text!r}\n\n"
+            "Reply with ONLY the JSON object, no prose. Omit keys you cannot infer."
+        )
+        try:
+            message = self._client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=256,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = _first_text(message).strip()
+            parsed = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return self._sanitise(parsed)
+
+    def _sanitise(self, parsed: dict) -> dict:
+        effect: dict = {}
+        horizon = parsed.get("horizon")
+        if isinstance(horizon, str) and horizon.lower() in self._ALLOWED_HORIZONS:
+            effect["horizon"] = horizon.lower()
+        dow = parsed.get("dow")
+        if isinstance(dow, int) and 0 <= dow <= 6:
+            effect["dow"] = dow
+        if isinstance(parsed.get("order_count_delta"), int):
+            effect["order_count_delta"] = parsed["order_count_delta"]
+        for key in ("order_count_mult", "revenue_mult"):
+            val = parsed.get(key)
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                effect[key] = float(val)
+        dish = parsed.get("dish_demand_delta")
+        if isinstance(dish, dict):
+            cleaned = {
+                str(k): int(v)
+                for k, v in dish.items()
+                if isinstance(v, int) and not isinstance(v, bool)
+            }
+            if cleaned:
+                effect["dish_demand_delta"] = cleaned
+        return effect

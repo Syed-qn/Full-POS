@@ -68,3 +68,88 @@ class FakeArbiter:
 
     async def arbitrate(self, query: str, candidates: list) -> object | None:
         return candidates[0] if candidates else None
+
+
+class FakeForecastAdjuster:
+    """Rule-based ForecastAdjuster test double — no network.
+
+    Scans plain-English override text and emits the parsed_effect DSL.
+    Returns ``{}`` when nothing recognisable is found.
+    """
+
+    _WEEKDAYS = {
+        "monday": 0,
+        "tuesday": 1,
+        "wednesday": 2,
+        "thursday": 3,
+        "friday": 4,
+        "saturday": 5,
+        "sunday": 6,
+    }
+    _HORIZONS = ("breakfast", "lunch", "dinner", "midnight", "morning", "evening")
+
+    def parse_override(self, text: str) -> dict:
+        import re
+
+        lower = text.lower()
+        effect: dict = {}
+
+        for word, dow in self._WEEKDAYS.items():
+            if word in lower:
+                effect["dow"] = dow
+                break
+
+        for horizon in self._HORIZONS:
+            if horizon in lower:
+                effect["horizon"] = horizon
+                break
+
+        if "double" in lower or "twice" in lower:
+            effect["order_count_mult"] = 2.0
+
+        # First integer near an order/extra cue -> order_count_delta.
+        if re.search(r"\b(extra|more|order|orders)\b", lower):
+            match = re.search(r"\b(\d+)\b", lower)
+            if match:
+                effect["order_count_delta"] = int(match.group(1))
+
+        return effect
+
+
+class FakeSegmentCompiler:
+    """Test double: rule-based plain-English -> validated segment DSL.
+
+    Heuristics (spec §4.7): "spend/aed + number" -> total_spend gte; "vip"/tag
+    words -> tag contains; "last N days" -> last_order_days_ago lte N. Emits a
+    top-level "all" tree; the service still calls ``validate_dsl`` before use.
+    """
+
+    def compile(self, text: str) -> dict:
+        import re
+
+        lower = text.lower()
+        conditions: list[dict] = []
+
+        spend = re.search(r"(?:spen\w*|aed|dirham\w*)\D*(\d+)", lower)
+        if not spend:
+            spend = re.search(r"(\d+)\s*(?:aed|dirham)", lower)
+        if spend:
+            conditions.append(
+                {"field": "total_spend", "op": "gte", "value": int(spend.group(1))}
+            )
+
+        days = re.search(r"last\s+(\d+)\s*days?", lower)
+        if days:
+            conditions.append(
+                {"field": "last_order_days_ago", "op": "lte", "value": int(days.group(1))}
+            )
+
+        for tag in ("vip", "regular", "loyal"):
+            if tag in lower:
+                conditions.append({"field": "tag", "op": "contains", "value": tag})
+
+        if not conditions:
+            # Fall back to a benign tag match so output always validates.
+            conditions.append({"field": "tag", "op": "contains", "value": "all"})
+
+        return {"all": conditions}
