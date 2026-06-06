@@ -1,16 +1,54 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+import redis.asyncio as aioredis
 from fastapi import FastAPI
+from fastapi.responses import Response
 
 from app.cod.router import router as cod_router
 from app.config import get_settings
+from app.db import get_engine
 from app.dispatch.router import router as dispatch_router
 from app.identity.router import router as identity_router
 from app.menu.router import router as menu_router
+from app.middleware.security import SecurityHeadersMiddleware
 from app.ordering.router import router as ordering_router
 from app.webhook.router import router as webhook_router
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    redis_conn = None
+
+    # --- startup ---
+    if settings.rate_limit_enabled:
+        from app.ratelimit.bucket import TokenBucketLimiter
+        from app.ratelimit.deps import set_limiter
+
+        redis_conn = await aioredis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_timeout=3,
+        )
+        set_limiter(TokenBucketLimiter(redis_conn))
+
+    yield  # serve requests
+
+    # --- shutdown ---
+    if redis_conn is not None:
+        await redis_conn.aclose()
+
+    engine = get_engine()
+    if engine is not None:
+        await engine.dispose()
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Restaurant WhatsApp Platform")
+    app = FastAPI(title="Restaurant WhatsApp Platform", lifespan=lifespan)
+
+    app.add_middleware(SecurityHeadersMiddleware)
+
     app.include_router(identity_router)
     app.include_router(menu_router)
     app.include_router(ordering_router)
@@ -21,11 +59,13 @@ def create_app() -> FastAPI:
     settings = get_settings()
     if settings.whatsapp_provider == "mock":
         from apps.simulator.router import router as simulator_router
+
         app.include_router(simulator_router)
 
     # Predictions router (P6-T8) — registered when available
     try:
         from app.predictions.router import router as predictions_router
+
         app.include_router(predictions_router)
     except ImportError:
         pass
@@ -33,6 +73,7 @@ def create_app() -> FastAPI:
     # Marketing router (P6-T16) — registered when available
     try:
         from app.marketing.router import router as marketing_router
+
         app.include_router(marketing_router)
     except ImportError:
         pass
@@ -40,6 +81,13 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok"}
+
+    from app.metrics import metrics_response
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        body, content_type = metrics_response()
+        return Response(content=body, media_type=content_type)
 
     return app
 
