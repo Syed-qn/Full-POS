@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -26,10 +26,61 @@ async def simulator_index() -> str:
     return _HTML_PATH.read_text()
 
 
+class ButtonReplyIn(BaseModel):
+    id: str
+    title: str
+
+
+class LocationIn(BaseModel):
+    latitude: float
+    longitude: float
+
+
 class SimulatorSendIn(BaseModel):
     from_phone: str
     restaurant_phone: str
-    text: str
+    text: str | None = None
+    button_reply: ButtonReplyIn | None = None
+    location: LocationIn | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_payload(self) -> "SimulatorSendIn":
+        provided = [
+            field
+            for field, value in (
+                ("text", self.text),
+                ("button_reply", self.button_reply),
+                ("location", self.location),
+            )
+            if value is not None
+        ]
+        if len(provided) != 1:
+            raise ValueError(
+                "exactly one of text, button_reply, location must be provided"
+            )
+        return self
+
+    def to_inbound(self, *, wa_message_id: str) -> InboundMessage:
+        if self.button_reply is not None:
+            mtype = MessageType.BUTTON_REPLY
+            payload = {"id": self.button_reply.id, "title": self.button_reply.title}
+        elif self.location is not None:
+            mtype = MessageType.LOCATION
+            payload = {
+                "latitude": self.location.latitude,
+                "longitude": self.location.longitude,
+            }
+        else:
+            mtype = MessageType.TEXT
+            payload = {"text": self.text}
+        return InboundMessage(
+            wa_message_id=wa_message_id,
+            from_phone=self.from_phone,
+            type=mtype,
+            payload=payload,
+            restaurant_phone=self.restaurant_phone,
+            timestamp=0,
+        )
 
 
 @router.post("/send")
@@ -45,22 +96,15 @@ async def simulator_send(
         raise HTTPException(404, f"no restaurant with phone {body.restaurant_phone}")
 
     wa_id = f"sim-wamid-{uuid.uuid4().hex[:12]}"
+    inbound = body.to_inbound(wa_message_id=wa_id)
     session.add(
         WebhookEvent(
             provider_event_id=wa_id,
-            payload={"simulator": True, "text": body.text},
+            payload={"simulator": True, "type": str(inbound.type), **inbound.payload},
             processed_at=None,
         )
     )
 
-    inbound = InboundMessage(
-        wa_message_id=wa_id,
-        from_phone=body.from_phone,
-        type=MessageType.TEXT,
-        payload={"text": body.text},
-        restaurant_phone=body.restaurant_phone,
-        timestamp=0,
-    )
     await handle_inbound(session, inbound, restaurant_id=restaurant.id)
     await session.commit()
 

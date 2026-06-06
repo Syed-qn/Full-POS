@@ -91,3 +91,85 @@ async def test_simulator_order_dish_gets_confirmation(client, db_session, restau
     messages = msgs_resp.json()
     bodies = [m.get("payload", {}).get("body", "") for m in messages]
     assert any("Chicken Biryani" in b or "110" in b for b in bodies)
+
+
+async def _drive_to_address_capture(client, db_session, restaurant, phone):
+    """hi -> add a dish -> done, leaving the conversation at address_capture."""
+    await _seed_full_menu(db_session, restaurant.id)
+    for text in ("hi", "chicken biryani", "done"):
+        await client.post(
+            "/simulator/send",
+            json={
+                "from_phone": phone,
+                "restaurant_phone": "+97141234567",
+                "text": text,
+            },
+        )
+    await client.get("/simulator/messages")  # drain
+
+
+async def test_simulator_button_reply_reaches_engine(client, db_session, restaurant):
+    """A button_reply payload reaches the engine as a BUTTON_REPLY inbound (200)."""
+    from sqlalchemy import select
+
+    from app.webhook.models import WebhookEvent
+
+    resp = await client.post(
+        "/simulator/send",
+        json={
+            "from_phone": "+971509111010",
+            "restaurant_phone": "+97141234567",
+            "button_reply": {"id": "confirm_order", "title": "Confirm order"},
+        },
+    )
+    assert resp.status_code == 200
+
+    event = (
+        await db_session.execute(
+            select(WebhookEvent).order_by(WebhookEvent.id.desc())
+        )
+    ).scalars().first()
+    assert event.payload["type"] == "button_reply"
+    assert event.payload["id"] == "confirm_order"
+
+
+async def test_simulator_location_drives_address_flow(client, db_session, restaurant):
+    """An in-radius location at address_capture -> bot asks for room/building."""
+    phone = "+971509111011"
+    await _drive_to_address_capture(client, db_session, restaurant, phone)
+
+    resp = await client.post(
+        "/simulator/send",
+        json={
+            "from_phone": phone,
+            "restaurant_phone": "+97141234567",
+            "location": {"latitude": 25.2048, "longitude": 55.2708},
+        },
+    )
+    assert resp.status_code == 200
+
+    messages = (await client.get("/simulator/messages")).json()
+    bodies = [m.get("payload", {}).get("body", "") for m in messages]
+    assert any("room/apartment" in b or "building" in b for b in bodies)
+
+
+async def test_simulator_send_requires_exactly_one_payload(client, db_session, restaurant):
+    """422 when none or multiple of text/button_reply/location are set."""
+    # none
+    resp = await client.post(
+        "/simulator/send",
+        json={"from_phone": "+971509111012", "restaurant_phone": "+97141234567"},
+    )
+    assert resp.status_code == 422
+
+    # multiple
+    resp = await client.post(
+        "/simulator/send",
+        json={
+            "from_phone": "+971509111012",
+            "restaurant_phone": "+97141234567",
+            "text": "hi",
+            "location": {"latitude": 25.2, "longitude": 55.2},
+        },
+    )
+    assert resp.status_code == 422

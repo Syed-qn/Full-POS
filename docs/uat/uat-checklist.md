@@ -44,11 +44,12 @@ cd "Restaurant Whatsapp Service"     # the project folder
 >   <http://localhost:8000/health> shows `{"status":"ok"}`.
 > - Notes: ________________________________________________
 
-> **Note on the simulator (read once):** the simulator is a **text-only** WhatsApp stand-in. It can type
-> messages but it **cannot drop a Google-Maps location pin** and **cannot tap blue reply-buttons**. So in
-> the ordering scenarios you will type the address as text (the comma format) and type button choices as
-> plain words (e.g. type `confirm order`). Distance-based delivery-fee tiers and the >10 km rejection are
-> verified separately in **Scenario E** using the API docs page, because they need a real pin.
+> **Note on the simulator (read once):** the simulator is a WhatsApp stand-in that now supports **tappable
+> reply-buttons** and a **location pin**. When the bot offers blue buttons, tap the matching chip under the
+> bubble (you may still type the choice as words if you prefer). To send a delivery pin, tap the **📍 button**
+> to the left of the message box, enter/keep the latitude & longitude (prefilled `25.2048, 55.2708`), and tap
+> **Send pin**. Distance-based delivery-fee tiers and the >10 km rejection are exercised in **Scenario E** by
+> sending pins at different lat/lng from this same control.
 
 ---
 
@@ -115,15 +116,16 @@ Type each message into the box and press send. Wait ~1–2 seconds for the reply
 | C1 | `hi` | The **digital menu** appears: a categorized list like `110. Chicken Biryani — AED 22`. Never a raw PDF. | [ ] P / [ ] F | |
 | C2 | `110` (a real dish number from your menu) | `Added 1x 110. <name> (AED ..). Reply with more items, or send 'done' ...` | [ ] P / [ ] F | |
 | C3 | `2 111` (quantity 2 of dish 111) | `Added 2x 111. <name> ...` — quantity recognised. | [ ] P / [ ] F | |
-| C4 | `done` | `Great! Please share your delivery location pin, or type your address.` | [ ] P / [ ] F | |
+| C4 | `done` | `Great! Please share your delivery location pin, or type your address.` (a **Share location** button chip also appears.) | [ ] P / [ ] F | |
 | C5 | `101, Tower A` (room, building — comma is required) | `Address noted: room/apartment 101, building Tower A. Who should the rider ask for? ...` | [ ] P / [ ] F | |
 | C6 | `Ahmed` (receiver name) | **Order summary**: item lines with line totals, **Subtotal**, **Delivery fee**, **Total**, `Payment: COD (cash on delivery)`, `ETA: 40 minutes`, and a confirm prompt. | [ ] P / [ ] F | |
-| C7 | Check the math in C6. | Subtotal = sum of (qty × price); Total = Subtotal + Delivery fee. (With the text-address path the fee shows **AED 0** — see note below.) | [ ] P / [ ] F | |
-| C8 | `confirm order` | `Order confirmed! Order #<n>. Total: AED .. (COD ...). Your food will arrive within 40 minutes.` | [ ] P / [ ] F | |
+| C7 | Check the math in C6. | Subtotal = sum of (qty × price); Total = Subtotal + Delivery fee. (Using the **text-address** path the fee shows **AED 0**; using a **pin** the fee follows the distance tiers — see note below.) | [ ] P / [ ] F | |
+| C8 | Tap the **Confirm order** button chip (or type `confirm order`). | `Order confirmed! Order #<n>. Total: AED .. (COD ...). Your food will arrive within 40 minutes.` | [ ] P / [ ] F | |
 
-> **Fee note for C7:** because the simulator cannot drop a map pin, this order has no measured distance, so
-> the fee is **AED 0 (free tier)**. That is expected here. The **distance-based fee tiers** (≤3 km free /
-> 3–5 km AED 5 / >5 km AED 10) and the **>10 km rejection** are verified in **Scenario E**. — Validates §1.
+> **Fee note for C7:** if you typed the address as text (no pin) this order has no measured distance, so the
+> fee is **AED 0 (free tier)** — expected here. To see a non-zero fee, at step C4 send a **pin** instead via
+> the 📍 control. The **distance-based fee tiers** (≤3 km free / 3–5 km AED 5 / >5 km AED 10) and the
+> **>10 km rejection** are exercised in **Scenario E**. — Validates §1.
 
 > Negative-format check (optional): in C5 type an address **without a comma** (e.g. `101 Tower A`). Expected:
 > the bot asks you to include a comma and gives the example. Then re-send with the comma. — Validates §4.2.
@@ -180,18 +182,18 @@ Use the **same** customer phone `+97155000111` and restaurant `+97150000001`.
 | E5 | In the simulator, from a new customer phone, type `hi`. | The menu now renders **without** that dish. Toggling reflects immediately on the next menu. | [ ] P / [ ] F | |
 | E6 | Toggle the same dish back **available**; type `hi` again from a new phone. | The dish reappears in the menu. | [ ] P / [ ] F | |
 
-### E-radius — distance fee tiers + >10 km rejection (needs a real pin, so use /docs)
+### E-radius — distance fee tiers + >10 km rejection (use the simulator 📍 pin control)
 
-The simulator can't send a pin, so inject a location event through the webhook test view. If your tester
-cannot do this comfortably, mark these rows **N/A** and hand them to a technical reviewer — but they MUST
-be checked before go-live.
+Run a normal order (C1–C4). At step C4, instead of typing an address, tap the **📍 control**, enter the
+lat/lng below, and tap **Send pin**. The bot continues to address/receiver and the summary shows the fee for
+that distance. Repeat per row from a fresh phone number.
 
-| # | Step (technical reviewer) | Expected result | Pass/Fail | Notes |
+| # | Step (📍 lat/lng to send) | Expected result | Pass/Fail | Notes |
 |---|---------------------------|-----------------|-----------|-------|
-| E7 | Send the customer a **location** message at ~2 km from the restaurant (lat/lng close to `25.2048, 55.2708`). | Delivery fee on the summary = **AED 0** (≤3 km free). | [ ] P / [ ] F | |
-| E8 | A pin at ~4 km. | Fee = **AED 5** (3–5 km). | [ ] P / [ ] F | |
-| E9 | A pin at ~7 km. | Fee = **AED 10** (>5 km). | [ ] P / [ ] F | |
-| E10 | A pin **>10 km** away. | `Sorry, your location is outside our delivery area (maximum 10 km)...` — order is **not** placed. | [ ] P / [ ] F | |
+| E7 | A pin ~2 km away — keep the prefilled `25.2048, 55.2708`. | Delivery fee on the summary = **AED 0** (≤3 km free). | [ ] P / [ ] F | |
+| E8 | A pin ~4 km away, e.g. `25.2400, 55.2708`. | Fee = **AED 5** (3–5 km). | [ ] P / [ ] F | |
+| E9 | A pin ~7 km away, e.g. `25.2680, 55.2708`. | Fee = **AED 10** (>5 km). | [ ] P / [ ] F | |
+| E10 | A pin **>10 km** away, e.g. `25.3000, 55.2708`. | `Sorry, your location is outside our delivery area (maximum 10 km)...` — order is **not** placed. | [ ] P / [ ] F | |
 
 ---
 
@@ -269,7 +271,7 @@ following are intentionally **not yet present** — testers must not report them
 - **Real WhatsApp & real AI/Maps:** in this test environment the WhatsApp provider is a **Mock** (the
   simulator), the menu AI is the **FakeExtractor**, and geo uses a haversine fallback. No messages are sent
   to real phones and no external AI/Maps calls are made.
-- **Simulator limitations:** the browser simulator is **text-only** — it cannot send a map **location pin**
-  or tap blue reply-**buttons**. Type button choices as words (e.g. `confirm order`, `cancel`). Pin-dependent
-  checks (Scenario E7–E10) require a technical reviewer.
+- **Simulator capabilities:** the browser simulator now supports **tappable reply-button chips** and a
+  **location pin** (📍 control with lat/lng). You can tap button chips or still type the choice as words
+  (e.g. `confirm order`, `cancel`); pin-dependent checks (Scenario E7–E10) run directly in the simulator.
 - **Dashboard gaps:** any screen/control not yet wired in the ~75%-complete dashboard — mark **N/A**, not Fail.
