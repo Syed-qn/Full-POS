@@ -2456,3 +2456,731 @@ git commit -m "feat: coupon service — issue (unique code, 30d expiry) + single
 ```
 
 ---
+
+### Task 14: SLA monitor — yellow/red/breach events, customer + manager alerts, auto-coupon gate
+
+**Files:**
+- Create: `src/app/sla/monitor.py`
+- Create: `tests/sla/test_sla_monitor.py` (extend the existing import-only file from Task 4)
+
+Spec §4.5. `check_sla_deadlines(session, restaurant_id)` scans active (not yet `delivered`/`cancelled`) orders for one restaurant and, based on elapsed time vs `sla_deadline`:
+- **yellow_30** (now ≥ deadline − 10 min, i.e. internal 30-min target reached): create a `SlaEvent(type="yellow_30")` once; dashboard-only (no WhatsApp).
+- **red_35** (now ≥ deadline − 5 min): create `SlaEvent(type="red_35")` once + manager push via outbox + proactive customer "running a little late" message.
+- **breach_40** (now > deadline) on a still-undelivered order: create `SlaEvent(type="breach_40")` once + manager alert.
+- **Late-delivered coupon gate**: when an order reaches `delivered` with `late == True`:
+  - if `weather_delay_disclosed == False` → `issue_coupon` (AED 10 default) + send WhatsApp apology with the coupon code to the customer.
+  - if `weather_delay_disclosed == True` → apology only, NO coupon (spec exception).
+  Each event type is created at most once per order (idempotent via a uniqueness check on `(order_id, type)`).
+
+This is the heartbeat called by the Celery beat task (Task 16).
+
+- [ ] **Step 1: Write the failing tests** (REPLACE the import-only `tests/sla/test_sla_monitor.py` body, keeping the 4 import assertions and adding these)
+
+```python
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from app.sla.monitor import check_sla_deadlines, process_late_delivery
+from app.sla.models import SlaEvent
+from app.coupons.models import Coupon
+from app.identity.models import Restaurant
+from app.ordering.models import Customer, Order
+from app.outbox.models import OutboxMessage
+from sqlalchemy import select
+
+
+async def _seed_order(db_session, *, deadline_offset_min, status="preparing",
+                      weather=False, late=False, delivered=False):
+    r = Restaurant(name="R", phone="+9711112222", password_hash="x",
+                   location_lat=25.2, location_lon=55.2, settings={})
+    db_session.add(r); await db_session.flush()
+    c = Customer(restaurant_id=r.id, phone="+971501010101", name="C",
+                 usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"))
+    db_session.add(c); await db_session.flush()
+    now = datetime.now(timezone.utc)
+    o = Order(restaurant_id=r.id, customer_id=c.id, order_number="O1", status=status,
+              priority="normal", weather_delay_disclosed=weather, late=late,
+              delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("20.00"), total=Decimal("20.00"),
+              dropoff_lat=25.2, dropoff_lon=55.2,
+              sla_deadline=now + timedelta(minutes=deadline_offset_min),
+              delivered_at=now if delivered else None)
+    db_session.add(o); await db_session.commit()
+    return r, c, o
+
+
+async def test_yellow_event_created_at_30(db_session):
+    r, c, o = await _seed_order(db_session, deadline_offset_min=9)  # 31 min elapsed of 40
+    await check_sla_deadlines(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    ev = await db_session.scalar(select(SlaEvent).where(SlaEvent.order_id == o.id))
+    assert ev.type == "yellow_30"
+
+
+async def test_red_event_notifies_manager_and_customer(db_session):
+    r, c, o = await _seed_order(db_session, deadline_offset_min=4)  # 36 min elapsed
+    await check_sla_deadlines(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    types = {e.type for e in (await db_session.scalars(
+        select(SlaEvent).where(SlaEvent.order_id == o.id))).all()}
+    assert "red_35" in types
+    msgs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.restaurant_id == r.id))).all()
+    to = {m.to_phone for m in msgs}
+    assert r.phone in to and c.phone in to
+
+
+async def test_breach_event_created_past_deadline(db_session):
+    r, c, o = await _seed_order(db_session, deadline_offset_min=-1)  # 41 min elapsed
+    await check_sla_deadlines(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    types = {e.type for e in (await db_session.scalars(
+        select(SlaEvent).where(SlaEvent.order_id == o.id))).all()}
+    assert "breach_40" in types
+
+
+async def test_events_idempotent(db_session):
+    r, c, o = await _seed_order(db_session, deadline_offset_min=-1)
+    await check_sla_deadlines(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await check_sla_deadlines(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    breaches = (await db_session.scalars(
+        select(SlaEvent).where(SlaEvent.order_id == o.id, SlaEvent.type == "breach_40"))).all()
+    assert len(breaches) == 1
+
+
+async def test_late_delivery_issues_coupon_when_no_weather(db_session):
+    r, c, o = await _seed_order(db_session, deadline_offset_min=-2,
+                                status="delivered", weather=False, late=True, delivered=True)
+    await process_late_delivery(db_session, order_id=o.id)
+    await db_session.commit()
+    coupon = await db_session.scalar(select(Coupon).where(Coupon.order_id == o.id))
+    assert coupon is not None
+    msg = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == c.phone))
+    assert msg is not None  # apology + code sent
+
+
+async def test_late_delivery_weather_disclosed_no_coupon(db_session):
+    r, c, o = await _seed_order(db_session, deadline_offset_min=-2,
+                                status="delivered", weather=True, late=True, delivered=True)
+    await process_late_delivery(db_session, order_id=o.id)
+    await db_session.commit()
+    coupon = await db_session.scalar(select(Coupon).where(Coupon.order_id == o.id))
+    assert coupon is None  # weather exception suppresses coupon
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/pytest tests/sla/test_sla_monitor.py -v`
+Expected: FAIL — `ImportError: cannot import name 'check_sla_deadlines'`
+
+- [ ] **Step 3: Write implementation**
+
+```python
+# src/app/sla/monitor.py
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.coupons.service import issue_coupon
+from app.identity.models import Restaurant
+from app.ordering.models import Order
+from app.outbox.service import enqueue_message
+from app.sla.models import SlaEvent
+from app.whatsapp.port import OutboundMessageType
+
+LATE_COUPON_AED = Decimal("10.00")
+_ACTIVE_STATUSES = ("confirmed", "preparing", "ready", "assigned", "picked_up", "arriving")
+
+
+async def _event_exists(session: AsyncSession, order_id: int, type_: str) -> bool:
+    return (
+        await session.scalar(
+            select(SlaEvent).where(SlaEvent.order_id == order_id, SlaEvent.type == type_)
+        )
+    ) is not None
+
+
+async def _add_event(session, order, type_, *, notified):
+    if await _event_exists(session, order.id, type_):
+        return False
+    session.add(SlaEvent(
+        order_id=order.id, restaurant_id=order.restaurant_id, type=type_,
+        ts=datetime.now(timezone.utc), notified=notified,
+    ))
+    return True
+
+
+async def check_sla_deadlines(session: AsyncSession, *, restaurant_id: int) -> int:
+    """Scan active orders; emit yellow/red/breach events + notifications. Returns #events."""
+    restaurant = await session.get(Restaurant, restaurant_id)
+    now = datetime.now(timezone.utc)
+    orders = (await session.scalars(
+        select(Order).where(
+            Order.restaurant_id == restaurant_id,
+            Order.status.in_(_ACTIVE_STATUSES),
+            Order.sla_deadline.isnot(None),
+        )
+    )).all()
+
+    created = 0
+    for o in orders:
+        remaining = o.sla_deadline - now
+        if now > o.sla_deadline:
+            if await _add_event(session, o, "breach_40", notified={"manager": True}):
+                created += 1
+                await _alert_manager(session, restaurant, o,
+                                     f"SLA BREACH: order {o.order_number} past 40 min.")
+        elif remaining <= timedelta(minutes=5):
+            if await _add_event(session, o, "red_35",
+                                notified={"manager": True, "customer": True}):
+                created += 1
+                await _alert_manager(session, restaurant, o,
+                                     f"Order {o.order_number} at risk (35 min).")
+                await _notify_customer_late(session, o)
+        elif remaining <= timedelta(minutes=10):
+            if await _add_event(session, o, "yellow_30", notified={}):
+                created += 1
+    return created
+
+
+async def _alert_manager(session, restaurant, order, body):
+    await enqueue_message(
+        session, restaurant_id=restaurant.id, to_phone=restaurant.phone,
+        msg_type=OutboundMessageType.TEXT, payload={"body": body},
+        idempotency_key=f"sla-mgr-{order.id}-{body[:8]}",
+    )
+
+
+async def _notify_customer_late(session, order):
+    customer = await _customer_phone(session, order)
+    if customer is None:
+        return
+    await enqueue_message(
+        session, restaurant_id=order.restaurant_id, to_phone=customer,
+        msg_type=OutboundMessageType.TEXT,
+        payload={"body": "Your order is running a little late — it's on the way, thank you for your patience."},
+        idempotency_key=f"sla-cust-{order.id}",
+    )
+
+
+async def _customer_phone(session, order) -> str | None:
+    from app.ordering.models import Customer
+    c = await session.get(Customer, order.customer_id)
+    return c.phone if c else None
+
+
+async def process_late_delivery(session: AsyncSession, *, order_id: int) -> None:
+    """Called when an order is delivered late. Coupon unless weather was disclosed."""
+    order = await session.get(Order, order_id)
+    if order is None or not order.late:
+        return
+    phone = await _customer_phone(session, order)
+    if order.weather_delay_disclosed:
+        if phone:
+            await enqueue_message(
+                session, restaurant_id=order.restaurant_id, to_phone=phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={"body": "Sorry your order arrived late due to weather conditions. Thank you for understanding."},
+                idempotency_key=f"late-weather-{order.id}",
+            )
+        return
+    coupon = await issue_coupon(
+        session, restaurant_id=order.restaurant_id, customer_id=order.customer_id,
+        order_id=order.id, discount_aed=LATE_COUPON_AED,
+    )
+    order.coupon_id = coupon.id
+    if phone:
+        await enqueue_message(
+            session, restaurant_id=order.restaurant_id, to_phone=phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": (
+                f"Sorry your order was late. Here's AED {LATE_COUPON_AED} off your next order: "
+                f"code {coupon.code}"
+            )},
+            idempotency_key=f"late-coupon-{order.id}",
+        )
+```
+
+NOTE: `process_late_delivery` should be invoked from `dispatch/delivery.py` right after an order transitions to `delivered` with `late == True` (add a call there in this task, or wire it via the SLA worker scanning recently-delivered late orders). Simplest: in `advance_delivery`, after setting `order.late`, `if order.late: await process_late_delivery(session, order_id=order.id)` — import locally to avoid a cycle. Assumes `Order.coupon_id` column exists (spec §3); add via migration if Phase 3 omitted it.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/pytest tests/sla/test_sla_monitor.py -v`
+Expected: all PASS (4 import + 6 behaviour)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/app/sla/monitor.py src/app/dispatch/delivery.py tests/sla/test_sla_monitor.py
+git commit -m "feat: SLA monitor — yellow/red/breach events, proactive alerts, late-coupon gate (weather exception)"
+```
+
+---
+
+### Task 15: Customer live tracking — "Where is my order?" → status + rider ETA
+
+**Files:**
+- Create: `src/app/dispatch/tracking.py` (`build_tracking_reply`)
+- Extend: `src/app/conversation/engine.py` (customer intent: status query → tracking reply)
+- Create: `tests/dispatch/test_tracking.py`
+
+Spec §4.2.9. When a customer asks for their order status, reply with the current FSM-derived human status and, if a rider is assigned and en route, an ETA computed from the rider's live position via the geo provider (`distance_km` + `eta_minutes`, +10-min buffer if the order is batched). ETAs are flagged as estimates when `provider.is_estimate` is True.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/dispatch/test_tracking.py
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from app.dispatch.tracking import build_tracking_reply
+from app.geo.fake import FakeGeoProvider
+from app.identity.models import Restaurant, Rider
+from app.ordering.models import Customer, Order
+
+
+async def _seed(db_session, status, with_rider=True):
+    r = Restaurant(name="R", phone="+9713334444", password_hash="x",
+                   location_lat=25.2, location_lon=55.2, settings={})
+    db_session.add(r); await db_session.flush()
+    rider = None
+    if with_rider:
+        rider = Rider(restaurant_id=r.id, name="Rdr", phone="+971509990003",
+                      status="on_delivery", last_lat=25.2048, last_lon=55.2708,
+                      performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0})
+        db_session.add(rider); await db_session.flush()
+    c = Customer(restaurant_id=r.id, phone="+971502020202", name="C",
+                 usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"))
+    db_session.add(c); await db_session.flush()
+    o = Order(restaurant_id=r.id, customer_id=c.id, order_number="O7", status=status,
+              priority="normal", weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+              subtotal=Decimal("20.00"), total=Decimal("20.00"),
+              rider_id=rider.id if rider else None,
+              dropoff_lat=25.2200, dropoff_lon=55.2900)
+    db_session.add(o); await db_session.commit()
+    return r, c, o, rider
+
+
+async def test_tracking_reply_preparing(db_session):
+    r, c, o, rider = await _seed(db_session, status="preparing", with_rider=False)
+    reply = await build_tracking_reply(db_session, order=o, geo=FakeGeoProvider())
+    assert "prepar" in reply.lower()
+
+
+async def test_tracking_reply_en_route_includes_eta(db_session):
+    r, c, o, rider = await _seed(db_session, status="arriving")
+    reply = await build_tracking_reply(db_session, order=o, geo=FakeGeoProvider())
+    assert "min" in reply.lower()  # ETA present
+
+
+async def test_tracking_reply_delivered(db_session):
+    r, c, o, rider = await _seed(db_session, status="delivered")
+    reply = await build_tracking_reply(db_session, order=o, geo=FakeGeoProvider())
+    assert "deliver" in reply.lower()
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/pytest tests/dispatch/test_tracking.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.dispatch.tracking'`
+
+- [ ] **Step 3: Write `src/app/dispatch/tracking.py`**
+
+```python
+# src/app/dispatch/tracking.py
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dispatch.models import BatchOrder
+from app.geo.port import GeoPort
+from app.identity.models import Rider
+from app.ordering.models import Order
+
+_HUMAN_STATUS = {
+    "draft": "We're still taking your order.",
+    "pending_confirmation": "Waiting for your confirmation.",
+    "confirmed": "Order confirmed — heading to the kitchen.",
+    "preparing": "Your order is being prepared.",
+    "ready": "Your order is ready and waiting for a rider.",
+    "assigned": "A rider has been assigned to your order.",
+    "picked_up": "Your rider has picked up your order.",
+    "arriving": "Your rider is on the way!",
+    "delivered": "Your order has been delivered. Enjoy!",
+    "cancelled": "This order was cancelled.",
+}
+
+
+async def build_tracking_reply(
+    session: AsyncSession, *, order: Order, geo: GeoPort
+) -> str:
+    """Human status line + live rider ETA when en route."""
+    base = _HUMAN_STATUS.get(order.status, "We're processing your order.")
+    if order.status in ("assigned", "picked_up", "arriving") and order.rider_id:
+        rider = await session.get(Rider, order.rider_id)
+        if rider and rider.last_lat is not None and rider.last_lon is not None:
+            dist = geo.distance_km(
+                rider.last_lat, rider.last_lon, order.dropoff_lat, order.dropoff_lon
+            )
+            buffer = 0
+            bo = await session.scalar(
+                select(BatchOrder).where(BatchOrder.order_id == order.id)
+            )
+            if bo is not None:
+                siblings = (await session.scalars(
+                    select(BatchOrder).where(BatchOrder.batch_id == bo.batch_id)
+                )).all()
+                buffer = 10 * max(0, bo.sequence - 1) if len(siblings) > 1 else 0
+            eta = geo.eta_minutes(dist, buffer_minutes=buffer)
+            est = " (estimated)" if getattr(geo, "is_estimate", False) else ""
+            return f"{base} ETA ~{eta} min{est}."
+    return base
+```
+
+- [ ] **Step 4: Wire into `engine.py` customer flow** — when a customer in a post-order state sends a status query (intent "where is my order"), look up their latest active order and reply with `build_tracking_reply`. Minimal hook (keyword match acceptable for this phase; LLM intent parse already exists in Phase 3):
+
+```python
+    # inside customer dispatch, before/after dialogue_state handling:
+    body = (inbound.payload.get("body") or "").lower()
+    if any(k in body for k in ("where", "status", "track", "my order")):
+        from app.dispatch.tracking import build_tracking_reply
+        from app.geo.factory import get_geo_provider
+        from sqlalchemy import select
+        from app.ordering.models import Order
+        order = await session.scalar(
+            select(Order).where(
+                Order.restaurant_id == restaurant_id,
+                Order.customer_id == conv.state.get("customer_id"),
+                Order.status.notin_(("delivered", "cancelled", "draft")),
+            ).order_by(Order.id.desc())
+        )
+        if order is not None:
+            reply = await build_tracking_reply(session, order=order, geo=get_geo_provider())
+            await enqueue_message(
+                session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                msg_type=OutboundMessageType.TEXT, payload={"body": reply},
+                idempotency_key=f"track-{order.id}-{inbound.wa_message_id}",
+            )
+            return
+```
+
+NOTE: `conv.state.get("customer_id")` assumes Phase 3 stores the customer id on the conversation state after an order; if it uses a different key, adapt the lookup (or resolve the customer via phone). Keep behaviour identical.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `.venv/bin/pytest tests/dispatch/test_tracking.py -v`
+Expected: 3 PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/app/dispatch/tracking.py src/app/conversation/engine.py tests/dispatch/test_tracking.py
+git commit -m "feat: customer live tracking — status reply with live rider ETA (+batch buffer, estimate flag)"
+```
+
+---
+
+### Task 16: Celery wiring — dispatch + sla_monitor queues, workers, beat schedule
+
+**Files:**
+- Create: `src/app/dispatch/worker.py` (`dispatch_for_restaurant` task)
+- Create: `src/app/sla/worker.py` (`sla_monitor_tick` beat task)
+- Modify: `apps/workers/celery_app.py` (register tasks, queues, beat schedule, Asia/Dubai tz)
+- Create: `tests/dispatch/test_dispatch_worker.py`, `tests/sla/test_sla_worker.py`
+
+Spec §4.3 (dispatch as Celery task) + §4.5 (heartbeat). Celery timezone is **Asia/Dubai**; DB stays UTC. Workers bridge async services via `asyncio.run` over a fresh session (mirror the Phase 2 outbox worker pattern). Queues: `dispatch`, `sla_monitor`. Beat: `sla_monitor_tick` every 60 s (spec says 30 s; CLAUDE.md/this brief says every minute → use 60 s) iterating all restaurants; dispatch is triggered on demand (order→ready, rider freed) and also swept every 60 s as a safety net.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/dispatch/test_dispatch_worker.py
+def test_dispatch_task_registered():
+    from apps.workers.celery_app import celery_app
+    assert "app.dispatch.worker.dispatch_for_restaurant" in celery_app.tasks
+
+
+def test_dispatch_task_callable_offline(monkeypatch):
+    """Task body runs run_dispatch_engine inside asyncio.run without a broker."""
+    import app.dispatch.worker as w
+    calls = {}
+
+    async def fake_engine(session, *, restaurant_id):
+        calls["rid"] = restaurant_id
+        class R:  # noqa
+            assigned_count = 0
+            unassigned_count = 0
+            needs_retry = False
+        return R()
+
+    monkeypatch.setattr(w, "run_dispatch_engine", fake_engine)
+    monkeypatch.setattr(w, "_session_scope", _fake_session_scope)
+    w.dispatch_for_restaurant.run(restaurant_id=42)
+    assert calls["rid"] == 42
+```
+
+```python
+# tests/sla/test_sla_worker.py
+def test_sla_tick_registered():
+    from apps.workers.celery_app import celery_app
+    assert "app.sla.worker.sla_monitor_tick" in celery_app.tasks
+
+
+def test_beat_schedule_has_sla_tick():
+    from apps.workers.celery_app import celery_app
+    assert any(
+        e["task"] == "app.sla.worker.sla_monitor_tick"
+        for e in celery_app.conf.beat_schedule.values()
+    )
+
+
+def test_celery_timezone_is_dubai():
+    from apps.workers.celery_app import celery_app
+    assert celery_app.conf.timezone == "Asia/Dubai"
+```
+
+For `test_dispatch_task_callable_offline`, add this helper at the top of `tests/dispatch/test_dispatch_worker.py`:
+
+```python
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _fake_session_scope():
+    class _S:
+        async def commit(self): ...
+        async def rollback(self): ...
+    yield _S()
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/pytest tests/dispatch/test_dispatch_worker.py tests/sla/test_sla_worker.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.dispatch.worker'`
+
+- [ ] **Step 3: Write `src/app/dispatch/worker.py`**
+
+```python
+# src/app/dispatch/worker.py
+import asyncio
+from contextlib import asynccontextmanager
+
+from apps.workers.celery_app import celery_app
+from app.dispatch.service import run_dispatch_engine
+
+
+@asynccontextmanager
+async def _session_scope():
+    """Fresh async session for a Celery task. Mirrors outbox worker pattern."""
+    from app.db import async_session_factory
+    async with async_session_factory() as session:
+        yield session
+
+
+@celery_app.task(name="app.dispatch.worker.dispatch_for_restaurant", queue="dispatch")
+def dispatch_for_restaurant(restaurant_id: int) -> dict:
+    async def _run():
+        async with _session_scope() as session:
+            result = await run_dispatch_engine(session, restaurant_id=restaurant_id)
+            await session.commit()
+            return {
+                "assigned": result.assigned_count,
+                "unassigned": result.unassigned_count,
+                "needs_retry": result.needs_retry,
+            }
+    return asyncio.run(_run())
+```
+
+- [ ] **Step 4: Write `src/app/sla/worker.py`**
+
+```python
+# src/app/sla/worker.py
+import asyncio
+
+from sqlalchemy import select
+
+from apps.workers.celery_app import celery_app
+from app.sla.monitor import check_sla_deadlines
+
+
+@celery_app.task(name="app.sla.worker.sla_monitor_tick", queue="sla_monitor")
+def sla_monitor_tick() -> dict:
+    async def _run():
+        from app.db import async_session_factory
+        from app.identity.models import Restaurant
+        total = 0
+        async with async_session_factory() as session:
+            ids = (await session.scalars(select(Restaurant.id))).all()
+            for rid in ids:
+                total += await check_sla_deadlines(session, restaurant_id=rid)
+            await session.commit()
+        return {"events": total, "restaurants": len(ids)}
+    return asyncio.run(_run())
+```
+
+- [ ] **Step 5: Modify `apps/workers/celery_app.py`** — add to the `include` list and config:
+
+```python
+# in the Celery(...) include=[...] list, add:
+    "app.dispatch.worker",
+    "app.sla.worker",
+
+# config block:
+celery_app.conf.timezone = "Asia/Dubai"
+celery_app.conf.enable_utc = True   # store/transport UTC, display Dubai
+celery_app.conf.task_routes = {
+    **celery_app.conf.task_routes,
+    "app.dispatch.worker.*": {"queue": "dispatch"},
+    "app.sla.worker.*": {"queue": "sla_monitor"},
+}
+celery_app.conf.beat_schedule = {
+    **getattr(celery_app.conf, "beat_schedule", {}),
+    "sla-monitor-every-minute": {
+        "task": "app.sla.worker.sla_monitor_tick",
+        "schedule": 60.0,
+    },
+}
+```
+
+If `async_session_factory` is not the exact symbol exported by `app.db`, use whatever the project exposes (e.g. `get_sessionmaker()` or `AsyncSessionLocal`); the outbox worker from Phase 2 shows the canonical pattern — copy it.
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run: `.venv/bin/pytest tests/dispatch/test_dispatch_worker.py tests/sla/test_sla_worker.py -v`
+Expected: 6 PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/app/dispatch/worker.py src/app/sla/worker.py apps/workers/celery_app.py \
+        tests/dispatch/test_dispatch_worker.py tests/sla/test_sla_worker.py
+git commit -m "feat: Celery dispatch + sla_monitor queues, sla beat (60s), Asia/Dubai tz"
+```
+
+---
+
+### Task 17: Dispatch trigger router + full suite + smoke test
+
+**Files:**
+- Create: `src/app/dispatch/router.py`
+- Modify: `src/app/main.py` (register dispatch router)
+- Create: `tests/dispatch/test_dispatch_router.py`
+
+Manager manual trigger (spec §4.8 dashboard "live dispatch map"): `POST /api/v1/dispatch/trigger` enqueues the dispatch Celery task for the authenticated restaurant (so the dashboard can force a re-run).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/dispatch/test_dispatch_router.py
+async def test_trigger_endpoint_enqueues(async_client, auth_headers, monkeypatch):
+    sent = {}
+    import app.dispatch.router as r
+    monkeypatch.setattr(
+        r.dispatch_for_restaurant, "delay",
+        lambda restaurant_id: sent.setdefault("rid", restaurant_id),
+    )
+    resp = await async_client.post("/api/v1/dispatch/trigger", headers=auth_headers)
+    assert resp.status_code == 202
+    assert "rid" in sent
+```
+
+NOTE: reuse the project's existing auth fixtures (`async_client`, `auth_headers`) from Phase 0/1 conftest; if their names differ, adapt.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/pytest tests/dispatch/test_dispatch_router.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.dispatch.router'`
+
+- [ ] **Step 3: Write `src/app/dispatch/router.py`**
+
+```python
+# src/app/dispatch/router.py
+from fastapi import APIRouter, Depends, status
+
+from app.dispatch.worker import dispatch_for_restaurant
+from app.identity.deps import current_restaurant
+
+router = APIRouter(prefix="/api/v1/dispatch", tags=["dispatch"])
+
+
+@router.post("/trigger", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_dispatch(restaurant=Depends(current_restaurant)):
+    """Manager manual re-run of the dispatch engine for their restaurant."""
+    dispatch_for_restaurant.delay(restaurant_id=restaurant.id)
+    return {"status": "queued", "restaurant_id": restaurant.id}
+```
+
+Register in `src/app/main.py`: `app.include_router(dispatch_router)`.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `.venv/bin/pytest tests/dispatch/test_dispatch_router.py -v`
+Expected: 1 PASS
+
+- [ ] **Step 5: Run the FULL suite**
+
+Run: `.venv/bin/pytest`
+Expected: ALL PASS (Phase 0–4). If anything regressed (e.g. engine refactor in Tasks 10/15 broke Phase 2/3 tests), fix forward — keep customer-flow behaviour identical.
+
+- [ ] **Step 6: Lint**
+
+Run: `.venv/bin/ruff check src apps tests`
+Expected: clean (fix imports/unused).
+
+- [ ] **Step 7: Smoke test — end-to-end logistics path**
+
+```bash
+# DB up + schema applied
+docker compose up -d
+.venv/bin/alembic upgrade head
+
+# boot API
+.venv/bin/uvicorn app.main:app --port 8000 &
+sleep 2
+curl -s http://localhost:8000/health
+
+# manual dispatch trigger (needs a manager JWT from your auth flow)
+# curl -s -X POST http://localhost:8000/api/v1/dispatch/trigger -H "Authorization: Bearer <JWT>"
+kill %1
+
+# Celery worker + beat smoke (Ctrl-C after a tick)
+.venv/bin/celery -A apps.workers.celery_app:celery_app worker -Q dispatch,sla_monitor --loglevel=info &
+.venv/bin/celery -A apps.workers.celery_app:celery_app beat --loglevel=info &
+sleep 5
+# expect: beat schedules sla_monitor_tick; worker logs "events": N
+kill %1 %2 2>/dev/null || true
+```
+
+Expected: `{"status":"ok"}`; worker registers `dispatch` + `sla_monitor` queues; beat fires `sla_monitor_tick` once.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/app/dispatch/router.py src/app/main.py tests/dispatch/test_dispatch_router.py
+git commit -m "feat: dispatch manual-trigger endpoint + Phase 4 full-suite & smoke green"
+```
+
+- [ ] **Step 9: Update `understanding.txt`** with a dated bullet summarizing Phase 4 completion.
+
+---
+
+## Post-phase
+
+Phase 4 done = the full **logistics & dispatch layer** is live and tested end-to-end:
+
+- **Geo** — `GeoPort` protocol with a haversine-backed `FakeGeoProvider` (static 25 km/h, `is_estimate=True`) and a `GoogleMapsGeoProvider` stub that degrades gracefully to haversine; canonical `delivery_fee_aed` tier calculator (≤3 km free / ≤5 km AED 5 / ≤10 km AED 10 / >10 km `OutOfRadiusError`).
+- **Dispatch engine** — assigns the nearest available rider (composite score = distance + workload + on-time %, persisted to `assignments.algorithm_score` for explainability); riders are employees with **no accept/reject**; no available riders → manager alerted via outbox and orders stay `ready` for retry; per-restaurant Redis lock (best-effort).
+- **Batching** — greedy proximity grouping, **max 3 orders / 10-min readiness window**, +10-min SLA buffer per additional stop.
+- **Delivery FSM** — `assigned → picked_up → arriving → delivered` (spec §3 strings only), audited on every transition; final delivery frees the rider and completes the batch.
+- **Rider WhatsApp flow** — conversations routed by `counterpart="rider"`; live **location pings** update `rider.last_lat/last_lon/last_seen_at` + `rider_locations` time series + Redis GEO hot copy; **"Orders Picked"** and **"Delivered / Collect money & delivered"** buttons drive the FSM, capture COD, and reveal the next-stop nav link (button-only flow integrity).
+- **SLA monitor** — Celery-beat heartbeat (every 60 s, Asia/Dubai tz) emits idempotent `yellow_30 / red_35 / breach_40` events, pushes proactive customer + manager messages, and on late delivery **auto-issues an AED 10 apology coupon — except when a weather delay was disclosed at order time**.
+- **COD ledger** — idempotent `cod_collections` per delivered order + end-of-shift `rider_shift_reconciliations` (expected vs collected → variance/status), exposed via `GET /api/v1/cod/shift/{rider_id}`.
+- **Coupons** — single-use codes, 30-day expiry, audited issue + redeem.
+- **Customer live tracking** — "Where is my order?" → human status + live rider ETA (geo provider, +batch buffer, estimate flag).
+- **Wiring** — `dispatch` + `sla_monitor` Celery queues, `dispatch_for_restaurant` on-demand task, `sla_monitor_tick` beat, and a manager `POST /api/v1/dispatch/trigger` endpoint.
+
+New tables shipped: `batches`, `batch_orders`, `rider_locations`, `assignments`, `sla_events`, `coupons`, `cod_collections`, `rider_shift_reconciliations` — plus `orders.rider_id`, `riders.performance`, and (where Phase 3 omitted them) rider position columns and `orders.coupon_id`. All TimestampMixin tables carry `trg_<table>_updated_at` triggers and `restaurant_id` for multi-tenancy.
+
+**Next plan: Phase 5 — Predictions (LightGBM demand + LLM context adjustment) and Marketing automation (recurring promos, Today's Special templates, Klaviyo-style segments/automations).**
