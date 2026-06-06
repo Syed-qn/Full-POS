@@ -14,7 +14,7 @@ def get_geo_provider() -> GeoPort:
     """
     settings = get_settings()
     if settings.geo_provider == "google_maps":
-        if not settings.google_maps_api_key:
+        if not settings.google_maps_api_key.get_secret_value():
             raise ValueError(
                 "geo_provider='google_maps' requires APP_GOOGLE_MAPS_API_KEY"
             )

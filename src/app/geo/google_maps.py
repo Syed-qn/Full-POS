@@ -25,7 +25,7 @@ class GoogleMapsGeoProvider:
     def __init__(self) -> None:
         from app.config import get_settings
 
-        self._api_key = get_settings().google_maps_api_key
+        self._api_key = get_settings().google_maps_api_key.get_secret_value()
         self.is_estimate: bool = False  # flipped to True on API failure
 
     def distance_km(

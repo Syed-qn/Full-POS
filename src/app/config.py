@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Geo
     geo_provider: str = "fake"  # fake | google_maps
-    google_maps_api_key: str = ""
+    google_maps_api_key: SecretStr = SecretStr("")
 
 
 @lru_cache
