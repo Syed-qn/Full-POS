@@ -1,3 +1,14 @@
+async def test_upload_rejects_oversized_file(client, auth_headers):
+    """Files > 5 MB should be rejected with 413."""
+    big_content = b"x" * (6 * 1024 * 1024)  # 6 MB
+    resp = await client.post(
+        "/api/v1/menus",
+        files=[("files", ("big.jpg", big_content, "image/jpeg"))],
+        headers=auth_headers,
+    )
+    assert resp.status_code == 413
+
+
 async def test_upload_menu_returns_drafts(client, auth_headers):
     files = [("files", ("menu.jpg", b"\xff\xd8\xff fake", "image/jpeg"))]
     resp = await client.post("/api/v1/menus", files=files, headers=auth_headers)

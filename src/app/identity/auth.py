@@ -1,20 +1,27 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from app.config import get_settings
 
-_pwd = CryptContext(schemes=["argon2"], deprecated="auto")
+# argon2id with argon2-cffi's OWASP-acceptable defaults. Produces and verifies
+# the same "$argon2id$" PHC strings the previous passlib backend emitted, so
+# existing stored password hashes keep verifying unchanged.
+_ph = PasswordHasher()
 _ALGO = "HS256"
 
 
 def hash_password(plain: str) -> str:
-    return _pwd.hash(plain)
+    return _ph.hash(plain)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd.verify(plain, hashed)
+    try:
+        return _ph.verify(hashed, plain)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
 
 
 def create_access_token(restaurant_id: int) -> str:

@@ -1,3 +1,5 @@
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +16,8 @@ from app.menu.schemas import AvailabilityIn, DiffOut, DishIn, DishOut, DishPatch
 from app.menu.service import MenuIncompleteError
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 async def _load_menu(
@@ -34,14 +38,24 @@ async def upload_menu(
     session: AsyncSession = Depends(get_session),
     extractor: MenuExtractor = Depends(get_menu_extractor),
 ):
-    uploaded = [
-        UploadedFile(
-            filename=f.filename or "file",
-            content=await f.read(),
-            mime=f.content_type or "application/octet-stream",
+    uploaded = []
+    for f in files:
+        content = await f.read()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                f"File '{f.filename}' exceeds maximum size of "
+                f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
+            )
+        # Rewind so downstream readers (if any) can re-read
+        f.file = io.BytesIO(content)
+        uploaded.append(
+            UploadedFile(
+                filename=f.filename or "file",
+                content=content,
+                mime=f.content_type or "application/octet-stream",
+            )
         )
-        for f in files
-    ]
     try:
         menu, report = await service.upload_with_diff(
             session, restaurant_id=restaurant.id, files=uploaded, extractor=extractor

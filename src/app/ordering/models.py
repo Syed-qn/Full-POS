@@ -68,6 +68,9 @@ class Order(Base, TimestampMixin):
     address_id: Mapped[int | None] = mapped_column(ForeignKey("customer_addresses.id"))
     additional_details: Mapped[str | None] = mapped_column(Text)
 
+    # Dispatch (Phase 4): nullable until the dispatch engine assigns a rider.
+    rider_id: Mapped[int | None] = mapped_column(ForeignKey("riders.id"), index=True)
+
     subtotal: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     delivery_fee_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     total: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))

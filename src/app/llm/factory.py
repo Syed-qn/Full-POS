@@ -53,3 +53,23 @@ def get_arbiter():
         return ClaudeArbiter()
     from app.llm.fake import FakeArbiter
     return FakeArbiter()
+
+
+def get_forecast_adjuster():
+    """FastAPI/test dependency — returns FakeForecastAdjuster or ClaudeForecastAdjuster."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeForecastAdjuster
+        return ClaudeForecastAdjuster()
+    from app.llm.fake import FakeForecastAdjuster
+    return FakeForecastAdjuster()
+
+
+def get_segment_compiler():
+    """FastAPI/test dependency — returns FakeSegmentCompiler or ClaudeSegmentCompiler."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeSegmentCompiler
+        return ClaudeSegmentCompiler()
+    from app.llm.fake import FakeSegmentCompiler
+    return FakeSegmentCompiler()

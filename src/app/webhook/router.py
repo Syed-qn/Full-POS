@@ -10,8 +10,8 @@ from app.config import get_settings
 from app.conversation.engine import handle_inbound
 from app.db import get_session
 from app.identity.models import Restaurant
-from app.outbox.models import OutboxMessage
-from app.outbox.worker import deliver_outbox_message
+from app.outbox.worker import claim_pending_outbox_ids, deliver_outbox_message
+from app.ratelimit.deps import rate_limit_webhook
 from app.webhook.models import WebhookEvent
 from app.webhook.normalizer import parse_cloud_payload
 
@@ -40,6 +40,7 @@ async def verify_webhook(request: Request) -> Response:
 async def receive_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    _rl: None = Depends(rate_limit_webhook),
 ) -> dict:
     """Receive inbound WhatsApp events from Meta (or simulator)."""
     body_bytes = await request.body()
@@ -91,19 +92,20 @@ async def receive_webhook(
 
         try:
             await handle_inbound(session, inbound, restaurant_id=restaurant.id)
+
+            # Atomically claim this conversation's pending outbox rows
+            # (pending -> dispatching) BEFORE committing so concurrent webhooks
+            # racing the same rows can't double-dispatch to the customer. Only
+            # the winning transaction gets the ids back; losers claim nothing.
+            claimed_ids = await claim_pending_outbox_ids(
+                session,
+                to_phone=inbound.from_phone,
+                restaurant_id=restaurant.id,
+            )
             await session.commit()
 
-            pending_rows = (
-                await session.execute(
-                    select(OutboxMessage).where(
-                        OutboxMessage.status == "pending",
-                        OutboxMessage.to_phone == inbound.from_phone,
-                        OutboxMessage.restaurant_id == restaurant.id,
-                    )
-                )
-            ).scalars().all()
-            for outbox_row in pending_rows:
-                deliver_outbox_message.apply_async(args=[outbox_row.id], queue="outbox")
+            for outbox_id in claimed_ids:
+                deliver_outbox_message.apply_async(args=[outbox_id], queue="outbox")
 
         except IntegrityError:
             await session.rollback()

@@ -1,5 +1,14 @@
 from decimal import Decimal
 
+# Canonical spec primitive lives in app.geo.fees (single source of truth for the
+# fixed spec tiers + 10 km radius rejection). Re-exported here so callers that
+# only need the spec default can import from either place without divergence.
+from app.geo.fees import (  # noqa: F401
+    MAX_RADIUS_KM,
+    OutOfRadiusError,
+    delivery_fee_aed,
+)
+
 _DEFAULT_TIERS = [
     {"max_km": 3.0, "fee": "0.00"},
     {"max_km": 5.0, "fee": "5.00"},

@@ -17,9 +17,9 @@ describe("sla", () => {
 
   it.each([
     [0, "safe"],
-    [24, "safe"],
-    [26, "warn"], // 14 min remaining
-    [31, "critical"], // 9 min remaining
+    [29, "safe"], // 11 min remaining
+    [31, "warn"], // 9 min remaining (10–5 min band per brief)
+    [36, "critical"], // 4 min remaining (last 5 min per brief)
     [40, "breach"],
     [42, "breach"],
   ])("slaTier at %i min elapsed = %s", (mins, tier) => {

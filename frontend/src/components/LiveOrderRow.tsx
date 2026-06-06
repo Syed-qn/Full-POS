@@ -17,6 +17,12 @@ export function LiveOrderRow({
     <div
       className={`${s.row} ${isNew ? s.new : ""}`}
       onClick={() => onOpen(order.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(order.id);
+        }
+      }}
       role="button"
       tabIndex={0}
     >

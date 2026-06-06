@@ -42,4 +42,32 @@ describe("apiClient", () => {
     });
     await expect(apiClient.post("/api/v1/auth/login", {})).rejects.toBeInstanceOf(ApiError);
   });
+
+  it("clears stored token and redirects to /login on 401", async () => {
+    localStorage.setItem("ops_token", "tok-expired");
+    const assign = vi.fn();
+    vi.stubGlobal("location", { pathname: "/orders", assign });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "token expired" }), { status: 401 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiClient.get("/api/v1/me")).rejects.toBeInstanceOf(ApiError);
+
+    expect(localStorage.getItem("ops_token")).toBeNull();
+    expect(assign).toHaveBeenCalledWith("/login");
+  });
+
+  it("does not redirect on 401 when already on /login (no loop)", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { pathname: "/login", assign });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "bad credentials" }), { status: 401 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiClient.post("/api/v1/auth/login", {})).rejects.toBeInstanceOf(ApiError);
+
+    expect(assign).not.toHaveBeenCalled();
+  });
 });

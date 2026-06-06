@@ -1,0 +1,50 @@
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  height: 100%;
+}
+.list {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  overflow-y: auto;
+}
+.viewer {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.viewerHead {
+  display: flex;
+  justify-content: flex-end;
+}
+.thread {
+  flex: 1;
+  overflow-y: auto;
+}
+.composer {
+  display: flex;
+  gap: 8px;
+}
+.input {
+  flex: 1;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--text-primary);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px;
+}

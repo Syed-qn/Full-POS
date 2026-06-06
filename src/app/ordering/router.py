@@ -1,6 +1,5 @@
 # src/app/ordering/router.py
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -8,6 +7,7 @@ from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.ordering.models import Order
 from app.ordering.schemas import OrderOut
+from app.ordering.service import get_order_for_tenant, list_orders_for_tenant
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -18,11 +18,8 @@ async def get_order(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> Order:
-    order = await session.scalar(
-        select(Order).where(
-            Order.id == order_id,
-            Order.restaurant_id == restaurant.id,
-        )
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -36,8 +33,6 @@ async def list_orders(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[Order]:
-    q = select(Order).where(Order.restaurant_id == restaurant.id)
-    if status:
-        q = q.where(Order.status == status)
-    q = q.order_by(Order.created_at.desc()).limit(limit)
-    return list((await session.scalars(q)).all())
+    return await list_orders_for_tenant(
+        session, restaurant_id=restaurant.id, status=status, limit=limit
+    )

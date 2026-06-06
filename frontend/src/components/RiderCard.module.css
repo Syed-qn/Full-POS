@@ -1,0 +1,43 @@
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stale {
+  border-color: var(--sla-warn);
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.status {
+  font-size: 12px;
+  font-weight: 500;
+}
+.staleBadge {
+  align-self: flex-start;
+  font-size: 10px;
+  color: var(--sla-warn);
+  border: 1px solid var(--sla-warn);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.loc,
+.stats {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}

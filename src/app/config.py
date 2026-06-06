@@ -23,10 +23,23 @@ class Settings(BaseSettings):
     wa_access_token: SecretStr = SecretStr("")
     wa_phone_number_id: str = ""
     wa_app_secret: SecretStr = SecretStr("")
+    wa_business_account_id: str = ""  # WABA id for message-template management
+
+    # Marketing
+    marketing_send_dry_run: bool = True  # safe default — no real Meta calls
+    marketing_template_provider: str = "mock"  # mock | meta
 
     # Geo
     geo_provider: str = "fake"  # fake | google_maps
     google_maps_api_key: SecretStr = SecretStr("")
+
+    # Predictions
+    forecast_provider: str = "rolling"  # rolling | fake
+
+    # Rate limiting (redis token bucket)
+    rate_limit_enabled: bool = True
+    auth_rate_limit: str = "5/minute"
+    webhook_rate_limit: str = "120/minute"
 
 
 @lru_cache

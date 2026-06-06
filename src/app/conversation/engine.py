@@ -651,17 +651,79 @@ async def _handle_status_query(
     )
 
 
+async def _resolve_counterpart(
+    session: AsyncSession, restaurant_id: int, phone: str
+):
+    """Return ("rider", rider) if the phone is a rider for this tenant, else ("customer", None)."""
+    from app.identity.models import Rider
+
+    rider = await session.scalar(
+        select(Rider).where(
+            Rider.restaurant_id == restaurant_id, Rider.phone == phone
+        )
+    )
+    return ("rider", rider) if rider is not None else ("customer", None)
+
+
+async def _handle_rider_inbound(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    rider,
+) -> None:
+    """Rider-side handlers: location pings (button actions added in Task 11)."""
+    from app.dispatch.rider_location import update_rider_location
+
+    if inbound.type == MessageType.LOCATION:
+        await update_rider_location(
+            session,
+            rider=rider,
+            latitude=float(inbound.payload["latitude"]),
+            longitude=float(inbound.payload["longitude"]),
+        )
+        return
+
+    if inbound.type == MessageType.BUTTON_REPLY:
+        # Accept either payload key shape ("button_id" from dispatch buttons,
+        # "id" from the shared button helper).
+        button_id = inbound.payload.get("button_id") or inbound.payload.get("id", "")
+        if button_id.startswith("picked:"):
+            from app.dispatch.rider_flow import handle_orders_picked
+
+            await handle_orders_picked(
+                session,
+                restaurant_id=restaurant_id,
+                rider=rider,
+                batch_id=int(button_id.split(":", 1)[1]),
+            )
+        elif button_id.startswith("delivered:"):
+            from app.dispatch.rider_flow import handle_delivered
+
+            await handle_delivered(
+                session,
+                restaurant_id=restaurant_id,
+                rider=rider,
+                order_id=int(button_id.split(":", 1)[1]),
+            )
+        return
+    # Other rider message types (e.g. free text) are ignored — flow is button-only.
+
+
 async def handle_inbound(
     session: AsyncSession,
     inbound: InboundMessage,
     restaurant_id: int,
 ) -> None:
     """Main entry point: load conversation → record message → dispatch state handler."""
+    counterpart, rider = await _resolve_counterpart(
+        session, restaurant_id, inbound.from_phone
+    )
     conv = await get_or_create_conversation(
         session,
         restaurant_id=restaurant_id,
         phone=inbound.from_phone,
-        counterpart="customer",
+        counterpart=counterpart,
     )
 
     await record_message(
@@ -674,8 +736,31 @@ async def handle_inbound(
         ts=inbound.timestamp,
     )
 
+    # STOP opt-out — must be checked before any dialogue processing
+    from app.marketing.optout import is_stop_keyword, record_opt_out
+    if is_stop_keyword(inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""):
+        await record_opt_out(
+            session,
+            restaurant_id=restaurant_id,
+            phone=inbound.from_phone,
+        )
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=inbound.from_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "You've been unsubscribed from marketing messages. Reply START to re-subscribe."},
+            idempotency_key=f"stop-ack-{inbound.wa_message_id}",
+        )
+        return  # do not process further
+
     # Manual takeover: bot is silent, human handles it
     if conv.manual_takeover:
+        return
+
+    # Rider conversations bypass the customer dialogue entirely.
+    if counterpart == "rider":
+        await _handle_rider_inbound(session, conv, inbound, restaurant_id, rider)
         return
 
     # Intent intercept: a status query ("where is my order") is answered from

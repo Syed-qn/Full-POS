@@ -40,3 +40,19 @@ class ArbiterPort(Protocol):
     async def arbitrate(self, query: str, candidates: list) -> object | None:
         """Given ambiguous matches, return the single best Dish or None."""
         ...
+
+
+class ForecastAdjusterPort(Protocol):
+    def parse_override(self, text: str) -> dict:
+        """Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape)."""
+        ...
+
+
+class SegmentCompilerPort(Protocol):
+    def compile(self, text: str) -> dict:
+        """Translate plain-English audience description into a validated segment DSL.
+
+        The returned dict MUST pass ``app.marketing.segments.validate_dsl`` — the
+        caller validates and rejects anything unsafe (never executes raw input).
+        """
+        ...

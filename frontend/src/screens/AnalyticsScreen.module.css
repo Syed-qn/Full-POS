@@ -1,0 +1,10 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+}
+.note {
+  color: var(--text-muted);
+  font-size: 13px;
+}

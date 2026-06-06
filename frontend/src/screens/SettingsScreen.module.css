@@ -1,0 +1,47 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  text-transform: capitalize;
+  cursor: pointer;
+  font-size: 13px;
+}
+.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field input {
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--text-primary);
+  width: 160px;
+}
+.note {
+  color: var(--text-secondary);
+  font-size: 13px;
+}

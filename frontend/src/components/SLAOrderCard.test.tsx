@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SLAOrderCard } from "./SLAOrderCard";
 import type { OrderOut } from "../lib/types";
@@ -26,13 +26,28 @@ describe("SLAOrderCard", () => {
     expect(screen.getByTestId("countdown")).toBeInTheDocument();
   });
 
-  it("applies critical lane styling under 10 min remaining", () => {
-    render(<SLAOrderCard order={order({ sla_started_at: iso(31) })} />);
+  it("applies warn lane styling in 10–5 min remaining band", () => {
+    render(<SLAOrderCard order={order({ sla_started_at: iso(31) })} />); // 9 min left
+    expect(screen.getByTestId("sla-card").className).toContain("warn");
+  });
+
+  it("applies critical lane styling under 5 min remaining", () => {
+    render(<SLAOrderCard order={order({ sla_started_at: iso(36) })} />); // 4 min left
     expect(screen.getByTestId("sla-card").className).toContain("critical");
   });
 
   it("applies breach styling past 40 min", () => {
     render(<SLAOrderCard order={order({ sla_started_at: iso(45) })} />);
     expect(screen.getByTestId("sla-card").className).toContain("breach");
+  });
+
+  it("fires onClick on Enter and Space (keyboard a11y)", () => {
+    const onClick = vi.fn();
+    render(<SLAOrderCard order={order()} onClick={onClick} />);
+    const card = screen.getByTestId("sla-card");
+    card.focus();
+    fireEvent.keyDown(card, { key: "Enter" });
+    fireEvent.keyDown(card, { key: " " });
+    expect(onClick).toHaveBeenCalledTimes(2);
   });
 });

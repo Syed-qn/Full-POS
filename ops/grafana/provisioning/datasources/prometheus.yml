@@ -1,0 +1,17 @@
+# Grafana datasource provisioning — auto-loads the Prometheus instance on boot.
+# Mounted at /etc/grafana/provisioning/datasources/ (see docs/observability.md).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: restaurant-prometheus
+    type: prometheus
+    access: proxy
+    # Prometheus service name on the compose network, port 9090.
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      # Must match prometheus.yml global.scrape_interval so rate() windows align.
+      timeInterval: 15s

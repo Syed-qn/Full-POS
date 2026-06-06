@@ -10,6 +10,40 @@ def test_normalize_name_removes_punctuation():
     assert normalize_name("Chkn. Biryani!") == "chkn biryani"
 
 
+def test_normalize_name_preserves_arabic():
+    """Unicode word chars survive normalization (regression: Arabic was dropped)."""
+    assert normalize_name("برياني دجاج") == "برياني دجاج"
+
+
+def test_normalize_name_preserves_arabic_with_punctuation():
+    """Punctuation around an Arabic name becomes collapsed spaces, name intact."""
+    assert normalize_name("  برياني، دجاج!  ") == "برياني دجاج"
+
+
+async def test_find_dish_matches_arabic_dish(db_session, restaurant):
+    """An Arabic-named dish is findable via fuzzy trigram query (pg_trgm bytewise)."""
+    from app.ordering.matching import MatchConfidence
+    from app.menu.models import Dish, Menu
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id,
+        dish_number=410, name="برياني دجاج",
+        price_aed=Decimal("22.00"), category="Rice", is_available=True,
+        name_normalized=normalize_name("برياني دجاج"),
+    )
+    db_session.add(dish)
+    await db_session.commit()
+
+    results = await find_dish_matches(
+        db_session, restaurant_id=restaurant.id, query="برياني دجاج",
+    )
+    assert results.confidence == MatchConfidence.DIRECT
+    assert len(results.candidates) == 1
+    assert results.candidates[0].dish_number == 410
+
+
 async def test_find_dish_matches_single_strong_match(db_session, restaurant):
     """Single match above 0.6 with gap > 0.15 → MatchResult.DIRECT."""
     from app.ordering.matching import MatchConfidence

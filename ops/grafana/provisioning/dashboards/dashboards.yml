@@ -1,0 +1,18 @@
+# Grafana dashboard provider — auto-imports JSON dashboards from disk on boot.
+# Mounted at /etc/grafana/provisioning/dashboards/ ; the JSON files live at the
+# `path` below (mount ops/grafana/dashboards there). See docs/observability.md.
+apiVersion: 1
+
+providers:
+  - name: restaurant-ops
+    orgId: 1
+    folder: Restaurant Ops
+    type: file
+    disableDeletion: false
+    editable: true
+    # Re-read changed dashboard files every 30s.
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
