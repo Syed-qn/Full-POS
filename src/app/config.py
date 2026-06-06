@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     geo_provider: str = "fake"  # fake | google_maps
     google_maps_api_key: SecretStr = SecretStr("")
 
+    # Predictions
+    forecast_provider: str = "rolling"  # rolling | fake
+
 
 @lru_cache
 def get_settings() -> Settings:
