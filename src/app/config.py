@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     claude_model: str = "claude-opus-4-8"
     upload_dir: str = "var/uploads"
 
+    # WhatsApp
+    whatsapp_provider: str = "mock"  # mock | cloud
+    wa_verify_token: str = "dev-verify-token"
+    wa_access_token: SecretStr = SecretStr("")
+    wa_phone_number_id: str = ""
+    wa_app_secret: SecretStr = SecretStr("")
+
 
 @lru_cache
 def get_settings() -> Settings:
