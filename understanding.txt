@@ -1,6 +1,8 @@
 # understanding.txt — running log of code changes + system understanding
 # Format: - [YYYY-MM-DD HH:MM] <change> — <why/impact>
 
+- [2026-06-06 20:10 +04] P7-T7 DONE: FileBlobStore (sha256-addressed, tenant-scoped under upload_dir/<restaurant_id>/<sha256>); MenuFile table (menu_files migration 464f76bc2e70 with trg_menu_files_updated_at trigger, down_revision=eb6f4dfb6f23); create_menu_from_upload now persists bytes + creates MenuFile rows after session.flush(); reextract_menu reads stored bytes + re-runs extractor via upload_with_diff; POST /api/v1/menus/{id}/reextract endpoint wired in router.py. New files: src/app/menu/storage.py, tests/menu/test_storage.py, tests/menu/test_reextract.py. 418 tests passing.
+
 - [2026-06-06 20:00 +04] PHASE 6 GATE PASSED + merged to main (wave 2): Phase 6 all done (predictions router, marketing router, STOP wiring, Celery ml+marketing workers+beats), Phase 7 partial (outbox backoff, structlog, security headers, menu cap, rate limiting, Prometheus, lifespan). 413 tests passing on main.
 
 - [2026-06-06 19:17 +04] P7-T13 DONE (frontend): Added security headers to Vite dev server in frontend/vite.config.ts — X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy: no-referrer added to server.headers block. Mirrors SecurityHeadersMiddleware behaviour from production so dashboard receives headers during development. Frontend test suite: 82/82 tests passed (26 test files). TypeScript compile: clean (tsc --noEmit, 0 errors). Committed as feat: security headers in Vite dev server (P7-T13 frontend) on feat/phase-4 (b2f8b46). No backend/alembic/celery files touched.
