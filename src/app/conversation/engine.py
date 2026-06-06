@@ -687,6 +687,11 @@ async def handle_inbound(
         if intent == "status":
             await _handle_status_query(session, conv, inbound, restaurant_id)
             return
+        # TODO(modify dialogue): ordering.service.modify_order exists (SLA restart,
+        # blocked at ready — tested) but no engine state drives it yet. When wiring
+        # the modify-confirm handler, load the order with
+        # session.get(Order, id, with_for_update=True) — see fsm.transition()
+        # concurrency note (confirm vs kitchen→ready race).
 
     dialogue_state = conv.state.get("dialogue_state", "greeting")
 

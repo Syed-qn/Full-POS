@@ -132,7 +132,8 @@ class ClaudeDescriber:
         raw = _first_text(message).strip()
         # Safety strip — remove any price-like patterns that slipped through
         safe = _re.sub(r"\b(?:AED|aed|\d+\.\d{2})\b", "", raw).strip()
-        return safe
+        # Spec: max 3 lines — enforce programmatically, not just via prompt
+        return "\n".join(safe.splitlines()[:3])
 
 
 class ClaudeIntentClassifier:

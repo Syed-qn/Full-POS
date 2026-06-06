@@ -303,7 +303,18 @@ async def cancel_order(
         customer = await session.get(Customer, order.customer_id)
         phone = customer.phone if customer else ""
         addr_id = str(order.address_id or "")
-        exclusion_hash = hashlib.sha256(f"{phone}:{addr_id}".encode()).hexdigest()
+        # Spec §3: exclude same phone/PERSON/address — receiver_name covers the
+        # person dimension (different address or phone, same receiver = still barred).
+        receiver = ""
+        if order.address_id is not None:
+            address = await session.get(CustomerAddress, order.address_id)
+            receiver = (address.receiver_name or "").strip().lower() if address else ""
+        exclusion_hash = hashlib.sha256(
+            f"{phone}:{receiver}:{addr_id}".encode()
+        ).hexdigest()
+        # TODO(phase-4 resale dispatch): the resale-offer matcher MUST filter
+        # candidate buyers against this exclusion_hash — written here, enforced
+        # nowhere yet. See understanding.txt Wave-4 review fix #2.
 
         resale = Order(
             restaurant_id=order.restaurant_id,

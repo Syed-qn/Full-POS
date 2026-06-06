@@ -40,7 +40,8 @@ class FakeDescriber:
         # Truncate raw description to 80 chars; strip price-like patterns
         import re
         safe = re.sub(r"\b(?:AED|aed|\d+\.\d{2})\b", "", raw_description).strip()
-        return f"{name}. {safe[:80]}"
+        # Spec: max 3 lines — enforce like the production describer
+        return "\n".join(f"{name}. {safe[:80]}".splitlines()[:3])
 
 
 class FakeIntentClassifier:
