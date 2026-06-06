@@ -1,6 +1,9 @@
 # understanding.txt — running log of code changes + system understanding
 # Format: - [YYYY-MM-DD HH:MM] <change> — <why/impact>
 
+- [2026-06-06 04:58] Worktree A merged + integration commit 4951706: alembic env.py now has include_object filter (reflected && compare_to is None → skip) — KILLS recurring PostGIS/Tiger drop-table pollution in autogenerate permanently. restaurants_riders migration regenerated clean + applied. identity models registered in alembic env + conftest. FULL SUITE: 15 passed, ruff clean. Worktrees removed, branches deleted. State: T1-T8 + T10-T11 done; remaining plan T9 (signup/login routes), T12-T19 + Unit 2.5 hardening.
+- [2026-06-06 04:58] Research landed: docs/research/whatsapp-cloud-api-notes.md (webhook shapes, 3-button/10-row limits, media URL 5-min expiry, lat/lng strings-out/floats-in, template name 30-day reuse blackout, 100 templates/hr/WABA) + docs/research/meta-template-compliance.md (UAE 9am-6pm marketing window, per-user 2-marketing-msgs/day Meta cap = top delivery risk, datestamped template names mandatory). Phase 2 plan persisted: docs/superpowers/plans/2026-06-06-phase-2-whatsapp-core.md (NOT yet committed — commit with next batch).
+
 - [2026-06-06 04:10] git repo initialized on main; design spec committed at docs/superpowers/specs/2026-06-06-whatsapp-restaurant-platform-design.md — single source of truth for business rules (40-min SLA, COD, batching, riders-are-employees, coupon rules, resale exclusions).
 - [2026-06-06 04:18] Implementation plan committed at docs/superpowers/plans/2026-06-06-phase-0-1-foundation.md — 19 TDD tasks for Phase 0 (scaffold) + Phase 1 (identity + AI menu).
 - [2026-06-06 04:25] Branch feat/phase-0-1 created. Execution = subagent-driven (multi-agent: implementer + spec reviewer + quality reviewer per unit).
