@@ -98,4 +98,7 @@ async def test_second_message_after_menu_sent_does_not_resend_menu(db_session, r
     await db_session.commit()
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
-    assert len(rows) == 1  # only greeting menu; second message is pass-through for now
+    # Post-menu_sent messages are now handled by item-collection (Phase 3, Task 6):
+    # the menu is NOT re-sent — only the greeting menu carries the full dish list.
+    menu_sends = [r for r in rows if "Welcome! Here is our menu" in r.payload["body"]]
+    assert len(menu_sends) == 1
