@@ -1,0 +1,29 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.blocked {
+  color: var(--sla-warn);
+  font-size: 12px;
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px 0;
+}
