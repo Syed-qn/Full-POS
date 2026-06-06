@@ -1,0 +1,40 @@
+.row {
+  display: grid;
+  grid-template-columns: 56px 120px 1fr 110px 90px 90px;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--bg-surface-raised);
+}
+.new {
+  animation: slide-in-right 180ms ease-out;
+  background: var(--sla-safe-dim);
+}
+.id {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.cust {
+  font-weight: 600;
+}
+.items {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rider {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-rider);
+}
+.timer :global(span) {
+  font-size: 14px;
+}
