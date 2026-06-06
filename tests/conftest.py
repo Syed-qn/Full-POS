@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
 import app.audit.models  # noqa: F401
+import app.identity.models  # noqa: F401
 
 
 @pytest.fixture
