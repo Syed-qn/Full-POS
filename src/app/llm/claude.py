@@ -1,6 +1,7 @@
 import base64
 
 from anthropic import AsyncAnthropic
+from pydantic import ValidationError
 
 from app.config import get_settings
 from app.llm.port import DishDraft, UploadedFile
@@ -38,6 +39,8 @@ _PROMPT = (
     "Preserve original spelling of names."
 )
 
+_IMAGE_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
 
 class ClaudeExtractor:
     def __init__(self) -> None:
@@ -46,6 +49,9 @@ class ClaudeExtractor:
         self._model = settings.claude_model
 
     async def extract_menu(self, files: list[UploadedFile]) -> list[DishDraft]:
+        if not files:
+            raise ValueError("extract_menu requires at least one file")
+
         content: list[dict] = []
         for f in files:
             if f.mime == "application/pdf":
@@ -57,7 +63,7 @@ class ClaudeExtractor:
                         "data": base64.b64encode(f.content).decode(),
                     },
                 })
-            else:
+            elif f.mime in _IMAGE_MIMES:
                 content.append({
                     "type": "image",
                     "source": {
@@ -66,16 +72,28 @@ class ClaudeExtractor:
                         "data": base64.b64encode(f.content).decode(),
                     },
                 })
+            else:
+                raise ValueError(f"Unsupported file type: {f.mime}")
         content.append({"type": "text", "text": _PROMPT})
 
         response = await self._client.messages.create(
             model=self._model,
-            max_tokens=8192,
+            max_tokens=16384,
             tools=[_TOOL],
             tool_choice={"type": "tool", "name": "submit_menu"},
             messages=[{"role": "user", "content": content}],
         )
+
+        if response.stop_reason == "max_tokens":
+            raise RuntimeError("Menu extraction truncated — output exceeded max_tokens")
+
         for block in response.content:
             if block.type == "tool_use":
-                return [DishDraft(**d) for d in block.input["dishes"]]
+                dishes = block.input.get("dishes")
+                if not isinstance(dishes, list):
+                    raise RuntimeError("Model response missing 'dishes' list")
+                try:
+                    return [DishDraft(**d) for d in dishes]
+                except ValidationError as exc:
+                    raise RuntimeError(f"Malformed dish from model: {exc}") from exc
         raise RuntimeError("Claude returned no tool_use block")
