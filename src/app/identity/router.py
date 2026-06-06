@@ -58,7 +58,7 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad credentials")
     if not verify_password(body.password, restaurant.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad credentials")
-    return TokenOut(access_token=create_access_token(restaurant.id))
+    return TokenOut(access_token=create_access_token(restaurant_id=restaurant.id))
 
 
 @router.get("/me", response_model=RestaurantOut)

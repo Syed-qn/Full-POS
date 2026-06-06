@@ -24,19 +24,42 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(restaurant_id: int) -> str:
+def create_access_token(
+    *,
+    restaurant_id: int | None = None,
+    rider_id: int | None = None,
+    audience: str = "manager",
+) -> str:
     s = get_settings()
+    sub = str(restaurant_id if restaurant_id is not None else rider_id)
     payload = {
-        "sub": str(restaurant_id),
+        "sub": sub,
+        "aud": audience,
+        "iss": s.jwt_issuer,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=s.jwt_ttl_minutes),
     }
     return jwt.encode(payload, s.jwt_secret.get_secret_value(), algorithm=_ALGO)
 
 
-def decode_access_token(token: str) -> int:
+def decode_token(token: str, *, audience: str) -> dict:
+    """Decode and verify a JWT, enforcing aud and iss. Returns full claims dict."""
     s = get_settings()
     try:
-        payload = jwt.decode(token, s.jwt_secret.get_secret_value(), algorithms=[_ALGO])
-        return int(payload["sub"])
+        return jwt.decode(
+            token,
+            s.jwt_secret.get_secret_value(),
+            algorithms=[_ALGO],
+            audience=audience,
+            issuer=s.jwt_issuer,
+        )
     except (jwt.PyJWTError, KeyError, ValueError) as exc:
+        raise ValueError("invalid token") from exc
+
+
+def decode_access_token(token: str) -> int:
+    """Backward-compat wrapper: decode a manager token, return restaurant_id as int."""
+    claims = decode_token(token, audience="manager")
+    try:
+        return int(claims["sub"])
+    except (KeyError, ValueError) as exc:
         raise ValueError("invalid token") from exc

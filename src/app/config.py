@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6380/0"
     jwt_secret: SecretStr = SecretStr("dev-secret-change-me-0123456789abcdef")
     jwt_ttl_minutes: int = 60
+    jwt_issuer: str = "restaurant-platform"
+    jwt_audience_manager: str = "manager"
+    jwt_audience_rider: str = "rider"
     llm_provider: str = "fake"  # fake | claude
     anthropic_api_key: SecretStr = SecretStr("")
     claude_model: str = "claude-opus-4-8"
