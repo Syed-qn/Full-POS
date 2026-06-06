@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from celery import shared_task
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.outbox.models import OutboxMessage
@@ -10,6 +11,36 @@ from app.whatsapp.port import OutboundMessage, OutboundMessageType, WhatsAppPort
 logger = logging.getLogger(__name__)
 
 _MAX_ATTEMPTS = 3
+
+# Statuses a delivery worker must never (re)send.
+_TERMINAL_STATUSES = ("sent", "dead")
+
+
+async def claim_pending_outbox_ids(
+    session: AsyncSession, *, to_phone: str, restaurant_id: int
+) -> list[int]:
+    """Atomically claim this conversation's pending outbox rows for dispatch.
+
+    Transitions matching rows ``pending -> dispatching`` in a single
+    ``UPDATE ... RETURNING`` so two concurrent webhooks (or a webhook racing the
+    sweeper) can never grab the same row: PostgreSQL serializes the row-level
+    writes, and only the transaction that flips a row out of ``pending`` gets it
+    back in ``RETURNING``. The loser's ``WHERE status='pending'`` no longer
+    matches, so it claims (and dispatches) nothing for those rows.
+
+    Caller is responsible for committing the surrounding transaction.
+    """
+    claimed = await session.execute(
+        update(OutboxMessage)
+        .where(
+            OutboxMessage.status == "pending",
+            OutboxMessage.to_phone == to_phone,
+            OutboxMessage.restaurant_id == restaurant_id,
+        )
+        .values(status="dispatching")
+        .returning(OutboxMessage.id)
+    )
+    return list(claimed.scalars().all())
 
 
 def _outbox_row_to_outbound(row: OutboxMessage) -> OutboundMessage:
@@ -31,7 +62,7 @@ async def _deliver_one(
 ) -> None:
     async with session_factory() as session:
         row = await session.get(OutboxMessage, outbox_id)
-        if row is None or row.status in ("sent", "dead"):
+        if row is None or row.status in _TERMINAL_STATUSES:
             return
         msg = _outbox_row_to_outbound(row)
         try:
