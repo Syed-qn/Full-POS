@@ -59,3 +59,30 @@ async def get_active_menu(session: AsyncSession, restaurant_id: int) -> Menu | N
     return await session.scalar(
         select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
     )
+
+
+class MenuIncompleteError(Exception):
+    pass
+
+
+async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
+    incomplete = [
+        d for d in menu.dishes if d.dish_number is None or d.price_aed is None
+    ]
+    if incomplete:
+        names = ", ".join(d.name for d in incomplete[:5])
+        raise MenuIncompleteError(
+            f"incomplete dishes (need number and price): {names}"
+        )
+    previous = await get_active_menu(session, menu.restaurant_id)
+    if previous and previous.id != menu.id:
+        previous.status = "superseded"
+    menu.status = "active"
+    await record_audit(
+        session, actor="manager", restaurant_id=menu.restaurant_id, entity="menu",
+        entity_id=str(menu.id), action="activated",
+        after={"version": menu.version},
+    )
+    await session.commit()
+    await session.refresh(menu)
+    return menu

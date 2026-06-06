@@ -11,6 +11,7 @@ from app.llm.port import MenuExtractor, UploadedFile
 from app.menu import service
 from app.menu.models import Dish, Menu
 from app.menu.schemas import DishIn, DishOut, DishPatch, MenuOut
+from app.menu.service import MenuIncompleteError
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
 
@@ -140,3 +141,16 @@ async def delete_dish(
     await session.delete(dish)
     await session.commit()
     session.expire_all()
+
+
+@router.post("/menus/{menu_id}/activate", response_model=MenuOut)
+async def activate_menu(
+    menu_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    menu = await _load_menu(menu_id, restaurant, session)
+    try:
+        return await service.activate_menu(session, menu)
+    except MenuIncompleteError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
