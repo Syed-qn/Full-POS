@@ -46,3 +46,15 @@ class Dish(Base, TimestampMixin):
     name_normalized: Mapped[str | None] = mapped_column(String(256))
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
+
+
+class MenuFile(Base, TimestampMixin):
+    __tablename__ = "menu_files"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    menu_id: Mapped[int | None] = mapped_column(ForeignKey("menus.id"), index=True)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    content_type: Mapped[str] = mapped_column(String(128))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    original_filename: Mapped[str | None] = mapped_column(String(512))

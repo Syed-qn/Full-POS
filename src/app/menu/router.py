@@ -202,3 +202,31 @@ async def activate_menu(
         return await service.activate_menu(session, menu)
     except MenuIncompleteError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+
+
+@router.post("/menus/{menu_id}/reextract", response_model=MenuWithDiffOut, status_code=200)
+async def reextract_menu(
+    menu_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+    extractor: MenuExtractor = Depends(get_menu_extractor),
+):
+    menu = await _load_menu(menu_id, restaurant, session)
+    try:
+        new_menu, report = await service.reextract_menu(session, menu=menu, extractor=extractor)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"menu re-extraction failed: {exc}")
+    out = MenuWithDiffOut.model_validate(new_menu)
+    if report is not None:
+        out.diff_vs_active = DiffOut(
+            price_changes=[
+                {**c, "old_price": str(c["old_price"]), "new_price": str(c["new_price"])}
+                for c in report.price_changes
+            ],
+            added=[d.model_dump(mode="json") for d in report.added],
+            removed=report.removed,
+            conflicts=report.conflicts,
+        )
+    return out
