@@ -461,6 +461,99 @@ async def _handle_order_confirmation(
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
+async def _handle_status_query(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Reply to 'where is my order' with the current order status and ETA."""
+    from datetime import datetime, timezone
+
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Customer, Order
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id,
+            Customer.phone == inbound.from_phone,
+        )
+    )
+    if not customer:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="status-no-customer",
+            body="I don't see any recent orders for this number. "
+                 "Send 'hi' to start a new order.",
+        )
+        return
+
+    terminal = {
+        str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
+        str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
+        str(OrderStatus.WRITTEN_OFF),
+    }
+    order = await session.scalar(
+        select(Order)
+        .where(
+            Order.restaurant_id == restaurant_id,
+            Order.customer_id == customer.id,
+            Order.status.notin_(terminal),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+
+    if not order:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="status-no-order",
+            body="You don't have any active orders right now. "
+                 "Send 'hi' to place a new order.",
+        )
+        return
+
+    status_messages = {
+        str(OrderStatus.DRAFT): "Your order is being assembled.",
+        str(OrderStatus.PENDING_CONFIRMATION): "Your order is waiting for your confirmation.",
+        str(OrderStatus.CONFIRMED): (
+            f"Your order #{order.order_number} is confirmed and will be ready "
+            f"in about 40 minutes."
+        ),
+        str(OrderStatus.PREPARING): (
+            f"Your order #{order.order_number} is being prepared in the kitchen."
+        ),
+        str(OrderStatus.READY): (
+            f"Your order #{order.order_number} is ready and waiting for the rider."
+        ),
+        str(OrderStatus.ASSIGNED): (
+            f"Your order #{order.order_number} has been assigned to a rider."
+        ),
+        str(OrderStatus.PICKED_UP): f"Your order #{order.order_number} is on its way!",
+        str(OrderStatus.ARRIVING): f"Your order #{order.order_number} is arriving shortly!",
+        str(OrderStatus.ON_RESALE): (
+            "Your order was cancelled. Please contact the restaurant for more information."
+        ),
+    }
+    body = status_messages.get(str(order.status), f"Order status: {order.status}.")
+
+    if order.sla_deadline:
+        remaining = int(
+            (order.sla_deadline - datetime.now(timezone.utc)).total_seconds() / 60
+        )
+        if 0 < remaining <= 40 and str(order.status) in (
+            str(OrderStatus.CONFIRMED),
+            str(OrderStatus.PREPARING),
+            str(OrderStatus.READY),
+        ):
+            body += f" Estimated time remaining: ~{remaining} minutes."
+
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="status-reply", body=body,
+    )
+
+
 async def handle_inbound(
     session: AsyncSession,
     inbound: InboundMessage,
@@ -487,6 +580,16 @@ async def handle_inbound(
     # Manual takeover: bot is silent, human handles it
     if conv.manual_takeover:
         return
+
+    # Intent intercept: a status query ("where is my order") is answered from
+    # any state without disturbing the in-progress dialogue.
+    if inbound.type == MessageType.TEXT:
+        from app.llm.factory import get_intent_classifier
+
+        intent = get_intent_classifier().classify(inbound.payload.get("text", ""))
+        if intent == "status":
+            await _handle_status_query(session, conv, inbound, restaurant_id)
+            return
 
     dialogue_state = conv.state.get("dialogue_state", "greeting")
 
