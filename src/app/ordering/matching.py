@@ -20,9 +20,18 @@ _GAP_THRESHOLD = 0.15
 
 
 def normalize_name(raw: str) -> str:
-    """Lowercase, strip, remove non-alphanumeric (except spaces)."""
-    cleaned = re.sub(r"[^a-zA-Z0-9 ]", "", raw)
-    return cleaned.strip().lower()
+    """Casefold, strip, drop punctuation while keeping unicode word chars.
+
+    Unicode-aware: ``\\w`` retains letters/digits from any script (Arabic,
+    CJK, accented Latin, …) so non-Latin dish names survive normalization
+    instead of collapsing to an empty string. Punctuation/symbols become
+    spaces, which are then collapsed. ``casefold`` is preferred over ``lower``
+    for correct case-insensitive matching across scripts. pg_trgm computes
+    bytewise trigrams, so similarity still works on the preserved unicode.
+    """
+    cleaned = re.sub(r"[^\w ]", " ", raw, flags=re.UNICODE)
+    collapsed = re.sub(r"\s+", " ", cleaned)
+    return collapsed.strip().casefold()
 
 
 class MatchConfidence(StrEnum):

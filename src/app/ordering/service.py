@@ -19,6 +19,40 @@ if TYPE_CHECKING:
     from app.menu.models import Dish
 
 
+async def get_order_for_tenant(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+) -> Order | None:
+    """Fetch a single order scoped to the tenant. Returns None if not found."""
+    return await session.scalar(
+        select(Order).where(
+            Order.id == order_id,
+            Order.restaurant_id == restaurant_id,
+        )
+    )
+
+
+async def list_orders_for_tenant(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    status: str | None = None,
+    limit: int = 50,
+) -> list[Order]:
+    """List orders for the tenant, newest first, optionally filtered by status.
+
+    ``limit`` is clamped to the inclusive range [1, 100] to bound result size.
+    """
+    limit = min(max(limit, 1), 100)
+    q = select(Order).where(Order.restaurant_id == restaurant_id)
+    if status:
+        q = q.where(Order.status == status)
+    q = q.order_by(Order.created_at.desc()).limit(limit)
+    return list((await session.scalars(q)).all())
+
+
 async def get_or_create_customer(
     session: "AsyncSession",
     *,

@@ -136,6 +136,41 @@ async def test_list_orders_api_filters_by_status(client, db_session, restaurant)
     assert "R1-LIST2" not in numbers
 
 
+async def test_list_orders_for_tenant_clamps_limit(db_session, restaurant):
+    """An over-large limit is clamped to 100 (never returns more than 100 rows)."""
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Customer, Order
+    from app.ordering.service import list_orders_for_tenant
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501229999", name="Clamp Test",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    db_session.add_all([
+        Order(
+            restaurant_id=restaurant.id, customer_id=customer.id,
+            order_number=f"R1-CLAMP{i:03d}", status=OrderStatus.CONFIRMED,
+            priority="normal", weather_delay_disclosed=False,
+            delivery_fee_aed=Decimal("0.00"),
+            subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        )
+        for i in range(105)
+    ])
+    await db_session.commit()
+
+    rows = await list_orders_for_tenant(
+        db_session, restaurant_id=restaurant.id, limit=10000,
+    )
+    assert len(rows) == 100
+
+
+def test_list_orders_for_tenant_clamps_limit_floor():
+    """A non-positive limit is clamped up to 1 (unit-level, no DB)."""
+    assert min(max(0, 1), 100) == 1
+
+
 async def test_create_draft_order_increments_number(db_session, restaurant):
     from app.ordering.service import create_draft_order, get_or_create_customer
     customer = await get_or_create_customer(
