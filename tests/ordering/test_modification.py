@@ -10,15 +10,15 @@ from app.ordering.models import Customer, Order, OrderItem
 from app.ordering.service import modify_order
 
 
-async def _seed_confirmed_order(db_session) -> tuple[Order, object]:
+async def _seed_confirmed_order(db_session, restaurant_id: int) -> tuple[Order, object]:
     """Seed a confirmed order with one item. Returns (order, dish)."""
     from app.menu.models import Dish, Menu
 
-    menu = Menu(restaurant_id=1, version=1, status="active", source_files=[])
+    menu = Menu(restaurant_id=restaurant_id, version=1, status="active", source_files=[])
     db_session.add(menu)
     await db_session.flush()
     dish = Dish(
-        menu_id=menu.id, restaurant_id=1,
+        menu_id=menu.id, restaurant_id=restaurant_id,
         dish_number=110, name="Chicken Biryani",
         price_aed=Decimal("22.00"), category="Rice",
         is_available=True, name_normalized="chicken biryani",
@@ -27,7 +27,7 @@ async def _seed_confirmed_order(db_session) -> tuple[Order, object]:
     await db_session.flush()
 
     customer = Customer(
-        restaurant_id=1, phone="+971501230099", name="Test",
+        restaurant_id=restaurant_id, phone="+971501230099", name="Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
@@ -35,7 +35,7 @@ async def _seed_confirmed_order(db_session) -> tuple[Order, object]:
 
     now = datetime.now(timezone.utc)
     order = Order(
-        restaurant_id=1, customer_id=customer.id,
+        restaurant_id=restaurant_id, customer_id=customer.id,
         order_number="R1-MOD1", status=OrderStatus.CONFIRMED,
         priority="normal", weather_delay_disclosed=False,
         delivery_fee_aed=Decimal("0.00"),
@@ -55,9 +55,9 @@ async def _seed_confirmed_order(db_session) -> tuple[Order, object]:
     return order, dish
 
 
-async def test_modify_order_recalculates_total(db_session):
+async def test_modify_order_recalculates_total(db_session, restaurant):
     """Adding an item via modify_order recalculates subtotal + total."""
-    order, dish = await _seed_confirmed_order(db_session)
+    order, dish = await _seed_confirmed_order(db_session, restaurant.id)
 
     await modify_order(
         db_session, order=order,
@@ -71,9 +71,9 @@ async def test_modify_order_recalculates_total(db_session):
     assert order.total == Decimal("44.00")
 
 
-async def test_modify_order_restarts_sla_clock(db_session):
+async def test_modify_order_restarts_sla_clock(db_session, restaurant):
     """SLA deadline is reset to now+40 min after modification."""
-    order, dish = await _seed_confirmed_order(db_session)
+    order, dish = await _seed_confirmed_order(db_session, restaurant.id)
     original_deadline = order.sla_deadline
 
     await modify_order(
@@ -87,9 +87,9 @@ async def test_modify_order_restarts_sla_clock(db_session):
     assert order.sla_deadline > original_deadline
 
 
-async def test_modify_order_blocked_at_ready(db_session):
+async def test_modify_order_blocked_at_ready(db_session, restaurant):
     """Modification at or after ready raises ValueError."""
-    order, dish = await _seed_confirmed_order(db_session)
+    order, dish = await _seed_confirmed_order(db_session, restaurant.id)
     order.status = OrderStatus.READY
     await db_session.commit()
 
@@ -101,9 +101,9 @@ async def test_modify_order_blocked_at_ready(db_session):
         )
 
 
-async def test_modify_order_produces_audit_log(db_session):
+async def test_modify_order_produces_audit_log(db_session, restaurant):
     """Each modification is recorded in audit_log."""
-    order, dish = await _seed_confirmed_order(db_session)
+    order, dish = await _seed_confirmed_order(db_session, restaurant.id)
 
     await modify_order(
         db_session, order=order,

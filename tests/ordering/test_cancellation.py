@@ -8,15 +8,15 @@ from app.ordering.models import Customer, Order
 from app.ordering.service import cancel_order
 
 
-async def _seed_order(db_session, status: str) -> Order:
+async def _seed_order(db_session, status: str, restaurant_id: int) -> Order:
     customer = Customer(
-        restaurant_id=1, phone="+971501230098", name="Cancel Test",
+        restaurant_id=restaurant_id, phone="+971501230098", name="Cancel Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
     await db_session.flush()
     order = Order(
-        restaurant_id=1, customer_id=customer.id,
+        restaurant_id=restaurant_id, customer_id=customer.id,
         order_number="R1-CAN1", status=status,
         priority="normal", weather_delay_disclosed=False,
         delivery_fee_aed=Decimal("0.00"),
@@ -27,8 +27,8 @@ async def _seed_order(db_session, status: str) -> Order:
     return order
 
 
-async def test_cancel_before_preparing_transitions_to_cancelled(db_session):
-    order = await _seed_order(db_session, OrderStatus.CONFIRMED)
+async def test_cancel_before_preparing_transitions_to_cancelled(db_session, restaurant):
+    order = await _seed_order(db_session, OrderStatus.CONFIRMED, restaurant.id)
     await cancel_order(db_session, order=order, actor="customer", reason="Changed mind")
     await db_session.commit()
     await db_session.refresh(order)
@@ -36,9 +36,9 @@ async def test_cancel_before_preparing_transitions_to_cancelled(db_session):
     assert order.cancellation_reason == "Changed mind"
 
 
-async def test_cancel_during_preparing_creates_resale_copy(db_session):
+async def test_cancel_during_preparing_creates_resale_copy(db_session, restaurant):
     """Cancellation after cooking started creates an on_resale copy with exclusion hash."""
-    order = await _seed_order(db_session, OrderStatus.PREPARING)
+    order = await _seed_order(db_session, OrderStatus.PREPARING, restaurant.id)
     original_id = order.id
 
     await cancel_order(db_session, order=order, actor="customer", reason="Duplicate order")
@@ -54,10 +54,10 @@ async def test_cancel_during_preparing_creates_resale_copy(db_session):
     assert order.status == OrderStatus.ON_RESALE
 
 
-async def test_exclusion_hash_encodes_phone_and_address(db_session):
+async def test_exclusion_hash_encodes_phone_and_address(db_session, restaurant):
     """Exclusion hash is SHA-256 of phone + address_id so same customer is blocked from resale."""
     customer = Customer(
-        restaurant_id=1, phone="+971501230097", name="Hash Test",
+        restaurant_id=restaurant.id, phone="+971501230097", name="Hash Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
@@ -72,7 +72,7 @@ async def test_exclusion_hash_encodes_phone_and_address(db_session):
     await db_session.flush()
 
     order = Order(
-        restaurant_id=1, customer_id=customer.id,
+        restaurant_id=restaurant.id, customer_id=customer.id,
         order_number="R1-HASH1", status=OrderStatus.PREPARING,
         priority="normal", weather_delay_disclosed=False,
         delivery_fee_aed=Decimal("0.00"),

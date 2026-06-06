@@ -1,0 +1,97 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.kpiStrip {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+}
+.midRow {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+}
+.mapPanel {
+  background: var(--map-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  min-height: 420px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mapBody {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.slaBoard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.laneLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.laneCards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.clear {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.feed {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.feedHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.filters {
+  display: flex;
+  gap: 6px;
+}
+.filterPill {
+  font-size: 11px;
+  text-transform: capitalize;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 3px 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.filterActive {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px 0;
+}

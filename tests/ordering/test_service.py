@@ -3,9 +3,9 @@ from decimal import Decimal
 from app.ordering.models import Customer, CustomerAddress
 
 
-async def test_customer_table_has_expected_columns(db_session):
+async def test_customer_table_has_expected_columns(db_session, restaurant):
     c = Customer(
-        restaurant_id=1,
+        restaurant_id=restaurant.id,
         phone="+971501234567",
         name="Ali Hassan",
         usual_order_times={},
@@ -20,9 +20,9 @@ async def test_customer_table_has_expected_columns(db_session):
     assert c.total_orders == 0
 
 
-async def test_customer_address_table_has_expected_columns(db_session):
+async def test_customer_address_table_has_expected_columns(db_session, restaurant):
     c = Customer(
-        restaurant_id=1, phone="+971501234568", name="Sara",
+        restaurant_id=restaurant.id, phone="+971501234568", name="Sara",
         usual_order_times={}, tags={}, total_orders=0, total_spend="0.00",
     )
     db_session.add(c)
@@ -46,14 +46,14 @@ async def test_customer_address_table_has_expected_columns(db_session):
     assert addr.last_used_at is None
 
 
-def _get_test_token() -> str:
-    """Bearer token for the autouse-seeded restaurant (id=1)."""
+def _token_for(restaurant_id: int) -> str:
+    """Bearer token for the dynamically-seeded restaurant fixture."""
     from app.identity.auth import create_access_token
 
-    return create_access_token(restaurant_id=1)
+    return create_access_token(restaurant_id=restaurant_id)
 
 
-async def test_get_order_api_returns_order(client, db_session):
+async def test_get_order_api_returns_order(client, db_session, restaurant):
     """GET /api/v1/orders/{id} returns order JSON for the authenticated restaurant."""
     from decimal import Decimal
 
@@ -61,13 +61,13 @@ async def test_get_order_api_returns_order(client, db_session):
     from app.ordering.models import Customer, Order
 
     customer = Customer(
-        restaurant_id=1, phone="+971501220001", name="API Test",
+        restaurant_id=restaurant.id, phone="+971501220001", name="API Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
     await db_session.flush()
     order = Order(
-        restaurant_id=1, customer_id=customer.id,
+        restaurant_id=restaurant.id, customer_id=customer.id,
         order_number="R1-API1", status=OrderStatus.CONFIRMED,
         priority="normal", weather_delay_disclosed=False,
         delivery_fee_aed=Decimal("0.00"),
@@ -78,7 +78,7 @@ async def test_get_order_api_returns_order(client, db_session):
 
     resp = await client.get(
         f"/api/v1/orders/{order.id}",
-        headers={"Authorization": f"Bearer {_get_test_token()}"},
+        headers={"Authorization": f"Bearer {_token_for(restaurant.id)}"},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -86,16 +86,16 @@ async def test_get_order_api_returns_order(client, db_session):
     assert data["status"] == "confirmed"
 
 
-async def test_get_order_api_404_for_unknown(client):
+async def test_get_order_api_404_for_unknown(client, restaurant):
     """GET /api/v1/orders/{id} returns 404 when the order does not exist."""
     resp = await client.get(
         "/api/v1/orders/999999",
-        headers={"Authorization": f"Bearer {_get_test_token()}"},
+        headers={"Authorization": f"Bearer {_token_for(restaurant.id)}"},
     )
     assert resp.status_code == 404
 
 
-async def test_list_orders_api_filters_by_status(client, db_session):
+async def test_list_orders_api_filters_by_status(client, db_session, restaurant):
     """GET /api/v1/orders?status=... returns only matching orders for the restaurant."""
     from decimal import Decimal
 
@@ -103,20 +103,20 @@ async def test_list_orders_api_filters_by_status(client, db_session):
     from app.ordering.models import Customer, Order
 
     customer = Customer(
-        restaurant_id=1, phone="+971501220002", name="List Test",
+        restaurant_id=restaurant.id, phone="+971501220002", name="List Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
     await db_session.flush()
     db_session.add_all([
         Order(
-            restaurant_id=1, customer_id=customer.id, order_number="R1-LIST1",
+            restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-LIST1",
             status=OrderStatus.CONFIRMED, priority="normal",
             weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
             subtotal=Decimal("10.00"), total=Decimal("10.00"),
         ),
         Order(
-            restaurant_id=1, customer_id=customer.id, order_number="R1-LIST2",
+            restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-LIST2",
             status=OrderStatus.DRAFT, priority="normal",
             weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
             subtotal=Decimal("12.00"), total=Decimal("12.00"),
@@ -127,7 +127,7 @@ async def test_list_orders_api_filters_by_status(client, db_session):
     resp = await client.get(
         "/api/v1/orders",
         params={"status": "confirmed"},
-        headers={"Authorization": f"Bearer {_get_test_token()}"},
+        headers={"Authorization": f"Bearer {_token_for(restaurant.id)}"},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -136,28 +136,28 @@ async def test_list_orders_api_filters_by_status(client, db_session):
     assert "R1-LIST2" not in numbers
 
 
-async def test_create_draft_order_increments_number(db_session):
+async def test_create_draft_order_increments_number(db_session, restaurant):
     from app.ordering.service import create_draft_order, get_or_create_customer
     customer = await get_or_create_customer(
-        db_session, restaurant_id=1, phone="+971500000001",
+        db_session, restaurant_id=restaurant.id, phone="+971500000001",
     )
     await db_session.commit()
-    order1 = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    order1 = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
     await db_session.commit()
-    order2 = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    order2 = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
     await db_session.commit()
     assert order1.order_number != order2.order_number
 
 
-async def test_add_item_recalculates_total(db_session):
+async def test_add_item_recalculates_total(db_session, restaurant):
     from app.menu.models import Dish, Menu
     from app.ordering.service import add_item, create_draft_order, get_or_create_customer
 
-    menu = Menu(restaurant_id=1, version=1, status="active", source_files=[])
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
     db_session.add(menu)
     await db_session.flush()
     dish = Dish(
-        menu_id=menu.id, restaurant_id=1, dish_number=110,
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
         name="Chicken Biryani", price_aed=Decimal("22.00"),
         category="Rice", is_available=True, name_normalized="chicken biryani",
     )
@@ -165,10 +165,10 @@ async def test_add_item_recalculates_total(db_session):
     await db_session.flush()
 
     customer = await get_or_create_customer(
-        db_session, restaurant_id=1, phone="+971500000002",
+        db_session, restaurant_id=restaurant.id, phone="+971500000002",
     )
     await db_session.flush()
-    order = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
     await db_session.flush()
 
     await add_item(db_session, order=order, dish=dish, qty=2)
@@ -178,17 +178,17 @@ async def test_add_item_recalculates_total(db_session):
     assert order.total == Decimal("44.00")
 
 
-async def test_finalize_confirmation_sets_sla_fields(db_session):
+async def test_finalize_confirmation_sets_sla_fields(db_session, restaurant):
     from app.ordering.service import (
         create_draft_order, finalize_confirmation, get_or_create_customer,
     )
     from app.ordering.fsm import OrderStatus
 
     customer = await get_or_create_customer(
-        db_session, restaurant_id=1, phone="+971500000003",
+        db_session, restaurant_id=restaurant.id, phone="+971500000003",
     )
     await db_session.flush()
-    order = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
     await db_session.flush()
 
     await finalize_confirmation(db_session, order=order, actor="customer")
@@ -201,13 +201,13 @@ async def test_finalize_confirmation_sets_sla_fields(db_session):
     assert abs(diff_minutes - 40) < 1  # within 1 min tolerance
 
 
-async def test_get_or_create_customer_idempotent(db_session):
+async def test_get_or_create_customer_idempotent(db_session, restaurant):
     from app.ordering.service import get_or_create_customer
     c1 = await get_or_create_customer(
-        db_session, restaurant_id=1, phone="+971500000004",
+        db_session, restaurant_id=restaurant.id, phone="+971500000004",
     )
     await db_session.commit()
     c2 = await get_or_create_customer(
-        db_session, restaurant_id=1, phone="+971500000004",
+        db_session, restaurant_id=restaurant.id, phone="+971500000004",
     )
     assert c1.id == c2.id

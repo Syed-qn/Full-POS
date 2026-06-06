@@ -3,16 +3,16 @@ import pytest
 from app.identity.models import Restaurant
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 async def restaurant(db_session) -> Restaurant:
-    """Seed a restaurant with id=1 so ordering tests can reference restaurant_id=1.
+    """Seed a minimal restaurant row required for ordering FKs.
 
-    Ordering tests (per plan) hardcode restaurant_id=1; the FK to restaurants.id
-    must be satisfied. id is set explicitly because the per-test rollback does not
-    reset the sequence, so a plain insert would not reliably land on id=1.
+    Non-autouse and dynamic-PK: tests must take this fixture and reference
+    ``restaurant.id`` rather than hardcoding ``restaurant_id=1``. Pinning the
+    PK is a known footgun (the per-test rollback does not reset the sequence,
+    and an HTTP signup in the same test would collide on restaurants_pkey).
     """
     row = Restaurant(
-        id=1,
         name="Test Restaurant",
         phone="+97141234567",
         password_hash="x",

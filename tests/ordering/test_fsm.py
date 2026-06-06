@@ -38,7 +38,7 @@ def test_all_statuses_have_entries_in_transition_map():
         assert status in OrderFSM.TRANSITIONS, f"{status} missing from TRANSITIONS"
 
 
-async def test_transition_helper_audits_and_mutates(db_session):
+async def test_transition_helper_audits_and_mutates(db_session, restaurant):
     """transition() applies new status and writes an audit log row."""
     from decimal import Decimal
 
@@ -49,14 +49,14 @@ async def test_transition_helper_audits_and_mutates(db_session):
     from app.ordering.models import Customer, Order
 
     customer = Customer(
-        restaurant_id=1, phone="+971501230001", name="Test",
+        restaurant_id=restaurant.id, phone="+971501230001", name="Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
     await db_session.flush()
 
     order = Order(
-        restaurant_id=1,
+        restaurant_id=restaurant.id,
         customer_id=customer.id,
         order_number="R1-0001",
         status=OrderStatus.DRAFT,

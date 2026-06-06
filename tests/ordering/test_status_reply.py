@@ -21,9 +21,9 @@ def _status_msg(wa_id: str = "wamid.status1") -> InboundMessage:
     )
 
 
-async def _seed_active_order(db_session, status: str) -> Order:
+async def _seed_active_order(db_session, status: str, restaurant_id: int) -> Order:
     customer = Customer(
-        restaurant_id=1, phone="+971501110099", name="StatusTest",
+        restaurant_id=restaurant_id, phone="+971501110099", name="StatusTest",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
     )
     db_session.add(customer)
@@ -31,7 +31,7 @@ async def _seed_active_order(db_session, status: str) -> Order:
 
     now = datetime.now(timezone.utc)
     order = Order(
-        restaurant_id=1, customer_id=customer.id,
+        restaurant_id=restaurant_id, customer_id=customer.id,
         order_number="R1-STA1", status=status,
         priority="normal", weather_delay_disclosed=False,
         delivery_fee_aed=Decimal("0.00"),
@@ -44,16 +44,16 @@ async def _seed_active_order(db_session, status: str) -> Order:
     return order
 
 
-async def test_status_query_confirmed_order_returns_status_message(db_session):
+async def test_status_query_confirmed_order_returns_status_message(db_session, restaurant):
     """'Where is my order' when order is confirmed returns a status string."""
-    await _seed_active_order(db_session, OrderStatus.CONFIRMED)
+    await _seed_active_order(db_session, OrderStatus.CONFIRMED, restaurant.id)
 
     from app.menu.models import Menu
-    menu = Menu(restaurant_id=1, version=1, status="active", source_files=[])
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
     db_session.add(menu)
     await db_session.commit()
 
-    await handle_inbound(db_session, _status_msg(), restaurant_id=1)
+    await handle_inbound(db_session, _status_msg(), restaurant_id=restaurant.id)
     await db_session.commit()
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
@@ -62,15 +62,15 @@ async def test_status_query_confirmed_order_returns_status_message(db_session):
     assert any(word in last for word in ("confirmed", "preparing", "kitchen", "order", "eta"))
 
 
-async def test_status_query_preparing_mentions_kitchen(db_session):
-    await _seed_active_order(db_session, OrderStatus.PREPARING)
+async def test_status_query_preparing_mentions_kitchen(db_session, restaurant):
+    await _seed_active_order(db_session, OrderStatus.PREPARING, restaurant.id)
 
     from app.menu.models import Menu
-    menu = Menu(restaurant_id=1, version=1, status="active", source_files=[])
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
     db_session.add(menu)
     await db_session.commit()
 
-    await handle_inbound(db_session, _status_msg(wa_id="wamid.status2"), restaurant_id=1)
+    await handle_inbound(db_session, _status_msg(wa_id="wamid.status2"), restaurant_id=restaurant.id)
     await db_session.commit()
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
@@ -78,14 +78,14 @@ async def test_status_query_preparing_mentions_kitchen(db_session):
     assert "kitchen" in last or "preparing" in last
 
 
-async def test_status_query_no_active_order_returns_polite_reply(db_session):
+async def test_status_query_no_active_order_returns_polite_reply(db_session, restaurant):
     """No active order → polite 'no recent order' message."""
     from app.menu.models import Menu
-    menu = Menu(restaurant_id=1, version=1, status="active", source_files=[])
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
     db_session.add(menu)
     await db_session.commit()
 
-    await handle_inbound(db_session, _status_msg(wa_id="wamid.status3"), restaurant_id=1)
+    await handle_inbound(db_session, _status_msg(wa_id="wamid.status3"), restaurant_id=restaurant.id)
     await db_session.commit()
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
