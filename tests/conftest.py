@@ -39,6 +39,8 @@ async def db_session(engine):
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.db import get_session  # noqa: E402
+from app.llm.factory import get_menu_extractor  # noqa: E402
+from app.llm.fake import FakeExtractor  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
@@ -50,6 +52,21 @@ async def client(engine, db_session):
         yield db_session
 
     app.dependency_overrides[get_session] = _override_session
+    app.dependency_overrides[get_menu_extractor] = lambda: FakeExtractor()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+async def auth_headers(client):
+    signup = {
+        "name": "Biryani House", "phone": "+971501234567",
+        "password": "hunter2!", "lat": 25.2048, "lng": 55.2708,
+    }
+    await client.post("/api/v1/auth/signup", json=signup)
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": "+971501234567", "password": "hunter2!"},
+    )
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
