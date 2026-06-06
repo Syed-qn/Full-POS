@@ -2,13 +2,13 @@
 
 
 def test_metrics_importable():
-    from app.metrics import (
-        HTTP_REQUESTS,
+    from app.metrics import (  # noqa: F401
         HTTP_DURATION,
+        HTTP_REQUESTS,
         OUTBOX_DELIVERIES,
-        SLA_BREACHES,
         RATE_LIMIT_REJECTIONS,
         REGISTRY,
+        SLA_BREACHES,
         metrics_response,
     )
     assert HTTP_REQUESTS is not None
