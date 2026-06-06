@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.db import Base
 import app.audit.models  # noqa: F401
 import app.identity.models  # noqa: F401
+import app.menu.models  # noqa: F401
 
 
 @pytest.fixture(scope="session")

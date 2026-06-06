@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.db import Base
 import app.audit.models  # noqa: F401  (register tables; later modules append imports)
 import app.identity.models  # noqa: F401
+import app.menu.models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
