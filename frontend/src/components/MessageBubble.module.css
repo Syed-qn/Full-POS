@@ -1,0 +1,25 @@
+.row {
+  display: flex;
+  margin-bottom: 8px;
+}
+.inbound {
+  justify-content: flex-start;
+}
+.outbound {
+  justify-content: flex-end;
+}
+.bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.inbound .bubble {
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+}
+.outbound .bubble {
+  background: var(--accent-primary-dim);
+  color: var(--text-primary);
+  border: 1px solid var(--accent-primary);
+}

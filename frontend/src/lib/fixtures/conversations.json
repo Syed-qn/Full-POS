@@ -1,0 +1,16 @@
+{
+  "conversations": [
+    { "id": 1, "phone": "+971501234567", "counterpart": "customer", "manual_takeover": false, "last_message_preview": "Customer wants to order", "unread": true, "updated_at": "2026-06-06T09:58:00Z" },
+    { "id": 2, "phone": "+971559876543", "counterpart": "customer", "manual_takeover": false, "last_message_preview": "Delivered, thanks!", "unread": false, "updated_at": "2026-06-06T09:15:00Z" }
+  ],
+  "messages": {
+    "1": [
+      { "id": 11, "direction": "inbound", "type": "text", "payload": { "text": "Hi" }, "ts": 1717660800 },
+      { "id": 12, "direction": "outbound", "type": "text", "payload": { "text": "Welcome! Here is our menu…" }, "ts": 1717660830 },
+      { "id": 13, "direction": "inbound", "type": "text", "payload": { "text": "I want to order biryani" }, "ts": 1717660900 }
+    ],
+    "2": [
+      { "id": 21, "direction": "outbound", "type": "text", "payload": { "text": "Your order is on the way." }, "ts": 1717650000 }
+    ]
+  }
+}
