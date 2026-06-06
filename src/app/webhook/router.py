@@ -11,6 +11,7 @@ from app.conversation.engine import handle_inbound
 from app.db import get_session
 from app.identity.models import Restaurant
 from app.outbox.worker import claim_pending_outbox_ids, deliver_outbox_message
+from app.ratelimit.deps import rate_limit_webhook
 from app.webhook.models import WebhookEvent
 from app.webhook.normalizer import parse_cloud_payload
 
@@ -39,6 +40,7 @@ async def verify_webhook(request: Request) -> Response:
 async def receive_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
+    _rl: None = Depends(rate_limit_webhook),
 ) -> dict:
     """Receive inbound WhatsApp events from Meta (or simulator)."""
     body_bytes = await request.body()
