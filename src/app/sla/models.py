@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,6 +11,7 @@ class SlaEvent(Base, TimestampMixin):
     """Records yellow/red/breach SLA alerts for an order."""
 
     __tablename__ = "sla_events"
+    __table_args__ = (UniqueConstraint("order_id", "type", name="uq_sla_events_order_type"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
