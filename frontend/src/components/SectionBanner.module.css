@@ -1,0 +1,37 @@
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius);
+}
+.warning {
+  background: var(--sla-warn-dim);
+  color: var(--sla-warn);
+  border: 1px solid var(--sla-warn);
+}
+.error {
+  background: var(--sla-critical-dim);
+  color: var(--sla-critical);
+  border: 1px solid var(--sla-critical);
+}
+.info {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+}
+.success {
+  background: var(--sla-safe-dim);
+  color: var(--sla-safe);
+  border: 1px solid var(--sla-safe);
+}
+.x {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+}
