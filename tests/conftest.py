@@ -27,3 +27,22 @@ async def db_session(engine):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         yield session
+
+
+from httpx import ASGITransport, AsyncClient
+
+from app.db import get_session
+from app.main import create_app
+
+
+@pytest.fixture
+async def client(engine, db_session):
+    app = create_app()
+
+    async def _override_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = _override_session
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
