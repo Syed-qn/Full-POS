@@ -69,6 +69,34 @@ async def client(engine, db_session):
         yield c
 
 
+import redis.asyncio as _redis  # noqa: E402
+
+from app.ratelimit.bucket import TokenBucketLimiter  # noqa: E402
+from app.ratelimit.deps import set_limiter  # noqa: E402
+
+# Dedicated redis logical DB for tests so limiter keys never collide with dev.
+_TEST_REDIS_URL = os.environ.get("APP_TEST_REDIS_URL", "redis://localhost:6380/9")
+
+
+@pytest.fixture
+async def redis_client():
+    client = _redis.from_url(_TEST_REDIS_URL, decode_responses=False)
+    await client.flushdb()
+    yield client
+    await client.flushdb()
+    await client.aclose()
+
+
+@pytest.fixture
+async def rate_limiter(redis_client):
+    """Install a live token-bucket limiter for the app under test, isolated per
+    test (redis/9 flushed before+after), and reset afterwards."""
+    limiter = TokenBucketLimiter(redis_client)
+    set_limiter(limiter)
+    yield limiter
+    set_limiter(None)
+
+
 @pytest.fixture
 async def auth_headers(client):
     signup = {

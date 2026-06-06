@@ -22,6 +22,7 @@ from app.identity.schemas import (
     TokenOut,
 )
 from app.identity.service import DuplicatePhoneError
+from app.ratelimit.deps import rate_limit_auth
 
 router = APIRouter(prefix="/api/v1", tags=["identity"])
 
@@ -43,7 +44,11 @@ async def signup(body: SignupIn, session: AsyncSession = Depends(get_session)):
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
-@router.post("/auth/login", response_model=TokenOut)
+@router.post(
+    "/auth/login",
+    response_model=TokenOut,
+    dependencies=[Depends(rate_limit_auth)],
+)
 async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
     restaurant = await session.scalar(
         select(Restaurant).where(Restaurant.phone == body.phone)

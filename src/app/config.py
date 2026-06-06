@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Predictions
     forecast_provider: str = "rolling"  # rolling | fake
 
+    # Rate limiting (redis token bucket)
+    rate_limit_enabled: bool = True
+    auth_rate_limit: str = "5/minute"
+    webhook_rate_limit: str = "120/minute"
+
 
 @lru_cache
 def get_settings() -> Settings:
