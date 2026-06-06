@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.conversation.engine import handle_inbound
 from app.db import get_session
@@ -76,10 +76,17 @@ async def simulator_send(
     ).scalars().all()
 
     provider = get_mock_provider()
-    from app.db import async_session_factory
 
+    # Deliver on the SAME connection the request used. Opening a fresh
+    # connection (async_session_factory) cannot see rows committed within an
+    # outer test transaction (savepoint isolation), and is also an unnecessary
+    # extra connection for the synchronous simulator path. Bind a sessionmaker
+    # to this session's connection so _deliver_one reuses it.
+    session_factory = async_sessionmaker(
+        bind=session.bind, expire_on_commit=False, join_transaction_mode="create_savepoint"
+    )
     for row in pending:
-        await _deliver_one(row.id, provider=provider, session_factory=async_session_factory)
+        await _deliver_one(row.id, provider=provider, session_factory=session_factory)
 
     return {"status": "ok", "wa_message_id": wa_id}
 
