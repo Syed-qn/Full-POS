@@ -100,6 +100,11 @@ async def transition(
     """Validate, apply, and audit a single order status transition.
 
     The caller MUST commit the session after this returns.
+
+    Concurrency: validate() checks the in-memory order.status — two concurrent
+    transitions on the same order can both pass and last-write-wins. Callers
+    mutating from parallel workers MUST load the row with
+    SELECT ... FOR UPDATE (session.get(Order, id, with_for_update=True)).
     """
     from app.audit.service import record_audit
 

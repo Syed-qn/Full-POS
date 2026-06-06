@@ -100,6 +100,15 @@ class ClaudeExtractor:
         raise RuntimeError("Claude returned no tool_use block")
 
 
+def _first_text(message) -> str:
+    """Extract first text block; guard truncation/empty content (error contract: RuntimeError = model fault)."""
+    if message.stop_reason == "max_tokens":
+        raise RuntimeError("Claude response truncated (max_tokens)")
+    if not message.content or not getattr(message.content[0], "text", None):
+        raise RuntimeError("Claude returned empty content")
+    return message.content[0].text
+
+
 class ClaudeDescriber:
     """Production describer via Claude API. Max 3 lines, never includes price."""
 
@@ -120,7 +129,7 @@ class ClaudeDescriber:
             max_tokens=128,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text.strip()
+        raw = _first_text(message).strip()
         # Safety strip — remove any price-like patterns that slipped through
         safe = _re.sub(r"\b(?:AED|aed|\d+\.\d{2})\b", "", raw).strip()
         return safe
@@ -147,7 +156,7 @@ class ClaudeIntentClassifier:
             max_tokens=16,
             messages=[{"role": "user", "content": prompt}],
         )
-        result = message.content[0].text.strip().lower()
+        result = _first_text(message).strip().lower()
         return result if result in self._VALID else "other"
 
 
@@ -175,7 +184,7 @@ class ClaudeArbiter:
             max_tokens=8,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text.strip()
+        raw = _first_text(message).strip()
         try:
             idx = int(raw) - 1
             if 0 <= idx < len(candidates):
