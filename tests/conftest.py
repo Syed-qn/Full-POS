@@ -29,10 +29,10 @@ async def db_session(engine):
         yield session
 
 
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from app.db import get_session
-from app.main import create_app
+from app.db import get_session  # noqa: E402
+from app.main import create_app  # noqa: E402
 
 
 @pytest.fixture
