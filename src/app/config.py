@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     wa_phone_number_id: str = ""
     wa_app_secret: SecretStr = SecretStr("")
 
+    # Geo
+    geo_provider: str = "fake"  # fake | google_maps
+    google_maps_api_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
