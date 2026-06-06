@@ -6,6 +6,42 @@ from app.llm.port import DishDraft, MenuExtractor, UploadedFile
 from app.menu.models import Dish, Menu
 
 
+async def upload_with_diff(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    files: list[UploadedFile],
+    extractor: MenuExtractor,
+) -> "tuple[Menu, object | None]":
+    """Create menu from upload and compute diff vs active menu.
+
+    Returns (menu, DiffReport-or-None). DiffReport is None when there is no
+    prior active menu to compare against.
+    """
+    from app.menu.diff import DiffReport, diff_menus
+
+    menu = await create_menu_from_upload(
+        session, restaurant_id=restaurant_id, files=files, extractor=extractor
+    )
+    active = await get_active_menu(session, restaurant_id)
+    if active is None or active.id == menu.id:
+        return menu, None
+    report: DiffReport = diff_menus(
+        active.dishes,
+        [
+            DishDraft(
+                dish_number=d.dish_number,
+                name=d.name,
+                price_aed=d.price_aed,
+                category=d.category,
+                description=d.description,
+            )
+            for d in menu.dishes
+        ],
+    )
+    return menu, report
+
+
 async def next_version(session: AsyncSession, restaurant_id: int) -> int:
     current = await session.scalar(
         select(func.max(Menu.version)).where(Menu.restaurant_id == restaurant_id)

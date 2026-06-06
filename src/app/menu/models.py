@@ -44,4 +44,4 @@ class Dish(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(String(2000))
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    menu: Mapped["Menu"] = relationship(back_populates="dishes")
+    menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")

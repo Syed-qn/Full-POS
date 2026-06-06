@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,11 +7,10 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.llm.factory import get_menu_extractor
-from app.llm.port import DishDraft, MenuExtractor, UploadedFile
+from app.llm.port import MenuExtractor, UploadedFile
 from app.menu import service
-from app.menu.diff import diff_menus
 from app.menu.models import Dish, Menu
-from app.menu.schemas import DiffOut, DishIn, DishOut, DishPatch, MenuOut, MenuWithDiffOut
+from app.menu.schemas import AvailabilityIn, DiffOut, DishIn, DishOut, DishPatch, MenuOut, MenuWithDiffOut
 from app.menu.service import MenuIncompleteError
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
@@ -45,26 +43,15 @@ async def upload_menu(
         for f in files
     ]
     try:
-        menu = await service.create_menu_from_upload(
+        menu, report = await service.upload_with_diff(
             session, restaurant_id=restaurant.id, files=uploaded, extractor=extractor
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"menu extraction failed: {exc}")
-    active = await service.get_active_menu(session, restaurant.id)
     out = MenuWithDiffOut.model_validate(menu)
-    if active is not None and active.id != menu.id:
-        report = diff_menus(
-            active.dishes,
-            [
-                DishDraft(
-                    dish_number=d.dish_number, name=d.name, price_aed=d.price_aed,
-                    category=d.category, description=d.description,
-                )
-                for d in menu.dishes
-            ],
-        )
+    if report is not None:
         out.diff_vs_active = DiffOut(
             price_changes=[
                 {**c, "old_price": str(c["old_price"]), "new_price": str(c["new_price"])}
@@ -166,10 +153,6 @@ async def delete_dish(
     await session.delete(dish)
     await session.commit()
     session.expire_all()
-
-
-class AvailabilityIn(BaseModel):
-    is_available: bool
 
 
 @router.patch("/dishes/{dish_id}/availability", response_model=DishOut)

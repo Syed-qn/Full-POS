@@ -49,3 +49,7 @@ class DiffOut(BaseModel):
 
 class MenuWithDiffOut(MenuOut):
     diff_vs_active: DiffOut | None = None
+
+
+class AvailabilityIn(BaseModel):
+    is_available: bool
