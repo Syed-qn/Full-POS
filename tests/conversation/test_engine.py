@@ -102,3 +102,19 @@ async def test_second_message_after_menu_sent_does_not_resend_menu(db_session, r
     # the menu is NOT re-sent — only the greeting menu carries the full dish list.
     menu_sends = [r for r in rows if "Welcome! Here is our menu" in r.payload["body"]]
     assert len(menu_sends) == 1
+
+
+async def test_stop_keyword_records_optout(db_session, restaurant):
+    from app.marketing.optout import is_opted_out
+
+    inbound = InboundMessage(
+        wa_message_id="stop-test-1",
+        from_phone="+971501234999",
+        restaurant_phone=restaurant.phone,
+        type=MessageType.TEXT,
+        payload={"text": "STOP"},
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert await is_opted_out(db_session, restaurant_id=restaurant.id, phone="+971501234999")

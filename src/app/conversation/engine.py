@@ -736,6 +736,24 @@ async def handle_inbound(
         ts=inbound.timestamp,
     )
 
+    # STOP opt-out — must be checked before any dialogue processing
+    from app.marketing.optout import is_stop_keyword, record_opt_out
+    if is_stop_keyword(inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""):
+        await record_opt_out(
+            session,
+            restaurant_id=restaurant_id,
+            phone=inbound.from_phone,
+        )
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=inbound.from_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "You've been unsubscribed from marketing messages. Reply START to re-subscribe."},
+            idempotency_key=f"stop-ack-{inbound.wa_message_id}",
+        )
+        return  # do not process further
+
     # Manual takeover: bot is silent, human handles it
     if conv.manual_takeover:
         return
