@@ -2,12 +2,26 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit import record_audit
 from app.db import get_session
-from app.identity.auth import create_access_token, hash_password, verify_password
+from app.identity import service
+from app.identity.auth import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
-from app.identity.schemas import LoginIn, RestaurantOut, SignupIn, TokenOut
+from app.identity.schemas import (
+    LoginIn,
+    RestaurantOut,
+    RiderIn,
+    RiderOut,
+    RiderPatch,
+    SettingsPatch,
+    SignupIn,
+    TokenOut,
+)
+from app.identity.service import DuplicatePhoneError
 
 router = APIRouter(prefix="/api/v1", tags=["identity"])
 
@@ -16,31 +30,17 @@ _DUMMY_HASH = hash_password("dummy-timing-equalizer-not-a-real-password")
 
 @router.post("/auth/signup", response_model=RestaurantOut, status_code=201)
 async def signup(body: SignupIn, session: AsyncSession = Depends(get_session)):
-    existing = await session.scalar(
-        select(Restaurant).where(Restaurant.phone == body.phone)
-    )
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, "phone already registered")
-    restaurant = Restaurant(
-        name=body.name,
-        phone=body.phone,
-        password_hash=hash_password(body.password),
-        lat=body.lat,
-        lng=body.lng,
-    )
-    session.add(restaurant)
-    await session.flush()
-    await record_audit(
-        session,
-        actor="manager",
-        restaurant_id=restaurant.id,
-        entity="restaurant",
-        entity_id=str(restaurant.id),
-        action="signup",
-        after={"name": body.name, "phone": body.phone, "lat": body.lat, "lng": body.lng},
-    )
-    await session.commit()
-    return restaurant
+    try:
+        return await service.create_restaurant(
+            session,
+            name=body.name,
+            phone=body.phone,
+            password=body.password,
+            lat=body.lat,
+            lng=body.lng,
+        )
+    except DuplicatePhoneError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -59,3 +59,56 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
 @router.get("/me", response_model=RestaurantOut)
 async def me(restaurant: Restaurant = Depends(current_restaurant)):
     return restaurant
+
+
+@router.post("/riders", response_model=RiderOut, status_code=201)
+async def create_rider(
+    body: RiderIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await service.create_rider(
+            session,
+            restaurant_id=restaurant.id,
+            name=body.name,
+            phone=body.phone,
+        )
+    except DuplicatePhoneError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+
+@router.get("/riders", response_model=list[RiderOut])
+async def list_riders(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await service.list_riders(session, restaurant.id)
+
+
+@router.patch("/riders/{rider_id}", response_model=RiderOut)
+async def patch_rider(
+    rider_id: int,
+    body: RiderPatch,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rider = await service.set_rider_status(
+        session,
+        restaurant_id=restaurant.id,
+        rider_id=rider_id,
+        status=body.status,
+    )
+    if rider is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
+    return rider
+
+
+@router.patch("/settings", response_model=RestaurantOut)
+async def patch_settings(
+    body: SettingsPatch,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    changes = body.model_dump(exclude_unset=True, exclude_none=True)
+    return await service.update_settings(session, restaurant=restaurant, changes=changes)
