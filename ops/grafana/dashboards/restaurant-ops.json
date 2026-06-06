@@ -1,0 +1,362 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Operational health for the Restaurant WhatsApp Platform. Panels are wired to the Phase 7 Task 10 Prometheus metric set (http_requests_total, http_request_duration_seconds, outbox_deliveries_total, sla_breaches_total, rate_limit_rejections_total).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["restaurant", "whatsapp", "ops", "p7"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+        "definition": "label_values(http_requests_total, status)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Status",
+        "multi": true,
+        "name": "status",
+        "options": [],
+        "query": { "qryType": 1, "query": "label_values(http_requests_total, status)" },
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "timezone": "Asia/Dubai",
+  "title": "Restaurant Ops",
+  "uid": "restaurant-ops",
+  "version": 1,
+  "weekStart": "",
+  "panels": [
+    {
+      "type": "row",
+      "title": "Outbox delivery (outbox_deliveries_total)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox queue throughput by result (stacked)",
+      "description": "Per-result delivery rate from outbox_deliveries_total{result=sent|failed|dead}. The app has no standalone outbox-depth gauge in P7-T10; queue pressure is read as the failed+dead rate climbing relative to sent. The 'dead' series is the dead-letter count.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
+      "id": 1,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "stacking": { "mode": "normal", "group": "A" },
+            "lineWidth": 1
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "dead" }, "properties": [ { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } } ] },
+          { "matcher": { "id": "byName", "options": "failed" }, "properties": [ { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } } ] },
+          { "matcher": { "id": "byName", "options": "sent" }, "properties": [ { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum by (result) (rate(outbox_deliveries_total[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Outbox dead-letter count (cumulative)",
+      "description": "Total dead-lettered messages: sum(outbox_deliveries_total{result=dead}). Any non-zero value is an alerting condition (see docs/observability.md).",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+      "id": 2,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum(outbox_deliveries_total{result=\"dead\"})",
+          "legendFormat": "dead",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Outbox failed (last 5m)",
+      "description": "Recent transient failures awaiting sweeper retry: sum(increase(outbox_deliveries_total{result=failed}[5m])). Persistently high = approaching dead-letter.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 5 },
+      "id": 3,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 20 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum(increase(outbox_deliveries_total{result=\"failed\"}[5m]))",
+          "legendFormat": "failed",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "SLA (sla_breaches_total)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 101,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "SLA breach rate (per restaurant)",
+      "description": "rate(sla_breaches_total[5m]) by restaurant_id — orders exceeding the 40-minute customer SLA. Spec: a breach triggers an automatic coupon (except disclosed weather delays).",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 10 },
+      "id": 4,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2, "spanNulls": true },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum by (restaurant_id) (rate(sla_breaches_total[5m]))",
+          "legendFormat": "restaurant {{restaurant_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "SLA breaches (last 5m, all tenants)",
+      "description": "sum(increase(sla_breaches_total[5m])). Alert fires when this is > 0 over a 5-minute window.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+      "id": 5,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["sum"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum(increase(sla_breaches_total[5m]))",
+          "legendFormat": "breaches",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "HTTP traffic (http_requests_total / http_request_duration_seconds)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 102,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by endpoint (route template)",
+      "description": "sum by (path) (rate(http_requests_total[5m])). 'path' is the matched route template (e.g. /webhooks/whatsapp, /api/v1/auth/login) — bounded cardinality by design.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "id": 6,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "stacking": { "mode": "none", "group": "A" } },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum by (path) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate (4xx / 5xx share)",
+      "description": "Ratio of 5xx and 4xx responses to total requests, from http_requests_total{status}. 5xx is the primary alerting signal.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "id": 7,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2 },
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "5xx" }, "properties": [ { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } } ] },
+          { "matcher": { "id": "byName", "options": "4xx" }, "properties": [ { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)",
+          "legendFormat": "5xx",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)",
+          "legendFormat": "4xx",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Webhook latency (http_request_duration_seconds, path=/webhooks/whatsapp)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "id": 103,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Webhook latency p50 / p95 / p99",
+      "description": "histogram_quantile over http_request_duration_seconds_bucket filtered to path=\"/webhooks/whatsapp\". This is the inbound WhatsApp ingest latency; p95 SLO < 500ms (alert threshold). There is no separate webhook histogram in P7-T10 — it is derived from the shared HTTP histogram by route.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 28 },
+      "id": 8,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 },
+          "unit": "s"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p99" }, "properties": [ { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } } ] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [ { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } } ] },
+          { "matcher": { "id": "byName", "options": "p50" }, "properties": [ { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{path=\"/webhooks/whatsapp\"}[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{path=\"/webhooks/whatsapp\"}[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{path=\"/webhooks/whatsapp\"}[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate-limit rejections by scope",
+      "description": "sum by (scope) (rate(rate_limit_rejections_total[5m])) — auth (login brute-force) vs webhook (flood) rejections returning HTTP 429.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 },
+      "id": 9,
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "stacking": { "mode": "normal", "group": "A" } },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["sum"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+          "expr": "sum by (scope) (rate(rate_limit_rejections_total[5m]))",
+          "legendFormat": "{{scope}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Order status (orders-by-status)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "id": 104,
+      "panels": []
+    },
+    {
+      "type": "text",
+      "title": "Orders by status — NOT YET EMITTED",
+      "description": "Placeholder for the brief's orders-by-status (stacked) panel.",
+      "datasource": { "type": "prometheus", "uid": "restaurant-prometheus" },
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 37 },
+      "id": 10,
+      "options": {
+        "mode": "markdown",
+        "content": "**No `orders_by_status` gauge exists in the implemented P7-T10 metric set.** The Phase 7 Task 10 plan defines only: `http_requests_total`, `http_request_duration_seconds`, `outbox_deliveries_total`, `sla_breaches_total`, `rate_limit_rejections_total`. When an order-status gauge is added (suggested: `orders_by_status{restaurant_id,status}` registered on `app.obs.metrics.REGISTRY`, updated by a beat task), replace this panel with a stacked timeseries of `sum by (status) (orders_by_status)`. SLA breaches (above) are the only order-level signal available today."
+      }
+    }
+  ]
+}
