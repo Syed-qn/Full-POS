@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     env: str = "dev"
     database_url: str = "postgresql+asyncpg://app:app@localhost:5433/restaurant"
     redis_url: str = "redis://localhost:6380/0"
-    jwt_secret: SecretStr = SecretStr("dev-secret-change-me")
+    jwt_secret: SecretStr = SecretStr("dev-secret-change-me-0123456789abcdef")
     jwt_ttl_minutes: int = 60
     llm_provider: str = "fake"  # fake | claude
     anthropic_api_key: SecretStr = SecretStr("")

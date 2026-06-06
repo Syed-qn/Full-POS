@@ -1,5 +1,5 @@
 # src/app/audit/models.py
-from sqlalchemy import BigInteger, String
+from sqlalchemy import BigInteger, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -8,6 +8,10 @@ from app.db import Base, TimestampMixin
 
 class AuditLog(Base, TimestampMixin):
     __tablename__ = "audit_log"
+
+    __table_args__ = (
+        Index("ix_audit_log_restaurant_entity", "restaurant_id", "entity", "entity_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     actor: Mapped[str] = mapped_column(String(64))

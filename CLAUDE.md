@@ -65,3 +65,4 @@ Modular monolith (FastAPI, async SQLAlchemy 2, Celery) — see spec §2 for full
 - Money: `Numeric(8,2)` / `Decimal`, AED. Time zone: Asia/Dubai (Celery), UTC in DB.
 - Order/Delivery statuses are explicit FSM strings — never invent new ones; spec §3 lists them.
 - Commit per task, conventional-commit style (`feat:`, `chore:`).
+- New tables using TimestampMixin: add BEFORE UPDATE trigger trg_<table>_updated_at in their migration (see updated_at_triggers migration).

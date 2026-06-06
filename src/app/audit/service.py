@@ -15,6 +15,7 @@ async def record_audit(
     before: dict | None = None,
     after: dict | None = None,
 ) -> AuditLog:
+    """Add an audit row to the caller's transaction. The caller MUST commit (or flush) — record_audit never commits."""
     row = AuditLog(
         actor=actor,
         restaurant_id=restaurant_id,

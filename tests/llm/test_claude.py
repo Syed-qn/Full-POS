@@ -75,3 +75,11 @@ async def test_missing_dishes_key_raises():
     files = [UploadedFile(filename="m.jpg", content=b"\xff\xd8\xff", mime="image/jpeg")]
     with pytest.raises(RuntimeError, match="dishes"):
         await extractor.extract_menu(files)
+
+
+async def test_malformed_dish_raises_runtime_error():
+    malformed_input = {"dishes": [{"name": ["not", "a", "string"]}]}
+    extractor = _make_extractor(block_input=malformed_input, stop_reason="tool_use")
+    files = [UploadedFile(filename="m.jpg", content=b"\xff\xd8\xff", mime="image/jpeg")]
+    with pytest.raises(RuntimeError, match="Malformed dish"):
+        await extractor.extract_menu(files)

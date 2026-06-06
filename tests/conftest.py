@@ -6,14 +6,14 @@ os.environ["APP_DATABASE_URL"] = (
 )
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.db import Base
 import app.audit.models  # noqa: F401
 import app.identity.models  # noqa: F401
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 async def engine():
     eng = create_async_engine(os.environ["APP_DATABASE_URL"])
     async with eng.begin() as conn:
@@ -25,9 +25,14 @@ async def engine():
 
 @pytest.fixture
 async def db_session(engine):
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with factory() as session:
+    async with engine.connect() as conn:
+        trans = await conn.begin()
+        session = AsyncSession(
+            bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        )
         yield session
+        await session.close()
+        await trans.rollback()
 
 
 from httpx import ASGITransport, AsyncClient  # noqa: E402
