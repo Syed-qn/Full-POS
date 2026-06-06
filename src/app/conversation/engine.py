@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_audit
 from app.conversation.models import Conversation
 from app.conversation.service import get_or_create_conversation, record_message
+from app.ordering.matching import MatchConfidence, find_dish_matches
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
@@ -126,7 +127,6 @@ async def _handle_collecting_items(
     restaurant_id: int,
 ) -> None:
     """Parse dish name/number + qty from free text; add, disambiguate, or retry."""
-    from app.ordering.matching import MatchConfidence, find_dish_matches
     from app.ordering.models import Order
     from app.ordering.service import (
         add_item,
@@ -227,6 +227,59 @@ async def _handle_collecting_items(
     )
 
 
+async def _finalize_with_stored_address(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    stored,
+    *,
+    rest_lat: float,
+    rest_lng: float,
+) -> None:
+    """Attach a returning customer's saved address to the draft and summarise."""
+    from datetime import datetime, timezone
+
+    from app.geo.haversine import distance_km
+    from app.ordering.fees import UndeliverableError, calculate_fee
+    from app.ordering.models import Order
+
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-draft-saved",
+            body="Your cart is empty. Please send 'hi' to start a new order.",
+        )
+        return
+
+    dist = None
+    fee = Decimal("0.00")
+    if stored.latitude is not None and stored.longitude is not None:
+        dist = distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
+        try:
+            fee = calculate_fee(dist)
+        except UndeliverableError:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="undeliverable-saved",
+                body="Sorry, your saved address is outside our delivery area "
+                     "(maximum 10 km). Please share a new location.",
+            )
+            return
+
+    order.address_id = stored.id
+    order.distance_km = dist
+    order.delivery_fee_aed = fee
+    order.total = order.subtotal + fee
+    stored.last_used_at = datetime.now(timezone.utc)
+    await session.flush()
+
+    _set_state(conv, dialogue_state="order_confirmation", pending_order_id=order.id)
+    await _send_order_summary(session, conv, inbound, restaurant_id, order)
+
+
 async def _handle_address_capture(
     session: AsyncSession,
     conv: Conversation,
@@ -237,11 +290,55 @@ async def _handle_address_capture(
     from app.geo.haversine import distance_km
     from app.identity.models import Restaurant
     from app.ordering.fees import UndeliverableError, calculate_fee
-    from app.ordering.service import get_or_create_customer
+    from app.ordering.service import get_last_address, get_or_create_customer
 
     restaurant = await session.get(Restaurant, restaurant_id)
     rest_lat = restaurant.lat if restaurant else 25.2048
     rest_lng = restaurant.lng if restaurant else 55.2708
+
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone,
+    )
+
+    # Button reply on a previously-offered saved address.
+    if inbound.type == MessageType.BUTTON_REPLY:
+        btn_id = inbound.payload.get("id", "")
+        if btn_id == "use_saved_address":
+            stored = await get_last_address(session, customer.id)
+            if stored is not None:
+                await _finalize_with_stored_address(
+                    session, conv, inbound, restaurant_id, stored,
+                    rest_lat=rest_lat, rest_lng=rest_lng,
+                )
+                return
+        if btn_id == "new_address":
+            _set_state(conv, address_offer_made=True)
+            await _send_buttons(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ask-location",
+                body="Please share your delivery location pin, or type your address.",
+                buttons=[{"id": "share_location", "title": "Share location"}],
+            )
+            return
+
+    # Returning customer: offer the saved address once before asking for a pin.
+    if not conv.state.get("address_offer_made"):
+        stored = await get_last_address(session, customer.id)
+        if stored is not None:
+            _set_state(conv, address_offer_made=True)
+            label = ", ".join(
+                p for p in (stored.room_apartment, stored.building) if p
+            ) or "your saved address"
+            await _send_buttons(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="offer-saved-addr",
+                body=f"Welcome back! Deliver to your saved address ({label})?",
+                buttons=[
+                    {"id": "use_saved_address", "title": "Use saved address"},
+                    {"id": "new_address", "title": "New address"},
+                ],
+            )
+            return
 
     if inbound.type == MessageType.LOCATION:
         lat = inbound.payload["latitude"]
