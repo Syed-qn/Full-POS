@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     auth_rate_limit: str = "5/minute"
     webhook_rate_limit: str = "120/minute"
 
+    # CORS / security headers (P7-T13)
+    cors_allow_origins: list[str] = []
+    hsts_enabled: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

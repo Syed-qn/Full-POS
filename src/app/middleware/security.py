@@ -1,27 +1,33 @@
-"""Security headers middleware (P7-T6).
+"""Security headers middleware (P7-T6 / P7-T13).
 
-Adds security headers to every response. HSTS is only emitted in production
-(APP_ENV=prod) since local dev runs over HTTP.
+Adds security headers to every response, including Content-Security-Policy.
+HSTS is gated on the ``hsts`` constructor parameter (driven by
+``APP_HSTS_ENABLED`` in config) so it is never emitted over plain HTTP in dev.
 """
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.config import get_settings
-
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to every response."""
 
+    def __init__(self, app, *, hsts: bool = False) -> None:
+        super().__init__(app)
+        self._hsts = hsts
+
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
-        settings = get_settings()
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        if settings.env == "prod":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'none'; frame-ancestors 'none'",
+        )
+        if self._hsts:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=63072000; includeSubDomains",
             )
         return response
