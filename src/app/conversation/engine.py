@@ -683,7 +683,31 @@ async def _handle_rider_inbound(
             longitude=float(inbound.payload["longitude"]),
         )
         return
-    # Button replies (Orders Picked / Delivered) are wired in Task 11.
+
+    if inbound.type == MessageType.BUTTON_REPLY:
+        # Accept either payload key shape ("button_id" from dispatch buttons,
+        # "id" from the shared button helper).
+        button_id = inbound.payload.get("button_id") or inbound.payload.get("id", "")
+        if button_id.startswith("picked:"):
+            from app.dispatch.rider_flow import handle_orders_picked
+
+            await handle_orders_picked(
+                session,
+                restaurant_id=restaurant_id,
+                rider=rider,
+                batch_id=int(button_id.split(":", 1)[1]),
+            )
+        elif button_id.startswith("delivered:"):
+            from app.dispatch.rider_flow import handle_delivered
+
+            await handle_delivered(
+                session,
+                restaurant_id=restaurant_id,
+                rider=rider,
+                order_id=int(button_id.split(":", 1)[1]),
+            )
+        return
+    # Other rider message types (e.g. free text) are ignored — flow is button-only.
 
 
 async def handle_inbound(

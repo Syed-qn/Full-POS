@@ -264,3 +264,51 @@ class ClaudeForecastAdjuster:
             if cleaned:
                 effect["dish_demand_delta"] = cleaned
         return effect
+
+
+class ClaudeSegmentCompiler:
+    """Production segment compiler: plain English -> validated DSL via haiku.
+
+    The model is constrained to emit JSON-only DSL; we then run ``validate_dsl``
+    which raises on anything outside the field/op allowlist. Invalid model output
+    is rejected (RuntimeError) — never executed.
+    """
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    def compile(self, text: str) -> dict:
+        import json
+
+        from app.marketing.segments import validate_dsl
+
+        prompt = (
+            "Translate this restaurant manager's audience description into a "
+            "segment DSL JSON object. Reply with JSON ONLY, no prose.\n\n"
+            f"Description: {text!r}\n\n"
+            "Schema: top-level key 'all' (AND) or 'any' (OR) -> list of conditions.\n"
+            "Each condition is {\"field\":..,\"op\":..,\"value\":..}.\n"
+            "Allowed fields/ops:\n"
+            "  total_spend: eq|gte|lte|gt|lt (numeric AED)\n"
+            "  order_count: eq|gte|lte|gt|lt (integer)\n"
+            "  last_order_days_ago: eq|gte|lte|gt|lt (integer days)\n"
+            "  tag: contains (string tag label, e.g. 'vip')\n"
+            "  ordered_dish_id: eq (integer dish id, optional 'min_count')\n"
+            "Use ONLY these fields and ops. Output JSON only."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = _first_text(message).strip()
+        # Strip ```json fences if present.
+        raw = _re.sub(r"^```(?:json)?|```$", "", raw, flags=_re.MULTILINE).strip()
+        try:
+            dsl = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"SegmentCompiler returned non-JSON: {exc}") from exc
+        # Security gate: reject anything outside the allowlist before returning.
+        validate_dsl(dsl)
+        return dsl
