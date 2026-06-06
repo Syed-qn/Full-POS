@@ -10,7 +10,7 @@ Idempotency: uq_sla_events_order_type blocks duplicate rows; ON CONFLICT DO NOTH
 from __future__ import annotations
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from celery import shared_task

@@ -4,7 +4,6 @@ Uses the ``client`` / ``auth_headers`` fixtures from tests/conftest.py.
 The predictions router is mounted by the local conftest override.
 """
 import pytest
-from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
 

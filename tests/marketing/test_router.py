@@ -4,7 +4,6 @@ Uses the shared ``client`` + ``auth_headers`` fixtures from tests/conftest.py.
 The marketing router must be wired into create_app() for these tests to pass.
 """
 import pytest
-from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
 

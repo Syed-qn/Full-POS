@@ -13,6 +13,17 @@ celery_app.conf.update(
     timezone="Asia/Dubai",
     task_routes={
         "outbox.deliver": {"queue": "outbox"},
+        "sla.monitor_tick": {"queue": "sla_monitor"},
+        "dispatch.*": {"queue": "dispatch"},
+    },
+    beat_schedule={
+        "sla-monitor-tick": {
+            "task": "sla.monitor_tick",
+            "schedule": 60.0,  # every 60 seconds
+        },
     },
 )
-celery_app.autodiscover_tasks(["app.outbox"], related_name="worker")
+celery_app.autodiscover_tasks(
+    ["app.outbox", "app.sla"],
+    related_name="worker",
+)

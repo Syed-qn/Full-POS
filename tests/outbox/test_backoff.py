@@ -1,6 +1,4 @@
 """Test outbox exponential backoff (P7-T1)."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def test_backoff_countdown_progression():
