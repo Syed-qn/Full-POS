@@ -1,0 +1,39 @@
+# Python virtualenv + caches
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+**/*.egg-info/
+dist/
+build/
+
+# Local runtime data (uploads, etc.) — created fresh in the image
+var/
+
+# Tests are not shipped in the runtime image
+tests/
+
+# Docs are not part of the deployed artifact
+docs/
+
+# Frontend ships separately (its own build / static host)
+frontend/
+
+# Secrets and local env files must never enter the image
+.env
+.env.*
+!.env.example
+
+# VCS + tooling
+.git/
+.gitignore
+.github/
+*.md
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+scripts/

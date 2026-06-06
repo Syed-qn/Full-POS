@@ -1,0 +1,140 @@
+# Production composition for the Restaurant WhatsApp Platform.
+#
+# Usage:
+#   cp .env.example .env   # then fill in production secrets (see docs/deployment.md)
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Notes:
+# - No host-mounted source: images are immutable build artifacts.
+# - `migrate` runs alembic once and must exit 0 before `api` starts.
+# - All services declare healthchecks + restart policies + memory limits.
+
+x-app-env: &app-env
+  # Inside the compose network, services reach db/redis by service name.
+  # These override whatever is in .env for the containerised topology.
+  APP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-restaurant}
+  APP_REDIS_URL: redis://redis:6379/0
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-restaurant}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-restaurant}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 1g
+    # Not published to the host in prod; reachable only on the compose network.
+    expose:
+      - "5432"
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    expose:
+      - "6379"
+
+  # One-shot schema migration. Must complete successfully before api boots.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: restaurant-api:latest
+    restart: "no"
+    env_file: .env
+    environment:
+      <<: *app-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 512m
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: restaurant-api:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-env
+      APP_WORKERS: ${APP_WORKERS:-4}
+      APP_PORT: "8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    mem_limit: 1g
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: restaurant-worker:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-env
+      APP_CONCURRENCY: ${APP_CONCURRENCY:-4}
+      APP_QUEUES: outbox,default
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 1g
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: restaurant-worker:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-env
+    # Beat schedules periodic tasks (SLA monitor, schedulers); single instance only.
+    command:
+      - celery
+      - -A
+      - apps.workers.celery_app:celery_app
+      - beat
+      - --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 256m
+
+volumes:
+  pgdata:
+  redisdata:

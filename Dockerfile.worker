@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1.7
+# Celery worker image. Shares the builder stage approach with Dockerfile so the
+# Python environment is byte-for-byte identical to the API; only the CMD differs.
+
+# ----------------------------------------------------------------------------
+# Builder: same dependency-wheel build as the API image.
+# ----------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY pyproject.toml ./
+COPY src ./src
+
+RUN pip wheel --wheel-dir /wheels .
+
+# ----------------------------------------------------------------------------
+# Runtime: non-root celery worker.
+# ----------------------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app/src:/app \
+    APP_CONCURRENCY=4 \
+    APP_QUEUES=outbox,default
+
+RUN useradd --create-home --uid 10001 app
+
+WORKDIR /app
+
+COPY --from=builder /wheels /wheels
+COPY pyproject.toml ./
+COPY src ./src
+COPY apps ./apps
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+
+RUN pip install --no-index --find-links=/wheels \
+        fastapi "uvicorn[standard]" pydantic pydantic-settings \
+        "sqlalchemy[asyncio]" asyncpg alembic "celery[redis]" redis \
+        "passlib[argon2]" pyjwt anthropic python-multipart \
+    && pip install --no-deps -e . \
+    && rm -rf /wheels
+
+RUN mkdir -p /app/var/uploads && chown -R app:app /app/var
+
+USER app
+
+# Liveness via celery ping (talks to the broker + worker mailbox).
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD celery -A apps.workers.celery_app:celery_app inspect ping -d "celery@$(hostname)" || exit 1
+
+# Consume the outbox + default queues; concurrency tunable via env.
+CMD celery -A apps.workers.celery_app:celery_app worker \
+    --queues "${APP_QUEUES}" \
+    --concurrency "${APP_CONCURRENCY}" \
+    --loglevel=info
