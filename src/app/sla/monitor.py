@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import async_session_factory
+from app.metrics import SLA_BREACHES
 from app.ordering.fsm import OrderStatus
 from app.ordering.models import Customer, Order
 from app.outbox.service import enqueue_message
@@ -130,6 +131,10 @@ async def _fire_event(
             payload={"body": mgr_msg},
             idempotency_key=f"sla-mgr-{order.id}-{event_type}",
         )
+
+    # Prometheus metric: increment SLA breach counter
+    if event_type == "breach_40":
+        SLA_BREACHES.labels(restaurant_id=str(order.restaurant_id)).inc()
 
     # Auto-coupon at breach_40 if NOT weather-delay-disclosed
     if event_type == "breach_40" and not order.weather_delay_disclosed:

@@ -5,6 +5,7 @@ from celery import shared_task
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.metrics import OUTBOX_DELIVERIES
 from app.outbox.models import OutboxMessage
 from app.whatsapp.port import OutboundMessage, OutboundMessageType, WhatsAppPort
 
@@ -81,10 +82,16 @@ async def _deliver_one(
             row.status = "sent"
             row.wa_message_id = wa_id
             row.attempts += 1
+            OUTBOX_DELIVERIES.labels(status="sent").inc()
         except Exception as exc:
             row.attempts += 1
             logger.warning("outbox delivery failed for id=%s: %s", outbox_id, exc)
-            row.status = "dead" if row.attempts >= _MAX_ATTEMPTS else "failed"
+            if row.attempts >= _MAX_ATTEMPTS:
+                row.status = "dead"
+                OUTBOX_DELIVERIES.labels(status="dead").inc()
+            else:
+                row.status = "failed"
+                OUTBOX_DELIVERIES.labels(status="retry").inc()
         await session.commit()
 
 
@@ -95,6 +102,7 @@ async def _mark_dead(outbox_id: int, *, session_factory: async_sessionmaker[Asyn
         if row is not None and row.status not in _TERMINAL_STATUSES:
             row.status = "dead"
             row.attempts += 1
+            OUTBOX_DELIVERIES.labels(status="dead").inc()
             await session.commit()
 
 
@@ -136,4 +144,5 @@ def deliver_outbox_message(self, outbox_id: int) -> None:
             "outbox transient failure id=%s retries=%s countdown=%ss: %s",
             outbox_id, self.request.retries, countdown, exc,
         )
+        OUTBOX_DELIVERIES.labels(status="retry").inc()
         raise self.retry(exc=exc, countdown=countdown)
