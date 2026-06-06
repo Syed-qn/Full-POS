@@ -43,7 +43,7 @@ async def upload_menu(
         content = await f.read()
         if len(content) > MAX_UPLOAD_BYTES:
             raise HTTPException(
-                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status.HTTP_413_CONTENT_TOO_LARGE,
                 f"File '{f.filename}' exceeds maximum size of "
                 f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
             )
@@ -61,7 +61,7 @@ async def upload_menu(
             session, restaurant_id=restaurant.id, files=uploaded, extractor=extractor
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"menu extraction failed: {exc}")
     out = MenuWithDiffOut.model_validate(menu)
@@ -201,7 +201,7 @@ async def activate_menu(
     try:
         return await service.activate_menu(session, menu)
     except MenuIncompleteError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 
 @router.post("/menus/{menu_id}/reextract", response_model=MenuWithDiffOut, status_code=200)
@@ -215,7 +215,7 @@ async def reextract_menu(
     try:
         new_menu, report = await service.reextract_menu(session, menu=menu, extractor=extractor)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"menu re-extraction failed: {exc}")
     out = MenuWithDiffOut.model_validate(new_menu)
