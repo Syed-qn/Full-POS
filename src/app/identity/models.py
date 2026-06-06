@@ -42,3 +42,12 @@ class Rider(Base, TimestampMixin):
     phone: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="available")
     # available | on_delivery | off_shift | deactivated
+    # Rolling delivery performance (Phase 4) — feeds dispatch scoring.
+    performance: Mapped[dict] = mapped_column(
+        JSONB,
+        default=lambda: {
+            "on_time_pct": 100.0,
+            "avg_delivery_min": 25,
+            "total_deliveries": 0,
+        },
+    )

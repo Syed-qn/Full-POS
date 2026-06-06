@@ -211,3 +211,39 @@ async def test_get_or_create_customer_idempotent(db_session, restaurant):
         db_session, restaurant_id=restaurant.id, phone="+971500000004",
     )
     assert c1.id == c2.id
+
+
+async def test_order_has_rider_id_column(db_session, restaurant):
+    """Order.rider_id column exists, is nullable, and Rider.performance JSONB exists."""
+    from decimal import Decimal
+
+    from app.identity.models import Rider
+    from app.ordering.models import Customer, Order
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501230200", name="RiderFKTest",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-RFK1", status="draft",
+        priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("0.00"), total=Decimal("0.00"),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    rider = Rider(
+        restaurant_id=restaurant.id, name="PerfRider", phone="+971501230201",
+        status="available",
+    )
+    db_session.add(rider)
+    await db_session.commit()
+    await db_session.refresh(order)
+    await db_session.refresh(rider)
+    assert order.rider_id is None  # nullable FK
+    # performance JSONB default present
+    assert rider.performance["on_time_pct"] == 100.0
+    assert rider.performance["total_deliveries"] == 0
