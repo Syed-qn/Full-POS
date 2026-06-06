@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     wa_access_token: SecretStr = SecretStr("")
     wa_phone_number_id: str = ""
     wa_app_secret: SecretStr = SecretStr("")
+    wa_business_account_id: str = ""  # WABA id for message-template management
+
+    # Marketing
+    marketing_send_dry_run: bool = True  # safe default — no real Meta calls
+    marketing_template_provider: str = "mock"  # mock | meta
 
     # Geo
     geo_provider: str = "fake"  # fake | google_maps
