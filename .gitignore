@@ -7,3 +7,9 @@ var/
 .ruff_cache/
 dist/
 *.egg-info/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/node_modules/.tmp/
+frontend/*.tsbuildinfo
