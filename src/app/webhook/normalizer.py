@@ -90,7 +90,10 @@ def parse_cloud_payload(payload: dict) -> list[InboundMessage]:
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            restaurant_phone = value.get("metadata", {}).get("display_phone_number", "")
+            raw_restaurant_phone = value.get("metadata", {}).get("display_phone_number", "")
+            restaurant_phone = (
+                _normalize_phone(raw_restaurant_phone) if raw_restaurant_phone else ""
+            )
             for msg in value.get("messages", []):
                 results.append(_parse_single_message(msg, restaurant_phone))
     return results
