@@ -41,6 +41,15 @@ async function request<T>(
     } catch {
       /* non-JSON error body */
     }
+    if (resp.status === 401) {
+      // Session expired/invalid → drop the stored token and bounce to login.
+      // Cleared directly (not via auth.logout) to avoid a circular import; guard
+      // against a redirect loop when the failing request is the login page itself.
+      localStorage.removeItem(TOKEN_KEY);
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.assign("/login");
+      }
+    }
     throw new ApiError(resp.status, detail);
   }
   if (resp.status === 204) return undefined as T;

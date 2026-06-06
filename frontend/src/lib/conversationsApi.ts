@@ -5,10 +5,15 @@ import type { ConversationOut, MessageOut } from "./types";
 type Fix = { conversations: ConversationOut[]; messages: Record<string, MessageOut[]> };
 const FIX = fixtures as Fix;
 
+// Fixture fallback is a dev-only convenience: the conversation endpoints don't
+// exist yet. In production we rethrow so failures surface rather than masking
+// with stale data. NOTE: vitest runs with import.meta.env.DEV === true, so
+// existing tests still exercise the fixture fallback path.
 export async function fetchConversations(): Promise<ConversationOut[]> {
   try {
     return await apiClient.get<ConversationOut[]>("/api/v1/conversations");
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err instanceof ApiError && err.status !== 404) throw err;
     return FIX.conversations;
   }
@@ -18,6 +23,7 @@ export async function fetchMessages(conversationId: number): Promise<MessageOut[
   try {
     return await apiClient.get<MessageOut[]>(`/api/v1/conversations/${conversationId}/messages`);
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err instanceof ApiError && err.status !== 404) throw err;
     return FIX.messages[String(conversationId)] ?? [];
   }
@@ -27,6 +33,7 @@ export async function setTakeover(conversationId: number, active: boolean): Prom
   try {
     await apiClient.post(`/api/v1/conversations/${conversationId}/takeover`, { active });
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err instanceof ApiError && err.status !== 404) throw err;
     // fixture mode: no-op
   }
@@ -36,6 +43,7 @@ export async function sendMessage(conversationId: number, text: string): Promise
   try {
     await apiClient.post(`/api/v1/conversations/${conversationId}/messages`, { text });
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err instanceof ApiError && err.status !== 404) throw err;
   }
 }

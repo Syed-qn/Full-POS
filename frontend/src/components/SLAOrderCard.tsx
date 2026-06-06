@@ -14,6 +14,12 @@ export function SLAOrderCard({ order, onClick }: { order: OrderOut; onClick?: ()
       data-testid="sla-card"
       className={`${s.card} ${s[tier]}`}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       role="button"
       tabIndex={0}
     >

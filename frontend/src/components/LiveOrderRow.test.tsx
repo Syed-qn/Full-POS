@@ -27,4 +27,15 @@ describe("LiveOrderRow", () => {
     await userEvent.click(screen.getByText(/#48/));
     expect(onOpen).toHaveBeenCalledWith(48);
   });
+
+  it("calls onOpen on Enter and Space (keyboard a11y)", async () => {
+    const onOpen = vi.fn();
+    render(<LiveOrderRow order={o} onOpen={onOpen} />);
+    const row = screen.getByRole("button");
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(" ");
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen).toHaveBeenCalledWith(48);
+  });
 });

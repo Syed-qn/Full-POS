@@ -14,8 +14,14 @@ describe("CountdownTimer", () => {
     expect(screen.getByText("10:00")).toBeInTheDocument();
   });
 
-  it("applies critical tier under 10 min", () => {
-    render(<CountdownTimer slaStartedAt={iso(31)} />);
+  it("applies warn tier in 10–5 min band", () => {
+    render(<CountdownTimer slaStartedAt={iso(31)} />); // 9 min left
+    const el = screen.getByTestId("countdown");
+    expect(el.style.color).toContain("sla-warn");
+  });
+
+  it("applies critical tier under 5 min", () => {
+    render(<CountdownTimer slaStartedAt={iso(36)} />); // 4 min left
     const el = screen.getByTestId("countdown");
     expect(el.style.color).toContain("sla-critical");
   });

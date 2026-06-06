@@ -11,8 +11,9 @@ export function remainingMs(slaStartedAt: string | null, now: number = Date.now(
 export function slaTier(slaStartedAt: string | null, now: number = Date.now()): SlaTier {
   const rem = remainingMs(slaStartedAt, now);
   if (rem <= 0) return "breach";
-  if (rem < 10 * 60_000) return "critical";
-  if (rem < 15 * 60_000) return "warn";
+  // Brief (dashboard-design-brief.md, SLA Board): red = last 5 min, yellow = 10–5 min remaining.
+  if (rem < 5 * 60_000) return "critical";
+  if (rem < 10 * 60_000) return "warn";
   return "safe";
 }
 
