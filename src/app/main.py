@@ -3,6 +3,7 @@ from typing import AsyncIterator
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from app.cod.router import router as cod_router
@@ -45,9 +46,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(title="Restaurant WhatsApp Platform", lifespan=lifespan)
 
-    app.add_middleware(SecurityHeadersMiddleware)
+    # Middleware order matters: add_middleware inserts at the front of the stack,
+    # so the last call here executes FIRST on the request path.
+    # SecurityHeadersMiddleware runs last on request / first on response.
+    app.add_middleware(SecurityHeadersMiddleware, hsts=settings.hsts_enabled)
+    # CORSMiddleware runs first on request (handles pre-flight) / last on response.
+    if settings.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_allow_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        )
 
     app.include_router(identity_router)
     app.include_router(menu_router)
@@ -56,7 +70,6 @@ def create_app() -> FastAPI:
     app.include_router(cod_router)
     app.include_router(dispatch_router)
 
-    settings = get_settings()
     if settings.whatsapp_provider == "mock":
         from apps.simulator.router import router as simulator_router
 
