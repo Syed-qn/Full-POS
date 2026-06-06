@@ -13,6 +13,7 @@ import app.menu.models  # noqa: F401
 import app.webhook.models   # noqa: F401
 import app.outbox.models    # noqa: F401
 import app.conversation.models  # noqa: F401
+import app.ordering.models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
