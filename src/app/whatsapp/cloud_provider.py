@@ -79,6 +79,9 @@ def _build_graph_payload(msg: OutboundMessage) -> dict[str, Any]:
             "components": msg.payload.get("components", []),
         }
 
+    else:
+        raise NotImplementedError(f"Unsupported message type: {msg.type!r}")
+
     return base
 
 
