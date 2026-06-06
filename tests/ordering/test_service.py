@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from app.ordering.models import Customer, CustomerAddress
 
 
@@ -132,3 +134,80 @@ async def test_list_orders_api_filters_by_status(client, db_session):
     numbers = {o["order_number"] for o in data}
     assert "R1-LIST1" in numbers
     assert "R1-LIST2" not in numbers
+
+
+async def test_create_draft_order_increments_number(db_session):
+    from app.ordering.service import create_draft_order, get_or_create_customer
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=1, phone="+971500000001",
+    )
+    await db_session.commit()
+    order1 = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    await db_session.commit()
+    order2 = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    await db_session.commit()
+    assert order1.order_number != order2.order_number
+
+
+async def test_add_item_recalculates_total(db_session):
+    from app.menu.models import Dish, Menu
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=1, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=1, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"),
+        category="Rice", is_available=True, name_normalized="chicken biryani",
+    )
+    db_session.add(dish)
+    await db_session.flush()
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=1, phone="+971500000002",
+    )
+    await db_session.flush()
+    order = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    await db_session.flush()
+
+    await add_item(db_session, order=order, dish=dish, qty=2)
+    await db_session.commit()
+
+    assert order.subtotal == Decimal("44.00")
+    assert order.total == Decimal("44.00")
+
+
+async def test_finalize_confirmation_sets_sla_fields(db_session):
+    from app.ordering.service import (
+        create_draft_order, finalize_confirmation, get_or_create_customer,
+    )
+    from app.ordering.fsm import OrderStatus
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=1, phone="+971500000003",
+    )
+    await db_session.flush()
+    order = await create_draft_order(db_session, restaurant_id=1, customer_id=customer.id)
+    await db_session.flush()
+
+    await finalize_confirmation(db_session, order=order, actor="customer")
+    await db_session.commit()
+
+    assert order.status == OrderStatus.CONFIRMED
+    assert order.sla_confirmed_at is not None
+    assert order.sla_deadline is not None
+    diff_minutes = (order.sla_deadline - order.sla_confirmed_at).total_seconds() / 60
+    assert abs(diff_minutes - 40) < 1  # within 1 min tolerance
+
+
+async def test_get_or_create_customer_idempotent(db_session):
+    from app.ordering.service import get_or_create_customer
+    c1 = await get_or_create_customer(
+        db_session, restaurant_id=1, phone="+971500000004",
+    )
+    await db_session.commit()
+    c2 = await get_or_create_customer(
+        db_session, restaurant_id=1, phone="+971500000004",
+    )
+    assert c1.id == c2.id
