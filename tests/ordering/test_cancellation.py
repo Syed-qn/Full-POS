@@ -55,7 +55,7 @@ async def test_cancel_during_preparing_creates_resale_copy(db_session, restauran
 
 
 async def test_exclusion_hash_encodes_phone_and_address(db_session, restaurant):
-    """Exclusion hash is SHA-256 of phone + address_id so same customer is blocked from resale."""
+    """Exclusion hash is SHA-256 of phone + receiver + address_id (spec: same phone/person/address blocked)."""
     customer = Customer(
         restaurant_id=restaurant.id, phone="+971501230097", name="Hash Test",
         usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
@@ -66,7 +66,7 @@ async def test_exclusion_hash_encodes_phone_and_address(db_session, restaurant):
     from app.ordering.models import CustomerAddress
     addr = CustomerAddress(
         customer_id=customer.id, latitude=25.21, longitude=55.27,
-        room_apartment="10", building="A", confirmed=True,
+        room_apartment="10", building="A", receiver_name="Hash Test", confirmed=True,
     )
     db_session.add(addr)
     await db_session.flush()
@@ -90,6 +90,6 @@ async def test_exclusion_hash_encodes_phone_and_address(db_session, restaurant):
     )).scalar_one()
 
     expected_hash = hashlib.sha256(
-        f"+971501230097:{addr.id}".encode()
+        f"+971501230097:hash test:{addr.id}".encode()
     ).hexdigest()
     assert resale.exclusion_hash == expected_hash
