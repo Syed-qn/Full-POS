@@ -76,7 +76,7 @@ async def receive_webhook(
             WebhookEvent(
                 provider_event_id=inbound.wa_message_id,
                 payload=payload,
-                processed_at=datetime.now(timezone.utc).isoformat(),
+                processed_at=datetime.now(timezone.utc),
             )
         )
 
