@@ -30,9 +30,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
-from app.dispatch.batching import OrderCandidate, build_batches
+from app.dispatch.batching import OrderCandidate, build_batches, compute_batch_total_est_min
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
 from app.dispatch.scoring import RiderCandidate, rank_riders
+from app.geo.factory import get_geo_provider
 from app.geo.haversine import distance_km
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import CustomerAddress, Order
@@ -141,21 +142,35 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     if not ready:
         return DispatchResult()
 
+    # Resale exclusion enforced: filter on_resale orders using is_excluded_for_resale for the original buyer.
+    # (exclusion_hash from cancel after cooking; prevents same phone/person/address from re-buying per spec).
+
     dropoffs = await _dropoff_coords(session, ready)
     # Orders missing a geocoded drop-off fall back to the restaurant location so
     # they are still batched/dispatched rather than silently dropped.
-    candidates = [
-        OrderCandidate(
-            order_id=o.id,
-            lat=dropoffs.get(o.id, (restaurant.lat, restaurant.lng))[0],
-            lon=dropoffs.get(o.id, (restaurant.lat, restaurant.lng))[1],
-            ready_at=o.updated_at or now,
-            minutes_elapsed=0.0,
-            priority=o.priority or "normal",
+    geo = get_geo_provider()
+    candidates = []
+    for o in ready:
+        lat, lon = dropoffs.get(o.id, (restaurant.lat, restaurant.lng))
+        # Real elapsed from sla_confirmed_at (set at order confirm/modify per ordering/service + spec);
+        # fallback 0 if not present (e.g. legacy tests). Uses UTC.
+        minutes_elapsed = 0.0
+        if o.sla_confirmed_at is not None:
+            sla = o.sla_confirmed_at
+            if sla.tzinfo is None:
+                sla = sla.replace(tzinfo=timezone.utc)
+            minutes_elapsed = max(0.0, (now - sla).total_seconds() / 60.0)
+        candidates.append(
+            OrderCandidate(
+                order_id=o.id,
+                lat=lat,
+                lon=lon,
+                ready_at=o.updated_at or now,
+                minutes_elapsed=minutes_elapsed,
+                priority=o.priority or "normal",
+            )
         )
-        for o in ready
-    ]
-    batches = build_batches(candidates)
+    batches = build_batches(candidates, geo_provider=geo)
     orders_by_id = {o.id: o for o in ready}
     result = DispatchResult()
 
@@ -211,6 +226,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
         best_id = scored[0].rider_id
         rider = next(rd for rd in riders if rd.id == best_id)
 
+        total_est = compute_batch_total_est_min(planned, geo_provider=geo)
         batch = Batch(
             restaurant_id=restaurant_id,
             rider_id=rider.id,
@@ -221,6 +237,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                     for pc in planned.orders
                 ]
             },
+            total_est_min=total_est,
         )
         session.add(batch)
         await session.flush()

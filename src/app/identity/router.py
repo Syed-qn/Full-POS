@@ -13,6 +13,7 @@ from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.identity.schemas import (
     LoginIn,
+    ProfilePatch,
     RestaurantOut,
     RiderIn,
     RiderOut,
@@ -64,6 +65,15 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
 @router.get("/me", response_model=RestaurantOut)
 async def me(restaurant: Restaurant = Depends(current_restaurant)):
     return restaurant
+
+
+@router.patch("/me", response_model=RestaurantOut)
+async def patch_me(
+    body: ProfilePatch,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await service.update_profile(session, restaurant=restaurant, name=body.name)
 
 
 @router.post("/riders", response_model=RiderOut, status_code=201)

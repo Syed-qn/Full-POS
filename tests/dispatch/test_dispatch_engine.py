@@ -8,7 +8,7 @@ Schema adaptation (per Phase-3 T2 flags — NO new migration):
     a rider with no ping is treated as co-located with the restaurant (distance 0).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -27,7 +27,8 @@ async def _seed_restaurant(db_session, lat=25.2048, lng=55.2708):
     return r
 
 
-async def _ready_order(db_session, restaurant_id, lat, lon, num):
+async def _ready_order(db_session, restaurant_id, lat, lon, num, minutes_since_sla: int = 5):
+    """Seed ready order; now supports minutes_since_sla for realistic sla_confirmed_at (used in GAP#4 inter-stop elapsed + route_time tests)."""
     c = Customer(
         restaurant_id=restaurant_id,
         phone=f"+97150{num:07d}",
@@ -44,6 +45,7 @@ async def _ready_order(db_session, restaurant_id, lat, lon, num):
     )
     db_session.add(addr)
     await db_session.flush()
+    sla_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_since_sla)
     o = Order(
         restaurant_id=restaurant_id,
         customer_id=c.id,
@@ -55,6 +57,9 @@ async def _ready_order(db_session, restaurant_id, lat, lon, num):
         subtotal=Decimal("10.00"),
         total=Decimal("10.00"),
         address_id=addr.id,
+        sla_confirmed_at=sla_at,
+        sla_deadline=sla_at + timedelta(minutes=40),
+        promised_eta=sla_at + timedelta(minutes=40),
     )
     db_session.add(o)
     await db_session.flush()
@@ -159,3 +164,59 @@ async def test_rider_set_on_delivery_and_batch_created(db_session):
         )
     ).all()
     assert len(bos) == 2  # both nearby orders batched to one rider
+
+
+async def test_inter_stop_travel_gap_splits_batch_and_sets_total_est_min(db_session):
+    """GAP_LIST #4 + spec §4.3: inter-stop travel (via geo port/haversine in sequenced stops) + (now-sla_elapsed) + 10min/order buf must respect <=30 internal target.
+
+    Uses real sla_confirmed_at (populated in service candidates), ~0.78km inter-stop (~1.9min @25kmh city), elapsed~19min so 19+1.9+10~30.9>30 -> split to fresh batches even within proximity 1km + window.
+    2 riders available so both batches assign. Verifies total_est_min set on Batch (from compute using geo inter-stop sum).
+    Also exercises priority single protection if threatens (existing + new logic).
+    40min customer respected implicitly via 30+buf design.
+    """
+    r = await _seed_restaurant(db_session)
+    rider1 = Rider(
+        restaurant_id=r.id,
+        name="R1",
+        phone="+971500000011",
+        status="available",
+        performance={"on_time_pct": 100.0},
+    )
+    rider2 = Rider(
+        restaurant_id=r.id,
+        name="R2",
+        phone="+971500000012",
+        status="available",
+        performance={"on_time_pct": 100.0},
+    )
+    db_session.add_all([rider1, rider2])
+    await db_session.flush()
+    await _ping(db_session, rider1, r.id, 25.2048, 55.2708)
+    await _ping(db_session, rider2, r.id, 25.2048, 55.2708)
+
+    # spaced ~0.78km (within default 1.0km prox to seed), high elapsed for gap
+    await _ready_order(db_session, r.id, 25.2048, 55.2708, 101, minutes_since_sla=19)
+    await _ready_order(
+        db_session, r.id, 25.2048 + 0.0075, 55.2708 + 0.0005, 102, minutes_since_sla=19
+    )
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    # 2 batches assigned thanks to 2 riders + split
+    assert result.assigned_count == 2
+    assert result.unassigned_count == 0
+
+    batches = (await db_session.scalars(select(Batch))).all()
+    assert len(batches) == 2, "inter-stop travel gap must cause split to fresh batch (not fit <~30 internal)"
+    for b in batches:
+        assert b.total_est_min is not None
+        assert b.total_est_min > 0, "total_est_min must be set on batch per GAP#4/spec"
+        # est should be at least the elapsed + small for this case ~20+
+        assert b.total_est_min >= 19
+
+    bos = (await db_session.scalars(select(BatchOrder))).all()
+    assert len(bos) == 2
+    # confirm not batched together (would be 1 batch 2 bos if no gap fix)
+

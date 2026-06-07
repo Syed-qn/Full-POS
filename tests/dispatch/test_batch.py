@@ -101,3 +101,43 @@ def test_active_order_count_field_on_order_candidate():
         priority="priority",
     )
     assert oc_priority.priority == "priority"
+
+
+def test_inter_stop_travel_time_affects_internal_target_and_forces_fresh_batch():
+    """GAP_LIST #4 (spec §4.3): build_batches must incorporate sequenced inter-stop travel time (haversine+static or geo port) in _within_internal_target.
+
+    Orders close enough for prox+window (seed), elapsed=19 each; inter ~1.9min for 2nd stop.
+    w/o route: 19 + (1*10 buf) =29 <=30 -> would batch.
+    w/ route_to_2nd: 19 +1.9 +10 >30 internal -> must not place, start fresh (2 batches).
+    Also covers priority single already (existing test) + 40min cust (30+10 design).
+    total_est_min asserted via engine; here drive the source calc change.
+    """
+    # delta ~0.0075 lat ~0.83km inter leg -> ~2min @25kmh
+    o1 = OrderCandidate(
+        order_id=1, lat=25.2048, lon=55.2708, ready_at=BASE, minutes_elapsed=19.0
+    )
+    o2 = OrderCandidate(
+        order_id=2,
+        lat=25.2048 + 0.0075,
+        lon=55.2708 + 0.0005,
+        ready_at=BASE,
+        minutes_elapsed=19.0,
+    )
+    batches = build_batches(
+        [o1, o2], max_per_batch=MAX_PER_BATCH, proximity_km=1.0, window_min=10
+    )
+    assert len(batches) == 2, "inter-stop route_time must cause 'cannot fit' -> dispatch current, start fresh"
+    assert all(len(b.orders) == 1 for b in batches)
+
+
+def test_planned_batch_and_compute_respects_geo_port_equiv_for_inter_stop():
+    """Unit drive: when geo passed (future), inter calc uses its distance/eta; haversine fallback when None.
+    (In practice engine passes get_geo_provider() which for tests is Fake equiv to haversine 25kmh.)
+    """
+    o1 = OrderCandidate(1, 25.2048, 55.2708, BASE, minutes_elapsed=5.0)
+    o2 = OrderCandidate(2, 25.2055, 55.2715, BASE, minutes_elapsed=5.0)  # farther but <1km
+    # call w/ no geo (default haversine path)
+    batches = build_batches([o1, o2], max_per_batch=3, proximity_km=1.0, window_min=10)
+    # with low elapsed=5 + buf10 + small route <30 -> 1 batch
+    assert len(batches) == 1
+    # (full geo threading + compute_batch_total_est_min verified in engine test + service)

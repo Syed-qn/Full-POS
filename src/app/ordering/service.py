@@ -441,3 +441,32 @@ async def cancel_order(
         extra_audit={"reason": reason or ""},
     )
     return None
+
+
+# Manager-driven kitchen status transitions: confirmed→preparing, preparing→ready.
+_KITCHEN_TRANSITIONS: dict[OrderStatus, OrderStatus] = {
+    OrderStatus.CONFIRMED: OrderStatus.PREPARING,
+    OrderStatus.PREPARING: OrderStatus.READY,
+}
+
+
+async def advance_kitchen_status(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    actor: str = "manager",
+) -> Order:
+    """Advance order through kitchen FSM: confirmed→preparing or preparing→ready.
+
+    Raises ValueError if the order is not in a kitchen-advanceable state.
+    """
+    next_status = _KITCHEN_TRANSITIONS.get(OrderStatus(order.status))
+    if next_status is None:
+        raise ValueError(
+            f"Cannot advance kitchen status from '{order.status}'. "
+            f"Only confirmed or preparing orders can be advanced."
+        )
+    await fsm_transition(session, order, next_status, actor=actor)
+    await session.commit()
+    await session.refresh(order)
+    return order

@@ -54,3 +54,7 @@ class SettingsPatch(BaseModel):
     max_orders_per_batch: int | None = Field(default=None, ge=1, le=6)
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
     delivery_fee_tiers: list[dict] | None = None
+
+
+class ProfilePatch(BaseModel):
+    name: str = Field(min_length=1, max_length=255)

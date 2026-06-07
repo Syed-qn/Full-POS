@@ -9,10 +9,15 @@ ETAs flagged as estimates (is_estimate=True).
 import logging
 import math
 
+import httpx
+
 from app.geo.haversine import distance_km as _haversine
 
 logger = logging.getLogger(__name__)
 _CITY_SPEED_KMH = 25.0
+
+_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+_FIELD_MASK = "routes.distanceMeters,routes.duration"
 
 
 class GoogleMapsGeoProvider:
@@ -55,13 +60,35 @@ class GoogleMapsGeoProvider:
         lat2: float,
         lon2: float,
     ) -> float:
-        """Call Google Maps Routes API. Raises on failure."""
+        """Call Google Maps Routes API (traffic-aware). Raises on any failure for graceful fallback."""
         if not self._api_key:
             raise ValueError("APP_GOOGLE_MAPS_API_KEY not configured")
-        # Real implementation: POST to
-        # https://routes.googleapis.com/directions/v2:computeRoutes
-        # Returns routes[0].distanceMeters / 1000.0
-        # Placeholder until production API key is available:
-        raise NotImplementedError(
-            "Google Maps API key required for production routes"
-        )
+
+        headers = {
+            "X-Goog-Api-Key": self._api_key,
+            "X-Goog-FieldMask": _FIELD_MASK,
+            "Content-Type": "application/json",
+        }
+        body = {
+            "origin": {
+                "location": {"latLng": {"latitude": lat1, "longitude": lon1}}
+            },
+            "destination": {
+                "location": {"latLng": {"latitude": lat2, "longitude": lon2}}
+            },
+            "travelMode": "DRIVE",
+            "routingPreference": "TRAFFIC_AWARE",
+        }
+
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(_ROUTES_URL, json=body, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        routes = data.get("routes") or []
+        if not routes:
+            raise ValueError("No routes returned by Google Maps")
+        route = routes[0]
+        meters = float(route.get("distanceMeters", 0))
+        if meters <= 0:
+            raise ValueError("Invalid distance from Google Maps")
+        return meters / 1000.0

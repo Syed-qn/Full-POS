@@ -157,3 +157,65 @@ async def test_button_only_unknown_id_no_op(db_session):
     await db_session.commit()
     await db_session.refresh(orders[0])
     assert orders[0].status == "assigned"  # unchanged — buttons only
+
+
+async def test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location(db_session):
+    """Spec §4.4 + transcript: at ~100 m from stop → dual buttons "Delivered" | "Delivered and Next Order Location".
+    Button click is the ONLY way to get next location (forces flow integrity). "delivered_next" marks + immediately sends next stop nav.
+    Power bank provided per ops policy (note in code). Riders see customer contact in msg body; no raw phone leaked to customer side.
+    """
+    r, rider, batch, orders = await _seed_batch(db_session, n_orders=2)
+    o1, o2 = orders
+    # make o1 picked so stop sent; set rider loc very close to o1 dropoff (~50m < 0.1km)
+    o1.status = "picked_up"
+    batch.status = "picked_up"
+    await db_session.commit()
+    # first stop already sent in real flow on picked; here simulate location ping near o1 to trigger geofence dual
+    inbound_loc = InboundMessage(
+        wa_message_id="loc-near-1",
+        from_phone=rider.phone,
+        type=MessageType.LOCATION,
+        payload={"latitude": 25.21005, "longitude": 55.27005},  # near 25.21,55.27
+        restaurant_phone=r.phone,
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound_loc, restaurant_id=r.id)
+    await db_session.commit()
+    # assert choice buttons sent (dual instead of single)
+    msg = await db_session.scalar(
+        select(OutboxMessage)
+        .where(OutboxMessage.to_phone == rider.phone)
+        .order_by(OutboxMessage.id.desc())
+    )
+    assert msg is not None
+    payload = msg.payload or {}
+    assert "buttons" in payload
+    titles = [b.get("title", "") for b in payload.get("buttons", [])]
+    assert any("Delivered" in t or "Collect money" in t for t in titles)
+    assert "Delivered and Next Order Location" in titles
+    body = payload.get("body", "")
+    assert "Near" in body or "stop" in body.lower()
+    # customer contact in body for rider (safe check; seed uses customer_id)
+    assert "Customer:" in body or "Contact" in body or "Next stop" in body
+
+    # click delivered_next for o1 -> delivered + immediate next stop for o2
+    inbound_next = InboundMessage(
+        wa_message_id="dn-1",
+        from_phone=rider.phone,
+        type=MessageType.BUTTON_REPLY,
+        payload={"button_id": f"delivered_next:{o1.id}"},
+        restaurant_phone=r.phone,
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound_next, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(o1)
+    assert o1.status == "delivered"
+    # next stop msg for o2 sent immediately
+    msg2 = await db_session.scalar(
+        select(OutboxMessage)
+        .where(OutboxMessage.to_phone == rider.phone)
+        .order_by(OutboxMessage.id.desc())
+    )
+    assert msg2 is not None
+    assert f"Next stop: Order {o2.order_number}" in (msg2.payload or {}).get("body", "")

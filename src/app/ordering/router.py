@@ -8,7 +8,7 @@ from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import OrderItemOut, OrderOut
-from app.ordering.service import get_order_for_tenant, list_orders_for_tenant
+from app.ordering.service import advance_kitchen_status, get_order_for_tenant, list_orders_for_tenant
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -72,6 +72,24 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         lat=lat,
         lng=lng,
     )
+
+
+@router.post("/{order_id}/advance", response_model=OrderOut)
+async def advance_order(
+    order_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    try:
+        order = await advance_kitchen_status(session, order=order)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return await _enrich(session, order)
 
 
 @router.get("/{order_id}", response_model=OrderOut)

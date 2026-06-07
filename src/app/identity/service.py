@@ -109,6 +109,29 @@ async def set_rider_status(
     return rider
 
 
+async def update_profile(
+    session: AsyncSession,
+    *,
+    restaurant: Restaurant,
+    name: str,
+) -> Restaurant:
+    before = {"name": restaurant.name}
+    restaurant.name = name
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant.id,
+        entity="restaurant",
+        entity_id=str(restaurant.id),
+        action="profile_changed",
+        before=before,
+        after={"name": name},
+    )
+    await session.commit()
+    await session.refresh(restaurant)
+    return restaurant
+
+
 async def update_settings(
     session: AsyncSession,
     *,
