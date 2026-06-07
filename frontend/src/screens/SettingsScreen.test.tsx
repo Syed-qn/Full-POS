@@ -21,16 +21,27 @@ describe("SettingsScreen", () => {
 
   it("loads current batching settings", async () => {
     render(<SettingsScreen />);
+    // Navigate to batching tab
+    await waitFor(() => screen.getByRole("button", { name: /batching/i }));
+    await userEvent.click(screen.getByRole("button", { name: /batching/i }));
     await waitFor(() => expect((screen.getByLabelText(/orders per batch/i) as HTMLInputElement).value).toBe("3"));
   });
 
   it("PATCHes settings on save", async () => {
     const spy = vi.mocked(fetch);
     render(<SettingsScreen />);
+    // Navigate to batching tab
+    await waitFor(() => screen.getByRole("button", { name: /batching/i }));
+    await userEvent.click(screen.getByRole("button", { name: /batching/i }));
     await waitFor(() => screen.getByLabelText(/orders per batch/i));
-    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() =>
       expect(spy.mock.calls.some(([u, i]) => String(u).includes("/settings") && i?.method === "PATCH")).toBe(true),
     );
+  });
+
+  it("shows restaurant name in general tab", async () => {
+    render(<SettingsScreen />);
+    await waitFor(() => expect((screen.getByDisplayValue("Test Resto") as HTMLInputElement).value).toBe("Test Resto"));
   });
 });

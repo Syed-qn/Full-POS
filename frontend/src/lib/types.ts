@@ -75,6 +75,7 @@ export interface OrderItemOut {
 
 export interface OrderOut {
   id: number;
+  order_number?: string;
   status: OrderStatus;
   customer_name: string;
   customer_phone: string;

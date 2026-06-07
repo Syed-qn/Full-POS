@@ -8,6 +8,10 @@
   align-items: center;
   justify-content: space-between;
 }
+.actionBar {
+  padding: 12px 0 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
 .field {
   display: flex;
   flex-direction: column;

@@ -1,60 +1,68 @@
 :root {
-  /* ─── Backgrounds ─── */
-  --bg-canvas: #0d0f12;
-  --bg-surface: #141720;
-  --bg-surface-raised: #1c2030;
-  --bg-surface-inset: #0a0c0f;
-  --bg-overlay: rgba(13, 15, 18, 0.85);
+  /* ─── Backgrounds (light) ─── */
+  --bg-canvas: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #ffffff;
+  --bg-surface-inset: #f7f8fa;
+  --bg-overlay: rgba(255, 255, 255, 0.92);
 
   /* ─── Borders ─── */
-  --border-subtle: #252a38;
-  --border-default: #323848;
-  --border-strong: #4a5268;
+  --border-subtle: #e8eaed;
+  --border-default: #d1d5db;
+  --border-strong: #9ca3af;
 
   /* ─── Text ─── */
-  --text-primary: #e8ecf5;
-  --text-secondary: #8b93a8;
-  --text-muted: #525a70;
-  --text-inverse: #0d0f12;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --text-inverse: #ffffff;
 
   /* ─── SLA Semantics ─── */
-  --sla-safe: #1adb8e;
-  --sla-safe-dim: rgba(26, 219, 142, 0.12);
-  --sla-warn: #f5a623;
-  --sla-warn-dim: rgba(245, 166, 35, 0.12);
-  --sla-critical: #ff3d55;
-  --sla-critical-dim: rgba(255, 61, 85, 0.14);
-  --sla-breach: #ff1a37;
+  --sla-safe: #16a34a;
+  --sla-safe-dim: rgba(22, 163, 74, 0.10);
+  --sla-warn: #d97706;
+  --sla-warn-dim: rgba(217, 119, 6, 0.10);
+  --sla-critical: #dc2626;
+  --sla-critical-dim: rgba(220, 38, 38, 0.10);
+  --sla-breach: #b91c1c;
 
-  /* ─── Operational Accents ─── */
-  --accent-primary: #3d8bff;
-  --accent-primary-dim: rgba(61, 139, 255, 0.15);
-  --accent-dispatch: #a78bfa;
-  --accent-rider: #38bdf8;
-  --accent-revenue: #34d399;
-  --accent-ai: #818cf8;
-  --accent-ai-dim: rgba(129, 140, 248, 0.18);
+  /* ─── Operational Accents (Power BI palette) ─── */
+  --accent-primary: #2563eb;
+  --accent-primary-dim: rgba(37, 99, 235, 0.10);
+  --accent-dispatch: #7c3aed;
+  --accent-rider: #0891b2;
+  --accent-revenue: #059669;
+  --accent-ai: #6366f1;
+  --accent-ai-dim: rgba(99, 102, 241, 0.12);
+
+  /* ─── Chart colours (Power BI style) ─── */
+  --chart-1: #2563eb;
+  --chart-2: #7c3aed;
+  --chart-3: #059669;
+  --chart-4: #d97706;
+  --chart-5: #dc2626;
+  --chart-6: #0891b2;
 
   /* ─── Status Pills ─── */
   --status-pending: #6b7280;
-  --status-confirmed: #3d8bff;
-  --status-preparing: #f5a623;
-  --status-ready: #a78bfa;
-  --status-assigned: #38bdf8;
-  --status-pickedup: #a78bfa;
-  --status-delivered: #1adb8e;
-  --status-cancelled: #ff3d55;
-  --status-resale: #fbbf24;
+  --status-confirmed: #2563eb;
+  --status-preparing: #d97706;
+  --status-ready: #7c3aed;
+  --status-assigned: #0891b2;
+  --status-pickedup: #7c3aed;
+  --status-delivered: #16a34a;
+  --status-cancelled: #dc2626;
+  --status-resale: #f59e0b;
 
   /* ─── Map ─── */
-  --map-bg: #0f1419;
-  --map-road: #1e2535;
-  --map-water: #0d1520;
-  --map-rider-active: #38bdf8;
-  --map-rider-stale: #525a70;
-  --map-order-pin: #f5a623;
-  --map-batch-hull: rgba(167, 139, 250, 0.18);
-  --map-batch-stroke: #a78bfa;
+  --map-bg: #e8edf3;
+  --map-road: #cbd5e1;
+  --map-water: #bfdbfe;
+  --map-rider-active: #2563eb;
+  --map-rider-stale: #9ca3af;
+  --map-order-pin: #d97706;
+  --map-batch-hull: rgba(124, 58, 237, 0.12);
+  --map-batch-stroke: #7c3aed;
 
   /* ─── Type ─── */
   --font-mono: "DM Mono", ui-monospace, monospace;
@@ -68,4 +76,6 @@
   --space-5: 20px;
   --space-6: 24px;
   --radius: 8px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
 }

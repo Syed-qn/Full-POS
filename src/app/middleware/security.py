@@ -21,10 +21,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault(
-            "Content-Security-Policy",
-            "default-src 'none'; frame-ancestors 'none'",
-        )
+        if request.url.path.startswith("/simulator"):
+            # Dev-only simulator needs inline styles + scripts + same-origin fetch
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'",
+            )
+        else:
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'none'; frame-ancestors 'none'",
+            )
         if self._hsts:
             response.headers.setdefault(
                 "Strict-Transport-Security",

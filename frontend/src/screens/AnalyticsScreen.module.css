@@ -1,10 +1,163 @@
-.wrap {
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.kpiStrip {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+/* Forecast detail grid */
+.forecastGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.forecastCard {
+  background: var(--bg-surface-inset, #f7f7f8);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forecastHorizon {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.forecastDate {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.forecastRunId {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.adjustedBadge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-primary, #2563eb);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  align-self: flex-start;
+}
+
+/* Campaign table */
+.campaignTable {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.tableHead {
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr 80px 100px;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface-inset, #f7f7f8);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr 80px 100px;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  align-items: center;
+}
+
+.tableRow:hover {
+  background: var(--bg-surface-inset, #f7f7f8);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.typeLabel {
+  text-transform: capitalize;
+}
+
+.statusLabel {
+  text-transform: capitalize;
+  font-size: 12px;
+}
+
+.statusLabel[data-status="sent"],
+.statusLabel[data-status="completed"] {
+  color: var(--sla-safe, #16a34a);
+}
+
+.statusLabel[data-status="failed"],
+.statusLabel[data-status="cancelled"] {
+  color: var(--sla-critical, #dc2626);
+}
+
+.statusLabel[data-status="scheduled"],
+.statusLabel[data-status="draft"] {
+  color: var(--text-muted);
+}
+
+/* Chart container */
+.chartWrap {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 24px;
+  margin-top: 4px;
 }
-.note {
+
+.chartTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
-  font-size: 13px;
 }

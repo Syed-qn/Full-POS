@@ -30,6 +30,24 @@
   justify-content: center;
   color: var(--text-muted);
   font-size: 12px;
+  background: var(--map-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mapSvg {
+  width: 100%;
+  height: 100%;
+  max-height: 380px;
+}
+
+.riderDot {
+  animation: riderPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes riderPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 .slaBoard {
   background: var(--bg-surface);
@@ -94,4 +112,20 @@
   color: var(--text-muted);
   font-size: 13px;
   padding: 20px 0;
+}
+.chartPanel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+}
+.chartEmpty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px 0;
+  text-align: center;
 }

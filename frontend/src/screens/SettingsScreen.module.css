@@ -33,15 +33,64 @@
   flex-direction: column;
   gap: 6px;
 }
-.field input {
-  background: var(--bg-surface-inset);
+.input {
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   padding: 8px 12px;
   color: var(--text-primary);
-  width: 160px;
+  width: 100%;
+  max-width: 320px;
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+.fieldReadonly {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.readonlyValue {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 8px 0;
+}
+.hint {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 .note {
   color: var(--text-secondary);
   font-size: 13px;
+  line-height: 1.5;
+}
+/* Fee tier table */
+.tierTable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+}
+.tierHead {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+.tierRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.tierRow .input {
+  max-width: 100%;
 }

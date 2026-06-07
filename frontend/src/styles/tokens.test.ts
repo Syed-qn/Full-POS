@@ -6,15 +6,15 @@ const css = readFileSync(resolve(__dirname, "tokens.css"), "utf8");
 
 describe("design tokens", () => {
   it.each([
-    ["--bg-canvas", "#0d0f12"],
-    ["--bg-surface", "#141720"],
-    ["--sla-safe", "#1adb8e"],
-    ["--sla-warn", "#f5a623"],
-    ["--sla-critical", "#ff3d55"],
-    ["--sla-breach", "#ff1a37"],
-    ["--accent-primary", "#3d8bff"],
-    ["--status-delivered", "#1adb8e"],
-    ["--text-primary", "#e8ecf5"],
+    ["--bg-canvas", "#f0f2f5"],
+    ["--bg-surface", "#ffffff"],
+    ["--sla-safe", "#16a34a"],
+    ["--sla-warn", "#d97706"],
+    ["--sla-critical", "#dc2626"],
+    ["--sla-breach", "#b91c1c"],
+    ["--accent-primary", "#2563eb"],
+    ["--status-delivered", "#16a34a"],
+    ["--text-primary", "#111827"],
   ])("defines %s = %s", (name, value) => {
     const re = new RegExp(`${name}:\\s*${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
     expect(css).toMatch(re);
