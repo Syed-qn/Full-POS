@@ -3,7 +3,6 @@ from decimal import Decimal
 
 import pytest
 
-from app.llm.factory import get_segment_compiler
 from app.llm.fake import FakeSegmentCompiler
 from app.marketing.segments import (
     evaluate_segment,

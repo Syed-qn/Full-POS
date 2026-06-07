@@ -13,6 +13,7 @@ from app.marketing import service
 from app.marketing.models import Campaign, MarketingSend, WaTemplate
 from app.marketing.optout import record_opt_out
 from app.marketing.template_mock import MockTemplateProvider
+from app.marketing.template_port import TemplateCreateResult, TemplateStatus
 from app.outbox.models import OutboxMessage
 from app.ordering.models import Customer, Order
 from sqlalchemy import func, select
@@ -336,7 +337,11 @@ async def test_record_send_status_maps_meta_status(db_session, restaurant):
         )
     ).scalar_one()
     send.wa_message_id = "wamid.TEST123"
-    await db_session.flush()
+    await db_session.flush() 
+
+
+# TDD GAP#3 additions: failing tests for new service helpers (poll + EOD cleanup)
+# called by worker. These drive service impl before worker/celery. Use mock provider.
 
     await service.record_send_status(
         db_session, wa_message_id="wamid.TEST123", status="delivered"
@@ -398,3 +403,76 @@ async def test_campaign_stats_breakdown(db_session, restaurant):
     assert stats["suppressed_optout"] == 1
     assert stats["converted"] == 1
     assert stats["conversion_rate"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# TDD GAP#3 (service layer for poll + EOD cleanup jobs)
+# These were added first as failing, now with service impl should pass.
+# ---------------------------------------------------------------------------
+
+async def test_service_poll_template_statuses_updates_pending_meta(db_session, restaurant):
+    """Poll updates pending_meta using provider (mock here)."""
+    from app.marketing.models import WaTemplate
+    from app.marketing.template_mock import MockTemplateProvider
+
+    tpl = WaTemplate(
+        restaurant_id=restaurant.id, meta_template_name="svc_poll_20260606",
+        language="en", category="marketing", body="svc poll body", footer="STOP",
+        status="pending_meta", meta_template_id="svc-meta-1", ephemeral=True
+    )
+    db_session.add(tpl)
+    await db_session.flush()
+    await db_session.commit()
+
+    prov = MockTemplateProvider()
+    async def _g(mid):
+        return TemplateCreateResult(meta_template_id=mid, status=TemplateStatus.APPROVED)
+    prov.get_status = _g
+
+    updated = await service.poll_template_statuses(db_session, provider=prov)
+    assert updated >= 1
+    await db_session.refresh(tpl)
+    assert tpl.status == "approved"
+
+
+async def test_service_cleanup_ephemeral_sets_deleted(db_session, restaurant):
+    """Cleanup marks ephemeral approved as deleted + sets deleted_at."""
+    from datetime import datetime, timezone
+    from app.marketing.models import WaTemplate
+    from app.marketing.template_mock import MockTemplateProvider
+
+    tpl = WaTemplate(
+        restaurant_id=restaurant.id, meta_template_name="svc_eod_20260606",
+        language="en", category="marketing", body="eod", footer="STOP",
+        status="approved", ephemeral=True, meta_template_id="svc-eod-1", deleted_at=None
+    )
+    db_session.add(tpl)
+    await db_session.flush()
+    await db_session.commit()
+
+    prov = MockTemplateProvider()
+    spec_name = "svc_eod_20260606"
+    await prov.create(
+        type(
+            "S",
+            (),
+            {
+                "name": spec_name,
+                "to_compliance_dict": lambda s: {
+                    "name": spec_name,
+                    "body": "b",
+                    "header": None,
+                    "footer": None,
+                    "buttons": [],
+                },
+            },
+        )()
+    )
+    prov._id_by_name[spec_name] = "svc-eod-1"
+    prov._by_id["svc-eod-1"] = TemplateCreateResult(meta_template_id="svc-eod-1", status=TemplateStatus.APPROVED)
+
+    now = datetime(2026, 6, 6, 23, 30, tzinfo=timezone.utc)
+    n = await service.cleanup_ephemeral_templates(db_session, provider=prov, now=now)
+    assert n >= 1
+    await db_session.refresh(tpl)
+    assert tpl.deleted_at is not None and tpl.status == "deleted"

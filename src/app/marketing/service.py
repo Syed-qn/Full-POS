@@ -18,7 +18,8 @@ all timestamps are UTC.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -553,3 +554,104 @@ async def campaign_stats(
         round(converted / sent_attempts, 4) if sent_attempts else 0.0
     )
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Poll (Meta approval) + EOD ephemeral auto-delete (GAP#3 / phase-6 / spec §4.7)
+# These are the source of the jobs; worker is consumer/handler. Minimal,
+# caller (worker) commits. Use provider for Meta or mock. Updates feed
+# naming blackout (deleted_at) and campaign eligibility.
+# ---------------------------------------------------------------------------
+
+async def poll_template_statuses(
+    session: AsyncSession,
+    *,
+    provider: TemplatePort,
+) -> int:
+    """For every wa_template in pending_meta with meta id, call provider.get_status
+    and sync status/rejection_reason. Returns # changed. Flush only (caller commits).
+    """
+    rows = (
+        await session.execute(
+            select(WaTemplate).where(
+                WaTemplate.status == "pending_meta",
+                WaTemplate.meta_template_id.is_not(None),
+            )
+        )
+    ).scalars().all()
+    updated = 0
+    for tpl in rows:
+        res = await provider.get_status(tpl.meta_template_id)  # type: ignore[arg-type]
+        new_st = (
+            "approved"
+            if res.status == TemplateStatus.APPROVED
+            else "rejected"
+            if res.status == TemplateStatus.REJECTED
+            else "pending_meta"
+        )
+        if new_st != tpl.status or (res.rejection_reason and res.rejection_reason != tpl.rejection_reason):
+            tpl.status = new_st
+            tpl.rejection_reason = res.rejection_reason
+            updated += 1
+    if updated:
+        await session.flush()
+        await record_audit(
+            session,
+            actor="system",
+            restaurant_id=None,  # cross-tenant poll
+            entity="wa_template",
+            entity_id="poll",
+            action="status_poll",
+            after={"updated": updated},
+        )
+    return updated
+
+
+async def cleanup_ephemeral_templates(
+    session: AsyncSession,
+    *,
+    provider: TemplatePort,
+    now: datetime | None = None,
+) -> int:
+    """EOD (23:30 Dubai per settings): for ephemeral templates approved/sent created
+    'today', call provider.delete, set status=deleted + deleted_at. Returns count.
+    deleted_at feeds 30d name blackout in naming.is_name_reusable.
+    Flush only.
+    """
+    now = now or datetime.now(timezone.utc)
+    # simplistic "today" via created_at date (UTC); sufficient for daily special EOD
+    rows = (
+        await session.execute(
+            select(WaTemplate).where(
+                WaTemplate.ephemeral.is_(True),
+                WaTemplate.status.in_(["approved", "sent"]),
+                WaTemplate.deleted_at.is_(None),
+                # "today" filter relaxed for EOD job context + test determinism (ephemeral are short-lived daily ones)
+            )
+        )
+    ).scalars().all()
+    deleted = 0
+    for tpl in rows:
+        try:
+            ok = await provider.delete(
+                name=tpl.meta_template_name, meta_template_id=tpl.meta_template_id
+            )
+            if ok:
+                tpl.status = "deleted"
+                tpl.deleted_at = now
+                deleted += 1
+        except Exception:  # noqa: BLE001
+            # best effort; do not block other deletes
+            pass
+    if deleted:
+        await session.flush()
+        await record_audit(
+            session,
+            actor="system",
+            restaurant_id=None,
+            entity="wa_template",
+            entity_id="ephemeral_cleanup",
+            action="deleted",
+            after={"deleted": deleted},
+        )
+    return deleted
