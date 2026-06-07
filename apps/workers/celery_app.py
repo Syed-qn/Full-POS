@@ -14,6 +14,7 @@ celery_app.conf.update(
     timezone="Asia/Dubai",
     task_routes={
         "outbox.deliver": {"queue": "outbox"},
+        "outbox.sweep_failed": {"queue": "outbox"},
         "sla.monitor_tick": {"queue": "sla_monitor"},
         "dispatch.*": {"queue": "dispatch"},
         "ml.*": {"queue": "ml"},
@@ -28,9 +29,34 @@ celery_app.conf.update(
             "task": "ml.forecast_all_tenants",
             "schedule": crontab(hour=2, minute=0),  # 2am Asia/Dubai
         },
+        # GAP#5: weekly retrain (producer=beat using settings crontab; default Mon 04:00 per spec §4.6; no hardcode)
+        "weekly-retrain-all-tenants": {
+            "task": "ml.retrain_all_tenants",
+            "schedule": crontab(
+                day_of_week=settings.predictions_weekly_retrain_dow,
+                hour=settings.predictions_weekly_retrain_hour,
+                minute=settings.predictions_weekly_retrain_minute,
+            ),
+        },
         "nightly-marketing-campaigns": {
             "task": "marketing.send_scheduled_campaigns",
             "schedule": crontab(hour=9, minute=0),  # 9am when UAE window opens
+        },
+        "outbox-sweep-failed": {
+            "task": "outbox.sweep_failed",
+            "schedule": 300.0,  # every 5 minutes — orphan recovery
+        },
+        # GAP#3 / phase-6: poll Meta approval status (every N min from settings), EOD ephemeral delete (23:30 Dubai from settings)
+        "marketing-poll-template-statuses": {
+            "task": "marketing.poll_template_statuses",
+            "schedule": crontab(minute=f"*/{settings.marketing_template_poll_minutes}"),
+        },
+        "marketing-cleanup-ephemeral-templates": {
+            "task": "marketing.cleanup_ephemeral_templates",
+            "schedule": crontab(
+                hour=settings.marketing_ephemeral_delete_hour,
+                minute=settings.marketing_ephemeral_delete_minute,
+            ),
         },
     },
 )

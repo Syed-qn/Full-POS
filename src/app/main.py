@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis_conn = None
 
     # --- startup ---
+    from app.obs.sentry import init_sentry
+    init_sentry(settings.sentry_dsn, environment=settings.env)
+
     if settings.rate_limit_enabled:
         from app.ratelimit.bucket import TokenBucketLimiter
         from app.ratelimit.deps import set_limiter
@@ -75,21 +78,12 @@ def create_app() -> FastAPI:
 
         app.include_router(simulator_router)
 
-    # Predictions router (P6-T8) — registered when available
-    try:
-        from app.predictions.router import router as predictions_router
+    # P6 modules — fully implemented (predictions + marketing routers, workers, services, ports, tests)
+    from app.predictions.router import router as predictions_router
+    from app.marketing.router import router as marketing_router
 
-        app.include_router(predictions_router)
-    except ImportError:
-        pass
-
-    # Marketing router (P6-T16) — registered when available
-    try:
-        from app.marketing.router import router as marketing_router
-
-        app.include_router(marketing_router)
-    except ImportError:
-        pass
+    app.include_router(predictions_router)
+    app.include_router(marketing_router)
 
     @app.get("/health")
     async def health() -> dict:

@@ -31,3 +31,13 @@ def test_whatsapp_provider_env_override(monkeypatch):
     s = Settings(_env_file=None)
     assert s.whatsapp_provider == "cloud"
     assert s.wa_access_token.get_secret_value() == "tok123"
+
+
+def test_marketing_meta_upload_settings_defaults():
+    """Covers new settings for resumable header upload + EOD/poll (no hardcodes)."""
+    s = Settings(_env_file=None)
+    assert s.wa_app_id == ""
+    assert s.graph_api_version == "v21.0"
+    assert s.marketing_ephemeral_delete_hour == 23
+    assert s.marketing_ephemeral_delete_minute == 30
+    assert s.marketing_template_poll_minutes == 2

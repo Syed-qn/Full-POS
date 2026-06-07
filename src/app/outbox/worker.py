@@ -1,8 +1,9 @@
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 
 from celery import shared_task
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.metrics import OUTBOX_DELIVERIES
@@ -146,3 +147,49 @@ def deliver_outbox_message(self, outbox_id: int) -> None:
         )
         OUTBOX_DELIVERIES.labels(status="retry").inc()
         raise self.retry(exc=exc, countdown=countdown)
+
+
+_SWEEPER_STALE_MINUTES = 5
+
+
+async def _sweep_stale_pending(session_factory: async_sessionmaker[AsyncSession]) -> list[int]:
+    """Find pending outbox rows stuck for > _SWEEPER_STALE_MINUTES and re-dispatch them.
+
+    Rows matching: status='pending' AND updated_at < NOW()-5min AND attempts < _MAX_ATTEMPTS.
+    Returns list of outbox IDs re-dispatched.
+    """
+    # DB stores timestamps as UTC naive (TimestampMixin uses server_default=func.now())
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=_SWEEPER_STALE_MINUTES)).replace(tzinfo=None)
+    async with session_factory() as session:
+        result = await session.execute(
+            select(OutboxMessage.id).where(
+                OutboxMessage.status == "pending",
+                OutboxMessage.updated_at < cutoff,
+                OutboxMessage.attempts < _MAX_ATTEMPTS,
+            )
+        )
+        stale_ids = list(result.scalars().all())
+
+    for outbox_id in stale_ids:
+        deliver_outbox_message.apply_async(args=[outbox_id])
+        logger.info("outbox sweeper re-dispatched stale id=%s", outbox_id)
+
+    return stale_ids
+
+
+@shared_task(name="outbox.sweep_failed")
+def sweep_failed_outbox() -> int:
+    """Celery beat task: orphan-recovery for stale pending outbox rows.
+
+    Picks up rows with status='pending' that have not been updated in
+    more than 5 minutes (e.g. worker crash before the deliver task was enqueued)
+    and re-dispatches them via deliver_outbox_message.apply_async.
+
+    Returns the count of rows re-dispatched.
+    """
+    from app.db import async_session_factory
+
+    stale_ids = asyncio.run(_sweep_stale_pending(async_session_factory))
+    if stale_ids:
+        logger.info("outbox sweeper recovered %d stale rows: %s", len(stale_ids), stale_ids)
+    return len(stale_ids)
