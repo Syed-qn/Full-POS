@@ -4,6 +4,10 @@ The nightly worker queries actual order counts and calls these helpers to
 backfill ``prediction_runs.accuracy`` (1 - MAPE, clamped to [0, 1]).
 """
 
+# GAP#5 / spec §4.6: ~80% acc target; manager-config weekly retrain; LightGBM future per-rest.
+# Placed here (accuracy/) + used in service per explicit task "add TARGET_ACCURACY=0.8 in accuracy/service".
+TARGET_ACCURACY: float = 0.8
+
 
 def mape(predicted: list[float], actual: list[float]) -> float:
     """Mean Absolute Percentage Error over paired points.

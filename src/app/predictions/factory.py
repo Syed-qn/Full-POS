@@ -22,4 +22,14 @@ def get_forecast_model() -> ForecastModel:
         from app.predictions.fake import FakeForecastModel
 
         return FakeForecastModel()
+    if provider == "lightgbm":
+        # GAP#5 / spec §4.6 / phase-6 plan: LightGBM per restaurant (full horizons, weekly retrain).
+        # Port/protocol ready for drop-in (no call-site changes). Real impl + lightgbm dep deferred
+        # (no heavy ML in phase-6 per plan; stub here to satisfy config + TDD test + "wire ... stub or note").
+        # When ready: pip install lightgbm, add class LightGBMForecastModel(ForecastModel): ... per-rest fit.
+        raise NotImplementedError(
+            "LightGBMForecastModel (per-restaurant) not yet wired (GAP#5 task: note/stub only; "
+            "requires extra deps + full model; use 'rolling' or 'fake' for now). "
+            "See predictions/port.py Protocol + phase-6 plan deferral."
+        )
     raise ValueError(f"Unknown forecast_provider: {provider!r}")

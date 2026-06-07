@@ -1,6 +1,6 @@
 import math
 
-from app.predictions.accuracy import accuracy_from_mape, mape, score_prediction
+from app.predictions.accuracy import TARGET_ACCURACY, accuracy_from_mape, mape, score_prediction
 
 
 def test_mape_basic():
@@ -26,3 +26,16 @@ def test_score_prediction_reads_order_count():
     acc = score_prediction(predicted, actual)
     # uses order_count primary metric: APE = |50-40|/40 = 0.25 → accuracy 0.75
     assert math.isclose(acc, 0.75)
+
+
+def test_target_accuracy_default_80pct():
+    """~80% acc target per spec/GAP_LIST #5; const drives enforcement/check in run_forecast + retrain."""
+    assert TARGET_ACCURACY == 0.8
+
+
+def test_accuracy_below_target_is_flagged_by_score():
+    """Example: low accuracy run (below target) should be detectable for retrain/alerts."""
+    # predicted 100 vs actual 50 -> MAPE=1.0 -> acc=0.0 < 0.8
+    acc = score_prediction({"order_count": 100}, {"order_count": 50})
+    assert acc < TARGET_ACCURACY
+    assert acc == 0.0

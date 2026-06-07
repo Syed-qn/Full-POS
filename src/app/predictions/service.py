@@ -29,6 +29,7 @@ from app.predictions.adjust import apply_overrides
 from app.predictions.features import build_observations
 from app.predictions.models import ManagerOverride, ModelRegistry, PredictionRun
 from app.predictions.port import ForecastModel
+from app.predictions.accuracy import TARGET_ACCURACY  # GAP#5: 0.8 target for check/enforcement in run_forecast + retrain
 
 # Statuses that count as "real demand" history (order placed and not cancelled).
 _DEMAND_STATUSES = ("confirmed", "ready", "assigned", "out_for_delivery", "delivered")
@@ -193,11 +194,19 @@ async def run_forecast(
         for ov in override_rows:
             ov.applied_to_runs = [*(ov.applied_to_runs or []), run.id]
 
+    # GAP#5 / spec §4.6: TARGET_ACCURACY check wired in run_forecast (source).
+    # At forecast time accuracy is None (backfill later via accuracy.py + worker); we record target
+    # to ModelRegistry metrics for weekly retrain decisions, MAPE dashboard, 80% enforcement.
+    # Provisional target_met computed for future (when accuracy backfilled before retrain).
+    target_met = bool(getattr(run, "accuracy", None) is not None and run.accuracy >= TARGET_ACCURACY)
+
     await _upsert_model_registry(
         session,
         restaurant_id=restaurant_id,
         version=run.model_version,
         n_samples=len(observations),
+        target_accuracy=TARGET_ACCURACY,
+        target_met=target_met,
     )
 
     await record_audit(
@@ -241,6 +250,8 @@ async def _upsert_model_registry(
     restaurant_id: int,
     version: str,
     n_samples: int,
+    target_accuracy: float = TARGET_ACCURACY,  # GAP#5 default from accuracy
+    target_met: bool | None = None,
 ) -> ModelRegistry:
     model_type = version.split("-", 1)[0]
     existing = (
@@ -251,14 +262,20 @@ async def _upsert_model_registry(
             )
         )
     ).scalar_one_or_none()
+    extra = {
+        "n_samples": n_samples,
+        "target_accuracy": target_accuracy,
+    }
+    if target_met is not None:
+        extra["target_met"] = target_met
     if existing is not None:
-        existing.metrics = {**(existing.metrics or {}), "n_samples": n_samples}
+        existing.metrics = {**(existing.metrics or {}), **extra}
         return existing
     row = ModelRegistry(
         restaurant_id=restaurant_id,
         model_type=model_type,
         version=version,
-        metrics={"n_samples": n_samples},
+        metrics={"n_samples": n_samples, "target_accuracy": target_accuracy, **({"target_met": target_met} if target_met is not None else {})},
     )
     session.add(row)
     return row

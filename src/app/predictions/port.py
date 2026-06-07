@@ -15,7 +15,9 @@ class DishHourForecast:
 
 @runtime_checkable
 class ForecastModel(Protocol):
-    """Swap seam: RollingAverageModel today; LightGBM/sklearn/prophet later, no call-site change."""
+    """Swap seam: RollingAverageModel today; LightGBM/sklearn/prophet later, no call-site change.
+    GAP#5: LightGBM per restaurant wired as stub/note in factory (no dep; impl later).
+    """
 
     def fit(self, observations: list[DishHourObservation]) -> None: ...
 
