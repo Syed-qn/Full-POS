@@ -66,9 +66,27 @@ def _build_graph_payload(msg: OutboundMessage) -> dict[str, Any]:
         }
 
     elif msg.type == OutboundMessageType.IMAGE:
-        # payload: {"url": str, "caption": str}
+        # payload: {"url": str, "caption": str} OR {"media_id": str, "caption": str}
         base["type"] = "image"
-        base["image"] = {"link": msg.payload["url"], "caption": msg.payload.get("caption", "")}
+        if "media_id" in msg.payload:
+            base["image"] = {"id": msg.payload["media_id"], "caption": msg.payload.get("caption", "")}
+        else:
+            base["image"] = {"link": msg.payload["url"], "caption": msg.payload.get("caption", "")}
+
+    elif msg.type == OutboundMessageType.DOCUMENT:
+        # payload: {"url": str, "filename": str} OR {"media_id": str, "filename": str}
+        base["type"] = "document"
+        if "media_id" in msg.payload:
+            base["document"] = {
+                "id": msg.payload["media_id"],
+                "filename": msg.payload.get("filename", "menu.pdf"),
+            }
+        else:
+            base["document"] = {
+                "link": msg.payload["url"],
+                "filename": msg.payload.get("filename", "menu.pdf"),
+                "caption": msg.payload.get("caption", ""),
+            }
 
     elif msg.type == OutboundMessageType.TEMPLATE:
         # payload: {"name": str, "language": str, "components": list}
@@ -92,7 +110,31 @@ class CloudAPIProvider:
         self._phone_number_id = settings.wa_phone_number_id
         self._app_secret = settings.wa_app_secret.get_secret_value()
 
+    async def _upload_media(self, data: bytes, content_type: str) -> str:
+        """Upload raw bytes to Meta media API; return the media_id."""
+        import base64 as _b64
+        _ = _b64  # suppress unused import — base64 used only by caller
+        url = f"{_GRAPH_BASE}/{self._phone_number_id}/media"
+        headers = {"Authorization": f"Bearer {self._token}"}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                headers=headers,
+                data={"messaging_product": "whatsapp"},
+                files={"file": ("file", data, content_type)},
+            )
+        resp.raise_for_status()
+        return resp.json()["id"]
+
     async def send(self, msg: OutboundMessage) -> str:
+        # For file messages with raw base64 data, upload to Meta first to get media_id.
+        if msg.type in (OutboundMessageType.IMAGE, OutboundMessageType.DOCUMENT):
+            if "data" in msg.payload and "media_id" not in msg.payload:
+                import base64
+                raw = base64.b64decode(msg.payload["data"])
+                media_id = await self._upload_media(raw, msg.payload["content_type"])
+                msg.payload = {**msg.payload, "media_id": media_id}
+
         url = f"{_GRAPH_BASE}/{self._phone_number_id}/messages"
         headers = {
             "Authorization": f"Bearer {self._token}",

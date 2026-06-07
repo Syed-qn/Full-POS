@@ -12,6 +12,7 @@ from app.llm.factory import get_menu_extractor
 from app.llm.port import MenuExtractor, UploadedFile
 from app.menu import service
 from app.menu.models import Dish, Menu
+from app.ordering.matching import normalize_name
 from app.menu.schemas import AvailabilityIn, DiffOut, DishIn, DishOut, DishPatch, MenuOut, MenuWithDiffOut
 from app.menu.service import MenuIncompleteError
 
@@ -101,6 +102,7 @@ async def add_dish(
     if dup:
         raise HTTPException(status.HTTP_409_CONFLICT, "dish number already in menu")
     dish = Dish(menu_id=menu.id, restaurant_id=restaurant.id, **body.model_dump())
+    dish.name_normalized = normalize_name(dish.name)
     session.add(dish)
     await session.flush()
     await record_audit(

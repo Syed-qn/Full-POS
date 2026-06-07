@@ -10,8 +10,10 @@ def get_menu_extractor() -> MenuExtractor:
     settings = get_settings()
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeExtractor
-
         return ClaudeExtractor()
+    elif settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekExtractor
+        return DeepSeekExtractor()
     elif settings.llm_provider == "fake":
         return FakeExtractor()
     else:
@@ -28,11 +30,13 @@ def _get_anthropic_client():
 
 
 def get_describer():
-    """FastAPI/test dependency — returns FakeDescriber or ClaudeDescriber."""
     settings = get_settings()
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeDescriber
         return ClaudeDescriber()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekDescriber
+        return DeepSeekDescriber()
     from app.llm.fake import FakeDescriber
     return FakeDescriber()
 
@@ -42,6 +46,9 @@ def get_intent_classifier():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeIntentClassifier
         return ClaudeIntentClassifier()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekIntentClassifier
+        return DeepSeekIntentClassifier()
     from app.llm.fake import FakeIntentClassifier
     return FakeIntentClassifier()
 
@@ -51,25 +58,32 @@ def get_arbiter():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeArbiter
         return ClaudeArbiter()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekArbiter
+        return DeepSeekArbiter()
     from app.llm.fake import FakeArbiter
     return FakeArbiter()
 
 
 def get_forecast_adjuster():
-    """FastAPI/test dependency — returns FakeForecastAdjuster or ClaudeForecastAdjuster."""
     settings = get_settings()
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeForecastAdjuster
         return ClaudeForecastAdjuster()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekForecastAdjuster
+        return DeepSeekForecastAdjuster()
     from app.llm.fake import FakeForecastAdjuster
     return FakeForecastAdjuster()
 
 
 def get_segment_compiler():
-    """FastAPI/test dependency — returns FakeSegmentCompiler or ClaudeSegmentCompiler."""
     settings = get_settings()
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeSegmentCompiler
         return ClaudeSegmentCompiler()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekSegmentCompiler
+        return DeepSeekSegmentCompiler()
     from app.llm.fake import FakeSegmentCompiler
     return FakeSegmentCompiler()

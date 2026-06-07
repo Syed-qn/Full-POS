@@ -9,40 +9,28 @@ from pydantic import BaseModel, ConfigDict
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    dish_number: int
-    dish_name: str
-    price_aed: Decimal
+    dish_number: Optional[int]
+    name: str          # dish_name field on OrderItem
     qty: int
-    notes: Optional[str]
+    price_aed: str     # serialised as string for JS safety
 
 
 class OrderOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+    """Enriched order response — includes customer, items, rider, and address."""
     id: int
-    restaurant_id: int
-    customer_id: int
     order_number: str
     status: str
-    priority: str
-    subtotal: Decimal
-    delivery_fee_aed: Decimal
-    total: Decimal
-    distance_km: Optional[float]
-    weather_delay_disclosed: bool
-    sla_confirmed_at: Optional[datetime]
-    sla_deadline: Optional[datetime]
-    promised_eta: Optional[datetime]
-    delivered_at: Optional[datetime]
-    late: Optional[bool]
-    additional_details: Optional[str]
-    address_id: Optional[int]
-    cancellation_reason: Optional[str]
-    cancelled_at: Optional[datetime]
-    resale_of_order_id: Optional[int]
-    created_at: datetime
-    updated_at: datetime
+    customer_name: Optional[str]
+    customer_phone: str
+    items: list[OrderItemOut]
+    total_aed: str
+    rider_id: Optional[int]
+    rider_name: Optional[str]
+    sla_started_at: Optional[str]   # ISO 8601 of sla_confirmed_at
+    created_at: str
+    address: Optional[str]
+    lat: Optional[float]
+    lng: Optional[float]
 
 
 class CustomerOut(BaseModel):

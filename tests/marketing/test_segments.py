@@ -188,7 +188,14 @@ def test_fake_compiler_recency():
     assert {"field": "last_order_days_ago", "op": "lte", "value": 30} in dsl["all"]
 
 
-def test_factory_returns_fake_by_default():
-    compiler = get_segment_compiler()
-    assert isinstance(compiler, FakeSegmentCompiler)
-    validate_dsl(compiler.compile("customers who spent over 200 aed"))
+def test_factory_returns_fake_when_provider_is_fake(monkeypatch):
+    from app.config import get_settings
+    from app.llm.factory import get_segment_compiler as _get
+    monkeypatch.setenv("APP_LLM_PROVIDER", "fake")
+    get_settings.cache_clear()
+    try:
+        compiler = _get()
+        assert isinstance(compiler, FakeSegmentCompiler)
+        validate_dsl(compiler.compile("customers who spent over 200 aed"))
+    finally:
+        get_settings.cache_clear()

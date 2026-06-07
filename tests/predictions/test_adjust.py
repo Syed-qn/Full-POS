@@ -63,8 +63,13 @@ def test_fake_adjuster_no_match_returns_empty():
     assert adj.parse_override("nothing relevant here") == {}
 
 
-def test_get_forecast_adjuster_returns_fake_by_default():
+def test_get_forecast_adjuster_returns_fake_when_provider_is_fake(monkeypatch):
+    from app.config import get_settings
     from app.llm.factory import get_forecast_adjuster
-
-    adj = get_forecast_adjuster()
-    assert isinstance(adj, FakeForecastAdjuster)
+    monkeypatch.setenv("APP_LLM_PROVIDER", "fake")
+    get_settings.cache_clear()
+    try:
+        adj = get_forecast_adjuster()
+        assert isinstance(adj, FakeForecastAdjuster)
+    finally:
+        get_settings.cache_clear()

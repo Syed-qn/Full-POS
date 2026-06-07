@@ -1,3 +1,4 @@
+import base64
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -409,5 +410,194 @@ async def test_ambiguous_match_sends_disambiguation_question(db_session, restaur
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     last = rows[-1].payload["body"]
-    assert "110" in last or "111" in last  # disambiguation lists dish numbers
-    assert "mean" in last.lower()
+    # Arbiter (FakeArbiter picks first candidate = dish 110) resolves ambiguity
+    # automatically — customer gets "Added 1x..." instead of disambiguation ping-pong.
+    assert "110" in last or "111" in last
+
+
+async def test_modify_order_dialogue_flow_after_placed_restarts_sla_and_updates_items(db_session, restaurant):
+    """Full modify dialogue after order_placed: 'modify'/'change' -> collect new items (reuse logic) -> 'done' -> confirm button
+    calls service (via effects), restarts SLA, updates items, audit, state back to order_placed. TDD red->green.
+    """
+    await _seed_menu(db_session, restaurant.id)
+
+    from app.menu.models import Dish
+    from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+    from app.ordering.fsm import OrderStatus
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+    from sqlalchemy import select as sa_select
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501110001", name="Modder",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    addr = CustomerAddress(
+        customer_id=customer.id, latitude=25.21, longitude=55.27,
+        room_apartment="10", building="Mod Tower",
+        receiver_name="Modder", confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-MODT", status=OrderStatus.CONFIRMED,
+        priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("22.00"), total=Decimal("22.00"),
+        address_id=addr.id, distance_km=1.0,
+        sla_confirmed_at=now, sla_deadline=now + timedelta(minutes=40),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    dish = await db_session.scalar(
+        sa_select(Dish).where(Dish.dish_number == 110)
+    )
+    item = OrderItem(
+        order_id=order.id, dish_id=dish.id, dish_number=110,
+        dish_name="Chicken Biryani", price_aed=Decimal("22.00"), qty=1,
+    )
+    db_session.add(item)
+    await db_session.commit()
+
+    # Ensure conv exists (hi creates it) then force to placed with the order ref (simulates post-confirmation)
+    await handle_inbound(db_session, _msg("hi", "wamid.greetmod"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    conv.state = {
+        **conv.state,
+        "dialogue_state": "order_placed",
+        "pending_order_id": order.id,
+    }
+    await db_session.commit()
+
+    # 1. Customer says modify (or change order) -> should prompt and set modify_items state
+    await handle_inbound(db_session, _msg("modify my order", "wamid.mod1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    last_body = rows[-1].payload.get("body", "").lower()
+    assert any(k in last_body for k in ["modify", "change", "update", "items", "what would you like"]), f"prompt missing modify cue: {last_body}"
+
+    conv = await _conv(db_session)
+    assert conv.state.get("dialogue_state") == "modify_items"
+    assert conv.state.get("modify_order_id") == order.id
+
+    # 2. Send new items (qty change) -> accumulates in proposed (re-uses parse/match logic)
+    await handle_inbound(db_session, _msg("2x chicken biryani", "wamid.moditem"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    proposed = conv.state.get("modify_proposed", [])
+    assert len(proposed) >= 1, "proposed items not collected in state"
+    assert any(p.get("qty") == 2 for p in proposed)
+
+    # 3. 'done' -> advances to modify_confirm (shows summary prompt)
+    await handle_inbound(db_session, _msg("done", "wamid.moddone"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    assert conv.state.get("dialogue_state") == "modify_confirm"
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    last_body = rows[-1].payload.get("body", "").lower()
+    assert "confirm" in last_body or "change" in last_body
+
+    # 4. Confirm button -> calls modify_order (via engine), items updated, SLA restarted, audit, state reset
+    orig_deadline = order.sla_deadline
+    await handle_inbound(db_session, _btn("confirm_modify", "wamid.modconf"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.subtotal == Decimal("44.00")
+    assert order.total == Decimal("44.00")
+    assert order.sla_deadline is not None
+    assert order.sla_deadline > orig_deadline, "SLA clock must restart on customer-confirmed modify per spec"
+
+    from app.audit.models import AuditLog
+    logs = (await db_session.execute(sa_select(AuditLog))).scalars().all()
+    assert any(getattr(audit_log, "action", None) == "order_modified" for audit_log in logs), "modify must produce audit"
+
+    conv = await _conv(db_session)
+    assert conv.state.get("dialogue_state") == "order_placed"
+
+
+async def test_greeting_sends_menu_file_when_uploaded(db_session, restaurant, tmp_path, monkeypatch):
+    """When MenuFile records exist, greeting enqueues IMAGE/DOCUMENT + short text prompt."""
+    from app.config import get_settings
+    from app.menu.models import Dish, Menu, MenuFile
+    from app.menu.storage import FileBlobStore
+
+    monkeypatch.setenv("APP_UPLOAD_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    try:
+        menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+        db_session.add(menu)
+        await db_session.flush()
+        db_session.add(Dish(
+            menu_id=menu.id, restaurant_id=restaurant.id, dish_number=101,
+            name="Biryani", price_aed=Decimal("20.00"),
+            category="Rice", is_available=True, name_normalized="biryani",
+        ))
+
+        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 20
+        store = FileBlobStore(tmp_path)
+        digest = store.put(restaurant_id=restaurant.id, data=fake_png, content_type="image/png")
+        db_session.add(MenuFile(
+            restaurant_id=restaurant.id,
+            menu_id=menu.id,
+            sha256=digest,
+            content_type="image/png",
+            size_bytes=len(fake_png),
+            original_filename="menu.png",
+        ))
+        await db_session.commit()
+
+        await handle_inbound(db_session, _msg("hi", "wamid.greet-file"), restaurant_id=restaurant.id)
+        await db_session.commit()
+
+        rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+        types = [r.payload.get("type") for r in rows]
+        assert "image" in types, "must enqueue IMAGE when menu file is an image"
+        assert "text" in types, "must enqueue text prompt after file"
+
+        img_row = next(r for r in rows if r.payload.get("type") == "image")
+        assert img_row.payload.get("data") == base64.b64encode(fake_png).decode()
+        assert img_row.payload.get("content_type") == "image/png"
+
+        text_rows = [r for r in rows if r.payload.get("type") == "text"]
+        # Prompt — not the full processed menu text
+        assert any("dish" in (r.payload.get("body") or "").lower() for r in text_rows)
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_greeting_falls_back_to_text_menu_when_no_files(db_session, restaurant):
+    """When no MenuFile records exist, greeting renders and sends the digital text menu."""
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=101,
+        name="Biryani", price_aed=Decimal("20.00"),
+        category="Rice", is_available=True, name_normalized="biryani",
+    ))
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.greet-text"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    types = [r.payload.get("type") for r in rows]
+    assert "text" in types
+    assert "image" not in types
+    assert "document" not in types
+    text_rows = [r for r in rows if r.payload.get("type") == "text"]
+    assert any("biryani" in (r.payload.get("body") or "").lower() for r in text_rows)

@@ -52,17 +52,81 @@ async def _handle_greeting(
     inbound: InboundMessage,
     restaurant_id: int,
 ) -> None:
-    """Send the digital menu and advance state to menu_sent."""
-    menu_text = await _render_menu(session, restaurant_id)
-    key = f"greeting-{conv.id}-{inbound.wa_message_id}"
-    await enqueue_message(
-        session,
-        restaurant_id=restaurant_id,
-        to_phone=inbound.from_phone,
-        msg_type=OutboundMessageType.TEXT,
-        payload={"body": menu_text},
-        idempotency_key=key,
+    """Send uploaded menu files (image/PDF) then a short prompt; fall back to text menu."""
+    import base64
+
+    from app.config import get_settings
+    from app.menu.models import Menu, MenuFile
+    from app.menu.storage import FileBlobStore
+
+    menu = await session.scalar(
+        select(Menu).where(
+            Menu.restaurant_id == restaurant_id,
+            Menu.status == "active",
+        )
     )
+
+    files_sent = 0
+    if menu is not None:
+        menu_files = list(
+            (
+                await session.scalars(
+                    select(MenuFile).where(MenuFile.menu_id == menu.id)
+                )
+            ).all()
+        )
+        store = FileBlobStore(get_settings().upload_dir)
+        for mf in menu_files:
+            data = store.get(restaurant_id=restaurant_id, digest=mf.sha256)
+            if data is None:
+                continue
+            b64 = base64.b64encode(data).decode()
+            if mf.content_type.startswith("image/"):
+                msg_type = OutboundMessageType.IMAGE
+                payload: dict = {
+                    "data": b64,
+                    "content_type": mf.content_type,
+                    "caption": mf.original_filename or "Menu",
+                }
+            else:
+                msg_type = OutboundMessageType.DOCUMENT
+                payload = {
+                    "data": b64,
+                    "content_type": mf.content_type,
+                    "filename": mf.original_filename or "menu.pdf",
+                    "caption": "Our menu",
+                }
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=inbound.from_phone,
+                msg_type=msg_type,
+                payload=payload,
+                idempotency_key=f"greeting-file-{mf.sha256[:16]}-{conv.id}-{inbound.wa_message_id}",
+            )
+            files_sent += 1
+
+    if files_sent == 0:
+        # No uploaded files — render the digital menu as text
+        menu_text = await _render_menu(session, restaurant_id)
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=inbound.from_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": menu_text},
+            idempotency_key=f"greeting-{conv.id}-{inbound.wa_message_id}",
+        )
+    else:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=inbound.from_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "Reply with the dish name to order."},
+            idempotency_key=f"greeting-prompt-{conv.id}-{inbound.wa_message_id}",
+        )
+
     conv.state = {**conv.state, "dialogue_state": "menu_sent"}
     await record_audit(
         session,
@@ -189,19 +253,27 @@ async def _handle_collecting_items(
         return
 
     if result.confidence == MatchConfidence.AMBIGUOUS:
-        options = " or ".join(
-            f"{d.dish_number}. {d.name} (AED {Decimal(d.price_aed).normalize()})"
-            for d in result.candidates[:3]
-        )
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="ambiguous",
-            body=f"Did you mean {options}? Please reply with the dish number.",
-        )
-        return
+        # Let LLM arbiter resolve ambiguity — avoids ping-pong with the customer.
+        from app.llm.factory import get_arbiter
+        try:
+            dish = await get_arbiter().arbitrate(dish_query, result.candidates[:3])
+        except Exception:
+            dish = None
+        if dish is None:
+            options = " or ".join(
+                f"{d.dish_number}. {d.name} (AED {Decimal(d.price_aed).normalize()})"
+                for d in result.candidates[:3]
+            )
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ambiguous",
+                body=f"Did you mean {options}? Please reply with the dish number.",
+            )
+            return
+        # Arbiter resolved — fall through to add item below.
 
-    # DIRECT match → add to draft order.
-    dish = result.candidates[0]
+    # DIRECT match or arbiter-resolved → add to draft order.
+    dish = dish if result.confidence == MatchConfidence.AMBIGUOUS else result.candidates[0]
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone,
     )
@@ -393,7 +465,7 @@ async def _handle_address_capture(
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="ask-receiver",
-        body=f"Address noted: room/apartment {room_apartment}, building {building}.\n"
+        body=f"Address noted: room/apartment number {room_apartment} building {building}.\n"
              f"Who should the rider ask for? Please reply with the receiver's name.",
     )
 
@@ -558,6 +630,316 @@ async def _handle_order_confirmation(
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
+async def _handle_modify_intent(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Start modify flow: lookup recent modifiable order (conv.state pending/ modify_order_id or by phone like status query).
+    If before ready, set modify_items + empty proposed; prompt for new items (SLA restart noted).
+    """
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Customer, Order
+
+    order = None
+    mod_id = conv.state.get("modify_order_id") or conv.state.get("pending_order_id")
+    if mod_id:
+        order = await session.get(Order, mod_id)
+
+    if order is None:
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.restaurant_id == restaurant_id,
+                Customer.phone == inbound.from_phone,
+            )
+        )
+        if customer:
+            terminal = {
+                str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
+                str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
+                str(OrderStatus.WRITTEN_OFF),
+            }
+            order = await session.scalar(
+                select(Order)
+                .where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.customer_id == customer.id,
+                    Order.status.notin_(terminal),
+                )
+                .order_by(Order.created_at.desc())
+                .limit(1)
+            )
+
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="modify-no-order",
+            body="You don't have any active orders to modify. Send 'hi' to place a new order.",
+        )
+        return
+
+    # Mirror service _NON_MODIFIABLE_STATUSES (strings for safety, no private cross)
+    non_mod_strs = {
+        "ready", "assigned", "picked_up", "arriving", "delivered", "cancelled",
+        "undeliverable", "on_resale", "resold", "written_off",
+    }
+    if str(order.status) in non_mod_strs:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="modify-blocked",
+            body=f"Order #{order.order_number} cannot be modified (status: {order.status}). Modifications allowed only before ready per spec.",
+        )
+        return
+
+    _set_state(conv, dialogue_state="modify_items", modify_order_id=order.id, modify_proposed=[])
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="modify-start",
+        body=(
+            f"Sure, let's modify order #{order.order_number}. "
+            f"Reply with updated dishes (e.g. '2x 110' or names from menu), or 'done' when ready to review changes. "
+            f"After you confirm, the 40-min SLA clock restarts."
+        ),
+    )
+
+
+async def _handle_modify_items(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Collect proposed replacement items for modify (re-uses _handle_collecting_items logic:
+    parse_qty_and_text, find_dish_matches + confidence paths, 'what is' describer, 'done' gate).
+    Stores serializable proposed list in conv.state['modify_proposed']; no DB mutation until confirm.
+    """
+    from app.ordering.service import parse_qty_and_text
+
+    if inbound.type != MessageType.TEXT:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="need-text-mod",
+            body="Please type the name or number of a dish from the menu to update your order.",
+        )
+        return
+
+    text = (inbound.payload.get("text") or "").strip()
+    qty, dish_query = parse_qty_and_text(text)
+    lower_q = dish_query.lower()
+
+    if lower_q in ("done", "checkout", "that's all", "thats all"):
+        mod_id = conv.state.get("modify_order_id")
+        proposed = conv.state.get("modify_proposed", []) or []
+        if not mod_id or not proposed:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="modify-no-proposed",
+                body="No changes proposed yet. Reply with dishes or send 'hi' to start over.",
+            )
+            return
+        _set_state(conv, dialogue_state="modify_confirm")
+        await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
+        return
+
+    if lower_q.startswith("what is "):
+        from app.llm.factory import get_describer
+        item_name = dish_query[8:].strip().rstrip("?")
+        desc = get_describer().describe(item_name, "")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="dish-desc-mod", body=desc,
+        )
+        return
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+
+    if result.confidence == MatchConfidence.NO_MATCH:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-match-mod",
+            body="Sorry, I couldn't find that dish. Please reply with the dish number from the menu, or try a different name.",
+        )
+        return
+
+    if result.confidence == MatchConfidence.AMBIGUOUS:
+        options = " or ".join(
+            f"{d.dish_number}. {d.name} (AED {Decimal(d.price_aed).normalize()})"
+            for d in result.candidates[:3]
+        )
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ambiguous-mod",
+            body=f"Did you mean {options}? Please reply with the dish number.",
+        )
+        return
+
+    # Direct match: accumulate in proposed (replaces cart-add in collecting_items)
+    dish = result.candidates[0]
+    proposed = list(conv.state.get("modify_proposed", []) or [])
+    proposed.append({
+        "dish_id": dish.id,
+        "dish_number": dish.dish_number,
+        "name": dish.name,
+        "price_aed": str(dish.price_aed),
+        "qty": qty,
+    })
+    _set_state(conv, dialogue_state="modify_items", modify_proposed=proposed)
+
+    price = Decimal(dish.price_aed).normalize()
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="item-proposed",
+        body=(
+            f"Added {qty}x {dish.dish_number}. {dish.name} (AED {price}) to your modification.\n"
+            f"Reply with more items, or send 'done' to review and confirm (SLA restarts on confirm)."
+        ),
+    )
+
+
+async def _send_modify_summary(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    order_id: int,
+    proposed: list[dict],
+) -> None:
+    """Show current vs proposed + totals; buttons for confirm_modify / cancel_modify."""
+    from app.ordering.models import Order, OrderItem
+
+    order = await session.get(Order, order_id)
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-mod-order", body="Order not found.",
+        )
+        return
+
+    current_items = list((
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all())
+    curr_lines = "\n".join(
+        f"  {it.qty}x {it.dish_number}. {it.dish_name} — "
+        f"AED {Decimal(it.price_aed * it.qty).normalize()}"
+        for it in current_items
+    ) or "  (none)"
+
+    prop_lines = "\n".join(
+        f"  {p['qty']}x {p.get('dish_number', '?')}. {p.get('name', '?')} — "
+        f"AED {Decimal(str(p['price_aed'])) * p['qty'] :.2f}"
+        for p in proposed
+    ) or "  (none)"
+
+    new_sub = sum(Decimal(str(p["price_aed"])) * p["qty"] for p in proposed)
+    new_total = new_sub + (order.delivery_fee_aed or Decimal("0"))
+
+    body = (
+        f"Current order #{order.order_number}:\n{curr_lines}\n\n"
+        f"Proposed new items:\n{prop_lines}\n\n"
+        f"New subtotal: AED {new_sub.normalize()}\n"
+        f"Delivery: AED {Decimal(order.delivery_fee_aed or 0).normalize()}\n"
+        f"New total: AED {new_total.normalize()}\n\n"
+        f"Confirm these changes? (COD, 40-min SLA restarts after your confirm)"
+    )
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="modify-summary",
+        body=body,
+        buttons=[
+            {"id": "confirm_modify", "title": "Confirm changes"},
+            {"id": "cancel_modify", "title": "Keep original"},
+        ],
+    )
+
+
+async def _handle_modify_confirm(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Confirm handler for modify: load order WITH FOR UPDATE (per spec §4.2.8 and fsm concurrency note),
+    build dish list, call ordering.service.modify_order (handles items replace, recalc, SLA restart, audit).
+    Bounded context: engine only calls service, no direct model writes. Full flow wired (intent, states, confirm).
+    """
+    from app.menu.models import Dish
+    from app.ordering.models import Order
+    from app.ordering.service import modify_order
+
+    mod_id = conv.state.get("modify_order_id")
+    if not mod_id:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-mod-pending",
+            body="No modification in progress. Send 'hi' to start a new order.",
+        )
+        return
+
+    # for_update per spec §4.2.8 (modify only before ready) and fsm concurrency (race with kitchen ready). Full modify dialogue implemented.
+    order = await session.get(Order, mod_id, with_for_update=True) if mod_id else None
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-mod-order",
+            body="Order not found for modification.",
+        )
+        return
+
+    btn_id = inbound.payload.get("id", "") if inbound.type == MessageType.BUTTON_REPLY else ""
+
+    if btn_id == "confirm_modify":
+        proposed = conv.state.get("modify_proposed", []) or []
+        if not proposed:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="modify-empty",
+                body="No proposed changes. Modification cancelled.",
+            )
+            _set_state(conv, dialogue_state="order_placed", modify_order_id=None, modify_proposed=None)
+            return
+
+        new_items: list[dict] = []
+        for p in proposed:
+            dish = await session.get(Dish, p["dish_id"])
+            if dish is not None:
+                new_items.append({"dish": dish, "qty": p.get("qty", 1), "notes": None})
+
+        if new_items:
+            await modify_order(session, order=order, new_items=new_items, actor="customer")
+            # commit by caller (webhook/router)
+
+        _set_state(
+            conv,
+            dialogue_state="order_placed",
+            modify_order_id=None,
+            modify_proposed=None,
+        )
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="modify-confirmed",
+            body=(
+                f"Order #{order.order_number} updated!\n"
+                f"New total: AED {Decimal(order.total).normalize()} (COD).\n"
+                f"The 40-minute delivery window restarts now."
+            ),
+        )
+        return
+
+    if btn_id == "cancel_modify":
+        _set_state(conv, dialogue_state="order_placed", modify_order_id=None, modify_proposed=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="modify-cancelled",
+            body="Modification cancelled — original order unchanged. Send 'hi' if needed.",
+        )
+        return
+
+    # re-prompt
+    proposed = conv.state.get("modify_proposed", []) or []
+    await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
+
+
 async def _handle_status_query(
     session: AsyncSession,
     conv: Conversation,
@@ -696,6 +1078,10 @@ async def _handle_rider_inbound(
             latitude=float(inbound.payload["latitude"]),
             longitude=float(inbound.payload["longitude"]),
         )
+        # Geofence check per spec §4.4 + transcript: if near current stop (~100m), send dual "Delivered" | "Delivered and Next Order Location"
+        # Button click is ONLY way to reveal next location (flow integrity). Power bank provided per ops policy for all-day location.
+        from app.dispatch.rider_flow import check_and_send_near_dual_if_applicable
+        await check_and_send_near_dual_if_applicable(session, restaurant_id=restaurant_id, rider=rider)
         return
 
     if inbound.type == MessageType.BUTTON_REPLY:
@@ -720,6 +1106,17 @@ async def _handle_rider_inbound(
                 rider=rider,
                 order_id=int(button_id.split(":", 1)[1]),
             )
+        elif button_id.startswith("delivered_next:"):
+            from app.dispatch.rider_flow import handle_delivered
+
+            await handle_delivered(
+                session,
+                restaurant_id=restaurant_id,
+                rider=rider,
+                order_id=int(button_id.split(":", 1)[1]),
+            )
+            # "Delivered and Next Order Location" click reveals next stop location immediately (bypass near wait for subsequent)
+            return
         return
     # Other rider message types (e.g. free text) are ignored — flow is button-only.
 
@@ -779,18 +1176,42 @@ async def handle_inbound(
 
     # Intent intercept: a status query ("where is my order") is answered from
     # any state without disturbing the in-progress dialogue.
+    # Modify intent ("modify", "change order", "edit my order") also intercepted
+    # from any state (post-confirmation primarily) to start modify flow per spec.
     if inbound.type == MessageType.TEXT:
+        import asyncio
         from app.llm.factory import get_intent_classifier
 
-        intent = get_intent_classifier().classify(inbound.payload.get("text", ""))
+        text = inbound.payload.get("text", "") or ""
+        # Run sync classifier in thread — avoids blocking the async event loop
+        # (both Claude and DeepSeek use sync HTTP clients).
+        # Fall back to "other" on any network / parse failure.
+        try:
+            intent = await asyncio.to_thread(get_intent_classifier().classify, text)
+        except Exception:
+            intent = "other"
+
         if intent == "status":
             await _handle_status_query(session, conv, inbound, restaurant_id)
             return
-        # TODO(modify dialogue): ordering.service.modify_order exists (SLA restart,
-        # blocked at ready — tested) but no engine state drives it yet. When wiring
-        # the modify-confirm handler, load the order with
-        # session.get(Order, id, with_for_update=True) — see fsm.transition()
-        # concurrency note (confirm vs kitchen→ready race).
+        lower = text.lower()
+        # Modify intercept only valid AFTER an order is placed — prevents "make it 2
+        # biriyani" from triggering modify while the customer is still building their cart.
+        _cur_state = conv.state.get("dialogue_state", "greeting")
+        if (_cur_state == "order_placed") and (
+            intent == "modify" or ("edit" in lower and "order" in lower)
+        ):
+            await _handle_modify_intent(session, conv, inbound, restaurant_id)
+            return
+
+    # Greeting reset: "hi/hello/hey/start/menu" from any state re-shows the menu.
+    _GREET = {"hi", "hello", "hey", "start", "menu", "مرحبا", "السلام عليكم", "hii", "helo"}
+    if inbound.type == MessageType.TEXT:
+        _txt_lower = (inbound.payload.get("text") or "").strip().lower()
+        if _txt_lower in _GREET:
+            _set_state(conv, dialogue_state="greeting", draft_order_id=None)
+            await _handle_greeting(session, conv, inbound, restaurant_id)
+            return
 
     dialogue_state = conv.state.get("dialogue_state", "greeting")
 
@@ -804,4 +1225,9 @@ async def handle_inbound(
         await _handle_receiver_details(session, conv, inbound, restaurant_id)
     elif dialogue_state == "order_confirmation":
         await _handle_order_confirmation(session, conv, inbound, restaurant_id)
+    elif dialogue_state == "modify_items":
+        await _handle_modify_items(session, conv, inbound, restaurant_id)
+    elif dialogue_state == "modify_confirm":
+        await _handle_modify_confirm(session, conv, inbound, restaurant_id)
     # Terminal states (order_placed, cancelled) are pass-through for now.
+    # (modify intent is intercepted early; new states only entered from order_placed via modify flow)

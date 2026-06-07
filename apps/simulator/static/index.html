@@ -63,6 +63,16 @@
     background: #fff8e1; border: 1px dashed #e0c97f; border-radius: 6px;
     padding: 5px 9px; max-width: 78%;
   }
+  .media-bubble img {
+    max-width: 100%; border-radius: 6px; display: block;
+  }
+  .media-bubble .caption {
+    font-size: 12px; color: #555; margin-top: 4px;
+  }
+  .doc-bubble a {
+    color: #075e54; text-decoration: none; font-weight: 600;
+  }
+  .doc-bubble a:hover { text-decoration: underline; }
   #locrow {
     display: none; gap: 6px; padding: 6px 10px; background: #eef4f1;
     border-top: 1px solid #ddd; align-items: flex-end; flex: 0 0 auto;
@@ -235,8 +245,44 @@
           seen[key] = true;
           var payload = m.payload || {};
           var type = (m.type || "").toLowerCase();
-          var text = payload.body != null ? payload.body : "";
-          if (text) addBubble(text, "recv");
+          if (type === "image") {
+            var imgWrap = document.createElement("div");
+            imgWrap.className = "bubble recv media-bubble";
+            var img = document.createElement("img");
+            img.src = "data:" + payload.content_type + ";base64," + payload.data;
+            imgWrap.appendChild(img);
+            if (payload.caption) {
+              var cap = document.createElement("span");
+              cap.className = "caption";
+              cap.textContent = payload.caption;
+              imgWrap.appendChild(cap);
+            }
+            var ts = document.createElement("span");
+            ts.className = "ts"; ts.textContent = now();
+            imgWrap.appendChild(ts);
+            msgs.appendChild(imgWrap);
+            msgs.scrollTop = msgs.scrollHeight;
+          } else if (type === "document") {
+            var docWrap = document.createElement("div");
+            docWrap.className = "bubble recv doc-bubble";
+            var link = document.createElement("a");
+            link.textContent = "📄 " + (payload.filename || payload.caption || "Document");
+            if (payload.data && payload.content_type) {
+              link.href = "data:" + payload.content_type + ";base64," + payload.data;
+              link.download = payload.filename || "menu.pdf";
+            } else if (payload.url) {
+              link.href = payload.url; link.target = "_blank";
+            }
+            var ts2 = document.createElement("span");
+            ts2.className = "ts"; ts2.textContent = now();
+            docWrap.appendChild(link);
+            docWrap.appendChild(ts2);
+            msgs.appendChild(docWrap);
+            msgs.scrollTop = msgs.scrollHeight;
+          } else {
+            var text = payload.body != null ? payload.body : "";
+            if (text) addBubble(text, "recv");
+          }
           if (type.indexOf("buttons") !== -1 && payload.buttons) {
             addChips(payload.buttons);
           }

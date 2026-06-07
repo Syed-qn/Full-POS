@@ -13,10 +13,66 @@ from app.ordering.fsm import OrderStatus
 from app.ordering.fsm import transition as fsm_transition
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 
+
+def _compute_exclusion_hash(
+    phone: str, receiver_name: str | None, address_id: int | None
+) -> str:
+    """Single source for exclusion hash format (phone:receiver:addr_id). Used by cancel and matcher."""
+    receiver = (receiver_name or "").strip().lower()
+    addr = str(address_id or "")
+    return hashlib.sha256(f"{phone}:{receiver}:{addr}".encode()).hexdigest()
+
+
+def is_excluded_for_resale(
+    exclusion_hash: str | None,
+    *,
+    phone: str,
+    receiver_name: str | None = None,
+    address_id: int | None = None,
+) -> bool:
+    """Return True if this buyer (phone + person/address) is barred from this resale per spec §1 and §4.3.7.
+
+    Used by dispatch offer matcher and conversation resale suggestion to enforce
+    "excluded from same phone/person/address".
+    """
+    if not exclusion_hash:
+        return False
+    h = _compute_exclusion_hash(phone, receiver_name, address_id)
+    return h == exclusion_hash
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.menu.models import Dish
+
+
+async def get_available_resale_orders(
+    session: "AsyncSession",
+    restaurant_id: int,
+    phone: str,
+    receiver_name: str | None = None,
+    address_id: int | None = None,
+) -> list[Order]:
+    """Resale-offer matcher: returns on_resale orders for which the given buyer is NOT excluded.
+
+    Enforces post-cook cancel exclusion (same phone/person/address hash) per spec §1/§4.3.7.
+    Used by dispatch engine / conversation when suggesting resale fast orders.
+    """
+    resales = (
+        await session.scalars(
+            select(Order).where(
+                Order.restaurant_id == restaurant_id,
+                Order.status == OrderStatus.ON_RESALE,
+            )
+        )
+    ).all()
+    available: list[Order] = []
+    for r in resales:
+        if not is_excluded_for_resale(
+            r.exclusion_hash, phone=phone, receiver_name=receiver_name, address_id=address_id
+        ):
+            available.append(r)
+    return available
 
 
 async def get_order_for_tenant(
@@ -181,7 +237,8 @@ async def add_item(
 def parse_qty_and_text(text: str) -> tuple[int, str]:
     """Parse quantity prefixes from free text. Returns (qty, remaining_text).
 
-    Handles: "2x chicken", "x2 chicken", "two chicken", "chicken" (qty=1).
+    Handles: "2x chicken", "x2 chicken", "two chicken", "2 chicken",
+    "make it 2 chicken", "chicken" (qty=1).
     """
     text = text.strip()
     m = re.match(r"^(\d+)\s*[xX]\s*(.+)$", text)
@@ -198,6 +255,19 @@ def parse_qty_and_text(text: str) -> tuple[int, str]:
     for word, val in word_map.items():
         if lower.startswith(word + " "):
             return val, text[len(word):].strip()
+    # "2 201" — qty followed by a bare dish number (3+ digits)
+    m = re.match(r"^(\d+)\s+(\d{3,})$", text)
+    if m:
+        qty = int(m.group(1))
+        if 1 <= qty <= 20:
+            return qty, m.group(2)
+
+    # Natural: "2 biryani" or "make it 2 biryani" — find rightmost plausible qty
+    m = re.search(r"\b(\d+)\s+([a-zA-Z؀-ۿ].+)$", text)
+    if m:
+        qty = int(m.group(1))
+        if 1 <= qty <= 20:  # dish numbers are 100+ so small ints are quantities
+            return qty, m.group(2).strip()
     return 1, text
 
 
@@ -336,19 +406,15 @@ async def cancel_order(
 
         customer = await session.get(Customer, order.customer_id)
         phone = customer.phone if customer else ""
-        addr_id = str(order.address_id or "")
         # Spec §3: exclude same phone/PERSON/address — receiver_name covers the
         # person dimension (different address or phone, same receiver = still barred).
         receiver = ""
         if order.address_id is not None:
             address = await session.get(CustomerAddress, order.address_id)
             receiver = (address.receiver_name or "").strip().lower() if address else ""
-        exclusion_hash = hashlib.sha256(
-            f"{phone}:{receiver}:{addr_id}".encode()
-        ).hexdigest()
-        # TODO(phase-4 resale dispatch): the resale-offer matcher MUST filter
-        # candidate buyers against this exclusion_hash — written here, enforced
-        # nowhere yet. See understanding.txt Wave-4 review fix #2.
+        exclusion_hash = _compute_exclusion_hash(phone, receiver, order.address_id)
+        # Resale exclusion enforced via is_excluded_for_resale (single hash source above).
+        # Matcher (get_available_resale_orders) filters buyers against exclusion_hash when offering.
 
         resale = Order(
             restaurant_id=order.restaurant_id,

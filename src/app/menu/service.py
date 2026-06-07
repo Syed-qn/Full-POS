@@ -6,6 +6,7 @@ from app.audit import record_audit
 from app.llm.port import DishDraft, MenuExtractor, UploadedFile
 from app.menu.models import Dish, Menu, MenuFile
 from app.menu.storage import FileBlobStore
+from app.ordering.matching import normalize_name
 
 
 def _get_store() -> FileBlobStore:
@@ -98,6 +99,7 @@ async def create_menu_from_upload(
                 restaurant_id=restaurant_id,
                 dish_number=d.dish_number,
                 name=d.name,
+                name_normalized=normalize_name(d.name),
                 price_aed=d.price_aed,
                 category=d.category,
                 description=d.description,

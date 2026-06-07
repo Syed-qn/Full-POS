@@ -9,6 +9,7 @@ class OutboundMessageType(StrEnum):
     LIST = "list"
     LOCATION_REQUEST = "location_request"
     IMAGE = "image"
+    DOCUMENT = "document"
     TEMPLATE = "template"
 
 
