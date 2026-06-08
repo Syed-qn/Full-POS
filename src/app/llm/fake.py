@@ -1,4 +1,4 @@
-from app.llm.port import DishDraft, UploadedFile
+from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile
 
 _DEFAULT = [
     DishDraft(
@@ -114,6 +114,55 @@ class FakeForecastAdjuster:
                 effect["order_count_delta"] = int(match.group(1))
 
         return effect
+
+
+class FakeConversationAgent:
+    """Test double: rule-based conversation agent, no network."""
+
+    async def respond(
+        self,
+        *,
+        restaurant_name: str,
+        menu_text: str,
+        history: list[dict],
+        cart_summary: str,
+    ) -> ConversationAgentResult:
+        last_user = ""
+        for msg in reversed(history):
+            if msg.get("role") == "user":
+                last_user = msg.get("content", "").lower()
+                break
+        if any(w in last_user for w in ("done", "checkout", "that's all", "thats all")):
+            return ConversationAgentResult(
+                message="Got it! Moving to delivery details.",
+                action="proceed_checkout",
+                action_data={},
+            )
+        if any(w in last_user for w in ("cancel", "never mind", "nevermind")):
+            return ConversationAgentResult(
+                message="Order cancelled. Send 'hi' to start again.",
+                action="cancel_cart",
+                action_data={},
+            )
+        # Simple "N item_name" or "item_name" pattern
+        import re
+        m = re.match(r"^(?:(\d+)\s*x?\s*)?(.+)$", last_user.strip())
+        if m:
+            qty_str, query = m.group(1), m.group(2).strip()
+            qty = int(qty_str) if qty_str else 1
+            query_words = set(re.findall(r"\b\w+\b", query))
+            _greet_words = {"hi", "hello", "hey", "menu", "start", "hiu", "salam"}
+            if query and not query_words.issubset(_greet_words | {"please", "send", "show"}) and not query_words & _greet_words:
+                return ConversationAgentResult(
+                    message=f"Adding {qty}x {query} to your cart.",
+                    action="add_item",
+                    action_data={"dish_query": query, "qty": qty},
+                )
+        return ConversationAgentResult(
+            message=f"{menu_text}\n\nReply with a dish name or number to order.",
+            action="no_action",
+            action_data={},
+        )
 
 
 class FakeSegmentCompiler:

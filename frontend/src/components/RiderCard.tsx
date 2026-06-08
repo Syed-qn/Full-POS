@@ -19,10 +19,12 @@ const STATUS_COLOR: Record<RiderStatus, string> = {
 export function RiderCard({
   rider,
   onStatusChange,
+  onDelete,
   stale = false,
 }: {
   rider: RiderOut;
   onStatusChange: (id: number, status: RiderStatus) => void;
+  onDelete: (id: number) => void;
   stale?: boolean;
 }) {
   const offShift = rider.status === "off_shift";
@@ -35,14 +37,17 @@ export function RiderCard({
         </span>
       </div>
       {stale && <span className={s.staleBadge}>Location stale</span>}
+      <span className={s.phone}>{rider.phone}</span>
       <span className={s.loc}>Location: live tracking phase</span>
-      <span className={s.stats}>On-time: — · Avg —</span>
       <div className={s.actions}>
         <Button variant="ghost" onClick={() => onStatusChange(rider.id, offShift ? "available" : "off_shift")}>
           {offShift ? "Start shift" : "End shift"}
         </Button>
         <Button variant="danger" onClick={() => onStatusChange(rider.id, "deactivated")}>
           Deactivate
+        </Button>
+        <Button variant="danger" onClick={() => onDelete(rider.id)} style={{ marginLeft: "auto" }}>
+          Remove
         </Button>
       </div>
     </div>

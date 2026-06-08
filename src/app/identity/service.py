@@ -109,6 +109,29 @@ async def set_rider_status(
     return rider
 
 
+async def delete_rider(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider_id: int,
+) -> bool:
+    rider = await session.get(Rider, rider_id)
+    if rider is None or rider.restaurant_id != restaurant_id:
+        return False
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="rider",
+        entity_id=str(rider.id),
+        action="deleted",
+        before={"name": rider.name, "phone": rider.phone},
+    )
+    await session.delete(rider)
+    await session.commit()
+    return True
+
+
 async def update_profile(
     session: AsyncSession,
     *,

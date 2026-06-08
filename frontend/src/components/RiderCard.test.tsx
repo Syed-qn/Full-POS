@@ -8,20 +8,20 @@ const rider: RiderOut = { id: 3, name: "Ali Hassan", phone: "+9715", status: "on
 
 describe("RiderCard", () => {
   it("renders name and status label", () => {
-    render(<RiderCard rider={rider} onStatusChange={() => {}} />);
+    render(<RiderCard rider={rider} onStatusChange={() => {}} onDelete={() => {}} />);
     expect(screen.getByText("Ali Hassan")).toBeInTheDocument();
     expect(screen.getByText(/On Delivery/i)).toBeInTheDocument();
   });
 
   it("deactivate action triggers status change", async () => {
     const onStatusChange = vi.fn();
-    render(<RiderCard rider={rider} onStatusChange={onStatusChange} />);
+    render(<RiderCard rider={rider} onStatusChange={onStatusChange} onDelete={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: /deactivate/i }));
     expect(onStatusChange).toHaveBeenCalledWith(3, "deactivated");
   });
 
   it("shows stale-location border when stale", () => {
-    render(<RiderCard rider={rider} onStatusChange={() => {}} stale />);
+    render(<RiderCard rider={rider} onStatusChange={() => {}} onDelete={() => {}} stale />);
     expect(screen.getByTestId("rider-card").className).toContain("stale");
   });
 });

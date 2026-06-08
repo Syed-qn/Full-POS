@@ -5,7 +5,7 @@ from anthropic import AsyncAnthropic
 from pydantic import ValidationError
 
 from app.config import get_settings
-from app.llm.port import DishDraft, UploadedFile
+from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile
 
 _TOOL = {
     "name": "submit_menu",
@@ -312,3 +312,109 @@ class ClaudeSegmentCompiler:
         # Security gate: reject anything outside the allowlist before returning.
         validate_dsl(dsl)
         return dsl
+
+
+_CONVERSATION_TOOL = {
+    "name": "take_action",
+    "description": "Record the structured action inferred from the customer message, plus your reply text.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["add_item", "proceed_checkout", "cancel_cart", "no_action"],
+                "description": "add_item: customer wants to add a dish. proceed_checkout: cart is ready, move to delivery. cancel_cart: customer wants to cancel. no_action: greeting, question, or unclear.",
+            },
+            "dish_query": {
+                "type": "string",
+                "description": "Dish name or number the customer wants (only for add_item).",
+            },
+            "qty": {
+                "type": "integer",
+                "description": "Quantity to add (only for add_item, default 1).",
+            },
+            "reply": {
+                "type": "string",
+                "description": "Natural WhatsApp reply to send to the customer (keep it short and friendly).",
+            },
+        },
+        "required": ["action", "reply"],
+    },
+}
+
+_CONVERSATION_SYSTEM = """\
+You are a friendly WhatsApp ordering assistant for {restaurant_name}.
+Help customers order food in natural, conversational language.
+
+MENU:
+{menu_text}
+
+CURRENT CART: {cart_summary}
+
+STRICT RULES — read carefully before choosing an action:
+
+1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
+   → ALWAYS action="no_action". Include the full menu in your reply.
+
+2. ORDERING ("I want X", "give me Y", "add Z", "order N biryani", etc.)
+   → action="add_item", fill dish_query and qty.
+
+3. CHECKOUT — ONLY when ALL of these are true:
+   a. The cart is NOT empty (current cart shows items)
+   b. The customer explicitly says "done", "that's all", "proceed", "checkout", or equivalent
+   → action="proceed_checkout"
+   If cart is empty, NEVER use "proceed_checkout". Use "no_action" instead.
+
+4. CANCEL — only when customer says they want to cancel the whole order
+   → action="cancel_cart"
+
+5. EVERYTHING ELSE (questions, "are you AI?", unclear messages, status queries)
+   → action="no_action"
+
+Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. Max 10 km.
+ALWAYS call take_action — never reply without the tool.
+"""
+
+
+class ClaudeConversationAgent:
+    """AI-powered full-conversation agent for customer ordering via WhatsApp."""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self._client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
+        self._model = settings.claude_model
+
+    async def respond(
+        self,
+        *,
+        restaurant_name: str,
+        menu_text: str,
+        history: list[dict],
+        cart_summary: str,
+    ) -> ConversationAgentResult:
+        system = _CONVERSATION_SYSTEM.format(
+            restaurant_name=restaurant_name,
+            menu_text=menu_text,
+            cart_summary=cart_summary or "empty",
+        )
+        messages = history if history else [{"role": "user", "content": "hi"}]
+        response = await self._client.messages.create(
+            model=self._model,
+            max_tokens=512,
+            system=system,
+            tools=[_CONVERSATION_TOOL],
+            tool_choice={"type": "tool", "name": "take_action"},
+            messages=messages,
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "take_action":
+                inp = block.input
+                return ConversationAgentResult(
+                    message=inp.get("reply", ""),
+                    action=inp.get("action", "no_action"),
+                    action_data={
+                        "dish_query": inp.get("dish_query", ""),
+                        "qty": int(inp.get("qty") or 1),
+                    },
+                )
+        raise RuntimeError("ClaudeConversationAgent: no take_action block in response")

@@ -1047,6 +1047,188 @@ async def _handle_status_query(
     )
 
 
+async def _fetch_conversation_history(
+    session: AsyncSession, conversation_id: int, limit: int = 20
+) -> list[dict]:
+    """Fetch last N messages as Claude-compatible history (alternating roles)."""
+    from app.conversation.models import Message
+
+    rows = list(
+        (
+            await session.scalars(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.id.desc())
+                .limit(limit)
+            )
+        ).all()
+    )
+    rows.reverse()
+    raw: list[dict] = []
+    for m in rows:
+        if m.type == "text":
+            content = m.payload.get("text") or m.payload.get("body") or ""
+        else:
+            content = f"[{m.type}]"
+        if not content:
+            continue
+        role = "user" if m.direction == "inbound" else "assistant"
+        raw.append({"role": role, "content": content})
+    # Claude requires strictly alternating user/assistant — merge consecutive same-role
+    merged: list[dict] = []
+    for item in raw:
+        if merged and merged[-1]["role"] == item["role"]:
+            merged[-1]["content"] += "\n" + item["content"]
+        else:
+            merged.append({"role": item["role"], "content": item["content"]})
+    return merged
+
+
+async def _build_cart_summary(session: AsyncSession, conv) -> str:
+    from app.ordering.models import Order, OrderItem
+
+    draft_order_id = conv.state.get("draft_order_id")
+    if not draft_order_id:
+        return ""
+    order = await session.get(Order, draft_order_id)
+    if order is None:
+        return ""
+    items = list(
+        (await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))).all()
+    )
+    if not items:
+        return ""
+    lines = [
+        f"{it.qty}x {it.dish_name} (AED {Decimal(it.price_aed * it.qty).normalize()})"
+        for it in items
+    ]
+    return ", ".join(lines) + f" | Subtotal: AED {Decimal(order.subtotal).normalize()}"
+
+
+async def _execute_ai_add_item(
+    session: AsyncSession,
+    conv,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    dish_query: str,
+    qty: int,
+) -> bool:
+    """Find and add a dish; return True if successfully added."""
+    from app.ordering.models import Order
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH:
+        return False
+    if result.confidence == MatchConfidence.AMBIGUOUS:
+        from app.llm.factory import get_arbiter
+        try:
+            dish = await get_arbiter().arbitrate(dish_query, result.candidates[:3])
+        except Exception:
+            dish = None
+        if dish is None:
+            dish = result.candidates[0]
+    else:
+        dish = result.candidates[0]
+
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone
+    )
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None:
+        order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
+        _set_state(conv, draft_order_id=order.id)
+    await add_item(session, order=order, dish=dish, qty=qty)
+    _set_state(conv, dialogue_state="collecting_items")
+    return True
+
+
+async def _handle_customer_ai(
+    session: AsyncSession,
+    conv,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """AI-driven handler: replaces FSM for greeting/ordering phases."""
+    import asyncio
+
+    from app.identity.models import Restaurant
+    from app.llm.factory import get_conversation_agent
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    restaurant_name = restaurant.name if restaurant else "Restaurant"
+    menu_text = await _render_menu(session, restaurant_id)
+    cart_summary = await _build_cart_summary(session, conv)
+
+    current_text = (inbound.payload.get("text") or "").strip()
+    # Only inbound messages are in the messages table (no assistant turns stored),
+    # so reconstructed history would have consecutive user turns — invalid for Claude.
+    # cart_summary already provides full ordering context.
+    history = [{"role": "user", "content": current_text or "hi"}]
+
+    agent = get_conversation_agent()
+    try:
+        result = await agent.respond(
+            restaurant_name=restaurant_name,
+            menu_text=menu_text,
+            history=history,
+            cart_summary=cart_summary,
+        )
+    except Exception:
+        # Fallback to simple greeting on agent failure
+        await _handle_greeting(session, conv, inbound, restaurant_id)
+        return
+
+    if result.action == "add_item":
+        dish_query = result.action_data.get("dish_query", "")
+        qty = int(result.action_data.get("qty") or 1)
+        added = False
+        if dish_query:
+            added = await _execute_ai_add_item(
+                session, conv, inbound, restaurant_id, dish_query, qty
+            )
+        if result.message:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ai-reply", body=result.message,
+            )
+        if not added and dish_query:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ai-no-match",
+                body=f"Sorry, I couldn't find '{dish_query}' in our menu. Please check the dish number or name and try again.",
+            )
+        return
+
+    if result.action == "proceed_checkout":
+        draft_order_id = conv.state.get("draft_order_id")
+        if not draft_order_id:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ai-empty-cart",
+                body="Your cart is empty. Please add at least one dish before checking out.",
+            )
+            return
+        _set_state(conv, dialogue_state="address_capture")
+        await _send_buttons(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ask-location",
+            body="Great! Please share your delivery location pin, or type your address.",
+            buttons=[{"id": "share_location", "title": "Share location"}],
+        )
+        return
+
+    if result.action == "cancel_cart":
+        _set_state(conv, dialogue_state="cancelled", draft_order_id=None, pending_order_id=None)
+
+    if result.message:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ai-reply", body=result.message,
+        )
+
+
 async def _resolve_counterpart(
     session: AsyncSession, restaurant_id: int, phone: str
 ):
@@ -1178,18 +1360,18 @@ async def handle_inbound(
         await _handle_rider_inbound(session, conv, inbound, restaurant_id, rider)
         return
 
-    # Intent intercept: a status query ("where is my order") is answered from
-    # any state without disturbing the in-progress dialogue.
-    # Modify intent ("modify", "change order", "edit my order") also intercepted
-    # from any state (post-confirmation primarily) to start modify flow per spec.
-    if inbound.type == MessageType.TEXT:
+    dialogue_state = conv.state.get("dialogue_state", "greeting")
+
+    # Structured FSM states that need specific input (location pin, button replies, names).
+    _FSM_STATES = {"address_capture", "address_text_pending", "receiver_details",
+                   "order_confirmation", "modify_items", "modify_confirm"}
+
+    # Status / modify intent intercepts — work from any state via intent classifier.
+    if inbound.type == MessageType.TEXT and dialogue_state not in _FSM_STATES:
         import asyncio
         from app.llm.factory import get_intent_classifier
 
         text = inbound.payload.get("text", "") or ""
-        # Run sync classifier in thread — avoids blocking the async event loop
-        # (both Claude and DeepSeek use sync HTTP clients).
-        # Fall back to "other" on any network / parse failure.
         try:
             intent = await asyncio.to_thread(get_intent_classifier().classify, text)
         except Exception:
@@ -1199,39 +1381,56 @@ async def handle_inbound(
             await _handle_status_query(session, conv, inbound, restaurant_id)
             return
         lower = text.lower()
-        # Modify intercept only valid AFTER an order is placed — prevents "make it 2
-        # biriyani" from triggering modify while the customer is still building their cart.
-        _cur_state = conv.state.get("dialogue_state", "greeting")
-        if (_cur_state == "order_placed") and (
+        if (dialogue_state == "order_placed") and (
             intent == "modify" or ("edit" in lower and "order" in lower)
         ):
             await _handle_modify_intent(session, conv, inbound, restaurant_id)
             return
 
-    # Greeting reset: "hi/hello/hey/start/menu" from any state re-shows the menu.
-    _GREET = {"hi", "hello", "hey", "start", "menu", "مرحبا", "السلام عليكم", "hii", "helo"}
+    # Button replies always go to FSM (they carry structured IDs).
+    if inbound.type == MessageType.BUTTON_REPLY:
+        if dialogue_state in ("address_capture", "address_text_pending"):
+            await _handle_address_capture(session, conv, inbound, restaurant_id)
+        elif dialogue_state == "order_confirmation":
+            await _handle_order_confirmation(session, conv, inbound, restaurant_id)
+        elif dialogue_state == "modify_confirm":
+            await _handle_modify_confirm(session, conv, inbound, restaurant_id)
+        return
+
+    # Structured FSM states for text input.
+    if dialogue_state in _FSM_STATES:
+        if dialogue_state in ("address_capture", "address_text_pending"):
+            await _handle_address_capture(session, conv, inbound, restaurant_id)
+        elif dialogue_state == "receiver_details":
+            await _handle_receiver_details(session, conv, inbound, restaurant_id)
+        elif dialogue_state == "order_confirmation":
+            await _handle_order_confirmation(session, conv, inbound, restaurant_id)
+        elif dialogue_state == "modify_items":
+            await _handle_modify_items(session, conv, inbound, restaurant_id)
+        elif dialogue_state == "modify_confirm":
+            await _handle_modify_confirm(session, conv, inbound, restaurant_id)
+        return
+
+    # Greeting reset: any message containing a greeting word restarts the conversation.
+    # Use the reliable FSM greeting handler (sends uploaded menu images/PDFs, then text).
+    _GREET_WORDS = {"hi", "hello", "hey", "start", "menu", "مرحبا", "السلام عليكم",
+                    "hii", "helo", "hiu", "hiya", "salam"}
     if inbound.type == MessageType.TEXT:
         _txt_lower = (inbound.payload.get("text") or "").strip().lower()
-        if _txt_lower in _GREET:
+        if _txt_lower in _GREET_WORDS or any(w in _GREET_WORDS for w in _txt_lower.split()):
             _set_state(conv, dialogue_state="greeting", draft_order_id=None)
-            await _handle_greeting(session, conv, inbound, restaurant_id)
-            return
 
-    dialogue_state = conv.state.get("dialogue_state", "greeting")
-
-    if dialogue_state == "greeting":
+    if dialogue_state == "greeting" or conv.state.get("dialogue_state") == "greeting":
         await _handle_greeting(session, conv, inbound, restaurant_id)
-    elif dialogue_state in ("menu_sent", "collecting_items"):
-        await _handle_collecting_items(session, conv, inbound, restaurant_id)
-    elif dialogue_state in ("address_capture", "address_text_pending"):
+        return
+
+    # All other customer TEXT messages → AI agent (natural language ordering, questions, etc.)
+    if inbound.type == MessageType.TEXT:
+        await _handle_customer_ai(session, conv, inbound, restaurant_id)
+        return
+
+    # Non-text, non-button customer messages (e.g. location pin during address capture
+    # that landed while state was still "collecting_items") — fall back gracefully.
+    if inbound.type == MessageType.LOCATION:
         await _handle_address_capture(session, conv, inbound, restaurant_id)
-    elif dialogue_state == "receiver_details":
-        await _handle_receiver_details(session, conv, inbound, restaurant_id)
-    elif dialogue_state == "order_confirmation":
-        await _handle_order_confirmation(session, conv, inbound, restaurant_id)
-    elif dialogue_state == "modify_items":
-        await _handle_modify_items(session, conv, inbound, restaurant_id)
-    elif dialogue_state == "modify_confirm":
-        await _handle_modify_confirm(session, conv, inbound, restaurant_id)
-    # Terminal states (order_placed, cancelled) are pass-through for now.
-    # (modify intent is intercepted early; new states only entered from order_placed via modify flow)
+        return

@@ -119,6 +119,19 @@ async def patch_rider(
     return rider
 
 
+@router.delete("/riders/{rider_id}", status_code=204)
+async def delete_rider(
+    rider_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    deleted = await service.delete_rider(
+        session, restaurant_id=restaurant.id, rider_id=rider_id
+    )
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
+
+
 @router.patch("/settings", response_model=RestaurantOut)
 async def patch_settings(
     body: SettingsPatch,

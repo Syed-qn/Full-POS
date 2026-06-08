@@ -77,6 +77,18 @@ def get_forecast_adjuster():
     return FakeForecastAdjuster()
 
 
+def get_conversation_agent():
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeConversationAgent
+        return ClaudeConversationAgent()
+    if settings.llm_provider == "deepseek":
+        from app.llm.fake import FakeConversationAgent
+        return FakeConversationAgent()
+    from app.llm.fake import FakeConversationAgent
+    return FakeConversationAgent()
+
+
 def get_segment_compiler():
     settings = get_settings()
     if settings.llm_provider == "claude":

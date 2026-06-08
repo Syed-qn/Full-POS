@@ -56,3 +56,22 @@ class SegmentCompilerPort(Protocol):
         caller validates and rejects anything unsafe (never executes raw input).
         """
         ...
+
+
+@dataclass
+class ConversationAgentResult:
+    """Result from the AI conversation agent."""
+    message: str
+    action: str  # "add_item" | "proceed_checkout" | "cancel_cart" | "no_action"
+    action_data: dict  # {"dish_query": str, "qty": int} for add_item
+
+
+class ConversationAgentPort(Protocol):
+    async def respond(
+        self,
+        *,
+        restaurant_name: str,
+        menu_text: str,
+        history: list[dict],
+        cart_summary: str,
+    ) -> ConversationAgentResult: ...
