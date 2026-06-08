@@ -1136,6 +1136,10 @@ async def handle_inbound(
         phone=inbound.from_phone,
         counterpart=counterpart,
     )
+    # Heal stale counterpart — phone may have been registered as a rider after
+    # an initial customer-side conversation was already created.
+    if conv.counterpart != counterpart:
+        conv.counterpart = counterpart
 
     await record_message(
         session,

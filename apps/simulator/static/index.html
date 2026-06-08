@@ -235,7 +235,8 @@
   }
 
   function poll() {
-    fetch("/simulator/messages")
+    var myPhone = encodeURIComponent(document.getElementById("fromPhone").value.trim());
+    fetch("/simulator/messages?phone=" + myPhone)
       .then(function (r) { if (!r.ok) throw new Error("bad status"); return r.json(); })
       .then(function (arr) {
         setError("");

@@ -22,6 +22,6 @@ describe("App routing", () => {
         <App />
       </MemoryRouter>,
     );
-    expect(screen.getByText("Live Ops")).toBeInTheDocument();
+    expect(screen.getByText("Home")).toBeInTheDocument();
   });
 });

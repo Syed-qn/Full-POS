@@ -30,6 +30,12 @@ class MockProvider:
         self._sends.clear()
         return result
 
+    def drain_sends_for(self, to_phone: str) -> list[OutboundMessage]:
+        """Return sends addressed to `to_phone`, remove only those from the log."""
+        matched = [m for m in self._sends if m.to_phone == to_phone]
+        self._sends = [m for m in self._sends if m.to_phone != to_phone]
+        return matched
+
     def drain_inbound(self) -> list[InboundMessage]:
         """Return all queued inbound messages and clear the queue."""
         result = list(self._inbound)

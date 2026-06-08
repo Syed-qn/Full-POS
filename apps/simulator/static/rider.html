@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Rider WhatsApp Simulator</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #c8b89a; display: flex; justify-content: center;
+  }
+  #app {
+    width: 100%; max-width: 480px; height: 100vh;
+    display: flex; flex-direction: column; background: #ece5d8;
+  }
+  header {
+    background: #e07b39; color: #fff; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 600; flex: 0 0 auto;
+  }
+  header .badge {
+    background: rgba(255,255,255,0.25); border-radius: 12px;
+    padding: 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  }
+  #status {
+    font-family: monospace; font-size: 12px; padding: 4px 14px;
+    color: #b00020; background: #fff3f3; min-height: 0; display: none;
+  }
+  #status.show { display: block; }
+  #config {
+    display: flex; gap: 8px; padding: 8px 10px; background: #f6f0e8;
+    border-bottom: 1px solid #d9c9b0; flex: 0 0 auto;
+  }
+  #config label { display: flex; flex-direction: column; font-size: 11px; color: #555; flex: 1; }
+  #config input {
+    font-family: monospace; font-size: 13px; padding: 5px 6px;
+    border: 1px solid #ccc; border-radius: 5px; margin-top: 2px;
+  }
+  #riderInfo {
+    background: #fdf3e3; border-bottom: 1px solid #e0c88a;
+    padding: 6px 14px; font-size: 12px; color: #7a5800; flex: 0 0 auto;
+  }
+  #riderInfo span { font-weight: 600; }
+  #messages {
+    flex: 1 1 auto; overflow-y: auto; padding: 12px 10px;
+    background-color: #ece5d8;
+    background-image:
+      radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+      radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1px);
+    background-size: 22px 22px; background-position: 0 0, 11px 11px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .bubble {
+    max-width: 82%; padding: 7px 10px; border-radius: 8px;
+    font-size: 14px; line-height: 1.35; white-space: pre-wrap;
+    word-wrap: break-word; box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+  }
+  .sent { align-self: flex-end; background: #ffd9a0; border-top-right-radius: 2px; }
+  .recv { align-self: flex-start; background: #fff; border-top-left-radius: 2px; }
+  .ts { display: block; font-size: 10px; color: #888; text-align: right; margin-top: 3px; }
+  .chips { align-self: flex-start; display: flex; flex-wrap: wrap; gap: 6px; max-width: 82%; }
+  .chip {
+    background: #fff; color: #e07b39; border: 1.5px solid #f0c090;
+    border-radius: 16px; padding: 7px 14px; font-size: 13px; font-weight: 700;
+    cursor: pointer; box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+    transition: background 0.1s;
+  }
+  .chip:active { background: #fff3e0; }
+  .chip.pickup { color: #d44000; border-color: #f0a060; }
+  .chip.deliver { color: #1a7a3a; border-color: #80c89a; }
+  .hint {
+    align-self: flex-start; font-size: 12px; color: #555; font-style: italic;
+    background: #fff8e1; border: 1px dashed #e0c97f; border-radius: 6px;
+    padding: 5px 9px; max-width: 82%;
+  }
+  /* Location panel — always visible for rider */
+  #locpanel {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 10px; background: #f6f0e8;
+    border-top: 1px solid #d9c9b0; flex: 0 0 auto;
+  }
+  #locpanel .lochead {
+    font-size: 11px; font-weight: 600; color: #7a5800; text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #locpanel .locrow {
+    display: flex; gap: 6px; align-items: flex-end;
+  }
+  #locpanel label { display: flex; flex-direction: column; font-size: 10px; color: #555; flex: 1; }
+  #locpanel input {
+    font-family: monospace; font-size: 13px; padding: 5px 6px;
+    border: 1px solid #ccc; border-radius: 5px; margin-top: 2px; width: 100%;
+  }
+  #locpanel button {
+    background: #e07b39; color: #fff; border: none; border-radius: 16px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  #locpanel button:active { background: #c06020; }
+  /* Quick presets */
+  #presets {
+    display: flex; gap: 6px; flex-wrap: wrap; padding: 0 10px 6px;
+    background: #f6f0e8; flex: 0 0 auto;
+  }
+  .preset {
+    font-size: 11px; background: #fff; border: 1px solid #d9c9b0;
+    border-radius: 10px; padding: 3px 10px; cursor: pointer; color: #7a5800;
+  }
+  .preset:active { background: #fde8c8; }
+  footer {
+    display: none; /* rider doesn't need free-text input */
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    🛵 Rider Simulator
+    <span class="badge">RIDER SIDE</span>
+  </header>
+  <div id="status"></div>
+  <div id="config">
+    <label>Rider phone (your number)
+      <input id="riderPhone" value="+971501111111" />
+    </label>
+    <label>Restaurant phone
+      <input id="restPhone" value="+97141234567" />
+    </label>
+  </div>
+  <div id="riderInfo">
+    Simulating rider at <span id="riderPhoneLabel">+971501111111</span> — messages addressed to this phone appear here.
+  </div>
+  <div id="messages"></div>
+
+  <!-- Location panel — always open -->
+  <div id="locpanel">
+    <div class="lochead">📍 Send Location Ping</div>
+    <div class="locrow">
+      <label>Latitude
+        <input id="lat" value="25.2048" />
+      </label>
+      <label>Longitude
+        <input id="lng" value="55.2708" />
+      </label>
+      <button id="sendLoc">Ping</button>
+    </div>
+  </div>
+  <div id="presets">
+    <span class="lochead" style="align-self:center;font-size:10px;">Presets:</span>
+    <button class="preset" data-lat="25.2048" data-lng="55.2708">Restaurant</button>
+    <button class="preset" data-lat="25.1980" data-lng="55.2750">Stop 1</button>
+    <button class="preset" data-lat="25.2100" data-lng="55.2650">Stop 2</button>
+    <button class="preset" data-lat="25.2060" data-lng="55.2800">Stop 3</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var msgs = document.getElementById("messages");
+  var statusBar = document.getElementById("status");
+  var seen = {};
+  var seq = 0;
+
+  function setError(msg) {
+    if (msg) { statusBar.textContent = msg; statusBar.classList.add("show"); }
+    else { statusBar.textContent = ""; statusBar.classList.remove("show"); }
+  }
+
+  function now() {
+    var d = new Date();
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function addBubble(text, cls) {
+    var b = document.createElement("div");
+    b.className = "bubble " + cls;
+    var span = document.createElement("span");
+    span.textContent = text;
+    var ts = document.createElement("span");
+    ts.className = "ts"; ts.textContent = now();
+    b.appendChild(span); b.appendChild(ts);
+    msgs.appendChild(b);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function addChips(buttons) {
+    var row = document.createElement("div");
+    row.className = "chips";
+    (buttons || []).forEach(function (btn) {
+      var chip = document.createElement("button");
+      chip.className = "chip";
+      chip.type = "button";
+      chip.textContent = btn.title;
+      // Style by action type
+      if (btn.id && btn.id.startsWith("picked")) chip.classList.add("pickup");
+      if (btn.id && (btn.id.startsWith("delivered"))) chip.classList.add("deliver");
+      chip.addEventListener("click", function () {
+        row.remove();
+        sendPayload({ button_reply: { id: btn.id, title: btn.title } }, "▸ " + btn.title);
+      });
+      row.appendChild(chip);
+    });
+    msgs.appendChild(row);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function riderPhone() { return document.getElementById("riderPhone").value.trim(); }
+  function restPhone() { return document.getElementById("restPhone").value.trim(); }
+
+  function updateLabel() {
+    document.getElementById("riderPhoneLabel").textContent = riderPhone();
+  }
+  document.getElementById("riderPhone").addEventListener("input", updateLabel);
+
+  function sendPayload(extra, optimisticText) {
+    var body = { from_phone: riderPhone(), restaurant_phone: restPhone() };
+    for (var k in extra) { body[k] = extra[k]; }
+    if (optimisticText) addBubble(optimisticText, "sent");
+    fetch("/simulator/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+    .then(function (r) { if (!r.ok) throw new Error("bad status"); setError(""); })
+    .catch(function () { setError("Failed — is rider registered for this restaurant?"); });
+    setTimeout(poll, 300);
+    setTimeout(poll, 1200);
+  }
+
+  function sendLocation() {
+    var lat = parseFloat(document.getElementById("lat").value);
+    var lng = parseFloat(document.getElementById("lng").value);
+    if (isNaN(lat) || isNaN(lng)) { setError("Lat/lng must be numbers"); return; }
+    sendPayload(
+      { location: { latitude: lat, longitude: lng } },
+      "📍 " + lat.toFixed(4) + ", " + lng.toFixed(4)
+    );
+  }
+
+  function poll() {
+    var phone = encodeURIComponent(riderPhone());
+    fetch("/simulator/messages?phone=" + phone)
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (arr) {
+        setError("");
+        (arr || []).forEach(function (m) {
+          var key = m.wa_message_id || ("seq-" + (seq++));
+          if (seen[key]) return;
+          seen[key] = true;
+          var payload = m.payload || {};
+          var type = (m.type || "").toLowerCase();
+          var text = payload.body != null ? payload.body : "";
+          if (text) addBubble(text, "recv");
+          if (type.indexOf("buttons") !== -1 && payload.buttons) {
+            addChips(payload.buttons);
+          }
+        });
+      })
+      .catch(function () { setError("Failed to reach server"); });
+  }
+
+  document.getElementById("sendLoc").addEventListener("click", sendLocation);
+
+  // Preset buttons
+  document.querySelectorAll(".preset").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.getElementById("lat").value = btn.dataset.lat;
+      document.getElementById("lng").value = btn.dataset.lng;
+      sendLocation();
+    });
+  });
+
+  poll();
+  setInterval(poll, 3000);
+})();
+</script>
+</body>
+</html>

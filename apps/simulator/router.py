@@ -136,10 +136,10 @@ async def simulator_send(
 
 
 @router.get("/messages")
-async def simulator_messages() -> list[dict]:
-    """Return and clear the MockProvider send log for the simulator UI."""
+async def simulator_messages(phone: str | None = None) -> list[dict]:
+    """Return and clear MockProvider send log. If `phone` supplied, return only messages to that phone."""
     provider = get_mock_provider()
-    sends = provider.drain_sends()
+    sends = provider.drain_sends_for(phone) if phone else provider.drain_sends()
     return [
         {
             "to": s.to_phone,
@@ -149,3 +149,8 @@ async def simulator_messages() -> list[dict]:
         }
         for s in sends
     ]
+
+
+@router.get("/rider", response_class=HTMLResponse)
+async def simulator_rider_index() -> str:
+    return (Path(__file__).parent / "static" / "rider.html").read_text()
