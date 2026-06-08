@@ -77,11 +77,16 @@ async def _handle_greeting(
         )
         store = FileBlobStore(get_settings().upload_dir)
         for mf in menu_files:
+            # Only send image or PDF files — skip txt/csv/other non-media formats
+            is_image = mf.content_type.startswith("image/")
+            is_pdf = mf.content_type == "application/pdf"
+            if not (is_image or is_pdf):
+                continue
             data = store.get(restaurant_id=restaurant_id, digest=mf.sha256)
             if data is None:
                 continue
             b64 = base64.b64encode(data).decode()
-            if mf.content_type.startswith("image/"):
+            if is_image:
                 msg_type = OutboundMessageType.IMAGE
                 payload: dict = {
                     "data": b64,
@@ -1188,16 +1193,18 @@ async def _handle_customer_ai(
             added = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty
             )
-        if result.message:
+        if added and result.message:
+            # Only confirm if item was actually added
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ai-reply", body=result.message,
             )
-        if not added and dish_query:
+        elif not added:
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ai-no-match",
-                body=f"Sorry, I couldn't find '{dish_query}' in our menu. Please check the dish number or name and try again.",
+                body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
+                     f"Please reply with the dish number (e.g. 110) or check the menu spelling.",
             )
         return
 

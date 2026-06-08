@@ -12,10 +12,11 @@ if TYPE_CHECKING:
 
 from app.menu.models import Dish, Menu
 
-# Floor for treating the top trigram hit as a real match. pg_trgm 1.6 scores a
-# common typo like "chikn biryani" vs "chicken biryani" at ~0.58, so 0.5 keeps
-# such hits while the 0.3 SQL pre-filter already discards genuine non-matches.
-_SINGLE_THRESHOLD = 0.5
+# word_similarity(query, name) finds the best match of the query within the name
+# string — much better than similarity() when the customer types a partial name
+# like "biriyani" against "chicken biryani". Thresholds tuned for this function:
+# word_similarity("biriyani", "chicken biryani") ≈ 0.55; common typos ≥ 0.45.
+_SINGLE_THRESHOLD = 0.4
 _GAP_THRESHOLD = 0.15
 
 
@@ -86,17 +87,20 @@ async def find_dish_matches(
             return MatchResult(confidence=MatchConfidence.DIRECT, candidates=[dish])
         return MatchResult(confidence=MatchConfidence.NO_MATCH)
 
-    # --- Trigram similarity ---
+    # --- Trigram word-similarity ---
+    # word_similarity(query, name) scores how well the query matches any
+    # contiguous extent within the dish name — better for "biriyani" vs
+    # "chicken biryani" than the full-string similarity() function.
     normalized_query = normalize_name(query)
     rows = (
         await session.execute(
             text("""
-                SELECT d.id, similarity(d.name_normalized, :q) AS sim
+                SELECT d.id, word_similarity(:q, d.name_normalized) AS sim
                 FROM dishes d
                 WHERE d.menu_id = :mid
                   AND d.is_available = true
                   AND d.name_normalized IS NOT NULL
-                  AND similarity(d.name_normalized, :q) > 0.3
+                  AND word_similarity(:q, d.name_normalized) > 0.3
                 ORDER BY sim DESC
                 LIMIT 5
             """),
