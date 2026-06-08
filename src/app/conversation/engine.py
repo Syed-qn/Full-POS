@@ -111,27 +111,8 @@ async def _handle_greeting(
             )
             files_sent += 1
 
-    if files_sent == 0:
-        # No uploaded files — render the digital menu as text
-        menu_text = await _render_menu(session, restaurant_id)
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=inbound.from_phone,
-            msg_type=OutboundMessageType.TEXT,
-            payload={"body": menu_text},
-            idempotency_key=f"greeting-{conv.id}-{inbound.wa_message_id}",
-        )
-    else:
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=inbound.from_phone,
-            msg_type=OutboundMessageType.TEXT,
-            payload={"body": "Reply with the dish name to order."},
-            idempotency_key=f"greeting-prompt-{conv.id}-{inbound.wa_message_id}",
-        )
-
+    # After sending any image/PDF files, AI handles the text greeting response.
+    # (text menu dump removed — AI responds naturally with menu context in system prompt)
     conv.state = {**conv.state, "dialogue_state": "menu_sent"}
     await record_audit(
         session,
@@ -1428,7 +1409,11 @@ async def handle_inbound(
             _set_state(conv, dialogue_state="greeting", draft_order_id=None)
 
     if dialogue_state == "greeting" or conv.state.get("dialogue_state") == "greeting":
+        # Send any uploaded image/PDF menu files, transition state to menu_sent
         await _handle_greeting(session, conv, inbound, restaurant_id)
+        # Then AI sends a natural greeting (with menu in system prompt)
+        if inbound.type == MessageType.TEXT:
+            await _handle_customer_ai(session, conv, inbound, restaurant_id)
         return
 
     # All other customer TEXT messages → AI agent (natural language ordering, questions, etc.)

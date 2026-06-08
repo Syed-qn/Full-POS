@@ -354,7 +354,7 @@ CURRENT CART: {cart_summary}
 STRICT RULES — read carefully before choosing an action:
 
 1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
-   → ALWAYS action="no_action". Include the full menu in your reply.
+   → ALWAYS action="no_action". Greet warmly and show the full menu in your reply (all dishes with numbers and prices).
 
 2. ORDERING ("I want X", "give me Y", "add Z", "order N biryani", etc.)
    → action="add_item", fill dish_query and qty.
