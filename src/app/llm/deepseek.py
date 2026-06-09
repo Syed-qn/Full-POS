@@ -181,30 +181,69 @@ async def _async_chat_tools(
     raise RuntimeError(f"DeepSeek returned no {tool_name!r} tool call")
 
 
-_DS_CONVERSATION_TOOL = {
+_DS_TOOL = {
     "type": "function",
     "function": {
         "name": "take_action",
-        "description": "Record the structured action inferred from the customer message, plus your reply text.",
+        "description": (
+            "Record the structured action inferred from the customer message, plus your reply. "
+            "ALWAYS call this tool — never reply without it."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["add_item", "proceed_checkout", "cancel_cart", "no_action"],
-                    "description": "add_item: customer wants to add a dish. proceed_checkout: cart ready, move to delivery. cancel_cart: customer wants to cancel. no_action: greeting, question, or unclear.",
+                    "enum": [
+                        "add_item", "remove_item", "update_qty", "proceed_to_address",
+                        "send_location_request", "save_address_text", "use_saved_address",
+                        "proceed_to_confirmation",
+                        "confirm_order", "request_modification", "cancel_order",
+                        "status_query", "no_action",
+                    ],
+                    "description": (
+                        "add_item: customer wants to add a dish. "
+                        "remove_item: customer wants to remove a dish. "
+                        "update_qty: change quantity of a dish already in cart. "
+                        "proceed_to_address: cart ready, move to delivery address capture. "
+                        "send_location_request: ask customer to share their WhatsApp location pin. "
+                        "save_address_text: all 3 address fields collected (apt_room + building + receiver_name). "
+                        "use_saved_address: returning customer confirmed their saved address. "
+                        "proceed_to_confirmation: address complete, show order summary. "
+                        "confirm_order: customer confirmed the order. "
+                        "request_modification: customer wants to change something in the order. "
+                        "cancel_order: customer wants to cancel. "
+                        "status_query: customer asked where their order is. "
+                        "no_action: greeting, question, answer, anything that doesn't change state."
+                    ),
                 },
                 "dish_query": {
                     "type": "string",
-                    "description": "Dish name or number the customer wants (only for add_item).",
+                    "description": "Dish name or number (for add_item, remove_item, update_qty).",
                 },
                 "qty": {
                     "type": "integer",
-                    "description": "Quantity to add (only for add_item, default 1).",
+                    "description": "Quantity (for add_item, update_qty). Default 1.",
+                },
+                "special_note": {
+                    "type": "string",
+                    "description": "Kitchen note e.g. 'no onion', 'extra spicy' (for add_item).",
+                },
+                "apt_room": {
+                    "type": "string",
+                    "description": "Apartment / room / door number (for save_address_text).",
+                },
+                "building": {
+                    "type": "string",
+                    "description": "Building name or number (for save_address_text).",
+                },
+                "receiver_name": {
+                    "type": "string",
+                    "description": "Name of person receiving the order (for save_address_text).",
                 },
                 "reply": {
                     "type": "string",
-                    "description": "Natural WhatsApp reply to send to the customer (keep it short and friendly).",
+                    "description": "Natural WhatsApp reply to send. Short, friendly, casual. Required always.",
                 },
             },
             "required": ["action", "reply"],
@@ -212,70 +251,193 @@ _DS_CONVERSATION_TOOL = {
     },
 }
 
-_DS_CONVERSATION_SYSTEM = """\
-You are a friendly WhatsApp ordering assistant for {restaurant_name}.
-Help customers order food in natural, conversational language.
+_IDENTITY = """\
+You are {restaurant_name}'s friendly WhatsApp ordering assistant.
+
+LANGUAGE: Detect the customer's language and reply in the SAME language automatically.
+Supported: English, Arabic (عربي), Urdu/Hindi (اردو/हिंदी), Turkish, Russian, Filipino (Tagalog), Malayalam (മലയാളം).
+If they mix languages, match their mix. Never switch language unless the customer does.
+
+TONE: Friendly and casual — like a helpful friend, not a corporate bot.
+SHORT replies (WhatsApp style). Emoji: sparingly, only where natural.
+
+ALWAYS call take_action. Never reply without calling it.
+COD only (cash on delivery). Delivery ~40 minutes. Max {max_radius_km} km range.
+"""
+
+_ORDERING_BLOCK = """
+PHASE: Taking order
 
 MENU:
 {menu_text}
 
 CURRENT CART: {cart_summary}
 
-STRICT RULES — read carefully before choosing an action:
+YOUR JOB:
+- Greet warmly. Show 2-3 highlights, NOT the whole menu as a wall of text.
+  If customer asks to see full menu, show it grouped by category.
+- Understand shorthand orders in ANY language:
+    "2 bry + karahi"         → add_item dish_query="biryani" qty=2, then add_item dish_query="karahi"
+    "ek biryani dena bhai"   → add_item dish_query="biryani" qty=1
+    "bhai no onion"          → add_item with special_note="no onion"
+    "extra spicy plz"        → add_item with special_note="extra spicy"
+    "rm that" / "cancel last"→ remove_item
+    "make it 3"              → update_qty qty=3
+    "bas" / "khalaas" / "that's all" / "done" / "checkout" → proceed_to_address
+- Handle questions: spice level, halal, portion size, ingredients, vegetarian, allergens.
+  Max 3 lines per answer. Never include price in dish descriptions.
+- Upsell ONCE (only if cart has ≥1 item and you haven't already suggested): "Want to add a drink? 😊"
+- NEVER ask for address or location in this phase.
+- If cart is not empty and customer says they are done → proceed_to_address.
+"""
 
-1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
-   → ALWAYS action="no_action". Greet warmly and show the full menu in your reply (all dishes with numbers and prices).
+_ADDRESS_BLOCK = """
+PHASE: Address capture
 
-2. ORDERING ("I want X", "give me Y", "add Z", "order N biryani", etc.)
-   → action="add_item", fill dish_query and qty.
+CART: {cart_summary}
+SAVED ADDRESS: {saved_address}
+LOCATION RECEIVED: {location_received}
+APT/ROOM COLLECTED: {apt_room}
+BUILDING COLLECTED: {building}
+RECEIVER NAME COLLECTED: {receiver_name}
+DELIVERY RADIUS: {max_radius_km} km
 
-3. CHECKOUT — ONLY when ALL of these are true:
-   a. The cart is NOT empty (current cart shows items)
-   b. The customer explicitly says "done", "that's all", "proceed", "checkout", or equivalent
-   → action="proceed_checkout"
-   If cart is empty, NEVER use "proceed_checkout". Use "no_action" instead.
+YOUR JOB (follow this exact sequence):
+1. If SAVED ADDRESS is not empty:
+   → Offer it: "Use your saved address — {saved_address}? Or share a new location 📍"
+   → Customer says yes/correct/ok → use_saved_address
+   → Customer wants new → continue to step 2
 
-4. CANCEL — only when customer says they want to cancel the whole order
-   → action="cancel_cart"
+2. If LOCATION RECEIVED is False:
+   → send_location_request (ask customer to share WhatsApp location pin)
+   → Reply: "Please share your location pin 📍"
 
-5. EVERYTHING ELSE (questions, "are you AI?", unclear messages, status queries)
-   → action="no_action"
+3. If LOCATION RECEIVED is True and APT/ROOM COLLECTED is empty:
+   → no_action, ask: "What's your apartment/room/door number?"
 
-Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. Max 10 km.
-ALWAYS call take_action — never reply without the tool.
+4. If APT/ROOM COLLECTED is set and BUILDING COLLECTED is empty:
+   → no_action, ask: "What's the building name or number?"
+
+5. If APT/ROOM and BUILDING are set and RECEIVER NAME COLLECTED is empty:
+   → no_action, ask: "What's the receiver's name?"
+
+6. If all three (apt_room + building + receiver_name) are now provided in this message:
+   → save_address_text with apt_room + building + receiver_name
+
+RULES:
+- Collect ONLY: apt/room, building, receiver name. Nothing else is mandatory.
+- If customer volunteers extra info (landmark, floor), include it in apt_room field.
+- If location pin is outside {max_radius_km} km radius → tell customer politely, end conversation.
+"""
+
+_CONFIRMATION_BLOCK = """
+PHASE: Order confirmation
+
+ORDER SUMMARY:
+{order_summary}
+
+YOUR JOB:
+- Show the summary clearly (already formatted above).
+- Ask: "Shall I place this order? ✅"
+- customer says yes / confirm / ok / haan / aiwa / да / oo / sige → confirm_order
+- customer wants changes → request_modification
+- customer cancels → cancel_order
+- Anything unclear → re-show summary and ask again (no_action).
+"""
+
+_POST_ORDER_BLOCK = """
+PHASE: Order placed
+
+ORDER #{order_number} — Status: {order_status}
+RIDER ETA: {rider_eta}
+
+YOUR JOB:
+- Answer status queries in the customer's language.
+- Status is "preparing" / "confirmed" → "Your order is being prepared in the kitchen 🍳"
+- Status is "ready" → "Your order is ready and will be picked up by a rider soon! 🛵"
+- Status is "assigned" / "picked_up" / "arriving" → "Your rider is on the way! ETA ~{rider_eta} min"
+- Modification requests (before 'ready' status) → request_modification
+- Cancellation (if status is before 'picked_up') → cancel_order
+- If order already picked up / delivered → explain it's too late to cancel
+- "Where is my order" / "كم باقي" / "کتنا وقت لگے گا" → status_query
 """
 
 
 class DeepSeekConversationAgent:
-    """AI-powered conversation agent using DeepSeek's OpenAI-compatible function calling."""
+    """Phase-aware AI ordering assistant using DeepSeek function calling."""
 
     def __init__(self) -> None:
         self._api_key, self._model = _get_deepseek_settings()
+
+    def _build_system(self, restaurant_name: str, dialogue_phase: str, context: dict) -> str:
+        max_km = context.get("max_radius_km", 10)
+        identity = _IDENTITY.format(
+            restaurant_name=restaurant_name,
+            max_radius_km=max_km,
+        )
+
+        if dialogue_phase == "ordering":
+            phase_block = _ORDERING_BLOCK.format(
+                menu_text=context.get("menu_text", "Menu unavailable."),
+                cart_summary=context.get("cart_summary") or "empty",
+            )
+        elif dialogue_phase == "address_capture":
+            saved = context.get("saved_address", "")
+            phase_block = _ADDRESS_BLOCK.format(
+                cart_summary=context.get("cart_summary") or "empty",
+                saved_address=saved or "none",
+                location_received=context.get("location_received", False),
+                apt_room=context.get("apt_room") or "not yet",
+                building=context.get("building") or "not yet",
+                receiver_name=context.get("receiver_name") or "not yet",
+                max_radius_km=max_km,
+            )
+        elif dialogue_phase == "awaiting_confirmation":
+            phase_block = _CONFIRMATION_BLOCK.format(
+                order_summary=context.get("order_summary", ""),
+            )
+        elif dialogue_phase == "post_order":
+            phase_block = _POST_ORDER_BLOCK.format(
+                order_number=context.get("order_number", ""),
+                order_status=context.get("order_status", "unknown"),
+                rider_eta=context.get("rider_eta") or "calculating",
+            )
+        else:
+            phase_block = ""
+
+        return identity + phase_block
 
     async def respond(
         self,
         *,
         restaurant_name: str,
-        menu_text: str,
+        dialogue_phase: str,
         history: list[dict],
-        cart_summary: str,
+        context: dict,
     ) -> ConversationAgentResult:
-        system = _DS_CONVERSATION_SYSTEM.format(
-            restaurant_name=restaurant_name,
-            menu_text=menu_text,
-            cart_summary=cart_summary or "empty",
-        )
+        system = self._build_system(restaurant_name, dialogue_phase, context)
         messages = history if history else [{"role": "user", "content": "hi"}]
+
         inp = await _async_chat_tools(
-            self._api_key, self._model, system, messages,
-            tools=[_DS_CONVERSATION_TOOL], tool_name="take_action",
+            self._api_key,
+            self._model,
+            system,
+            messages,
+            tools=[_DS_TOOL],
+            tool_name="take_action",
+            max_tokens=512,
         )
+
         return ConversationAgentResult(
             message=inp.get("reply", ""),
             action=inp.get("action", "no_action"),
             action_data={
                 "dish_query": inp.get("dish_query", ""),
                 "qty": int(inp.get("qty") or 1),
+                "special_note": inp.get("special_note", ""),
+                "apt_room": inp.get("apt_room", ""),
+                "building": inp.get("building", ""),
+                "receiver_name": inp.get("receiver_name", ""),
             },
         )
 
