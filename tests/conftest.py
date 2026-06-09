@@ -2,6 +2,8 @@
 import os
 
 os.environ.setdefault("APP_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:5433/restaurant_test")
+os.environ.setdefault("APP_LLM_PROVIDER", "fake")  # never hit real AI APIs in tests
+
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

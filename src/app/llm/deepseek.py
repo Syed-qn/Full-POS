@@ -10,7 +10,7 @@ from functools import lru_cache
 import httpx
 
 from app.config import get_settings
-from app.llm.port import DishDraft, UploadedFile
+from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile
 
 _BASE = "https://api.deepseek.com"
 _CHAT = f"{_BASE}/chat/completions"
@@ -155,6 +155,129 @@ class DeepSeekForecastAdjuster:
         if not isinstance(parsed, dict):
             return {}
         return _sanitise_effect(parsed)
+
+
+async def _async_chat_tools(
+    api_key: str, model: str, system: str, messages: list,
+    tools: list, tool_name: str, max_tokens: int = 512,
+) -> dict:
+    """OpenAI-compatible tool-calling: returns parsed arguments dict of the forced tool call."""
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": system}] + messages,
+        "tools": tools,
+        "tool_choice": {"type": "function", "function": {"name": tool_name}},
+        "max_tokens": max_tokens,
+        "temperature": 0.0,
+    }
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(_CHAT, headers=_headers(api_key), json=payload)
+        r.raise_for_status()
+    data = r.json()
+    tool_calls = data["choices"][0]["message"].get("tool_calls") or []
+    for tc in tool_calls:
+        if tc.get("function", {}).get("name") == tool_name:
+            return json.loads(tc["function"]["arguments"])
+    raise RuntimeError(f"DeepSeek returned no {tool_name!r} tool call")
+
+
+_DS_CONVERSATION_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "take_action",
+        "description": "Record the structured action inferred from the customer message, plus your reply text.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["add_item", "proceed_checkout", "cancel_cart", "no_action"],
+                    "description": "add_item: customer wants to add a dish. proceed_checkout: cart ready, move to delivery. cancel_cart: customer wants to cancel. no_action: greeting, question, or unclear.",
+                },
+                "dish_query": {
+                    "type": "string",
+                    "description": "Dish name or number the customer wants (only for add_item).",
+                },
+                "qty": {
+                    "type": "integer",
+                    "description": "Quantity to add (only for add_item, default 1).",
+                },
+                "reply": {
+                    "type": "string",
+                    "description": "Natural WhatsApp reply to send to the customer (keep it short and friendly).",
+                },
+            },
+            "required": ["action", "reply"],
+        },
+    },
+}
+
+_DS_CONVERSATION_SYSTEM = """\
+You are a friendly WhatsApp ordering assistant for {restaurant_name}.
+Help customers order food in natural, conversational language.
+
+MENU:
+{menu_text}
+
+CURRENT CART: {cart_summary}
+
+STRICT RULES — read carefully before choosing an action:
+
+1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
+   → ALWAYS action="no_action". Greet warmly and show the full menu in your reply (all dishes with numbers and prices).
+
+2. ORDERING ("I want X", "give me Y", "add Z", "order N biryani", etc.)
+   → action="add_item", fill dish_query and qty.
+
+3. CHECKOUT — ONLY when ALL of these are true:
+   a. The cart is NOT empty (current cart shows items)
+   b. The customer explicitly says "done", "that's all", "proceed", "checkout", or equivalent
+   → action="proceed_checkout"
+   If cart is empty, NEVER use "proceed_checkout". Use "no_action" instead.
+
+4. CANCEL — only when customer says they want to cancel the whole order
+   → action="cancel_cart"
+
+5. EVERYTHING ELSE (questions, "are you AI?", unclear messages, status queries)
+   → action="no_action"
+
+Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. Max 10 km.
+ALWAYS call take_action — never reply without the tool.
+"""
+
+
+class DeepSeekConversationAgent:
+    """AI-powered conversation agent using DeepSeek's OpenAI-compatible function calling."""
+
+    def __init__(self) -> None:
+        self._api_key, self._model = _get_deepseek_settings()
+
+    async def respond(
+        self,
+        *,
+        restaurant_name: str,
+        menu_text: str,
+        history: list[dict],
+        cart_summary: str,
+    ) -> ConversationAgentResult:
+        system = _DS_CONVERSATION_SYSTEM.format(
+            restaurant_name=restaurant_name,
+            menu_text=menu_text,
+            cart_summary=cart_summary or "empty",
+        )
+        messages = history if history else [{"role": "user", "content": "hi"}]
+        inp = await _async_chat_tools(
+            self._api_key, self._model, system, messages,
+            tools=[_DS_CONVERSATION_TOOL], tool_name="take_action",
+        )
+        return ConversationAgentResult(
+            message=inp.get("reply", ""),
+            action=inp.get("action", "no_action"),
+            action_data={
+                "dish_query": inp.get("dish_query", ""),
+                "qty": int(inp.get("qty") or 1),
+            },
+        )
 
 
 def _sanitise_effect(parsed: dict) -> dict:

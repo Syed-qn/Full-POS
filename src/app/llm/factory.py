@@ -83,8 +83,8 @@ def get_conversation_agent():
         from app.llm.claude import ClaudeConversationAgent
         return ClaudeConversationAgent()
     if settings.llm_provider == "deepseek":
-        from app.llm.fake import FakeConversationAgent
-        return FakeConversationAgent()
+        from app.llm.deepseek import DeepSeekConversationAgent
+        return DeepSeekConversationAgent()
     from app.llm.fake import FakeConversationAgent
     return FakeConversationAgent()
 
