@@ -12,7 +12,7 @@ describe("App routing", () => {
         <App />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/sign in/i)).toBeInTheDocument();
+    expect(screen.getByText("OPS TERMINAL", { exact: false })).toBeInTheDocument();
   });
 
   it("renders shell when authenticated", () => {

@@ -3,38 +3,155 @@
   align-items: center;
   justify-content: center;
   height: 100%;
+  position: relative;
+  overflow: hidden;
 }
+
+/* Subtle scanline / grid bg for the terminal feel */
+.bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(255,255,255,0.03) 39px,
+      rgba(255,255,255,0.03) 40px
+    );
+  pointer-events: none;
+}
+
 .card {
-  width: 360px;
+  width: 380px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 28px;
+  padding: 32px 28px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset, 0 24px 64px rgba(0,0,0,0.5);
 }
+
 .brand {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.15em;
+  font-size: 15px;
+  letter-spacing: 0.2em;
   text-align: center;
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.brandIcon {
+  font-size: 18px;
+  animation: blink 1.2s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Tab switcher */
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-secondary);
+  padding: 9px 0;
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
+}
+
+.tabActive {
   color: var(--text-primary);
 }
+
+.tabSlider {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  background: var(--bg-surface-inset);
+  border-radius: calc(var(--radius) - 1px);
+  transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+/* Fields */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .field input {
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   padding: 9px 12px;
   color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.15s;
 }
+
+.field input::placeholder {
+  color: var(--text-muted, var(--text-secondary));
+  opacity: 0.5;
+}
+
 .field input:focus {
   outline: none;
   border-color: var(--accent-primary);
+}
+
+/* Footer hint */
+.hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0;
+}
+
+.switchLink {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.switchLink:hover {
+  opacity: 0.8;
 }

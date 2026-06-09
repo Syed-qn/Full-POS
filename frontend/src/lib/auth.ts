@@ -24,3 +24,18 @@ export async function login(phone: string, password: string): Promise<void> {
   const res = await apiClient.post<TokenOut>("/api/v1/auth/login", { phone, password });
   setToken(res.access_token);
 }
+
+export async function signup(
+  name: string,
+  phone: string,
+  password: string,
+): Promise<void> {
+  await apiClient.post("/api/v1/auth/signup", {
+    name,
+    phone,
+    password,
+    lat: 25.2048,
+    lng: 55.2708,
+  });
+  await login(phone, password);
+}

@@ -3,25 +3,39 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { SectionBanner } from "../components/SectionBanner";
 import { ApiError } from "../lib/apiClient";
-import { login } from "../lib/auth";
+import { login, signup } from "../lib/auth";
 import s from "./LoginScreen.module.css";
 
+type Mode = "login" | "signup";
+
 export function LoginScreen() {
+  const [mode, setMode] = useState<Mode>("login");
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
 
+  function switchMode(m: Mode) {
+    setMode(m);
+    setError(null);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await login(phone, password);
+      if (mode === "signup") {
+        if (!name.trim()) { setError("Restaurant name is required"); setBusy(false); return; }
+        await signup(name.trim(), phone, password);
+      } else {
+        await login(phone, password);
+      }
       nav("/", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Login failed");
+      setError(err instanceof ApiError ? err.detail : mode === "signup" ? "Signup failed" : "Login failed");
     } finally {
       setBusy(false);
     }
@@ -29,31 +43,83 @@ export function LoginScreen() {
 
   return (
     <div className={s.wrap}>
-      <form className={s.card} onSubmit={submit}>
-        <div className={s.brand}>OPS TERMINAL</div>
+      <div className={s.bg} />
+      <form className={s.card} onSubmit={submit} noValidate>
+        <div className={s.brand}>
+          <span className={s.brandIcon}>▸</span> OPS TERMINAL
+        </div>
+
+        <div className={s.tabs}>
+          <button
+            type="button"
+            className={`${s.tab} ${mode === "login" ? s.tabActive : ""}`}
+            onClick={() => switchMode("login")}
+          >
+            SIGN IN
+          </button>
+          <button
+            type="button"
+            className={`${s.tab} ${mode === "signup" ? s.tabActive : ""}`}
+            onClick={() => switchMode("signup")}
+          >
+            SIGN UP
+          </button>
+          <div className={s.tabSlider} style={{ left: mode === "login" ? 0 : "50%" }} />
+        </div>
+
         {error && <SectionBanner tone="error">{error}</SectionBanner>}
-        <label className={s.field}>
-          <span className="label-upper">Phone</span>
-          <input
-            aria-label="Phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            autoComplete="username"
-          />
-        </label>
-        <label className={s.field}>
-          <span className="label-upper">Password</span>
-          <input
-            aria-label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
+
+        <div className={`${s.fields} ${mode === "signup" ? s.fieldsExpanded : ""}`}>
+          {mode === "signup" && (
+            <label className={s.field}>
+              <span className="label-upper">Restaurant Name</span>
+              <input
+                aria-label="Restaurant Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Biryani House"
+                autoComplete="organization"
+                autoFocus={mode === "signup"}
+              />
+            </label>
+          )}
+
+          <label className={s.field}>
+            <span className="label-upper">Phone</span>
+            <input
+              aria-label="Phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+971XXXXXXXXX"
+              autoComplete="username"
+              autoFocus={mode === "login"}
+            />
+          </label>
+
+          <label className={s.field}>
+            <span className="label-upper">Password</span>
+            <input
+              aria-label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            />
+          </label>
+        </div>
+
         <Button type="submit" disabled={busy}>
-          {busy ? "Signing in…" : "Sign In"}
+          {busy
+            ? mode === "signup" ? "Creating account…" : "Signing in…"
+            : mode === "signup" ? "Create Account" : "Sign In"}
         </Button>
+
+        <p className={s.hint}>
+          {mode === "login"
+            ? <>No account? <button type="button" className={s.switchLink} onClick={() => switchMode("signup")}>Sign up</button></>
+            : <>Already registered? <button type="button" className={s.switchLink} onClick={() => switchMode("login")}>Sign in</button></>
+          }
+        </p>
       </form>
     </div>
   );
