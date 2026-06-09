@@ -117,49 +117,113 @@ class FakeForecastAdjuster:
 
 
 class FakeConversationAgent:
-    """Test double: rule-based conversation agent, no network."""
+    """Test double — returns deterministic responses based on last user message."""
 
     async def respond(
         self,
         *,
         restaurant_name: str,
-        menu_text: str,
+        dialogue_phase: str,
         history: list[dict],
-        cart_summary: str,
-    ) -> ConversationAgentResult:
+        context: dict,
+    ) -> "ConversationAgentResult":
         last_user = ""
         for msg in reversed(history):
             if msg.get("role") == "user":
-                last_user = msg.get("content", "").lower()
+                last_user = (msg.get("content") or "").lower()
                 break
-        if any(w in last_user for w in ("done", "checkout", "that's all", "thats all")):
-            return ConversationAgentResult(
-                message="Got it! Moving to delivery details.",
-                action="proceed_checkout",
-                action_data={},
-            )
-        if any(w in last_user for w in ("cancel", "never mind", "nevermind")):
-            return ConversationAgentResult(
-                message="Order cancelled. Send 'hi' to start again.",
-                action="cancel_cart",
-                action_data={},
-            )
-        # Simple "N item_name" or "item_name" pattern
-        import re
-        m = re.match(r"^(?:(\d+)\s*x?\s*)?(.+)$", last_user.strip())
-        if m:
-            qty_str, query = m.group(1), m.group(2).strip()
-            qty = int(qty_str) if qty_str else 1
-            query_words = set(re.findall(r"\b\w+\b", query))
-            _greet_words = {"hi", "hello", "hey", "menu", "start", "hiu", "salam"}
-            if query and not query_words.issubset(_greet_words | {"please", "send", "show"}) and not query_words & _greet_words:
+
+        # ordering phase
+        if dialogue_phase == "ordering":
+            if any(w in last_user for w in ("done", "that's all", "bas", "khalaas", "proceed", "checkout")):
                 return ConversationAgentResult(
-                    message=f"Adding {qty}x {query} to your cart.",
-                    action="add_item",
-                    action_data={"dish_query": query, "qty": qty},
+                    message="Great! Let me get your delivery details.",
+                    action="proceed_to_address",
+                    action_data={},
                 )
+            if any(w in last_user for w in ("cancel",)):
+                return ConversationAgentResult(
+                    message="Order cancelled.",
+                    action="cancel_order",
+                    action_data={},
+                )
+            if any(w in last_user for w in ("biryani", "karahi", "order", "want", "add", "give")):
+                return ConversationAgentResult(
+                    message="Added to your cart!",
+                    action="add_item",
+                    action_data={"dish_query": last_user, "qty": 1, "special_note": ""},
+                )
+            return ConversationAgentResult(
+                message="Welcome! Here is our menu.",
+                action="no_action",
+                action_data={},
+            )
+
+        # address_capture phase
+        if dialogue_phase == "address_capture":
+            if "[customer shared location" in last_user:
+                return ConversationAgentResult(
+                    message="Got your location! What's your apartment/room/door number?",
+                    action="no_action",
+                    action_data={},
+                )
+            saved = context.get("saved_address", "")
+            if saved and any(w in last_user for w in ("yes", "same", "correct", "ok")):
+                return ConversationAgentResult(
+                    message="Using your saved address!",
+                    action="use_saved_address",
+                    action_data={},
+                )
+            if not context.get("location_received"):
+                return ConversationAgentResult(
+                    message="Please share your location 📍",
+                    action="send_location_request",
+                    action_data={},
+                )
+            apt = context.get("apt_room", "")
+            building = context.get("building", "")
+            if apt and building:
+                return ConversationAgentResult(
+                    message="Got it! What's the receiver's name?",
+                    action="no_action",
+                    action_data={},
+                )
+            return ConversationAgentResult(
+                message="What's your apartment number?",
+                action="no_action",
+                action_data={},
+            )
+
+        # awaiting_confirmation phase
+        if dialogue_phase == "awaiting_confirmation":
+            if any(w in last_user for w in ("yes", "confirm", "ok", "proceed", "haan", "aiwa")):
+                return ConversationAgentResult(
+                    message="Order confirmed! 🎉",
+                    action="confirm_order",
+                    action_data={},
+                )
+            if any(w in last_user for w in ("cancel",)):
+                return ConversationAgentResult(
+                    message="Order cancelled.",
+                    action="cancel_order",
+                    action_data={},
+                )
+            return ConversationAgentResult(
+                message="Please confirm or cancel your order.",
+                action="no_action",
+                action_data={},
+            )
+
+        # post_order phase
+        if dialogue_phase == "post_order":
+            return ConversationAgentResult(
+                message="Your order is being prepared!",
+                action="status_query",
+                action_data={},
+            )
+
         return ConversationAgentResult(
-            message=f"{menu_text}\n\nReply with a dish name or number to order.",
+            message="How can I help?",
             action="no_action",
             action_data={},
         )
