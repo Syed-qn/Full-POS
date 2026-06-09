@@ -62,8 +62,13 @@ class SegmentCompilerPort(Protocol):
 class ConversationAgentResult:
     """Result from the AI conversation agent."""
     message: str
-    action: str  # "add_item" | "proceed_checkout" | "cancel_cart" | "no_action"
-    action_data: dict  # {"dish_query": str, "qty": int} for add_item
+    action: str
+    # Ordering actions: add_item | remove_item | update_qty | proceed_to_address
+    # Address actions:  send_location_request | save_address_text | use_saved_address | proceed_to_confirmation
+    # Confirmation:     confirm_order | request_modification | cancel_order
+    # Post-order:       status_query
+    # Any phase:        no_action | cancel_order
+    action_data: dict  # keys vary by action — see design spec
 
 
 class ConversationAgentPort(Protocol):
@@ -71,7 +76,7 @@ class ConversationAgentPort(Protocol):
         self,
         *,
         restaurant_name: str,
-        menu_text: str,
-        history: list[dict],
-        cart_summary: str,
+        dialogue_phase: str,   # ordering | address_capture | awaiting_confirmation | post_order
+        history: list[dict],   # [{"role": "user"|"assistant", "content": str}, ...]
+        context: dict,         # phase-specific data dict
     ) -> ConversationAgentResult: ...
