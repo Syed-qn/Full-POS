@@ -140,6 +140,8 @@ async def _send_text(
     prefix: str,
     body: str,
 ) -> None:
+    import time
+
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -147,6 +149,15 @@ async def _send_text(
         msg_type=OutboundMessageType.TEXT,
         payload={"body": body},
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
+    )
+    await record_message(
+        session,
+        conversation_id=conv.id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="text",
+        payload={"body": body},
+        ts=int(time.time()),
     )
 
 
@@ -160,6 +171,8 @@ async def _send_buttons(
     body: str,
     buttons: list[dict],
 ) -> None:
+    import time
+
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -167,6 +180,15 @@ async def _send_buttons(
         msg_type=OutboundMessageType.BUTTONS,
         payload={"body": body, "buttons": buttons},
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
+    )
+    await record_message(
+        session,
+        conversation_id=conv.id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="buttons",
+        payload={"body": body, "buttons": buttons},
+        ts=int(time.time()),
     )
 
 
@@ -1091,6 +1113,212 @@ async def _build_cart_summary(session: AsyncSession, conv) -> str:
     return ", ".join(lines) + f" | Subtotal: AED {Decimal(order.subtotal).normalize()}"
 
 
+async def _build_history(
+    session: AsyncSession,
+    conv: Conversation,
+    limit: int = 10,
+) -> list[dict]:
+    """Fetch last `limit` messages and build OpenAI-style history list."""
+    from app.conversation.models import Message
+
+    rows = (
+        await session.scalars(
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(limit)
+        )
+    ).all()
+    rows = list(reversed(rows))  # oldest first
+
+    history: list[dict] = []
+    for msg in rows:
+        role = "user" if msg.direction == "inbound" else "assistant"
+        payload = msg.payload or {}
+
+        if msg.type == "text":
+            content = payload.get("text") or payload.get("body") or ""
+        elif msg.type == "location":
+            lat = payload.get("latitude", "")
+            lng = payload.get("longitude", "")
+            content = f"[customer shared location pin: {lat},{lng}]"
+        elif msg.type == "button_reply":
+            title = payload.get("title") or payload.get("id") or "button"
+            content = f"[tapped: {title}]"
+        elif msg.type == "buttons":
+            content = payload.get("body") or "[buttons sent]"
+        else:
+            content = f"[{msg.type}]"
+
+        if content:
+            history.append({"role": role, "content": content})
+
+    # OpenAI requires first message to be user role
+    if history and history[0]["role"] == "assistant":
+        history.insert(0, {"role": "user", "content": "hi"})
+
+    return history
+
+
+_PHASE_MAP = {
+    "greeting": "ordering",
+    "menu_sent": "ordering",
+    "collecting_items": "ordering",
+    "cancelled": "ordering",
+    "modify_items": "ordering",
+    "modify_confirm": "ordering",
+    "address_capture": "address_capture",
+    "address_text_pending": "address_capture",
+    "receiver_details": "address_capture",
+    "order_confirmation": "awaiting_confirmation",
+    "order_placed": "post_order",
+    "post_order": "post_order",
+}
+
+_VALID_PHASES = frozenset({"ordering", "address_capture", "awaiting_confirmation", "post_order"})
+
+_PHASE_ACTIONS: dict[str, frozenset] = {
+    "ordering": frozenset({
+        "add_item", "remove_item", "update_qty", "proceed_to_address",
+        "cancel_order", "no_action",
+    }),
+    "address_capture": frozenset({
+        "send_location_request", "save_address_text", "use_saved_address",
+        "proceed_to_confirmation", "cancel_order", "no_action",
+    }),
+    "awaiting_confirmation": frozenset({
+        "confirm_order", "request_modification", "cancel_order", "no_action",
+    }),
+    "post_order": frozenset({
+        "status_query", "request_modification", "cancel_order", "no_action",
+    }),
+}
+
+
+def _resolve_phase(conv: Conversation) -> str:
+    """Return the current dialogue_phase, mapping legacy dialogue_state if needed."""
+    state = conv.state or {}
+    if "dialogue_phase" in state and state["dialogue_phase"] in _VALID_PHASES:
+        return state["dialogue_phase"]
+    old_state = state.get("dialogue_state", "greeting")
+    return _PHASE_MAP.get(old_state, "ordering")
+
+
+def _is_valid_action_for_phase(action: str, phase: str) -> bool:
+    """Return True if action is allowed in the given phase."""
+    allowed = _PHASE_ACTIONS.get(phase, frozenset())
+    return action in allowed
+
+
+async def _build_context(
+    session: AsyncSession,
+    conv: Conversation,
+    restaurant_id: int,
+    phase: str,
+    restaurant,
+) -> dict:
+    """Build phase-specific context dict for the AI agent."""
+    ctx: dict = {}
+
+    if phase == "ordering":
+        ctx["menu_text"] = await _render_menu(session, restaurant_id)
+        ctx["cart_summary"] = await _build_cart_summary(session, conv)
+
+    elif phase == "address_capture":
+        ctx["cart_summary"] = await _build_cart_summary(session, conv)
+        ctx["location_received"] = conv.state.get("pin_lat") is not None
+        ctx["apt_room"] = conv.state.get("pending_room", "")
+        ctx["building"] = conv.state.get("pending_building", "")
+        ctx["receiver_name"] = conv.state.get("pending_receiver", "")
+        max_km = restaurant.settings.get("max_radius_km", 10) if restaurant else 10
+        ctx["max_radius_km"] = max_km
+
+        from app.ordering.models import Customer, CustomerAddress
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.restaurant_id == restaurant_id,
+                Customer.phone == conv.phone,
+            )
+        )
+        saved = ""
+        if customer:
+            addr = await session.scalar(
+                select(CustomerAddress)
+                .where(CustomerAddress.customer_id == customer.id)
+                .order_by(CustomerAddress.last_used_at.desc())
+                .limit(1)
+            )
+            if addr:
+                saved = f"Apt {addr.room_apartment}, {addr.building}"
+                ctx["saved_address_id"] = addr.id
+        ctx["saved_address"] = saved
+
+    elif phase == "awaiting_confirmation":
+        from app.ordering.models import Order, OrderItem
+        from app.weather.factory import get_weather_port
+
+        order_id = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+        order = await session.get(Order, order_id) if order_id else None
+        if order:
+            items = (await session.scalars(
+                select(OrderItem).where(OrderItem.order_id == order.id)
+            )).all()
+            item_lines = "\n".join(
+                f"  {it.qty}x {it.dish_number}. {it.dish_name} — "
+                f"AED {Decimal(it.price_aed * it.qty).normalize()}"
+                for it in items
+            )
+            weather_note = ""
+            if get_weather_port().is_delay_active():
+                order.weather_delay_disclosed = True
+                await session.flush()
+                weather_note = "\n⚠️ Weather may cause delays beyond usual ETA."
+            ctx["order_summary"] = (
+                f"{item_lines}\n\n"
+                f"Subtotal: AED {Decimal(order.subtotal).normalize()}\n"
+                f"Delivery fee: AED {Decimal(order.delivery_fee_aed).normalize()}\n"
+                f"Total: AED {Decimal(order.total).normalize()}\n"
+                f"Payment: COD (cash on delivery)\n"
+                f"ETA: ~40 minutes{weather_note}"
+            )
+            ctx["order_id"] = order.id
+
+    elif phase == "post_order":
+        from app.ordering.fsm import OrderStatus
+        from app.ordering.models import Customer, Order
+
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.restaurant_id == restaurant_id,
+                Customer.phone == conv.phone,
+            )
+        )
+        ctx["order_number"] = ""
+        ctx["order_status"] = "unknown"
+        ctx["rider_eta"] = ""
+        if customer:
+            terminal = {
+                str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
+                str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
+                str(OrderStatus.WRITTEN_OFF),
+            }
+            order = await session.scalar(
+                select(Order)
+                .where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.customer_id == customer.id,
+                    Order.status.notin_(terminal),
+                )
+                .order_by(Order.created_at.desc())
+                .limit(1)
+            )
+            if order:
+                ctx["order_number"] = str(order.order_number or "")
+                ctx["order_status"] = str(order.status)
+
+    return ctx
+
+
 async def _execute_ai_add_item(
     session: AsyncSession,
     conv,
@@ -1098,6 +1326,7 @@ async def _execute_ai_add_item(
     restaurant_id: int,
     dish_query: str,
     qty: int,
+    special_note: str = "",
 ) -> bool:
     """Find and add a dish; return True if successfully added."""
     from app.ordering.models import Order
@@ -1125,96 +1354,469 @@ async def _execute_ai_add_item(
     if order is None:
         order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
         _set_state(conv, draft_order_id=order.id)
-    await add_item(session, order=order, dish=dish, qty=qty)
-    _set_state(conv, dialogue_state="collecting_items")
+    await add_item(session, order=order, dish=dish, qty=qty, notes=special_note or None)
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     return True
+
+
+async def _execute_ai_remove_item(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, dish_query: str
+) -> None:
+    """Remove matching dish from draft order cart."""
+    from app.ordering.models import Order, OrderItem
+
+    draft_order_id = conv.state.get("draft_order_id")
+    if not draft_order_id or not dish_query:
+        return
+    order = await session.get(Order, draft_order_id)
+    if order is None:
+        return
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return
+    target_dish_id = result.candidates[0].id
+    item = await session.scalar(
+        select(OrderItem).where(
+            OrderItem.order_id == order.id,
+            OrderItem.dish_id == target_dish_id,
+        )
+    )
+    if item:
+        await session.delete(item)
+        all_items = (await session.scalars(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        )).all()
+        order.subtotal = sum(Decimal(i.price_aed) * i.qty for i in all_items)
+        order.total = order.subtotal + Decimal(order.delivery_fee_aed or "0")
+
+
+async def _execute_ai_update_qty(
+    session: AsyncSession, conv: Conversation, restaurant_id: int,
+    dish_query: str, qty: int
+) -> None:
+    """Update quantity of matching dish in draft order."""
+    from app.ordering.models import Order, OrderItem
+
+    draft_order_id = conv.state.get("draft_order_id")
+    if not draft_order_id or not dish_query or qty < 1:
+        return
+    order = await session.get(Order, draft_order_id)
+    if order is None:
+        return
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return
+    target_dish_id = result.candidates[0].id
+    item = await session.scalar(
+        select(OrderItem).where(
+            OrderItem.order_id == order.id,
+            OrderItem.dish_id == target_dish_id,
+        )
+    )
+    if item:
+        item.qty = qty
+        all_items = (await session.scalars(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        )).all()
+        order.subtotal = sum(Decimal(i.price_aed) * i.qty for i in all_items)
+        order.total = order.subtotal + Decimal(order.delivery_fee_aed or "0")
+
+
+async def _execute_save_address(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage,
+    restaurant_id: int, apt_room: str, building: str, receiver_name: str, restaurant,
+) -> None:
+    """Store address, attach to draft order, transition to awaiting_confirmation."""
+    from app.ordering.fees import calculate_fee
+    from app.ordering.models import Order
+    from app.ordering.service import get_or_create_customer, upsert_address
+
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone
+    )
+    addr = await upsert_address(
+        session,
+        customer_id=customer.id,
+        latitude=conv.state.get("pin_lat"),
+        longitude=conv.state.get("pin_lon"),
+        room_apartment=apt_room,
+        building=building,
+        receiver_name=receiver_name,
+        confirmed=True,
+    )
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-draft-addr",
+            body="Your cart is empty. Send 'hi' to start a new order.",
+        )
+        return
+    dist = conv.state.get("distance_km")
+    fee = calculate_fee(dist if dist is not None else 0.0)
+    order.address_id = addr.id
+    order.distance_km = dist
+    order.delivery_fee_aed = fee
+    order.total = order.subtotal + fee
+    await session.flush()
+    _set_state(conv, dialogue_phase="awaiting_confirmation",
+               dialogue_state="order_confirmation", pending_order_id=order.id)
+    await _send_order_summary(session, conv, inbound, restaurant_id, order)
+
+
+async def _attach_saved_address_to_order(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage,
+    restaurant_id: int, address_id: int, restaurant,
+) -> None:
+    """Reuse saved address — attach to draft order and transition to confirmation."""
+    from app.ordering.fees import calculate_fee
+    from app.ordering.models import CustomerAddress, Order
+
+    addr = await session.get(CustomerAddress, address_id)
+    if addr is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="saved-addr-gone",
+            body="Couldn't load your saved address. Please share your location 📍",
+        )
+        return
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-draft-saved",
+            body="Your cart is empty. Send 'hi' to start a new order.",
+        )
+        return
+    from app.geo.factory import get_geo_provider
+    try:
+        dist_result = await get_geo_provider().distance(
+            origin=(restaurant.lat, restaurant.lng),
+            destination=(addr.latitude, addr.longitude),
+        )
+        dist_km = dist_result.distance_km
+    except Exception:
+        from app.geo.haversine import distance_km as haversine_km
+        dist_km = haversine_km(restaurant.lat, restaurant.lng, addr.latitude, addr.longitude)
+    fee = calculate_fee(dist_km)
+    order.address_id = addr.id
+    order.distance_km = dist_km
+    order.delivery_fee_aed = fee
+    order.total = order.subtotal + fee
+    await session.flush()
+    _set_state(conv, dialogue_phase="awaiting_confirmation",
+               dialogue_state="order_confirmation", pending_order_id=order.id)
+    await _send_order_summary(session, conv, inbound, restaurant_id, order)
+
+
+async def _execute_confirm_order(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> None:
+    """Finalize order confirmation and transition to post_order."""
+    from app.ordering.models import Order
+    from app.ordering.service import finalize_confirmation
+
+    order_id = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+    order = await session.get(Order, order_id) if order_id else None
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="no-order-confirm",
+            body="No order to confirm. Send 'hi' to start again.",
+        )
+        return
+    await finalize_confirmation(session, order=order, actor="customer")
+    _set_state(conv, dialogue_phase="post_order", dialogue_state="order_placed")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="order-confirmed",
+        body=(
+            f"Order confirmed! 🎉 Order #{order.order_number}\n"
+            f"Total: AED {Decimal(order.total).normalize()} (COD — cash on delivery)\n"
+            f"Your food will arrive within ~40 minutes. We'll keep you posted! 🛵"
+        ),
+    )
+
+
+async def _execute_cancel_order(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> None:
+    """Cancel the current draft/pending order."""
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.fsm import transition as fsm_transition
+    from app.ordering.models import Order
+
+    for key in ("pending_order_id", "draft_order_id"):
+        order_id = conv.state.get(key)
+        if order_id:
+            order = await session.get(Order, order_id)
+            if order and str(order.status) in (
+                str(OrderStatus.DRAFT), str(OrderStatus.PENDING_CONFIRMATION),
+                str(OrderStatus.CONFIRMED),
+            ):
+                await fsm_transition(session, order, OrderStatus.CANCELLED, actor="customer")
+            break
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="greeting",
+               draft_order_id=None, pending_order_id=None)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="order-cancelled",
+        body="No problem — your order has been cancelled. Send 'hi' whenever you're ready to order again 😊",
+    )
+
+
+async def _dispatch_action(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    result,
+    phase: str,
+    restaurant,
+) -> None:
+    """Execute the action returned by the AI agent."""
+    action = result.action
+    data = result.action_data or {}
+    reply = result.message or ""
+
+    # Phase guard — wrong-phase action falls back to no_action
+    if not _is_valid_action_for_phase(action, phase):
+        action = "no_action"
+
+    # ── ordering actions ──────────────────────────────────────────────────
+    if action == "add_item":
+        dish_query = data.get("dish_query", "")
+        qty = int(data.get("qty") or 1)
+        special_note = data.get("special_note", "")
+        if dish_query:
+            added = await _execute_ai_add_item(
+                session, conv, inbound, restaurant_id, dish_query, qty, special_note
+            )
+            if added and reply:
+                await _send_text(session, conv=conv, inbound=inbound,
+                                 restaurant_id=restaurant_id, prefix="ai-add", body=reply)
+            elif not added:
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="ai-no-match",
+                    body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
+                         "Try the dish number (e.g. 110) or check the menu spelling.",
+                )
+        else:
+            if reply:
+                await _send_text(session, conv=conv, inbound=inbound,
+                                 restaurant_id=restaurant_id, prefix="ai-reply", body=reply)
+        return
+
+    if action == "remove_item":
+        dish_query = data.get("dish_query", "")
+        await _execute_ai_remove_item(session, conv, restaurant_id, dish_query)
+        if reply:
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-remove", body=reply)
+        return
+
+    if action == "update_qty":
+        dish_query = data.get("dish_query", "")
+        qty = int(data.get("qty") or 1)
+        await _execute_ai_update_qty(session, conv, restaurant_id, dish_query, qty)
+        if reply:
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-qty", body=reply)
+        return
+
+    if action == "proceed_to_address":
+        cart = await _build_cart_summary(session, conv)
+        if not cart:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ai-empty-cart",
+                body="Your cart is empty — please add at least one dish first! 😊",
+            )
+            return
+        _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
+        if reply:
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-proceed-addr", body=reply)
+        return
+
+    # ── address_capture actions ───────────────────────────────────────────
+    if action == "send_location_request":
+        _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
+        await _send_buttons(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="loc-request",
+            body=reply or "Please share your delivery location 📍",
+            buttons=[{"id": "share_location", "title": "Share location 📍"}],
+        )
+        return
+
+    if action == "use_saved_address":
+        saved_id = conv.state.get("saved_address_id")
+        if saved_id:
+            _set_state(conv, pending_address_id=saved_id, dialogue_phase="awaiting_confirmation",
+                       dialogue_state="order_confirmation")
+            await _attach_saved_address_to_order(session, conv, inbound, restaurant_id,
+                                                  saved_id, restaurant)
+        else:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="no-saved-addr",
+                body="I couldn't find your saved address. Please share your location 📍",
+            )
+        return
+
+    if action == "save_address_text":
+        apt_room = data.get("apt_room", "")
+        building = data.get("building", "")
+        receiver_name = data.get("receiver_name", "")
+        if apt_room and building and receiver_name:
+            await _execute_save_address(session, conv, inbound, restaurant_id,
+                                        apt_room, building, receiver_name, restaurant)
+        else:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="addr-incomplete",
+                body=reply or "I need all three: apartment number, building name, and receiver's name.",
+            )
+        return
+
+    if action == "proceed_to_confirmation":
+        _set_state(conv, dialogue_phase="awaiting_confirmation",
+                   dialogue_state="order_confirmation")
+        if reply:
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-confirm", body=reply)
+        return
+
+    # ── awaiting_confirmation actions ─────────────────────────────────────
+    if action == "confirm_order":
+        await _execute_confirm_order(session, conv, inbound, restaurant_id)
+        return
+
+    if action == "request_modification":
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items",
+                   pending_order_id=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ai-modify",
+            body=reply or "Sure! What would you like to change? 😊",
+        )
+        return
+
+    if action == "cancel_order":
+        await _execute_cancel_order(session, conv, inbound, restaurant_id)
+        return
+
+    # ── post_order actions ────────────────────────────────────────────────
+    if action == "status_query":
+        await _handle_status_query(session, conv, inbound, restaurant_id)
+        return
+
+    # ── no_action (all phases) ────────────────────────────────────────────
+    if reply:
+        await _send_text(session, conv=conv, inbound=inbound,
+                         restaurant_id=restaurant_id, prefix="ai-reply", body=reply)
+
+
+async def _handle_location_pin(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> None:
+    """Process a location pin in address_capture phase.
+
+    Validates against restaurant.settings["max_radius_km"].
+    Stores lat/lng in conv.state then calls AI to ask for apt/room.
+    """
+    from app.geo.factory import get_geo_provider
+
+    lat = float(inbound.payload.get("latitude", 0))
+    lng = float(inbound.payload.get("longitude", 0))
+    max_km = restaurant.settings.get("max_radius_km", 10) if restaurant else 10
+
+    try:
+        dist_result = await get_geo_provider().distance(
+            origin=(restaurant.lat, restaurant.lng),
+            destination=(lat, lng),
+        )
+        dist_km = dist_result.distance_km
+    except Exception:
+        from app.geo.haversine import distance_km as haversine_km
+        dist_km = haversine_km(restaurant.lat, restaurant.lng, lat, lng)
+
+    if dist_km > max_km:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="out-of-range",
+            body=(
+                f"Sorry, your location is {dist_km:.1f} km away. "
+                f"We deliver within {max_km} km. "
+                "Unfortunately we can't deliver to you at this time 😔"
+            ),
+        )
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="greeting",
+                   draft_order_id=None)
+        return
+
+    _set_state(
+        conv,
+        pin_lat=lat,
+        pin_lon=lng,
+        distance_km=dist_km,
+        dialogue_phase="address_capture",
+        dialogue_state="address_capture",
+    )
+    # Let AI ask for apt/room (location_received=True now in context)
+    await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
 
 
 async def _handle_customer_ai(
     session: AsyncSession,
-    conv,
+    conv: Conversation,
     inbound: InboundMessage,
     restaurant_id: int,
+    restaurant=None,
 ) -> None:
-    """AI-driven handler: replaces FSM for greeting/ordering phases."""
-    import asyncio
-
-    from app.identity.models import Restaurant
+    """Phase-aware AI handler: owns the entire customer conversation."""
+    from app.identity.models import Restaurant as RestaurantModel
     from app.llm.factory import get_conversation_agent
 
-    restaurant = await session.get(Restaurant, restaurant_id)
-    restaurant_name = restaurant.name if restaurant else "Restaurant"
-    menu_text = await _render_menu(session, restaurant_id)
-    cart_summary = await _build_cart_summary(session, conv)
+    if restaurant is None:
+        restaurant = await session.get(RestaurantModel, restaurant_id)
 
-    current_text = (inbound.payload.get("text") or "").strip()
-    # Only inbound messages are in the messages table (no assistant turns stored),
-    # so reconstructed history would have consecutive user turns — invalid for Claude.
-    # cart_summary already provides full ordering context.
-    history = [{"role": "user", "content": current_text or "hi"}]
+    restaurant_name = restaurant.name if restaurant else "Restaurant"
+    phase = _resolve_phase(conv)
+    history = await _build_history(session, conv, limit=10)
+    context = await _build_context(session, conv, restaurant_id, phase, restaurant)
+
+    # Store saved_address_id in conv.state for use_saved_address action
+    if "saved_address_id" in context:
+        _set_state(conv, saved_address_id=context["saved_address_id"])
 
     agent = get_conversation_agent()
     try:
         result = await agent.respond(
             restaurant_name=restaurant_name,
-            menu_text=menu_text,
+            dialogue_phase=phase,
             history=history,
-            cart_summary=cart_summary,
+            context=context,
         )
     except Exception:
-        # Fallback to simple greeting on agent failure
-        await _handle_greeting(session, conv, inbound, restaurant_id)
-        return
-
-    if result.action == "add_item":
-        dish_query = result.action_data.get("dish_query", "")
-        qty = int(result.action_data.get("qty") or 1)
-        added = False
-        if dish_query:
-            added = await _execute_ai_add_item(
-                session, conv, inbound, restaurant_id, dish_query, qty
-            )
-        if added and result.message:
-            # Only confirm if item was actually added
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="ai-reply", body=result.message,
-            )
-        elif not added:
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="ai-no-match",
-                body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
-                     f"Please reply with the dish number (e.g. 110) or check the menu spelling.",
-            )
-        return
-
-    if result.action == "proceed_checkout":
-        draft_order_id = conv.state.get("draft_order_id")
-        if not draft_order_id:
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="ai-empty-cart",
-                body="Your cart is empty. Please add at least one dish before checking out.",
-            )
-            return
-        _set_state(conv, dialogue_state="address_capture")
-        await _send_buttons(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="ask-location",
-            body="Great! Please share your delivery location pin, or type your address.",
-            buttons=[{"id": "share_location", "title": "Share location"}],
-        )
-        return
-
-    if result.action == "cancel_cart":
-        _set_state(conv, dialogue_state="cancelled", draft_order_id=None, pending_order_id=None)
-
-    if result.message:
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="ai-reply", body=result.message,
+            prefix="ai-fallback",
+            body="Sorry, having a moment 😅 Type the dish number to order (e.g. 110) or send 'hi' to start.",
         )
+        return
+
+    await _dispatch_action(
+        session, conv, inbound, restaurant_id, result, phase, restaurant
+    )
 
 
 async def _resolve_counterpart(
@@ -1348,81 +1950,19 @@ async def handle_inbound(
         await _handle_rider_inbound(session, conv, inbound, restaurant_id, rider)
         return
 
-    dialogue_state = conv.state.get("dialogue_state", "greeting")
+    # ── Customer conversation (full AI) ────────────────────────────────────
+    from app.identity.models import Restaurant as RestaurantModel
+    restaurant = await session.get(RestaurantModel, restaurant_id)
 
-    # Structured FSM states that need specific input (location pin, button replies, names).
-    _FSM_STATES = {"address_capture", "address_text_pending", "receiver_details",
-                   "order_confirmation", "modify_items", "modify_confirm"}
-
-    # Status / modify intent intercepts — work from any state via intent classifier.
-    if inbound.type == MessageType.TEXT and dialogue_state not in _FSM_STATES:
-        import asyncio
-        from app.llm.factory import get_intent_classifier
-
-        text = inbound.payload.get("text", "") or ""
-        try:
-            intent = await asyncio.to_thread(get_intent_classifier().classify, text)
-        except Exception:
-            intent = "other"
-
-        if intent == "status":
-            await _handle_status_query(session, conv, inbound, restaurant_id)
-            return
-        lower = text.lower()
-        if (dialogue_state == "order_placed") and (
-            intent == "modify" or ("edit" in lower and "order" in lower)
-        ):
-            await _handle_modify_intent(session, conv, inbound, restaurant_id)
-            return
-
-    # Button replies always go to FSM (they carry structured IDs).
-    if inbound.type == MessageType.BUTTON_REPLY:
-        if dialogue_state in ("address_capture", "address_text_pending"):
-            await _handle_address_capture(session, conv, inbound, restaurant_id)
-        elif dialogue_state == "order_confirmation":
-            await _handle_order_confirmation(session, conv, inbound, restaurant_id)
-        elif dialogue_state == "modify_confirm":
-            await _handle_modify_confirm(session, conv, inbound, restaurant_id)
-        return
-
-    # Structured FSM states for text input.
-    if dialogue_state in _FSM_STATES:
-        if dialogue_state in ("address_capture", "address_text_pending"):
-            await _handle_address_capture(session, conv, inbound, restaurant_id)
-        elif dialogue_state == "receiver_details":
-            await _handle_receiver_details(session, conv, inbound, restaurant_id)
-        elif dialogue_state == "order_confirmation":
-            await _handle_order_confirmation(session, conv, inbound, restaurant_id)
-        elif dialogue_state == "modify_items":
-            await _handle_modify_items(session, conv, inbound, restaurant_id)
-        elif dialogue_state == "modify_confirm":
-            await _handle_modify_confirm(session, conv, inbound, restaurant_id)
-        return
-
-    # Greeting reset: any message containing a greeting word restarts the conversation.
-    # Use the reliable FSM greeting handler (sends uploaded menu images/PDFs, then text).
-    _GREET_WORDS = {"hi", "hello", "hey", "start", "menu", "مرحبا", "السلام عليكم",
-                    "hii", "helo", "hiu", "hiya", "salam"}
-    if inbound.type == MessageType.TEXT:
-        _txt_lower = (inbound.payload.get("text") or "").strip().lower()
-        if _txt_lower in _GREET_WORDS or any(w in _GREET_WORDS for w in _txt_lower.split()):
-            _set_state(conv, dialogue_state="greeting", draft_order_id=None)
-
-    if dialogue_state == "greeting" or conv.state.get("dialogue_state") == "greeting":
-        # Send any uploaded image/PDF menu files, transition state to menu_sent
-        await _handle_greeting(session, conv, inbound, restaurant_id)
-        # Then AI sends a natural greeting (with menu in system prompt)
-        if inbound.type == MessageType.TEXT:
-            await _handle_customer_ai(session, conv, inbound, restaurant_id)
-        return
-
-    # All other customer TEXT messages → AI agent (natural language ordering, questions, etc.)
-    if inbound.type == MessageType.TEXT:
-        await _handle_customer_ai(session, conv, inbound, restaurant_id)
-        return
-
-    # Non-text, non-button customer messages (e.g. location pin during address capture
-    # that landed while state was still "collecting_items") — fall back gracefully.
+    # Location pin → address capture handler (needs geo validation before AI)
     if inbound.type == MessageType.LOCATION:
-        await _handle_address_capture(session, conv, inbound, restaurant_id)
+        phase = _resolve_phase(conv)
+        if phase == "address_capture":
+            await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
+        else:
+            # Unsolicited location — let AI respond in current phase
+            await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
         return
+
+    # All text + button_reply → AI (history includes "[tapped: X]" for button replies)
+    await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
