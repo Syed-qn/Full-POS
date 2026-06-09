@@ -153,7 +153,7 @@ Short replies (WhatsApp style). Emoji: use sparingly, only where natural.
 
 RULES:
 - COD only (cash on delivery). Never mention card/online payment.
-- Delivery ~40 minutes. Max 10 km delivery range.
+- Delivery ~40 minutes. Max delivery radius from `restaurant.settings["max_radius_km"]`.
 - Always call take_action — never reply without it.
 ```
 
@@ -207,7 +207,7 @@ RULES:
 - Collect ONLY: apt/room, building, receiver name. Nothing else.
 - Do NOT ask for phone number, landmark, floor (unless volunteered — then save in apt_room).
 - If customer volunteers extra info (e.g., landmark), include it in apt_room field.
-- If location pin is outside 10 km → inform customer and end conversation politely.
+- If location pin is outside the restaurant's delivery radius → inform customer and end conversation politely.
 ```
 
 ### 4.4 Awaiting Confirmation Phase Block
@@ -283,7 +283,7 @@ The system prompt explicitly instructs the AI to handle:
 | AI returns invalid action for phase | Log warning, execute `no_action` with AI's reply |
 | AI returns unknown action string | Log, treat as `no_action` |
 | Dish not found after add_item | AI reply already handles it; server sends "couldn't find X" fallback |
-| Location pin outside 10 km | Detected at pin processing; AI informed via context; replies politely |
+| Location pin outside radius | Detected at pin processing using `restaurant.settings["max_radius_km"]`; AI informed via context; replies politely |
 | Missing required fields for save_address_text | Phase stays at address_capture; AI reprompts |
 | DeepSeek returns no tool call | Raise RuntimeError, caught by fallback handler |
 
@@ -340,7 +340,7 @@ No migration required — mapping done at runtime in `handle_inbound`.
 ## 10. Non-Negotiable Business Rules (unchanged)
 
 - COD only
-- Max 10 km radius — enforced at pin processing
+- Max delivery radius: `restaurant.settings["max_radius_km"]` km — enforced at pin processing, NOT hardcoded
 - Address: apt/room + building + receiver name (exactly, nothing more mandatory)
 - Customer descriptions: max 3 lines, never include price
 - STOP keyword → opt-out (checked before AI, unchanged)
