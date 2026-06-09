@@ -98,10 +98,6 @@ async def test_second_message_after_menu_sent_does_not_resend_menu(db_session, r
     await db_session.commit()
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
-    # Greeting: AI sends one reply containing the menu. Second message (ordering)
-    # gets a different reply — menu is not re-sent.
-    greeting_sends = [r for r in rows if "chicken biryani" in r.payload["body"].lower()
-                      and r != rows[-1]]
     # Just verify there are exactly 2 messages total (greeting + order response)
     assert len(rows) == 2
 

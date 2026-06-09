@@ -1,4 +1,3 @@
-import pytest
 
 from app.llm.fake import FakeExtractor
 from app.llm.port import DishDraft, UploadedFile

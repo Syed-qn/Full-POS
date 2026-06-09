@@ -111,9 +111,23 @@ async def _handle_greeting(
             )
             files_sent += 1
 
-    # After sending any image/PDF files, AI handles the text greeting response.
-    # (text menu dump removed — AI responds naturally with menu context in system prompt)
     conv.state = {**conv.state, "dialogue_state": "menu_sent"}
+
+    if files_sent > 0:
+        # Short prompt so the customer knows to reply with a dish
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="greeting-prompt",
+            body="Here's our menu! 😊 Reply with a dish name or number to order.",
+        )
+    else:
+        # No image/PDF on file — send the full text menu
+        menu_text = await _render_menu(session, restaurant_id)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="greeting-menu",
+            body=menu_text,
+        )
     await record_audit(
         session,
         actor="system",
@@ -1180,7 +1194,7 @@ _VALID_PHASES = frozenset({"ordering", "address_capture", "awaiting_confirmation
 _PHASE_ACTIONS: dict[str, frozenset] = {
     "ordering": frozenset({
         "add_item", "remove_item", "update_qty", "proceed_to_address",
-        "cancel_order", "no_action",
+        "cancel_order", "status_query", "no_action",
     }),
     "address_capture": frozenset({
         "send_location_request", "save_address_text", "use_saved_address",
@@ -1697,13 +1711,8 @@ async def _dispatch_action(
         return
 
     if action == "request_modification":
-        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items",
-                   pending_order_id=None)
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="ai-modify",
-            body=reply or "Sure! What would you like to change? 😊",
-        )
+        # Delegate to the full modify FSM flow (find order, set modify_items state, prompt)
+        await _handle_modify_intent(session, conv, inbound, restaurant_id)
         return
 
     if action == "cancel_order":
@@ -1954,15 +1963,33 @@ async def handle_inbound(
     from app.identity.models import Restaurant as RestaurantModel
     restaurant = await session.get(RestaurantModel, restaurant_id)
 
+    # First contact: greeting fires when dialogue_state is "greeting" AND the message
+    # is a greeting word — ordering requests on first contact go straight to AI.
+    _GREETING_WORDS = frozenset({"hi", "hey", "hello", "salam", "salaam", "start", "menu"})
+    if inbound.type == MessageType.TEXT and conv.state.get("dialogue_state", "greeting") == "greeting":
+        import re as _re
+        _txt_words = set(_re.findall(r'\b\w+\b', (inbound.payload.get("text") or "").lower()))
+        if _txt_words & _GREETING_WORDS:
+            await _handle_greeting(session, conv, inbound, restaurant_id)
+            return
+
     # Location pin → address capture handler (needs geo validation before AI)
     if inbound.type == MessageType.LOCATION:
         phase = _resolve_phase(conv)
         if phase == "address_capture":
             await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
         else:
-            # Unsolicited location — let AI respond in current phase
             await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
         return
 
-    # All text + button_reply → AI (history includes "[tapped: X]" for button replies)
+    # Modify FSM states: route to dedicated handlers (preserves SLA-restart and audit logic)
+    state_key = conv.state.get("dialogue_state", "")
+    if state_key == "modify_items":
+        await _handle_modify_items(session, conv, inbound, restaurant_id)
+        return
+    if state_key == "modify_confirm":
+        await _handle_modify_confirm(session, conv, inbound, restaurant_id)
+        return
+
+    # All remaining text + button_reply → AI
     await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)

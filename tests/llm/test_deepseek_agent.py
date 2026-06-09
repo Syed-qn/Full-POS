@@ -1,11 +1,10 @@
 """Tests for DeepSeekConversationAgent phase-aware prompts and tool schema."""
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.llm.deepseek import DeepSeekConversationAgent
-from app.llm.port import ConversationAgentResult
 
 
 def _mock_deepseek_response(action: str, reply: str, **extra):

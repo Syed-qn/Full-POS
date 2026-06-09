@@ -127,6 +127,8 @@ class FakeConversationAgent:
         history: list[dict],
         context: dict,
     ) -> "ConversationAgentResult":
+        import re
+
         last_user = ""
         for msg in reversed(history):
             if msg.get("role") == "user":
@@ -147,34 +149,59 @@ class FakeConversationAgent:
                     action="cancel_order",
                     action_data={},
                 )
-            if any(w in last_user for w in ("biryani", "karahi", "order", "want", "add", "give")):
+            # Parse quantity prefix: "2x biryani" or "2 biryani"
+            qty = 1
+            dish_query = last_user
+            qty_match = re.match(r'^(\d+)\s*[xX]\s+', last_user)
+            if qty_match:
+                qty = int(qty_match.group(1))
+                dish_query = last_user[qty_match.end():]
+            # Greeting → no_action; use word-set to avoid "hi" matching "chicken"
+            _last_words = set(re.findall(r'\b\w+\b', last_user))
+            if _last_words & {"hi", "hello", "hey", "salam", "salaam"}:
                 return ConversationAgentResult(
-                    message="Added to your cart!",
+                    message=context.get("menu_text", "Welcome! Here is our menu."),
+                    action="no_action",
+                    action_data={},
+                )
+            # Status query detection
+            if any(w in last_user for w in ("where", "status", "track", "eta", "when")):
+                return ConversationAgentResult(
+                    message="Let me check your order status.",
+                    action="status_query",
+                    action_data={},
+                )
+            # Any non-empty text → try add_item; engine will send no-match if dish not found
+            if last_user:
+                return ConversationAgentResult(
+                    message=f"Added {dish_query} to your cart! 🛒",
                     action="add_item",
-                    action_data={"dish_query": last_user, "qty": 1, "special_note": ""},
+                    action_data={"dish_query": dish_query, "qty": qty, "special_note": ""},
                 )
             return ConversationAgentResult(
-                message="Welcome! Here is our menu.",
+                message=context.get("menu_text", "Welcome! Here is our menu."),
                 action="no_action",
                 action_data={},
             )
 
         # address_capture phase
         if dialogue_phase == "address_capture":
-            if "[customer shared location" in last_user:
+            saved = context.get("saved_address", "")
+            location_received = context.get("location_received", False)
+            # Location received + saved address → offer the saved address
+            if saved and location_received:
                 return ConversationAgentResult(
-                    message="Got your location! What's your apartment/room/door number?",
+                    message=f"I see your saved address: {saved}. Would you like to use it?",
                     action="no_action",
                     action_data={},
                 )
-            saved = context.get("saved_address", "")
             if saved and any(w in last_user for w in ("yes", "same", "correct", "ok")):
                 return ConversationAgentResult(
                     message="Using your saved address!",
                     action="use_saved_address",
                     action_data={},
                 )
-            if not context.get("location_received"):
+            if not location_received:
                 return ConversationAgentResult(
                     message="Please share your location 📍",
                     action="send_location_request",
@@ -189,7 +216,7 @@ class FakeConversationAgent:
                     action_data={},
                 )
             return ConversationAgentResult(
-                message="What's your apartment number?",
+                message="Please share your room/apartment number and building name.",
                 action="no_action",
                 action_data={},
             )
@@ -216,8 +243,14 @@ class FakeConversationAgent:
 
         # post_order phase
         if dialogue_phase == "post_order":
+            if any(w in last_user for w in ("modify", "change", "update", "edit")):
+                return ConversationAgentResult(
+                    message="Sure! Let me help you modify your order.",
+                    action="request_modification",
+                    action_data={},
+                )
             return ConversationAgentResult(
-                message="Your order is being prepared!",
+                message="Your order is being prepared! 🛵",
                 action="status_query",
                 action_data={},
             )

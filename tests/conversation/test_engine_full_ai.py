@@ -2,7 +2,6 @@
 import time
 from decimal import Decimal
 
-import pytest
 from sqlalchemy import select
 
 from app.conversation.engine import handle_inbound
@@ -170,7 +169,7 @@ async def test_add_item_action_updates_cart(db_session, restaurant):
         db_session, restaurant_id=restaurant.id,
         phone="+971501234999", counterpart="customer"
     )
-    from app.ordering.models import Order, OrderItem
+    from app.ordering.models import OrderItem
     draft_order_id = conv.state.get("draft_order_id")
     assert draft_order_id is not None
     items = (await db_session.scalars(
