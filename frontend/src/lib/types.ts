@@ -108,3 +108,91 @@ export interface MessageOut {
   payload: Record<string, unknown>;
   ts: number;
 }
+
+// ── Order Detail (rich view) ─────────────────────────────────────────────────
+
+export interface OrderItemDetailOut {
+  dish_number: number;
+  dish_name: string;
+  qty: number;
+  price_aed: string;
+  line_total: string;
+}
+
+export interface AddressDetailOut {
+  id: number;
+  room_apartment: string | null;
+  building: string | null;
+  receiver_name: string | null;
+  additional_details: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface CustomerDetailOut {
+  id: number;
+  name: string | null;
+  phone: string;
+  total_orders: number;
+  total_spend: string;
+  first_order_at: string | null;
+  last_order_at: string | null;
+  marketing_opted_in: boolean;
+}
+
+export interface RiderDetailOut {
+  id: number;
+  name: string;
+  phone: string;
+}
+
+export interface TimelineEventOut {
+  ts: string;
+  action: string;
+  actor: string;
+  after: Record<string, unknown> | null;
+}
+
+export interface ChatMessageOut {
+  direction: "inbound" | "outbound";
+  text: string | null;
+  ts: number;
+}
+
+export interface GpsPingOut {
+  latitude: number;
+  longitude: number;
+  ts: string;
+}
+
+export interface OrderDetailOut {
+  id: number;
+  order_number: string;
+  status: string;
+  items: OrderItemDetailOut[];
+  address: AddressDetailOut | null;
+  customer: CustomerDetailOut;
+  rider: RiderDetailOut | null;
+  subtotal: string;
+  delivery_fee_aed: string;
+  total: string;
+  created_at: string;
+  delivered_at: string | null;
+  sla_deadline: string | null;
+  timeline: TimelineEventOut[];
+  chat: ChatMessageOut[];
+  route: GpsPingOut[];
+}
+
+export interface CustomerPatchIn {
+  name?: string | null;
+  phone?: string | null;
+  marketing_opted_in?: boolean | null;
+}
+
+export interface AddressPatchIn {
+  room_apartment?: string | null;
+  building?: string | null;
+  receiver_name?: string | null;
+  additional_details?: string | null;
+}
