@@ -1,0 +1,348 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 1100px;
+}
+
+.heading {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary, #e2e8f0);
+  margin: 0 0 20px 0;
+  letter-spacing: 0.5px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #0ea5e9;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #1e293b;
+  margin: 8px 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.input {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 7px 10px;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.input:focus {
+  border-color: #0ea5e9;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.inputRow .input {
+  flex: 1;
+}
+
+.lookupBtn {
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 7px 14px;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lookupBtn:hover {
+  background: #475569;
+}
+
+.lookupHint {
+  font-size: 10px;
+  color: #22c55e;
+  min-height: 14px;
+}
+
+.lookupHintNew {
+  color: #94a3b8;
+}
+
+.feeRow {
+  display: flex;
+  gap: 6px;
+}
+
+.feeBtn {
+  flex: 1;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 6px 0;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.feeBtnActive {
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+  color: #000;
+  font-weight: 700;
+}
+
+.searchInput {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: #e2e8f0;
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  margin-bottom: 4px;
+}
+
+.searchInput:focus {
+  border-color: #0ea5e9;
+}
+
+.categoryLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #475569;
+  text-transform: uppercase;
+  margin: 10px 0 4px;
+}
+
+.dishRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 10px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  margin-bottom: 3px;
+}
+
+.dishRowActive {
+  background: #1a2744;
+  border-color: #0ea5e9;
+}
+
+.dishName {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.dishNameActive {
+  color: #e2e8f0;
+}
+
+.dishPrice {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 6px;
+}
+
+.qtyControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qtyBtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.qtyBtnActive {
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+  color: #000;
+  font-weight: 700;
+}
+
+.qtyValue {
+  font-size: 13px;
+  color: #475569;
+  min-width: 14px;
+  text-align: center;
+}
+
+.qtyValueActive {
+  color: #0ea5e9;
+  font-weight: 700;
+}
+
+.summary {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.summaryTitle {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.summaryLine {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 3px;
+}
+
+.summaryDivider {
+  border: none;
+  border-top: 1px solid #1e293b;
+  margin: 6px 0;
+}
+
+.summaryTotal {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.summaryTotalAmount {
+  color: #0ea5e9;
+}
+
+.emptyHint {
+  font-size: 11px;
+  color: #475569;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.bottomBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #1e293b;
+}
+
+.waHint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.cancelBtn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 8px 18px;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: #334155;
+}
+
+.placeBtn {
+  background: #0ea5e9;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 20px;
+  color: #000;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.placeBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.errorBanner {
+  background: #450a0a;
+  border: 1px solid #dc2626;
+  border-radius: 4px;
+  padding: 10px 14px;
+  color: #fca5a5;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.noMenuBanner {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 24px;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+}
