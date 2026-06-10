@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.menu.models import Dish, Menu
-from app.ordering.models import Order, OrderItem, Customer, CustomerAddress
+from app.ordering.models import OrderItem, Customer, CustomerAddress
 from app.outbox.models import OutboxMessage
 
 
