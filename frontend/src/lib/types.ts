@@ -196,3 +196,23 @@ export interface AddressPatchIn {
   receiver_name?: string | null;
   additional_details?: string | null;
 }
+
+export interface OrderSummaryOut {
+  id: number;
+  order_number: string;
+  status: OrderStatus;
+  total: string;
+  created_at: string;
+}
+
+export interface CustomerProfileOut extends CustomerDetailOut {
+  tags: Record<string, unknown>;
+  addresses: AddressDetailOut[];
+  recent_orders: OrderSummaryOut[];
+}
+
+export interface CustomerListOut {
+  items: CustomerDetailOut[];
+  limit: number;
+  offset: number;
+}
