@@ -1,91 +1,465 @@
-import { useEffect, useState } from "react";
-import { Button } from "../components/Button";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
 import { Spinner } from "../components/Spinner";
 import { StatusPill } from "../components/StatusPill";
+import { Button } from "../components/Button";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { apiClient } from "../lib/apiClient";
+import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
 import { fetchOrder } from "../lib/ordersApi";
-import type { OrderOut } from "../lib/types";
+import type {
+  AddressDetailOut,
+  CustomerDetailOut,
+  OrderDetailOut,
+  OrderOut,
+  OrderStatus,
+} from "../lib/types";
 import s from "./OrderDetailDrawer.module.css";
 
-const KITCHEN_ADVANCEABLE = new Set(["confirmed", "preparing"]);
+type Tab = "overview" | "timeline" | "chat" | "customer";
 
+const KITCHEN_ADVANCEABLE = new Set(["confirmed", "preparing"]);
 const ADVANCE_LABEL: Record<string, string> = {
   confirmed: "Start Preparing",
   preparing: "Mark as Ready",
 };
 
-export function OrderDetailDrawer({ orderId, onClose }: { orderId: number | null; onClose: () => void }) {
-  const [order, setOrder] = useState<OrderOut | null>(null);
+export function OrderDetailDrawer({
+  orderId,
+  onClose,
+}: {
+  orderId: number | null;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<OrderDetailOut | null>(null);
+  const [basicOrder, setBasicOrder] = useState<OrderOut | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<Tab>("overview");
   const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
     if (orderId === null) {
-      setOrder(null);
+      setDetail(null);
+      setBasicOrder(null);
       return;
     }
     setLoading(true);
-    fetchOrder(orderId)
-      .then(setOrder)
+    setTab("overview");
+    Promise.all([fetchOrderDetail(orderId), fetchOrder(orderId)])
+      .then(([d, b]) => {
+        setDetail(d);
+        setBasicOrder(b);
+      })
       .finally(() => setLoading(false));
   }, [orderId]);
 
   async function advanceStatus() {
-    if (!order) return;
+    if (!basicOrder) return;
     setAdvancing(true);
     try {
-      const updated = await apiClient.post<OrderOut>(`/api/v1/orders/${order.id}/advance`);
-      setOrder(updated);
+      const updated = await apiClient.post<OrderOut>(`/api/v1/orders/${basicOrder.id}/advance`);
+      setBasicOrder(updated);
+      const d = await fetchOrderDetail(basicOrder.id);
+      setDetail(d);
     } finally {
       setAdvancing(false);
     }
   }
 
+  function onCustomerSaved(updated: CustomerDetailOut) {
+    if (!detail) return;
+    setDetail({ ...detail, customer: updated });
+  }
+
+  function onAddressSaved(updated: AddressDetailOut) {
+    if (!detail) return;
+    setDetail({ ...detail, address: updated });
+  }
+
+  const title = basicOrder
+    ? `Order ${basicOrder.order_number ?? `#${basicOrder.id}`}`
+    : "Order";
+
   return (
-    <SideDrawer open={orderId !== null} title={order ? `Order ${order.order_number ?? `#${order.id}`}` : "Order"} onClose={onClose}>
-      {loading || !order ? (
+    <SideDrawer open={orderId !== null} title={title} onClose={onClose} wide>
+      {loading || !detail || !basicOrder ? (
         <Spinner />
       ) : (
         <div className={s.detail}>
           <div className={s.head}>
-            <StatusPill status={order.status} />
-            <CountdownTimer slaStartedAt={order.sla_started_at} />
+            <StatusPill status={detail.status as OrderStatus} />
+            <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
           </div>
 
-          {KITCHEN_ADVANCEABLE.has(order.status) && (
+          {KITCHEN_ADVANCEABLE.has(detail.status) && (
             <div className={s.actionBar}>
               <Button onClick={advanceStatus} disabled={advancing}>
-                {advancing ? "Saving…" : ADVANCE_LABEL[order.status]}
+                {advancing ? "Saving…" : ADVANCE_LABEL[detail.status]}
               </Button>
             </div>
           )}
 
-          <Field label="Customer" value={`${order.customer_name ?? "—"} · ${order.customer_phone}`} />
-          <Field label="Address" value={order.address ?? "—"} />
-          <Field label="Rider" value={order.rider_name ?? "Unassigned"} />
-          <div className={s.items}>
-            <span className="label-upper">Items</span>
-            {order.items.map((it, i) => (
-              <div key={i} className={s.item}>
-                <span>{it.qty}× {it.name}</span>
-                <span className={s.price}>AED {it.price_aed}</span>
-              </div>
+          <div className={s.tabs} role="tablist">
+            {(["overview", "timeline", "chat", "customer"] as Tab[]).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={tab === t}
+                className={`${s.tab} ${tab === t ? s.activeTab : ""}`}
+                onClick={() => setTab(t)}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
             ))}
           </div>
-          <Field label="Total" value={`AED ${order.total_aed}`} />
+
+          <div className={s.tabContent}>
+            {tab === "overview" && <OverviewTab detail={detail} />}
+            {tab === "timeline" && <TimelineTab detail={detail} />}
+            {tab === "chat" && <ChatTab detail={detail} />}
+            {tab === "customer" && (
+              <CustomerTab
+                detail={detail}
+                onCustomerSaved={onCustomerSaved}
+                onAddressSaved={onAddressSaved}
+              />
+            )}
+          </div>
         </div>
       )}
     </SideDrawer>
   );
 }
 
+// ── Overview Tab ─────────────────────────────────────────────────────────────
+
+function OverviewTab({ detail }: { detail: OrderDetailOut }) {
+  return (
+    <div className={s.overview}>
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Items</h4>
+        {detail.items.map((item, i) => (
+          <div key={i} className={s.itemRow}>
+            <span className={s.itemNum}>{item.dish_number}.</span>
+            <span className={s.itemName}>{item.dish_name}</span>
+            <span className={s.itemQty}>×{item.qty}</span>
+            <span className={s.itemPrice}>AED {item.line_total}</span>
+          </div>
+        ))}
+        <div className={s.totals}>
+          <div className={s.totalRow}>
+            <span>Subtotal</span><span>AED {detail.subtotal}</span>
+          </div>
+          <div className={s.totalRow}>
+            <span>Delivery</span><span>AED {detail.delivery_fee_aed}</span>
+          </div>
+          <div className={`${s.totalRow} ${s.grandTotal}`}>
+            <span>Total</span><span>AED {detail.total}</span>
+          </div>
+          <div className={s.totalRow}>
+            <span>Payment</span><span>COD</span>
+          </div>
+        </div>
+      </section>
+
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Delivery</h4>
+        {detail.address ? (
+          <>
+            <Field label="Receiver" value={detail.address.receiver_name ?? "—"} />
+            <Field
+              label="Address"
+              value={
+                [detail.address.room_apartment, detail.address.building]
+                  .filter(Boolean)
+                  .join(", ") || "—"
+              }
+            />
+            {detail.address.additional_details && (
+              <Field label="Notes" value={detail.address.additional_details} />
+            )}
+          </>
+        ) : (
+          <p className={s.empty}>No address</p>
+        )}
+        <Field
+          label="Rider"
+          value={detail.rider ? `${detail.rider.name} · ${detail.rider.phone}` : "Unassigned"}
+        />
+      </section>
+    </div>
+  );
+}
+
+// ── Timeline Tab ──────────────────────────────────────────────────────────────
+
+function TimelineTab({ detail }: { detail: OrderDetailOut }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapRef.current || detail.route.length === 0) return;
+
+    import("leaflet").then((L) => {
+      const container = mapRef.current!;
+      // Remove any previous map instance
+      (container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id = undefined;
+      container.innerHTML = "";
+
+      const map = L.map(container, { zoomControl: true });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      const coords: [number, number][] = detail.route.map((p) => [p.latitude, p.longitude]);
+      const polyline = L.polyline(coords, { color: "#0ea5e9", weight: 3 }).addTo(map);
+      map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+
+      L.circleMarker(coords[0], {
+        radius: 7,
+        color: "#f59e0b",
+        fillColor: "#f59e0b",
+        fillOpacity: 1,
+      })
+        .bindTooltip("Pickup")
+        .addTo(map);
+
+      const last = coords[coords.length - 1];
+      L.circleMarker(last, {
+        radius: 7,
+        color: "#22c55e",
+        fillColor: "#22c55e",
+        fillOpacity: 1,
+      })
+        .bindTooltip("Delivered")
+        .addTo(map);
+    });
+
+    return () => {
+      if (mapRef.current) mapRef.current.innerHTML = "";
+    };
+  }, [detail.route]);
+
+  return (
+    <div className={s.timeline}>
+      {detail.timeline.length === 0 ? (
+        <p className={s.empty}>No timeline events</p>
+      ) : (
+        <ol className={s.timelineList}>
+          {detail.timeline.map((event, i) => (
+            <li key={i} className={s.timelineEvent}>
+              <span className={s.timelineDot} />
+              <div className={s.timelineBody}>
+                <span className={s.timelineAction}>
+                  {event.action.replace(/_/g, " ")}
+                </span>
+                <span className={s.timelineMeta}>
+                  {new Date(event.ts).toLocaleTimeString()} · {event.actor}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {detail.route.length > 0 ? (
+        <div className={s.mapWrapper}>
+          <h4 className={s.sectionTitle}>Delivery Route</h4>
+          <div ref={mapRef} className={s.map} />
+        </div>
+      ) : (
+        detail.rider && <p className={s.empty}>No GPS pings recorded for this order</p>
+      )}
+    </div>
+  );
+}
+
+// ── Chat Tab ──────────────────────────────────────────────────────────────────
+
+function ChatTab({ detail }: { detail: OrderDetailOut }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "instant" });
+  }, [detail.chat]);
+
+  if (detail.chat.length === 0) {
+    return <p className={s.empty}>No WhatsApp conversation found for this order</p>;
+  }
+
+  return (
+    <div className={s.chatContainer}>
+      {detail.chat.map((msg, i) => (
+        <div
+          key={i}
+          className={`${s.bubble} ${msg.direction === "inbound" ? s.inbound : s.outbound}`}
+        >
+          <span className={s.bubbleText}>
+            {msg.text ??
+              (msg.direction === "inbound" ? "[📍 location / media]" : "[📤 automated]")}
+          </span>
+          <span className={s.bubbleTime}>
+            {new Date(msg.ts * 1000).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </div>
+      ))}
+      <div ref={bottomRef} />
+    </div>
+  );
+}
+
+// ── Customer Tab ──────────────────────────────────────────────────────────────
+
+function CustomerTab({
+  detail,
+  onCustomerSaved,
+  onAddressSaved,
+}: {
+  detail: OrderDetailOut;
+  onCustomerSaved: (c: CustomerDetailOut) => void;
+  onAddressSaved: (a: AddressDetailOut) => void;
+}) {
+  const { customer, address } = detail;
+  const [name, setName] = useState(customer.name ?? "");
+  const [phone, setPhone] = useState(customer.phone);
+  const [optIn, setOptIn] = useState(customer.marketing_opted_in);
+  const [aptRoom, setAptRoom] = useState(address?.room_apartment ?? "");
+  const [building, setBuilding] = useState(address?.building ?? "");
+  const [receiverName, setReceiverName] = useState(address?.receiver_name ?? "");
+  const [addrNotes, setAddrNotes] = useState(address?.additional_details ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const dirty =
+    name !== (customer.name ?? "") ||
+    phone !== customer.phone ||
+    optIn !== customer.marketing_opted_in ||
+    aptRoom !== (address?.room_apartment ?? "") ||
+    building !== (address?.building ?? "") ||
+    receiverName !== (address?.receiver_name ?? "") ||
+    addrNotes !== (address?.additional_details ?? "");
+
+  async function save() {
+    setSaving(true);
+    try {
+      const [updatedCustomer, updatedAddress] = await Promise.all([
+        patchCustomer(customer.id, {
+          name: name || null,
+          phone: phone || null,
+          marketing_opted_in: optIn,
+        }),
+        address
+          ? patchAddress(customer.id, address.id, {
+              room_apartment: aptRoom || null,
+              building: building || null,
+              receiver_name: receiverName || null,
+              additional_details: addrNotes || null,
+            })
+          : Promise.resolve(null),
+      ]);
+      onCustomerSaved(updatedCustomer);
+      if (updatedAddress) onAddressSaved(updatedAddress);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={s.customerTab}>
+      <div className={s.customerStats}>
+        <Stat label="Orders" value={String(customer.total_orders)} />
+        <Stat label="Spend" value={`AED ${customer.total_spend}`} />
+        <Stat
+          label="First Order"
+          value={
+            customer.first_order_at
+              ? new Date(customer.first_order_at).toLocaleDateString()
+              : "—"
+          }
+        />
+      </div>
+
+      <div className={s.profileLink}>
+        <Link to={`/customers/${customer.id}`} className={s.openProfile}>
+          Open Full Profile →
+        </Link>
+      </div>
+
+      <section className={s.section}>
+        <h4 className={s.sectionTitle}>Identity</h4>
+        <label className={s.fieldLabel}>Name</label>
+        <input className={s.input} value={name} onChange={(e) => setName(e.target.value)} />
+        <label className={s.fieldLabel}>Phone</label>
+        <input className={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <div className={s.toggleRow}>
+          <label className={s.fieldLabel}>Marketing (WhatsApp)</label>
+          <button
+            className={`${s.toggle} ${optIn ? s.toggleOn : s.toggleOff}`}
+            onClick={() => setOptIn(!optIn)}
+            aria-label={optIn ? "Opt out" : "Opt in"}
+          >
+            {optIn ? "OPT-IN" : "OPT-OUT"}
+          </button>
+        </div>
+      </section>
+
+      {address && (
+        <section className={s.section}>
+          <h4 className={s.sectionTitle}>Address</h4>
+          <label className={s.fieldLabel}>Apt / Room</label>
+          <input
+            className={s.input}
+            value={aptRoom}
+            onChange={(e) => setAptRoom(e.target.value)}
+          />
+          <label className={s.fieldLabel}>Building</label>
+          <input
+            className={s.input}
+            value={building}
+            onChange={(e) => setBuilding(e.target.value)}
+          />
+          <label className={s.fieldLabel}>Receiver Name</label>
+          <input
+            className={s.input}
+            value={receiverName}
+            onChange={(e) => setReceiverName(e.target.value)}
+          />
+          <label className={s.fieldLabel}>Notes</label>
+          <input
+            className={s.input}
+            value={addrNotes}
+            onChange={(e) => setAddrNotes(e.target.value)}
+          />
+        </section>
+      )}
+
+      <div className={s.saveRow}>
+        <Button onClick={save} disabled={!dirty || saving}>
+          {saving ? "Saving…" : "Save Changes"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className={s.field}>
-      <span className="label-upper">{label}</span>
+      <span className={s.fieldLabel}>{label}</span>
       <span className={s.val}>{value}</span>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={s.stat}>
+      <span className={s.statValue}>{value}</span>
+      <span className={s.statLabel}>{label}</span>
     </div>
   );
 }
