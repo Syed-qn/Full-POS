@@ -4,7 +4,7 @@
 are DB-backed and tenant-scoped (restaurant_id + phone). The caller commits.
 """
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,40 @@ _STOP_KEYWORDS: frozenset[str] = frozenset(
 )
 # Lenient prefixes so "stop sending the biryani" still triggers.
 _STOP_PREFIXES: tuple[str, ...] = ("stop", "unsubscribe")
+
+# Multi-word natural-language opt-out phrases (substring match, lowercased).
+_OPTOUT_PHRASES: tuple[str, ...] = (
+    "stop sending",
+    "stop messaging",
+    "don't send",
+    "dont send",
+    "no more messages",
+    "no more marketing",
+    "no more promotions",
+    "opt out",
+    "opt-out",
+    "remove me",
+    "don't message",
+    "dont message",
+    "stop marketing",
+    "stop promotions",
+    "no promotions",
+    "unsubscribe me",
+    "don't contact",
+    "dont contact",
+)
+
+
+def is_optout_intent(text: str) -> bool:
+    """True if text contains a natural-language marketing opt-out phrase.
+
+    Complements is_stop_keyword which handles exact single-word keywords.
+    Only matches multi-word phrases so single-word 'stop' is not double-counted.
+    """
+    if not text:
+        return False
+    normalized = text.strip().lower()
+    return any(phrase in normalized for phrase in _OPTOUT_PHRASES)
 
 
 def is_stop_keyword(text: str) -> bool:
@@ -99,3 +133,18 @@ async def is_opted_out(
         )
     )
     return result.first() is not None
+
+
+async def record_opt_in(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    phone: str,
+) -> None:
+    """Remove opt-out record if present. Idempotent — safe when no row exists."""
+    await session.execute(
+        delete(OptOut).where(
+            OptOut.restaurant_id == restaurant_id,
+            OptOut.phone == phone,
+        )
+    )
