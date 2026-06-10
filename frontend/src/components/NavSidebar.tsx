@@ -4,6 +4,7 @@ import s from "./NavSidebar.module.css";
 const ITEMS: Array<{ to: string; label: string; icon: string }> = [
   { to: "/", label: "Home", icon: "🏠" },
   { to: "/orders", label: "Orders", icon: "📋" },
+  { to: "/new-order", label: "New Order", icon: "➕" },
   { to: "/menu", label: "Menu", icon: "🍽️" },
   { to: "/riders", label: "Riders", icon: "🛵" },
   { to: "/conversations", label: "Chats", icon: "💬" },

@@ -6,6 +6,7 @@ import { ConversationsScreen } from "./screens/ConversationsScreen";
 import { LiveOpsScreen } from "./screens/LiveOpsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { MenuManagerScreen } from "./screens/MenuManagerScreen";
+import { NewOrderScreen } from "./screens/NewOrderScreen";
 import { OrdersScreen } from "./screens/OrdersScreen";
 import { RidersScreen } from "./screens/RidersScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
@@ -21,6 +22,7 @@ export default function App() {
       <Route path="/login" element={<LoginScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
+      <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
       <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
