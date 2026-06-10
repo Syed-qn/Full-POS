@@ -13,7 +13,8 @@ from app.dispatch.router import router as dispatch_router
 from app.identity.router import router as identity_router
 from app.menu.router import router as menu_router
 from app.middleware.security import SecurityHeadersMiddleware
-from app.ordering.router import customers_router, router as ordering_router
+from app.ordering.customer_router import router as customer_router
+from app.ordering.router import router as ordering_router
 from app.webhook.router import router as webhook_router
 
 
@@ -69,7 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(identity_router)
     app.include_router(menu_router)
     app.include_router(ordering_router)
-    app.include_router(customers_router)
+    app.include_router(customer_router)
     app.include_router(webhook_router)
     app.include_router(cod_router)
     app.include_router(dispatch_router)

@@ -9,10 +9,6 @@ from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import AddressOut, CustomerLookupOut, ManualOrderIn, OrderItemOut, OrderOut
 from app.ordering.detail_schemas import (
-    AddressDetailOut,
-    AddressPatchIn,
-    CustomerDetailOut,
-    CustomerPatchIn,
     OrderDetailOut,
 )
 from app.ordering.service import (
@@ -22,12 +18,9 @@ from app.ordering.service import (
     get_order_detail,
     get_order_for_tenant,
     list_orders_for_tenant,
-    patch_address,
-    patch_customer,
 )
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
-customers_router = APIRouter(prefix="/api/v1/ordering/customers", tags=["customers"])
 
 
 async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
@@ -199,67 +192,3 @@ async def list_orders(
     return [await _enrich(session, o) for o in orders]
 
 
-@customers_router.patch("/{customer_id}", response_model=CustomerDetailOut)
-async def patch_customer_endpoint(
-    customer_id: int,
-    body: CustomerPatchIn,
-    restaurant: Restaurant = Depends(current_restaurant),
-    session: AsyncSession = Depends(get_session),
-) -> CustomerDetailOut:
-    from app.marketing.optout import is_opted_out
-    try:
-        customer = await patch_customer(
-            session,
-            restaurant_id=restaurant.id,
-            customer_id=customer_id,
-            name=body.name,
-            phone=body.phone,
-            marketing_opted_in=body.marketing_opted_in,
-        )
-        await session.commit()
-        opted_out = await is_opted_out(session, restaurant_id=restaurant.id, phone=customer.phone)
-        return CustomerDetailOut(
-            id=customer.id,
-            name=customer.name,
-            phone=customer.phone,
-            total_orders=customer.total_orders,
-            total_spend=customer.total_spend,
-            first_order_at=customer.first_order_at,
-            last_order_at=customer.last_order_at,
-            marketing_opted_in=not opted_out,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-
-@customers_router.patch("/{customer_id}/addresses/{address_id}", response_model=AddressDetailOut)
-async def patch_address_endpoint(
-    customer_id: int,
-    address_id: int,
-    body: AddressPatchIn,
-    restaurant: Restaurant = Depends(current_restaurant),
-    session: AsyncSession = Depends(get_session),
-) -> AddressDetailOut:
-    try:
-        addr = await patch_address(
-            session,
-            restaurant_id=restaurant.id,
-            customer_id=customer_id,
-            address_id=address_id,
-            room_apartment=body.room_apartment,
-            building=body.building,
-            receiver_name=body.receiver_name,
-            additional_details=body.additional_details,
-        )
-        await session.commit()
-        return AddressDetailOut(
-            id=addr.id,
-            room_apartment=addr.room_apartment,
-            building=addr.building,
-            receiver_name=addr.receiver_name,
-            additional_details=addr.additional_details,
-            latitude=addr.latitude,
-            longitude=addr.longitude,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
