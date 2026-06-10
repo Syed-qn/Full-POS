@@ -762,3 +762,88 @@ async def get_order_detail(
         chat=chat,
         route=route,
     )
+
+
+async def patch_customer(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    customer_id: int,
+    name: str | None,
+    phone: str | None,
+    marketing_opted_in: bool | None,
+) -> Customer:
+    """Update customer name/phone and/or marketing opt preference."""
+    from sqlalchemy import select as sa_select
+    from app.marketing.optout import record_opt_in, record_opt_out
+
+    customer = await session.scalar(
+        sa_select(Customer).where(
+            Customer.id == customer_id,
+            Customer.restaurant_id == restaurant_id,
+        )
+    )
+    if not customer:
+        raise ValueError("Customer not found")
+
+    if name is not None:
+        customer.name = name
+    if phone is not None:
+        customer.phone = phone
+    if marketing_opted_in is True:
+        await record_opt_in(session, restaurant_id=restaurant_id, phone=customer.phone)
+    elif marketing_opted_in is False:
+        await record_opt_out(
+            session, restaurant_id=restaurant_id,
+            phone=customer.phone, source="manager_dashboard",
+        )
+
+    await session.flush()
+    return customer
+
+
+async def patch_address(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    customer_id: int,
+    address_id: int,
+    room_apartment: str | None,
+    building: str | None,
+    receiver_name: str | None,
+    additional_details: str | None,
+) -> CustomerAddress:
+    """Update address fields. Raises ValueError if address not owned by customer."""
+    from sqlalchemy import select as sa_select
+
+    # Verify the customer belongs to this restaurant tenant, then check address
+    # ownership. Both failures surface as "Address not found" so that callers
+    # cannot enumerate customer IDs across tenants.
+    customer = await session.scalar(
+        sa_select(Customer).where(
+            Customer.id == customer_id,
+            Customer.restaurant_id == restaurant_id,
+        )
+    )
+
+    addr = await session.scalar(
+        sa_select(CustomerAddress).where(
+            CustomerAddress.id == address_id,
+            CustomerAddress.customer_id == customer_id,
+        )
+    ) if customer else None
+
+    if not addr:
+        raise ValueError("Address not found")
+
+    if room_apartment is not None:
+        addr.room_apartment = room_apartment
+    if building is not None:
+        addr.building = building
+    if receiver_name is not None:
+        addr.receiver_name = receiver_name
+    if additional_details is not None:
+        addr.additional_details = additional_details
+
+    await session.flush()
+    return addr
