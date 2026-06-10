@@ -13,7 +13,6 @@ import type {
   CustomerDetailOut,
   OrderDetailOut,
   OrderOut,
-  OrderStatus,
 } from "../lib/types";
 import s from "./OrderDetailDrawer.module.css";
 
@@ -35,6 +34,7 @@ export function OrderDetailDrawer({
   const [detail, setDetail] = useState<OrderDetailOut | null>(null);
   const [basicOrder, setBasicOrder] = useState<OrderOut | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
   const [advancing, setAdvancing] = useState(false);
 
@@ -46,11 +46,13 @@ export function OrderDetailDrawer({
     }
     setLoading(true);
     setTab("overview");
+    setError(null);
     Promise.all([fetchOrderDetail(orderId), fetchOrder(orderId)])
       .then(([d, b]) => {
         setDetail(d);
         setBasicOrder(b);
       })
+      .catch(() => setError("Failed to load order details"))
       .finally(() => setLoading(false));
   }, [orderId]);
 
@@ -84,11 +86,11 @@ export function OrderDetailDrawer({
   return (
     <SideDrawer open={orderId !== null} title={title} onClose={onClose} wide>
       {loading || !detail || !basicOrder ? (
-        <Spinner />
+        error ? <p style={{ color: "var(--text-secondary)", padding: "16px" }}>{error}</p> : <Spinner />
       ) : (
         <div className={s.detail}>
           <div className={s.head}>
-            <StatusPill status={detail.status as OrderStatus} />
+            <StatusPill status={detail.status} />
             <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
           </div>
 
@@ -196,17 +198,21 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
 
 function TimelineTab({ detail }: { detail: OrderDetailOut }) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMapRef = useRef<import("leaflet").Map | null>(null);
 
   useEffect(() => {
     if (!mapRef.current || detail.route.length === 0) return;
 
     import("leaflet").then((L) => {
-      const container = mapRef.current!;
-      // Remove any previous map instance
-      (container as HTMLDivElement & { _leaflet_id?: number })._leaflet_id = undefined;
-      container.innerHTML = "";
+      // Remove any previous instance cleanly
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
 
-      const map = L.map(container, { zoomControl: true });
+      const map = L.map(mapRef.current!, { zoomControl: true });
+      leafletMapRef.current = map;
+
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
       }).addTo(map);
@@ -236,7 +242,8 @@ function TimelineTab({ detail }: { detail: OrderDetailOut }) {
     });
 
     return () => {
-      if (mapRef.current) mapRef.current.innerHTML = "";
+      leafletMapRef.current?.remove();
+      leafletMapRef.current = null;
     };
   }, [detail.route]);
 

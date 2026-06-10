@@ -168,7 +168,7 @@ export interface GpsPingOut {
 export interface OrderDetailOut {
   id: number;
   order_number: string;
-  status: string;
+  status: OrderStatus;
   items: OrderItemDetailOut[];
   address: AddressDetailOut | null;
   customer: CustomerDetailOut;
