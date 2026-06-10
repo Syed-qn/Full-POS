@@ -3,6 +3,8 @@ import { AppShell } from "./components/AppShell";
 import { isAuthenticated } from "./lib/auth";
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
+import { CustomerProfileScreen } from "./screens/CustomerProfileScreen";
+import { CustomersScreen } from "./screens/CustomersScreen";
 import { LiveOpsScreen } from "./screens/LiveOpsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { MenuManagerScreen } from "./screens/MenuManagerScreen";
@@ -22,6 +24,8 @@ export default function App() {
       <Route path="/login" element={<LoginScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
+      <Route path="/customers" element={<Guarded><CustomersScreen /></Guarded>} />
+      <Route path="/customers/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
       <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
       <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
