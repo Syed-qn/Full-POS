@@ -1,0 +1,167 @@
+# tests/ordering/test_order_detail.py
+from decimal import Decimal
+
+import pytest
+from sqlalchemy import select
+
+from app.ordering.detail_schemas import OrderDetailOut
+from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+from app.ordering.service import get_order_detail
+
+
+async def _seed_full_order(db_session, restaurant_id):
+    """Seed: menu + customer + address + confirmed order with one item."""
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant_id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant_id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"),
+        category="Rice", is_available=True,
+    )
+    db_session.add(dish)
+    await db_session.flush()
+
+    customer = Customer(
+        restaurant_id=restaurant_id, phone="+971501112233",
+        name="Sara Al Rashid", total_orders=1,
+        total_spend=Decimal("22.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+
+    addr = CustomerAddress(
+        customer_id=customer.id, room_apartment="Apt 404",
+        building="Marina Tower", receiver_name="Sara Al Rashid",
+        confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+
+    order = Order(
+        restaurant_id=restaurant_id, customer_id=customer.id,
+        order_number="R1-0099", status="delivered",
+        address_id=addr.id, subtotal=Decimal("22.00"),
+        delivery_fee_aed=Decimal("0.00"), total=Decimal("22.00"),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    item = OrderItem(
+        order_id=order.id, dish_id=dish.id, dish_number=110,
+        dish_name="Chicken Biryani", price_aed=Decimal("22.00"), qty=1,
+    )
+    db_session.add(item)
+    await db_session.commit()
+    return order, customer, addr
+
+
+async def test_get_order_detail_returns_correct_shape(db_session, restaurant):
+    order, customer, addr = await _seed_full_order(db_session, restaurant.id)
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert isinstance(detail, OrderDetailOut)
+    assert detail.order_number == "R1-0099"
+    assert detail.status == "delivered"
+    assert len(detail.items) == 1
+    assert detail.items[0].dish_number == 110
+    assert detail.items[0].dish_name == "Chicken Biryani"
+    assert detail.items[0].line_total == Decimal("22.00")
+    assert detail.customer.name == "Sara Al Rashid"
+    assert detail.customer.phone == "+971501112233"
+    assert detail.address is not None
+    assert detail.address.room_apartment == "Apt 404"
+    assert detail.address.building == "Marina Tower"
+
+
+async def test_get_order_detail_no_rider_returns_null(db_session, restaurant):
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert detail.rider is None
+    assert detail.route == []
+
+
+async def test_get_order_detail_timeline_from_audit_log(db_session, restaurant):
+    from app.audit.service import record_audit
+
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+    await record_audit(
+        db_session, actor="manager", restaurant_id=restaurant.id,
+        entity="order", entity_id=str(order.id),
+        action="status_change", after={"status": "confirmed"},
+    )
+    await db_session.commit()
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert len(detail.timeline) >= 1
+    assert detail.timeline[0].action == "status_change"
+    assert detail.timeline[0].actor == "manager"
+
+
+async def test_get_order_detail_chat_from_conversation(db_session, restaurant):
+    from app.conversation.models import Conversation, Message
+
+    order, customer, _ = await _seed_full_order(db_session, restaurant.id)
+
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone=customer.phone,
+        counterpart="customer", state={},
+    )
+    db_session.add(conv)
+    await db_session.flush()
+
+    db_session.add(Message(
+        conversation_id=conv.id, direction="inbound",
+        type="text", payload={"text": "I want biryani"}, ts=1717660800,
+    ))
+    db_session.add(Message(
+        conversation_id=conv.id, direction="outbound",
+        type="text", payload={"text": "Added 1x Chicken Biryani!"}, ts=1717660810,
+    ))
+    await db_session.commit()
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert len(detail.chat) == 2
+    assert detail.chat[0].direction == "inbound"
+    assert detail.chat[0].text == "I want biryani"
+    assert detail.chat[1].direction == "outbound"
+
+
+async def test_get_order_detail_no_conversation_returns_empty_chat(db_session, restaurant):
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert detail.chat == []
+
+
+async def test_get_order_detail_marketing_opted_in_flag(db_session, restaurant):
+    from app.marketing.optout import record_opt_out
+
+    order, customer, _ = await _seed_full_order(db_session, restaurant.id)
+    await record_opt_out(db_session, restaurant_id=restaurant.id, phone=customer.phone)
+    await db_session.commit()
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert detail.customer.marketing_opted_in is False
+
+
+async def test_get_order_detail_wrong_tenant_raises(db_session, restaurant):
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+
+    with pytest.raises(ValueError, match="Order not found"):
+        await get_order_detail(db_session, restaurant_id=99999, order_id=order.id)
+
+
+async def test_get_order_detail_unknown_id_raises(db_session, restaurant):
+    with pytest.raises(ValueError, match="Order not found"):
+        await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=99999)

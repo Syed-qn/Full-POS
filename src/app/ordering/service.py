@@ -575,3 +575,187 @@ async def create_manual_order(
     )
 
     return order
+
+
+async def get_order_detail(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+) -> "OrderDetailOut":
+    """Assemble all data for the Order Detail drawer in one call."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.audit.models import AuditLog
+    from app.conversation.models import Conversation, Message
+    from app.dispatch.models import Assignment, RiderLocation
+    from app.identity.models import Rider
+    from app.marketing.optout import is_opted_out
+    from app.ordering.detail_schemas import (
+        AddressDetailOut,
+        ChatMessageOut,
+        CustomerDetailOut,
+        GpsPingOut,
+        OrderDetailOut,
+        OrderItemDetailOut,
+        RiderDetailOut,
+        TimelineEventOut,
+    )
+
+    # 1. Order — raise if wrong tenant or unknown id
+    order = await session.scalar(
+        select(Order).where(Order.id == order_id, Order.restaurant_id == restaurant_id)
+    )
+    if not order:
+        raise ValueError("Order not found")
+
+    # 2. Items
+    items_rows = list(
+        (await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))).all()
+    )
+    items = [
+        OrderItemDetailOut(
+            dish_number=i.dish_number,
+            dish_name=i.dish_name,
+            qty=i.qty,
+            price_aed=i.price_aed,
+        )
+        for i in items_rows
+    ]
+
+    # 3. Customer
+    customer = await session.get(Customer, order.customer_id)
+
+    # 4. Address
+    address: AddressDetailOut | None = None
+    if order.address_id:
+        addr = await session.get(CustomerAddress, order.address_id)
+        if addr:
+            address = AddressDetailOut(
+                id=addr.id,
+                room_apartment=addr.room_apartment,
+                building=addr.building,
+                receiver_name=addr.receiver_name,
+                additional_details=addr.additional_details,
+                latitude=addr.latitude,
+                longitude=addr.longitude,
+            )
+
+    # 5. Rider
+    rider: RiderDetailOut | None = None
+    if order.rider_id:
+        r = await session.get(Rider, order.rider_id)
+        if r:
+            rider = RiderDetailOut(id=r.id, name=r.name, phone=r.phone)
+
+    # 6. Timeline from audit log
+    audit_rows = list(
+        (
+            await session.scalars(
+                select(AuditLog)
+                .where(AuditLog.entity == "order", AuditLog.entity_id == str(order.id))
+                .order_by(AuditLog.created_at)
+            )
+        ).all()
+    )
+    timeline = [
+        TimelineEventOut(
+            ts=row.created_at,
+            action=row.action,
+            actor=row.actor,
+            after=row.after,
+        )
+        for row in audit_rows
+    ]
+
+    # 7. Chat history — matched by customer phone on the customer-side conversation
+    chat: list[ChatMessageOut] = []
+    if customer:
+        conv = await session.scalar(
+            select(Conversation).where(
+                Conversation.restaurant_id == restaurant_id,
+                Conversation.phone == customer.phone,
+                Conversation.counterpart == "customer",
+            )
+        )
+        if conv:
+            msg_rows = list(
+                (
+                    await session.scalars(
+                        select(Message)
+                        .where(Message.conversation_id == conv.id)
+                        .order_by(Message.ts)
+                    )
+                ).all()
+            )
+            chat = [
+                ChatMessageOut(
+                    direction=m.direction,
+                    text=m.payload.get("text") if m.type == "text" else None,
+                    ts=m.ts,
+                )
+                for m in msg_rows
+            ]
+
+    # 8. Rider GPS route — pings between assignment time and delivery (or now)
+    route: list[GpsPingOut] = []
+    if order.rider_id:
+        assignment = await session.scalar(
+            select(Assignment).where(Assignment.order_id == order.id)
+        )
+        if assignment:
+            upper = order.delivered_at or datetime.now(timezone.utc)
+            ping_rows = list(
+                (
+                    await session.scalars(
+                        select(RiderLocation)
+                        .where(
+                            RiderLocation.rider_id == order.rider_id,
+                            RiderLocation.ts >= assignment.assigned_at,
+                            RiderLocation.ts <= upper,
+                        )
+                        .order_by(RiderLocation.ts)
+                    )
+                ).all()
+            )
+            route = [
+                GpsPingOut(latitude=p.latitude, longitude=p.longitude, ts=p.ts)
+                for p in ping_rows
+            ]
+
+    # 9. Marketing opt-in flag
+    opted_out = (
+        await is_opted_out(session, restaurant_id=restaurant_id, phone=customer.phone)
+        if customer
+        else False
+    )
+
+    return OrderDetailOut(
+        id=order.id,
+        order_number=order.order_number,
+        status=order.status,
+        items=items,
+        address=address,
+        customer=CustomerDetailOut(
+            id=customer.id,
+            name=customer.name,
+            phone=customer.phone,
+            total_orders=customer.total_orders,
+            total_spend=customer.total_spend,
+            first_order_at=customer.first_order_at,
+            last_order_at=customer.last_order_at,
+            marketing_opted_in=not opted_out,
+        ),
+        rider=rider,
+        subtotal=order.subtotal,
+        delivery_fee_aed=order.delivery_fee_aed,
+        total=order.total,
+        created_at=order.created_at,
+        delivered_at=order.delivered_at,
+        sla_deadline=order.sla_deadline,
+        timeline=timeline,
+        chat=chat,
+        route=route,
+    )
