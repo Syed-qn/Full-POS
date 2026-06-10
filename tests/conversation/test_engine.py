@@ -174,20 +174,27 @@ async def test_stop_keyword_records_optout(db_session, restaurant):
 
 
 async def test_natural_language_optout_records_optout(db_session, restaurant):
-    """Natural-language phrase triggers opt-out same as STOP keyword."""
+    """Natural-language phrase triggers opt-out with source='natural_language'."""
     from app.marketing.optout import is_opted_out
+    from app.marketing.models import OptOut
+    from sqlalchemy import select
 
     inbound = InboundMessage(
         wa_message_id="nl-optout-1",
         from_phone="+971501234777",
         restaurant_phone=restaurant.phone,
         type=MessageType.TEXT,
-        payload={"text": "stop sending me marketing messages"},
+        payload={"text": "don't send me any more messages please"},
         timestamp=0,
     )
     await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
     await db_session.commit()
     assert await is_opted_out(db_session, restaurant_id=restaurant.id, phone="+971501234777")
+
+    row = (await db_session.execute(
+        select(OptOut).where(OptOut.phone == "+971501234777", OptOut.restaurant_id == restaurant.id)
+    )).scalar_one()
+    assert row.source == "natural_language"
 
 
 async def test_natural_language_optout_sends_confirmation(db_session, restaurant):

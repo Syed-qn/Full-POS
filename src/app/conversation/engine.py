@@ -1936,12 +1936,14 @@ async def handle_inbound(
     # Checked before any dialogue processing so AI never sees opt-out messages.
     from app.marketing.optout import is_optout_intent, is_stop_keyword, record_opt_out
     _opt_text = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
-    if is_stop_keyword(_opt_text) or is_optout_intent(_opt_text):
+    _is_kw = is_stop_keyword(_opt_text)
+    _is_nl = not _is_kw and is_optout_intent(_opt_text)
+    if _is_kw or _is_nl:
         await record_opt_out(
             session,
             restaurant_id=restaurant_id,
             phone=inbound.from_phone,
-            source="stop_keyword" if is_stop_keyword(_opt_text) else "natural_language",
+            source="stop_keyword" if _is_kw else "natural_language",
         )
         await enqueue_message(
             session,
