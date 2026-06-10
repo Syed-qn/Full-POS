@@ -165,3 +165,48 @@ async def test_get_order_detail_wrong_tenant_raises(db_session, restaurant):
 async def test_get_order_detail_unknown_id_raises(db_session, restaurant):
     with pytest.raises(ValueError, match="Order not found"):
         await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=99999)
+
+
+async def test_get_order_detail_route_from_rider_pings(db_session, restaurant):
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import Assignment, RiderLocation
+    from app.identity.models import Rider
+
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+
+    # Seed a rider
+    rider = Rider(
+        restaurant_id=restaurant.id, name="Ahmed Hassan",
+        phone="+971501999888", status="available", performance={},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+
+    # Assign rider to order — use a past timestamp so pings fall before datetime.now()
+    assigned_at = datetime(2026, 6, 9, 9, 35, tzinfo=timezone.utc)
+    assignment = Assignment(
+        order_id=order.id, rider_id=rider.id,
+        assigned_at=assigned_at,
+    )
+    db_session.add(assignment)
+    order.rider_id = rider.id
+
+    # Seed GPS pings — both after assigned_at and before now (yesterday)
+    db_session.add(RiderLocation(
+        rider_id=rider.id, restaurant_id=restaurant.id,
+        latitude=25.201, longitude=55.271,
+        ts=datetime(2026, 6, 9, 9, 36, tzinfo=timezone.utc),
+    ))
+    db_session.add(RiderLocation(
+        rider_id=rider.id, restaurant_id=restaurant.id,
+        latitude=25.205, longitude=55.275,
+        ts=datetime(2026, 6, 9, 9, 37, tzinfo=timezone.utc),
+    ))
+    await db_session.commit()
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+
+    assert len(detail.route) == 2
+    assert detail.route[0].latitude == 25.201
+    assert detail.route[1].latitude == 25.205

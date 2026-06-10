@@ -627,6 +627,8 @@ async def get_order_detail(
 
     # 3. Customer
     customer = await session.get(Customer, order.customer_id)
+    if not customer:
+        raise ValueError("Order not found")
 
     # 4. Address
     address: AddressDetailOut | None = None
@@ -713,6 +715,7 @@ async def get_order_detail(
                         select(RiderLocation)
                         .where(
                             RiderLocation.rider_id == order.rider_id,
+                            RiderLocation.restaurant_id == restaurant_id,
                             RiderLocation.ts >= assignment.assigned_at,
                             RiderLocation.ts <= upper,
                         )
