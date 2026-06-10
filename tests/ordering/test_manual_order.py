@@ -232,3 +232,134 @@ async def test_outbox_message_enqueued_after_manual_order(db_session, restaurant
     ).all()
     assert len(outbox) == 1
     assert order.order_number in outbox[0].payload["body"]
+
+
+def _token(restaurant_id: int) -> str:
+    from app.identity.auth import create_access_token
+    return create_access_token(restaurant_id=restaurant_id)
+
+
+async def test_api_customer_lookup_found(client, db_session, restaurant):
+    """GET /manual/customer-lookup returns name + last address for known phone."""
+    from app.ordering.service import get_or_create_customer, upsert_address
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971509991001"
+    )
+    customer.name = "Lookup User"
+    await db_session.flush()
+    await upsert_address(
+        db_session,
+        customer_id=customer.id,
+        latitude=None, longitude=None,
+        room_apartment="B12",
+        building="Creek Tower",
+        receiver_name="Lookup User",
+        additional_details=None,
+        confirmed=True,
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        "/api/v1/orders/manual/customer-lookup",
+        params={"phone": "+971509991001"},
+        headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "Lookup User"
+    assert data["last_address"]["building"] == "Creek Tower"
+    assert data["last_address"]["apt_room"] == "B12"
+
+
+async def test_api_customer_lookup_not_found(client, db_session, restaurant):
+    """GET /manual/customer-lookup returns 404 for unknown phone."""
+    resp = await client.get(
+        "/api/v1/orders/manual/customer-lookup",
+        params={"phone": "+971509999999"},
+        headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_api_create_manual_order(client, db_session, restaurant):
+    """POST /manual creates confirmed order, returns OrderOut."""
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    body = {
+        "customer_phone": "+971509992001",
+        "customer_name": "Walk-in User",
+        "items": [{"dish_id": biryani_id, "qty": 2, "notes": None}],
+        "address": {
+            "apt_room": "Room 7",
+            "building": "Hotel Block",
+            "receiver_name": "Walk-in User",
+            "notes": None,
+        },
+        "delivery_fee_aed": "0.00",
+    }
+    resp = await client.post(
+        "/api/v1/orders/manual",
+        json=body,
+        headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "confirmed"
+    assert data["customer_phone"] == "+971509992001"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["qty"] == 2
+    assert data["total_aed"] == "44.00"
+
+
+async def test_api_create_manual_order_unavailable_dish_returns_422(client, db_session, restaurant):
+    """POST /manual with unavailable dish → 422."""
+    menu = await _seed_menu(db_session, restaurant.id)
+    unavail_id = await _get_dish_id(db_session, menu.id, "Unavailable Dish")
+
+    body = {
+        "customer_phone": "+971509992002",
+        "customer_name": None,
+        "items": [{"dish_id": unavail_id, "qty": 1, "notes": None}],
+        "address": {"apt_room": "1A", "building": "T", "receiver_name": "X", "notes": None},
+        "delivery_fee_aed": "0.00",
+    }
+    resp = await client.post(
+        "/api/v1/orders/manual",
+        json=body,
+        headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_api_create_manual_order_no_menu_returns_422(client, db_session, restaurant):
+    """POST /manual with no active menu → 422."""
+    body = {
+        "customer_phone": "+971509992003",
+        "customer_name": None,
+        "items": [{"dish_id": 1, "qty": 1, "notes": None}],
+        "address": {"apt_room": "1A", "building": "T", "receiver_name": "X", "notes": None},
+        "delivery_fee_aed": "0.00",
+    }
+    resp = await client.post(
+        "/api/v1/orders/manual",
+        json=body,
+        headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_api_get_active_menu(client, db_session, restaurant):
+    """GET /menus/active returns active menu with dishes."""
+    await _seed_menu(db_session, restaurant.id)
+
+    resp = await client.get(
+        "/api/v1/menus/active",
+        headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "active"
+    available = [d for d in data["dishes"] if d["is_available"]]
+    assert len(available) == 2

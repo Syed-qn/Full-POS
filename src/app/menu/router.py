@@ -79,6 +79,24 @@ async def upload_menu(
     return out
 
 
+@router.get("/menus/active", response_model=MenuOut)
+async def get_active_menu(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return the currently active menu with all dishes for this restaurant."""
+    menu = await session.scalar(
+        select(Menu).where(
+            Menu.restaurant_id == restaurant.id,
+            Menu.status == "active",
+        )
+    )
+    if not menu:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No active menu")
+    await session.refresh(menu)
+    return menu
+
+
 @router.get("/menus/{menu_id}", response_model=MenuOut)
 async def get_menu(
     menu_id: int,

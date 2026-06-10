@@ -7,8 +7,14 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
-from app.ordering.schemas import OrderItemOut, OrderOut
-from app.ordering.service import advance_kitchen_status, get_order_for_tenant, list_orders_for_tenant
+from app.ordering.schemas import AddressOut, CustomerLookupOut, ManualOrderIn, OrderItemOut, OrderOut
+from app.ordering.service import (
+    advance_kitchen_status,
+    create_manual_order,
+    get_last_address,
+    get_order_for_tenant,
+    list_orders_for_tenant,
+)
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -72,6 +78,57 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         lat=lat,
         lng=lng,
     )
+
+
+@router.get("/manual/customer-lookup", response_model=CustomerLookupOut)
+async def customer_lookup(
+    phone: str,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> CustomerLookupOut:
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant.id,
+            Customer.phone == phone,
+        )
+    )
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    last_addr = await get_last_address(session, customer_id=customer.id)
+    address_out: AddressOut | None = None
+    if last_addr:
+        address_out = AddressOut(
+            apt_room=last_addr.room_apartment or "",
+            building=last_addr.building or "",
+            receiver_name=last_addr.receiver_name or "",
+            notes=last_addr.additional_details,
+        )
+    return CustomerLookupOut(name=customer.name, last_address=address_out)
+
+
+@router.post("/manual", response_model=OrderOut)
+async def create_manual_order_endpoint(
+    body: ManualOrderIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    try:
+        order = await create_manual_order(
+            session,
+            restaurant_id=restaurant.id,
+            customer_phone=body.customer_phone,
+            customer_name=body.customer_name,
+            items=[i.model_dump() for i in body.items],
+            apt_room=body.address.apt_room,
+            building=body.address.building,
+            receiver_name=body.address.receiver_name,
+            address_notes=body.address.notes,
+            delivery_fee_aed=body.delivery_fee_aed,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    await session.commit()
+    return await _enrich(session, order)
 
 
 @router.post("/{order_id}/advance", response_model=OrderOut)
