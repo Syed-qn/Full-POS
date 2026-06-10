@@ -786,16 +786,19 @@ async def patch_customer(
     if not customer:
         raise ValueError("Customer not found")
 
+    # Capture phone BEFORE mutation so marketing opt targets the current phone
+    effective_phone = customer.phone
+
     if name is not None:
         customer.name = name
     if phone is not None:
         customer.phone = phone
     if marketing_opted_in is True:
-        await record_opt_in(session, restaurant_id=restaurant_id, phone=customer.phone)
+        await record_opt_in(session, restaurant_id=restaurant_id, phone=effective_phone)
     elif marketing_opted_in is False:
         await record_opt_out(
             session, restaurant_id=restaurant_id,
-            phone=customer.phone, source="manager_dashboard",
+            phone=effective_phone, source="manager_dashboard",
         )
 
     await session.flush()

@@ -2,9 +2,8 @@
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
 
-from app.ordering.models import Customer, CustomerAddress, Order
+from app.ordering.models import Customer, CustomerAddress
 from app.ordering.service import patch_customer, patch_address
 
 
@@ -78,6 +77,26 @@ async def test_patch_customer_opt_in(db_session, restaurant):
     await db_session.commit()
 
     assert not await is_opted_out(db_session, restaurant_id=restaurant.id, phone=customer.phone)
+
+
+async def test_patch_customer_opt_out_targets_original_phone(db_session, restaurant):
+    """When phone and marketing_opted_in=False sent together, opt-out targets original phone."""
+    from app.marketing.optout import is_opted_out
+
+    customer, _ = await _seed_customer_with_address(db_session, restaurant.id)
+    original_phone = customer.phone  # "+971502223333"
+
+    await patch_customer(
+        db_session, restaurant_id=restaurant.id,
+        customer_id=customer.id,
+        name=None,
+        phone="+971509990000",
+        marketing_opted_in=False,
+    )
+    await db_session.commit()
+
+    # Opt-out should target the ORIGINAL phone, not the new one
+    assert await is_opted_out(db_session, restaurant_id=restaurant.id, phone=original_phone)
 
 
 async def test_patch_customer_wrong_tenant_raises(db_session, restaurant):
