@@ -101,3 +101,29 @@ class AddressPatchIn(BaseModel):
     building: str | None = None
     receiver_name: str | None = None
     additional_details: str | None = None
+
+
+class OrderSummaryOut(BaseModel):
+    id: int
+    order_number: str
+    status: str
+    total: Decimal
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CustomerProfileOut(BaseModel):
+    id: int
+    name: str | None
+    phone: str
+    total_orders: int
+    total_spend: Decimal
+    first_order_at: datetime | None
+    last_order_at: datetime | None
+    marketing_opted_in: bool
+    tags: dict
+    addresses: list[AddressDetailOut]
+    recent_orders: list[OrderSummaryOut]
+
+    model_config = {"from_attributes": True}
