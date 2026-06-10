@@ -56,6 +56,23 @@ def test_parse_location():
     assert msgs[0].type == MessageType.LOCATION
     assert msgs[0].payload["latitude"] == 25.2048
     assert msgs[0].payload["longitude"] == 55.2708
+    assert "is_live" not in msgs[0].payload  # static pin has no live flag
+
+
+def test_parse_live_location_sets_is_live():
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [{"changes": [{"value": {
+            "metadata": {"display_phone_number": "+97141234567", "phone_number_id": "111"},
+            "messages": [{"id": "wamid.LIVE1", "from": "971509876543", "timestamp": "1717661000",
+                          "type": "location",
+                          "location": {"latitude": 25.2048, "longitude": 55.2708, "live_period": 3600}}],
+        }, "field": "messages"}]}],
+    }
+    msgs = parse_cloud_payload(payload)
+    assert msgs[0].type == MessageType.LOCATION
+    assert msgs[0].payload["is_live"] is True
+    assert msgs[0].payload["latitude"] == 25.2048
 
 
 def test_parse_status_update_returns_empty():

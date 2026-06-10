@@ -102,6 +102,61 @@ async def test_second_message_after_menu_sent_does_not_resend_menu(db_session, r
     assert len(rows) == 2
 
 
+async def test_live_location_ping_outside_address_capture_is_silently_dropped(db_session, restaurant):
+    """Repeated live-location updates after address confirmed produce no outbound message."""
+    from app.conversation.service import get_or_create_conversation
+
+    # Put conversation in post_order phase (simulates order already placed)
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971509990099", counterpart="customer"
+    )
+    conv.state = {"dialogue_phase": "post_order", "dialogue_state": "order_placed"}
+    await db_session.commit()
+
+    location_msg = InboundMessage(
+        wa_message_id="wamid.live-loc-1",
+        from_phone="+971509990099",
+        restaurant_phone=restaurant.phone,
+        type=MessageType.LOCATION,
+        payload={"latitude": 25.2048, "longitude": 55.2708, "is_live": True},
+        timestamp=1717661000,
+    )
+    await handle_inbound(db_session, location_msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971509990099")
+    )).scalars().all()
+    assert len(rows) == 0  # no reply sent
+
+
+async def test_location_in_awaiting_confirmation_phase_is_silently_dropped(db_session, restaurant):
+    """Location ping during awaiting_confirmation (e.g. live share still active) produces no reply."""
+    from app.conversation.service import get_or_create_conversation
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971509990098", counterpart="customer"
+    )
+    conv.state = {"dialogue_phase": "awaiting_confirmation", "dialogue_state": "awaiting_confirmation"}
+    await db_session.commit()
+
+    location_msg = InboundMessage(
+        wa_message_id="wamid.live-loc-2",
+        from_phone="+971509990098",
+        restaurant_phone=restaurant.phone,
+        type=MessageType.LOCATION,
+        payload={"latitude": 25.2048, "longitude": 55.2708, "is_live": True},
+        timestamp=1717661001,
+    )
+    await handle_inbound(db_session, location_msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971509990098")
+    )).scalars().all()
+    assert len(rows) == 0
+
+
 async def test_stop_keyword_records_optout(db_session, restaurant):
     from app.marketing.optout import is_opted_out
 

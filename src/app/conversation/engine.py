@@ -1973,13 +1973,13 @@ async def handle_inbound(
             await _handle_greeting(session, conv, inbound, restaurant_id)
             return
 
-    # Location pin → address capture handler (needs geo validation before AI)
+    # Location pin → address capture handler (needs geo validation before AI).
+    # Pings outside address_capture (e.g. repeated live-location updates after
+    # address is confirmed) are silently dropped — no AI call, no reply.
     if inbound.type == MessageType.LOCATION:
         phase = _resolve_phase(conv)
         if phase == "address_capture":
             await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
-        else:
-            await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
         return
 
     # Modify FSM states: route to dedicated handlers (preserves SLA-restart and audit logic)

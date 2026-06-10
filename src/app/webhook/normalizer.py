@@ -49,11 +49,14 @@ def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
 
     if msg_type == "location":
         loc = msg["location"]
+        payload: dict = {"latitude": loc["latitude"], "longitude": loc["longitude"]}
+        if "live_period" in loc:
+            payload["is_live"] = True
         return InboundMessage(
             wa_message_id=wa_id,
             from_phone=from_phone,
             type=MessageType.LOCATION,
-            payload={"latitude": loc["latitude"], "longitude": loc["longitude"]},
+            payload=payload,
             restaurant_phone=restaurant_phone,
             timestamp=timestamp,
         )
