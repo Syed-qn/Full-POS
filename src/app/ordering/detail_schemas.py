@@ -127,3 +127,9 @@ class CustomerProfileOut(BaseModel):
     recent_orders: list[OrderSummaryOut]
 
     model_config = {"from_attributes": True}
+
+
+class CustomerListOut(BaseModel):
+    items: list[CustomerDetailOut]
+    limit: int
+    offset: int

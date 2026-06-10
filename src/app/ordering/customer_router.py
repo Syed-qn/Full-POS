@@ -6,11 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
+from app.marketing.models import OptOut
 from app.marketing.optout import is_opted_out
 from app.ordering.detail_schemas import (
     AddressDetailOut,
     AddressPatchIn,
     CustomerDetailOut,
+    CustomerListOut,
     CustomerPatchIn,
     CustomerProfileOut,
     OrderSummaryOut,
@@ -21,18 +23,18 @@ from app.ordering.service import patch_address, patch_customer
 router = APIRouter(prefix="/api/v1/ordering/customers", tags=["customers"])
 
 _OPEN_STATUSES = frozenset(
-    {"draft", "pending_confirmation", "confirmed", "preparing", "ready", "assigned", "picked_up", "arriving"}
+    {"draft", "pending_confirmation", "confirmed", "preparing", "ready", "assigned", "picked_up", "arriving", "on_resale"}
 )
 
 
-@router.get("", response_model=dict)
+@router.get("", response_model=CustomerListOut)
 async def list_customers(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> CustomerListOut:
     stmt = select(Customer).where(Customer.restaurant_id == restaurant.id)
     if q:
         pattern = f"%{q}%"
@@ -45,10 +47,22 @@ async def list_customers(
     rows = list(
         (await session.scalars(stmt.order_by(Customer.id.desc()).limit(limit).offset(offset))).all()
     )
-    items = []
-    for c in rows:
-        opted_out = await is_opted_out(session, restaurant_id=restaurant.id, phone=c.phone)
-        items.append(CustomerDetailOut(
+
+    if rows:
+        phones = [c.phone for c in rows]
+        opted_out_phones = set(
+            (await session.scalars(
+                select(OptOut.phone).where(
+                    OptOut.restaurant_id == restaurant.id,
+                    OptOut.phone.in_(phones),
+                )
+            )).all()
+        )
+    else:
+        opted_out_phones = set()
+
+    items = [
+        CustomerDetailOut(
             id=c.id,
             name=c.name,
             phone=c.phone,
@@ -56,9 +70,11 @@ async def list_customers(
             total_spend=c.total_spend,
             first_order_at=c.first_order_at,
             last_order_at=c.last_order_at,
-            marketing_opted_in=not opted_out,
-        ).model_dump())
-    return {"items": items, "limit": limit, "offset": offset}
+            marketing_opted_in=c.phone not in opted_out_phones,
+        )
+        for c in rows
+    ]
+    return CustomerListOut(items=items, limit=limit, offset=offset)
 
 
 @router.get("/{customer_id}", response_model=CustomerProfileOut)
@@ -221,6 +237,7 @@ async def delete_address(
     open_order = await session.scalar(
         select(Order).where(
             Order.address_id == address_id,
+            Order.restaurant_id == restaurant.id,
             Order.status.in_(_OPEN_STATUSES),
         )
     )
