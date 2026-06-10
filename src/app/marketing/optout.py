@@ -1,7 +1,8 @@
-"""Marketing opt-out (STOP keyword) primitives.
+"""Marketing opt-out primitives.
 
-``is_stop_keyword`` is a pure matcher. ``record_opt_out`` / ``is_opted_out``
-are DB-backed and tenant-scoped (restaurant_id + phone). The caller commits.
+Pure matchers: ``is_stop_keyword`` (exact keywords), ``is_optout_intent`` (natural-language phrases).
+DB helpers (async, tenant-scoped): ``record_opt_out``, ``record_opt_in``, ``is_opted_out``.
+The caller is responsible for committing the session.
 """
 
 from sqlalchemy import delete, select
@@ -37,8 +38,8 @@ _OPTOUT_PHRASES: tuple[str, ...] = (
     "no more messages",
     "no more marketing",
     "no more promotions",
-    "opt out",
-    "opt-out",
+    "opt out",   # also in _STOP_KEYWORDS (exact); here for substring match in longer sentences
+    "opt-out",   # hyphenated variant
     "remove me",
     "don't message",
     "dont message",
@@ -147,4 +148,13 @@ async def record_opt_in(
             OptOut.restaurant_id == restaurant_id,
             OptOut.phone == phone,
         )
+    )
+    await record_audit(
+        session,
+        actor=f"customer:{phone}",
+        restaurant_id=restaurant_id,
+        entity="marketing_opt_out",
+        entity_id=phone,
+        action="opt_in",
+        after={"phone": phone},
     )
