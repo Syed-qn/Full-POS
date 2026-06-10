@@ -1932,13 +1932,16 @@ async def handle_inbound(
         ts=inbound.timestamp,
     )
 
-    # STOP opt-out — must be checked before any dialogue processing
-    from app.marketing.optout import is_stop_keyword, record_opt_out
-    if is_stop_keyword(inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""):
+    # Opt-out — exact STOP keywords + natural-language phrases.
+    # Checked before any dialogue processing so AI never sees opt-out messages.
+    from app.marketing.optout import is_optout_intent, is_stop_keyword, record_opt_out
+    _opt_text = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+    if is_stop_keyword(_opt_text) or is_optout_intent(_opt_text):
         await record_opt_out(
             session,
             restaurant_id=restaurant_id,
             phone=inbound.from_phone,
+            source="stop_keyword" if is_stop_keyword(_opt_text) else "natural_language",
         )
         await enqueue_message(
             session,

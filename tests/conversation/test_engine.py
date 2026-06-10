@@ -171,3 +171,57 @@ async def test_stop_keyword_records_optout(db_session, restaurant):
     await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
     await db_session.commit()
     assert await is_opted_out(db_session, restaurant_id=restaurant.id, phone="+971501234999")
+
+
+async def test_natural_language_optout_records_optout(db_session, restaurant):
+    """Natural-language phrase triggers opt-out same as STOP keyword."""
+    from app.marketing.optout import is_opted_out
+
+    inbound = InboundMessage(
+        wa_message_id="nl-optout-1",
+        from_phone="+971501234777",
+        restaurant_phone=restaurant.phone,
+        type=MessageType.TEXT,
+        payload={"text": "stop sending me marketing messages"},
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert await is_opted_out(db_session, restaurant_id=restaurant.id, phone="+971501234777")
+
+
+async def test_natural_language_optout_sends_confirmation(db_session, restaurant):
+    inbound = InboundMessage(
+        wa_message_id="nl-optout-2",
+        from_phone="+971501234778",
+        restaurant_phone=restaurant.phone,
+        type=MessageType.TEXT,
+        payload={"text": "don't send me any more messages please"},
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501234778")
+    )).scalars().all()
+    assert len(rows) == 1
+    assert "unsubscribed" in rows[0].payload["body"].lower()
+
+
+async def test_ordering_message_not_misclassified_as_optout(db_session, restaurant):
+    from app.marketing.optout import is_opted_out
+
+    await _seed_menu(db_session, restaurant.id)
+
+    inbound = InboundMessage(
+        wa_message_id="not-optout-1",
+        from_phone="+971501234779",
+        restaurant_phone=restaurant.phone,
+        type=MessageType.TEXT,
+        payload={"text": "I want to order 2 chicken biryani"},
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert not await is_opted_out(db_session, restaurant_id=restaurant.id, phone="+971501234779")
