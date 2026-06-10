@@ -470,3 +470,108 @@ async def advance_kitchen_status(
     await session.commit()
     await session.refresh(order)
     return order
+
+
+async def create_manual_order(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    customer_phone: str,
+    customer_name: str | None,
+    items: list[dict],
+    apt_room: str,
+    building: str,
+    receiver_name: str,
+    address_notes: str | None,
+    delivery_fee_aed: Decimal,
+) -> "Order":
+    """Create a confirmed delivery order on behalf of a walk-in/phone customer.
+
+    Bypasses the WhatsApp conversation flow. Sends a WhatsApp confirmation
+    via the outbox system. Caller must commit after this returns.
+    """
+    from app.menu.models import Dish, Menu
+    from app.outbox.service import enqueue_message
+    from app.whatsapp.port import OutboundMessageType
+
+    # 1. Verify active menu exists
+    menu = await session.scalar(
+        select(Menu).where(
+            Menu.restaurant_id == restaurant_id,
+            Menu.status == "active",
+        )
+    )
+    if not menu:
+        raise ValueError("No active menu for this restaurant")
+
+    # 2. Validate all dishes upfront
+    validated: list[tuple] = []
+    for item in items:
+        dish = await session.scalar(
+            select(Dish).where(
+                Dish.id == item["dish_id"],
+                Dish.restaurant_id == restaurant_id,
+                Dish.is_available.is_(True),
+            )
+        )
+        if not dish:
+            raise ValueError(f"Dish {item['dish_id']} not found or unavailable")
+        validated.append((dish, item["qty"], item.get("notes")))
+
+    # 3. Get or create customer; only set name if customer is new
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=customer_phone
+    )
+    if customer_name and customer.name is None:
+        customer.name = customer_name
+        await session.flush()
+
+    # 4. Store delivery address
+    address = await upsert_address(
+        session,
+        customer_id=customer.id,
+        latitude=None,
+        longitude=None,
+        room_apartment=apt_room,
+        building=building,
+        receiver_name=receiver_name,
+        additional_details=address_notes,
+        confirmed=True,
+    )
+
+    # 5. Create draft order and wire address + delivery fee
+    order = await create_draft_order(
+        session, restaurant_id=restaurant_id, customer_id=customer.id
+    )
+    order.delivery_fee_aed = delivery_fee_aed
+    order.address_id = address.id
+    await session.flush()
+
+    # 6. Add items (each call recalculates subtotal)
+    for dish, qty, notes in validated:
+        await add_item(session, order=order, dish=dish, qty=qty, notes=notes)
+
+    # 7. Recompute total including delivery fee (add_item only tracks subtotal)
+    order.total = order.subtotal + delivery_fee_aed
+    await session.flush()
+
+    # 8. Confirm order (draft → pending_confirmation → confirmed, starts SLA)
+    await finalize_confirmation(session, order=order, actor="manager")
+
+    # 9. Enqueue WhatsApp confirmation to customer
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=customer_phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={
+            "body": (
+                f"Your order {order.order_number} has been placed! "
+                f"Total: AED {order.total} (COD). "
+                f"Your food will arrive in ~40 minutes \U0001f6f5"
+            )
+        },
+        idempotency_key=f"manual-order-confirm-{order.id}",
+    )
+
+    return order

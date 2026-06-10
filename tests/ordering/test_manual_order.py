@@ -1,0 +1,234 @@
+# tests/ordering/test_manual_order.py
+from decimal import Decimal
+
+import pytest
+from sqlalchemy import select
+
+from app.menu.models import Dish, Menu
+from app.ordering.models import Order, OrderItem, Customer, CustomerAddress
+from app.outbox.models import OutboxMessage
+
+
+async def _seed_menu(db_session, restaurant_id: int) -> Menu:
+    menu = Menu(restaurant_id=restaurant_id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant_id,
+        dish_number=101, name="Chicken Biryani", price_aed=Decimal("22.00"),
+        category="Rice", is_available=True, name_normalized="chicken biryani",
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant_id,
+        dish_number=201, name="Mutton Karahi", price_aed=Decimal("35.00"),
+        category="Curries", is_available=True, name_normalized="mutton karahi",
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant_id,
+        dish_number=301, name="Unavailable Dish", price_aed=Decimal("10.00"),
+        category="Other", is_available=False, name_normalized="unavailable dish",
+    ))
+    await db_session.commit()
+    return menu
+
+
+async def _get_dish_id(db_session, menu_id: int, name: str) -> int:
+    dish = await db_session.scalar(
+        select(Dish).where(Dish.menu_id == menu_id, Dish.name == name)
+    )
+    return dish.id
+
+
+async def test_create_manual_order_new_customer(db_session, restaurant):
+    """New phone → customer created, order confirmed, items correct, SLA set."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+    karahi_id = await _get_dish_id(db_session, menu.id, "Mutton Karahi")
+
+    order = await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990001",
+        customer_name="Ahmed Al Rashid",
+        items=[
+            {"dish_id": biryani_id, "qty": 2, "notes": None},
+            {"dish_id": karahi_id, "qty": 1, "notes": "extra spicy"},
+        ],
+        apt_room="Apt 404",
+        building="Marina Tower",
+        receiver_name="Ahmed Al Rashid",
+        address_notes=None,
+        delivery_fee_aed=Decimal("0.00"),
+    )
+    await db_session.commit()
+
+    assert order.status == "confirmed"
+    assert order.sla_confirmed_at is not None
+    assert order.sla_deadline is not None
+
+    items = (
+        await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    assert len(items) == 2
+    names = {i.dish_name for i in items}
+    assert names == {"Chicken Biryani", "Mutton Karahi"}
+
+    biryani = next(i for i in items if i.dish_name == "Chicken Biryani")
+    assert biryani.qty == 2
+
+    assert order.subtotal == Decimal("79.00")   # 22*2 + 35*1
+    assert order.total == Decimal("79.00")
+
+    customer = await db_session.scalar(
+        select(Customer).where(Customer.phone == "+971509990001")
+    )
+    assert customer is not None
+    assert customer.name == "Ahmed Al Rashid"
+
+
+async def test_create_manual_order_existing_customer(db_session, restaurant):
+    """Known phone → reuses customer row; new address stored."""
+    from app.ordering.service import create_manual_order, get_or_create_customer
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    # Pre-create customer
+    existing = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971509990002"
+    )
+    existing.name = "Sara"
+    await db_session.commit()
+
+    await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990002",
+        customer_name="Sara Updated",   # should NOT overwrite existing name
+        items=[{"dish_id": biryani_id, "qty": 1, "notes": None}],
+        apt_room="Unit 5",
+        building="Gold Tower",
+        receiver_name="Sara",
+        address_notes=None,
+        delivery_fee_aed=Decimal("5.00"),
+    )
+    await db_session.commit()
+
+    customers = (
+        await db_session.scalars(
+            select(Customer).where(
+                Customer.restaurant_id == restaurant.id,
+                Customer.phone == "+971509990002",
+            )
+        )
+    ).all()
+    assert len(customers) == 1  # no duplicate
+    assert customers[0].name == "Sara"  # original name preserved
+
+    address = await db_session.scalar(
+        select(CustomerAddress).where(CustomerAddress.customer_id == customers[0].id)
+    )
+    assert address is not None
+    assert address.building == "Gold Tower"
+
+
+async def test_create_manual_order_delivery_fee_included_in_total(db_session, restaurant):
+    """delivery_fee_aed is added to subtotal in order total."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    order = await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990003",
+        customer_name=None,
+        items=[{"dish_id": biryani_id, "qty": 1, "notes": None}],
+        apt_room="12A",
+        building="Al Noor",
+        receiver_name="Guest",
+        address_notes=None,
+        delivery_fee_aed=Decimal("10.00"),
+    )
+    await db_session.commit()
+
+    assert order.delivery_fee_aed == Decimal("10.00")
+    assert order.subtotal == Decimal("22.00")
+    assert order.total == Decimal("32.00")
+
+
+async def test_create_manual_order_no_active_menu_raises(db_session, restaurant):
+    """ValueError raised when no active menu exists."""
+    from app.ordering.service import create_manual_order
+
+    with pytest.raises(ValueError, match="No active menu"):
+        await create_manual_order(
+            db_session,
+            restaurant_id=restaurant.id,
+            customer_phone="+971509990004",
+            customer_name=None,
+            items=[{"dish_id": 999, "qty": 1, "notes": None}],
+            apt_room="1A",
+            building="Tower",
+            receiver_name="Guest",
+            address_notes=None,
+            delivery_fee_aed=Decimal("0.00"),
+        )
+
+
+async def test_create_manual_order_unavailable_dish_raises(db_session, restaurant):
+    """ValueError raised when dish is unavailable."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    unavail_id = await _get_dish_id(db_session, menu.id, "Unavailable Dish")
+
+    with pytest.raises(ValueError, match=str(unavail_id)):
+        await create_manual_order(
+            db_session,
+            restaurant_id=restaurant.id,
+            customer_phone="+971509990005",
+            customer_name=None,
+            items=[{"dish_id": unavail_id, "qty": 1, "notes": None}],
+            apt_room="1A",
+            building="Tower",
+            receiver_name="Guest",
+            address_notes=None,
+            delivery_fee_aed=Decimal("0.00"),
+        )
+
+
+async def test_outbox_message_enqueued_after_manual_order(db_session, restaurant):
+    """WhatsApp confirmation OutboxMessage created with correct phone."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    order = await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990006",
+        customer_name=None,
+        items=[{"dish_id": biryani_id, "qty": 1, "notes": None}],
+        apt_room="1A",
+        building="Tower",
+        receiver_name="Guest",
+        address_notes=None,
+        delivery_fee_aed=Decimal("0.00"),
+    )
+    await db_session.commit()
+
+    outbox = (
+        await db_session.scalars(
+            select(OutboxMessage).where(
+                OutboxMessage.restaurant_id == restaurant.id,
+                OutboxMessage.to_phone == "+971509990006",
+            )
+        )
+    ).all()
+    assert len(outbox) == 1
+    assert order.order_number in outbox[0].payload["body"]
