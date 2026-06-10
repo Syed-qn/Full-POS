@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OrderItemOut(BaseModel):
@@ -44,3 +44,36 @@ class CustomerOut(BaseModel):
     total_spend: Decimal
     first_order_at: Optional[datetime]
     last_order_at: Optional[datetime]
+
+
+class ManualOrderItemIn(BaseModel):
+    dish_id: int
+    qty: int = Field(ge=1, le=50)
+    notes: str | None = None
+
+
+class ManualOrderAddressIn(BaseModel):
+    apt_room: str = Field(min_length=1)
+    building: str = Field(min_length=1)
+    receiver_name: str = Field(min_length=1)
+    notes: str | None = None
+
+
+class AddressOut(BaseModel):
+    apt_room: str
+    building: str
+    receiver_name: str
+    notes: str | None
+
+
+class ManualOrderIn(BaseModel):
+    customer_phone: str = Field(min_length=7)
+    customer_name: str | None = None
+    items: list[ManualOrderItemIn] = Field(min_length=1)
+    address: ManualOrderAddressIn
+    delivery_fee_aed: Decimal = Decimal("0.00")
+
+
+class CustomerLookupOut(BaseModel):
+    name: str | None
+    last_address: AddressOut | None
