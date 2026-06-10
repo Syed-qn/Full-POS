@@ -1,4 +1,4 @@
-import { apiClient } from "./apiClient";
+import { ApiError, apiClient } from "./apiClient";
 import type { DishOut, MenuOut, MenuWithDiffOut } from "./types";
 
 export async function getMenu(menuId: number): Promise<MenuOut> {
@@ -19,4 +19,13 @@ export async function setAvailability(dishId: number, isAvailable: boolean): Pro
   return apiClient.patch<DishOut>(`/api/v1/dishes/${dishId}/availability`, {
     is_available: isAvailable,
   });
+}
+
+export async function fetchActiveMenu(): Promise<MenuOut | null> {
+  try {
+    return await apiClient.get<MenuOut>("/api/v1/menus/active");
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
