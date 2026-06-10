@@ -210,3 +210,84 @@ async def test_get_order_detail_route_from_rider_pings(db_session, restaurant):
     assert len(detail.route) == 2
     assert detail.route[0].latitude == 25.201
     assert detail.route[1].latitude == 25.205
+
+
+# ---------------------------------------------------------------------------
+# Helpers for API tests
+# ---------------------------------------------------------------------------
+
+def _token(restaurant_id: int) -> str:
+    from app.identity.auth import create_access_token
+    return create_access_token(restaurant_id=restaurant_id)
+
+
+def _auth(restaurant_id: int) -> dict:
+    return {"Authorization": f"Bearer {_token(restaurant_id)}"}
+
+
+# ---------------------------------------------------------------------------
+# API tests — GET /api/v1/orders/{id}/detail
+# ---------------------------------------------------------------------------
+
+async def test_api_order_detail_returns_200(client, db_session, restaurant):
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+
+    resp = await client.get(
+        f"/api/v1/orders/{order.id}/detail",
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["order_number"] == "R1-0099"
+    assert data["status"] == "delivered"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["dish_name"] == "Chicken Biryani"
+    assert "customer" in data
+    assert "timeline" in data
+    assert "chat" in data
+    assert "route" in data
+
+
+async def test_api_order_detail_unknown_id_returns_404(client, db_session, restaurant):
+    resp = await client.get(
+        "/api/v1/orders/99999/detail",
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# API tests — PATCH /api/v1/ordering/customers/{id}
+# ---------------------------------------------------------------------------
+
+async def test_api_patch_customer_name(client, db_session, restaurant):
+    order, customer, _ = await _seed_full_order(db_session, restaurant.id)
+
+    resp = await client.patch(
+        f"/api/v1/ordering/customers/{customer.id}",
+        json={"name": "Updated Name"},
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Updated Name"
+
+
+async def test_api_patch_address(client, db_session, restaurant):
+    order, customer, addr = await _seed_full_order(db_session, restaurant.id)
+
+    resp = await client.patch(
+        f"/api/v1/ordering/customers/{customer.id}/addresses/{addr.id}",
+        json={"building": "New Tower"},
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["building"] == "New Tower"
+
+
+async def test_api_patch_customer_wrong_id_returns_404(client, db_session, restaurant):
+    resp = await client.patch(
+        "/api/v1/ordering/customers/99999",
+        json={"name": "X"},
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 404
