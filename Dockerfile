@@ -98,5 +98,13 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # On boot: apply DB migrations, then serve. Best-effort migrate (|| echo) so a
 # transient/misconfigured DB logs loudly but still starts the API and keeps
 # /health green — the next deploy re-runs `alembic upgrade head` (idempotent).
-# Worker count is configurable via APP_WORKERS. Shell form expands ${...} at start.
-CMD sh -c 'alembic upgrade head || echo "[startup] alembic upgrade head FAILED — check APP_DATABASE_URL"; exec uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT}" --workers "${APP_WORKERS}"'
+#
+# Port: bind the platform-assigned ${PORT} (Render/Heroku/Cloud Run inject it);
+# fall back to ${APP_PORT} for local/docker-compose. Binding the wrong port is
+# why Render logged "No open ports detected" and never cut the deploy over.
+#
+# Workers: honour ${WEB_CONCURRENCY} (Render sets =1 for the instance size); fall
+# back to ${APP_WORKERS}. On the 512 MB free tier, 4 uvicorn workers each load the
+# full app and OOM-thrash ("Child process died" loop), so the deploy never goes
+# live — one worker fits the memory budget.
+CMD sh -c 'alembic upgrade head || echo "[startup] alembic upgrade head FAILED — check APP_DATABASE_URL"; exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-$APP_PORT}" --workers "${WEB_CONCURRENCY:-$APP_WORKERS}"'
