@@ -7,12 +7,21 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
-from app.ordering.schemas import AddressOut, CustomerLookupOut, ManualOrderIn, OrderItemOut, OrderOut
+from app.ordering.schemas import (
+    AddressOut,
+    CancelOrderIn,
+    CustomerLookupOut,
+    ManualOrderIn,
+    OrderItemOut,
+    OrderOut,
+)
 from app.ordering.detail_schemas import (
     OrderDetailOut,
 )
+from app.ordering.fsm import IllegalTransitionError
 from app.ordering.service import (
     advance_kitchen_status,
+    cancel_order,
     create_manual_order,
     get_last_address,
     get_order_detail,
@@ -150,6 +159,38 @@ async def advance_order(
         order = await advance_kitchen_status(session, order=order)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/cancel", response_model=OrderOut)
+async def cancel_order_endpoint(
+    order_id: int,
+    body: CancelOrderIn | None = None,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Cancel an order. Legal before delivery only: draft/pending/confirmed →
+    cancelled; preparing → on_resale (food already cooked, auto-resold per spec).
+    Later states (ready/assigned/picked_up/arriving/terminal) return 422."""
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    try:
+        await cancel_order(
+            session,
+            order=order,
+            actor="manager",
+            reason=(body.reason if body else None),
+        )
+    except IllegalTransitionError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Order in status '{order.status}' can no longer be cancelled.",
+        )
+    await session.commit()
+    await session.refresh(order)
     return await _enrich(session, order)
 
 

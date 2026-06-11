@@ -17,6 +17,10 @@ export async function fetchOrders(): Promise<OrderOut[]> {
   }
 }
 
+export async function cancelOrder(id: number, reason?: string): Promise<OrderOut> {
+  return apiClient.post<OrderOut>(`/api/v1/orders/${id}/cancel`, reason ? { reason } : {});
+}
+
 export async function fetchOrder(id: number): Promise<OrderOut> {
   try {
     return await apiClient.get<OrderOut>(`/api/v1/orders/${id}`);

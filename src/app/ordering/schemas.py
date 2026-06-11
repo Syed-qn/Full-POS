@@ -77,3 +77,7 @@ class ManualOrderIn(BaseModel):
 class CustomerLookupOut(BaseModel):
     name: str | None
     last_address: AddressOut | None
+
+
+class CancelOrderIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)

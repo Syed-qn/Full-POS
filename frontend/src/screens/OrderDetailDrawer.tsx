@@ -7,7 +7,7 @@ import { Button } from "../components/Button";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { apiClient } from "../lib/apiClient";
 import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
-import { fetchOrder } from "../lib/ordersApi";
+import { cancelOrder, fetchOrder } from "../lib/ordersApi";
 import type {
   AddressDetailOut,
   CustomerDetailOut,
@@ -23,6 +23,16 @@ const ADVANCE_LABEL: Record<string, string> = {
   confirmed: "Start Preparing",
   preparing: "Mark as Ready",
 };
+// Cancellation is only legal before the order leaves the kitchen (FSM): pre-cook
+// states transition to "cancelled"; "preparing" (already cooking) goes to
+// "on_resale" so the food is auto-resold. Ready/assigned/out-for-delivery and
+// terminal states are not cancellable — the button is hidden for them.
+const CANCELLABLE = new Set([
+  "draft",
+  "pending_confirmation",
+  "confirmed",
+  "preparing",
+]);
 
 export function OrderDetailDrawer({
   orderId,
@@ -37,6 +47,8 @@ export function OrderDetailDrawer({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
   const [advancing, setAdvancing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (orderId === null) {
@@ -69,6 +81,27 @@ export function OrderDetailDrawer({
     }
   }
 
+  async function cancelOrderAction() {
+    if (!basicOrder) return;
+    const postCook = detail?.status === "preparing";
+    const msg = postCook
+      ? "Cancel this order? It's already being cooked, so the food will be put up for auto-resale."
+      : "Cancel this order? This cannot be undone.";
+    if (!window.confirm(msg)) return;
+    setCancelling(true);
+    setActionError(null);
+    try {
+      const updated = await cancelOrder(basicOrder.id);
+      setBasicOrder(updated);
+      const d = await fetchOrderDetail(basicOrder.id);
+      setDetail(d);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to cancel order");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   function onCustomerSaved(updated: CustomerDetailOut) {
     if (!detail) return;
     setDetail({ ...detail, customer: updated });
@@ -94,11 +127,27 @@ export function OrderDetailDrawer({
             <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
           </div>
 
-          {KITCHEN_ADVANCEABLE.has(detail.status) && (
+          {(KITCHEN_ADVANCEABLE.has(detail.status) || CANCELLABLE.has(detail.status)) && (
             <div className={s.actionBar}>
-              <Button onClick={advanceStatus} disabled={advancing}>
-                {advancing ? "Saving…" : ADVANCE_LABEL[detail.status]}
-              </Button>
+              {KITCHEN_ADVANCEABLE.has(detail.status) && (
+                <Button onClick={advanceStatus} disabled={advancing || cancelling}>
+                  {advancing ? "Saving…" : ADVANCE_LABEL[detail.status]}
+                </Button>
+              )}
+              {CANCELLABLE.has(detail.status) && (
+                <Button
+                  variant="danger"
+                  onClick={cancelOrderAction}
+                  disabled={advancing || cancelling}
+                >
+                  {cancelling ? "Cancelling…" : "Cancel Order"}
+                </Button>
+              )}
+              {actionError && (
+                <span style={{ color: "var(--danger, #dc2626)", fontSize: "13px" }}>
+                  {actionError}
+                </span>
+              )}
             </div>
           )}
 
