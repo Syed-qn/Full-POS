@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Build deps for argon2 (passlib[argon2]), asyncpg, and any C extensions.
+# Build deps for argon2-cffi, asyncpg, and any C extensions.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -60,11 +60,12 @@ COPY alembic.ini ./alembic.ini
 
 # Install deps from local wheels, then the project itself (editable for the
 # src-layout package). --no-index ensures we never reach out to PyPI at runtime.
-RUN pip install --no-index --find-links=/wheels \
-        fastapi "uvicorn[standard]" pydantic pydantic-settings \
-        "sqlalchemy[asyncio]" asyncpg alembic "celery[redis]" redis \
-        "passlib[argon2]" pyjwt anthropic python-multipart \
-    && pip install --no-deps -e . \
+# Install the project itself from the pre-built wheels; pip resolves ALL its
+# declared dependencies from /wheels too (no hardcoded list to drift from
+# pyproject.toml — the previous list still named passlib after the switch to
+# argon2-cffi and omitted numpy/structlog/prometheus-client, which broke the
+# build). --no-index guarantees we never reach PyPI.
+RUN pip install --no-index --find-links=/wheels restaurant-platform \
     && rm -rf /wheels
 
 # var/ holds uploads (menu images); make it writable by the app user.
