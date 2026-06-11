@@ -8,6 +8,7 @@ from fastapi.responses import Response
 
 from app.cod.router import router as cod_router
 from app.config import get_settings
+from app.conversation.router import router as conversation_router
 from app.db import get_engine
 from app.dispatch.router import router as dispatch_router
 from app.identity.router import router as identity_router
@@ -27,21 +28,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from app.obs.sentry import init_sentry
     init_sentry(settings.sentry_dsn, environment=settings.env)
 
-    if settings.rate_limit_enabled:
-        from app.ratelimit.bucket import TokenBucketLimiter
-        from app.ratelimit.deps import set_limiter
-
+    # One Redis connection shared by the rate limiter and the geocode cache.
+    if settings.rate_limit_enabled or settings.geocode_cache_enabled:
         redis_conn = await aioredis.from_url(
             settings.redis_url,
             decode_responses=True,
             socket_timeout=3,
         )
+    if settings.rate_limit_enabled and redis_conn is not None:
+        from app.ratelimit.bucket import TokenBucketLimiter
+        from app.ratelimit.deps import set_limiter
+
         set_limiter(TokenBucketLimiter(redis_conn))
+    if settings.geocode_cache_enabled and redis_conn is not None:
+        from app.geo.cache import set_geocode_redis
+
+        set_geocode_redis(redis_conn)
 
     yield  # serve requests
 
     # --- shutdown ---
     if redis_conn is not None:
+        from app.geo.cache import set_geocode_redis
+
+        set_geocode_redis(None)
         await redis_conn.aclose()
 
     engine = get_engine()
@@ -71,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(menu_router)
     app.include_router(ordering_router)
     app.include_router(customer_router)
+    app.include_router(conversation_router)
     app.include_router(webhook_router)
     app.include_router(cod_router)
     app.include_router(dispatch_router)

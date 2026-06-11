@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -c \"re.sub\\(r\\\\\"\\\\\\\\\\\\\\\\D\\\\\"\" src/app/webhook/normalizer.py)"
+    ]
+  }
+}

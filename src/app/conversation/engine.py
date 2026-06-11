@@ -1255,7 +1255,10 @@ async def _build_context(
             )
         )
         saved = ""
-        if customer:
+        # Only surface the saved address to the AI until it's been offered once
+        # (deterministically, via buttons). After that, address_offer_made is set
+        # and we drop it so the AI never re-offers / loops on it.
+        if customer and not conv.state.get("address_offer_made"):
             addr = await session.scalar(
                 select(CustomerAddress)
                 .where(CustomerAddress.customer_id == customer.id)
@@ -1479,6 +1482,75 @@ async def _execute_save_address(
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
+async def _resolve_saved_address_id(
+    session: AsyncSession, restaurant_id: int, phone: str
+) -> int | None:
+    """Return the id of the customer's most-recently-used saved address, or None."""
+    from app.ordering.models import Customer, CustomerAddress
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id,
+            Customer.phone == phone,
+        )
+    )
+    if customer is None:
+        return None
+    addr = await session.scalar(
+        select(CustomerAddress)
+        .where(CustomerAddress.customer_id == customer.id)
+        .order_by(CustomerAddress.last_used_at.desc())
+        .limit(1)
+    )
+    return addr.id if addr else None
+
+
+async def _offer_saved_address_if_any(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> bool:
+    """Returning customer → offer the saved address UP FRONT with Use/New buttons,
+    deterministically (the rule engine decides, the AI just talks). Returns True if
+    an offer was sent.
+
+    Offering before they type avoids the "type address → get offered saved → retype"
+    double entry. Sets address_offer_made so it's shown once and the AI won't
+    re-offer (saved_address is dropped from its context afterwards).
+    """
+    from app.ordering.models import Customer, CustomerAddress
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id,
+            Customer.phone == conv.phone,
+        )
+    )
+    if customer is None:
+        return False
+    addr = await session.scalar(
+        select(CustomerAddress)
+        .where(CustomerAddress.customer_id == customer.id)
+        .order_by(CustomerAddress.last_used_at.desc())
+        .limit(1)
+    )
+    if addr is None:
+        return False
+
+    label = ", ".join(
+        p for p in (addr.room_apartment, addr.building) if p
+    ) or "your saved address"
+    _set_state(conv, address_offer_made=True, saved_address_id=addr.id)
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="offer-saved-addr",
+        body=f"Welcome back! Deliver to your saved address ({label})?",
+        buttons=[
+            {"id": "use_saved_address", "title": "Use saved address"},
+            {"id": "new_address", "title": "New address"},
+        ],
+    )
+    return True
+
+
 async def _attach_saved_address_to_order(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, address_id: int, restaurant,
@@ -1651,6 +1723,12 @@ async def _dispatch_action(
             )
             return
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
+        # Returning customer → offer their saved address up front (one tap to reuse,
+        # or "New address" to enter once). Prevents the type-then-offered-then-retype
+        # double entry. New customers fall through to the normal "share location" ask.
+        if not conv.state.get("address_offer_made"):
+            if await _offer_saved_address_if_any(session, conv, inbound, restaurant_id):
+                return
         if reply:
             await _send_text(session, conv=conv, inbound=inbound,
                              restaurant_id=restaurant_id, prefix="ai-proceed-addr", body=reply)
@@ -1995,6 +2073,30 @@ async def handle_inbound(
     if state_key == "modify_confirm":
         await _handle_modify_confirm(session, conv, inbound, restaurant_id)
         return
+
+    # Saved-address offer buttons → handled deterministically (not via the AI) so the
+    # customer's choice is honoured exactly and a typed address is never asked twice.
+    if inbound.type == MessageType.BUTTON_REPLY:
+        btn_id = inbound.payload.get("id", "")
+        if btn_id == "use_saved_address":
+            saved_id = conv.state.get("saved_address_id") or await _resolve_saved_address_id(
+                session, restaurant_id, inbound.from_phone
+            )
+            if saved_id:
+                await _attach_saved_address_to_order(
+                    session, conv, inbound, restaurant_id, saved_id, restaurant
+                )
+                return
+        if btn_id == "new_address":
+            _set_state(conv, address_offer_made=True,
+                       dialogue_phase="address_capture", dialogue_state="address_capture")
+            await _send_buttons(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ask-new-address",
+                body="Please share your location 📍 or type your delivery address.",
+                buttons=[{"id": "share_location", "title": "Share location 📍"}],
+            )
+            return
 
     # All remaining text + button_reply → AI
     await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)

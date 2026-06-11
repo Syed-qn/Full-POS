@@ -3,6 +3,27 @@ from celery.schedules import crontab
 
 from app.config import get_settings
 
+# Register ALL model metadata in the worker process. Tasks (e.g. outbox.deliver)
+# touch OutboxMessage, whose restaurant_id FK targets the `restaurants` table; if
+# the Restaurant model (and its siblings) are never imported here, SQLAlchemy
+# cannot resolve that foreign key at commit time and raises NoReferencedTableError
+# — the send succeeds but the status write fails, so Celery retries and the
+# customer receives duplicate WhatsApp messages. Keep this list in sync with
+# alembic/env.py and tests/conftest.py.
+import app.audit.models  # noqa: F401,E402
+import app.identity.models  # noqa: F401,E402
+import app.menu.models  # noqa: F401,E402
+import app.webhook.models  # noqa: F401,E402
+import app.outbox.models  # noqa: F401,E402
+import app.conversation.models  # noqa: F401,E402
+import app.ordering.models  # noqa: F401,E402
+import app.dispatch.models  # noqa: F401,E402
+import app.sla.models  # noqa: F401,E402
+import app.coupons.models  # noqa: F401,E402
+import app.cod.models  # noqa: F401,E402
+import app.marketing.models  # noqa: F401,E402
+import app.predictions.models  # noqa: F401,E402
+
 settings = get_settings()
 celery_app = Celery(
     "restaurant",
@@ -16,6 +37,7 @@ celery_app.conf.update(
         "outbox.deliver": {"queue": "outbox"},
         "outbox.sweep_failed": {"queue": "outbox"},
         "sla.monitor_tick": {"queue": "sla_monitor"},
+        "conversation.*": {"queue": "default"},
         "dispatch.*": {"queue": "dispatch"},
         "ml.*": {"queue": "ml"},
         "marketing.*": {"queue": "marketing"},
@@ -46,6 +68,10 @@ celery_app.conf.update(
             "task": "outbox.sweep_failed",
             "schedule": 300.0,  # every 5 minutes — orphan recovery
         },
+        "abandoned-cart-sweep": {
+            "task": "conversation.abandoned_cart_sweep",
+            "schedule": 300.0,  # every 5 minutes — nudge stale draft carts
+        },
         # GAP#3 / phase-6: poll Meta approval status (every N min from settings), EOD ephemeral delete (23:30 Dubai from settings)
         "marketing-poll-template-statuses": {
             "task": "marketing.poll_template_statuses",
@@ -61,6 +87,6 @@ celery_app.conf.update(
     },
 )
 celery_app.autodiscover_tasks(
-    ["app.outbox", "app.sla", "app.predictions", "app.marketing"],
+    ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation"],
     related_name="worker",
 )

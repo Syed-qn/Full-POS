@@ -484,14 +484,19 @@ async def record_conversion(
     customer_id: int,
     order_id: int,
     window_hours: int = 48,
+    now_utc: datetime | None = None,
 ) -> None:
     """Attribute ``order_id`` to a recent marketing send for this customer.
 
     If the customer has a sent ``MarketingSend`` within ``window_hours`` before
-    now (and not yet attributed), set its ``converted_order_id``. Best-effort,
-    no-op if nothing matches. Caller commits.
+    ``now_utc`` (and not yet attributed), set its ``converted_order_id``.
+    ``now_utc`` defaults to the current UTC time; callers (and tests) may inject
+    a fixed clock to stay consistent with the ``now_utc`` threaded through the
+    rest of the send pipeline. Best-effort, no-op if nothing matches. Caller
+    commits.
     """
-    cutoff = datetime.now(tz=None).astimezone() - timedelta(hours=window_hours)
+    now = now_utc or datetime.now(tz=timezone.utc)
+    cutoff = now - timedelta(hours=window_hours)
     send = (
         await session.execute(
             select(MarketingSend)

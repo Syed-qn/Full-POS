@@ -23,7 +23,7 @@ _HTML_PATH = Path(__file__).parent / "static" / "index.html"
 
 @router.get("/", response_class=HTMLResponse)
 async def simulator_index() -> str:
-    return _HTML_PATH.read_text()
+    return _HTML_PATH.read_text(encoding="utf-8")
 
 
 class ButtonReplyIn(BaseModel):
@@ -153,4 +153,4 @@ async def simulator_messages(phone: str | None = None) -> list[dict]:
 
 @router.get("/rider", response_class=HTMLResponse)
 async def simulator_rider_index() -> str:
-    return (Path(__file__).parent / "static" / "rider.html").read_text()
+    return (Path(__file__).parent / "static" / "rider.html").read_text(encoding="utf-8")

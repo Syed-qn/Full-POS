@@ -213,6 +213,60 @@ async def test_add_item_recalculates_total(db_session, restaurant):
     assert order.total == Decimal("44.00")
 
 
+async def test_remove_item_reduces_qty_and_total(db_session, restaurant):
+    from app.menu.models import Dish, Menu
+    from app.ordering.service import (
+        add_item,
+        create_draft_order,
+        get_or_create_customer,
+        remove_item,
+    )
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1,
+        name="Chicken Biryani", price_aed=Decimal("28.00"),
+        category="Rice", is_available=True, name_normalized="chicken biryani",
+    )
+    lassi = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=7,
+        name="Mango Lassi", price_aed=Decimal("12.00"),
+        category="Drinks", is_available=True, name_normalized="mango lassi",
+    )
+    db_session.add_all([biryani, lassi])
+    await db_session.flush()
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000009",
+    )
+    await db_session.flush()
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
+    await db_session.flush()
+
+    await add_item(db_session, order=order, dish=biryani, qty=2)
+    await add_item(db_session, order=order, dish=lassi, qty=3)
+    # 2*28 + 3*12 = 92
+    assert order.total == Decimal("92.00")
+
+    # Remove 1 biryani -> 1*28 + 3*12 = 64
+    removed = await remove_item(db_session, order=order, dish=biryani, qty=1)
+    assert removed == 1
+    assert order.total == Decimal("64.00")
+
+    # Removing more than present clamps to what's there (3 lassis present, ask 5)
+    removed = await remove_item(db_session, order=order, dish=lassi, qty=5)
+    assert removed == 3
+    assert order.total == Decimal("28.00")  # 1 biryani left
+
+    # Removing a dish not in the cart returns 0
+    removed = await remove_item(db_session, order=order, dish=lassi, qty=1)
+    assert removed == 0
+    assert order.total == Decimal("28.00")
+    await db_session.commit()
+
+
 async def test_finalize_confirmation_sets_sla_fields(db_session, restaurant):
     from app.ordering.service import (
         create_draft_order, finalize_confirmation, get_or_create_customer,

@@ -1,10 +1,19 @@
 # src/app/webhook/normalizer.py
+import re
+
 from app.whatsapp.port import InboundMessage, MessageType
 
 
 def _normalize_phone(raw: str) -> str:
-    """Ensure phone has + prefix (Meta sends without it)."""
-    return raw if raw.startswith("+") else f"+{raw}"
+    """Normalize a phone to '+<digits>' (E.164-ish), stripping spaces, dashes,
+    parentheses, etc.
+
+    Meta's ``display_phone_number`` can arrive formatted ('+1 555-148-7637') while
+    the same number elsewhere is bare ('15551487637'); both must compare equal so
+    restaurant/customer matching never silently fails on cosmetic formatting.
+    """
+    digits = re.sub(r"\D", "", raw or "")
+    return f"+{digits}" if digits else (raw or "")
 
 
 def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:

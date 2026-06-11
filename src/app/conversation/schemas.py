@@ -23,3 +23,23 @@ class MessageOut(BaseModel):
     type: str
     payload: dict
     ts: int
+
+
+# ── Manager-dashboard (React Conversations screen) read models ───────────────
+# Shapes match frontend/src/lib/types.ts ConversationOut / MessageOut exactly.
+class DashboardConversationOut(BaseModel):
+    id: int
+    phone: str
+    counterpart: str
+    manual_takeover: bool
+    last_message_preview: str | None
+    unread: bool
+    updated_at: str
+
+
+class DashboardMessageOut(BaseModel):
+    id: int
+    direction: str
+    type: str
+    payload: dict
+    ts: int

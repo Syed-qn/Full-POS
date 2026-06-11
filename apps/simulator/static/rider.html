@@ -126,7 +126,7 @@
       <input id="riderPhone" value="+971501111111" />
     </label>
     <label>Restaurant phone
-      <input id="restPhone" value="+97141234567" />
+      <input id="restPhone" value="+971565594402" />
     </label>
   </div>
   <div id="riderInfo">
@@ -173,11 +173,24 @@
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function formatWhatsApp(text) {
+    var s = escapeHtml(text);
+    s = s.replace(/```([^`]+)```/g, "<code>$1</code>");
+    s = s.replace(/(^|[^\w*])\*([^*\n]+)\*(?=[^\w*]|$)/g, "$1<b>$2</b>");
+    s = s.replace(/(^|[^\w_])_([^_\n]+)_(?=[^\w_]|$)/g, "$1<i>$2</i>");
+    s = s.replace(/(^|[^\w~])~([^~\n]+)~(?=[^\w~]|$)/g, "$1<s>$2</s>");
+    return s;
+  }
+
   function addBubble(text, cls) {
     var b = document.createElement("div");
     b.className = "bubble " + cls;
     var span = document.createElement("span");
-    span.textContent = text;
+    span.innerHTML = formatWhatsApp(text);
     var ts = document.createElement("span");
     ts.className = "ts"; ts.textContent = now();
     b.appendChild(span); b.appendChild(ts);

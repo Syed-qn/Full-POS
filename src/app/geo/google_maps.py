@@ -18,6 +18,7 @@ _CITY_SPEED_KMH = 25.0
 
 _ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 _FIELD_MASK = "routes.distanceMeters,routes.duration"
+_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 
 class GoogleMapsGeoProvider:
@@ -52,6 +53,34 @@ class GoogleMapsGeoProvider:
         """Return ETA in whole minutes (static speed when is_estimate=True)."""
         raw = (distance_km / _CITY_SPEED_KMH) * 60
         return max(1, math.ceil(raw)) + buffer_minutes
+
+    def geocode(self, address: str) -> tuple[float, float] | None:
+        """Geocode a free-text address via the Google Geocoding API.
+
+        Biased to the UAE. Returns ``(lat, lng)`` for the top result, or None on
+        no match / any API failure (caller then asks for a location pin).
+        """
+        if not self._api_key or not address:
+            return None
+        try:
+            params = {
+                "address": address,
+                "key": self._api_key,
+                "region": "ae",
+                "components": "country:AE",
+            }
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(_GEOCODE_URL, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results") or []
+            if not results:
+                return None
+            loc = results[0]["geometry"]["location"]
+            return (float(loc["lat"]), float(loc["lng"]))
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully on any failure
+            logger.warning("Google geocode failed for %r: %s", address, exc)
+            return None
 
     def _maps_distance(
         self,

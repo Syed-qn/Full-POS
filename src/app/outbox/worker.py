@@ -114,14 +114,28 @@ def deliver_outbox_message(self, outbox_id: int) -> None:
     Uses exponential back-off (10s, 20s, 40s, 80s, 160s).  After max_retries
     the message is marked ``dead`` and no further retries occur.
     """
-    from app.db import async_session_factory
+    from app.db import async_session_factory, get_engine
     from app.whatsapp.factory import get_whatsapp_provider
 
     provider = get_whatsapp_provider()
+
+    async def _run(coro) -> None:
+        # Dispose the engine's connection pool at the end of THIS event loop.
+        # Celery's solo pool reuses a single process and calls asyncio.run() once
+        # per task; a pooled asyncpg connection opened here is bound to this loop,
+        # which asyncio.run() then closes — so the next task would fail with
+        # "Event loop is closed". Disposing per task gives each task fresh
+        # connections on its own loop. (The worker is a separate process from the
+        # web app, so this never touches the app's engine.)
+        try:
+            await coro
+        finally:
+            await get_engine().dispose()
+
     try:
-        asyncio.run(
+        asyncio.run(_run(
             _deliver_one(outbox_id, provider=provider, session_factory=async_session_factory)
-        )
+        ))
     except Exception as exc:
         # Check for permanent 4xx failures (not 429) — mark dead immediately.
         status_code: int | None = getattr(getattr(exc, "response", None), "status_code", None)
@@ -129,7 +143,7 @@ def deliver_outbox_message(self, outbox_id: int) -> None:
             logger.error(
                 "outbox permanent failure id=%s status=%s — marking dead", outbox_id, status_code
             )
-            asyncio.run(_mark_dead(outbox_id, session_factory=async_session_factory))
+            asyncio.run(_run(_mark_dead(outbox_id, session_factory=async_session_factory)))
             return
 
         # Transient error — retry with exponential back-off or mark dead.
@@ -137,7 +151,7 @@ def deliver_outbox_message(self, outbox_id: int) -> None:
             logger.error(
                 "outbox max retries reached for id=%s — marking dead", outbox_id
             )
-            asyncio.run(_mark_dead(outbox_id, session_factory=async_session_factory))
+            asyncio.run(_run(_mark_dead(outbox_id, session_factory=async_session_factory)))
             return
 
         countdown = _backoff_countdown(self.request.retries)

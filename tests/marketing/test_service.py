@@ -373,6 +373,7 @@ async def test_record_conversion_attributes_recent_send(db_session, restaurant):
         customer_id=cust.id,
         order_id=order.id,
         window_hours=48,
+        now_utc=NOW_IN_WINDOW,
     )
     send = (
         await db_session.execute(
@@ -393,7 +394,11 @@ async def test_campaign_stats_breakdown(db_session, restaurant):
         db_session, campaign=camp, provider=provider, now_utc=NOW_IN_WINDOW
     )
     await service.record_conversion(
-        db_session, restaurant_id=restaurant.id, customer_id=clean.id, order_id=order.id
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_id=clean.id,
+        order_id=order.id,
+        now_utc=NOW_IN_WINDOW,
     )
 
     stats = await service.campaign_stats(

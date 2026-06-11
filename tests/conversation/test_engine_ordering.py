@@ -335,6 +335,89 @@ async def test_returning_customer_confirms_saved_address_skips_to_summary(db_ses
     assert order.address_id == addr.id
 
 
+async def _seed_returning_with_saved_address(db_session, restaurant):
+    """Seed a customer (phone +971501110001) with one confirmed saved address."""
+    from app.ordering.models import Customer, CustomerAddress
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501110001", name="Returning",
+        usual_order_times={}, tags={}, total_orders=1, total_spend=Decimal("22.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    db_session.add(CustomerAddress(
+        customer_id=customer.id, latitude=25.21, longitude=55.27,
+        room_apartment="5B", building="Marina Tower",
+        receiver_name="Returning", confirmed=True,
+    ))
+    await db_session.commit()
+
+
+async def test_proactive_saved_address_offer_on_checkout(db_session, restaurant):
+    """Returning customer is offered their saved address with Use/New buttons UP
+    FRONT at checkout — before being asked to type (the double-entry fix on the
+    phase-aware engine)."""
+    await _seed_menu(db_session, restaurant.id)
+    await _seed_returning_with_saved_address(db_session, restaurant)
+
+    for m in (_msg("hi", "wamid.pa1"), _msg("chicken biryani", "wamid.pa2"),
+              _msg("done", "wamid.pa3")):
+        await handle_inbound(db_session, m, restaurant_id=restaurant.id)
+        await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    last = rows[-1].payload
+    assert last.get("type") == "buttons"
+    assert "Welcome back" in last.get("body", "")
+    assert "Marina" in last.get("body", "") or "5B" in last.get("body", "")
+    btn_ids = {b["id"] for b in last.get("buttons", [])}
+    assert {"use_saved_address", "new_address"} <= btn_ids
+
+
+async def test_use_saved_button_attaches_address_and_confirms(db_session, restaurant):
+    """Tapping 'Use saved address' after the proactive offer attaches it and moves
+    to confirmation — one tap, no typing."""
+    await _seed_menu(db_session, restaurant.id)
+    await _seed_returning_with_saved_address(db_session, restaurant)
+
+    for m in (_msg("hi", "wamid.us1"), _msg("chicken biryani", "wamid.us2"),
+              _msg("done", "wamid.us3")):
+        await handle_inbound(db_session, m, restaurant_id=restaurant.id)
+        await db_session.commit()
+    await handle_inbound(db_session, _btn("use_saved_address", "wamid.us4"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    assert conv.state["dialogue_state"] == "order_confirmation"
+
+
+async def test_new_address_button_marks_offer_and_does_not_reoffer(db_session, restaurant):
+    """Tapping 'New address' asks for location/text and marks the offer made, so the
+    saved address is never offered again (no double entry)."""
+    await _seed_menu(db_session, restaurant.id)
+    await _seed_returning_with_saved_address(db_session, restaurant)
+
+    for m in (_msg("hi", "wamid.na1"), _msg("chicken biryani", "wamid.na2"),
+              _msg("done", "wamid.na3")):
+        await handle_inbound(db_session, m, restaurant_id=restaurant.id)
+        await db_session.commit()
+    await handle_inbound(db_session, _btn("new_address", "wamid.na4"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    assert conv.state.get("address_offer_made") is True
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload.get("body", "")
+    assert "location" in body.lower() or "address" in body.lower()
+    assert "Welcome back" not in body
+
+
 async def test_what_is_query_returns_description_without_price(db_session, restaurant):
     """'What is chicken biryani' → describer reply, no price."""
     await _seed_menu(db_session, restaurant.id)

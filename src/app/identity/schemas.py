@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SignupIn(BaseModel):
@@ -54,6 +54,31 @@ class SettingsPatch(BaseModel):
     max_orders_per_batch: int | None = Field(default=None, ge=1, le=6)
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
     delivery_fee_tiers: list[dict] | None = None
+
+    @field_validator("delivery_fee_tiers")
+    @classmethod
+    def _validate_tiers(cls, v: list[dict] | None) -> list[dict] | None:
+        """Each tier needs a positive ascending ``max_km`` and a non-negative
+        ``fee_aed`` — so the dynamic fee/radius config can't be saved broken."""
+        if v is None:
+            return v
+        if not v:
+            raise ValueError("delivery_fee_tiers must have at least one tier")
+        prev_km = 0.0
+        for tier in v:
+            if not isinstance(tier, dict) or "max_km" not in tier or "fee_aed" not in tier:
+                raise ValueError("each tier needs 'max_km' and 'fee_aed'")
+            try:
+                km = float(tier["max_km"])
+                fee = float(tier["fee_aed"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("max_km and fee_aed must be numbers") from exc
+            if km <= prev_km:
+                raise ValueError("tiers must be ascending with positive max_km")
+            if fee < 0:
+                raise ValueError("fee_aed must be >= 0")
+            prev_km = km
+        return v
 
 
 class ProfilePatch(BaseModel):

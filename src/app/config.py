@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Geo
     geo_provider: str = "fake"  # fake | google_maps
     google_maps_api_key: SecretStr = SecretStr("")
+    # Geocode cache (address -> lat/lng) in Redis; positive results, 30-day TTL.
+    geocode_cache_enabled: bool = True
+    geocode_cache_ttl_seconds: int = 2_592_000  # 30 days
 
     # Geo / dispatch fallbacks (used by haversine eta in geo/fake + batch inter-stop calc)
     geo_city_speed_kmh: float = 25.0  # spec §5 graceful: haversine + static 25km/h city

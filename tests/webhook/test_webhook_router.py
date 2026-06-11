@@ -73,11 +73,15 @@ _TEXT_PAYLOAD = {
 
 
 async def test_get_verify_handshake_valid(client):
+    # Use the actually-configured verify token (read from settings) so the test
+    # is robust to a real token being set in .env, not just the dev default.
+    from app.config import get_settings
+
     resp = await client.get(
         "/webhooks/whatsapp",
         params={
             "hub.mode": "subscribe",
-            "hub.verify_token": "dev-verify-token",
+            "hub.verify_token": get_settings().wa_verify_token,
             "hub.challenge": "1158201444",
         },
     )

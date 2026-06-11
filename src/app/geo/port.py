@@ -23,3 +23,12 @@ class GeoPort(Protocol):
     def eta_minutes(self, distance_km: float, buffer_minutes: int = 0) -> int:
         """Return ETA in whole minutes. buffer_minutes added after calculation."""
         ...
+
+    def geocode(self, address: str) -> tuple[float, float] | None:
+        """Convert a free-text address to ``(lat, lng)``, or None if not found.
+
+        FakeGeoProvider uses a small Dubai gazetteer (dev/tests);
+        GoogleMapsGeoProvider calls the Geocoding API. The backend — never the
+        LLM — uses the result to compute distance / fee / eligibility.
+        """
+        ...

@@ -1,0 +1,87 @@
+"""Manager-dashboard conversations read API (/api/v1/conversations)."""
+
+from sqlalchemy import select
+
+from app.conversation.models import Conversation, Message
+from app.identity.models import Restaurant
+
+
+async def _seed_conversation(db_session, restaurant_id: int, phone: str) -> Conversation:
+    conv = Conversation(
+        restaurant_id=restaurant_id, phone=phone, counterpart="customer", state={}
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    # outbound first (lower id), inbound last (higher id) -> "customer spoke last"
+    db_session.add(
+        Message(conversation_id=conv.id, direction="outbound", type="text",
+                payload={"body": "Here is our menu"}, ts=100)
+    )
+    db_session.add(
+        Message(conversation_id=conv.id, direction="inbound", type="text",
+                payload={"text": "I want biryani"}, ts=200)
+    )
+    await db_session.flush()
+    return conv
+
+
+async def _restaurant(db_session) -> Restaurant:
+    return await db_session.scalar(
+        select(Restaurant).where(Restaurant.phone == "+971501234567")
+    )
+
+
+async def test_list_conversations_returns_real_data(client, auth_headers, db_session):
+    restaurant = await _restaurant(db_session)
+    conv = await _seed_conversation(db_session, restaurant.id, "+971500000001")
+
+    resp = await client.get("/api/v1/conversations", headers=auth_headers)
+    assert resp.status_code == 200
+    rows = resp.json()
+    row = next(r for r in rows if r["id"] == conv.id)
+    assert row["phone"] == "+971500000001"
+    assert row["counterpart"] == "customer"
+    assert row["manual_takeover"] is False
+    assert row["last_message_preview"] == "I want biryani"  # from the last message
+    assert row["unread"] is True  # customer spoke last
+    assert row["updated_at"]  # ISO timestamp present
+
+
+async def test_messages_endpoint_normalizes_body_to_text(client, auth_headers, db_session):
+    restaurant = await _restaurant(db_session)
+    conv = await _seed_conversation(db_session, restaurant.id, "+971500000002")
+
+    resp = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    msgs = resp.json()
+    assert [m["direction"] for m in msgs] == ["outbound", "inbound"]  # id-ascending
+    # outbound stored under 'body' must surface as 'text' for the React bubble
+    assert msgs[0]["payload"]["text"] == "Here is our menu"
+    assert msgs[1]["payload"]["text"] == "I want biryani"
+
+
+async def test_messages_unknown_conversation_is_404(client, auth_headers, db_session):
+    resp = await client.get("/api/v1/conversations/999999/messages", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_other_restaurants_conversation_is_404(client, auth_headers, db_session):
+    # Conversation owned by a DIFFERENT restaurant must not be visible.
+    other = Restaurant(
+        name="Other", phone="+971599999999", password_hash="x", lat=25.0, lng=55.0
+    )
+    db_session.add(other)
+    await db_session.flush()
+    conv = await _seed_conversation(db_session, other.id, "+971500000003")
+
+    resp = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages", headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_requires_auth(client):
+    resp = await client.get("/api/v1/conversations")
+    assert resp.status_code == 401

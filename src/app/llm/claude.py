@@ -351,6 +351,11 @@ MENU:
 
 CURRENT CART: {cart_summary}
 
+DELIVERY FEES — the ONLY correct numbers. Recite EXACTLY when asked about
+delivery cost. NEVER invent or guess tiers/distances. The exact fee for an order
+is set by the backend from the customer's location, not by you:
+{delivery_info}
+
 STRICT RULES — read carefully before choosing an action:
 
 1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
@@ -391,11 +396,13 @@ class ClaudeConversationAgent:
         menu_text: str,
         history: list[dict],
         cart_summary: str,
+        delivery_info: str = "",
     ) -> ConversationAgentResult:
         system = _CONVERSATION_SYSTEM.format(
             restaurant_name=restaurant_name,
             menu_text=menu_text,
             cart_summary=cart_summary or "empty",
+            delivery_info=delivery_info or "Delivery fees vary by distance.",
         )
         messages = history if history else [{"role": "user", "content": "hi"}]
         response = await self._client.messages.create(

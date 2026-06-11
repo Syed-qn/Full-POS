@@ -3,6 +3,10 @@ import os
 
 os.environ.setdefault("APP_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:5433/restaurant_test")
 os.environ.setdefault("APP_LLM_PROVIDER", "fake")  # never hit real AI APIs in tests
+# Pin the WhatsApp provider for tests so they're deterministic regardless of the
+# runtime .env (which may be set to "cloud" for live WhatsApp). The simulator
+# router only mounts under "mock", and tests rely on it.
+os.environ.setdefault("APP_WHATSAPP_PROVIDER", "mock")
 
 
 import pytest

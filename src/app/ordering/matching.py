@@ -129,3 +129,80 @@ async def find_dish_matches(
     # Multiple close candidates → AMBIGUOUS (return up to 3)
     candidates = [dishes_map[r.id] for r in rows[:3] if r.id in dishes_map]
     return MatchResult(confidence=MatchConfidence.AMBIGUOUS, candidates=candidates)
+
+
+async def find_unavailable_match(
+    session: "AsyncSession",
+    restaurant_id: int,
+    query: str,
+) -> Dish | None:
+    """Return a dish that matches ``query`` but is currently unavailable.
+
+    Mirrors ``find_dish_matches`` but searches dishes with ``is_available =
+    false``. Used to distinguish "you asked for something we have but it's out
+    of stock" from "we don't have that at all", so the bot can offer an
+    alternative instead of a flat "not found".
+    """
+    query = query.strip()
+    menu_id = await _active_menu_id(session, restaurant_id)
+    if menu_id is None:
+        return None
+
+    if re.fullmatch(r"\d+", query):
+        return await session.scalar(
+            select(Dish).where(
+                Dish.menu_id == menu_id,
+                Dish.dish_number == int(query),
+                Dish.is_available == False,  # noqa: E712
+            )
+        )
+
+    normalized_query = normalize_name(query)
+    row = (
+        await session.execute(
+            text("""
+                SELECT d.id, word_similarity(:q, d.name_normalized) AS sim
+                FROM dishes d
+                WHERE d.menu_id = :mid
+                  AND d.is_available = false
+                  AND d.name_normalized IS NOT NULL
+                  AND word_similarity(:q, d.name_normalized) > :thr
+                ORDER BY sim DESC
+                LIMIT 1
+            """),
+            {"q": normalized_query, "mid": menu_id, "thr": _SINGLE_THRESHOLD},
+        )
+    ).first()
+    if row is None:
+        return None
+    return await session.get(Dish, row.id)
+
+
+async def suggest_available_alternative(
+    session: "AsyncSession",
+    restaurant_id: int,
+    *,
+    category: str | None,
+    exclude_id: int,
+) -> Dish | None:
+    """Pick one available dish to offer as an alternative.
+
+    Prefers a dish in the same ``category``; falls back to any available dish.
+    Excludes ``exclude_id`` (the out-of-stock dish itself).
+    """
+    menu_id = await _active_menu_id(session, restaurant_id)
+    if menu_id is None:
+        return None
+
+    base = select(Dish).where(
+        Dish.menu_id == menu_id,
+        Dish.is_available == True,  # noqa: E712
+        Dish.id != exclude_id,
+    )
+    if category:
+        same_cat = await session.scalar(
+            base.where(Dish.category == category).order_by(Dish.dish_number).limit(1)
+        )
+        if same_cat is not None:
+            return same_cat
+    return await session.scalar(base.order_by(Dish.dish_number).limit(1))

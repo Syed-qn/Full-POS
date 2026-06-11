@@ -212,16 +212,32 @@ async def add_item(
     qty: int = 1,
     notes: str | None = None,
 ) -> OrderItem:
-    item = OrderItem(
-        order_id=order.id,
-        dish_id=dish.id,
-        dish_number=dish.dish_number,
-        dish_name=dish.name,
-        price_aed=dish.price_aed,
-        qty=qty,
-        notes=notes,
-    )
-    session.add(item)
+    # Merge into an existing line for the same dish + notes so the cart shows
+    # "2x Mango Lassi" instead of two separate "1x" lines (matches how real
+    # ordering apps present a cart).
+    existing_line = (
+        await session.scalars(
+            select(OrderItem).where(
+                OrderItem.order_id == order.id,
+                OrderItem.dish_id == dish.id,
+                OrderItem.notes.is_(notes) if notes is None else OrderItem.notes == notes,
+            )
+        )
+    ).first()
+    if existing_line is not None:
+        existing_line.qty += qty
+        item = existing_line
+    else:
+        item = OrderItem(
+            order_id=order.id,
+            dish_id=dish.id,
+            dish_number=dish.dish_number,
+            dish_name=dish.name,
+            price_aed=dish.price_aed,
+            qty=qty,
+            notes=notes,
+        )
+        session.add(item)
     await session.flush()
     # Recalculate order totals from persisted items.
     existing = (
@@ -232,6 +248,98 @@ async def add_item(
     order.total = subtotal + order.delivery_fee_aed
     await session.flush()
     return item
+
+
+async def remove_item(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    dish: "Dish",
+    qty: int = 1,
+) -> int:
+    """Remove up to ``qty`` units of ``dish`` from ``order``; return units removed.
+
+    Decrements existing line items for the dish (newest first). Lines that reach
+    zero are deleted. Recalculates order totals. Returns 0 if the dish is not in
+    the cart. Caller commits.
+    """
+    items = (
+        await session.scalars(
+            select(OrderItem)
+            .where(OrderItem.order_id == order.id, OrderItem.dish_id == dish.id)
+            .order_by(OrderItem.id.desc())
+        )
+    ).all()
+
+    remaining = max(0, qty)
+    removed = 0
+    for item in items:
+        if remaining <= 0:
+            break
+        take = min(item.qty, remaining)
+        item.qty -= take
+        removed += take
+        remaining -= take
+        if item.qty <= 0:
+            await session.delete(item)
+    if removed == 0:
+        return 0
+    await session.flush()
+
+    existing = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    subtotal = sum((i.price_aed * i.qty for i in existing), Decimal("0.00"))
+    order.subtotal = subtotal
+    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+    return removed
+
+
+async def set_item_qty(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    dish_id: int,
+    qty: int,
+) -> OrderItem | None:
+    """Set the quantity of ``dish_id`` in ``order`` to exactly ``qty``.
+
+    Collapses any duplicate lines for the dish into one. ``qty <= 0`` removes
+    the dish entirely. Recalculates totals. Returns the surviving line (or None
+    if the dish was not in the cart, or was removed). Caller commits.
+
+    Used by the "make it 3" / "change to 2" context-update intercept.
+    """
+    items = (
+        await session.scalars(
+            select(OrderItem)
+            .where(OrderItem.order_id == order.id, OrderItem.dish_id == dish_id)
+            .order_by(OrderItem.id)
+        )
+    ).all()
+    if not items:
+        return None
+
+    survivor: OrderItem | None = None
+    if qty <= 0:
+        for item in items:
+            await session.delete(item)
+    else:
+        survivor = items[0]
+        survivor.qty = qty
+        for extra in items[1:]:  # collapse duplicates
+            await session.delete(extra)
+    await session.flush()
+
+    remaining = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    subtotal = sum((i.price_aed * i.qty for i in remaining), Decimal("0.00"))
+    order.subtotal = subtotal
+    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+    return survivor
 
 
 def parse_qty_and_text(text: str) -> tuple[int, str]:

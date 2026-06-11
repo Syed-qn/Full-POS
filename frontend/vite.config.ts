@@ -7,7 +7,12 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": { target: "http://localhost:8000", changeOrigin: true },
+      // Backend runs on :9001 (run_live.ps1 — 8000/8001 fall in a Windows
+      // reserved port range after Docker restarts). Override with VITE_API_PROXY.
+      "/api": {
+        target: process.env.VITE_API_PROXY ?? "http://localhost:9001",
+        changeOrigin: true,
+      },
     },
     headers: {
       "X-Content-Type-Options": "nosniff",

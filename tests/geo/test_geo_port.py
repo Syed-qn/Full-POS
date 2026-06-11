@@ -1,5 +1,33 @@
+import os
+
+import pytest
+
 from app.geo.fake import FakeGeoProvider
 from app.geo.port import GeoPort
+
+
+@pytest.fixture(autouse=True)
+def _restore_geo_env():
+    """Snapshot + restore the geo env vars this module mutates, and invalidate the
+    settings/provider caches afterward. Without this, setting a dummy
+    APP_GOOGLE_MAPS_API_KEY here leaked into later tests — harmless when the
+    provider was 'fake', but once APP_GEO_PROVIDER=google_maps the leaked key made
+    the factory pick the REAL provider, breaking the gazetteer cache tests.
+    """
+    keys = ("APP_GOOGLE_MAPS_API_KEY", "APP_GEO_PROVIDER")
+    saved = {k: os.environ.get(k) for k in keys}
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        from app.config import get_settings
+        from app.geo.factory import get_geo_provider
+        get_settings.cache_clear()
+        get_geo_provider.cache_clear()
 
 
 def test_fake_distance_matches_haversine():
