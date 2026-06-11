@@ -171,3 +171,28 @@ async def test_post_webhook_dispatches_celery_task(client, db_session):
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     assert len(rows) == 1
     assert rows[0].id in dispatched_ids
+
+
+async def test_post_webhook_sync_delivery_sends_in_request(client, db_session, monkeypatch):
+    """With outbox_sync_delivery on, the reply is delivered IN the webhook request
+    (no Celery worker) — the row ends up 'sent', not left pending/dispatching."""
+    from sqlalchemy import select
+
+    from app.config import get_settings
+    from app.outbox.models import OutboxMessage
+
+    monkeypatch.setattr(get_settings(), "outbox_sync_delivery", True)
+    await _seed_restaurant_and_menu(client, db_session)
+
+    body, sig = _signed_body(_TEXT_PAYLOAD)
+    resp = await client.post(
+        "/webhooks/whatsapp",
+        content=body,
+        headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+    )
+    assert resp.status_code == 200
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].status == "sent"  # delivered synchronously, no worker needed
+    assert rows[0].wa_message_id is not None

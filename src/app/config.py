@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     wa_phone_number_id: str = ""
     wa_app_secret: SecretStr = SecretStr("")
     wa_business_account_id: str = ""  # WABA id for message-template management
+    # Deliver outbound replies synchronously inside the webhook request instead of
+    # via the Celery outbox worker. Lets a single web service run the full WhatsApp
+    # flow with NO worker/Redis (e.g. a free Render web service). Trade-off: the
+    # webhook holds the connection until the reply is sent (~1-2s extra).
+    outbox_sync_delivery: bool = False
 
     # Marketing
     marketing_send_dry_run: bool = True  # safe default — no real Meta calls

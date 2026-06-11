@@ -104,8 +104,26 @@ async def receive_webhook(
             )
             await session.commit()
 
-            for outbox_id in claimed_ids:
-                deliver_outbox_message.apply_async(args=[outbox_id], queue="outbox")
+            if settings.outbox_sync_delivery:
+                # No worker: deliver each reply in-request on this same connection
+                # (mirrors the simulator's synchronous path). Bind a sessionmaker to
+                # this session's connection so _deliver_one reuses it.
+                from sqlalchemy.ext.asyncio import async_sessionmaker
+
+                from app.outbox.worker import _deliver_one
+                from app.whatsapp.factory import get_whatsapp_provider
+
+                provider = get_whatsapp_provider()
+                sync_factory = async_sessionmaker(
+                    bind=session.bind,
+                    expire_on_commit=False,
+                    join_transaction_mode="create_savepoint",
+                )
+                for outbox_id in claimed_ids:
+                    await _deliver_one(outbox_id, provider=provider, session_factory=sync_factory)
+            else:
+                for outbox_id in claimed_ids:
+                    deliver_outbox_message.apply_async(args=[outbox_id], queue="outbox")
 
         except IntegrityError:
             await session.rollback()
