@@ -20,8 +20,10 @@ tests/
 # Docs are not part of the deployed artifact
 docs/
 
-# Frontend ships separately (its own build / static host)
-frontend/
+# Frontend source IS built into the image (FastAPI serves the SPA); only skip
+# its heavy/generated dirs (node_modules + any stale local dist).
+frontend/node_modules/
+frontend/dist/
 
 # Secrets and local env files must never enter the image
 .env

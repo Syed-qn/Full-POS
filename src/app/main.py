@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.cod.router import router as cod_router
 from app.config import get_settings
@@ -108,6 +110,24 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         body, content_type = metrics_response()
         return Response(content=body, media_type=content_type)
+
+    # Serve the built React dashboard (single-service deploy): the Docker build
+    # drops the compiled SPA at /app/static. Absent in local dev — there you run
+    # the vite dev server. Mounted LAST so it never shadows the API/health/metrics
+    # routes above; the catch-all returns index.html so client-side routes
+    # (/login, /orders, …) resolve to the SPA.
+    static_dir = Path(__file__).resolve().parents[2] / "static"
+    if (static_dir / "index.html").is_file():
+        app.mount(
+            "/assets", StaticFiles(directory=static_dir / "assets"), name="assets"
+        )
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa(full_path: str) -> Response:
+            candidate = static_dir / full_path
+            if full_path and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(static_dir / "index.html")
 
     return app
 

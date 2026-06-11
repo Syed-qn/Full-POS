@@ -30,6 +30,20 @@ COPY src ./src
 RUN pip wheel --wheel-dir /wheels .
 
 # ----------------------------------------------------------------------------
+# Frontend builder: compile the React dashboard to static assets (dist/).
+# Served by FastAPI in the runtime stage so one service hosts API + dashboard.
+# ----------------------------------------------------------------------------
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+# Install deps against the lockfile first (cached unless deps change).
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+# Build the SPA. No VITE_API_BASE -> the dashboard calls /api on its own origin
+# (same Render service), so no CORS and no second URL.
+COPY frontend/ ./
+RUN npm run build
+
+# ----------------------------------------------------------------------------
 # Runtime: minimal image, non-root, only runtime deps installed from wheels.
 # ----------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
@@ -57,6 +71,8 @@ COPY src ./src
 COPY apps ./apps
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+# Compiled React dashboard — FastAPI serves it from /app/static (main.py).
+COPY --from=frontend /frontend/dist ./static
 
 # Install deps from local wheels, then the project itself (editable for the
 # src-layout package). --no-index ensures we never reach out to PyPI at runtime.
