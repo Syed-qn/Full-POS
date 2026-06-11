@@ -86,12 +86,63 @@ async def set_manual_takeover(
     *,
     conversation_id: int,
     taken_over_by: int,
-) -> None:
+    active: bool = True,
+    restaurant_id: int | None = None,
+) -> bool:
+    """Toggle manual takeover. When ``restaurant_id`` is given it acts as a tenant
+    guard: returns False (no change) if the conversation is missing or owned by a
+    different restaurant. Turning takeover off clears ``taken_over_by``."""
     conv = await session.get(Conversation, conversation_id)
-    if conv is None:
-        raise ValueError(f"conversation {conversation_id} not found")
-    conv.manual_takeover = True
-    conv.taken_over_by = taken_over_by
+    if conv is None or (restaurant_id is not None and conv.restaurant_id != restaurant_id):
+        return False
+    conv.manual_takeover = active
+    conv.taken_over_by = taken_over_by if active else None
+    return True
+
+
+async def send_manual_message(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    conversation_id: int,
+    text: str,
+) -> tuple[Message, int] | None:
+    """Record a manager-authored outbound message and enqueue it for WhatsApp
+    delivery. Returns (message, outbox_id) or None if the conversation is missing
+    or belongs to another restaurant. Caller commits, then dispatches outbox_id."""
+    import time
+    import uuid
+
+    from app.outbox.service import enqueue_message
+    from app.whatsapp.port import OutboundMessageType
+
+    conv = await session.get(Conversation, conversation_id)
+    if conv is None or conv.restaurant_id != restaurant_id:
+        return None
+
+    ts = int(time.time())
+    payload = {"body": text}
+    msg = await record_message(
+        session,
+        conversation_id=conversation_id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="text",
+        payload=payload,
+        ts=ts,
+    )
+    await session.flush()  # assign msg.id
+
+    outbox = await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=conv.phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={"body": text},
+        idempotency_key=f"manual:{conversation_id}:{uuid.uuid4().hex}",
+    )
+    await session.flush()  # assign outbox.id
+    return msg, outbox.id
 
 
 async def list_dashboard_conversations(

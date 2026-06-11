@@ -1,4 +1,16 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class TakeoverIn(BaseModel):
+    """Toggle manager manual-takeover for a conversation."""
+
+    active: bool = True
+
+
+class SendMessageIn(BaseModel):
+    """A free-text message the manager sends to the customer from the dashboard."""
+
+    text: str = Field(min_length=1, max_length=4096)
 
 
 class ConversationOut(BaseModel):
