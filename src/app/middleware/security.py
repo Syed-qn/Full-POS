@@ -21,16 +21,36 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        if request.url.path.startswith("/simulator"):
+        path = request.url.path
+        if path.startswith("/simulator"):
             # Dev-only simulator needs inline styles + scripts + same-origin fetch
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'",
             )
-        else:
+        elif path.startswith(
+            ("/api", "/webhooks", "/health", "/metrics", "/openapi", "/docs", "/redoc")
+        ):
+            # Pure API / machine endpoints: lock everything down.
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'none'; frame-ancestors 'none'",
+            )
+        else:
+            # Single-page dashboard served from this origin. Allow its own bundled
+            # JS/CSS ('self'), inline styles emitted by recharts/leaflet, Google
+            # Fonts, OpenStreetMap map tiles, and same-origin API calls. Without
+            # this the browser blocks the SPA's own assets and renders a blank page.
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' data: https://fonts.gstatic.com; "
+                "img-src 'self' data: blob: https:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'",
             )
         if self._hsts:
             response.headers.setdefault(
