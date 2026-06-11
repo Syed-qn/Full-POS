@@ -3,7 +3,7 @@ import { Button } from "../components/Button";
 import { DiffPanel } from "../components/DiffPanel";
 import { DishCard } from "../components/DishCard";
 import { SectionBanner } from "../components/SectionBanner";
-import { activateMenu, getMenu, setAvailability, uploadMenu } from "../lib/menuApi";
+import { activateMenu, fetchActiveMenu, getMenu, setAvailability, uploadMenu } from "../lib/menuApi";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import s from "./MenuManagerScreen.module.css";
 
@@ -15,8 +15,22 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (activeMenuId !== null && pending === null) {
+    if (pending !== null) return;
+    if (activeMenuId !== null) {
+      // Known menu id (after an upload+activate, or passed in): load its dishes.
       getMenu(activeMenuId).then((m) => setDishes(m.dishes)).catch(() => {});
+    } else {
+      // First mount with no id: discover the restaurant's active menu so the
+      // current dishes show up instead of the empty "upload your first menu"
+      // state. Without this the screen never loads an existing/seeded menu.
+      fetchActiveMenu()
+        .then((m) => {
+          if (m) {
+            setActiveMenuId(m.id);
+            setDishes(m.dishes);
+          }
+        })
+        .catch(() => {});
     }
   }, [activeMenuId, pending]);
 

@@ -31,6 +31,23 @@ describe("MenuManagerScreen", () => {
     expect(screen.getByText("Mutton Karahi")).toBeInTheDocument();
   });
 
+  it("discovers the active menu on mount when no id is passed (route default)", async () => {
+    // The /menu route renders <MenuManagerScreen /> with NO initialMenuId.
+    // It must call GET /menus/active and show the dishes, not the empty state.
+    vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
+      if (typeof url === "string" && url.includes("/menus/active") && (!init || init.method === "GET")) {
+        return Promise.resolve(new Response(JSON.stringify(activeMenu), { status: 200 }));
+      }
+      if (typeof url === "string" && url.includes("/menus/5")) {
+        return Promise.resolve(new Response(JSON.stringify(activeMenu), { status: 200 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    render(<MenuManagerScreen />);
+    await waitFor(() => expect(screen.getByText("Chicken Biryani")).toBeInTheDocument());
+    expect(screen.queryByText("Upload your first menu to get started.")).not.toBeInTheDocument();
+  });
+
   it("toggles availability via API on switch click", async () => {
     const fetchSpy = vi.mocked(fetch);
     render(<MenuManagerScreen initialMenuId={5} />);
