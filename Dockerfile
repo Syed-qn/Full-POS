@@ -91,9 +91,11 @@ USER app
 
 EXPOSE 8000
 
-# Liveness probe hits the FastAPI /health endpoint.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS "http://localhost:${APP_PORT}/health" || exit 1
+# Liveness probe hits the FastAPI /health endpoint on the actually-bound port
+# (${PORT} on Render/Heroku, else ${APP_PORT}) — must match the uvicorn CMD below
+# or the probe hits a dead port and reports the container unhealthy.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD curl -fsS "http://localhost:${PORT:-$APP_PORT}/health" || exit 1
 
 # On boot: apply DB migrations, then serve. Best-effort migrate (|| echo) so a
 # transient/misconfigured DB logs loudly but still starts the API and keeps
