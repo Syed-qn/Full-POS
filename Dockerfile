@@ -79,6 +79,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS "http://localhost:${APP_PORT}/health" || exit 1
 
-# Worker count is configurable via APP_WORKERS (set in compose / env).
-# Shell form so ${APP_WORKERS}/${APP_PORT} expand at container start.
-CMD uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT}" --workers "${APP_WORKERS}"
+# On boot: apply DB migrations, then serve. Best-effort migrate (|| echo) so a
+# transient/misconfigured DB logs loudly but still starts the API and keeps
+# /health green — the next deploy re-runs `alembic upgrade head` (idempotent).
+# Worker count is configurable via APP_WORKERS. Shell form expands ${...} at start.
+CMD sh -c 'alembic upgrade head || echo "[startup] alembic upgrade head FAILED — check APP_DATABASE_URL"; exec uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT}" --workers "${APP_WORKERS}"'
