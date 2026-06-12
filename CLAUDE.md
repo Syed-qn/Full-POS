@@ -12,6 +12,24 @@ Multi-tenant SaaS platform: restaurants run delivery operations entirely through
 - Spec (single source of truth for business rules): `docs/superpowers/specs/2026-06-06-whatsapp-restaurant-platform-design.md`
 - Active implementation plan: `docs/superpowers/plans/2026-06-06-phase-0-1-foundation.md`
 
+## Knowledge Graph (Graphify) — MANDATORY
+
+The codebase has a live knowledge graph in `graphify-out/` (3940 nodes, 6842 edges, 361 communities).
+
+**Before any code change:**
+1. Query the graph for the relevant area: `/graphify query "<what you're about to change>"`
+2. Check god nodes touched by the change (`handle_inbound`, `get_settings`, `record_audit`, `lint_template`, `app.ordering.models`) — changes near these have wide blast radius.
+3. Review community membership of affected files — cross-community changes need extra care.
+
+**After any code change:**
+1. Run `/graphify . --update` to re-extract only changed files and rebuild the graph.
+2. Check that no new AMBIGUOUS edges appeared in the affected area.
+
+**Graph artifacts:**
+- `graphify-out/graph.html` — interactive visualization (open in browser)
+- `graphify-out/GRAPH_REPORT.md` — god nodes, surprising connections, community labels
+- `graphify-out/graph.json` — raw GraphRAG-ready data
+
 ## Commands
 
 ```bash
