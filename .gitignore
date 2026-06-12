@@ -13,3 +13,12 @@ frontend/node_modules/
 frontend/dist/
 frontend/node_modules/.tmp/
 frontend/*.tsbuildinfo
+
+# credentials / local access notes
+ACCESS.md
+
+# local tool state
+.superpowers/
+
+# graphify run metadata (not useful to team)
+graphify-out/cost.json
