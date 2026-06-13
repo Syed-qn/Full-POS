@@ -3,5 +3,21 @@
     "allow": [
       "Bash(grep -c \"re.sub\\(r\\\\\"\\\\\\\\\\\\\\\\D\\\\\"\" src/app/webhook/normalizer.py)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "cd \"/Users/syed/Files/untitled folder 2/Work/Catalystiq/Restaurant Whatsapp Service\" && source .env 2>/dev/null && export DEEPSEEK_API_KEY=\"$APP_DEEPSEEK_API_KEY\" && PYTHON=$(cat \"graphify-out/.graphify_python\") && \"$PYTHON\" -m graphify . --update --no-viz 2>&1 | tail -5",
+            "async": true,
+            "statusMessage": "Updating knowledge graph..."
+          }
+        ]
+      }
+    ]
   }
 }
