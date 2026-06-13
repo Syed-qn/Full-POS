@@ -1101,11 +1101,11 @@
       "llm_claude_rationale_270",
       "llm_claude_rationale_385",
       "llm_factory_get_anthropic_client",
-      "llm_factory_get_intent_classifier",
       "llm_factory_rationale_25",
       "llm_port_arbiter_port",
       "llm_port_describer_port",
       "llm_port_forecast_adjuster_port",
+      "llm_port_intent_classifier_port",
       "llm_port_segment_compiler_port",
       "src_app_llm_claude_py_conversationagentresult"
     ],
@@ -1663,34 +1663,6 @@
       "src_app_predictions_service_py_forecastmodel"
     ],
     "39": [
-      "app_main",
-      "app_main_create_app",
-      "app_main_lifespan",
-      "fastapi",
-      "llm_fake",
-      "llm_fake_fakeconversationagent",
-      "llm_fake_fakeconversationagent_respond",
-      "llm_fake_fakeextractor",
-      "llm_fake_fakeextractor_extract_menu",
-      "llm_fake_fakeextractor_init",
-      "llm_fake_rationale_120",
-      "llm_port_conversation_agent_port",
-      "llm_port_conversation_agent_result",
-      "llm_test_fake",
-      "llm_test_fake_test_fake_agent_new_interface",
-      "llm_test_fake_test_fake_extractor_canned_override",
-      "llm_test_fake_test_fake_extractor_returns_drafts",
-      "obs_sentry",
-      "obs_sentry_init_sentry",
-      "obs_sentry_rationale_1",
-      "obs_sentry_rationale_8",
-      "predictions_conftest_client",
-      "predictions_conftest_rationale_30",
-      "src_app_llm_fake_py_dishdraft",
-      "src_app_llm_fake_py_uploadedfile",
-      "tests_conftest_client"
-    ],
-    "40": [
       "fileblobstore",
       "menu_diff_diffreport",
       "menu_models_menu_file",
@@ -1716,6 +1688,33 @@
       "src_app_menu_service_py_menu",
       "src_app_menu_service_py_menuextractor",
       "src_app_menu_service_py_uploadedfile"
+    ],
+    "40": [
+      "llm_factory_get_intent_classifier",
+      "llm_fake",
+      "llm_fake_fakearbiter",
+      "llm_fake_fakearbiter_arbitrate",
+      "llm_fake_fakeconversationagent",
+      "llm_fake_fakeconversationagent_respond",
+      "llm_fake_fakedescriber",
+      "llm_fake_fakedescriber_describe",
+      "llm_fake_fakeintentclassifier",
+      "llm_fake_fakeintentclassifier_classify",
+      "llm_fake_rationale_120",
+      "llm_fake_rationale_37",
+      "llm_fake_rationale_48",
+      "llm_fake_rationale_67",
+      "llm_port_conversation_agent_port",
+      "llm_port_conversation_agent_result",
+      "llm_test_llm_ordering_ports",
+      "llm_test_llm_ordering_ports_rationale_41",
+      "llm_test_llm_ordering_ports_test_arbiter_protocol_satisfied_by_fake",
+      "llm_test_llm_ordering_ports_test_describer_protocol_satisfied_by_fake",
+      "llm_test_llm_ordering_ports_test_fake_arbiter_returns_one_of_candidates",
+      "llm_test_llm_ordering_ports_test_fake_describer_never_includes_price",
+      "llm_test_llm_ordering_ports_test_fake_describer_returns_max_3_lines",
+      "llm_test_llm_ordering_ports_test_fake_intent_classifier_returns_known_intent",
+      "llm_test_llm_ordering_ports_test_intent_classifier_protocol_satisfied_by_fake"
     ],
     "41": [
       "marketing_test_service",
@@ -2279,6 +2278,28 @@
       "src_app_coupons_service_py_decimal"
     ],
     "64": [
+      "app_main",
+      "app_main_create_app",
+      "app_main_lifespan",
+      "fastapi",
+      "llm_fake_fakeextractor",
+      "llm_fake_fakeextractor_extract_menu",
+      "llm_fake_fakeextractor_init",
+      "llm_test_fake",
+      "llm_test_fake_test_fake_agent_new_interface",
+      "llm_test_fake_test_fake_extractor_canned_override",
+      "llm_test_fake_test_fake_extractor_returns_drafts",
+      "obs_sentry",
+      "obs_sentry_init_sentry",
+      "obs_sentry_rationale_1",
+      "obs_sentry_rationale_8",
+      "predictions_conftest_client",
+      "predictions_conftest_rationale_30",
+      "src_app_llm_fake_py_dishdraft",
+      "src_app_llm_fake_py_uploadedfile",
+      "tests_conftest_client"
+    ],
+    "65": [
       "campaigncreate",
       "campaignresponse",
       "marketing_router",
@@ -2300,7 +2321,7 @@
       "templatecreate",
       "templateresponse"
     ],
-    "65": [
+    "66": [
       "conversation_engine_handle_inbound",
       "conversation_engine_rationale_1988",
       "conversation_test_engine",
@@ -2322,7 +2343,7 @@
       "conversation_test_engine_test_stop_keyword_records_optout",
       "tests_conversation_test_engine_py_inboundmessage"
     ],
-    "66": [
+    "67": [
       "db_Base",
       "dispatch_models_Assignment",
       "dispatch_models_Batch",
@@ -2344,7 +2365,7 @@
       "dispatch_test_dispatch_engine_test_no_available_riders_alerts_manager_and_leaves_unassigned",
       "dispatch_test_dispatch_engine_test_rider_set_on_delivery_and_batch_created"
     ],
-    "67": [
+    "68": [
       "frontend_tsconfig",
       "frontend_tsconfig_compileroptions",
       "frontend_tsconfig_compileroptions_allowimportingtsextensions",
@@ -2366,7 +2387,7 @@
       "frontend_tsconfig_include",
       "frontend_tsconfig_references"
     ],
-    "68": [
+    "69": [
       "marketing_template_factory",
       "marketing_template_factory_get_mock_template_provider",
       "marketing_template_factory_get_template_provider",
@@ -2388,7 +2409,29 @@
       "src_app_marketing_worker_py_datetime",
       "test_template_provider_mock_provider"
     ],
-    "69": [
+    "70": [
+      "menu_Menu_model",
+      "ordering_OrderItem_model",
+      "predictions_FakeForecastAdjuster",
+      "predictions_ManagerOverride_model",
+      "predictions_ModelRegistry_model",
+      "predictions_PredictionRun_model",
+      "predictions_TARGET_ACCURACY_80pct",
+      "predictions_apply_overrides",
+      "predictions_create_override",
+      "predictions_get_forecast_adjuster_factory",
+      "predictions_latest_run",
+      "predictions_list_runs",
+      "predictions_override_delta_mult_rule",
+      "predictions_override_immutable_input_rule",
+      "predictions_prep_ahead_suggestions",
+      "predictions_run_forecast",
+      "predictions_tenant_scoped_rule",
+      "test_predictions_adjust_file",
+      "test_predictions_models_file",
+      "test_predictions_service_file"
+    ],
+    "71": [
       "predictions_accuracy",
       "predictions_accuracy_accuracy_from_mape",
       "predictions_accuracy_from_mape",
@@ -2410,7 +2453,7 @@
       "predictions_test_accuracy_test_target_accuracy_default_80pct",
       "test_predictions_accuracy_file"
     ],
-    "70": [
+    "72": [
       "predictions_fake",
       "predictions_fake_fakeforecastmodel",
       "predictions_fake_fakeforecastmodel_fit",
@@ -2432,28 +2475,7 @@
       "src_app_predictions_fake_py_dishhourforecast",
       "src_app_predictions_fake_py_dishhourobservation"
     ],
-    "71": [
-      "conversation_handle_inbound",
-      "ordering_Customer_model",
-      "ordering_OrderStatus_fsm",
-      "ordering_Order_model",
-      "ordering_cancel_order_fn",
-      "ordering_delete_address_endpoint",
-      "ordering_get_available_resale_orders_fn",
-      "ordering_is_excluded_for_resale_fn",
-      "ordering_status_reply_confirmed",
-      "ordering_status_reply_no_order",
-      "ordering_status_reply_preparing",
-      "outbox_InboundMessage_type",
-      "test_cancellation_test_cancel_before_preparing",
-      "test_cancellation_test_cancel_during_preparing_creates_resale",
-      "test_cancellation_test_is_excluded_for_resale_helper",
-      "test_cancellation_test_resale_offer_matcher_filters_by_exclusion",
-      "test_customer_profile_test_delete_address",
-      "test_customer_profile_test_delete_address_linked_to_open_order_409",
-      "test_status_reply_file"
-    ],
-    "72": [
+    "73": [
       "exception",
       "identity_models",
       "identity_models_default_settings",
@@ -2473,27 +2495,6 @@
       "src_app_identity_service_py_asyncsession",
       "src_app_identity_service_py_restaurant",
       "src_app_identity_service_py_rider"
-    ],
-    "73": [
-      "llm_fake_fakearbiter",
-      "llm_fake_fakearbiter_arbitrate",
-      "llm_fake_fakedescriber",
-      "llm_fake_fakedescriber_describe",
-      "llm_fake_fakeintentclassifier",
-      "llm_fake_fakeintentclassifier_classify",
-      "llm_fake_rationale_37",
-      "llm_fake_rationale_48",
-      "llm_fake_rationale_67",
-      "llm_port_intent_classifier_port",
-      "llm_test_llm_ordering_ports",
-      "llm_test_llm_ordering_ports_rationale_41",
-      "llm_test_llm_ordering_ports_test_arbiter_protocol_satisfied_by_fake",
-      "llm_test_llm_ordering_ports_test_describer_protocol_satisfied_by_fake",
-      "llm_test_llm_ordering_ports_test_fake_arbiter_returns_one_of_candidates",
-      "llm_test_llm_ordering_ports_test_fake_describer_never_includes_price",
-      "llm_test_llm_ordering_ports_test_fake_describer_returns_max_3_lines",
-      "llm_test_llm_ordering_ports_test_fake_intent_classifier_returns_known_intent",
-      "llm_test_llm_ordering_ports_test_intent_classifier_protocol_satisfied_by_fake"
     ],
     "74": [
       "components_compacttable",
@@ -2693,6 +2694,7 @@
       "src_app_menu_diff_py_dishdraft"
     ],
     "84": [
+      "app_outbox_models",
       "app_whatsapp_port",
       "conversation_test_engine_pipeline",
       "conversation_test_engine_pipeline_rationale_1",
@@ -2701,15 +2703,14 @@
       "conversation_test_engine_pipeline_seed_menu",
       "conversation_test_engine_pipeline_test_full_greeting_pipeline_via_mock_provider",
       "conversation_test_engine_pipeline_test_item_collection_pipeline_direct_match",
+      "outbox_service",
+      "outbox_service_rationale_13",
       "simulator_ButtonReplyIn",
       "simulator_LocationIn",
       "simulator_SimulatorSendIn",
-      "whatsapp_test_mock_provider",
-      "whatsapp_test_mock_provider_test_inbound_message_shape",
-      "whatsapp_test_mock_provider_test_mock_drain_clears_log",
-      "whatsapp_test_mock_provider_test_mock_inject_inbound_queues_message",
-      "whatsapp_test_mock_provider_test_mock_send_records_and_returns_id",
-      "whatsapp_test_mock_provider_test_outbound_message_text_shape"
+      "workers_test_celery_metadata",
+      "workers_test_celery_metadata_rationale_1",
+      "workers_test_celery_metadata_test_worker_registers_restaurants_table_for_outbox_fk"
     ],
     "85": [
       "audit_record_audit",
@@ -2825,24 +2826,6 @@
       "tests_test_config_test_whatsapp_settings_defaults"
     ],
     "91": [
-      "app_outbox_models",
-      "conversation_test_rider_flow",
-      "conversation_test_rider_flow_rationale_1",
-      "conversation_test_rider_flow_rationale_146",
-      "conversation_test_rider_flow_rationale_163",
-      "conversation_test_rider_flow_seed_batch",
-      "conversation_test_rider_flow_test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location",
-      "conversation_test_rider_flow_test_button_only_unknown_id_no_op",
-      "conversation_test_rider_flow_test_delivered_marks_delivered_and_records_cod",
-      "conversation_test_rider_flow_test_last_delivery_frees_rider",
-      "conversation_test_rider_flow_test_orders_picked_advances_all_and_sends_first_stop",
-      "outbox_service",
-      "outbox_service_rationale_13",
-      "workers_test_celery_metadata",
-      "workers_test_celery_metadata_rationale_1",
-      "workers_test_celery_metadata_test_worker_registers_restaurants_table_for_outbox_fk"
-    ],
-    "92": [
       "identity_auth",
       "identity_auth_create_access_token",
       "identity_auth_decode_access_token",
@@ -2860,7 +2843,7 @@
       "identity_test_jwt_claims_test_rider_token_audience",
       "identity_test_jwt_claims_test_wrong_audience_rejected"
     ],
-    "93": [
+    "92": [
       "app_whatsapp_factory",
       "apps_simulator_router_py_asyncsession",
       "apps_simulator_router_py_inboundmessage",
@@ -2877,7 +2860,7 @@
       "simulator_router_simulatorsendin_exactly_one_payload",
       "simulator_router_simulatorsendin_to_inbound"
     ],
-    "94": [
+    "93": [
       "cloud_build_graph_payload",
       "cloud_upload_media",
       "cloud_verify_signature",
@@ -2894,7 +2877,7 @@
       "whatsapp_cloud_provider_cloudapiprovider",
       "whatsapp_cloud_provider_cloudapiprovider_init"
     ],
-    "95": [
+    "94": [
       "conversation_test_dashboard_api",
       "conversation_test_dashboard_api_rationale_1",
       "conversation_test_dashboard_api_rationale_136",
@@ -2911,24 +2894,7 @@
       "conversation_test_dashboard_api_test_takeover_toggles_flag",
       "tests_conversation_test_dashboard_api_py_conversation"
     ],
-    "96": [
-      "identity_Rider_model",
-      "identity_create_access_token",
-      "ordering_CustomerAddress_model",
-      "ordering_add_item",
-      "ordering_api_get_orders_endpoint",
-      "ordering_create_draft_order",
-      "ordering_finalize_confirmation",
-      "ordering_get_or_create_customer",
-      "ordering_limit_clamp_100",
-      "ordering_list_orders_for_tenant",
-      "ordering_remove_item",
-      "ordering_rider_performance_jsonb_rule",
-      "ordering_sla_40min_rule",
-      "test_cancellation_test_exclusion_hash_encodes_phone_and_address",
-      "test_ordering_service_file"
-    ],
-    "97": [
+    "95": [
       "src_app_whatsapp_mock_provider_py_inboundmessage",
       "src_app_whatsapp_mock_provider_py_outboundmessage",
       "tests_outbox_test_outbox_worker_py_outboxmessage",
@@ -2945,7 +2911,23 @@
       "whatsapp_mock_provider_rationale_40",
       "whatsapp_mock_provider_rationale_8"
     ],
-    "98": [
+    "96": [
+      "conversation_handle_inbound",
+      "ordering_Customer_model",
+      "ordering_IllegalTransitionError",
+      "ordering_OrderFSM",
+      "ordering_OrderStatus_fsm",
+      "ordering_status_reply_confirmed",
+      "ordering_status_reply_no_order",
+      "ordering_status_reply_preparing",
+      "outbox_InboundMessage_type",
+      "test_cancellation_test_cancel_before_preparing",
+      "test_fsm_test_all_statuses_have_entries",
+      "test_fsm_test_draft_to_pending_confirmation_allowed",
+      "test_fsm_test_illegal_transition_raises",
+      "test_status_reply_file"
+    ],
+    "97": [
       "geo_fees",
       "geo_fees_delivery_fee_aed",
       "geo_fees_max_radius_km",
@@ -2961,7 +2943,7 @@
       "geo_test_fees_test_returns_decimal_type",
       "src_app_geo_fees_py_decimal"
     ],
-    "99": [
+    "98": [
       "marketing_test_worker",
       "marketing_test_worker_rationale_1",
       "marketing_test_worker_rationale_11",
@@ -2977,23 +2959,7 @@
       "marketing_test_worker_test_send_scheduled_campaigns_no_due",
       "marketing_test_worker_test_send_scheduled_campaigns_runs"
     ],
-    "100": [
-      "menu_Menu_model",
-      "ordering_OrderItem_model",
-      "predictions_ManagerOverride_model",
-      "predictions_ModelRegistry_model",
-      "predictions_PredictionRun_model",
-      "predictions_TARGET_ACCURACY_80pct",
-      "predictions_create_override",
-      "predictions_latest_run",
-      "predictions_list_runs",
-      "predictions_prep_ahead_suggestions",
-      "predictions_run_forecast",
-      "predictions_tenant_scoped_rule",
-      "test_predictions_models_file",
-      "test_predictions_service_file"
-    ],
-    "101": [
+    "99": [
       "obs_test_security_headers",
       "obs_test_security_headers_rationale_1",
       "obs_test_security_headers_rationale_18",
@@ -3009,7 +2975,7 @@
       "obs_test_security_headers_test_hsts_not_emitted_by_default",
       "obs_test_security_headers_test_security_headers_present"
     ],
-    "102": [
+    "100": [
       "LiveOpsScreen_LiveOpsScreen",
       "LiveOpsScreen_test_LiveOpsScreenTest",
       "components_KPITile",
@@ -3024,7 +2990,7 @@
       "usePoll_test",
       "usePoll_usePoll"
     ],
-    "103": [
+    "101": [
       "app_logging_config",
       "app_logging_config_configure_logging",
       "app_logging_config_get_request_id_processor",
@@ -3039,22 +3005,22 @@
       "main_create_app",
       "main_lifespan"
     ],
-    "104": [
+    "102": [
       "grafana_dashboard_provisioning",
+      "item_variants_activation_guard",
+      "item_variants_plan",
       "load_test_harness",
       "order_detail_schemas",
-      "phase_4_logistics_batching",
-      "phase_4_logistics_rider_scoring",
+      "phase_3_ordering_plan",
       "phase_5_dashboard_sla_colors",
       "phase_7_prometheus_metrics",
       "platform_design_spec_cod_only_rule",
-      "platform_design_spec_dispatch_flow",
       "platform_design_spec_late_coupon_rule",
-      "platform_design_spec_rider_no_reject",
+      "platform_design_spec_menu_activation_rules",
       "platform_design_spec_sla_40min",
       "uat_checklist"
     ],
-    "105": [
+    "103": [
       "identity_Restaurant_model",
       "llm_FakeExtractor",
       "llm_get_menu_extractor_factory",
@@ -3069,7 +3035,22 @@
       "predictions_router_module",
       "test_predictions_router_file"
     ],
-    "106": [
+    "104": [
+      "identity_Rider_model",
+      "identity_create_access_token",
+      "ordering_add_item",
+      "ordering_api_get_orders_endpoint",
+      "ordering_create_draft_order",
+      "ordering_finalize_confirmation",
+      "ordering_get_or_create_customer",
+      "ordering_limit_clamp_100",
+      "ordering_list_orders_for_tenant",
+      "ordering_remove_item",
+      "ordering_rider_performance_jsonb_rule",
+      "ordering_sla_40min_rule",
+      "test_ordering_service_file"
+    ],
+    "105": [
       "ordering_service_modify_order",
       "ordering_service_rationale_422",
       "ordering_test_modification",
@@ -3084,7 +3065,7 @@
       "ordering_test_modification_test_modify_order_recalculates_total",
       "ordering_test_modification_test_modify_order_restarts_sla_clock"
     ],
-    "107": [
+    "106": [
       "ordering_service_patch_customer",
       "ordering_service_rationale_884",
       "ordering_test_customer_patch",
@@ -3099,7 +3080,7 @@
       "ordering_test_customer_patch_test_patch_customer_phone",
       "ordering_test_customer_patch_test_patch_customer_wrong_tenant_raises"
     ],
-    "108": [
+    "107": [
       "outbox_4xx_permanent_failure_rule",
       "outbox_exponential_backoff_rule",
       "outbox_test_backoff",
@@ -3114,7 +3095,7 @@
       "outbox_worker_rationale_28",
       "test_outbox_backoff_file"
     ],
-    "109": [
+    "108": [
       "outbox_test_sweeper",
       "outbox_test_sweeper_rationale_1",
       "outbox_test_sweeper_rationale_107",
@@ -3129,7 +3110,7 @@
       "outbox_test_sweeper_test_sweep_skips_sent_row",
       "tests_outbox_test_sweeper_py_outboxmessage"
     ],
-    "110": [
+    "109": [
       "predictions_DishHourObservation",
       "predictions_FakeForecastModel",
       "predictions_RollingAverageModel",
@@ -3144,7 +3125,7 @@
       "test_predictions_port_file",
       "test_predictions_rolling_file"
     ],
-    "111": [
+    "110": [
       "test_auth_identity_auth",
       "test_auth_jwt_garbage_rejected",
       "test_auth_jwt_roundtrip",
@@ -3159,7 +3140,7 @@
       "test_jwt_claims_rider_token_audience",
       "test_jwt_claims_wrong_audience_rejected"
     ],
-    "112": [
+    "111": [
       "test_webhook_replay_far_future_rejected",
       "test_webhook_replay_fresh_passes",
       "test_webhook_replay_future_tolerated",
@@ -3174,7 +3155,7 @@
       "webhook_test_replay_test_none_timestamp_skips",
       "webhook_test_replay_test_stale_timestamp_rejected"
     ],
-    "113": [
+    "112": [
       "async_sessionmaker",
       "conversation_router_dispatch_outbox",
       "conversation_router_rationale_27",
@@ -3188,7 +3169,7 @@
       "outbox_worker_deliver_one",
       "whatsappport"
     ],
-    "114": [
+    "113": [
       "marketing_test_template_provider",
       "marketing_test_template_provider_compliant_spec",
       "marketing_test_template_provider_rationale_1",
@@ -3202,7 +3183,7 @@
       "marketing_test_template_provider_test_mock_get_status_returns_approved",
       "tests_marketing_test_template_provider_py_templatespec"
     ],
-    "115": [
+    "114": [
       "menu_activate_endpoint",
       "menu_dish_availability_endpoint",
       "menu_upload_endpoint",
@@ -3215,6 +3196,20 @@
       "test_upload_test_upload_menu_returns_drafts",
       "test_upload_test_upload_rejects_oversized_file",
       "test_upload_test_upload_requires_auth"
+    ],
+    "115": [
+      "ordering_CustomerAddress_model",
+      "ordering_Order_model",
+      "ordering_cancel_order_fn",
+      "ordering_delete_address_endpoint",
+      "ordering_get_available_resale_orders_fn",
+      "ordering_is_excluded_for_resale_fn",
+      "test_cancellation_test_cancel_during_preparing_creates_resale",
+      "test_cancellation_test_exclusion_hash_encodes_phone_and_address",
+      "test_cancellation_test_is_excluded_for_resale_helper",
+      "test_cancellation_test_resale_offer_matcher_filters_by_exclusion",
+      "test_customer_profile_test_delete_address",
+      "test_customer_profile_test_delete_address_linked_to_open_order_409"
     ],
     "116": [
       "ordering_fsm",
@@ -3454,6 +3449,18 @@
       "tests_conversation_test_abandoned_cart_py_inboundmessage"
     ],
     "134": [
+      "conversation_test_rider_flow",
+      "conversation_test_rider_flow_rationale_1",
+      "conversation_test_rider_flow_rationale_146",
+      "conversation_test_rider_flow_rationale_163",
+      "conversation_test_rider_flow_seed_batch",
+      "conversation_test_rider_flow_test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location",
+      "conversation_test_rider_flow_test_button_only_unknown_id_no_op",
+      "conversation_test_rider_flow_test_delivered_marks_delivered_and_records_cod",
+      "conversation_test_rider_flow_test_last_delivery_frees_rider",
+      "conversation_test_rider_flow_test_orders_picked_advances_all_and_sends_first_stop"
+    ],
+    "135": [
       "deployment_md_env_vars",
       "deployment_md_pre_deploy_gates",
       "deployment_md_runbook",
@@ -3465,7 +3472,7 @@
       "docker_compose_prod_migrate_service",
       "docker_compose_prod_worker_service"
     ],
-    "135": [
+    "136": [
       "dispatch_rider_location",
       "dispatch_rider_location_rationale_1",
       "dispatch_rider_location_rationale_26",
@@ -3477,7 +3484,7 @@
       "src_app_dispatch_rider_location_py_datetime",
       "src_app_dispatch_rider_location_py_rider"
     ],
-    "136": [
+    "137": [
       "marketing_models_marketingsend",
       "marketing_models_rationale_114",
       "marketing_test_models",
@@ -3489,7 +3496,7 @@
       "marketing_test_models_test_wa_template_roundtrip",
       "marketing_test_models_test_wa_template_unique_name_lang"
     ],
-    "137": [
+    "138": [
       "ordering_test_customer_profile",
       "ordering_test_customer_profile_auth",
       "ordering_test_customer_profile_seed_customer",
@@ -3501,7 +3508,7 @@
       "ordering_test_customer_profile_test_list_customers_search_by_phone",
       "ordering_test_customer_profile_token"
     ],
-    "138": [
+    "139": [
       "ordering_test_status_reply",
       "ordering_test_status_reply_rationale_48",
       "ordering_test_status_reply_rationale_82",
@@ -3513,7 +3520,7 @@
       "tests_ordering_test_status_reply_py_inboundmessage",
       "tests_ordering_test_status_reply_py_order"
     ],
-    "139": [
+    "140": [
       "src_app_whatsapp_cloud_provider_py_any",
       "src_app_whatsapp_cloud_provider_py_outboundmessage",
       "test_whatsapp_cloud_provider_requires_config",
@@ -3525,7 +3532,7 @@
       "whatsapp_cloud_provider_cloudapiprovider_upload_media",
       "whatsapp_cloud_provider_rationale_114"
     ],
-    "140": [
+    "141": [
       "transport_index",
       "transport_index_errorlistener",
       "transport_index_listener",
@@ -3537,7 +3544,7 @@
       "transport_pollingtransport_pollingtransport_tick",
       "transport_pollingtransport_test"
     ],
-    "141": [
+    "142": [
       "Button_Button",
       "RiderCard_RiderCard",
       "RiderCard_test_RiderCardTest",
@@ -3548,7 +3555,7 @@
       "types_RiderOut",
       "types_RiderStatus"
     ],
-    "142": [
+    "143": [
       "full_ai_agent_fake_agent",
       "load_test_signed_webhooks",
       "phase_2_whatsapp_core_cloud_provider",
@@ -3559,7 +3566,7 @@
       "whatsapp_cloud_api_notes_message_types",
       "whatsapp_cloud_api_notes_webhook_verification"
     ],
-    "143": [
+    "144": [
       "gap_list_batch_travel_gap",
       "gap_list_gap_analysis",
       "gap_list_marketing_upload_gap",
@@ -3570,7 +3577,7 @@
       "simulator_rider_html_preset_stops",
       "simulator_rider_html_rider_ui"
     ],
-    "144": [
+    "145": [
       "identity_auth_hash_password",
       "identity_auth_verify_password",
       "identity_test_auth_test_password_hash_roundtrip",
@@ -3581,7 +3588,7 @@
       "identity_test_hashing_test_verifies_legacy_passlib_hash",
       "scripts_seed_dev_main"
     ],
-    "145": [
+    "146": [
       "marketing_optout_is_opted_out_fn",
       "marketing_optout_record_opt_out_fn",
       "ordering_patch_customer_fn",
@@ -3592,7 +3599,7 @@
       "test_customer_patch_test_patch_opt_out_targets_original_phone",
       "test_customer_patch_test_patch_wrong_tenant_raises"
     ],
-    "146": [
+    "147": [
       "ordering_UndeliverableError",
       "ordering_calculate_fee_fn",
       "ordering_fee_settings_from_restaurant_fn",
@@ -3603,7 +3610,7 @@
       "test_fees_test_fee_settings_from_restaurant",
       "test_fees_test_fee_within_3km_is_free"
     ],
-    "147": [
+    "148": [
       "whatsapp_cloud_provider_cloudapiprovider_verify_inbound_signature",
       "whatsapp_cloud_provider_rationale_14",
       "whatsapp_cloud_provider_verify_signature",
@@ -3614,7 +3621,7 @@
       "whatsapp_test_cloud_provider_test_verify_signature_missing_prefix_raises",
       "whatsapp_test_cloud_provider_test_verify_signature_valid"
     ],
-    "148": [
+    "149": [
       "ConversationsScreen_component",
       "ConversationsScreen_test",
       "MessageBubble_MessageBubble",
@@ -3624,7 +3631,7 @@
       "types_ConversationOut",
       "types_MessageOut"
     ],
-    "149": [
+    "150": [
       "audit_AuditLog_model",
       "ordering_modify_order_fn",
       "ordering_transition_fn",
@@ -3634,7 +3641,7 @@
       "test_modification_test_modify_order_recalculates_total",
       "test_modification_test_modify_order_restarts_sla_clock"
     ],
-    "150": [
+    "151": [
       "conftest_auth_headers_fixture",
       "conftest_client_fixture",
       "conftest_db_session_fixture",
@@ -3644,7 +3651,7 @@
       "test_dashboard_api_module",
       "test_hours_module"
     ],
-    "151": [
+    "152": [
       "full_ai_agent_history",
       "manual_order_endpoints",
       "manual_order_service_function",
@@ -3654,7 +3661,7 @@
       "platform_design_spec_order_fsm",
       "platform_design_spec_outbox_pattern"
     ],
-    "152": [
+    "153": [
       "llm_claude_ClaudeExtractor",
       "llm_port_UploadedFile",
       "test_claude_test_claude_extractor_parses_tool_response",
@@ -3664,7 +3671,7 @@
       "test_claude_test_truncation_raises",
       "test_claude_test_unsupported_mime"
     ],
-    "153": [
+    "154": [
       "llm_test_claude",
       "llm_test_claude_make_extractor",
       "llm_test_claude_test_claude_extractor_parses_tool_response",
@@ -3674,7 +3681,7 @@
       "llm_test_claude_test_truncation_raises",
       "llm_test_claude_test_unsupported_mime_rejected"
     ],
-    "154": [
+    "155": [
       "llm_test_deepseek_agent",
       "llm_test_deepseek_agent_mock_deepseek_response",
       "llm_test_deepseek_agent_rationale_1",
@@ -3684,7 +3691,7 @@
       "llm_test_deepseek_agent_test_ordering_phase_add_item",
       "llm_test_deepseek_agent_test_system_prompt_contains_language_instruction"
     ],
-    "155": [
+    "156": [
       "marketing_test_router",
       "marketing_test_router_rationale_1",
       "marketing_test_router_test_campaign_stats",
@@ -3694,7 +3701,7 @@
       "marketing_test_router_test_list_campaigns_empty",
       "marketing_test_router_test_list_segments_empty"
     ],
-    "156": [
+    "157": [
       "test_coupons_business_rule_30d_expiry",
       "test_coupons_business_rule_single_use",
       "test_coupons_coupon_service",
@@ -3704,7 +3711,7 @@
       "test_coupons_redeem_twice_rejected",
       "test_coupons_redeem_unknown_code_rejected"
     ],
-    "157": [
+    "158": [
       "app_outbox_worker",
       "outbox_test_claim_race",
       "outbox_test_claim_race_rationale_1",
@@ -3713,7 +3720,7 @@
       "outbox_test_claim_race_test_concurrent_claims_return_disjoint_ids",
       "tests_outbox_test_claim_race_py_outboxmessage"
     ],
-    "158": [
+    "159": [
       "app_security_middleware",
       "test_security_headers_test_cors_disallows_unlisted_origin",
       "test_security_headers_test_csp_allows_spa_assets",
@@ -3722,7 +3729,7 @@
       "test_security_headers_test_hsts_not_emitted_by_default",
       "test_security_headers_test_security_headers_present"
     ],
-    "159": [
+    "160": [
       "architecture_md_inbound_dataflow",
       "architecture_md_ports_inventory",
       "readme_architecture_sketch",
@@ -3731,7 +3738,7 @@
       "readme_ports_and_adapters",
       "readme_transactional_outbox"
     ],
-    "160": [
+    "161": [
       "architecture_md_order_fsm",
       "architecture_md_tenancy_model",
       "architecture_md_test_architecture",
@@ -3740,7 +3747,7 @@
       "claude_md_project_guidance",
       "claude_md_tdd_convention"
     ],
-    "161": [
+    "162": [
       "ci_yml_fake_providers",
       "ci_yml_github_ci_pipeline",
       "ci_yml_lint_step",
@@ -3749,7 +3756,7 @@
       "ci_yml_test_step",
       "docker_compose_dev"
     ],
-    "162": [
+    "163": [
       "coupons_service_couponerror",
       "coupons_service_rationale_24",
       "replay_assert_fresh",
@@ -3758,7 +3765,7 @@
       "webhook_replay_rationale_1",
       "webhook_replay_replayerror"
     ],
-    "163": [
+    "164": [
       "frontend_DishCard",
       "frontend_DishCard_test",
       "frontend_KPITile",
@@ -3767,7 +3774,7 @@
       "frontend_playwright_config",
       "lib_types_DishOut"
     ],
-    "164": [
+    "165": [
       "llm_DishDraft_model",
       "menu_Dish_model",
       "menu_diff_menus_fn",
@@ -3776,7 +3783,7 @@
       "test_diff_test_same_number_different_name_flagged",
       "test_diff_test_unchanged_not_reported"
     ],
-    "165": [
+    "166": [
       "menu_FileBlobStore",
       "menu_reextract_endpoint",
       "test_reextract_test_reextract_menu",
@@ -3785,7 +3792,7 @@
       "test_storage_test_put_get_roundtrip",
       "test_storage_test_tenant_isolation"
     ],
-    "166": [
+    "167": [
       "menu_test_edit",
       "menu_test_edit_test_add_dish",
       "menu_test_edit_test_delete_dish",
@@ -3794,7 +3801,7 @@
       "menu_test_edit_test_toggle_availability",
       "menu_test_edit_upload"
     ],
-    "167": [
+    "168": [
       "menu_test_reextract",
       "menu_test_reextract_rationale_27",
       "menu_test_reextract_rationale_51",
@@ -3803,7 +3810,7 @@
       "menu_test_reextract_test_reextract_tenant_isolation",
       "menu_test_reextract_test_upload_creates_menu_file_row"
     ],
-    "168": [
+    "169": [
       "meta_template_compliance_30day_blackout",
       "meta_template_compliance_ai_checklist",
       "meta_template_compliance_frequency_cap",
@@ -3812,7 +3819,7 @@
       "meta_template_compliance_tech_rules",
       "meta_template_compliance_uae_rules"
     ],
-    "169": [
+    "170": [
       "predictions_port",
       "predictions_port_dishhourforecast",
       "predictions_port_forecastmodel",
@@ -3821,7 +3828,7 @@
       "predictions_port_rationale_18",
       "src_app_predictions_port_py_dishhourobservation"
     ],
-    "170": [
+    "171": [
       "predictions_test_router",
       "predictions_test_router_rationale_1",
       "predictions_test_router_rationale_12",
@@ -3830,7 +3837,7 @@
       "predictions_test_router_test_list_forecast_runs_empty",
       "predictions_test_router_test_prep_ahead_empty"
     ],
-    "171": [
+    "172": [
       "run_live_run_live",
       "stop_live_stop_live",
       "tsconfig_node_tsconfig_node",
@@ -3839,7 +3846,7 @@
       "vite_config_vite_config",
       "vite_config_vitest_config"
     ],
-    "172": [
+    "173": [
       "AnalyticsScreen_component",
       "AnalyticsScreen_test",
       "marketingApi_CampaignResponse",
@@ -3847,7 +3854,7 @@
       "predictionsApi_ForecastResult",
       "predictionsApi_fetchLatestForecast"
     ],
-    "173": [
+    "174": [
       "RidersScreen_RidersScreen",
       "RidersScreen_test_RidersScreenTest",
       "components_RiderCard",
@@ -3855,7 +3862,7 @@
       "frontend_CompactTable_test",
       "ridersApi_ridersApi"
     ],
-    "174": [
+    "175": [
       "architecture_md_bounded_contexts",
       "architecture_md_migration_conventions",
       "impl_status_architecture_overview",
@@ -3863,7 +3870,7 @@
       "impl_status_migration_chain",
       "impl_status_overall_status"
     ],
-    "175": [
+    "176": [
       "dashboard_design_brief_aesthetic",
       "dashboard_design_brief_anti_goals",
       "dashboard_design_brief_color_system",
@@ -3871,7 +3878,7 @@
       "dashboard_design_brief_sla_countdown",
       "dashboard_design_brief_typography"
     ],
-    "176": [
+    "177": [
       "dispatch_test_dispatch_router",
       "dispatch_test_dispatch_router_rationale_1",
       "dispatch_test_dispatch_router_rationale_11",
@@ -3879,7 +3886,7 @@
       "dispatch_test_dispatch_router_test_dispatch_trigger_requires_auth",
       "dispatch_test_dispatch_router_test_dispatch_trigger_runs_and_returns_ok"
     ],
-    "177": [
+    "178": [
       "identity_auth_login_endpoint",
       "identity_auth_signup_endpoint",
       "test_signup_login_test_login_returns_token",
@@ -3887,7 +3894,7 @@
       "test_signup_login_test_signup_creates_restaurant",
       "test_signup_login_test_signup_duplicate_phone"
     ],
-    "178": [
+    "179": [
       "identity_test_riders",
       "identity_test_riders_test_create_and_list_riders",
       "identity_test_riders_test_deactivate_rider",
@@ -3895,7 +3902,7 @@
       "identity_test_riders_test_invalid_rider_status_422",
       "identity_test_riders_test_update_delivery_settings"
     ],
-    "179": [
+    "180": [
       "menu_test_upload",
       "menu_test_upload_rationale_2",
       "menu_test_upload_test_second_upload_increments_version",
@@ -3903,7 +3910,7 @@
       "menu_test_upload_test_upload_rejects_oversized_file",
       "menu_test_upload_test_upload_requires_auth"
     ],
-    "180": [
+    "181": [
       "metrics_http_duration",
       "metrics_http_requests",
       "metrics_outbox_deliveries",
@@ -3911,7 +3918,7 @@
       "metrics_registry",
       "metrics_sla_breaches"
     ],
-    "181": [
+    "182": [
       "ops_Finding_model",
       "ops_secrets_audit_fn",
       "test_secrets_audit_test_default_dev_secret_flagged",
@@ -3919,7 +3926,7 @@
       "test_secrets_audit_test_strong_prod_secrets_pass",
       "test_secrets_audit_test_weak_jwt_secret_flagged"
     ],
-    "182": [
+    "183": [
       "ordering_MatchConfidence_enum",
       "ordering_find_dish_matches_fn",
       "test_matching_test_find_dish_matches_arabic_dish",
@@ -3927,21 +3934,13 @@
       "test_matching_test_find_dish_matches_none_returns_no_match",
       "test_matching_test_find_dish_matches_single_strong_match"
     ],
-    "183": [
+    "184": [
       "ordering_add_item_fn",
       "ordering_create_draft_order_fn",
       "ordering_set_item_qty_fn",
       "test_features_test_set_item_qty_missing_dish_returns_none",
       "test_features_test_set_item_qty_updates_and_recalcs",
       "test_features_test_set_item_qty_zero_removes"
-    ],
-    "184": [
-      "predictions_FakeForecastAdjuster",
-      "predictions_apply_overrides",
-      "predictions_get_forecast_adjuster_factory",
-      "predictions_override_delta_mult_rule",
-      "predictions_override_immutable_input_rule",
-      "test_predictions_adjust_file"
     ],
     "185": [
       "test_fees_aed10_5to10km",
@@ -3968,74 +3967,75 @@
       "whatsapp_port_inbound_outbound"
     ],
     "188": [
+      "whatsapp_test_mock_provider",
+      "whatsapp_test_mock_provider_test_inbound_message_shape",
+      "whatsapp_test_mock_provider_test_mock_drain_clears_log",
+      "whatsapp_test_mock_provider_test_mock_inject_inbound_queues_message",
+      "whatsapp_test_mock_provider_test_mock_send_records_and_returns_id",
+      "whatsapp_test_mock_provider_test_outbound_message_text_shape"
+    ],
+    "189": [
       "ai_marketing_optout_record_opt_in",
       "customer_profile_customers_screen",
       "customer_profile_screen_address_delete_rule",
       "customer_profile_screen_endpoints",
       "order_detail_customer_patch"
     ],
-    "189": [
+    "190": [
       "claude_delivery_radius",
       "full_ai_agent_radius_from_settings",
       "phase_0_1_foundation_default_settings",
       "phase_4_logistics_geo_fees",
       "platform_design_spec_delivery_fee_tiers"
     ],
-    "190": [
+    "191": [
       "geo_test_haversine",
       "geo_test_haversine_test_distance_gt_10km",
       "geo_test_haversine_test_distance_is_symmetric",
       "geo_test_haversine_test_known_distance_dubai_to_deira",
       "geo_test_haversine_test_same_point_is_zero"
     ],
-    "191": [
+    "192": [
       "llm_deepseek_DeepSeekConversationAgent",
       "test_deepseek_agent_test_address_phase_send_location",
       "test_deepseek_agent_test_confirmation_phase_confirm_order",
       "test_deepseek_agent_test_ordering_phase_add_item",
       "test_deepseek_agent_test_system_prompt_languages"
     ],
-    "192": [
+    "193": [
       "llm_fake_FakeDescriber",
       "llm_port_DescriberPort",
       "test_llm_ordering_ports_test_describer_protocol",
       "test_llm_ordering_ports_test_fake_describer_max_3_lines",
       "test_llm_ordering_ports_test_fake_describer_no_price"
     ],
-    "193": [
+    "194": [
       "marketing_router_campaign_stats_endpoint",
       "marketing_router_campaigns_endpoint",
       "marketing_router_segments_endpoint",
       "marketing_router_templates_endpoint",
       "test_router_marketing_endpoints"
     ],
-    "194": [
+    "195": [
       "menu_dishes_endpoint",
       "test_edit_test_add_dish",
       "test_edit_test_delete_dish",
       "test_edit_test_duplicate_dish_number_409",
       "test_edit_test_patch_dish_price_and_name"
     ],
-    "195": [
+    "196": [
       "menu_test_activate",
       "menu_test_activate_test_activate_blocked_when_missing_price",
       "menu_test_activate_test_activate_menu",
       "menu_test_activate_test_activate_supersedes_previous",
       "menu_test_activate_upload"
     ],
-    "196": [
+    "197": [
       "ops_test_secrets_audit",
       "ops_test_secrets_audit_test_default_dev_secret_flagged",
       "ops_test_secrets_audit_test_dev_environment_is_lenient",
       "ops_test_secrets_audit_test_strong_prod_secrets_pass",
       "ops_test_secrets_audit_test_weak_jwt_secret_flagged"
-    ],
-    "197": [
-      "ordering_IllegalTransitionError",
-      "ordering_OrderFSM",
-      "test_fsm_test_all_statuses_have_entries",
-      "test_fsm_test_draft_to_pending_confirmation_allowed",
-      "test_fsm_test_illegal_transition_raises"
     ],
     "198": [
       "ratelimit_TokenBucketLimiter",
@@ -4078,52 +4078,52 @@
       "test_metrics_response_bytes"
     ],
     "204": [
-      "item_variants_activation_guard",
-      "item_variants_plan",
-      "phase_3_ordering_plan",
-      "platform_design_spec_menu_activation_rules"
-    ],
-    "205": [
       "llm_fake_FakeArbiter",
       "llm_port_ArbiterPort",
       "test_llm_ordering_ports_test_arbiter_protocol",
       "test_llm_ordering_ports_test_fake_arbiter"
     ],
-    "206": [
+    "205": [
       "llm_fake_FakeExtractor",
       "llm_port_DishDraft",
       "test_fake_test_fake_extractor_canned_override",
       "test_fake_test_fake_extractor_returns_drafts"
     ],
-    "207": [
+    "206": [
       "llm_fake_FakeIntentClassifier",
       "llm_port_IntentClassifierPort",
       "test_llm_ordering_ports_test_fake_intent_classifier",
       "test_llm_ordering_ports_test_intent_classifier_protocol"
     ],
-    "208": [
+    "207": [
       "observability_md_alerting_rules",
       "observability_md_grafana_dashboard",
       "observability_md_metrics_set",
       "observability_md_prometheus_grafana"
     ],
-    "209": [
+    "208": [
       "ordering_find_unavailable_match_fn",
       "ordering_suggest_available_alternative_fn",
       "test_features_test_find_unavailable_match_and_alternative",
       "test_features_test_find_unavailable_match_none_for_available"
     ],
-    "210": [
+    "209": [
       "ordering_normalize_name_fn",
       "test_matching_test_normalize_name_lowercases_and_strips",
       "test_matching_test_normalize_name_preserves_arabic",
       "test_matching_test_normalize_name_removes_punctuation"
     ],
-    "211": [
+    "210": [
       "outbox_to_whatsapp_text",
       "outbox_wa_bold_normalize_rule",
       "outbox_wa_markdown_header_rule",
       "test_whatsapp_formatting_file"
+    ],
+    "211": [
+      "phase_4_logistics_batching",
+      "phase_4_logistics_rider_scoring",
+      "platform_design_spec_dispatch_flow",
+      "platform_design_spec_rider_no_reject"
     ],
     "212": [
       "scripts_prod_smoke",
@@ -4712,8 +4712,8 @@
     "36": 0.28205128205128205,
     "37": 0.08547008547008547,
     "38": 0.11396011396011396,
-    "39": 0.09538461538461539,
-    "40": 0.18333333333333332,
+    "39": 0.18333333333333332,
+    "40": 0.1,
     "41": 0.16666666666666666,
     "42": 0.13666666666666666,
     "43": 0.09333333333333334,
@@ -4737,16 +4737,16 @@
     "61": 0.21428571428571427,
     "62": 0.1631578947368421,
     "63": 0.18947368421052632,
-    "64": 0.17894736842105263,
-    "65": 0.22631578947368422,
-    "66": 0.18947368421052632,
-    "67": 0.1,
-    "68": 0.13157894736842105,
-    "69": 0.1368421052631579,
-    "70": 0.1736842105263158,
-    "71": 0.11695906432748537,
-    "72": 0.2046783625730994,
-    "73": 0.1286549707602339,
+    "64": 0.12631578947368421,
+    "65": 0.17894736842105263,
+    "66": 0.22631578947368422,
+    "67": 0.18947368421052632,
+    "68": 0.1,
+    "69": 0.13157894736842105,
+    "70": 0.1368421052631579,
+    "71": 0.1368421052631579,
+    "72": 0.1736842105263158,
+    "73": 0.2046783625730994,
     "74": 0.16339869281045752,
     "75": 0.19607843137254902,
     "76": 0.1895424836601307,
@@ -4757,38 +4757,38 @@
     "81": 0.15441176470588236,
     "82": 0.11764705882352941,
     "83": 0.21323529411764705,
-    "84": 0.1323529411764706,
+    "84": 0.13970588235294118,
     "85": 0.1323529411764706,
     "86": 0.125,
     "87": 0.16176470588235295,
     "88": 0.16176470588235295,
     "89": 0.14705882352941177,
     "90": 0.15833333333333333,
-    "91": 0.16666666666666666,
-    "92": 0.21666666666666667,
-    "93": 0.1523809523809524,
-    "94": 0.2,
-    "95": 0.22857142857142856,
-    "96": 0.14285714285714285,
-    "97": 0.1619047619047619,
-    "98": 0.2087912087912088,
+    "91": 0.21666666666666667,
+    "92": 0.1523809523809524,
+    "93": 0.2,
+    "94": 0.22857142857142856,
+    "95": 0.1619047619047619,
+    "96": 0.15384615384615385,
+    "97": 0.2087912087912088,
+    "98": 0.14285714285714285,
     "99": 0.14285714285714285,
-    "100": 0.1978021978021978,
-    "101": 0.14285714285714285,
-    "102": 0.15384615384615385,
+    "100": 0.15384615384615385,
+    "101": 0.15384615384615385,
+    "102": 0.16666666666666666,
     "103": 0.15384615384615385,
     "104": 0.16666666666666666,
-    "105": 0.15384615384615385,
-    "106": 0.24358974358974358,
-    "107": 0.32051282051282054,
-    "108": 0.19230769230769232,
-    "109": 0.20512820512820512,
-    "110": 0.21794871794871795,
-    "111": 0.15384615384615385,
-    "112": 0.20512820512820512,
-    "113": 0.3181818181818182,
-    "114": 0.24242424242424243,
-    "115": 0.19696969696969696,
+    "105": 0.24358974358974358,
+    "106": 0.32051282051282054,
+    "107": 0.19230769230769232,
+    "108": 0.20512820512820512,
+    "109": 0.21794871794871795,
+    "110": 0.15384615384615385,
+    "111": 0.20512820512820512,
+    "112": 0.3181818181818182,
+    "113": 0.24242424242424243,
+    "114": 0.19696969696969696,
+    "115": 0.16666666666666666,
     "116": 0.18181818181818182,
     "117": 0.16666666666666666,
     "118": 0.30303030303030304,
@@ -4807,46 +4807,46 @@
     "131": 0.32727272727272727,
     "132": 0.2,
     "133": 0.35555555555555557,
-    "134": 0.24444444444444444,
+    "134": 0.3111111111111111,
     "135": 0.24444444444444444,
-    "136": 0.26666666666666666,
-    "137": 0.4666666666666667,
-    "138": 0.3111111111111111,
-    "139": 0.2222222222222222,
-    "140": 0.37777777777777777,
-    "141": 0.2777777777777778,
-    "142": 0.2222222222222222,
+    "136": 0.24444444444444444,
+    "137": 0.26666666666666666,
+    "138": 0.4666666666666667,
+    "139": 0.3111111111111111,
+    "140": 0.2222222222222222,
+    "141": 0.37777777777777777,
+    "142": 0.2777777777777778,
     "143": 0.2222222222222222,
-    "144": 0.3055555555555556,
-    "145": 0.2777777777777778,
-    "146": 0.2222222222222222,
-    "147": 0.2777777777777778,
-    "148": 0.32142857142857145,
+    "144": 0.2222222222222222,
+    "145": 0.3055555555555556,
+    "146": 0.2777777777777778,
+    "147": 0.2222222222222222,
+    "148": 0.2777777777777778,
     "149": 0.32142857142857145,
     "150": 0.32142857142857145,
-    "151": 0.25,
+    "151": 0.32142857142857145,
     "152": 0.25,
-    "153": 0.4642857142857143,
-    "154": 0.25,
+    "153": 0.25,
+    "154": 0.4642857142857143,
     "155": 0.25,
     "156": 0.25,
-    "157": 0.3333333333333333,
-    "158": 0.2857142857142857,
+    "157": 0.25,
+    "158": 0.3333333333333333,
     "159": 0.2857142857142857,
     "160": 0.2857142857142857,
     "161": 0.2857142857142857,
     "162": 0.2857142857142857,
-    "163": 0.3333333333333333,
-    "164": 0.2857142857142857,
+    "163": 0.2857142857142857,
+    "164": 0.3333333333333333,
     "165": 0.2857142857142857,
-    "166": 0.5238095238095238,
-    "167": 0.2857142857142857,
-    "168": 0.3333333333333333,
+    "166": 0.2857142857142857,
+    "167": 0.5238095238095238,
+    "168": 0.2857142857142857,
     "169": 0.3333333333333333,
-    "170": 0.2857142857142857,
+    "170": 0.3333333333333333,
     "171": 0.2857142857142857,
-    "172": 0.4,
-    "173": 0.3333333333333333,
+    "172": 0.2857142857142857,
+    "173": 0.4,
     "174": 0.3333333333333333,
     "175": 0.3333333333333333,
     "176": 0.3333333333333333,
@@ -4857,19 +4857,19 @@
     "181": 0.3333333333333333,
     "182": 0.3333333333333333,
     "183": 0.3333333333333333,
-    "184": 0.4,
+    "184": 0.3333333333333333,
     "185": 0.4,
     "186": 0.3333333333333333,
     "187": 0.3333333333333333,
-    "188": 0.4,
-    "189": 0.5,
-    "190": 0.4,
+    "188": 0.3333333333333333,
+    "189": 0.4,
+    "190": 0.5,
     "191": 0.4,
-    "192": 0.5,
-    "193": 0.4,
+    "192": 0.4,
+    "193": 0.5,
     "194": 0.4,
-    "195": 0.7,
-    "196": 0.4,
+    "195": 0.4,
+    "196": 0.7,
     "197": 0.4,
     "198": 0.4,
     "199": 0.4,
@@ -4877,10 +4877,10 @@
     "201": 0.4,
     "202": 0.5,
     "203": 0.5,
-    "204": 0.5,
-    "205": 0.6666666666666666,
-    "206": 0.5,
-    "207": 0.6666666666666666,
+    "204": 0.6666666666666666,
+    "205": 0.5,
+    "206": 0.6666666666666666,
+    "207": 0.5,
     "208": 0.5,
     "209": 0.5,
     "210": 0.5,
@@ -5124,6 +5124,17 @@
       "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `test_unknown_provider_raises()` unexpectedly reaches hub `get_menu_extractor()`"
     },
     {
+      "source": "test_fake_agent_new_interface()",
+      "target": "FakeConversationAgent",
+      "source_files": [
+        "tests/llm/test_fake.py",
+        "src/app/llm/fake.py"
+      ],
+      "confidence": "INFERRED",
+      "relation": "calls",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `test_fake_agent_new_interface()` unexpectedly reaches hub `FakeConversationAgent`"
+    },
+    {
       "source": "InboundMessage",
       "target": "OrderStatus",
       "source_files": [
@@ -5133,21 +5144,10 @@
       "confidence": "INFERRED",
       "relation": "uses",
       "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `InboundMessage` unexpectedly reaches hub `OrderStatus`"
-    },
-    {
-      "source": "Order",
-      "target": "OrderStatus",
-      "source_files": [
-        "tests/ordering/test_status_reply.py",
-        "src/app/ordering/fsm.py"
-      ],
-      "confidence": "INFERRED",
-      "relation": "uses",
-      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; bridges separate communities; peripheral node `Order` unexpectedly reaches hub `OrderStatus`"
     }
   ],
   "tokens": {
-    "input": 0,
-    "output": 0
+    "input": 2144,
+    "output": 9964
   }
 }
