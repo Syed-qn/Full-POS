@@ -1,4 +1,3 @@
-import pytest
 from app.marketing.optout import is_optout_intent, record_opt_in, is_opted_out, record_opt_out
 
 

@@ -1,9 +1,7 @@
 # tests/ordering/test_customer_profile.py
 from decimal import Decimal
 
-import pytest
-
-from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+from app.ordering.models import Customer, CustomerAddress, Order
 
 
 def _token(restaurant_id: int) -> str:

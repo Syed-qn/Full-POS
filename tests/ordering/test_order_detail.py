@@ -2,7 +2,6 @@
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
 
 from app.ordering.detail_schemas import OrderDetailOut
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem

@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.menu.models import Dish
+    from app.ordering.detail_schemas import OrderDetailOut
 
 
 async def get_available_resale_orders(
@@ -690,7 +691,7 @@ async def get_order_detail(
     *,
     restaurant_id: int,
     order_id: int,
-) -> "OrderDetailOut":
+) -> OrderDetailOut:
     """Assemble all data for the Order Detail drawer in one call."""
     from datetime import datetime, timezone
 
