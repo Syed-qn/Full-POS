@@ -1,27 +1,109 @@
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  padding: 16px;
+  border-radius: 12px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+.card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 .stale {
   border-color: var(--sla-warn);
 }
+.dim {
+  opacity: 0.6;
+}
 .head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+}
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 8px;
+  margin: -4px;
+  padding: 4px;
+}
+.profileClickable {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.profileClickable:hover {
+  background: var(--bg-surface-inset);
+}
+.editTag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 8px;
+  vertical-align: middle;
+  transition: color 0.12s, border-color 0.12s;
+}
+.profileClickable:hover .editTag {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.avatar {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 .name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phone {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
 }
 .status {
-  font-size: 12px;
-  font-weight: 500;
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+  border-radius: 12px;
+  padding: 3px 10px;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
 }
 .staleBadge {
   align-self: flex-start;
@@ -31,18 +113,28 @@
   border-radius: 4px;
   padding: 1px 6px;
 }
-.phone {
+.locRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  background: var(--bg-surface-inset);
+  border-radius: 8px;
+  padding: 8px 12px;
 }
-.loc,
-.stats {
-  font-size: 12px;
-  color: var(--text-secondary);
+.locDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-rider);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-rider) 18%, transparent);
 }
 .actions {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  align-items: center;
+}
+.removeBtn {
+  margin-left: auto;
 }

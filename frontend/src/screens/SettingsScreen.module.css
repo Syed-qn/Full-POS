@@ -2,62 +2,118 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 520px;
+  max-width: 640px;
 }
+
+/* ---- Segmented tabs ---- */
 .tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-self: flex-start;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
 }
 .tab {
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
   color: var(--text-secondary);
-  padding: 8px 12px;
+  padding: 7px 18px;
+  border-radius: 7px;
   text-transform: capitalize;
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover {
+  color: var(--text-primary);
 }
 .active {
-  color: var(--accent-primary);
-  border-bottom-color: var(--accent-primary);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
 }
+
+/* ---- Section card ---- */
 .section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 22px;
 }
+/* Save buttons size to their content, not the full card width. */
+.section > button {
+  align-self: flex-start;
+}
+
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 .input {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
-  padding: 8px 12px;
+  padding: 9px 12px;
   color: var(--text-primary);
   width: 100%;
-  max-width: 320px;
+  max-width: 360px;
   font-size: 13px;
-  transition: border-color 0.15s;
+  box-sizing: border-box;
+  transition: border-color 0.12s;
 }
 .input:focus {
   outline: none;
   border-color: var(--accent-primary);
 }
+
+/* ---- Read-only (locked) field ---- */
 .fieldReadonly {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+}
+.latLngRow {
+  display: flex;
+  gap: 10px;
+  max-width: 360px;
+}
+.latLngRow .input {
+  max-width: none;
+}
+.latLngRow .input::-webkit-outer-spin-button,
+.latLngRow .input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.latLngRow .input {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 .readonlyValue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
+  font-family: var(--font-mono);
   color: var(--text-primary);
-  padding: 8px 0;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  max-width: 360px;
+}
+.readonlyValue::before {
+  content: "🔒";
+  font-size: 12px;
 }
 .hint {
   font-size: 11px;
@@ -67,20 +123,22 @@
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
+  margin: 0;
 }
-/* Fee tier table */
+
+/* ---- Fee tier table ---- */
 .tierTable {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 320px;
+  gap: 8px;
+  max-width: 400px;
 }
 .tierHead {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr 34px;
+  gap: 10px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -88,9 +146,44 @@
 }
 .tierRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr 34px;
+  gap: 10px;
+  align-items: center;
 }
 .tierRow .input {
   max-width: 100%;
+}
+.tierRemove {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.tierRemove:hover {
+  border-color: #b02a2a;
+  color: #b02a2a;
+  background: #fdeaea;
+}
+.addTier {
+  align-self: flex-start;
+  margin-top: 2px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.addTier:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }

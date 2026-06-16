@@ -2,10 +2,37 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchActiveMenu } from "../lib/menuApi";
 import { createManualOrder, lookupCustomer } from "../lib/manualOrderApi";
-import type { DishOut, MenuOut } from "../lib/types";
+import { apiClient } from "../lib/apiClient";
+import type { DishOut, MenuOut, RestaurantOut } from "../lib/types";
+import { PageHeader } from "../components/PageHeader";
 import s from "./NewOrderScreen.module.css";
 
-type FeeOption = "0.00" | "5.00" | "10.00";
+type FeeOption = string;
+
+interface FeeTier {
+  max_km: number;
+  fee_aed: number | string;
+}
+
+interface FeeChoice {
+  value: string;
+  label: string;
+}
+
+// Turn the restaurant's saved fee tiers into labelled delivery-fee choices.
+function buildFeeOptions(tiers: FeeTier[]): FeeChoice[] {
+  const sorted = [...tiers].sort((a, b) => Number(a.max_km) - Number(b.max_km));
+  return sorted.map((t, i) => {
+    const km = Number(t.max_km);
+    const fee = Number(t.fee_aed);
+    const lower = i === 0 ? 0 : Number(sorted[i - 1].max_km);
+    const range = i === 0 ? `≤${km} km` : `${lower}–${km} km`;
+    return {
+      value: fee.toFixed(2),
+      label: fee === 0 ? `Free (${range})` : `AED ${fee} (${range})`,
+    };
+  });
+}
 
 export function NewOrderScreen() {
   const navigate = useNavigate();
@@ -26,13 +53,33 @@ export function NewOrderScreen() {
   const [receiverName, setReceiverName] = useState("");
   const [addressNotes, setAddressNotes] = useState("");
 
-  const [fee, setFee] = useState<FeeOption>("0.00");
+  const [feeOptions, setFeeOptions] = useState<FeeChoice[]>([]);
+  const [feesLoading, setFeesLoading] = useState(true);
+  const [fee, setFee] = useState<FeeOption>("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchActiveMenu().then((m) => setMenu(m));
+  }, []);
+
+  // Load delivery-fee tiers from settings so the choices match what the
+  // manager configured on the Settings → Fees tab. Nothing is hardcoded:
+  // until this resolves we show a loading state, never placeholder fees.
+  useEffect(() => {
+    apiClient
+      .get<RestaurantOut>("/api/v1/me")
+      .then((r) => {
+        const tiers = (r.settings as Record<string, unknown>)?.delivery_fee_tiers;
+        if (Array.isArray(tiers) && tiers.length > 0) {
+          const opts = buildFeeOptions(tiers as FeeTier[]);
+          setFeeOptions(opts);
+          setFee(opts[0].value);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFeesLoading(false));
   }, []);
 
   async function onLookup() {
@@ -105,7 +152,7 @@ export function NewOrderScreen() {
     (acc, { dish, qty }) => acc + parseFloat(dish.price_aed ?? "0") * qty,
     0,
   );
-  const total = subtotal + parseFloat(fee);
+  const total = subtotal + (parseFloat(fee) || 0);
 
   const canSubmit =
     phone.trim().length >= 7 &&
@@ -113,6 +160,7 @@ export function NewOrderScreen() {
     aptRoom.trim() &&
     building.trim() &&
     receiverName.trim() &&
+    fee !== "" &&
     !submitting;
 
   async function onSubmit() {
@@ -148,7 +196,7 @@ export function NewOrderScreen() {
   if (!menu) {
     return (
       <div className={s.screen}>
-        <h1 className={s.heading}>New Order</h1>
+        <PageHeader title="New Order" subtitle="Place a manual order on behalf of a customer" />
         <div className={s.noMenuBanner}>
           No active menu found. Activate a menu before placing manual orders.
         </div>
@@ -158,13 +206,13 @@ export function NewOrderScreen() {
 
   return (
     <div className={s.screen}>
-      <h1 className={s.heading}>New Order</h1>
+      <PageHeader title="New Order" subtitle="Place a manual order on behalf of a customer" />
 
       {error && <div className={s.errorBanner}>{error}</div>}
 
       <div className={s.grid}>
         {/* LEFT COLUMN */}
-        <div>
+        <div className={s.leftCol}>
           <div className={s.section}>
             <div className={s.sectionTitle}>Customer</div>
 
@@ -203,8 +251,6 @@ export function NewOrderScreen() {
               />
             </div>
           </div>
-
-          <hr className={s.divider} />
 
           <div className={s.section}>
             <div className={s.sectionTitle}>Delivery Address</div>
@@ -252,22 +298,22 @@ export function NewOrderScreen() {
             <div className={s.field}>
               <label className={s.label}>Delivery Fee</label>
               <div className={s.feeRow}>
-                {(
-                  [
-                    { value: "0.00", label: "Free (≤3 km)" },
-                    { value: "5.00", label: "AED 5 (3–5 km)" },
-                    { value: "10.00", label: "AED 10 (>5 km)" },
-                  ] as { value: FeeOption; label: string }[]
-                ).map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`${s.feeBtn} ${fee === value ? s.feeBtnActive : ""}`}
-                    onClick={() => setFee(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
+                {feesLoading ? (
+                  <span className={s.feeHint}>Loading delivery fees…</span>
+                ) : feeOptions.length === 0 ? (
+                  <span className={s.feeHint}>No delivery fees set — configure them in Settings → Fees.</span>
+                ) : (
+                  feeOptions.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`${s.feeBtn} ${fee === value ? s.feeBtnActive : ""}`}
+                      onClick={() => setFee(value)}
+                    >
+                      {label}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -284,6 +330,7 @@ export function NewOrderScreen() {
             placeholder="Search dishes…"
           />
 
+          <div className={s.itemList}>
           {categories.map((cat) => (
             <div key={cat}>
               <div className={s.categoryLabel}>{cat}</div>
@@ -333,6 +380,7 @@ export function NewOrderScreen() {
                 })}
             </div>
           ))}
+          </div>
 
           {selectedItems.length === 0 && (
             <p className={s.emptyHint}>Add at least 1 item to continue.</p>

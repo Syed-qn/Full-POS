@@ -38,6 +38,45 @@ const mockMenu = {
   ],
 };
 
+const mockSettings = {
+  id: 1,
+  name: "Test Restaurant",
+  phone: "+971500000000",
+  settings: {
+    delivery_fee_tiers: [
+      { max_km: 3, fee_aed: 0 },
+      { max_km: 5, fee_aed: 5 },
+    ],
+  },
+};
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status });
+}
+
+// URL-aware fetch mock so call ORDER never matters (the screen fires both the
+// active-menu and /me fetches on mount). Tests override individual routes.
+function mockFetch(overrides: Partial<Record<"menu" | "me" | "lookup" | "manual", () => Response>> = {}) {
+  const routes = {
+    menu: () => json(mockMenu),
+    me: () => json(mockSettings),
+    lookup: () => json({ detail: "not found" }, 404),
+    manual: () => json({ id: 99, status: "confirmed", order_number: "R1-0001" }),
+    ...overrides,
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: unknown) => {
+      const u = String(url);
+      if (u.includes("/menus/active")) return Promise.resolve(routes.menu());
+      if (u.includes("/api/v1/me")) return Promise.resolve(routes.me());
+      if (u.includes("/customer-lookup")) return Promise.resolve(routes.lookup());
+      if (u.includes("/orders/manual")) return Promise.resolve(routes.manual());
+      return Promise.resolve(json(mockMenu));
+    }),
+  );
+}
+
 function renderScreen() {
   return render(
     <MemoryRouter>
@@ -48,12 +87,7 @@ function renderScreen() {
 
 describe("NewOrderScreen", () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify(mockMenu), { status: 200 }),
-      ),
-    );
+    mockFetch();
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -109,13 +143,7 @@ describe("NewOrderScreen", () => {
       },
     };
 
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(mockMenu), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(lookupResult), { status: 200 }),
-      );
+    mockFetch({ lookup: () => json(lookupResult) });
 
     renderScreen();
     await waitFor(() =>
@@ -136,13 +164,7 @@ describe("NewOrderScreen", () => {
   });
 
   it("shows 'New customer' hint when lookup returns 404", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(mockMenu), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ detail: "not found" }), { status: 404 }),
-      );
+    mockFetch({ lookup: () => json({ detail: "not found" }, 404) });
 
     renderScreen();
     await waitFor(() =>
@@ -160,11 +182,7 @@ describe("NewOrderScreen", () => {
   });
 
   it("no active menu shows banner instead of form", async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ detail: "No active menu" }), {
-        status: 404,
-      }),
-    );
+    mockFetch({ menu: () => json({ detail: "No active menu" }, 404) });
     renderScreen();
     await waitFor(() =>
       expect(screen.getByText(/No active menu found/)).toBeInTheDocument(),
@@ -175,15 +193,7 @@ describe("NewOrderScreen", () => {
   });
 
   it("successful submit calls POST /manual and navigates to /orders", async () => {
-    const confirmedOrder = { id: 99, status: "confirmed", order_number: "R1-0001" };
-
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(mockMenu), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(confirmedOrder), { status: 200 }),
-      );
+    mockFetch();
 
     renderScreen();
     await waitFor(() =>

@@ -73,7 +73,9 @@ async def patch_me(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    return await service.update_profile(session, restaurant=restaurant, name=body.name)
+    return await service.update_profile(
+        session, restaurant=restaurant, name=body.name, lat=body.lat, lng=body.lng,
+    )
 
 
 @router.post("/riders", response_model=RiderOut, status_code=201)
@@ -108,12 +110,27 @@ async def patch_rider(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    rider = await service.set_rider_status(
-        session,
-        restaurant_id=restaurant.id,
-        rider_id=rider_id,
-        status=body.status,
-    )
+    # Profile edit (name/phone) takes precedence; otherwise it's a status change.
+    if body.name is not None or body.phone is not None:
+        try:
+            rider = await service.update_rider_profile(
+                session,
+                restaurant_id=restaurant.id,
+                rider_id=rider_id,
+                name=body.name,
+                phone=body.phone,
+            )
+        except DuplicatePhoneError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    elif body.status is not None:
+        rider = await service.set_rider_status(
+            session,
+            restaurant_id=restaurant.id,
+            rider_id=rider_id,
+            status=body.status,
+        )
+    else:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "no fields to update")
     if rider is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
     return rider

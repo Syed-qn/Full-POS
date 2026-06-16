@@ -38,7 +38,11 @@ class RiderIn(BaseModel):
 
 
 class RiderPatch(BaseModel):
-    status: Literal["available", "on_delivery", "off_shift", "deactivated"]
+    """Partial rider update — change status, or edit name/phone profile fields."""
+
+    status: Literal["available", "on_delivery", "off_shift", "deactivated"] | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = Field(default=None, min_length=7, max_length=32)
 
 
 class RiderOut(BaseModel):
@@ -83,3 +87,5 @@ class SettingsPatch(BaseModel):
 
 class ProfilePatch(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)

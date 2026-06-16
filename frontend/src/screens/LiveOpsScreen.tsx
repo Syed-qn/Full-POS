@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { KPITile } from "../components/KPITile";
-import { LiveOrderRow } from "../components/LiveOrderRow";
+import { CompactTable, type Column } from "../components/CompactTable";
 import { SectionBanner } from "../components/SectionBanner";
 import { SLAOrderCard } from "../components/SLAOrderCard";
+import { StatusPill } from "../components/StatusPill";
 import { fetchOrders } from "../lib/ordersApi";
 import { remainingMs } from "../lib/sla";
 import type { OrderOut } from "../lib/types";
@@ -17,26 +16,51 @@ const ACTIVE: OrderOut["status"][] = [
 
 // Friendly labels for status — plain English
 const STATUS_LABEL: Record<string, string> = {
-  confirmed:  "New",
-  preparing:  "Cooking",
-  ready:      "Ready",
-  assigned:   "With Rider",
-  picked_up:  "On the Way",
-  arriving:   "Arriving",
-  delivered:  "Delivered",
-  cancelled:  "Cancelled",
+  draft:                "Draft",
+  pending_confirmation: "Pending",
+  confirmed:            "New",
+  preparing:            "Cooking",
+  ready:                "Ready",
+  assigned:             "With Rider",
+  picked_up:            "On the Way",
+  arriving:             "Arriving",
+  delivered:            "Delivered",
+  cancelled:            "Cancelled",
+  on_resale:            "On Resale",
 };
 
+// Greyscale ramp (light = earlier in the flow, dark = completed) so the donut
+// stays cohesive with the white & grey theme.
 const STATUS_COLORS: Record<string, string> = {
-  confirmed:  "#2563eb",
-  preparing:  "#d97706",
-  ready:      "#7c3aed",
-  assigned:   "#0891b2",
-  picked_up:  "#6366f1",
-  arriving:   "#059669",
-  delivered:  "#16a34a",
-  cancelled:  "#dc2626",
+  draft:                "#cbd0d6",
+  pending_confirmation: "#b3b9c0",
+  confirmed:            "#9aa0a8",
+  preparing:            "#7e858e",
+  ready:                "#656c75",
+  assigned:             "#525964",
+  picked_up:            "#444b54",
+  arriving:             "#363c44",
+  delivered:            "#23272f",
+  cancelled:            "#a7adb4",
+  on_resale:            "#8b929b",
 };
+
+function StatCard({
+  icon, label, value, accent, sub,
+}: {
+  icon: string; label: string; value: string; accent: string; sub?: string;
+}) {
+  return (
+    <div className={s.stat} style={{ ["--accent" as string]: accent }}>
+      <div className={s.statTop}>
+        <span className={s.statIcon}>{icon}</span>
+        <span className={s.statLabel}>{label}</span>
+      </div>
+      <span className={s.statValue}>{value}</span>
+      {sub && <span className={s.statSub}>{sub}</span>}
+    </div>
+  );
+}
 
 export function LiveOpsScreen() {
   const { data, error } = usePoll<OrderOut[]>(fetchOrders, 4000);
@@ -44,101 +68,99 @@ export function LiveOpsScreen() {
   const nav = useNavigate();
   const [filter, setFilter] = useState<OrderOut["status"] | "all">("all");
 
+  const activeOrders = orders.filter((o) => ACTIVE.includes(o.status));
+  const urgent = activeOrders.filter((o) => remainingMs(o.sla_started_at) <= 10 * 60_000);
+
   const kpis = useMemo(() => {
-    const delivered = orders.filter((o) => o.status === "delivered");
-    const active = orders.filter((o) => ACTIVE.includes(o.status));
+    const delivered = orders.filter((o) => o.status === "delivered").length;
     const revenue = orders.filter((o) => o.status === "delivered")
       .reduce((sum, o) => sum + Number(o.total_aed), 0);
+    const finished = delivered + orders.filter((o) => o.status === "cancelled").length;
+    const completion = finished > 0 ? Math.round((delivered / finished) * 100) : 100;
     return {
       total: orders.length,
-      active: active.length,
-      delivered: delivered.length,
+      active: activeOrders.length,
+      delivered,
       revenue: `AED ${revenue.toFixed(0)}`,
+      completion,
     };
-  }, [orders]);
+  }, [orders, activeOrders.length]);
 
-  // Pie chart data — only statuses that have orders
+  // Status breakdown for the donut — only statuses that have orders.
   const pieData = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const o of orders) {
-      counts[o.status] = (counts[o.status] || 0) + 1;
-    }
-    return Object.entries(counts).map(([status, value]) => ({
-      name: STATUS_LABEL[status] ?? status,
-      value,
-      color: STATUS_COLORS[status] ?? "#9ca3af",
-    }));
+    for (const o of orders) counts[o.status] = (counts[o.status] || 0) + 1;
+    return Object.entries(counts)
+      .map(([status, value]) => ({
+        name: STATUS_LABEL[status] ?? status,
+        value,
+        color: STATUS_COLORS[status] ?? "#9ca3af",
+      }))
+      .sort((a, b) => b.value - a.value);
   }, [orders]);
 
-  const activeOrders = orders.filter((o) => ACTIVE.includes(o.status));
-  const urgent = activeOrders.filter((o) => {
-    const rem = remainingMs(o.sla_started_at);
-    return rem <= 10 * 60_000;
-  });
+  // Conic-gradient stops for the donut ring — always a perfectly closed circle
+  // (no recharts single-segment seam), segments sized by share of total.
+  const conic = useMemo(() => {
+    const total = orders.length || 1;
+    let acc = 0;
+    const stops = pieData.map((d) => {
+      const start = (acc / total) * 360;
+      acc += d.value;
+      const end = (acc / total) * 360;
+      return `${d.color} ${start}deg ${end}deg`;
+    });
+    return `conic-gradient(${stops.join(", ")})`;
+  }, [pieData, orders.length]);
+
   const laneIds = new Set(urgent.map((o) => o.id));
   const feedSource = orders.filter((o) => !laneIds.has(o.id));
   const feed = filter === "all" ? feedSource : feedSource.filter((o) => o.status === filter);
+  // Show only the 5 most recent orders in the side panel.
+  const visibleFeed = [...feed].sort((a, b) => b.id - a.id).slice(0, 5);
+
+  const orderColumns: Column<OrderOut>[] = [
+    { key: "id", header: "#", render: (o) => <span className="mono">#{o.id}</span> },
+    { key: "cust", header: "Customer", render: (o) => o.customer_name },
+    { key: "items", header: "Items", render: (o) => o.items.map((i) => `${i.qty}× ${i.name}`).join(", ") },
+    { key: "total", header: "Total", render: (o) => <span className="mono">AED {o.total_aed}</span> },
+    { key: "status", header: "Status", render: (o) => <StatusPill status={o.status} /> },
+  ];
 
   return (
     <div className={s.screen}>
       {error != null && <SectionBanner tone="warning">Connection lost — reconnecting…</SectionBanner>}
 
-      {/* ── Big friendly numbers ─── */}
-      <div className={s.kpiStrip}>
-        <KPITile label="Orders Today" value={String(kpis.total)} accent="var(--chart-1)" />
-        <KPITile label="Active Now" value={String(kpis.active)} accent="var(--sla-warn)" />
-        <KPITile label="Delivered" value={String(kpis.delivered)} accent="var(--sla-safe)" />
-        <KPITile label="Money Collected" value={kpis.revenue} accent="var(--chart-3)" />
-      </div>
-
-      {/* ── Order status breakdown — simple pie + legend ─── */}
-      {orders.length > 0 && (
-        <div className={s.statusCard}>
-          <div className={s.cardTitle}>Where are the orders?</div>
-          <div className={s.statusBody}>
-            <ResponsiveContainer width={180} height={180}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                >
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: "#fff",
-                    border: "1px solid var(--border-subtle)",
-                    borderRadius: "8px",
-                    fontSize: 13,
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className={s.legend}>
-              {pieData.map((d) => (
-                <div key={d.name} className={s.legendRow}>
-                  <span className={s.legendDot} style={{ background: d.color }} />
-                  <span className={s.legendLabel}>{d.name}</span>
-                  <span className={s.legendCount}>{d.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* ── Command-center header ─── */}
+      <header className={s.pageHeader}>
+        <div>
+          <h1 className={s.h1}>Live Operations</h1>
+          <p className={s.sub}>Real-time order &amp; delivery command center</p>
         </div>
-      )}
+        <div className={s.headerRight}>
+          <span className={s.livePill}><span className={s.liveDot} />LIVE</span>
+        </div>
+      </header>
+
+      {/* ── KPI cards ─── */}
+      <div className={s.kpiStrip}>
+        <StatCard icon="📦" label="Orders Today" value={String(kpis.total)}
+          accent="var(--chart-1)" sub={`${kpis.active} active now`} />
+        <StatCard icon="⚡" label="Active Now" value={String(kpis.active)}
+          accent="var(--sla-warn)" sub={urgent.length > 0 ? `${urgent.length} urgent` : "all on track"} />
+        <StatCard icon="✅" label="Delivered" value={String(kpis.delivered)}
+          accent="var(--sla-safe)" sub={`${kpis.completion}% completion`} />
+        <StatCard icon="💰" label="Money Collected" value={kpis.revenue}
+          accent="var(--accent-revenue)" sub="collected today" />
+      </div>
 
       {/* ── Urgent orders (need attention) ─── */}
       {urgent.length > 0 && (
         <div className={s.urgentCard}>
-          <div className={s.urgentTitle}>⚠️ Needs Attention Now</div>
+          <div className={s.urgentTitle}>
+            <span className={s.urgentPulse} />Needs Attention Now
+            <span className={s.urgentBadge}>{urgent.length}</span>
+          </div>
           <div className={s.urgentList}>
             {urgent.map((o) => (
               <SLAOrderCard key={o.id} order={o} onClick={() => nav(`/orders?id=${o.id}`)} />
@@ -147,35 +169,63 @@ export function LiveOpsScreen() {
         </div>
       )}
 
-      {/* ── Order feed ─── */}
-      <div className={s.feed}>
-        <div className={s.feedHead}>
-          <span className={s.feedTitle}>All Orders</span>
-          <div className={s.filters}>
-            <button
-              className={`${s.filterPill} ${filter === "all" ? s.filterActive : ""}`}
-              onClick={() => setFilter("all")}
-            >All</button>
-            {ACTIVE.map((st) => (
-              <button
-                key={st}
-                className={`${s.filterPill} ${filter === st ? s.filterActive : ""}`}
-                onClick={() => setFilter(st)}
-              >
-                {STATUS_LABEL[st] ?? st}
-              </button>
-            ))}
-          </div>
+      {/* ── Distribution + All Orders ─── */}
+      <div className={s.grid2}>
+        <div className={s.card}>
+          <div className={s.cardTitle}>Order Distribution</div>
+          {orders.length === 0 ? (
+            <div className={s.miniEmpty}>No orders to chart yet.</div>
+          ) : (
+            <div className={s.statusBody}>
+              <div className={s.donutWrap}>
+                <div className={s.donut} style={{ background: conic }} />
+                <div className={s.donutHole} />
+                <div className={s.donutCenter}>
+                  <span className={s.donutNum}>{orders.length}</span>
+                  <span className={s.donutCap}>orders</span>
+                </div>
+              </div>
+              <div className={s.legend}>
+                {pieData.map((d) => (
+                  <div key={d.name} className={s.legendRow}>
+                    <span className={s.legendDot} style={{ background: d.color }} />
+                    <span className={s.legendLabel}>{d.name}</span>
+                    <span className={s.legendPct}>{Math.round((d.value / orders.length) * 100)}%</span>
+                    <span className={s.legendCount}>{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        {feed.length === 0 ? (
-          <div className={s.empty}>
-            {orders.length === 0
-              ? "No orders yet today. Orders will appear here when customers message."
-              : "Nothing in this category right now."}
+
+        <div className={s.card}>
+          <div className={s.feedHead}>
+            <span className={s.feedTitle}>All Orders</span>
+            <div className={s.filters}>
+              <button
+                className={`${s.filterPill} ${filter === "all" ? s.filterActive : ""}`}
+                onClick={() => setFilter("all")}
+              >All</button>
+              {ACTIVE.map((st) => (
+                <button
+                  key={st}
+                  className={`${s.filterPill} ${filter === st ? s.filterActive : ""}`}
+                  onClick={() => setFilter(st)}
+                >
+                  {STATUS_LABEL[st] ?? st}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          feed.map((o) => <LiveOrderRow key={o.id} order={o} onOpen={(id) => nav(`/orders?id=${id}`)} />)
-        )}
+          <CompactTable
+            columns={orderColumns}
+            rows={visibleFeed}
+            rowKey={(o) => o.id}
+            onRowClick={(o) => nav(`/orders?id=${o.id}`)}
+            emptyText={orders.length === 0 ? "No orders yet today." : "Nothing in this category right now."}
+          />
+        </div>
       </div>
     </div>
   );

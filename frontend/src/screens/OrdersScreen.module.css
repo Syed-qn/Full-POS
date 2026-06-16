@@ -6,11 +6,59 @@
 .filterBar {
   display: flex;
   gap: 12px;
+  justify-content: flex-end;
+}
+.tableCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pageInfo {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.pageBtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pageNum {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  min-width: 92px;
+  text-align: center;
+}
+.pageBtn {
+  font-size: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.pageBtn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+.pageBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .search {
-  flex: 1;
+  flex: 0 1 320px;
   max-width: 320px;
-  background: var(--bg-surface-inset);
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   padding: 8px 12px;

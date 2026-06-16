@@ -17,7 +17,7 @@
   color: var(--text-inverse);
 }
 .primary:hover:not(:disabled) {
-  background: #2f7bf0;
+  background: var(--accent-primary-hover);
 }
 .ghost {
   background: transparent;

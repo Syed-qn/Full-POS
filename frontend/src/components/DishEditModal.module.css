@@ -1,0 +1,166 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 25, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.close:hover {
+  color: var(--text-primary);
+}
+.error {
+  margin: 14px 20px 0;
+  background: #fdeaea;
+  border: 1px solid #e6a6a6;
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  color: #b02a2a;
+  font-size: 13px;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  overflow-y: auto;
+}
+.row {
+  display: flex;
+  gap: 12px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.input,
+.textarea {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.12s;
+}
+.textarea {
+  resize: vertical;
+}
+/* Hide the native number spinner arrows — they look cramped in narrow fields. */
+.input[type="number"]::-webkit-outer-spin-button,
+.input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+.input:focus,
+.textarea:focus {
+  border-color: var(--accent-primary);
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+.footerRight {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+.deleteBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  color: #b02a2a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.deleteBtn:hover {
+  border-color: #b02a2a;
+  background: #fdeaea;
+}
+.deleteConfirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.deleteYes {
+  background: #b02a2a;
+  border: none;
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.deleteNo {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}

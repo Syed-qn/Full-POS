@@ -21,6 +21,32 @@ export async function setAvailability(dishId: number, isAvailable: boolean): Pro
   });
 }
 
+export interface DishInput {
+  dish_number: number;
+  name: string;
+  price_aed: string;
+  category?: string | null;
+  description?: string | null;
+}
+
+export type DishPatchInput = Partial<DishInput>;
+
+export async function addDish(menuId: number, body: DishInput): Promise<DishOut> {
+  return apiClient.post<DishOut>(`/api/v1/menus/${menuId}/dishes`, body);
+}
+
+export async function patchDish(
+  menuId: number,
+  dishId: number,
+  body: DishPatchInput,
+): Promise<DishOut> {
+  return apiClient.patch<DishOut>(`/api/v1/menus/${menuId}/dishes/${dishId}`, body);
+}
+
+export async function deleteDish(menuId: number, dishId: number): Promise<void> {
+  await apiClient.delete<void>(`/api/v1/menus/${menuId}/dishes/${dishId}`);
+}
+
 export async function fetchActiveMenu(): Promise<MenuOut | null> {
   try {
     return await apiClient.get<MenuOut>("/api/v1/menus/active");

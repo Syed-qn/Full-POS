@@ -2,25 +2,33 @@
   width: 100%;
   border-collapse: collapse;
 }
-.table th {
+.table thead th {
   text-align: left;
-  padding: 8px 12px;
+  padding: 11px 14px;
+  background: var(--bg-surface-inset);
   border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
 }
 .table td {
-  padding: 0 12px;
-  height: 44px;
+  padding: 0 14px;
+  height: 46px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 13px;
+  color: var(--text-primary);
+}
+.table tbody tr:last-child td {
+  border-bottom: none;
 }
 .clickable {
   cursor: pointer;
+  transition: background 0.12s;
 }
 .clickable:hover {
-  background: var(--bg-surface-raised);
+  background: var(--bg-surface-inset);
 }
 .empty {
   color: var(--text-muted);
   font-size: 13px;
-  padding: 24px 12px;
+  padding: 28px 14px;
+  text-align: center;
 }

@@ -18,6 +18,10 @@ export async function setRiderStatus(id: number, status: RiderStatus): Promise<R
   return apiClient.patch<RiderOut>(`/api/v1/riders/${id}`, { status });
 }
 
+export async function updateRider(id: number, data: Partial<RiderIn>): Promise<RiderOut> {
+  return apiClient.patch<RiderOut>(`/api/v1/riders/${id}`, data);
+}
+
 export async function deleteRider(id: number): Promise<void> {
   await apiClient.delete(`/api/v1/riders/${id}`);
 }

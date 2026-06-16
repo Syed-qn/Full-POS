@@ -109,6 +109,46 @@ async def set_rider_status(
     return rider
 
 
+async def update_rider_profile(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider_id: int,
+    name: str | None = None,
+    phone: str | None = None,
+) -> Rider | None:
+    rider = await session.get(Rider, rider_id)
+    if rider is None or rider.restaurant_id != restaurant_id:
+        return None
+    before = {"name": rider.name, "phone": rider.phone}
+    if phone is not None and phone != rider.phone:
+        dup = await session.scalar(
+            select(Rider).where(
+                Rider.restaurant_id == restaurant_id,
+                Rider.phone == phone,
+                Rider.id != rider.id,
+            )
+        )
+        if dup:
+            raise DuplicatePhoneError("rider phone already registered")
+        rider.phone = phone
+    if name is not None:
+        rider.name = name
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="rider",
+        entity_id=str(rider.id),
+        action="profile_updated",
+        before=before,
+        after={"name": rider.name, "phone": rider.phone},
+    )
+    await session.commit()
+    await session.refresh(rider)
+    return rider
+
+
 async def delete_rider(
     session: AsyncSession,
     *,
@@ -137,9 +177,15 @@ async def update_profile(
     *,
     restaurant: Restaurant,
     name: str,
+    lat: float | None = None,
+    lng: float | None = None,
 ) -> Restaurant:
-    before = {"name": restaurant.name}
+    before = {"name": restaurant.name, "lat": restaurant.lat, "lng": restaurant.lng}
     restaurant.name = name
+    if lat is not None:
+        restaurant.lat = lat
+    if lng is not None:
+        restaurant.lng = lng
     await record_audit(
         session,
         actor="manager",
@@ -148,7 +194,7 @@ async def update_profile(
         entity_id=str(restaurant.id),
         action="profile_changed",
         before=before,
-        after={"name": name},
+        after={"name": name, "lat": restaurant.lat, "lng": restaurant.lng},
     )
     await session.commit()
     await session.refresh(restaurant)

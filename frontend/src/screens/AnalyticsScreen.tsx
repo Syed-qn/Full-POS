@@ -14,6 +14,7 @@ import { fetchLatestForecast } from "../lib/predictionsApi";
 import { fetchCampaigns } from "../lib/marketingApi";
 import type { CampaignResponse } from "../lib/marketingApi";
 import { usePoll } from "../lib/usePoll";
+import { PageHeader } from "../components/PageHeader";
 import s from "./AnalyticsScreen.module.css";
 
 const HORIZONS = ["breakfast", "lunch", "dinner", "midnight"] as const;
@@ -79,6 +80,7 @@ export function AnalyticsScreen() {
 
   return (
     <div className={s.screen}>
+      <PageHeader title="Reports" subtitle="Performance and delivery insights" />
       {error != null && <SectionBanner tone="warning">Could not load data — retrying…</SectionBanner>}
 
       {/* ── Today's demand forecast ─── */}

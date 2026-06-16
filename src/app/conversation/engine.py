@@ -321,6 +321,17 @@ async def _handle_collecting_items(
     )
 
 
+async def _fee_settings_for(session: AsyncSession, restaurant_id: int) -> dict | None:
+    """Load the restaurant's configured delivery-fee tiers (Settings → Fees) in the
+    shape ``calculate_fee`` expects, so the bot charges the manager's real tiers
+    instead of the hardcoded spec defaults. Returns None when unconfigured."""
+    from app.identity.models import Restaurant
+    from app.ordering.fees import fee_settings_from_restaurant
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    return fee_settings_from_restaurant(restaurant.settings if restaurant else None)
+
+
 async def _finalize_with_stored_address(
     session: AsyncSession,
     conv: Conversation,
@@ -353,7 +364,7 @@ async def _finalize_with_stored_address(
     if stored.latitude is not None and stored.longitude is not None:
         dist = distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
         try:
-            fee = calculate_fee(dist)
+            fee = calculate_fee(dist, await _fee_settings_for(session, restaurant_id))
         except UndeliverableError:
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -439,7 +450,7 @@ async def _handle_address_capture(
         lon = inbound.payload["longitude"]
         dist = distance_km(rest_lat, rest_lng, lat, lon)
         try:
-            fee = calculate_fee(dist)
+            fee = calculate_fee(dist, await _fee_settings_for(session, restaurant_id))
         except UndeliverableError:
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -537,8 +548,13 @@ async def _handle_receiver_details(
         return
 
     dist = conv.state.get("distance_km")
-    fee = Decimal(conv.state.get("delivery_fee", "0.00")) if conv.state.get("delivery_fee") \
-        else calculate_fee(dist if dist is not None else 0.0)
+    if conv.state.get("delivery_fee"):
+        fee = Decimal(conv.state.get("delivery_fee", "0.00"))
+    else:
+        fee = calculate_fee(
+            dist if dist is not None else 0.0,
+            await _fee_settings_for(session, restaurant_id),
+        )
     order.address_id = addr.id
     order.distance_km = dist
     order.delivery_fee_aed = fee
@@ -1471,7 +1487,10 @@ async def _execute_save_address(
         )
         return
     dist = conv.state.get("distance_km")
-    fee = calculate_fee(dist if dist is not None else 0.0)
+    fee = calculate_fee(
+        dist if dist is not None else 0.0,
+        await _fee_settings_for(session, restaurant_id),
+    )
     order.address_id = addr.id
     order.distance_km = dist
     order.delivery_fee_aed = fee
@@ -1586,7 +1605,8 @@ async def _attach_saved_address_to_order(
     except Exception:
         from app.geo.haversine import distance_km as haversine_km
         dist_km = haversine_km(restaurant.lat, restaurant.lng, addr.latitude, addr.longitude)
-    fee = calculate_fee(dist_km)
+    from app.ordering.fees import fee_settings_from_restaurant
+    fee = calculate_fee(dist_km, fee_settings_from_restaurant(restaurant.settings))
     order.address_id = addr.id
     order.distance_km = dist_km
     order.delivery_fee_aed = fee

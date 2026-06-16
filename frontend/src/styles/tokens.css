@@ -1,68 +1,69 @@
 :root {
-  /* ─── Backgrounds (light) ─── */
-  --bg-canvas: #f0f2f5;
+  /* ─── Backgrounds (clean white & grey) ─── */
+  --bg-canvas: #f4f5f6;
   --bg-surface: #ffffff;
   --bg-surface-raised: #ffffff;
-  --bg-surface-inset: #f7f8fa;
+  --bg-surface-inset: #f1f2f4;
   --bg-overlay: rgba(255, 255, 255, 0.92);
 
   /* ─── Borders ─── */
-  --border-subtle: #e8eaed;
-  --border-default: #d1d5db;
-  --border-strong: #9ca3af;
+  --border-subtle: #eceef0;
+  --border-default: #dcdfe3;
+  --border-strong: #bcc1c8;
 
   /* ─── Text ─── */
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
+  --text-primary: #1c1e21;
+  --text-secondary: #5a6068;
+  --text-muted: #969ba3;
   --text-inverse: #ffffff;
 
-  /* ─── SLA Semantics ─── */
-  --sla-safe: #16a34a;
-  --sla-safe-dim: rgba(22, 163, 74, 0.10);
-  --sla-warn: #d97706;
-  --sla-warn-dim: rgba(217, 119, 6, 0.10);
-  --sla-critical: #dc2626;
-  --sla-critical-dim: rgba(220, 38, 38, 0.10);
+  /* ─── SLA Semantics (kept colourful — urgency must stay scannable) ─── */
+  --sla-safe: #2e9e5b;
+  --sla-safe-dim: rgba(46, 158, 91, 0.10);
+  --sla-warn: #d98a1f;
+  --sla-warn-dim: rgba(217, 138, 31, 0.10);
+  --sla-critical: #dc3b3b;
+  --sla-critical-dim: rgba(220, 59, 59, 0.10);
   --sla-breach: #b91c1c;
 
-  /* ─── Operational Accents (Power BI palette) ─── */
-  --accent-primary: #2563eb;
-  --accent-primary-dim: rgba(37, 99, 235, 0.10);
-  --accent-dispatch: #7c3aed;
-  --accent-rider: #0891b2;
-  --accent-revenue: #059669;
-  --accent-ai: #6366f1;
-  --accent-ai-dim: rgba(99, 102, 241, 0.12);
+  /* ─── Operational accent: neutral charcoal (monochrome theme) ─── */
+  --accent-primary: #33363b;
+  --accent-primary-hover: #1f2125;
+  --accent-primary-dim: rgba(51, 54, 59, 0.07);
+  --accent-dispatch: #6b7280;
+  --accent-rider: #6b7280;
+  --accent-revenue: #4b5563;
+  --accent-ai: #6b7280;
+  --accent-ai-dim: rgba(107, 114, 128, 0.12);
 
-  /* ─── Chart colours (Power BI style) ─── */
-  --chart-1: #2563eb;
-  --chart-2: #7c3aed;
-  --chart-3: #059669;
-  --chart-4: #d97706;
-  --chart-5: #dc2626;
-  --chart-6: #0891b2;
+  /* ─── Chart colours (greyscale ramp, on-theme) ─── */
+  --chart-1: #4b5563;
+  --chart-2: #6b7280;
+  --chart-3: #9aa0a8;
+  --chart-4: #374151;
+  --chart-5: #c2c6cc;
+  --chart-6: #828a96;
 
-  /* ─── Status Pills ─── */
+  /* ─── Status Pills (semantic for ops clarity) ─── */
   --status-pending: #6b7280;
-  --status-confirmed: #2563eb;
-  --status-preparing: #d97706;
-  --status-ready: #7c3aed;
-  --status-assigned: #0891b2;
-  --status-pickedup: #7c3aed;
-  --status-delivered: #16a34a;
-  --status-cancelled: #dc2626;
-  --status-resale: #f59e0b;
+  --status-confirmed: #3b6fb0;
+  --status-preparing: #d98a1f;
+  --status-ready: #7c6fb0;
+  --status-assigned: #3b8ca8;
+  --status-pickedup: #7c6fb0;
+  --status-delivered: #2e9e5b;
+  --status-cancelled: #dc3b3b;
+  --status-resale: #d98a1f;
 
   /* ─── Map ─── */
-  --map-bg: #e8edf3;
-  --map-road: #cbd5e1;
-  --map-water: #bfdbfe;
-  --map-rider-active: #2563eb;
-  --map-rider-stale: #9ca3af;
-  --map-order-pin: #d97706;
-  --map-batch-hull: rgba(124, 58, 237, 0.12);
-  --map-batch-stroke: #7c3aed;
+  --map-bg: #e9ebee;
+  --map-road: #d3d7dc;
+  --map-water: #c7d8e6;
+  --map-rider-active: #33363b;
+  --map-rider-stale: #aab0b8;
+  --map-order-pin: #d98a1f;
+  --map-batch-hull: rgba(107, 114, 128, 0.12);
+  --map-batch-stroke: #6b7280;
 
   /* ─── Type ─── */
   --font-mono: "DM Mono", ui-monospace, monospace;
@@ -76,6 +77,6 @@
   --space-5: 20px;
   --space-6: 24px;
   --radius: 8px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05);
 }
