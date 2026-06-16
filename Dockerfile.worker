@@ -21,7 +21,8 @@ WORKDIR /build
 COPY pyproject.toml ./
 COPY src ./src
 
-RUN pip wheel --wheel-dir /wheels .
+RUN pip wheel --wheel-dir /wheels . \
+    && pip wheel --wheel-dir /wheels tzlocal tzdata
 
 # ----------------------------------------------------------------------------
 # Runtime: non-root celery worker.
@@ -47,11 +48,12 @@ COPY apps ./apps
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 
-RUN pip install --no-index --find-links=/wheels \
-        fastapi "uvicorn[standard]" pydantic pydantic-settings \
-        "sqlalchemy[asyncio]" asyncpg alembic "celery[redis]" redis \
-        "passlib[argon2]" pyjwt anthropic python-multipart \
-    && pip install --no-deps -e . \
+# Install the project + ALL its declared deps from the pre-built wheels (no
+# hardcoded list to drift from pyproject.toml — the old list still named the
+# dropped passlib and omitted tzlocal, breaking the Celery worker at startup).
+# tzlocal/tzdata are forced + asserted so a bad image fails at build, not deploy.
+RUN pip install --no-index --find-links=/wheels restaurant-platform tzlocal tzdata \
+    && python -c "import tzlocal, zoneinfo; zoneinfo.ZoneInfo('Asia/Dubai')" \
     && rm -rf /wheels
 
 RUN mkdir -p /app/var/uploads && chown -R app:app /app/var

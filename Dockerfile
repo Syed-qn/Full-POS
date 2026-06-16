@@ -27,7 +27,13 @@ COPY pyproject.toml ./
 COPY src ./src
 
 # Build wheels for all runtime dependencies (NOT the optional [dev] extras).
-RUN pip wheel --wheel-dir /wheels .
+# Explicitly wheel tzlocal + tzdata too: Celery imports tzlocal at startup and
+# resolves Asia/Dubai via zoneinfo, but a stale wheel cache predating Celery's
+# tzlocal dependency otherwise omits it and the offline (--no-index) runtime
+# install crashes with ModuleNotFoundError: tzlocal. Forcing the wheels here
+# guarantees they exist regardless of project-dep resolution.
+RUN pip wheel --wheel-dir /wheels . \
+    && pip wheel --wheel-dir /wheels tzlocal tzdata
 
 # ----------------------------------------------------------------------------
 # Frontend builder: compile the React dashboard to static assets (dist/).
@@ -81,7 +87,8 @@ COPY --from=frontend /frontend/dist ./static
 # pyproject.toml — the previous list still named passlib after the switch to
 # argon2-cffi and omitted numpy/structlog/prometheus-client, which broke the
 # build). --no-index guarantees we never reach PyPI.
-RUN pip install --no-index --find-links=/wheels restaurant-platform \
+RUN pip install --no-index --find-links=/wheels restaurant-platform tzlocal tzdata \
+    && python -c "import tzlocal, zoneinfo; zoneinfo.ZoneInfo('Asia/Dubai')" \
     && rm -rf /wheels
 
 # var/ holds uploads (menu images); make it writable by the app user.
