@@ -11,6 +11,13 @@ dependencies = [
     "asyncpg>=0.29",
     "alembic>=1.13",
     "celery[redis]>=5.4",
+    # Celery imports tzlocal at startup and resolves Asia/Dubai via zoneinfo;
+    # declare both explicitly so the offline wheel build (Dockerfile) always
+    # bundles them (python:3.12-slim ships no system zoneinfo, and a stale
+    # wheel cache predating celery's tzlocal dep otherwise omits it -> the
+    # runtime import crashed with ModuleNotFoundError: tzlocal).
+    "tzlocal>=5.2",
+    "tzdata>=2024.1",
     "redis>=5.0",
     "argon2-cffi>=23",
     "pyjwt>=2.9",
