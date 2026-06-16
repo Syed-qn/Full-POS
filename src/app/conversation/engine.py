@@ -332,6 +332,31 @@ async def _fee_settings_for(session: AsyncSession, restaurant_id: int) -> dict |
     return fee_settings_from_restaurant(restaurant.settings if restaurant else None)
 
 
+async def _road_distance_km(
+    lat1: float, lng1: float, lat2: float, lng2: float
+) -> float:
+    """Distance (km) restaurant → customer via the configured geo provider.
+
+    Uses the GeoPort (``google_maps`` → traffic-aware road distance) so the fee
+    and radius the customer is quoted match real driving distance, not a
+    straight line. The provider's HTTP client is sync, so it's run in a thread
+    to avoid blocking the event loop. The provider already degrades to haversine
+    internally on any API failure; this wrapper adds a final haversine fallback
+    so a provider/config error can never break ordering.
+    """
+    import asyncio
+
+    from app.geo.factory import get_geo_provider
+    from app.geo.haversine import distance_km as _haversine
+
+    try:
+        return await asyncio.to_thread(
+            get_geo_provider().distance_km, lat1, lng1, lat2, lng2
+        )
+    except Exception:  # noqa: BLE001 - never let geo break ordering
+        return _haversine(lat1, lng1, lat2, lng2)
+
+
 async def _finalize_with_stored_address(
     session: AsyncSession,
     conv: Conversation,
@@ -345,7 +370,6 @@ async def _finalize_with_stored_address(
     """Attach a returning customer's saved address to the draft and summarise."""
     from datetime import datetime, timezone
 
-    from app.geo.haversine import distance_km
     from app.ordering.fees import UndeliverableError, calculate_fee
     from app.ordering.models import Order
 
@@ -362,7 +386,7 @@ async def _finalize_with_stored_address(
     dist = None
     fee = Decimal("0.00")
     if stored.latitude is not None and stored.longitude is not None:
-        dist = distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
+        dist = await _road_distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
         try:
             fee = calculate_fee(dist, await _fee_settings_for(session, restaurant_id))
         except UndeliverableError:
@@ -392,7 +416,6 @@ async def _handle_address_capture(
     restaurant_id: int,
 ) -> None:
     """Capture delivery address: location pin (fee/radius check) or text address."""
-    from app.geo.haversine import distance_km
     from app.identity.models import Restaurant
     from app.ordering.fees import UndeliverableError, calculate_fee
     from app.ordering.service import get_last_address, get_or_create_customer
@@ -448,7 +471,7 @@ async def _handle_address_capture(
     if inbound.type == MessageType.LOCATION:
         lat = inbound.payload["latitude"]
         lon = inbound.payload["longitude"]
-        dist = distance_km(rest_lat, rest_lng, lat, lon)
+        dist = await _road_distance_km(rest_lat, rest_lng, lat, lon)
         try:
             fee = calculate_fee(dist, await _fee_settings_for(session, restaurant_id))
         except UndeliverableError:
@@ -1595,16 +1618,9 @@ async def _attach_saved_address_to_order(
             body="Your cart is empty. Send 'hi' to start a new order.",
         )
         return
-    from app.geo.factory import get_geo_provider
-    try:
-        dist_result = await get_geo_provider().distance(
-            origin=(restaurant.lat, restaurant.lng),
-            destination=(addr.latitude, addr.longitude),
-        )
-        dist_km = dist_result.distance_km
-    except Exception:
-        from app.geo.haversine import distance_km as haversine_km
-        dist_km = haversine_km(restaurant.lat, restaurant.lng, addr.latitude, addr.longitude)
+    dist_km = await _road_distance_km(
+        restaurant.lat, restaurant.lng, addr.latitude, addr.longitude
+    )
     from app.ordering.fees import fee_settings_from_restaurant
     fee = calculate_fee(dist_km, fee_settings_from_restaurant(restaurant.settings))
     order.address_id = addr.id
@@ -1840,21 +1856,11 @@ async def _handle_location_pin(
     Validates against restaurant.settings["max_radius_km"].
     Stores lat/lng in conv.state then calls AI to ask for apt/room.
     """
-    from app.geo.factory import get_geo_provider
-
     lat = float(inbound.payload.get("latitude", 0))
     lng = float(inbound.payload.get("longitude", 0))
     max_km = restaurant.settings.get("max_radius_km", 10) if restaurant else 10
 
-    try:
-        dist_result = await get_geo_provider().distance(
-            origin=(restaurant.lat, restaurant.lng),
-            destination=(lat, lng),
-        )
-        dist_km = dist_result.distance_km
-    except Exception:
-        from app.geo.haversine import distance_km as haversine_km
-        dist_km = haversine_km(restaurant.lat, restaurant.lng, lat, lng)
+    dist_km = await _road_distance_km(restaurant.lat, restaurant.lng, lat, lng)
 
     if dist_km > max_km:
         await _send_text(
