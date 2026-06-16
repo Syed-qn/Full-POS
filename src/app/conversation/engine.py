@@ -1273,6 +1273,18 @@ async def _build_context(
     """Build phase-specific context dict for the AI agent."""
     ctx: dict = {}
 
+    # Restaurant location label — grounds "where are you located?" in the REAL
+    # saved coordinates (Settings → location) so the LLM can't invent an area.
+    # Dynamic: change the pin in Settings → new coords → new label here.
+    if restaurant is not None and restaurant.lat is not None and restaurant.lng is not None:
+        from app.geo.cache import reverse_geocode_cached
+
+        ctx["restaurant_location"] = (
+            await reverse_geocode_cached(restaurant.lat, restaurant.lng) or "unknown"
+        )
+    else:
+        ctx["restaurant_location"] = "unknown"
+
     if phase == "ordering":
         ctx["menu_text"] = await _render_menu(session, restaurant_id)
         ctx["cart_summary"] = await _build_cart_summary(session, conv)

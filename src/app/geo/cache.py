@@ -64,3 +64,40 @@ async def geocode_cached(address: str) -> tuple[float, float] | None:
         except Exception as exc:  # noqa: BLE001 - cache is best-effort
             logger.debug("geocode cache write failed: %s", exc)
     return coords
+
+
+_REVERSE_KEY_PREFIX = "revgeo:"
+
+
+def _reverse_key(lat: float, lng: float) -> str:
+    # Round to ~100 m so tiny coordinate jitter still hits the cache; a real
+    # location change (e.g. moving the Settings pin to a new area) yields a new
+    # key, so the bot's answer updates automatically.
+    return f"{_REVERSE_KEY_PREFIX}{round(lat, 3)},{round(lng, 3)}"
+
+
+async def reverse_geocode_cached(lat: float, lng: float) -> str | None:
+    """Reverse-geocode ``(lat, lng)`` to an area label via a Redis read-through
+    cache. Returns e.g. "Al Karama, Dubai" or None. Degrades to a direct provider
+    call (then None) on any cache error, so Redis being down never blocks chat.
+    """
+    key = _reverse_key(lat, lng)
+    r = _redis_client
+
+    if r is not None:
+        try:
+            hit = await r.get(key)
+            if hit:
+                return hit.decode() if isinstance(hit, bytes) else str(hit)
+        except Exception as exc:  # noqa: BLE001 - cache is best-effort
+            logger.debug("reverse geocode cache read failed (%s); calling provider", exc)
+
+    label = await asyncio.to_thread(get_geo_provider().reverse_geocode, lat, lng)
+
+    if label and r is not None:
+        try:
+            ttl = get_settings().geocode_cache_ttl_seconds
+            await r.set(key, label, ex=ttl)
+        except Exception as exc:  # noqa: BLE001 - cache is best-effort
+            logger.debug("reverse geocode cache write failed: %s", exc)
+    return label

@@ -20,6 +20,40 @@ _ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 _FIELD_MASK = "routes.distanceMeters,routes.duration"
 _GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
+# Address-component types, most→least specific, used to build an "Area, City"
+# label from a Google reverse-geocode result.
+_AREA_TYPES = ("sublocality", "neighborhood", "route")
+_CITY_TYPES = ("locality", "administrative_area_level_2", "administrative_area_level_1")
+
+
+def _component(components: list[dict], wanted: tuple[str, ...]) -> str | None:
+    """Return the first component whose types include any of ``wanted``."""
+    for t in wanted:
+        for c in components:
+            if t in c.get("types", []):
+                return c.get("long_name")
+    return None
+
+
+def _concise_area(result: dict) -> str | None:
+    """Build "Area, City" from a Google geocode result, else trim the country off
+    the formatted address."""
+    components = result.get("address_components") or []
+    area = _component(components, _AREA_TYPES)
+    city = _component(components, _CITY_TYPES)
+    if area and city and area != city:
+        return f"{area}, {city}"
+    if area:
+        return area
+    if city:
+        return city
+    formatted = result.get("formatted_address")
+    if formatted:
+        # Drop the trailing country segment ("…- United Arab Emirates").
+        parts = [p.strip() for p in formatted.replace(" - ", ",").split(",")]
+        return ", ".join(parts[:2]) if len(parts) >= 2 else formatted
+    return None
+
 
 class GoogleMapsGeoProvider:
     """Production geo provider — Google Maps Routes API with traffic.
@@ -80,6 +114,28 @@ class GoogleMapsGeoProvider:
             return (float(loc["lat"]), float(loc["lng"]))
         except Exception as exc:  # noqa: BLE001 - degrade gracefully on any failure
             logger.warning("Google geocode failed for %r: %s", address, exc)
+            return None
+
+    def reverse_geocode(self, lat: float, lng: float) -> str | None:
+        """Reverse-geocode coordinates to a concise "Area, City" label via Google.
+
+        Returns e.g. "Al Karama, Dubai" by preferring the sublocality/neighborhood
+        + city address components; falls back to the top result's formatted
+        address (sans country). Returns None on no match / any API failure.
+        """
+        if not self._api_key:
+            return None
+        try:
+            params = {"latlng": f"{lat},{lng}", "key": self._api_key, "language": "en"}
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(_GEOCODE_URL, params=params)
+            resp.raise_for_status()
+            results = resp.json().get("results") or []
+            if not results:
+                return None
+            return _concise_area(results[0])
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully on any failure
+            logger.warning("Google reverse geocode failed for %s,%s: %s", lat, lng, exc)
             return None
 
     def _maps_distance(

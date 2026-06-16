@@ -263,6 +263,12 @@ SHORT replies (WhatsApp style). Emoji: sparingly, only where natural.
 
 ALWAYS call take_action. Never reply without calling it.
 COD only (cash on delivery). Delivery ~40 minutes. Max {max_radius_km} km range.
+
+RESTAURANT LOCATION: {restaurant_location}
+If the customer asks where you/the restaurant are located, answer with EXACTLY this
+location — nothing more. NEVER invent, guess, or add areas, landmarks, or directions
+that are not in it. If it is "unknown", say you can share the exact location pin
+instead of naming an area.
 """
 
 _ORDERING_BLOCK = """
@@ -374,6 +380,7 @@ class DeepSeekConversationAgent:
         identity = _IDENTITY.format(
             restaurant_name=restaurant_name,
             max_radius_km=max_km,
+            restaurant_location=context.get("restaurant_location") or "unknown",
         )
 
         if dialogue_phase == "ordering":

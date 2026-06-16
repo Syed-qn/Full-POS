@@ -91,3 +91,28 @@ class FakeGeoProvider:
             if all(_word_in(kw) for kw in key.split()):
                 return coords
         return None
+
+    def reverse_geocode(self, lat: float, lng: float) -> str | None:
+        """Return the nearest known Dubai area as "Area, Dubai" (dev/tests).
+
+        Picks the gazetteer centroid closest to the point, so it stays in sync
+        with ``geocode`` and is fully deterministic for tests.
+        """
+        if not _DUBAI_AREAS:
+            return None
+        # Skip alias keys that share coords with a canonical one — pick the
+        # first (canonical) key per coordinate to avoid e.g. "Marina" vs
+        # "Dubai Marina" being chosen arbitrarily.
+        seen: set[tuple[float, float]] = set()
+        nearest_key: str | None = None
+        nearest_d = float("inf")
+        for key, coords in _DUBAI_AREAS.items():
+            if coords in seen:
+                continue
+            seen.add(coords)
+            d = _haversine(lat, lng, coords[0], coords[1])
+            if d < nearest_d:
+                nearest_d, nearest_key = d, key
+        if nearest_key is None:
+            return None
+        return f"{nearest_key.title()}, Dubai"

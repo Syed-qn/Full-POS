@@ -32,3 +32,14 @@ class GeoPort(Protocol):
         LLM — uses the result to compute distance / fee / eligibility.
         """
         ...
+
+    def reverse_geocode(self, lat: float, lng: float) -> str | None:
+        """Convert ``(lat, lng)`` to a concise human area label, or None.
+
+        e.g. ``(25.2489, 55.3061) -> "Al Karama, Dubai"``. Used to ground the
+        bot's "where are you located?" answer in the restaurant's REAL saved
+        coordinates instead of letting the LLM invent an area.
+        FakeGeoProvider uses the Dubai gazetteer; GoogleMapsGeoProvider calls the
+        Geocoding API reverse lookup.
+        """
+        ...
