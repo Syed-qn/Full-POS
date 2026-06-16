@@ -11,8 +11,9 @@ type Mode = "login" | "signup";
 export function LoginScreen() {
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
+  // Dev-only convenience prefill — production builds (import.meta.env.DEV === false) stay empty.
+  const [phone, setPhone] = useState(import.meta.env.DEV ? "+918754568384" : "");
+  const [password, setPassword] = useState(import.meta.env.DEV ? "password123" : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();

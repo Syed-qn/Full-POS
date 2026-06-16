@@ -4,6 +4,7 @@ import { SectionBanner } from "../components/SectionBanner";
 import { apiClient } from "../lib/apiClient";
 import type { RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
+import { LocationPicker } from "../components/LocationPicker";
 import s from "./SettingsScreen.module.css";
 
 type Tab = "general" | "fees" | "batching";
@@ -166,29 +167,12 @@ export function SettingsScreen() {
           </div>
           <div className={s.field}>
             <span className="label-upper">Restaurant Location</span>
-            <div className={s.latLngRow}>
-              <input
-                type="number"
-                step="any"
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                placeholder="Latitude (e.g. 25.1124)"
-                className={s.input}
-                aria-label="latitude"
-              />
-              <input
-                type="number"
-                step="any"
-                value={lng}
-                onChange={(e) => setLng(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                placeholder="Longitude (e.g. 55.1390)"
-                className={s.input}
-                aria-label="longitude"
-              />
-            </div>
-            <span className={s.hint}>Used to measure delivery distance &amp; fees. Tip: in Google Maps, right-click your restaurant → the first row copies the lat, lng.</span>
+            <LocationPicker
+              lat={Number(lat)}
+              lng={Number(lng)}
+              onChange={(la, ln) => { setLat(String(la)); setLng(String(ln)); }}
+            />
+            <span className={s.hint}>Used to measure delivery distance &amp; fees.</span>
           </div>
           <Button onClick={saveGeneral}>Save</Button>
         </div>

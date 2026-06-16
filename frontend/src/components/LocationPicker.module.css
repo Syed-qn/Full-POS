@@ -1,0 +1,129 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 460px;
+}
+
+/* ---- Search ---- */
+.searchWrap {
+  position: relative;
+}
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.12s;
+}
+.search::placeholder {
+  color: var(--text-muted);
+}
+.search:focus {
+  border-color: var(--accent-primary);
+}
+.spinner {
+  position: absolute;
+  right: 12px;
+  top: 9px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.resultItem {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.resultItem:hover {
+  background: var(--bg-surface-inset);
+  color: var(--text-primary);
+}
+
+/* ---- Map ---- */
+.map {
+  height: 240px;
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* ---- Controls ---- */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.locBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s;
+}
+.locBtn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+.locBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.tip {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ---- Address readout ---- */
+.address {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.addrIcon {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.addrText {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.error {
+  font-size: 12px;
+  color: #b02a2a;
+}

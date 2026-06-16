@@ -3,6 +3,31 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsScreen } from "./SettingsScreen";
 
+// Mock Leaflet — jsdom has no map support; LocationPicker imports it dynamically.
+vi.mock("leaflet", () => {
+  const marker = {
+    addTo: vi.fn(() => marker),
+    on: vi.fn(),
+    getLatLng: vi.fn(() => ({ lat: 25.2, lng: 55.2 })),
+    setLatLng: vi.fn(),
+  };
+  const map = {
+    setView: vi.fn(() => map),
+    on: vi.fn(),
+    remove: vi.fn(),
+    invalidateSize: vi.fn(),
+  };
+  const api = {
+    map: vi.fn(() => map),
+    tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
+    divIcon: vi.fn(() => ({})),
+    marker: vi.fn(() => marker),
+  };
+  // Expose as both named exports and default (matches the CJS interop the
+  // dynamic `import("leaflet")` relies on).
+  return { ...api, default: api };
+});
+
 const me = {
   id: 1, name: "Test Resto", phone: "+9714", lat: 25.2, lng: 55.2,
   settings: { max_orders_per_batch: 3, max_items_per_order: 20 },

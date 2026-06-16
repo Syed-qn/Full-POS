@@ -80,22 +80,9 @@
   flex-direction: column;
   gap: 6px;
 }
-.latLngRow {
-  display: flex;
-  gap: 10px;
-  max-width: 360px;
-}
-.latLngRow .input {
-  max-width: none;
-}
-.latLngRow .input::-webkit-outer-spin-button,
-.latLngRow .input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.latLngRow .input {
-  -moz-appearance: textfield;
-  appearance: textfield;
+.coords {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
 }
 .readonlyValue {
   display: flex;
