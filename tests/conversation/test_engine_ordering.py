@@ -256,16 +256,14 @@ async def test_returning_customer_offered_stored_address(db_session, restaurant)
     db_session.add(addr)
     await db_session.commit()
 
+    # Real flow: ordering then "done" offers the saved address on entry to
+    # address capture (deterministic _offer_saved_address_if_any) — before any
+    # pin is shared. (Sharing a NEW pin is now honoured as a new address.)
     await handle_inbound(db_session, _msg("hi", "wamid.ret1"), restaurant_id=restaurant.id)
     await db_session.commit()
-
-    conv = await _conv(db_session)
-    conv.state = {**conv.state, "dialogue_state": "address_capture"}
+    await handle_inbound(db_session, _msg("chicken biryani", "wamid.retitem"), restaurant_id=restaurant.id)
     await db_session.commit()
-
-    await handle_inbound(
-        db_session, _loc_msg(25.21, 55.27, "wamid.ret2"), restaurant_id=restaurant.id
-    )
+    await handle_inbound(db_session, _msg("done", "wamid.ret2"), restaurant_id=restaurant.id)
     await db_session.commit()
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
