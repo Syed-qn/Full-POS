@@ -44,6 +44,32 @@ async def test_list_customers_returns_tenant_only(client, db_session, restaurant
     assert all(c["phone"] for c in data["items"])
 
 
+async def test_nameless_customer_shows_receiver_name(client, db_session, restaurant):
+    """A customer with no name on file falls back to their address receiver name
+    in both the list and the profile (WhatsApp only collects a receiver name)."""
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971509998888",
+        name=None, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    db_session.add(CustomerAddress(
+        customer_id=customer.id, room_apartment="12", building="Tower Y",
+        receiver_name="Asfer", confirmed=True,
+    ))
+    await db_session.commit()
+
+    resp = await client.get("/api/v1/ordering/customers", headers=_auth(restaurant.id))
+    assert resp.status_code == 200
+    listed = next(c for c in resp.json()["items"] if c["phone"] == "+971509998888")
+    assert listed["name"] == "Asfer"
+
+    resp = await client.get(
+        f"/api/v1/ordering/customers/{customer.id}", headers=_auth(restaurant.id)
+    )
+    assert resp.json()["name"] == "Asfer"
+
+
 async def test_list_customers_search_by_phone(client, db_session, restaurant):
     await _seed_customer(db_session, restaurant.id)
 

@@ -61,10 +61,29 @@ async def list_customers(
     else:
         opted_out_phones = set()
 
+    # The WhatsApp flow only ever collects a receiver name, so customers can
+    # have no name on file. Fall back to their most recent address receiver
+    # (bulk query, newest first) so the Name column isn't blank.
+    nameless_ids = [c.id for c in rows if not (c.name or "").strip()]
+    receiver_by_customer: dict[int, str] = {}
+    if nameless_ids:
+        addr_rows = (await session.scalars(
+            select(CustomerAddress)
+            .where(
+                CustomerAddress.customer_id.in_(nameless_ids),
+                CustomerAddress.receiver_name.isnot(None),
+            )
+            .order_by(CustomerAddress.id.desc())
+        )).all()
+        for a in addr_rows:
+            rn = (a.receiver_name or "").strip()
+            if rn and a.customer_id not in receiver_by_customer:
+                receiver_by_customer[a.customer_id] = rn
+
     items = [
         CustomerDetailOut(
             id=c.id,
-            name=c.name,
+            name=c.name or receiver_by_customer.get(c.id),
             phone=c.phone,
             total_orders=c.total_orders,
             total_spend=c.total_spend,
@@ -109,9 +128,17 @@ async def get_customer_profile(
 
     opted_out = await is_opted_out(session, restaurant_id=restaurant.id, phone=customer.phone)
 
+    # Fall back to the most recent address receiver when no name is on file.
+    profile_name = customer.name
+    if not (profile_name or "").strip():
+        for a in sorted(addresses_rows, key=lambda x: x.id, reverse=True):
+            if (a.receiver_name or "").strip():
+                profile_name = a.receiver_name.strip()
+                break
+
     return CustomerProfileOut(
         id=customer.id,
-        name=customer.name,
+        name=profile_name,
         phone=customer.phone,
         total_orders=customer.total_orders,
         total_spend=customer.total_spend,
