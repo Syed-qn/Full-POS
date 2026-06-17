@@ -11,6 +11,22 @@ from app.outbox.service import enqueue_message
 from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
 
+import re as _re
+
+# A menu line looks like "5. Chicken Biryani — AED 28" (any dash/colon, any currency).
+_MENU_LINE = _re.compile(r"^\s*\d+[\.\)]\s+.+?(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.MULTILINE)
+
+
+def _looks_like_menu(text: str) -> bool:
+    """True if an AI reply appears to list dishes+prices (≥2 menu-ish lines).
+
+    Safety net: the LLM sometimes fabricates an entire menu in free text. Any
+    such reply in the ordering phase is replaced with the real DB menu before it
+    reaches the customer.
+    """
+    return len(_MENU_LINE.findall(text or "")) >= 2
+
+
 def _is_menu_request(text: str) -> bool:
     """True for short, explicit 'show me the menu' messages (lowercased).
 
@@ -1782,6 +1798,11 @@ async def _dispatch_action(
     # Phase guard — wrong-phase action falls back to no_action
     if not _is_valid_action_for_phase(action, phase):
         action = "no_action"
+
+    # Anti-hallucination safety net: if the AI dumped a (fabricated) menu into its
+    # reply during ordering, swap in the REAL DB menu before it goes out.
+    if phase == "ordering" and _looks_like_menu(reply):
+        reply = await _render_menu(session, restaurant_id)
 
     # ── ordering actions ──────────────────────────────────────────────────
     if action == "show_menu":

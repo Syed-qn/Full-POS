@@ -700,3 +700,14 @@ async def test_greeting_falls_back_to_text_menu_when_no_files(db_session, restau
     assert "document" not in types
     text_rows = [r for r in rows if r.payload.get("type") == "text"]
     assert any("biryani" in (r.payload.get("body") or "").lower() for r in text_rows)
+
+
+def test_looks_like_menu_detects_fabricated_list():
+    """Safety net: a reply listing dishes+prices is detected (and gets replaced
+    with the real DB menu in the ordering phase)."""
+    from app.conversation.engine import _looks_like_menu
+
+    fake = "Here's our menu!\n1. Chicken 65 — AED 12\n2. Samosa — AED 5\n3. Lassi — AED 8"
+    assert _looks_like_menu(fake) is True
+    assert _looks_like_menu("Added Chicken Biryani! Want a drink for AED 12? 😊") is False
+    assert _looks_like_menu("Your total is AED 33. Confirm?") is False
