@@ -108,7 +108,7 @@
   height: 30px;
   border-radius: 8px;
   font-size: 15px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
 }
 .statLabel {
   font-size: 10px;
