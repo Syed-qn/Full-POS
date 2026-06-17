@@ -30,9 +30,9 @@ def _is_permanent_failure(status_code: int) -> bool:
 
 
 async def claim_pending_outbox_ids(
-    session: AsyncSession, *, to_phone: str, restaurant_id: int
+    session: AsyncSession, *, restaurant_id: int, to_phone: str | None = None
 ) -> list[int]:
-    """Atomically claim this conversation's pending outbox rows for dispatch.
+    """Atomically claim a restaurant's pending outbox rows for dispatch.
 
     Transitions matching rows ``pending -> dispatching`` in a single
     ``UPDATE ... RETURNING`` so two concurrent webhooks (or a webhook racing the
@@ -41,17 +41,22 @@ async def claim_pending_outbox_ids(
     back in ``RETURNING``. The loser's ``WHERE status='pending'`` no longer
     matches, so it claims (and dispatches) nothing for those rows.
 
+    ``to_phone`` optionally narrows to one recipient. Leave it None to flush ALL
+    of the restaurant's pending rows — required for handlers that fan out to
+    multiple recipients (a rider's "Orders Picked" tap sends the rider their next
+    stop AND the customer an "on the way" update; a per-sender claim would strand
+    whichever recipient isn't the inbound sender).
+
     Caller is responsible for committing the surrounding transaction.
     """
+    stmt = update(OutboxMessage).where(
+        OutboxMessage.status == "pending",
+        OutboxMessage.restaurant_id == restaurant_id,
+    )
+    if to_phone is not None:
+        stmt = stmt.where(OutboxMessage.to_phone == to_phone)
     claimed = await session.execute(
-        update(OutboxMessage)
-        .where(
-            OutboxMessage.status == "pending",
-            OutboxMessage.to_phone == to_phone,
-            OutboxMessage.restaurant_id == restaurant_id,
-        )
-        .values(status="dispatching")
-        .returning(OutboxMessage.id)
+        stmt.values(status="dispatching").returning(OutboxMessage.id)
     )
     return list(claimed.scalars().all())
 

@@ -93,13 +93,17 @@ async def receive_webhook(
         try:
             await handle_inbound(session, inbound, restaurant_id=restaurant.id)
 
-            # Atomically claim this conversation's pending outbox rows
+            # Atomically claim the restaurant's pending outbox rows
             # (pending -> dispatching) BEFORE committing so concurrent webhooks
-            # racing the same rows can't double-dispatch to the customer. Only
-            # the winning transaction gets the ids back; losers claim nothing.
+            # racing the same rows can't double-dispatch. Only the winning
+            # transaction gets the ids back; losers claim nothing. We flush ALL
+            # of the restaurant's pending rows (not just replies to this sender)
+            # because a single inbound can fan out to several recipients — e.g. a
+            # rider's "Orders Picked" tap sends the rider their next stop AND the
+            # customer an "on the way" update; a per-sender claim would strand the
+            # other recipient's message as pending forever (no beat sweeper here).
             claimed_ids = await claim_pending_outbox_ids(
                 session,
-                to_phone=inbound.from_phone,
                 restaurant_id=restaurant.id,
             )
             await session.commit()

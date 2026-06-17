@@ -126,15 +126,35 @@ async def handle_orders_picked(
             .limit(1)
         )
     if batch is None:
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=rider.phone,
-            msg_type=OutboundMessageType.TEXT,
-            payload={"body": "You have no active batch to pick up right now. "
-                             "We'll message you when one is assigned."},
-            idempotency_key=f"nopick-{trigger_msg_id or rider.id}",
+        # No new batch to pick up. The rider may already be mid-run and just
+        # never received (or lost) their current stop — re-send it so tapping
+        # again recovers it. Otherwise tell them there's nothing to pick up.
+        bo = await session.scalar(
+            select(BatchOrder)
+            .join(Batch, BatchOrder.batch_id == Batch.id)
+            .where(
+                Batch.rider_id == rider.id,
+                Batch.status == "picked_up",
+                BatchOrder.delivered_at.is_(None),
+            )
+            .order_by(BatchOrder.sequence)
+            .limit(1)
         )
+        order = await session.get(Order, bo.order_id) if bo is not None else None
+        if order is not None:
+            # Unique suffix so the re-send isn't deduped against the original stop.
+            await _send_stop(session, restaurant_id, rider.phone, order,
+                             key_suffix=f"-resend-{trigger_msg_id or 'x'}")
+        else:
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=rider.phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={"body": "You have no active batch to pick up right now. "
+                                 "We'll message you when one is assigned."},
+                idempotency_key=f"nopick-{trigger_msg_id or rider.id}",
+            )
         return
     batch.status = "picked_up"
     bos = (
@@ -233,11 +253,14 @@ async def _get_latest_rider_location(session: AsyncSession, rider_id: int) -> tu
 
 
 async def _send_stop(
-    session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order, *, force_next: bool = False
+    session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order,
+    *, force_next: bool = False, key_suffix: str = "",
 ) -> None:
     """Send the rider the next stop: nav link + Delivered button (COD-aware).
     If near (~100m) or force_next, send dual buttons per spec §4.4 (button click mandatory for next location).
     Include customer contact for rider (name); customer side uses "Message rider" button (no raw phone leak).
+    ``key_suffix`` makes the idempotency key unique for an intentional re-send
+    (e.g. rider re-tapped because the first stop message was lost).
     """
     coords = await _dropoff_coords(session, order)
     nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
@@ -260,7 +283,7 @@ async def _send_stop(
         to_phone=rider_phone,
         msg_type=OutboundMessageType.BUTTONS,
         payload={"body": body, "buttons": buttons},
-        idempotency_key=f"stop-{order.id}",
+        idempotency_key=f"stop-{order.id}{key_suffix}",
     )
 
 

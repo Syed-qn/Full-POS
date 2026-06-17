@@ -101,6 +101,22 @@ async def test_picked_falls_back_to_current_batch_on_stale_id(db_session):
     assert any("picked up" in m.payload["body"].lower() for m in msgs)
 
 
+async def test_picked_resends_current_stop_when_already_in_progress(db_session):
+    """If the rider already picked up (batch in progress) and re-taps Orders
+    Picked — e.g. the first stop message was lost — re-send the current stop
+    rather than telling them there's nothing to do."""
+    r, rider, o, batch, c = await _seed(db_session, status="picked_up")
+    batch.status = "picked_up"  # in-progress, no longer 'planned'
+    await db_session.commit()
+
+    await handle_orders_picked(db_session, restaurant_id=r.id, rider=rider,
+                               batch_id=None, trigger_msg_id="wamid.resend1")
+    await db_session.commit()
+
+    rider_msgs = await _cust_msgs(db_session, rider.phone)
+    assert any("next stop" in m.payload["body"].lower() for m in rider_msgs)
+
+
 async def test_picked_with_no_batch_tells_rider(db_session):
     """Tapping with no active batch replies instead of a silent no-op."""
     r = await _restaurant(db_session)
