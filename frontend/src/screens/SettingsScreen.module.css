@@ -174,3 +174,62 @@
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
+
+/* ---- Opening hours ---- */
+.hoursToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.hoursToggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+.hoursList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 440px;
+}
+.hourRow {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.hourDay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.hourDay input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+.hourTimes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hourTimes .input {
+  width: auto;
+}
+.hourDash {
+  color: var(--text-muted);
+}
+.hourClosed {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}

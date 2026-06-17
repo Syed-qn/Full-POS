@@ -357,48 +357,6 @@ async def _road_distance_km(
         return _haversine(lat1, lng1, lat2, lng2)
 
 
-def _hours_info(restaurant) -> str:
-    """Grounded opening-hours line for the AI prompt.
-
-    Unconfigured hours mean "always open" — so instruct the model NOT to invent
-    specific open/close times (it was answering '11 AM to 11 PM' from nowhere).
-    When configured, state the live open/closed status.
-    """
-    open_hours = (restaurant.settings or {}).get("open_hours") if restaurant else None
-    if not open_hours or not open_hours.get("days"):
-        return (
-            "No fixed opening hours are posted — do NOT state specific open/close "
-            "times; assume we're available to take orders now."
-        )
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from app.conversation.hours import (
-        _fmt_time,
-        _window_for,
-        is_open,
-        next_opening_label,
-    )
-
-    labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    parts = []
-    for wd in range(7):
-        window = _window_for(open_hours, wd)
-        if window:
-            parts.append(f"{labels[wd]} {_fmt_time(window[0])}–{_fmt_time(window[1])}")
-        else:
-            parts.append(f"{labels[wd]} closed")
-    schedule = "; ".join(parts)
-
-    now = datetime.now(ZoneInfo("Asia/Dubai"))
-    if is_open(open_hours, now):
-        status = "currently OPEN"
-    else:
-        nxt = next_opening_label(open_hours, now)
-        status = f"currently CLOSED, next opening {nxt}" if nxt else "currently closed"
-    return f"Opening hours — {schedule}. We are {status}."
-
-
 async def _finalize_with_stored_address(
     session: AsyncSession,
     conv: Conversation,
@@ -1327,13 +1285,6 @@ async def _build_context(
     else:
         ctx["restaurant_location"] = "unknown"
 
-    # Real delivery-fee tiers (grounded) + opening hours, so the bot recites the
-    # truth instead of inventing fees/times when asked.
-    from app.ordering.fees import delivery_info_text
-
-    ctx["delivery_info"] = delivery_info_text(restaurant.settings if restaurant else None)
-    ctx["hours_info"] = _hours_info(restaurant)
-
     if phase == "ordering":
         ctx["menu_text"] = await _render_menu(session, restaurant_id)
         ctx["cart_summary"] = await _build_cart_summary(session, conv)
@@ -1914,22 +1865,16 @@ async def _handle_location_pin(
 ) -> None:
     """Process a location pin in address_capture phase.
 
-    Validates deliverability (distance ≤ radius AND within a fee tier), then sends
-    a DETERMINISTIC confirmation + asks for the apartment/room. This step is not
-    delegated to the LLM: the model would sometimes reply with non-progressing
-    filler ("let me check if we deliver…") and the conversation stalled after the
-    customer shared their pin. The follow-up apt/building/receiver collection
-    stays AI-driven.
+    Validates against restaurant.settings["max_radius_km"].
+    Stores lat/lng in conv.state then calls AI to ask for apt/room.
     """
-    from app.ordering.fees import UndeliverableError, calculate_fee
-
     lat = float(inbound.payload.get("latitude", 0))
     lng = float(inbound.payload.get("longitude", 0))
     max_km = restaurant.settings.get("max_radius_km", 10) if restaurant else 10
 
     dist_km = await _road_distance_km(restaurant.lat, restaurant.lng, lat, lng)
 
-    async def _send_out_of_range() -> None:
+    if dist_km > max_km:
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="out-of-range",
@@ -1941,16 +1886,6 @@ async def _handle_location_pin(
         )
         _set_state(conv, dialogue_phase="ordering", dialogue_state="greeting",
                    draft_order_id=None)
-
-    if dist_km > max_km:
-        await _send_out_of_range()
-        return
-
-    # Authoritative deliverability + fee from the restaurant's tiers.
-    try:
-        fee = calculate_fee(dist_km, await _fee_settings_for(session, restaurant_id))
-    except UndeliverableError:
-        await _send_out_of_range()
         return
 
     _set_state(
@@ -1958,21 +1893,11 @@ async def _handle_location_pin(
         pin_lat=lat,
         pin_lon=lng,
         distance_km=dist_km,
-        delivery_fee=str(fee),
         dialogue_phase="address_capture",
         dialogue_state="address_capture",
     )
-
-    fee_line = "Delivery is free 🎉" if fee == 0 else f"Delivery fee: AED {Decimal(fee).normalize():f}"
-    await _send_text(
-        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix="location-confirmed",
-        body=(
-            f"Got it — we deliver to your area! 🚚 {fee_line}\n\n"
-            "To finish, reply with your *apartment/room*, *building*, and "
-            "*receiver name* — e.g. _101, Tower A, Ahmed_"
-        ),
-    )
+    # Let AI ask for apt/room (location_received=True now in context)
+    await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
 
 
 async def _handle_customer_ai(

@@ -58,46 +58,6 @@ class SettingsPatch(BaseModel):
     max_orders_per_batch: int | None = Field(default=None, ge=1, le=6)
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
     delivery_fee_tiers: list[dict] | None = None
-    open_hours: dict | None = None
-
-    @field_validator("open_hours")
-    @classmethod
-    def _validate_open_hours(cls, v: dict | None) -> dict | None:
-        """Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.
-
-        0=Mon .. 6=Sun. An empty/absent ``days`` map = always open. Each present
-        day needs valid 24h times with close strictly after open (no cross-midnight).
-        Mirrors app.conversation.hours so what the manager saves is what the bot
-        reads — fully dynamic, no hardcoded timings.
-        """
-        if v is None:
-            return v
-        if not isinstance(v, dict):
-            raise ValueError("open_hours must be an object")
-        tz = v.get("tz")
-        if tz is not None and not isinstance(tz, str):
-            raise ValueError("open_hours.tz must be a string")
-        days = v.get("days") or {}
-        if not isinstance(days, dict):
-            raise ValueError("open_hours.days must be an object keyed by weekday")
-        for key, window in days.items():
-            if str(key) not in {"0", "1", "2", "3", "4", "5", "6"}:
-                raise ValueError("day keys must be '0'..'6' (0=Mon)")
-            if not (isinstance(window, (list, tuple)) and len(window) == 2):
-                raise ValueError("each day must be a [open, close] pair")
-            mins = []
-            for t in window:
-                try:
-                    hh, mm = str(t).split(":")
-                    h, m = int(hh), int(mm)
-                except (ValueError, AttributeError) as exc:
-                    raise ValueError("times must be 'HH:MM'") from exc
-                if not (0 <= h <= 23 and 0 <= m <= 59):
-                    raise ValueError("times must be valid 24h 'HH:MM'")
-                mins.append(h * 60 + m)
-            if mins[1] <= mins[0]:
-                raise ValueError("close time must be after open time")
-        return v
 
     @field_validator("delivery_fee_tiers")
     @classmethod

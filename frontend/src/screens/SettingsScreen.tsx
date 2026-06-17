@@ -7,7 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "batching";
+type Tab = "general" | "fees" | "hours" | "batching";
 
 interface FeeTier {
   max_km: number;
@@ -19,6 +19,21 @@ const DEFAULT_TIERS: FeeTier[] = [
   { max_km: 5, fee_aed: 5 },
   { max_km: 10, fee_aed: 10 },
 ];
+
+// Opening hours. Index 0=Mon .. 6=Sun (matches backend app.conversation.hours).
+interface DayHours {
+  open: boolean;
+  from: string; // "HH:MM"
+  to: string; // "HH:MM"
+}
+
+const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const DEFAULT_DAY: DayHours = { open: true, from: "10:00", to: "23:00" };
+
+function defaultHours(): DayHours[] {
+  return DAY_LABELS.map(() => ({ ...DEFAULT_DAY }));
+}
 
 export function SettingsScreen() {
   const [me, setMe] = useState<RestaurantOut | null>(null);
@@ -38,6 +53,10 @@ export function SettingsScreen() {
   // Fees tab
   const [tiers, setTiers] = useState<FeeTier[]>(DEFAULT_TIERS);
 
+  // Hours tab
+  const [noFixedHours, setNoFixedHours] = useState(true);
+  const [hours, setHours] = useState<DayHours[]>(defaultHours);
+
   useEffect(() => {
     apiClient.get<RestaurantOut>("/api/v1/me").then((r) => {
       setMe(r);
@@ -48,6 +67,20 @@ export function SettingsScreen() {
       if (typeof sset.max_orders_per_batch === "number") setOrdersPerBatch(sset.max_orders_per_batch);
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
+      // Opening hours: settings.open_hours.days maps "0".."6" -> ["HH:MM","HH:MM"].
+      const oh = sset.open_hours as { days?: Record<string, [string, string]> } | undefined;
+      const days = oh?.days;
+      if (days && Object.keys(days).length > 0) {
+        setNoFixedHours(false);
+        setHours(
+          DAY_LABELS.map((_, i) => {
+            const w = days[String(i)];
+            return w ? { open: true, from: w[0], to: w[1] } : { ...DEFAULT_DAY, open: false };
+          }),
+        );
+      } else {
+        setNoFixedHours(true);
+      }
     });
   }, []);
 
@@ -117,6 +150,50 @@ export function SettingsScreen() {
     }
   }
 
+  async function saveHours() {
+    if (noFixedHours) {
+      // Clear hours → backend treats absent days as "always open".
+      try {
+        await apiClient.patch("/api/v1/settings", { open_hours: { days: {} } });
+        flash();
+      } catch {
+        flash("Failed to save.");
+      }
+      return;
+    }
+    const days: Record<string, [string, string]> = {};
+    for (let i = 0; i < hours.length; i++) {
+      const d = hours[i];
+      if (!d.open) continue;
+      if (d.to <= d.from) {
+        flash(`${DAY_LABELS[i]}: closing time must be after opening time.`);
+        return;
+      }
+      days[String(i)] = [d.from, d.to];
+    }
+    if (Object.keys(days).length === 0) {
+      flash("Mark at least one day open, or choose 'No fixed hours'.");
+      return;
+    }
+    try {
+      await apiClient.patch("/api/v1/settings", {
+        open_hours: { tz: "Asia/Dubai", days },
+      });
+      flash();
+    } catch {
+      flash("Failed to save.");
+    }
+  }
+
+  function updateDay(i: number, patch: Partial<DayHours>) {
+    setHours((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  }
+
+  function copyFirstOpenToAll() {
+    const template = hours.find((d) => d.open) ?? DEFAULT_DAY;
+    setHours((prev) => prev.map((d) => ({ ...d, from: template.from, to: template.to })));
+  }
+
   function updateTier(i: number, field: keyof FeeTier, val: number) {
     // Clamp km to the 10 km radius; fees can't be negative.
     const clamped = field === "max_km" ? Math.min(10, Math.max(0, val)) : Math.max(0, val);
@@ -138,7 +215,7 @@ export function SettingsScreen() {
     <div className={s.screen}>
       <PageHeader title="Settings" subtitle="Restaurant profile and delivery rules" />
       <div className={s.tabs}>
-        {(["general", "fees", "batching"] as Tab[]).map((t) => (
+        {(["general", "fees", "hours", "batching"] as Tab[]).map((t) => (
           <button key={t} className={`${s.tab} ${tab === t ? s.active : ""}`} onClick={() => { setTab(t); setSaved(false); setError(null); }}>
             {t}
           </button>
@@ -225,6 +302,67 @@ export function SettingsScreen() {
             </button>
           </div>
           <Button onClick={saveFees}>Save Fee Tiers</Button>
+        </div>
+      )}
+
+      {tab === "hours" && (
+        <div className={s.section}>
+          <p className={s.note}>
+            Opening hours the bot tells customers. Times are Asia/Dubai. Leave “No fixed
+            hours” on to stay always available.
+          </p>
+          <label className={s.hoursToggle}>
+            <input
+              type="checkbox"
+              checked={noFixedHours}
+              onChange={(e) => setNoFixedHours(e.target.checked)}
+            />
+            <span>No fixed hours (always available)</span>
+          </label>
+
+          {!noFixedHours && (
+            <>
+              <div className={s.hoursList}>
+                {hours.map((d, i) => (
+                  <div key={i} className={s.hourRow}>
+                    <label className={s.hourDay}>
+                      <input
+                        type="checkbox"
+                        checked={d.open}
+                        onChange={(e) => updateDay(i, { open: e.target.checked })}
+                      />
+                      <span>{DAY_LABELS[i]}</span>
+                    </label>
+                    {d.open ? (
+                      <div className={s.hourTimes}>
+                        <input
+                          type="time"
+                          value={d.from}
+                          onChange={(e) => updateDay(i, { from: e.target.value })}
+                          className={s.input}
+                          aria-label={`${DAY_LABELS[i]} open`}
+                        />
+                        <span className={s.hourDash}>–</span>
+                        <input
+                          type="time"
+                          value={d.to}
+                          onChange={(e) => updateDay(i, { to: e.target.value })}
+                          className={s.input}
+                          aria-label={`${DAY_LABELS[i]} close`}
+                        />
+                      </div>
+                    ) : (
+                      <span className={s.hourClosed}>Closed</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button type="button" className={s.addTier} onClick={copyFirstOpenToAll}>
+                Copy first open day’s times to all
+              </button>
+            </>
+          )}
+          <Button onClick={saveHours}>Save Hours</Button>
         </div>
       )}
 
