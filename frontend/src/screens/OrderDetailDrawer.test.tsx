@@ -139,7 +139,9 @@ describe("OrderDetailDrawer", () => {
     await waitFor(() =>
       expect(screen.getByText("Chicken Biryani")).toBeInTheDocument(),
     );
-    expect(screen.getByText("110.")).toBeInTheDocument();
+    // Quantity is shown as a badge ("2×"); dish numbers are not shown to staff.
+    expect(screen.getByText("2×")).toBeInTheDocument();
+    expect(screen.queryByText("110.")).not.toBeInTheDocument();
     // "AED 44.00" appears multiple times (line_total, subtotal, total) — just verify presence
     expect(screen.getAllByText("AED 44.00").length).toBeGreaterThanOrEqual(1);
   });

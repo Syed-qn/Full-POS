@@ -1,4 +1,4 @@
-.detail { display: flex; flex-direction: column; height: 100%; }
+.detail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
 .head {
   display: flex;
@@ -47,7 +47,7 @@
   color: var(--accent-primary);
 }
 
-.tabContent { flex: 1; overflow-y: auto; }
+.tabContent { flex: 1; overflow-y: auto; min-height: 0; padding-right: 4px; }
 
 /* ── Shared ── */
 .section { margin-bottom: 20px; }
@@ -72,28 +72,104 @@
 .empty { color: var(--text-secondary); font-size: 0.85rem; font-style: italic; }
 
 /* ── Overview ── */
-.itemRow {
-  align-items: baseline;
-  display: grid;
-  font-size: 0.85rem;
-  gap: 6px;
-  grid-template-columns: 28px 1fr 32px 80px;
-  margin-bottom: 4px;
+.overview { display: flex; flex-direction: column; gap: 14px; }
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
 }
-.itemNum { color: var(--text-secondary); }
+.cardTitle {
+  color: var(--accent-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+.items { display: flex; flex-direction: column; gap: 8px; }
+.itemRow {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr auto;
+  font-size: 0.88rem;
+}
+.itemQtyBadge {
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .itemName { color: var(--text-primary); }
-.itemQty { color: var(--text-secondary); text-align: center; }
-.itemPrice { color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
+.itemPrice {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
 
-.totals { border-top: 1px solid var(--border-subtle); margin-top: 8px; padding-top: 8px; }
+.totals {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 12px;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .totalRow {
   display: flex;
   font-size: 0.82rem;
   justify-content: space-between;
-  padding: 2px 0;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.totalGrand {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 6px;
+  padding-top: 8px;
+}
+.payRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.payLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
-.grandTotal { color: var(--text-primary); font-size: 0.9rem; font-weight: 700; margin-top: 4px; }
+.codBadge {
+  background: var(--sla-safe, #2e9e5b);
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
 
 /* ── Timeline ── */
 .timelineList { list-style: none; padding: 0; }

@@ -247,16 +247,17 @@ export function OrderDetailDrawer({
 function OverviewTab({ detail }: { detail: OrderDetailOut }) {
   return (
     <div className={s.overview}>
-      <section className={s.section}>
-        <h4 className={s.sectionTitle}>Items</h4>
-        {detail.items.map((item, i) => (
-          <div key={i} className={s.itemRow}>
-            <span className={s.itemNum}>{item.dish_number}.</span>
-            <span className={s.itemName}>{item.dish_name}</span>
-            <span className={s.itemQty}>×{item.qty}</span>
-            <span className={s.itemPrice}>AED {item.line_total}</span>
-          </div>
-        ))}
+      <section className={s.card}>
+        <h4 className={s.cardTitle}>Items</h4>
+        <div className={s.items}>
+          {detail.items.map((item, i) => (
+            <div key={i} className={s.itemRow}>
+              <span className={s.itemQtyBadge}>{item.qty}×</span>
+              <span className={s.itemName}>{item.dish_name}</span>
+              <span className={s.itemPrice}>AED {item.line_total}</span>
+            </div>
+          ))}
+        </div>
         <div className={s.totals}>
           <div className={s.totalRow}>
             <span>Subtotal</span><span>AED {detail.subtotal}</span>
@@ -264,39 +265,42 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
           <div className={s.totalRow}>
             <span>Delivery</span><span>AED {detail.delivery_fee_aed}</span>
           </div>
-          <div className={`${s.totalRow} ${s.grandTotal}`}>
+          <div className={s.totalGrand}>
             <span>Total</span><span>AED {detail.total}</span>
           </div>
-          <div className={s.totalRow}>
-            <span>Payment</span><span>COD</span>
-          </div>
+        </div>
+        <div className={s.payRow}>
+          <span className={s.payLabel}>Payment</span>
+          <span className={s.codBadge}>COD</span>
         </div>
       </section>
 
-      <section className={s.section}>
-        <h4 className={s.sectionTitle}>Delivery</h4>
-        {detail.address ? (
-          <>
-            <Field label="Receiver" value={detail.address.receiver_name ?? "—"} />
-            <Field
-              label="Address"
-              value={
-                [detail.address.room_apartment, detail.address.building]
-                  .filter(Boolean)
-                  .join(", ") || "—"
-              }
-            />
-            {detail.address.additional_details && (
-              <Field label="Notes" value={detail.address.additional_details} />
-            )}
-          </>
-        ) : (
-          <p className={s.empty}>No address</p>
-        )}
-        <Field
-          label="Rider"
-          value={detail.rider ? `${detail.rider.name} · ${detail.rider.phone}` : "Unassigned"}
-        />
+      <section className={s.card}>
+        <h4 className={s.cardTitle}>Delivery</h4>
+        <div className={s.infoGrid}>
+          {detail.address ? (
+            <>
+              <Field label="Receiver" value={detail.address.receiver_name ?? "—"} />
+              <Field
+                label="Address"
+                value={
+                  [detail.address.room_apartment, detail.address.building]
+                    .filter(Boolean)
+                    .join(", ") || "—"
+                }
+              />
+              {detail.address.additional_details && (
+                <Field label="Notes" value={detail.address.additional_details} />
+              )}
+            </>
+          ) : (
+            <p className={s.empty}>No address</p>
+          )}
+          <Field
+            label="Rider"
+            value={detail.rider ? `${detail.rider.name} · ${detail.rider.phone}` : "Unassigned"}
+          />
+        </div>
       </section>
     </div>
   );

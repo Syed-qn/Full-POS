@@ -44,4 +44,4 @@
   overflow-y: auto;
   flex: 1;
 }
-.wide { width: min(60vw, 860px); }
+.wide { width: min(92vw, 600px); }
