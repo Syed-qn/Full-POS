@@ -148,6 +148,32 @@ async def test_menu_request_renders_real_db_menu(db_session, restaurant):
     assert "Shawarma" not in body and "Lollipop" not in body
 
 
+async def test_menu_request_after_order_renders_menu_and_resets_to_ordering(db_session, restaurant):
+    """Regression: after a completed order (post_order phase) the customer asks
+    'menu pls' — the bot must render the REAL menu (not LLM filler like "Here's
+    our menu 🍛" with no dishes) and reset to a fresh ordering session so the
+    next dish pick is valid."""
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.po0"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    # Simulate a finished order: conversation parked in post_order.
+    conv = await _conv(db_session)
+    conv.state = {**conv.state, "dialogue_phase": "post_order", "dialogue_state": "order_placed"}
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("menu pls", "wamid.po1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    body = rows[-1].payload["body"]
+    assert "110. Chicken Biryani" in body
+    assert "201. Mutton Karahi" in body
+    # Reset to a fresh ordering session so the next dish selection works.
+    conv = await _conv(db_session)
+    assert conv.state["dialogue_phase"] == "ordering"
+
+
 async def test_done_advances_to_address_capture(db_session, restaurant):
     """Sending 'done' with items in the draft advances to address capture."""
     await _seed_menu(db_session, restaurant.id)

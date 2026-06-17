@@ -2256,12 +2256,22 @@ async def handle_inbound(
             )
             return
 
-    # Explicit menu request → render the REAL menu deterministically (the LLM
-    # has hallucinated entire fake menus). Only in ordering phase so it doesn't
-    # derail address/confirmation steps.
-    if inbound.type == MessageType.TEXT and _resolve_phase(conv) == "ordering":
+    # Explicit menu request → render the REAL menu deterministically in ANY phase.
+    # Outside the ordering phase the LLM has no show_menu action, so it emits
+    # filler like "Sure! Here's our menu 🍛" with no dishes (or fabricates one).
+    # After a completed order (post_order) a menu request means "order again", so
+    # reset to a fresh ordering session so the next dish pick is valid.
+    if inbound.type == MessageType.TEXT:
         text = (inbound.payload.get("text") or "").strip().lower()
         if _is_menu_request(text):
+            if _resolve_phase(conv) == "post_order":
+                _set_state(
+                    conv,
+                    dialogue_phase="ordering",
+                    dialogue_state="collecting_items",
+                    draft_order_id=None,
+                    pending_order_id=None,
+                )
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="menu-request", body=await _render_menu(session, restaurant_id),
