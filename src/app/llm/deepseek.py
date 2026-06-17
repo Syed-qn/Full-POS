@@ -269,6 +269,15 @@ When the customer asks where the restaurant is, state this location in a natural
 friendly sentence and offer to share the exact location pin. NEVER invent, guess, or
 add any area, landmark, or direction that is not in the line above. If it is
 "unknown", don't name an area — just offer to share the exact location pin.
+
+DELIVERY FEES (the ONLY correct numbers — recite when asked, NEVER invent):
+{delivery_info}
+The exact fee for an order is computed by the backend from the customer's shared
+location pin. If a customer asks "do you deliver to <area/place name>?", DO NOT guess
+yes/no — ask them to share their location pin so we can check the real distance.
+
+OPENING HOURS: {hours_info}
+Never invent specific opening/closing times beyond what this line states.
 """
 
 _ORDERING_BLOCK = """
@@ -381,6 +390,8 @@ class DeepSeekConversationAgent:
             restaurant_name=restaurant_name,
             max_radius_km=max_km,
             restaurant_location=context.get("restaurant_location") or "unknown",
+            delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
+            hours_info=context.get("hours_info") or "Available to take orders now.",
         )
 
         if dialogue_phase == "ordering":

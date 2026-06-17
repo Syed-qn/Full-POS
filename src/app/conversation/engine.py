@@ -357,6 +357,34 @@ async def _road_distance_km(
         return _haversine(lat1, lng1, lat2, lng2)
 
 
+def _hours_info(restaurant) -> str:
+    """Grounded opening-hours line for the AI prompt.
+
+    Unconfigured hours mean "always open" — so instruct the model NOT to invent
+    specific open/close times (it was answering '11 AM to 11 PM' from nowhere).
+    When configured, state the live open/closed status.
+    """
+    open_hours = (restaurant.settings or {}).get("open_hours") if restaurant else None
+    if not open_hours or not open_hours.get("days"):
+        return (
+            "No fixed opening hours are posted — do NOT state specific open/close "
+            "times; assume we're available to take orders now."
+        )
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.conversation.hours import is_open, next_opening_label
+
+    now = datetime.now(ZoneInfo("Asia/Dubai"))
+    if is_open(open_hours, now):
+        return "We are currently OPEN and taking orders."
+    nxt = next_opening_label(open_hours, now)
+    return (
+        f"We are currently CLOSED. Next opening: {nxt}."
+        if nxt else "We are currently closed."
+    )
+
+
 async def _finalize_with_stored_address(
     session: AsyncSession,
     conv: Conversation,
@@ -1284,6 +1312,13 @@ async def _build_context(
         )
     else:
         ctx["restaurant_location"] = "unknown"
+
+    # Real delivery-fee tiers (grounded) + opening hours, so the bot recites the
+    # truth instead of inventing fees/times when asked.
+    from app.ordering.fees import delivery_info_text
+
+    ctx["delivery_info"] = delivery_info_text(restaurant.settings if restaurant else None)
+    ctx["hours_info"] = _hours_info(restaurant)
 
     if phase == "ordering":
         ctx["menu_text"] = await _render_menu(session, restaurant_id)
