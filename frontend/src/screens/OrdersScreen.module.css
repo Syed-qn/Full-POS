@@ -5,22 +5,14 @@
 }
 .filterBar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 10px 12px;
   box-shadow: var(--shadow-sm);
-}
-.filterTop {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.filterBottom {
-  display: flex;
 }
 /* Rounded preset pills. */
 .presets {
