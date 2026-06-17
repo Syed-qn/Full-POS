@@ -829,7 +829,7 @@ async def _handle_modify_intent(
     If before ready, set modify_items + empty proposed; prompt for new items (SLA restart noted).
     """
     from app.ordering.fsm import OrderStatus
-    from app.ordering.models import Customer, Order
+    from app.ordering.models import Customer, Order, OrderItem
 
     order = None
     mod_id = conv.state.get("modify_order_id") or conv.state.get("pending_order_id")
@@ -882,12 +882,18 @@ async def _handle_modify_intent(
         return
 
     _set_state(conv, dialogue_state="modify_items", modify_order_id=order.id, modify_proposed=[])
+    # Use a real dish from this order as the example so the hint is never a
+    # dish the restaurant doesn't serve (multi-tenant: no hardcoded dish names).
+    example_dish = await session.scalar(
+        select(OrderItem.dish_name).where(OrderItem.order_id == order.id).limit(1)
+    )
+    example = f"'2x {example_dish}'" if example_dish else "the dish name and quantity"
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="modify-start",
         body=(
             f"Sure, let's modify order #{order.order_number}. "
-            f"Reply with updated dishes (e.g. '2x Butter Chicken'), or 'done' when ready to review changes. "
+            f"Reply with updated dishes (e.g. {example}), or 'done' when ready to review changes. "
             f"After you confirm, the 40-min SLA clock restarts."
         ),
     )
