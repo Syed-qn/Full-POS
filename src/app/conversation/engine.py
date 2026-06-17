@@ -11,6 +11,21 @@ from app.outbox.service import enqueue_message
 from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
 
+def _is_menu_request(text: str) -> bool:
+    """True for short, explicit 'show me the menu' messages (lowercased).
+
+    Kept tight (short message + menu/list keyword) so normal ordering text like
+    'add the chicken from the menu' isn't intercepted — the AI's show_menu action
+    covers the natural-language cases.
+    """
+    t = text.strip()
+    if not t or len(t) > 40:
+        return False
+    keywords = ("menu", "full menu", "show menu", "see menu", "the list", "what do you have",
+                "what do you serve", "options")
+    return any(k in t for k in keywords)
+
+
 async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
     """Render the active menu as categorized text."""
     from app.menu.models import Dish, Menu
@@ -1275,7 +1290,7 @@ _VALID_PHASES = frozenset({"ordering", "address_capture", "awaiting_confirmation
 _PHASE_ACTIONS: dict[str, frozenset] = {
     "ordering": frozenset({
         "add_item", "remove_item", "update_qty", "proceed_to_address",
-        "cancel_order", "status_query", "no_action",
+        "cancel_order", "status_query", "show_menu", "no_action",
     }),
     "address_capture": frozenset({
         "send_location_request", "save_address_text", "use_saved_address",
@@ -1769,6 +1784,15 @@ async def _dispatch_action(
         action = "no_action"
 
     # ── ordering actions ──────────────────────────────────────────────────
+    if action == "show_menu":
+        # Render the REAL menu from the DB — never let the LLM reproduce it
+        # (it hallucinated entire fake menus). Ignore result.message.
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="show-menu", body=await _render_menu(session, restaurant_id),
+        )
+        return
+
     if action == "add_item":
         dish_query = data.get("dish_query", "")
         qty = int(data.get("qty") or 1)
@@ -2208,6 +2232,18 @@ async def handle_inbound(
                 prefix="ask-new-address",
                 body="Please share your location 📍 or type your delivery address.",
                 buttons=[{"id": "share_location", "title": "Share location 📍"}],
+            )
+            return
+
+    # Explicit menu request → render the REAL menu deterministically (the LLM
+    # has hallucinated entire fake menus). Only in ordering phase so it doesn't
+    # derail address/confirmation steps.
+    if inbound.type == MessageType.TEXT and _resolve_phase(conv) == "ordering":
+        text = (inbound.payload.get("text") or "").strip().lower()
+        if _is_menu_request(text):
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="menu-request", body=await _render_menu(session, restaurant_id),
             )
             return
 

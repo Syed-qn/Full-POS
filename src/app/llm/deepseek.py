@@ -199,9 +199,11 @@ _DS_TOOL = {
                         "send_location_request", "save_address_text", "use_saved_address",
                         "proceed_to_confirmation",
                         "confirm_order", "request_modification", "cancel_order",
-                        "status_query", "no_action",
+                        "status_query", "show_menu", "no_action",
                     ],
                     "description": (
+                        "show_menu: customer asks to see the menu/dishes/prices — the "
+                        "system sends the REAL menu, so do NOT write dishes in 'reply'. "
                         "add_item: customer wants to add a dish. "
                         "remove_item: customer wants to remove a dish. "
                         "update_qty: change quantity of a dish already in cart. "
@@ -289,8 +291,11 @@ MENU:
 CURRENT CART: {cart_summary}
 
 YOUR JOB:
-- Greet warmly. Show 2-3 highlights, NOT the whole menu as a wall of text.
-  If customer asks to see full menu, show it grouped by category.
+- Greet warmly. You may mention 1-2 dish names from the MENU above as highlights,
+  but NEVER invent dishes/prices that are not in it.
+- If the customer asks to see the menu (menu / full menu / what do you have / options),
+  use action="show_menu" and keep 'reply' short (e.g. "Here's our menu! 😊") — the
+  system sends the real menu. NEVER type the dish list yourself.
 - Understand shorthand orders in ANY language:
     "2 bry + karahi"         → add_item dish_query="biryani" qty=2, then add_item dish_query="karahi"
     "ek biryani dena bhai"   → add_item dish_query="biryani" qty=1

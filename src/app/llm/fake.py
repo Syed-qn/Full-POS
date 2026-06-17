@@ -137,6 +137,10 @@ class FakeConversationAgent:
 
         # ordering phase
         if dialogue_phase == "ordering":
+            if "menu" in last_user or "what do you have" in last_user:
+                return ConversationAgentResult(
+                    message="Here's our menu! 😊", action="show_menu", action_data={},
+                )
             if any(w in last_user for w in ("done", "that's all", "bas", "khalaas", "proceed", "checkout")):
                 return ConversationAgentResult(
                     message="Great! Let me get your delivery details.",

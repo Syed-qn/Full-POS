@@ -130,6 +130,24 @@ async def test_item_collection_no_match_polite_retry(db_session, restaurant):
     assert items == []
 
 
+async def test_menu_request_renders_real_db_menu(db_session, restaurant):
+    """Asking for the menu returns the REAL DB dishes, never an LLM-invented list
+    (regression: the bot hallucinated a whole fake menu with wrong dish numbers)."""
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.m0"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("menu", "wamid.m1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    body = rows[-1].payload["body"]
+    # Real seeded dishes with their real numbers/prices.
+    assert "110. Chicken Biryani" in body
+    assert "201. Mutton Karahi" in body
+    # Nothing invented.
+    assert "Shawarma" not in body and "Lollipop" not in body
+
+
 async def test_done_advances_to_address_capture(db_session, restaurant):
     """Sending 'done' with items in the draft advances to address capture."""
     await _seed_menu(db_session, restaurant.id)
