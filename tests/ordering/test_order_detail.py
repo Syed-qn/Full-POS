@@ -9,6 +9,36 @@ from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.service import get_order_detail
 
 
+async def test_detail_derives_stats_and_falls_back_to_receiver_name(db_session, restaurant):
+    """Order detail must show live order stats (not the stale 0 columns) and the
+    delivery receiver name when the customer has no name on file."""
+    # Customer with NO name and zeroed stat columns, but a real delivered order.
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971504445566",
+        name=None, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    addr = CustomerAddress(
+        customer_id=customer.id, room_apartment="12", building="Tower Y",
+        receiver_name="Asfer", confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-0100", status="delivered", address_id=addr.id,
+        subtotal=Decimal("33.00"), delivery_fee_aed=Decimal("5.00"), total=Decimal("38.00"),
+    )
+    db_session.add(order)
+    await db_session.commit()
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=order.id)
+    assert detail.customer.name == "Asfer"  # receiver-name fallback
+    assert detail.customer.total_orders == 1  # derived, not the 0 column
+    assert detail.customer.total_spend == Decimal("38.00")  # delivered total
+
+
 async def _seed_full_order(db_session, restaurant_id):
     """Seed: menu + customer + address + confirmed order with one item."""
     from app.menu.models import Dish, Menu

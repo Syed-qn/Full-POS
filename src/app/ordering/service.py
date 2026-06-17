@@ -1014,6 +1014,12 @@ async def get_order_detail(
         else False
     )
 
+    # Customer name + stats: fall back to the delivery receiver name when the
+    # customer has none on file, and derive order stats live from the orders
+    # table so the drawer is correct even if the denormalized columns are stale.
+    stats = (await compute_customer_order_stats(session, [customer.id])).get(customer.id, {})
+    customer_name = customer.name or (address.receiver_name if address else None)
+
     return OrderDetailOut(
         id=order.id,
         order_number=order.order_number,
@@ -1022,12 +1028,12 @@ async def get_order_detail(
         address=address,
         customer=CustomerDetailOut(
             id=customer.id,
-            name=customer.name,
+            name=customer_name,
             phone=customer.phone,
-            total_orders=customer.total_orders,
-            total_spend=customer.total_spend,
-            first_order_at=customer.first_order_at,
-            last_order_at=customer.last_order_at,
+            total_orders=stats.get("total_orders", customer.total_orders),
+            total_spend=stats.get("total_spend", customer.total_spend),
+            first_order_at=stats.get("first_order_at") or customer.first_order_at,
+            last_order_at=stats.get("last_order_at") or customer.last_order_at,
             marketing_opted_in=not opted_out,
         ),
         rider=rider,
