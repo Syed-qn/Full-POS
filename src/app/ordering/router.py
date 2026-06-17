@@ -77,6 +77,19 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
             if not (customer_name or "").strip() and addr.receiver_name:
                 customer_name = addr.receiver_name
 
+    # Still nameless (e.g. a draft with no address yet)? Use the customer's most
+    # recent receiver name from any of their past orders.
+    if customer is not None and not (customer_name or "").strip():
+        customer_name = await session.scalar(
+            select(CustomerAddress.receiver_name)
+            .where(
+                CustomerAddress.customer_id == customer.id,
+                CustomerAddress.receiver_name.isnot(None),
+            )
+            .order_by(CustomerAddress.id.desc())
+            .limit(1)
+        )
+
     sla_started_at = (
         order.sla_confirmed_at.isoformat() if order.sla_confirmed_at else None
     )

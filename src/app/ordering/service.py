@@ -1014,11 +1014,23 @@ async def get_order_detail(
         else False
     )
 
-    # Customer name + stats: fall back to the delivery receiver name when the
+    # Customer name + stats: fall back to a delivery receiver name when the
     # customer has none on file, and derive order stats live from the orders
     # table so the drawer is correct even if the denormalized columns are stale.
     stats = (await compute_customer_order_stats(session, [customer.id])).get(customer.id, {})
-    customer_name = customer.name or (address.receiver_name if address else None)
+    customer_name = customer.name
+    if not (customer_name or "").strip():
+        # Use the customer's most recent receiver name across ALL their addresses
+        # (this order may be a draft with no address yet, but they ordered before).
+        customer_name = await session.scalar(
+            select(CustomerAddress.receiver_name)
+            .where(
+                CustomerAddress.customer_id == customer.id,
+                CustomerAddress.receiver_name.isnot(None),
+            )
+            .order_by(CustomerAddress.id.desc())
+            .limit(1)
+        )
 
     return OrderDetailOut(
         id=order.id,

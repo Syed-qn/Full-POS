@@ -39,6 +39,34 @@ async def test_detail_derives_stats_and_falls_back_to_receiver_name(db_session, 
     assert detail.customer.total_spend == Decimal("38.00")  # delivered total
 
 
+async def test_draft_order_name_falls_back_to_prior_receiver(db_session, restaurant):
+    """A draft order has no address yet, but the same customer (same phone)
+    ordered before — show that prior receiver name, keyed on the customer."""
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+918220958384",
+        name=None, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    # A past delivered order's address carries the receiver name.
+    db_session.add(CustomerAddress(
+        customer_id=customer.id, room_apartment="123", building="Tower Y",
+        receiver_name="Asfer", confirmed=True,
+    ))
+    await db_session.flush()
+    # The current order is a DRAFT with no address of its own.
+    draft = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-0016", status="draft", address_id=None,
+        subtotal=Decimal("12.00"), delivery_fee_aed=Decimal("0.00"), total=Decimal("12.00"),
+    )
+    db_session.add(draft)
+    await db_session.commit()
+
+    detail = await get_order_detail(db_session, restaurant_id=restaurant.id, order_id=draft.id)
+    assert detail.customer.name == "Asfer"  # from the customer's prior address
+
+
 async def _seed_full_order(db_session, restaurant_id):
     """Seed: menu + customer + address + confirmed order with one item."""
     from app.menu.models import Dish, Menu
