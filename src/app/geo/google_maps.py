@@ -21,9 +21,15 @@ _FIELD_MASK = "routes.distanceMeters,routes.duration"
 _GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 # Address-component types, most→least specific, used to build an "Area, City"
-# label from a Google reverse-geocode result.
-_AREA_TYPES = ("sublocality", "neighborhood", "route")
-_CITY_TYPES = ("locality", "administrative_area_level_2", "administrative_area_level_1")
+# label from a Google reverse-geocode result. "Specific" = the place name a
+# human would say; "broader" = the region that gives it context (so a bare
+# village name like "Ilanthaikuttam" becomes "Ilanthaikuttam, Tamil Nadu").
+_SPECIFIC_TYPES = ("sublocality", "neighborhood", "locality", "route")
+_BROADER_TYPES = (
+    "locality",
+    "administrative_area_level_2",
+    "administrative_area_level_1",
+)
 
 
 def _component(components: list[dict], wanted: tuple[str, ...]) -> str | None:
@@ -35,23 +41,43 @@ def _component(components: list[dict], wanted: tuple[str, ...]) -> str | None:
     return None
 
 
+def _strip_plus_code(formatted: str) -> str:
+    """Drop a leading Google plus-code token (e.g. 'FV3X+46 Ilanthaikuttam')."""
+    head, _, rest = formatted.partition(" ")
+    return rest if ("+" in head and rest) else formatted
+
+
 def _concise_area(result: dict) -> str | None:
-    """Build "Area, City" from a Google geocode result, else trim the country off
-    the formatted address."""
+    """Build a human "Place, Region" label from a Google geocode result.
+
+    Always pairs the specific place with a broader region when possible, so the
+    bot's location answer reads naturally in both dense cities ("Al Karama,
+    Dubai") and rural areas ("Ilanthaikuttam, Tamil Nadu"). Falls back to the
+    formatted address (sans plus code + country) when components are absent.
+    """
     components = result.get("address_components") or []
-    area = _component(components, _AREA_TYPES)
-    city = _component(components, _CITY_TYPES)
-    if area and city and area != city:
-        return f"{area}, {city}"
-    if area:
-        return area
-    if city:
-        return city
+    specific = _component(components, _SPECIFIC_TYPES)
+    # Broader region that differs from the specific name.
+    broader: str | None = None
+    for t in _BROADER_TYPES:
+        val = _component(components, (t,))
+        if val and val != specific:
+            broader = val
+            break
+
+    if specific and broader:
+        return f"{specific}, {broader}"
+    if specific:
+        return specific
+    if broader:
+        return broader
+
     formatted = result.get("formatted_address")
     if formatted:
-        # Drop the trailing country segment ("…- United Arab Emirates").
-        parts = [p.strip() for p in formatted.replace(" - ", ",").split(",")]
-        return ", ".join(parts[:2]) if len(parts) >= 2 else formatted
+        formatted = _strip_plus_code(formatted)
+        # Normalise " - " separators, drop the trailing country segment.
+        parts = [p.strip() for p in formatted.replace(" - ", ",").split(",") if p.strip()]
+        return ", ".join(parts[:2]) if len(parts) >= 2 else (parts[0] if parts else None)
     return None
 
 

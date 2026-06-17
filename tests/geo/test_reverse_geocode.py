@@ -45,6 +45,30 @@ def test_concise_area_falls_back_to_formatted_without_country():
     assert _concise_area(result) == "Some Street, Dubai"
 
 
+def test_concise_area_adds_region_for_rural_locality():
+    """A bare village (locality, no sublocality) gets its region for context —
+    regression: the bot once answered just 'Ilanthaikuttam' with no region."""
+    result = {
+        "address_components": [
+            {"long_name": "FV3X+46", "types": ["plus_code"]},
+            {"long_name": "Ilanthaikuttam", "types": ["locality", "political"]},
+            {"long_name": "Ramanathapuram", "types": ["administrative_area_level_3"]},
+            {"long_name": "Tamil Nadu", "types": ["administrative_area_level_1"]},
+            {"long_name": "India", "types": ["country"]},
+        ],
+        "formatted_address": "FV3X+46 Ilanthaikuttam, Tamil Nadu, India",
+    }
+    assert _concise_area(result) == "Ilanthaikuttam, Tamil Nadu"
+
+
+def test_concise_area_strips_plus_code_in_fallback():
+    result = {
+        "address_components": [],
+        "formatted_address": "FV3X+46 Ilanthaikuttam, Tamil Nadu, India",
+    }
+    assert _concise_area(result) == "Ilanthaikuttam, Tamil Nadu"
+
+
 # ---- reverse_geocode_cached degrades without Redis ----
 
 class _StubProvider:

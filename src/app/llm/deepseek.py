@@ -265,10 +265,10 @@ ALWAYS call take_action. Never reply without calling it.
 COD only (cash on delivery). Delivery ~40 minutes. Max {max_radius_km} km range.
 
 RESTAURANT LOCATION: {restaurant_location}
-If the customer asks where you/the restaurant are located, answer with EXACTLY this
-location — nothing more. NEVER invent, guess, or add areas, landmarks, or directions
-that are not in it. If it is "unknown", say you can share the exact location pin
-instead of naming an area.
+When the customer asks where the restaurant is, state this location in a natural,
+friendly sentence and offer to share the exact location pin. NEVER invent, guess, or
+add any area, landmark, or direction that is not in the line above. If it is
+"unknown", don't name an area — just offer to share the exact location pin.
 """
 
 _ORDERING_BLOCK = """
