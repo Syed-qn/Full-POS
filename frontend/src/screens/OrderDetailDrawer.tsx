@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
 import { Spinner } from "../components/Spinner";
@@ -514,7 +515,7 @@ function CustomerTab({
 
   return (
     <div className={s.customerTab}>
-      <div className={s.customerStats}>
+      <div className={s.statTiles}>
         <Stat label="Orders" value={String(customer.total_orders)} />
         <Stat label="Spend" value={`AED ${customer.total_spend}`} />
         <Stat
@@ -527,20 +528,20 @@ function CustomerTab({
         />
       </div>
 
-      <div className={s.profileLink}>
-        <Link to={`/customers/${customer.id}`} className={s.openProfile}>
-          Open Full Profile →
-        </Link>
-      </div>
+      <Link to={`/customers/${customer.id}`} className={s.openProfile}>
+        Open Full Profile →
+      </Link>
 
-      <section className={s.section}>
-        <h4 className={s.sectionTitle}>Identity</h4>
-        <label className={s.fieldLabel}>Name</label>
-        <input className={s.input} value={name} onChange={(e) => setName(e.target.value)} />
-        <label className={s.fieldLabel}>Phone</label>
-        <input className={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <section className={s.card}>
+        <h4 className={s.cardTitle}>Identity</h4>
+        <FormField label="Name">
+          <input className={s.input} value={name} onChange={(e) => setName(e.target.value)} />
+        </FormField>
+        <FormField label="Phone">
+          <input className={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </FormField>
         <div className={s.toggleRow}>
-          <label className={s.fieldLabel}>Marketing (WhatsApp)</label>
+          <span className={s.formLabel}>Marketing (WhatsApp)</span>
           <button
             className={`${s.toggle} ${optIn ? s.toggleOn : s.toggleOff}`}
             onClick={() => setOptIn(!optIn)}
@@ -552,32 +553,20 @@ function CustomerTab({
       </section>
 
       {address && (
-        <section className={s.section}>
-          <h4 className={s.sectionTitle}>Address</h4>
-          <label className={s.fieldLabel}>Apt / Room</label>
-          <input
-            className={s.input}
-            value={aptRoom}
-            onChange={(e) => setAptRoom(e.target.value)}
-          />
-          <label className={s.fieldLabel}>Building</label>
-          <input
-            className={s.input}
-            value={building}
-            onChange={(e) => setBuilding(e.target.value)}
-          />
-          <label className={s.fieldLabel}>Receiver Name</label>
-          <input
-            className={s.input}
-            value={receiverName}
-            onChange={(e) => setReceiverName(e.target.value)}
-          />
-          <label className={s.fieldLabel}>Notes</label>
-          <input
-            className={s.input}
-            value={addrNotes}
-            onChange={(e) => setAddrNotes(e.target.value)}
-          />
+        <section className={s.card}>
+          <h4 className={s.cardTitle}>Address</h4>
+          <FormField label="Apt / Room">
+            <input className={s.input} value={aptRoom} onChange={(e) => setAptRoom(e.target.value)} />
+          </FormField>
+          <FormField label="Building">
+            <input className={s.input} value={building} onChange={(e) => setBuilding(e.target.value)} />
+          </FormField>
+          <FormField label="Receiver Name">
+            <input className={s.input} value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+          </FormField>
+          <FormField label="Notes">
+            <input className={s.input} value={addrNotes} onChange={(e) => setAddrNotes(e.target.value)} />
+          </FormField>
         </section>
       )}
 
@@ -586,6 +575,15 @@ function CustomerTab({
           {saving ? "Saving…" : "Save Changes"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className={s.formField}>
+      <label className={s.formLabel}>{label}</label>
+      {children}
     </div>
   );
 }
