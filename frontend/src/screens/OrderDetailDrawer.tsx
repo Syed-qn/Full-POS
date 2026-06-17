@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
-import { Spinner } from "../components/Spinner";
 import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
 import { CountdownTimer } from "../components/CountdownTimer";
@@ -22,6 +21,17 @@ import s from "./OrderDetailDrawer.module.css";
 
 type Tab = "overview" | "timeline" | "chat" | "customer";
 
+// The SLA clock only counts down while the order is in flight. For delivered
+// or other terminal states the timer is meaningless (it would freeze at 00:00).
+const ACTIVE_SLA = new Set([
+  "pending_confirmation",
+  "confirmed",
+  "preparing",
+  "ready",
+  "assigned",
+  "picked_up",
+  "arriving",
+]);
 const KITCHEN_ADVANCEABLE = new Set(["confirmed", "preparing"]);
 const ADVANCE_LABEL: Record<string, string> = {
   confirmed: "Start Preparing",
@@ -148,12 +158,23 @@ export function OrderDetailDrawer({
   return (
     <SideDrawer open={orderId !== null} title={title} onClose={onClose} wide>
       {loading || !detail || !basicOrder ? (
-        error ? <p style={{ color: "var(--text-secondary)", padding: "16px" }}>{error}</p> : <Spinner />
+        error ? <p style={{ color: "var(--text-secondary)", padding: "16px" }}>{error}</p> : <DrawerSkeleton />
       ) : (
         <div className={s.detail}>
           <div className={s.head}>
             <StatusPill status={detail.status} />
-            <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
+            {ACTIVE_SLA.has(detail.status) ? (
+              <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
+            ) : detail.status === "delivered" && detail.delivered_at ? (
+              <span className={s.deliveredStamp}>
+                ✓ Delivered{" "}
+                {new Date(detail.delivered_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Asia/Dubai",
+                })}
+              </span>
+            ) : null}
           </div>
 
           {(KITCHEN_ADVANCEABLE.has(detail.status) || CANCELLABLE.has(detail.status)) && (
@@ -240,6 +261,39 @@ export function OrderDetailDrawer({
         </div>
       )}
     </SideDrawer>
+  );
+}
+
+// ── Loading skeleton (mirrors the drawer head/tabs/content) ──────────────────
+
+function DrawerSkeleton() {
+  return (
+    <div className={s.detail} aria-busy="true" aria-label="Loading order">
+      <div className={s.head}>
+        <span className={`${s.sk} ${s.skPill}`} />
+        <span className={`${s.sk} ${s.skTimer}`} />
+      </div>
+      <div className={s.tabs}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <span key={i} className={`${s.sk} ${s.skTab}`} />
+        ))}
+      </div>
+      <div className={s.tabContent}>
+        <div className={s.overview}>
+          {Array.from({ length: 2 }).map((_, c) => (
+            <section key={c} className={s.card}>
+              <span className={`${s.sk} ${s.skCardTitle}`} />
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className={s.skRow}>
+                  <span className={`${s.sk} ${s.skLine}`} style={{ width: "42%" }} />
+                  <span className={`${s.sk} ${s.skLine}`} style={{ width: "22%" }} />
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -11,6 +11,39 @@
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 12px;
 }
+.deliveredStamp {
+  color: var(--sla-safe, #2e9e5b);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Loading skeleton ── */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: drawerSkShimmer 1.4s infinite;
+}
+@keyframes drawerSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skPill { height: 22px; width: 92px; border-radius: 999px; }
+.skTimer { height: 16px; width: 58px; }
+.skTab { height: 14px; width: 56px; margin: 8px 6px; }
+.skCardTitle { height: 12px; width: 88px; margin-bottom: 14px; }
+.skRow { display: flex; justify-content: space-between; margin-bottom: 12px; }
+.skRow:last-child { margin-bottom: 0; }
+.skLine { height: 12px; }
 
 .actionBar { margin-bottom: 12px; padding: 0 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
