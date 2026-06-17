@@ -18,6 +18,7 @@ from app.dispatch.service import run_dispatch_engine
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order
 from app.outbox.models import OutboxMessage
+from app.whatsapp.port import OutboundMessageType
 
 
 async def _seed_restaurant(db_session, lat=25.2048, lng=55.2708):
@@ -114,6 +115,74 @@ async def test_assigns_nearest_available_rider(db_session):
     )
     assert assignment.rider_id == near.id
     assert "composite" in assignment.algorithm_score
+
+
+async def test_assignment_default_is_freeform_button(db_session):
+    """With no template configured, the rider notification stays a free-form
+    interactive button (unchanged dev/test/mock behaviour)."""
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="Rdr", phone="+971500000009",
+        status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2050, 55.2710)
+    await _ready_order(db_session, r.id, 25.2050, 55.2710, 9)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    msg = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == rider.phone)
+    )
+    assert msg is not None
+    assert msg.payload["type"] == str(OutboundMessageType.BUTTONS)
+    assert msg.payload["buttons"][0]["id"].startswith("picked:")
+    assert msg.payload["buttons"][0]["title"] == "Orders Picked"
+
+
+async def test_assignment_uses_template_when_configured(db_session, monkeypatch):
+    """When wa_rider_assign_template is set, the assignment is sent as a TEMPLATE
+    (delivers outside the 24h window) with the order numbers as body param and
+    picked:{batch_id} as the quick-reply button payload."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "wa_rider_assign_template", "rider_assignment")
+    monkeypatch.setattr(settings, "wa_rider_assign_template_lang", "en")
+
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="Rdr", phone="+971500000010",
+        status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2050, 55.2710)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 10)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    msg = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == rider.phone)
+    )
+    assert msg is not None
+    assert msg.payload["type"] == str(OutboundMessageType.TEMPLATE)
+    assert msg.payload["name"] == "rider_assignment"
+    assert msg.payload["language"] == "en"
+    comps = msg.payload["components"]
+    body = next(c for c in comps if c["type"] == "body")
+    assert body["parameters"][0]["text"] == order.order_number
+    btn = next(c for c in comps if c["type"] == "button")
+    assert btn["sub_type"] == "quick_reply"
+    batch = await db_session.scalar(select(Batch).where(Batch.rider_id == rider.id))
+    assert btn["parameters"][0]["payload"] == f"picked:{batch.id}"
 
 
 async def test_no_available_riders_alerts_manager_and_leaves_unassigned(db_session):

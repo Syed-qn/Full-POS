@@ -56,6 +56,21 @@ def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
                 timestamp=timestamp,
             )
 
+    if msg_type == "button":
+        # A tap on a TEMPLATE quick-reply button arrives as type "button" (not
+        # interactive/button_reply). The developer-set payload (e.g.
+        # "picked:123") is what the rider/customer flow keys on, so map it to
+        # the same {"id", "title"} shape as an interactive button reply.
+        btn = msg.get("button", {})
+        return InboundMessage(
+            wa_message_id=wa_id,
+            from_phone=from_phone,
+            type=MessageType.BUTTON_REPLY,
+            payload={"id": btn.get("payload", ""), "title": btn.get("text", "")},
+            restaurant_phone=restaurant_phone,
+            timestamp=timestamp,
+        )
+
     if msg_type == "location":
         loc = msg["location"]
         payload: dict = {"latitude": loc["latitude"], "longitude": loc["longitude"]}

@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     wa_phone_number_id: str = ""
     wa_app_secret: SecretStr = SecretStr("")
     wa_business_account_id: str = ""  # WABA id for message-template management
+    # Rider assignment is a business-INITIATED message; outside WhatsApp's 24h
+    # window only an approved template delivers. Set this to the approved template
+    # name (e.g. "rider_assignment") to send assignments as a template; leave empty
+    # to send a free-form interactive button (works only inside the 24h window).
+    # The template MUST have body text {{1}} (order numbers) + one quick-reply
+    # button (e.g. "Orders Picked"); the button payload carries picked:{batch_id}.
+    wa_rider_assign_template: str = ""
+    wa_rider_assign_template_lang: str = "en"
     # Deliver outbound replies synchronously inside the webhook request instead of
     # via the Celery outbox worker. Lets a single web service run the full WhatsApp
     # flow with NO worker/Redis (e.g. a free Render web service). Trade-off: the

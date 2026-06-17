@@ -51,6 +51,27 @@ def test_parse_button_reply():
     assert msgs[0].payload["title"] == "Yes"
 
 
+_TEMPLATE_BUTTON_PAYLOAD = {
+    "object": "whatsapp_business_account",
+    "entry": [{"changes": [{"value": {
+        "metadata": {"display_phone_number": "+97141234567", "phone_number_id": "111"},
+        "messages": [{"id": "wamid.TBTN1", "from": "971509876543", "timestamp": "1717660950",
+                      "type": "button",
+                      "button": {"payload": "picked:42", "text": "Orders Picked"}}],
+    }, "field": "messages"}]}],
+}
+
+
+def test_parse_template_quick_reply_button():
+    # A tap on a TEMPLATE quick-reply button arrives as type "button" (not
+    # interactive) — the rider "Orders Picked" tap must still map to BUTTON_REPLY
+    # with the developer payload as the id, or the rider flow never advances.
+    msgs = parse_cloud_payload(_TEMPLATE_BUTTON_PAYLOAD)
+    assert msgs[0].type == MessageType.BUTTON_REPLY
+    assert msgs[0].payload["id"] == "picked:42"
+    assert msgs[0].payload["title"] == "Orders Picked"
+
+
 def test_parse_location():
     msgs = parse_cloud_payload(_LOCATION_PAYLOAD)
     assert msgs[0].type == MessageType.LOCATION

@@ -272,21 +272,77 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             result.assigned_count += 1
 
         rider.status = "on_delivery"
-        await enqueue_message(
+        order_numbers = ", ".join(
+            orders_by_id[pc.order_id].order_number for pc in planned.orders
+        )
+        await _enqueue_rider_assignment(
             session,
             restaurant_id=restaurant_id,
-            to_phone=rider.phone,
-            msg_type=OutboundMessageType.BUTTONS,
-            payload={
-                "body": "New batch assigned. Orders: "
-                + ", ".join(
-                    orders_by_id[pc.order_id].order_number for pc in planned.orders
-                ),
-                "buttons": [
-                    {"id": f"picked:{batch.id}", "title": "Orders Picked"}
-                ],
-            },
-            idempotency_key=f"assign-{batch.id}",
+            rider_phone=rider.phone,
+            batch_id=batch.id,
+            order_numbers=order_numbers,
         )
 
     return result
+
+
+async def _enqueue_rider_assignment(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider_phone: str,
+    batch_id: int,
+    order_numbers: str,
+) -> None:
+    """Notify the rider of a new batch.
+
+    Rider assignment is business-INITIATED, so outside WhatsApp's 24h window a
+    free-form interactive button is rejected. When ``wa_rider_assign_template``
+    is configured we send an approved TEMPLATE (delivers anytime); the quick-reply
+    button still carries ``picked:{batch_id}`` so the existing rider flow is
+    unchanged. With no template configured we keep the free-form button (works
+    only inside the 24h window) so dev/test/mock behaviour is identical.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    tmpl = settings.wa_rider_assign_template
+    if tmpl:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider_phone,
+            msg_type=OutboundMessageType.TEMPLATE,
+            payload={
+                "name": tmpl,
+                "language": settings.wa_rider_assign_template_lang,
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [{"type": "text", "text": order_numbers}],
+                    },
+                    {
+                        "type": "button",
+                        "sub_type": "quick_reply",
+                        "index": "0",
+                        "parameters": [
+                            {"type": "payload", "payload": f"picked:{batch_id}"}
+                        ],
+                    },
+                ],
+            },
+            idempotency_key=f"assign-{batch_id}",
+        )
+        return
+
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=rider_phone,
+        msg_type=OutboundMessageType.BUTTONS,
+        payload={
+            "body": f"New batch assigned. Orders: {order_numbers}",
+            "buttons": [{"id": f"picked:{batch_id}", "title": "Orders Picked"}],
+        },
+        idempotency_key=f"assign-{batch_id}",
+    )
