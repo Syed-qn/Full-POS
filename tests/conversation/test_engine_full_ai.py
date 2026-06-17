@@ -181,7 +181,7 @@ async def test_add_item_action_updates_cart(db_session, restaurant):
 
 async def test_location_pin_outside_radius_rejected(db_session, restaurant):
     """Location pin outside restaurant's max_radius_km → polite rejection, no crash."""
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import MagicMock, patch
     from app.conversation.service import get_or_create_conversation
 
     phone = "+971505555666"
@@ -205,7 +205,8 @@ async def test_location_pin_outside_radius_rejected(db_session, restaurant):
 
     with patch("app.geo.factory.get_geo_provider") as mock_geo:
         geo = MagicMock()
-        geo.distance = AsyncMock(return_value=MagicMock(distance_km=5432.0))
+        # Engine uses the GeoPort sync method distance_km(lat1,lng1,lat2,lng2).
+        geo.distance_km = MagicMock(return_value=5432.0)
         mock_geo.return_value = geo
 
         await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
