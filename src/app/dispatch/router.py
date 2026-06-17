@@ -18,6 +18,11 @@ async def trigger_dispatch(
     """Manually trigger the dispatch engine for this restaurant."""
     result = await run_dispatch(session, restaurant_id=restaurant.id)
     await session.commit()
+    # Deliver the rider/manager notifications the engine enqueued — the manual
+    # trigger has no delivery step of its own (unlike event-driven auto-dispatch).
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, restaurant.id)
     return {
         "assigned": result.assigned_count,
         "unassigned": result.unassigned_count,

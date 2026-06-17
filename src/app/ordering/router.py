@@ -219,6 +219,11 @@ async def reassign_order_endpoint(
         code = 404 if msg in ("Order not found", "Rider not found") else 422
         raise HTTPException(status_code=code, detail=msg)
     await session.commit()
+    # Flush the rider notification now — this handler has no event-driven
+    # delivery of its own, so without this the message sits pending forever.
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, restaurant.id)
     await session.refresh(order)
     return await _enrich(session, order)
 

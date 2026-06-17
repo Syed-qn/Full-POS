@@ -26,6 +26,27 @@ def to_whatsapp_text(text: str) -> str:
     return text
 
 
+async def deliver_pending(session: AsyncSession, restaurant_id: int) -> None:
+    """Flush all pending outbox rows for a restaurant (best-effort).
+
+    For request handlers that enqueue notifications but have no event-driven
+    delivery of their own (manual dispatch trigger, manual reassign). Without
+    this the rows sit ``pending`` until the 5-min orphan sweeper — which doesn't
+    run when Celery beat is absent (e.g. Render) — so the messages never send.
+    """
+    from sqlalchemy import select
+
+    ids = (
+        await session.scalars(
+            select(OutboxMessage.id).where(
+                OutboxMessage.restaurant_id == restaurant_id,
+                OutboxMessage.status == "pending",
+            )
+        )
+    ).all()
+    await deliver_outbox_now(session, list(ids))
+
+
 async def deliver_outbox_now(session: AsyncSession, outbox_ids: list[int]) -> None:
     """Deliver freshly-committed outbox rows — synchronously in-request when no
     Celery worker runs (APP_OUTBOX_SYNC_DELIVERY, e.g. Render free tier), else

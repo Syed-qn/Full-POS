@@ -313,6 +313,58 @@ async def test_api_reassign_unknown_order_returns_404(client, db_session, restau
     assert resp.status_code == 404
 
 
+async def test_api_reassign_delivers_notification_to_new_rider(client, db_session, restaurant, monkeypatch):
+    """Reassign must actually DELIVER the rider notification (not leave it pending).
+    Regression: the endpoint committed the outbox row but never flushed it, so on
+    a beat-less deploy the rider got nothing."""
+    from sqlalchemy import select
+
+    from app.config import get_settings
+    from app.dispatch.models import Batch, BatchOrder
+    from app.identity.models import Rider
+    from app.outbox.models import OutboxMessage
+
+    monkeypatch.setattr(get_settings(), "outbox_sync_delivery", True)
+
+    r1 = Rider(restaurant_id=restaurant.id, name="R1", phone="+971500000077",
+               status="on_delivery", performance={})
+    r2 = Rider(restaurant_id=restaurant.id, name="R2", phone="+971500000078",
+               status="available", performance={})
+    db_session.add_all([r1, r2])
+    await db_session.flush()
+
+    customer = Customer(restaurant_id=restaurant.id, phone="+971502223344", name="C",
+                        total_orders=0, total_spend=Decimal("0.00"))
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(restaurant_id=restaurant.id, customer_id=customer.id,
+                  order_number="R1-7777", status="assigned", rider_id=r1.id,
+                  subtotal=Decimal("10.00"), delivery_fee_aed=Decimal("0.00"), total=Decimal("10.00"))
+    db_session.add(order)
+    await db_session.flush()
+    batch = Batch(restaurant_id=restaurant.id, rider_id=r1.id, status="planned", route={})
+    db_session.add(batch)
+    await db_session.flush()
+    db_session.add(BatchOrder(batch_id=batch.id, order_id=order.id, sequence=1))
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/orders/{order.id}/reassign",
+        json={"rider_id": r2.id},
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["rider_name"] == "R2"
+
+    rows = (
+        await db_session.execute(
+            select(OutboxMessage).where(OutboxMessage.to_phone == r2.phone)
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].status == "sent"  # delivered, not left pending
+
+
 async def test_api_reassign_non_assigned_order_returns_422(client, db_session, restaurant):
     # _seed_full_order creates a delivered order — not reassignable.
     order, _, _ = await _seed_full_order(db_session, restaurant.id)
