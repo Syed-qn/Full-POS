@@ -9,10 +9,34 @@ const outbound: MessageOut = { id: 2, direction: "outbound", type: "text", paylo
 describe("MessageBubble", () => {
   it("renders inbound text on the left", () => {
     render(<MessageBubble message={inbound} />);
-    expect(screen.getByText("Hi").parentElement?.className).toContain("inbound");
+    expect(screen.getByText("Hi").closest("[class*='inbound']")).not.toBeNull();
   });
   it("renders outbound text on the right", () => {
     render(<MessageBubble message={outbound} />);
-    expect(screen.getByText("Welcome").parentElement?.className).toContain("outbound");
+    expect(screen.getByText("Welcome").closest("[class*='outbound']")).not.toBeNull();
+  });
+  it("shows older numbered menu lines as bullets (matching the customer view)", () => {
+    const msg: MessageOut = {
+      id: 4, direction: "outbound", type: "text",
+      payload: { text: "2. Mutton Biryani — AED 35\n11. Chicken Biryani — AED 28" }, ts: 1717660830,
+    };
+    const { container } = render(<MessageBubble message={msg} />);
+    const txt = container.textContent ?? "";
+    expect(txt).toContain("• Mutton Biryani — AED 35");
+    expect(txt).toContain("• Chicken Biryani — AED 28");
+    expect(txt).not.toContain("2. Mutton");
+    expect(txt).not.toContain("11. Chicken");
+  });
+
+  it("renders WhatsApp *bold* and **bold** as bold, without the asterisks", () => {
+    const msg: MessageOut = {
+      id: 3, direction: "outbound", type: "text",
+      payload: { text: "Here is our *Biryani* and **Curries**" }, ts: 1717660830,
+    };
+    const { container } = render(<MessageBubble message={msg} />);
+    const bolds = Array.from(container.querySelectorAll("strong")).map((b) => b.textContent);
+    expect(bolds).toContain("Biryani");
+    expect(bolds).toContain("Curries");
+    expect(container.textContent).not.toContain("*");
   });
 });

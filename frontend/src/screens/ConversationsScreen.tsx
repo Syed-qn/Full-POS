@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/Button";
 import { ConversationRow } from "../components/ConversationRow";
 import { MessageBubble } from "../components/MessageBubble";
@@ -17,6 +17,7 @@ export function ConversationsScreen() {
   const [messages, setMessages] = useState<MessageOut[]>([]);
   const [takeover, setTakeoverState] = useState(false);
   const [draft, setDraft] = useState("");
+  const threadRef = useRef<HTMLDivElement>(null);
 
   const customerCount = convs.filter((c) => c.counterpart === "customer").length;
   const riderCount = convs.filter((c) => c.counterpart === "rider").length;
@@ -38,6 +39,12 @@ export function ConversationsScreen() {
     const c = convs.find((x) => x.id === activeId);
     setTakeoverState(c?.manual_takeover ?? false);
   }, [activeId, convs]);
+
+  // Keep the thread pinned to the newest message (on open and on each new one).
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, activeId]);
 
   async function toggleTakeover() {
     if (activeId === null) return;
@@ -116,7 +123,7 @@ export function ConversationsScreen() {
             {takeover && (
               <SectionBanner tone="warning">You are controlling this conversation.</SectionBanner>
             )}
-            <div className={s.thread}>
+            <div className={s.thread} ref={threadRef}>
               {messages.map((m) => (
                 <MessageBubble key={m.id} message={m} />
               ))}
