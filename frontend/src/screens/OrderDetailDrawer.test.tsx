@@ -79,6 +79,14 @@ const mockDetail: OrderDetailOut = {
       actor: "manager",
       after: { status: "confirmed" },
     },
+    {
+      // Auto-dispatch records action "state_transition" with after.status —
+      // must still render the status, not the generic action label.
+      ts: "2026-06-10T09:40:00Z",
+      action: "state_transition",
+      actor: "system",
+      after: { status: "assigned", rider_id: 7 },
+    },
   ],
   chat: [
     { direction: "inbound", text: "I want 2 biryani", ts: 1717660800 },
@@ -144,6 +152,8 @@ describe("OrderDetailDrawer", () => {
     fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
     // A status transition surfaces the actual new status, not a generic label
     expect(screen.getByText("Status → Confirmed")).toBeInTheDocument();
+    // Auto-dispatch (state_transition / after.status) is surfaced the same way
+    expect(screen.getByText("Status → Assigned")).toBeInTheDocument();
   });
 
   // 2b. Tab switching — chat panel becomes visible

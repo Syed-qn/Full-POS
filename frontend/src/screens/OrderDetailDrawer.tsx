@@ -246,16 +246,15 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
 
 // ── Timeline Tab ──────────────────────────────────────────────────────────────
 
-// A status transition audit row carries the new status in `after.status`. Surface
-// it ("Status → Ready") instead of the generic "order status transition" label.
+// Status-changing audit rows (order_status_transition, dispatch/delivery
+// state_transition) all carry the new status in `after.status`. Surface it
+// ("Status → Ready", "Status → Assigned") instead of a generic action label.
 function timelineLabel(event: TimelineEventOut): string {
   const titleCase = (s: string) =>
     s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  if (event.action === "order_status_transition") {
-    const status = event.after?.status;
-    if (typeof status === "string" && status) {
-      return `Status → ${titleCase(status)}`;
-    }
+  const status = event.after?.status;
+  if (typeof status === "string" && status) {
+    return `Status → ${titleCase(status)}`;
   }
   return titleCase(event.action);
 }
