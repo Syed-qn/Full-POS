@@ -1,15 +1,18 @@
-.detail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* Cancel SideDrawer .body's 16px horizontal padding so the scroll area reaches
+   the panel edge; each section re-adds 16px so content gutters are symmetric
+   and the scrollbar sits flush at the right edge (not inside the content). */
+.detail { display: flex; flex-direction: column; height: 100%; min-height: 0; margin: 0 -16px; }
 
 .head {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 0 12px;
+  padding: 0 16px 12px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 12px;
 }
 
-.actionBar { margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.actionBar { margin-bottom: 12px; padding: 0 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .reassignSelect {
   background: var(--bg-surface);
@@ -25,6 +28,7 @@
 .tabs {
   display: flex;
   gap: 2px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 16px;
 }
@@ -47,7 +51,7 @@
   color: var(--accent-primary);
 }
 
-.tabContent { flex: 1; overflow-y: auto; min-height: 0; scrollbar-gutter: stable both-edges; }
+.tabContent { flex: 1; overflow-y: auto; min-height: 0; padding: 0 16px; }
 
 /* ── Shared ── */
 .section { margin-bottom: 20px; }
