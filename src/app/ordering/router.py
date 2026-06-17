@@ -24,6 +24,7 @@ from app.ordering.service import (
     advance_kitchen_status,
     cancel_order,
     create_manual_order,
+    delete_order,
     get_last_address,
     get_order_detail,
     get_order_for_tenant,
@@ -226,6 +227,20 @@ async def reassign_order_endpoint(
     await deliver_pending(session, restaurant.id)
     await session.refresh(order)
     return await _enrich(session, order)
+
+
+@router.delete("/{order_id}", status_code=204)
+async def delete_order_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Hard-delete an order and its dependents (admin/test-data cleanup).
+    Tenant-scoped + destructive — for clearing test orders, not customer-facing
+    cancellation (use /cancel for that)."""
+    deleted = await delete_order(session, restaurant_id=restaurant.id, order_id=order_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Order not found")
 
 
 @router.get("/{order_id}/detail", response_model=OrderDetailOut)

@@ -384,3 +384,53 @@ async def test_api_reassign_non_assigned_order_returns_422(client, db_session, r
     )
     assert resp.status_code == 422
     assert "assigned" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# delete_order — hard delete + dependents (admin/test cleanup)
+# ---------------------------------------------------------------------------
+
+async def test_delete_order_removes_order_and_dependents(db_session, restaurant):
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.cod.models import CodCollection
+    from app.dispatch.models import Assignment
+    from app.identity.models import Rider
+    from app.ordering.service import delete_order
+
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+    rider = Rider(restaurant_id=restaurant.id, name="R", phone="+971500000055",
+                  status="available", performance={})
+    db_session.add(rider)
+    await db_session.flush()
+    db_session.add(Assignment(order_id=order.id, rider_id=rider.id,
+                              assigned_at=datetime.now(timezone.utc), algorithm_score={}))
+    db_session.add(CodCollection(order_id=order.id, rider_id=rider.id, restaurant_id=restaurant.id,
+                                 amount_aed=Decimal("22.00"), collected_at=datetime.now(timezone.utc)))
+    await db_session.commit()
+
+    ok = await delete_order(db_session, restaurant_id=restaurant.id, order_id=order.id)
+    assert ok is True
+    assert await db_session.get(Order, order.id) is None
+    assert (await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))).first() is None
+    assert (await db_session.scalars(select(Assignment).where(Assignment.order_id == order.id))).first() is None
+    assert (await db_session.scalars(select(CodCollection).where(CodCollection.order_id == order.id))).first() is None
+
+
+async def test_delete_order_wrong_tenant_returns_false(db_session, restaurant):
+    from app.ordering.service import delete_order
+
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+    ok = await delete_order(db_session, restaurant_id=99999, order_id=order.id)
+    assert ok is False
+    assert await db_session.get(Order, order.id) is not None
+
+
+async def test_api_delete_order_returns_204_then_404(client, db_session, restaurant):
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+    resp = await client.delete(f"/api/v1/orders/{order.id}", headers=_auth(restaurant.id))
+    assert resp.status_code == 204
+    again = await client.delete(f"/api/v1/orders/{order.id}", headers=_auth(restaurant.id))
+    assert again.status_code == 404

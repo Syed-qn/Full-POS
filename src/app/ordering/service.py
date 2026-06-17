@@ -7,7 +7,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 
 from app.audit.service import record_audit
 from app.ordering.fsm import OrderStatus
@@ -553,6 +555,58 @@ async def cancel_order(
         extra_audit={"reason": reason or ""},
     )
     return None
+
+
+async def delete_order(
+    session: "AsyncSession", *, restaurant_id: int, order_id: int
+) -> bool:
+    """Hard-delete an order and every row that references it (admin/test cleanup).
+
+    Tenant-scoped. DESTRUCTIVE — removes operational AND financial rows tied to
+    the order (items, batch links, assignments, COD cash, SLA events, coupons),
+    and nulls soft references (resale parent, coupon redemption, marketing
+    attribution). Returns False if the order isn't this tenant's. Caller-facing
+    cancellation should use cancel_order; this is for wiping test data only.
+    """
+    from app.cod.models import CodCollection
+    from app.coupons.models import Coupon
+    from app.dispatch.models import Assignment, BatchOrder
+    from app.marketing.models import MarketingSend
+    from app.sla.models import SlaEvent
+
+    order = await session.get(Order, order_id)
+    if order is None or order.restaurant_id != restaurant_id:
+        return False
+
+    # Null nullable references so they survive without pointing at a dead order.
+    await session.execute(
+        sa_update(Order).where(Order.resale_of_order_id == order_id).values(resale_of_order_id=None)
+    )
+    await session.execute(
+        sa_update(Coupon).where(Coupon.redeemed_on_order_id == order_id).values(redeemed_on_order_id=None)
+    )
+    await session.execute(
+        sa_update(MarketingSend).where(MarketingSend.converted_order_id == order_id).values(converted_order_id=None)
+    )
+    # Delete hard dependents (FK-NOT-NULL).
+    for model, col in (
+        (OrderItem, OrderItem.order_id),
+        (BatchOrder, BatchOrder.order_id),
+        (Assignment, Assignment.order_id),
+        (CodCollection, CodCollection.order_id),
+        (SlaEvent, SlaEvent.order_id),
+        (Coupon, Coupon.order_id),
+    ):
+        await session.execute(sa_delete(model).where(col == order_id))
+
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant_id,
+        entity="order", entity_id=str(order_id), action="deleted",
+        before={"order_number": order.order_number, "status": str(order.status)},
+    )
+    await session.delete(order)
+    await session.commit()
+    return True
 
 
 # Manager-driven kitchen status transitions: confirmed→preparing, preparing→ready.
