@@ -23,8 +23,43 @@ from app.dispatch.models import Batch, BatchOrder, RiderLocation
 from app.geo.haversine import distance_km
 from app.identity.models import Rider
 from app.ordering.models import Customer, CustomerAddress, Order
+from app.outbox.models import OutboxMessage
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
+
+
+async def _notify_customer_status(
+    session: AsyncSession, *, restaurant_id: int, order: Order, status_key: str
+) -> None:
+    """Proactively message the customer when delivery progresses (picked_up → on
+    the way, delivered). Idempotent per (order, status) so a rider double-tap or
+    an outbox re-delivery never double-pings the customer. The customer's 24h
+    window is open (they ordered minutes ago), so a free-form text delivers — no
+    template needed (unlike the rider side). Reuses build_tracking_reply so the
+    wording (and live ETA when a GPS ping exists) matches the "where's my order"
+    reply."""
+    from app.dispatch.tracking import build_tracking_reply
+    from app.geo.factory import get_geo_provider
+
+    if order.customer_id is None:
+        return
+    key = f"cust-{status_key}-{order.id}"
+    if await session.scalar(
+        select(OutboxMessage.id).where(OutboxMessage.idempotency_key == key)
+    ) is not None:
+        return  # already notified for this order+status
+    customer = await session.get(Customer, order.customer_id)
+    if customer is None or not customer.phone:
+        return
+    body = await build_tracking_reply(session, order=order, geo=get_geo_provider())
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=customer.phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={"body": body},
+        idempotency_key=key,
+    )
 
 # ~100 m per spec §4.4 + transcript (geofence worker). Button click ONLY way to reveal next location (flow integrity).
 NEAR_KM = 0.1
@@ -88,6 +123,10 @@ async def handle_orders_picked(
         if order is None:
             continue
         await advance_delivery(session, order_id=order.id, to_status="picked_up")
+        # Proactively tell the customer their order is on the way.
+        await _notify_customer_status(
+            session, restaurant_id=restaurant_id, order=order, status_key="picked_up"
+        )
         if first_order is None:
             first_order = order
     if first_order is not None:
@@ -105,6 +144,10 @@ async def handle_delivered(
     if order.status == "picked_up":
         await advance_delivery(session, order_id=order.id, to_status="arriving")
     await advance_delivery(session, order_id=order.id, to_status="delivered")
+    # Proactively tell the customer their order has been delivered.
+    await _notify_customer_status(
+        session, restaurant_id=restaurant_id, order=order, status_key="delivered"
+    )
     # COD-only platform: every delivery collects the order total in cash.
     await record_collection(
         session,
