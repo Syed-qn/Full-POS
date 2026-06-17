@@ -120,9 +120,11 @@ async def test_get_order_detail_chat_from_conversation(db_session, restaurant):
         conversation_id=conv.id, direction="inbound",
         type="text", payload={"text": "I want biryani"}, ts=1717660800,
     ))
+    # Outbound bot replies store the text under "body" (not "text") — the order
+    # Chat must still render it, not the "[automated]" placeholder.
     db_session.add(Message(
         conversation_id=conv.id, direction="outbound",
-        type="text", payload={"text": "Added 1x Chicken Biryani!"}, ts=1717660810,
+        type="text", payload={"body": "Added 1x Chicken Biryani!"}, ts=1717660810,
     ))
     await db_session.commit()
 
@@ -132,6 +134,7 @@ async def test_get_order_detail_chat_from_conversation(db_session, restaurant):
     assert detail.chat[0].direction == "inbound"
     assert detail.chat[0].text == "I want biryani"
     assert detail.chat[1].direction == "outbound"
+    assert detail.chat[1].text == "Added 1x Chicken Biryani!"
 
 
 async def test_get_order_detail_no_conversation_returns_empty_chat(db_session, restaurant):

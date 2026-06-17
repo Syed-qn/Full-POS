@@ -839,10 +839,15 @@ async def get_order_detail(
                     )
                 ).all()
             )
+            # Outbound bot replies store their text under "body" (not "text"),
+            # and interactive/location rows under other keys — use the shared
+            # display helper so the order Chat shows real text, not a placeholder.
+            from app.conversation.service import message_display_text
+
             chat = [
                 ChatMessageOut(
                     direction=m.direction,
-                    text=m.payload.get("text") if m.type == "text" else None,
+                    text=message_display_text(m.payload or {}),
                     ts=m.ts,
                 )
                 for m in msg_rows
