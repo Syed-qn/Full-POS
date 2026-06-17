@@ -7,12 +7,14 @@ import { Button } from "../components/Button";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { apiClient } from "../lib/apiClient";
 import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
-import { cancelOrder, fetchOrder } from "../lib/ordersApi";
+import { cancelOrder, fetchOrder, reassignOrder } from "../lib/ordersApi";
+import { fetchRiders } from "../lib/ridersApi";
 import type {
   AddressDetailOut,
   CustomerDetailOut,
   OrderDetailOut,
   OrderOut,
+  RiderOut,
   TimelineEventOut,
 } from "../lib/types";
 import s from "./OrderDetailDrawer.module.css";
@@ -50,6 +52,9 @@ export function OrderDetailDrawer({
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [riders, setRiders] = useState<RiderOut[]>([]);
+  const [reassignTo, setReassignTo] = useState<number | "">("");
+  const [reassigning, setReassigning] = useState(false);
 
   useEffect(() => {
     if (orderId === null) {
@@ -60,14 +65,36 @@ export function OrderDetailDrawer({
     setLoading(true);
     setTab("overview");
     setError(null);
+    setReassignTo("");
     Promise.all([fetchOrderDetail(orderId), fetchOrder(orderId)])
       .then(([d, b]) => {
         setDetail(d);
         setBasicOrder(b);
+        // Riders are only needed for the reassign control on an assigned order.
+        if (d.status === "assigned") {
+          fetchRiders().then(setRiders).catch(() => setRiders([]));
+        }
       })
       .catch(() => setError("Failed to load order details"))
       .finally(() => setLoading(false));
   }, [orderId]);
+
+  async function reassignAction() {
+    if (!basicOrder || reassignTo === "") return;
+    setReassigning(true);
+    setActionError(null);
+    try {
+      const updated = await reassignOrder(basicOrder.id, Number(reassignTo));
+      setBasicOrder(updated);
+      setDetail(await fetchOrderDetail(basicOrder.id));
+      setReassignTo("");
+      fetchRiders().then(setRiders).catch(() => {});
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to reassign");
+    } finally {
+      setReassigning(false);
+    }
+  }
 
   async function advanceStatus() {
     if (!basicOrder) return;
@@ -144,6 +171,37 @@ export function OrderDetailDrawer({
                   {cancelling ? "Cancelling…" : "Cancel Order"}
                 </Button>
               )}
+              {actionError && (
+                <span style={{ color: "var(--danger, #dc2626)", fontSize: "13px" }}>
+                  {actionError}
+                </span>
+              )}
+            </div>
+          )}
+
+          {detail.status === "assigned" && (
+            <div className={s.actionBar}>
+              <select
+                className={s.reassignSelect}
+                value={reassignTo}
+                onChange={(e) =>
+                  setReassignTo(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                disabled={reassigning}
+                aria-label="Reassign to rider"
+              >
+                <option value="">Reassign to…</option>
+                {riders
+                  .filter((r) => r.status !== "deactivated" && r.id !== detail.rider?.id)
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.status.replace(/_/g, " ")})
+                    </option>
+                  ))}
+              </select>
+              <Button onClick={reassignAction} disabled={reassigning || reassignTo === ""}>
+                {reassigning ? "Reassigning…" : "Reassign rider"}
+              </Button>
               {actionError && (
                 <span style={{ color: "var(--danger, #dc2626)", fontSize: "13px" }}>
                   {actionError}

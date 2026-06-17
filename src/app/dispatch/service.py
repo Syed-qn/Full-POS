@@ -36,6 +36,7 @@ from app.dispatch.scoring import RiderCandidate, rank_riders
 from app.geo.factory import get_geo_provider
 from app.geo.haversine import distance_km
 from app.identity.models import Restaurant, Rider
+from app.ordering.fsm import OrderStatus
 from app.ordering.models import CustomerAddress, Order
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
@@ -346,3 +347,123 @@ async def _enqueue_rider_assignment(
         },
         idempotency_key=f"assign-{batch_id}",
     )
+
+
+async def reassign_order(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    order_id: int,
+    new_rider_id: int,
+    actor: str = "manager",
+) -> Order:
+    """Manually move an ASSIGNED order to a manager-chosen rider.
+
+    Recovery path for a stuck assignment (e.g. the original rider was never
+    reachable so the delivery never advanced). Moves the order into a fresh
+    single-order batch for the new rider, frees the old rider when they have no
+    other live orders, records the decision for explainability, and notifies the
+    new rider via the 24h-window-safe assignment helper.
+
+    Only ASSIGNED orders are reassignable — after pickup the original rider
+    physically holds the food, so reassigning would be incorrect. Caller commits.
+    """
+    order = await session.get(Order, order_id)
+    if order is None or order.restaurant_id != restaurant_id:
+        raise ValueError("Order not found")
+    if str(order.status) != str(OrderStatus.ASSIGNED):
+        raise ValueError(
+            f"Only assigned orders can be reassigned (current: '{order.status}')."
+        )
+    new_rider = await session.get(Rider, new_rider_id)
+    if new_rider is None or new_rider.restaurant_id != restaurant_id:
+        raise ValueError("Rider not found")
+    if new_rider.status == "deactivated":
+        raise ValueError("Cannot reassign to a deactivated rider.")
+    old_rider_id = order.rider_id
+    if old_rider_id == new_rider_id:
+        raise ValueError("Order is already assigned to this rider.")
+
+    # Detach the order from its current batch; mark that batch completed if empty.
+    bo = await session.scalar(
+        select(BatchOrder).where(BatchOrder.order_id == order.id)
+    )
+    old_batch_id = bo.batch_id if bo is not None else None
+    if bo is not None:
+        await session.delete(bo)
+        await session.flush()
+
+    # Fresh single-order batch for the new rider.
+    batch = Batch(
+        restaurant_id=restaurant_id, rider_id=new_rider_id,
+        status="planned", route={},
+    )
+    session.add(batch)
+    await session.flush()
+    session.add(BatchOrder(batch_id=batch.id, order_id=order.id, sequence=1))
+    order.rider_id = new_rider_id
+
+    # Explainability + timeline.
+    session.add(
+        Assignment(
+            order_id=order.id, rider_id=new_rider_id, batch_id=batch.id,
+            assigned_at=datetime.now(timezone.utc),
+            algorithm_score={
+                "manual_reassign": True,
+                "previous_rider_id": old_rider_id,
+                "actor": actor,
+            },
+        )
+    )
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="reassigned",
+        before={"rider_id": old_rider_id},
+        after={"rider_id": new_rider_id, "previous_rider_id": old_rider_id},
+    )
+
+    new_rider.status = "on_delivery"
+
+    # Free the old rider when they have no other live orders.
+    if old_rider_id and old_rider_id != new_rider_id:
+        old_rider = await session.get(Rider, old_rider_id)
+        if old_rider is not None and old_rider.status != "deactivated":
+            live = await session.scalar(
+                select(func.count(Order.id)).where(
+                    Order.rider_id == old_rider_id,
+                    Order.status.in_(
+                        [
+                            OrderStatus.ASSIGNED,
+                            OrderStatus.PICKED_UP,
+                            OrderStatus.ARRIVING,
+                        ]
+                    ),
+                )
+            )
+            if not live:
+                old_rider.status = "available"
+
+    if old_batch_id is not None:
+        remaining = await session.scalar(
+            select(func.count(BatchOrder.id)).where(
+                BatchOrder.batch_id == old_batch_id
+            )
+        )
+        if not remaining:
+            old_batch = await session.get(Batch, old_batch_id)
+            if old_batch is not None:
+                old_batch.status = "completed"
+
+    # Notify the new rider (template-aware → delivers even outside the 24h window).
+    await _enqueue_rider_assignment(
+        session,
+        restaurant_id=restaurant_id,
+        rider_phone=new_rider.phone,
+        batch_id=batch.id,
+        order_numbers=order.order_number,
+    )
+    return order

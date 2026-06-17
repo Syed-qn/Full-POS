@@ -185,6 +185,106 @@ async def test_assignment_uses_template_when_configured(db_session, monkeypatch)
     assert btn["parameters"][0]["payload"] == f"picked:{batch.id}"
 
 
+async def test_reassign_moves_order_and_frees_old_rider(db_session):
+    """Manual reassign: order moves to the chosen rider in a fresh batch, the old
+    rider is freed (no other live orders), the new rider goes on_delivery, and the
+    new rider is notified."""
+    from app.dispatch.service import reassign_order
+
+    r = await _seed_restaurant(db_session)
+    rider_a = Rider(
+        restaurant_id=r.id, name="A", phone="+971500000021", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(rider_a)
+    await db_session.flush()
+    await _ping(db_session, rider_a, r.id, 25.2050, 55.2710)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 21)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(order)
+    assert order.rider_id == rider_a.id  # auto-assigned to the only rider
+
+    # Manager picks a different rider.
+    rider_b = Rider(
+        restaurant_id=r.id, name="B", phone="+971500000022", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(rider_b)
+    await db_session.flush()
+    old_batch = await db_session.scalar(select(Batch).where(Batch.rider_id == rider_a.id))
+
+    await reassign_order(
+        db_session, restaurant_id=r.id, order_id=order.id, new_rider_id=rider_b.id
+    )
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    await db_session.refresh(rider_a)
+    await db_session.refresh(rider_b)
+    assert order.rider_id == rider_b.id
+    assert order.status == "assigned"
+    assert rider_a.status == "available"   # freed
+    assert rider_b.status == "on_delivery"
+
+    # New single-order batch for B carries the order.
+    new_batch = await db_session.scalar(select(Batch).where(Batch.rider_id == rider_b.id))
+    assert new_batch is not None and new_batch.id != old_batch.id
+    bo = await db_session.scalar(select(BatchOrder).where(BatchOrder.order_id == order.id))
+    assert bo.batch_id == new_batch.id
+
+    # New rider notified.
+    msg = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == rider_b.phone)
+    )
+    assert msg is not None
+
+
+async def test_reassign_rejects_non_assigned_order(db_session):
+    from app.dispatch.service import reassign_order
+
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="A", phone="+971500000031", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 31)  # status "ready"
+    await db_session.commit()
+
+    import pytest
+    with pytest.raises(ValueError, match="Only assigned orders"):
+        await reassign_order(
+            db_session, restaurant_id=r.id, order_id=order.id, new_rider_id=rider.id
+        )
+
+
+async def test_reassign_to_same_rider_rejected(db_session):
+    from app.dispatch.service import reassign_order
+
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="A", phone="+971500000041", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2050, 55.2710)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 41)
+    await db_session.commit()
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    import pytest
+    with pytest.raises(ValueError, match="already assigned to this rider"):
+        await reassign_order(
+            db_session, restaurant_id=r.id, order_id=order.id, new_rider_id=rider.id
+        )
+
+
 async def test_no_available_riders_alerts_manager_and_leaves_unassigned(db_session):
     r = await _seed_restaurant(db_session)
     order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 2)

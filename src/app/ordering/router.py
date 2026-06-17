@@ -14,6 +14,7 @@ from app.ordering.schemas import (
     ManualOrderIn,
     OrderItemOut,
     OrderOut,
+    ReassignOrderIn,
 )
 from app.ordering.detail_schemas import (
     OrderDetailOut,
@@ -189,6 +190,34 @@ async def cancel_order_endpoint(
             status_code=422,
             detail=f"Order in status '{order.status}' can no longer be cancelled.",
         )
+    await session.commit()
+    await session.refresh(order)
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/reassign", response_model=OrderOut)
+async def reassign_order_endpoint(
+    order_id: int,
+    body: ReassignOrderIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Manually reassign an ASSIGNED order to a chosen rider (recovery path when
+    the original rider is stuck/unreachable). Frees the old rider and notifies
+    the new one. 422 if the order isn't assignable or the rider is invalid."""
+    from app.dispatch.service import reassign_order
+
+    try:
+        order = await reassign_order(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            new_rider_id=body.rider_id,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if msg in ("Order not found", "Rider not found") else 422
+        raise HTTPException(status_code=code, detail=msg)
     await session.commit()
     await session.refresh(order)
     return await _enrich(session, order)

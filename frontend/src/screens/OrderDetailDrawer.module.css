@@ -9,7 +9,17 @@
   margin-bottom: 12px;
 }
 
-.actionBar { margin-bottom: 12px; }
+.actionBar { margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.reassignSelect {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  padding: 7px 10px;
+}
+.reassignSelect:focus { border-color: var(--accent-primary); outline: none; }
 
 /* ── Tabs ── */
 .tabs {

@@ -298,3 +298,37 @@ async def test_api_patch_customer_wrong_id_returns_404(client, db_session, resta
         headers=_auth(restaurant.id),
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# API tests — POST /api/v1/orders/{id}/reassign
+# ---------------------------------------------------------------------------
+
+async def test_api_reassign_unknown_order_returns_404(client, db_session, restaurant):
+    resp = await client.post(
+        "/api/v1/orders/99999/reassign",
+        json={"rider_id": 1},
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 404
+
+
+async def test_api_reassign_non_assigned_order_returns_422(client, db_session, restaurant):
+    # _seed_full_order creates a delivered order — not reassignable.
+    order, _, _ = await _seed_full_order(db_session, restaurant.id)
+    from app.identity.models import Rider
+
+    rider = Rider(
+        restaurant_id=restaurant.id, name="R", phone="+971500000099",
+        status="available", performance={},
+    )
+    db_session.add(rider)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/orders/{order.id}/reassign",
+        json={"rider_id": rider.id},
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 422
+    assert "assigned" in resp.json()["detail"].lower()
