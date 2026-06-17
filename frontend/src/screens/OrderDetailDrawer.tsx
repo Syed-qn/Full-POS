@@ -374,38 +374,46 @@ function TimelineTab({ detail }: { detail: OrderDetailOut }) {
 
   return (
     <div className={s.timeline}>
-      {detail.timeline.length === 0 ? (
-        <p className={s.empty}>No timeline events</p>
-      ) : (
-        <ol className={s.timelineList}>
-          {detail.timeline.map((event, i) => (
-            <li key={i} className={s.timelineEvent}>
-              <span className={s.timelineDot} />
-              <div className={s.timelineBody}>
-                <span className={s.timelineAction}>
-                  {timelineLabel(event)}
-                </span>
-                <span className={s.timelineMeta}>
-                  {new Date(event.ts).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: "Asia/Dubai",
-                  })}{" "}
-                  · {event.actor}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
+      <section className={s.card}>
+        <h4 className={s.cardTitle}>Activity</h4>
+        {detail.timeline.length === 0 ? (
+          <p className={s.empty}>No timeline events</p>
+        ) : (
+          <ol className={s.timelineList}>
+            {detail.timeline.map((event, i) => (
+              <li
+                key={i}
+                className={`${s.timelineEvent} ${i === detail.timeline.length - 1 ? s.timelineLatest : ""}`}
+              >
+                <span className={s.timelineDot} />
+                <div className={s.timelineBody}>
+                  <span className={s.timelineAction}>{timelineLabel(event)}</span>
+                  <span className={s.timelineMeta}>
+                    {new Date(event.ts).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "Asia/Dubai",
+                    })}{" "}
+                    · {event.actor}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
 
       {detail.route.length > 0 ? (
-        <div className={s.mapWrapper}>
-          <h4 className={s.sectionTitle}>Delivery Route</h4>
+        <section className={s.card}>
+          <h4 className={s.cardTitle}>Delivery Route</h4>
           <div ref={mapRef} className={s.map} />
-        </div>
+        </section>
       ) : (
-        detail.rider && <p className={s.empty}>No GPS pings recorded for this order</p>
+        detail.rider && (
+          <section className={s.card}>
+            <p className={s.empty}>No GPS pings recorded for this order</p>
+          </section>
+        )
       )}
     </div>
   );
