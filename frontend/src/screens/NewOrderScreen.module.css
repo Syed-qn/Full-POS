@@ -413,3 +413,59 @@
   font-size: 14px;
   box-shadow: var(--shadow-sm);
 }
+
+/* ---- Loading skeleton (mirrors the real form layout) ---- */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(125, 125, 125, 0.12),
+    transparent
+  );
+  animation: skShimmer 1.4s infinite;
+}
+@keyframes skShimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skLabel {
+  height: 10px;
+  width: 64px;
+}
+.skInput {
+  height: 36px;
+  width: 100%;
+}
+.skBtn {
+  height: 36px;
+  width: 92px;
+}
+.skTitle {
+  height: 13px;
+  width: 96px;
+}
+.skDish {
+  height: 40px;
+  width: 100%;
+  margin-bottom: 6px;
+  border-radius: var(--radius);
+}
+.skLine {
+  height: 12px;
+  width: 100%;
+}
+.skBar {
+  height: 13px;
+}

@@ -191,7 +191,7 @@ export function NewOrderScreen() {
     }
   }
 
-  if (menu === "loading") return <div className={s.screen}>Loading menu…</div>;
+  if (menu === "loading") return <NewOrderSkeleton />;
 
   if (!menu) {
     return (
@@ -442,6 +442,89 @@ export function NewOrderScreen() {
               ? "Placing…"
               : `Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A skeleton placeholder that mirrors the real New Order layout (two columns,
+// same cards/sections) so the page keeps its shape while the menu loads.
+function SkField({ labelWidth }: { labelWidth?: number }) {
+  return (
+    <div className={s.field}>
+      <span className={`${s.sk} ${s.skLabel}`} style={labelWidth ? { width: labelWidth } : undefined} />
+      <span className={`${s.sk} ${s.skInput}`} />
+    </div>
+  );
+}
+
+function NewOrderSkeleton() {
+  return (
+    <div className={s.screen} aria-busy="true" aria-label="Loading new order form">
+      <PageHeader title="New Order" subtitle="Place a manual order on behalf of a customer" />
+
+      <div className={s.grid}>
+        {/* LEFT COLUMN */}
+        <div className={s.leftCol}>
+          <div className={s.section}>
+            <span className={`${s.sk} ${s.skTitle}`} />
+            <div className={s.field}>
+              <span className={`${s.sk} ${s.skLabel}`} />
+              <div className={s.inputRow}>
+                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
+                <span className={`${s.sk} ${s.skBtn}`} />
+              </div>
+            </div>
+            <SkField />
+          </div>
+
+          <div className={s.section}>
+            <span className={`${s.sk} ${s.skTitle}`} />
+            <SkField />
+            <SkField />
+            <SkField labelWidth={96} />
+            <SkField labelWidth={88} />
+            <div className={s.field}>
+              <span className={`${s.sk} ${s.skLabel}`} />
+              <div className={s.feeRow}>
+                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
+                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
+                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div className={s.section}>
+          <span className={`${s.sk} ${s.skTitle}`} />
+          <span className={`${s.sk} ${s.skInput}`} />
+          <div className={s.itemList}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <span key={i} className={`${s.sk} ${s.skDish}`} />
+            ))}
+          </div>
+          <div className={s.summary}>
+            <span className={`${s.sk} ${s.skBar}`} style={{ width: 110, marginBottom: 12 }} />
+            <div className={s.summaryLine}>
+              <span className={`${s.sk} ${s.skLine}`} style={{ width: "40%" }} />
+              <span className={`${s.sk} ${s.skLine}`} style={{ width: "20%" }} />
+            </div>
+            <hr className={s.summaryDivider} />
+            <div className={s.summaryLine}>
+              <span className={`${s.sk} ${s.skLine}`} style={{ width: "30%" }} />
+              <span className={`${s.sk} ${s.skLine}`} style={{ width: "18%" }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={s.bottomBar}>
+        <span className={`${s.sk} ${s.skBar}`} style={{ width: 240 }} />
+        <div className={s.actions}>
+          <span className={`${s.sk} ${s.skBtn}`} />
+          <span className={`${s.sk} ${s.skBtn}`} style={{ width: 130 }} />
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import s from "./MenuManagerScreen.module.css";
 
 export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number }) {
   const [dishes, setDishes] = useState<DishOut[]>([]);
+  const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<MenuWithDiffOut | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(initialMenuId ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     if (pending !== null) return;
     if (activeMenuId !== null) {
       // Known menu id (after an upload+activate, or passed in): load its dishes.
-      getMenu(activeMenuId).then((m) => setDishes(m.dishes)).catch(() => {});
+      getMenu(activeMenuId).then((m) => setDishes(m.dishes)).catch(() => {}).finally(() => setLoading(false));
     } else {
       // First mount with no id: discover the restaurant's active menu so the
       // current dishes show up instead of the empty "upload your first menu"
@@ -50,7 +51,8 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
             setDishes(m.dishes);
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setLoading(false));
     }
   }, [activeMenuId, pending]);
 
@@ -224,7 +226,9 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           </>
         }
       />
-      {dishes.length === 0 ? (
+      {loading ? (
+        <MenuSkeleton />
+      ) : dishes.length === 0 ? (
         <div className={s.empty}>Upload your first menu to get started.</div>
       ) : (
         <>
@@ -331,6 +335,40 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           onSaved={reloadDishes}
         />
       )}
+    </div>
+  );
+}
+
+// Skeleton placeholder mirroring the menu layout (stats bar, filters, chips,
+// and category grids of dish cards) so the page keeps its shape while loading.
+function MenuSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading menu">
+      <div className={s.stats}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <span key={i} className={`${s.sk} ${s.skStat}`} />
+        ))}
+      </div>
+      <div className={s.filterBar}>
+        <span className={`${s.sk} ${s.skSearch}`} />
+        <span className={`${s.sk} ${s.skSegment}`} />
+      </div>
+      {Array.from({ length: 2 }).map((_, c) => (
+        <section key={c} className={s.catSection}>
+          <div className={s.catHeader}>
+            <span className={`${s.sk} ${s.skCatName}`} />
+          </div>
+          <div className={s.grid}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className={s.skCard}>
+                <span className={`${s.sk} ${s.skCardLine}`} style={{ width: "65%" }} />
+                <span className={`${s.sk} ${s.skCardLine}`} style={{ width: "35%" }} />
+                <span className={`${s.sk} ${s.skCardLine}`} style={{ width: "50%" }} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

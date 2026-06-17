@@ -101,6 +101,22 @@ describe("NewOrderScreen", () => {
     expect(screen.getByText(/Place Order/)).toBeInTheDocument();
   });
 
+  it("shows a loading skeleton while the menu is still loading", () => {
+    // Menu fetch stays pending → the screen renders its skeleton, not the form.
+    mockFetch({ menu: undefined });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: unknown) =>
+        String(url).includes("/menus/active")
+          ? new Promise(() => {}) // never resolves
+          : Promise.resolve(json(mockSettings)),
+      ),
+    );
+    const { container } = renderScreen();
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
+    expect(screen.queryByPlaceholderText("+971 50 123 4567")).not.toBeInTheDocument();
+  });
+
   it("shows unavailable dishes are hidden", async () => {
     renderScreen();
     await waitFor(() =>

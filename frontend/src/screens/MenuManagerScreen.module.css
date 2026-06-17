@@ -200,3 +200,40 @@
   color: var(--text-muted);
   margin: -4px 0 2px;
 }
+
+/* ---- Loading skeleton (mirrors the menu layout) ---- */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: menuSkShimmer 1.4s infinite;
+}
+@keyframes menuSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skStat { height: 16px; width: 90px; }
+.skSearch { height: 38px; flex: 1 1 280px; max-width: 360px; border-radius: var(--radius); }
+.skSegment { height: 38px; width: 220px; margin-left: auto; border-radius: 8px; }
+.skChip { height: 28px; border-radius: 999px; }
+.skCatName { height: 15px; width: 120px; }
+.skCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skCardLine { height: 12px; }

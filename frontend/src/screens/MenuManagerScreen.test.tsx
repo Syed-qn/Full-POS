@@ -31,6 +31,14 @@ describe("MenuManagerScreen", () => {
     expect(screen.getByText("Mutton Karahi")).toBeInTheDocument();
   });
 
+  it("shows a loading skeleton until the menu resolves", () => {
+    // GET stays pending → the screen renders its skeleton, not the empty state.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    const { container } = render(<MenuManagerScreen initialMenuId={5} />);
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
+    expect(screen.queryByText("Upload your first menu to get started.")).not.toBeInTheDocument();
+  });
+
   it("discovers the active menu on mount when no id is passed (route default)", async () => {
     // The /menu route renders <MenuManagerScreen /> with NO initialMenuId.
     // It must call GET /menus/active and show the dishes, not the empty state.
