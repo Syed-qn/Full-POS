@@ -669,7 +669,7 @@ async def _send_order_summary(
     order,
 ) -> None:
     """Render order summary with totals + ETA and confirm/cancel buttons."""
-    from app.ordering.models import OrderItem
+    from app.ordering.models import CustomerAddress, OrderItem
     from app.weather.factory import get_weather_port
 
     items = (
@@ -680,6 +680,19 @@ async def _send_order_summary(
         f"AED {Decimal(it.price_aed * it.qty).normalize()}"
         for it in items
     )
+
+    # Show the delivery address back to the customer so they can verify it before
+    # confirming (room/apartment, building, receiver — pin already captured).
+    address_block = ""
+    if order.address_id is not None:
+        addr = await session.get(CustomerAddress, order.address_id)
+        if addr is not None:
+            parts = [p for p in (addr.room_apartment, addr.building) if p]
+            addr_line = ", ".join(parts)
+            if addr.receiver_name:
+                addr_line = f"{addr_line} (for {addr.receiver_name})" if addr_line else f"For {addr.receiver_name}"
+            if addr_line:
+                address_block = f"Deliver to: {addr_line}\n"
 
     # Weather disclosure: if a delay is active, disclose at confirmation time so
     # that a later weather-caused delay does NOT trigger an automatic coupon.
@@ -697,6 +710,7 @@ async def _send_order_summary(
         f"Delivery fee: AED {Decimal(order.delivery_fee_aed).normalize()}\n"
         f"Total: AED {Decimal(order.total).normalize()}\n"
         f"Payment: COD (cash on delivery)\n"
+        f"{address_block}"
         f"ETA: 40 minutes{weather_note}\n\n"
         f"Confirm your order?"
     )
@@ -1867,13 +1881,23 @@ async def _dispatch_action(
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
         # Returning customer → offer their saved address up front (one tap to reuse,
         # or "New address" to enter once). Prevents the type-then-offered-then-retype
-        # double entry. New customers fall through to the normal "share location" ask.
+        # double entry. New customers fall through to the location-pin ask below.
         if not conv.state.get("address_offer_made"):
             if await _offer_saved_address_if_any(session, conv, inbound, restaurant_id):
                 return
-        if reply:
-            await _send_text(session, conv=conv, inbound=inbound,
-                             restaurant_id=restaurant_id, prefix="ai-proceed-addr", body=reply)
+        # New customer, no saved address: DETERMINISTICALLY request the WhatsApp
+        # location pin. We do NOT forward the LLM's reply here — the model tends to
+        # ask for a free-text address, which yields NO coordinates: dispatch then
+        # can't route the rider to the customer (it falls back to the restaurant
+        # location) and the fee/radius check has no real distance. The pin is
+        # mandatory; the follow-up apt/building/receiver collection stays AI-driven.
+        await _send_buttons(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ai-proceed-addr-loc",
+            body="Great! Please share your delivery location 📍 — tap the button below "
+                 "(or use the 📎 attachment → Location) so the rider reaches you exactly.",
+            buttons=[{"id": "share_location", "title": "Share location 📍"}],
+        )
         return
 
     # ── address_capture actions ───────────────────────────────────────────
@@ -1906,6 +1930,22 @@ async def _dispatch_action(
         apt_room = data.get("apt_room", "")
         building = data.get("building", "")
         receiver_name = data.get("receiver_name", "")
+        # A text address carries NO coordinates. Without a shared location pin the
+        # order would have no real drop-off: dispatch falls back to the restaurant
+        # location and the fee/radius check is meaningless. So if no pin has been
+        # shared yet, re-request the location instead of saving the address.
+        if conv.state.get("pin_lat") is None:
+            _set_state(conv, dialogue_phase="address_capture",
+                       dialogue_state="address_capture")
+            await _send_buttons(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="need-location-pin",
+                body="Almost there! Please share your delivery location 📍 first — "
+                     "tap the button (or 📎 → Location) so the rider can reach you "
+                     "exactly. Then I'll take your apartment/building and receiver name.",
+                buttons=[{"id": "share_location", "title": "Share location 📍"}],
+            )
+            return
         if apt_room and building and receiver_name:
             await _execute_save_address(session, conv, inbound, restaurant_id,
                                         apt_room, building, receiver_name, restaurant)

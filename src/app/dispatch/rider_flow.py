@@ -14,6 +14,8 @@ Drop-off coordinates come from the order's CustomerAddress (orders carry no
 dropoff_lat/lon columns); the nav link is omitted gracefully when absent.
 """
 
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +28,8 @@ from app.ordering.models import Customer, CustomerAddress, Order
 from app.outbox.models import OutboxMessage
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
+
+_logger = logging.getLogger(__name__)
 
 
 async def _notify_customer_status(
@@ -241,6 +245,25 @@ async def handle_delivered(
             payload={"body": "All delivered. Head back to the restaurant."},
             idempotency_key=f"headback-{bo.batch_id}-{rider.id}",
         )
+        # The batch is complete and the rider was just freed (status -> available
+        # in delivery._complete_batch_order). Re-run dispatch so any orders left
+        # waiting in `ready` (no rider was available when they became ready) are
+        # picked up immediately, instead of sitting until the next order hits
+        # `ready`. Production has no Celery beat sweeper (see CLAUDE.md), so a
+        # freed rider would otherwise never trigger a re-scan on its own. The
+        # rider-assignment + customer pushes this enqueues are delivered by the
+        # webhook's restaurant-wide outbox claim after this transaction commits.
+        # Best-effort: a dispatch error must never undo the delivery just recorded.
+        from app.dispatch.service import run_dispatch_engine
+
+        try:
+            await run_dispatch_engine(session, restaurant_id=restaurant_id)
+        except Exception:  # noqa: BLE001 - re-dispatch must not break delivery
+            _logger.exception(
+                "re-dispatch after freeing rider %s failed (restaurant_id=%s)",
+                rider.id,
+                restaurant_id,
+            )
 
 
 async def _get_latest_rider_location(session: AsyncSession, rider_id: int) -> tuple[float, float] | None:
