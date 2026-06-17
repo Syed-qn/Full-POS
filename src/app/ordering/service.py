@@ -181,6 +181,17 @@ async def upsert_address(
     )
     session.add(addr)
     await session.flush()
+
+    # The WhatsApp flow only ever asks "who should the rider ask for?", never a
+    # separate customer name — so backfill the customer's display name from the
+    # receiver name when they don't have one yet. Otherwise the dashboard's
+    # Customer column stays blank. Existing name is never overwritten.
+    if receiver_name and receiver_name.strip():
+        customer = await session.get(Customer, customer_id)
+        if customer is not None and not (customer.name or "").strip():
+            customer.name = receiver_name.strip()
+            await session.flush()
+
     return addr
 
 

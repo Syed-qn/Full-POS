@@ -72,6 +72,10 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
             address_str = ", ".join(parts) or None
             lat = addr.latitude
             lng = addr.longitude
+            # Fall back to the delivery receiver name when the customer has no
+            # name on file (older orders predating the name backfill).
+            if not (customer_name or "").strip() and addr.receiver_name:
+                customer_name = addr.receiver_name
 
     sla_started_at = (
         order.sla_confirmed_at.isoformat() if order.sla_confirmed_at else None

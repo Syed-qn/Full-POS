@@ -46,6 +46,42 @@ async def test_customer_address_table_has_expected_columns(db_session, restauran
     assert addr.last_used_at is None
 
 
+async def test_upsert_address_backfills_blank_customer_name_from_receiver(db_session, restaurant):
+    """The WhatsApp flow only collects a receiver name, so upsert_address backfills
+    the customer's display name from it when the customer has none yet."""
+    from app.ordering.service import get_or_create_customer, upsert_address
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000001"
+    )
+    assert customer.name is None
+
+    await upsert_address(
+        db_session, customer_id=customer.id, latitude=None, longitude=None,
+        room_apartment="12", building="Tower A", receiver_name="Asfer", confirmed=True,
+    )
+    await db_session.refresh(customer)
+    assert customer.name == "Asfer"
+
+
+async def test_upsert_address_does_not_overwrite_existing_customer_name(db_session, restaurant):
+    """An existing customer name is preserved — receiver names never clobber it."""
+    from app.ordering.service import get_or_create_customer, upsert_address
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000002"
+    )
+    customer.name = "Ali Hassan"
+    await db_session.flush()
+
+    await upsert_address(
+        db_session, customer_id=customer.id, latitude=None, longitude=None,
+        room_apartment="9", building="Tower B", receiver_name="Someone Else", confirmed=True,
+    )
+    await db_session.refresh(customer)
+    assert customer.name == "Ali Hassan"
+
+
 def _token_for(restaurant_id: int) -> str:
     """Bearer token for the dynamically-seeded restaurant fixture."""
     from app.identity.auth import create_access_token
