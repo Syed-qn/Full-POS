@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -12,6 +13,8 @@ from app.audit.service import record_audit
 from app.ordering.fsm import OrderStatus
 from app.ordering.fsm import transition as fsm_transition
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+
+_logger = logging.getLogger(__name__)
 
 
 def _compute_exclusion_hash(
@@ -578,7 +581,42 @@ async def advance_kitchen_status(
     await fsm_transition(session, order, next_status, actor=actor)
     await session.commit()
     await session.refresh(order)
+    # Event-driven dispatch: as soon as an order is READY, assign a rider — no
+    # manual /dispatch/trigger and no Celery beat required (this runs in the
+    # web request that marked it ready). Best-effort: never break the kitchen
+    # action if dispatch fails.
+    if order.status == "ready":
+        await _auto_dispatch_on_ready(session, order.restaurant_id)
     return order
+
+
+async def _auto_dispatch_on_ready(session: "AsyncSession", restaurant_id: int) -> None:
+    """Run the dispatch engine for a restaurant that just got a ready order and
+    deliver the resulting rider/manager notifications. Isolated + best-effort so a
+    dispatch error can't roll back the committed kitchen transition."""
+    from app.dispatch.service import run_dispatch_engine
+    from app.outbox.models import OutboxMessage
+    from app.outbox.service import deliver_outbox_now
+
+    try:
+        await run_dispatch_engine(session, restaurant_id=restaurant_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001 - dispatch must not break the kitchen action
+        _logger.exception("auto-dispatch on ready failed (restaurant_id=%s)", restaurant_id)
+        await session.rollback()
+        return
+    try:
+        ids = (
+            await session.scalars(
+                select(OutboxMessage.id).where(
+                    OutboxMessage.restaurant_id == restaurant_id,
+                    OutboxMessage.status == "pending",
+                )
+            )
+        ).all()
+        await deliver_outbox_now(session, list(ids))
+    except Exception:  # noqa: BLE001 - notification delivery is best-effort
+        _logger.exception("auto-dispatch outbox delivery failed (restaurant_id=%s)", restaurant_id)
 
 
 async def create_manual_order(

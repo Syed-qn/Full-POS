@@ -26,6 +26,37 @@ def to_whatsapp_text(text: str) -> str:
     return text
 
 
+async def deliver_outbox_now(session: AsyncSession, outbox_ids: list[int]) -> None:
+    """Deliver freshly-committed outbox rows — synchronously in-request when no
+    Celery worker runs (APP_OUTBOX_SYNC_DELIVERY, e.g. Render free tier), else
+    hand off to the outbox queue. Shared by the webhook/conversation reply paths
+    and event-driven dispatch so rider/manager notifications go out promptly
+    instead of waiting on the 5-minute orphan sweeper."""
+    if not outbox_ids:
+        return
+    from app.config import get_settings
+
+    if get_settings().outbox_sync_delivery:
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from app.outbox.worker import _deliver_one
+        from app.whatsapp.factory import get_whatsapp_provider
+
+        provider = get_whatsapp_provider()
+        factory = async_sessionmaker(
+            bind=session.bind,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
+        for oid in outbox_ids:
+            await _deliver_one(oid, provider=provider, session_factory=factory)
+    else:
+        from app.outbox.worker import deliver_outbox_message
+
+        for oid in outbox_ids:
+            deliver_outbox_message.apply_async(args=[oid], queue="outbox")
+
+
 async def enqueue_message(
     session: AsyncSession,
     *,

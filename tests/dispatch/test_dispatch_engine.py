@@ -220,3 +220,47 @@ async def test_inter_stop_travel_gap_splits_batch_and_sets_total_est_min(db_sess
     assert len(bos) == 2
     # confirm not batched together (would be 1 batch 2 bos if no gap fix)
 
+
+
+async def test_advance_to_ready_auto_assigns_rider(db_session):
+    """Marking an order READY auto-dispatches a rider — no manual /dispatch/trigger
+    and no Celery beat (the assignment happens in the kitchen-advance request)."""
+    from app.ordering.service import advance_kitchen_status
+
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000099", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+
+    c = Customer(
+        restaurant_id=r.id, phone="+971509999999", name="C",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(c)
+    await db_session.flush()
+    addr = CustomerAddress(customer_id=c.id, latitude=25.2050, longitude=55.2710, confirmed=True)
+    db_session.add(addr)
+    await db_session.flush()
+    now = datetime.now(timezone.utc)
+    o = Order(
+        restaurant_id=r.id, customer_id=c.id, order_number="OA1", status="preparing",
+        priority="normal", weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("10.00"), total=Decimal("10.00"), address_id=addr.id,
+        sla_confirmed_at=now, sla_deadline=now + timedelta(minutes=40),
+        promised_eta=now + timedelta(minutes=40),
+    )
+    db_session.add(o)
+    await db_session.commit()
+
+    # preparing -> ready triggers auto-dispatch in the same call
+    await advance_kitchen_status(db_session, order=o)
+
+    await db_session.refresh(o)
+    await db_session.refresh(rider)
+    assert o.status == "assigned"
+    assert o.rider_id == rider.id
+    assert rider.status == "on_delivery"
