@@ -1,7 +1,7 @@
 import type { OrderStatus } from "../lib/types";
 import s from "./StatusPill.module.css";
 
-const LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   pending_confirmation: "Pending",
   confirmed: "Confirmed",
@@ -34,7 +34,7 @@ const COLOR: Record<string, string> = {
 };
 
 export function StatusPill({ status }: { status: OrderStatus }) {
-  const label = LABELS[status] ?? status;
+  const label = STATUS_LABELS[status] ?? status;
   const color = COLOR[status] ?? "var(--text-muted)";
   return (
     <span className={s.pill} style={{ ["--pill" as string]: color }}>

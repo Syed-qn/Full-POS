@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -62,5 +62,55 @@ describe("OrdersScreen", () => {
     await waitFor(() => screen.getByText("Ali Hassan"));
     await userEvent.type(screen.getByPlaceholderText(/search/i), "#9999");
     await waitFor(() => expect(screen.getByText(/no orders match/i)).toBeInTheDocument());
+  });
+
+  it("filters by a custom From–To date range (fixtures are 2026-06-06)", async () => {
+    render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
+    await waitFor(() => screen.getByText("Ali Hassan"));
+
+    // From the next day → all fixtures fall before the range → empty.
+    fireEvent.change(screen.getByLabelText(/from date/i), { target: { value: "2026-06-07" } });
+    await waitFor(() => expect(screen.getByText(/no orders match/i)).toBeInTheDocument());
+
+    // Widen From to the order day → they reappear.
+    fireEvent.change(screen.getByLabelText(/from date/i), { target: { value: "2026-06-06" } });
+    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
+
+    // A To before the order day → empty again (upper bound).
+    fireEvent.change(screen.getByLabelText(/to date/i), { target: { value: "2026-06-05" } });
+    await waitFor(() => expect(screen.getByText(/no orders match/i)).toBeInTheDocument());
+
+    // Clear dates → everything back.
+    await userEvent.click(screen.getByRole("button", { name: /clear dates/i }));
+    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
+  });
+
+  it("filters orders by status", async () => {
+    render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
+    await waitFor(() => screen.getByText("Ali Hassan"));
+
+    // Only the 'preparing' order (Ali Hassan) survives.
+    await userEvent.selectOptions(screen.getByLabelText(/filter by status/i), "preparing");
+    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
+    expect(screen.queryByText("Omar Farouq")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sara Khan")).not.toBeInTheDocument();
+
+    // A status no fixture has → empty.
+    await userEvent.selectOptions(screen.getByLabelText(/filter by status/i), "delivered");
+    await waitFor(() => expect(screen.getByText(/no orders match/i)).toBeInTheDocument());
+
+    // Back to all statuses → everything returns.
+    await userEvent.selectOptions(screen.getByLabelText(/filter by status/i), "all");
+    await waitFor(() => expect(screen.getByText("Omar Farouq")).toBeInTheDocument());
+  });
+
+  it("the Today preset excludes older orders", async () => {
+    render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
+    await waitFor(() => screen.getByText("Ali Hassan"));
+    // Test runs well after 2026-06-06, so 'Today' filters the fixtures out.
+    await userEvent.click(screen.getByRole("button", { name: "Today" }));
+    await waitFor(() => expect(screen.getByText(/no orders match/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
   });
 });

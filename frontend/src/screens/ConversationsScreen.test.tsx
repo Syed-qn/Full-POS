@@ -22,6 +22,18 @@ describe("ConversationsScreen", () => {
     expect(screen.getByRole("button", { name: /take over/i })).toBeInTheDocument();
   });
 
+  it("separates customer and driver conversations into tabs", async () => {
+    render(<ConversationsScreen />);
+    // Customers tab is active by default: customer phone shown, rider phone hidden.
+    await waitFor(() => expect(screen.getByText("+971501234567")).toBeInTheDocument());
+    expect(screen.queryByText("+971555550199")).not.toBeInTheDocument();
+
+    // Switch to Drivers: rider phone appears, customer phone hidden.
+    await userEvent.click(screen.getByRole("tab", { name: /drivers/i }));
+    await waitFor(() => expect(screen.getByText("+971555550199")).toBeInTheDocument());
+    expect(screen.queryByText("+971501234567")).not.toBeInTheDocument();
+  });
+
   it("activating takeover shows the control banner", async () => {
     render(<ConversationsScreen />);
     await waitFor(() => screen.getByText("+971501234567"));

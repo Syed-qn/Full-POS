@@ -1,7 +1,8 @@
 {
   "conversations": [
     { "id": 1, "phone": "+971501234567", "counterpart": "customer", "manual_takeover": false, "last_message_preview": "Customer wants to order", "unread": true, "updated_at": "2026-06-06T09:58:00Z" },
-    { "id": 2, "phone": "+971559876543", "counterpart": "customer", "manual_takeover": false, "last_message_preview": "Delivered, thanks!", "unread": false, "updated_at": "2026-06-06T09:15:00Z" }
+    { "id": 2, "phone": "+971559876543", "counterpart": "customer", "manual_takeover": false, "last_message_preview": "Delivered, thanks!", "unread": false, "updated_at": "2026-06-06T09:15:00Z" },
+    { "id": 3, "phone": "+971555550199", "counterpart": "rider", "manual_takeover": false, "last_message_preview": "Orders picked up", "unread": false, "updated_at": "2026-06-06T09:40:00Z" }
   ],
   "messages": {
     "1": [
@@ -11,6 +12,10 @@
     ],
     "2": [
       { "id": 21, "direction": "outbound", "type": "text", "payload": { "text": "Your order is on the way." }, "ts": 1717650000 }
+    ],
+    "3": [
+      { "id": 31, "direction": "outbound", "type": "text", "payload": { "text": "New batch: 2 stops. Tap when picked up." }, "ts": 1717658000 },
+      { "id": 32, "direction": "inbound", "type": "text", "payload": { "text": "Orders picked up" }, "ts": 1717658400 }
     ]
   }
 }

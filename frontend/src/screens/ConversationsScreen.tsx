@@ -7,12 +7,25 @@ import { fetchConversations, fetchMessages, sendMessage, setTakeover } from "../
 import type { ConversationOut, MessageOut } from "../lib/types";
 import s from "./ConversationsScreen.module.css";
 
+type Tab = "customer" | "rider";
+
 export function ConversationsScreen() {
   const [convs, setConvs] = useState<ConversationOut[]>([]);
+  const [tab, setTab] = useState<Tab>("customer");
   const [activeId, setActiveId] = useState<number | null>(null);
   const [messages, setMessages] = useState<MessageOut[]>([]);
   const [takeover, setTakeoverState] = useState(false);
   const [draft, setDraft] = useState("");
+
+  const customerCount = convs.filter((c) => c.counterpart === "customer").length;
+  const riderCount = convs.filter((c) => c.counterpart === "rider").length;
+  const visible = convs.filter((c) => c.counterpart === tab);
+
+  function selectTab(next: Tab) {
+    if (next === tab) return;
+    setTab(next);
+    setActiveId(null); // clear selection — it belongs to the other tab
+  }
 
   useEffect(() => {
     fetchConversations().then(setConvs);
@@ -44,11 +57,37 @@ export function ConversationsScreen() {
 
   return (
     <div className={s.layout}>
-      <aside className={s.list}>
-        {convs.map((c) => (
-          <ConversationRow key={c.id} conversation={c} selected={c.id === activeId} onClick={() => setActiveId(c.id)} />
-        ))}
-        {convs.length === 0 && <div className={s.empty}>Conversations will appear here.</div>}
+      <aside className={s.sidebar}>
+        <div className={s.tabs} role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "customer"}
+            className={`${s.tab} ${tab === "customer" ? s.tabActive : ""}`}
+            onClick={() => selectTab("customer")}
+          >
+            Customers{customerCount > 0 ? ` (${customerCount})` : ""}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "rider"}
+            className={`${s.tab} ${tab === "rider" ? s.tabActive : ""}`}
+            onClick={() => selectTab("rider")}
+          >
+            Drivers{riderCount > 0 ? ` (${riderCount})` : ""}
+          </button>
+        </div>
+        <div className={s.list}>
+          {visible.map((c) => (
+            <ConversationRow key={c.id} conversation={c} selected={c.id === activeId} onClick={() => setActiveId(c.id)} />
+          ))}
+          {visible.length === 0 && (
+            <div className={s.empty}>
+              No {tab === "customer" ? "customer" : "driver"} conversations yet.
+            </div>
+          )}
+        </div>
       </aside>
       <section className={s.viewer}>
         {activeId === null ? (

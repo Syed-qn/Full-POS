@@ -5,8 +5,86 @@
 }
 .filterBar {
   display: flex;
-  gap: 12px;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow-sm);
+}
+/* Rounded preset pills. */
+.presets {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 12px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+.chipActive,
+.chipActive:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+/* From–To date inputs grouped as one pill. */
+.dateGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 2px 4px 2px 8px;
+}
+.date {
+  background: transparent;
+  border: none;
+  padding: 5px 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  color-scheme: dark;
+}
+.date:focus {
+  outline: none;
+}
+.arrow {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 0 2px;
+}
+.clearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.clearBtn:hover {
+  background: var(--border-default);
+  color: var(--text-primary);
 }
 .tableCard {
   background: var(--bg-surface);
@@ -55,14 +133,30 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-.search {
-  flex: 0 1 320px;
-  max-width: 320px;
-  background: var(--bg-surface);
+.statusSelect {
+  background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  padding: 8px 12px;
+  border-radius: 999px;
+  padding: 7px 14px;
   color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  color-scheme: dark;
+}
+.statusSelect:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+.search {
+  margin-left: auto;
+  flex: 0 1 190px;
+  min-width: 150px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 7px 14px;
+  color: var(--text-primary);
+  font-size: 13px;
 }
 .search:focus {
   outline: none;

@@ -1,17 +1,77 @@
 import { useEffect, useMemo, useState } from "react";
 import { CompactTable, type Column } from "../components/CompactTable";
-import { StatusPill } from "../components/StatusPill";
+import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
 import { fetchOrders } from "../lib/ordersApi";
-import type { OrderOut } from "../lib/types";
+import type { OrderOut, OrderStatus } from "../lib/types";
 import { OrderDetailDrawer } from "./OrderDetailDrawer";
 import { PageHeader } from "../components/PageHeader";
 import s from "./OrdersScreen.module.css";
 
 const PAGE_SIZE = 20;
 
+// Local YYYY-MM-DD (matches what <input type="date"> emits, so day-level
+// comparisons are plain string compares in the restaurant's own timezone).
+function toYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Status options in FSM order (src/app/ordering/fsm.py), for the status filter.
+const STATUS_OPTIONS: OrderStatus[] = [
+  "draft", "pending_confirmation", "confirmed", "preparing", "ready", "assigned",
+  "picked_up", "arriving", "delivered", "cancelled", "undeliverable",
+  "on_resale", "resold", "written_off",
+];
+
+type PresetKey = "all" | "today" | "yesterday" | "7d" | "30d" | "month" | "custom";
+
+const PRESETS: { key: Exclude<PresetKey, "custom">; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "month", label: "This month" },
+];
+
+// Resolve a preset to [from, to] day bounds (inclusive). "" means unbounded.
+function presetRange(key: Exclude<PresetKey, "custom">, now: Date): [string, string] {
+  const today = toYMD(now);
+  switch (key) {
+    case "today":
+      return [today, today];
+    case "yesterday": {
+      const y = new Date(now);
+      y.setDate(now.getDate() - 1);
+      return [toYMD(y), toYMD(y)];
+    }
+    case "7d": {
+      const f = new Date(now);
+      f.setDate(now.getDate() - 6); // inclusive of today = 7 calendar days
+      return [toYMD(f), today];
+    }
+    case "30d": {
+      const f = new Date(now);
+      f.setDate(now.getDate() - 29);
+      return [toYMD(f), today];
+    }
+    case "month":
+      return [toYMD(new Date(now.getFullYear(), now.getMonth(), 1)), today];
+    case "all":
+    default:
+      return ["", ""];
+  }
+}
+
 export function OrdersScreen() {
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [preset, setPreset] = useState<PresetKey>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
 
@@ -19,9 +79,34 @@ export function OrdersScreen() {
     fetchOrders().then(setOrders);
   }, []);
 
+  function applyPreset(key: Exclude<PresetKey, "custom">) {
+    const [from, to] = presetRange(key, new Date());
+    setFromDate(from);
+    setToDate(to);
+    setPreset(key);
+  }
+
+  function setBound(which: "from" | "to", value: string) {
+    if (which === "from") setFromDate(value);
+    else setToDate(value);
+    setPreset("custom");
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().replace(/^#/, "").toLowerCase();
-    const base = [...orders].sort((a, b) => b.id - a.id); // newest first
+    let base = [...orders].sort((a, b) => b.id - a.id); // newest first
+    if (statusFilter !== "all") {
+      base = base.filter((o) => o.status === statusFilter);
+    }
+    if (fromDate || toDate) {
+      base = base.filter((o) => {
+        const day = o.created_at ? toYMD(new Date(o.created_at)) : "";
+        if (!day) return false;
+        if (fromDate && day < fromDate) return false;
+        if (toDate && day > toDate) return false;
+        return true;
+      });
+    }
     if (!q) return base;
     return base.filter(
       (o) =>
@@ -29,10 +114,10 @@ export function OrdersScreen() {
         o.customer_name.toLowerCase().includes(q) ||
         o.customer_phone.includes(q),
     );
-  }, [orders, search]);
+  }, [orders, search, statusFilter, fromDate, toDate]);
 
-  // Reset to the first page whenever the search changes.
-  useEffect(() => { setPage(1); }, [search]);
+  // Reset to the first page whenever any filter changes.
+  useEffect(() => { setPage(1); }, [search, statusFilter, fromDate, toDate]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -51,6 +136,62 @@ export function OrdersScreen() {
     <div className={s.screen}>
       <PageHeader title="Orders" subtitle="All delivery orders — live and past" />
       <div className={s.filterBar}>
+        <div className={s.presets} role="group" aria-label="Date range presets">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={`${s.chip} ${preset === p.key ? s.chipActive : ""}`}
+              aria-pressed={preset === p.key}
+              onClick={() => applyPreset(p.key)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className={s.dateGroup}>
+          <input
+            type="date"
+            aria-label="From date"
+            className={s.date}
+            value={fromDate}
+            max={toDate || undefined}
+            onChange={(e) => setBound("from", e.target.value)}
+          />
+          <span className={s.arrow} aria-hidden="true">→</span>
+          <input
+            type="date"
+            aria-label="To date"
+            className={s.date}
+            value={toDate}
+            min={fromDate || undefined}
+            onChange={(e) => setBound("to", e.target.value)}
+          />
+          {(fromDate || toDate) && (
+            <button
+              type="button"
+              className={s.clearBtn}
+              aria-label="Clear dates"
+              title="Clear dates"
+              onClick={() => applyPreset("all")}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <select
+          className={s.statusSelect}
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as "all" | OrderStatus)}
+        >
+          <option value="all">All statuses</option>
+          {STATUS_OPTIONS.map((st) => (
+            <option key={st} value={st}>
+              {STATUS_LABELS[st] ?? st}
+            </option>
+          ))}
+        </select>
         <input
           className={s.search}
           placeholder="Search #ID / name / phone"
