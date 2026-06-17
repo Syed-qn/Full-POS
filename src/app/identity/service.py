@@ -1,5 +1,5 @@
 # src/app/identity/service.py
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -10,6 +10,12 @@ from app.identity.models import Restaurant, Rider
 
 class DuplicatePhoneError(Exception):
     pass
+
+
+class RiderHasHistoryError(Exception):
+    """Raised when a rider can't be hard-deleted because they hold financial
+    records (COD cash / shift reconciliations) that must be preserved — the
+    manager should deactivate them instead."""
 
 
 async def create_restaurant(
@@ -158,6 +164,50 @@ async def delete_rider(
     rider = await session.get(Rider, rider_id)
     if rider is None or rider.restaurant_id != restaurant_id:
         return False
+
+    # Preserve financial history: a rider holding COD cash records or shift
+    # reconciliations must not be hard-deleted — deactivate instead.
+    from app.cod.models import CodCollection, RiderShiftReconciliation
+
+    has_money = await session.scalar(
+        select(CodCollection.id).where(CodCollection.rider_id == rider_id).limit(1)
+    ) or await session.scalar(
+        select(RiderShiftReconciliation.id)
+        .where(RiderShiftReconciliation.rider_id == rider_id)
+        .limit(1)
+    )
+    if has_money:
+        raise RiderHasHistoryError(
+            "This rider has payment records on file — deactivate them instead of removing."
+        )
+
+    # Detach orders so their records survive: drop the rider link, and return any
+    # in-flight delivery to the dispatch pool (back to 'ready', unassigned).
+    from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Order
+
+    _active = {
+        str(OrderStatus.ASSIGNED), str(OrderStatus.PICKED_UP), str(OrderStatus.ARRIVING),
+    }
+    orders = (
+        await session.scalars(select(Order).where(Order.rider_id == rider_id))
+    ).all()
+    for o in orders:
+        if str(o.status) in _active:
+            o.status = OrderStatus.READY  # recovery: re-enters dispatch
+        o.rider_id = None
+
+    # Remove the rider's operational rows (no financial value).
+    await session.execute(delete(RiderLocation).where(RiderLocation.rider_id == rider_id))
+    await session.execute(delete(Assignment).where(Assignment.rider_id == rider_id))
+    batch_ids = (
+        await session.scalars(select(Batch.id).where(Batch.rider_id == rider_id))
+    ).all()
+    if batch_ids:
+        await session.execute(delete(BatchOrder).where(BatchOrder.batch_id.in_(batch_ids)))
+        await session.execute(delete(Batch).where(Batch.id.in_(batch_ids)))
+
     await record_audit(
         session,
         actor="manager",

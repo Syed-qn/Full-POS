@@ -32,8 +32,15 @@ export function RidersScreen() {
 
   async function onDelete(id: number) {
     if (!confirm("Remove this rider? This cannot be undone.")) return;
-    await deleteRider(id);
-    setRiders((rs) => rs.filter((r) => r.id !== id));
+    try {
+      await deleteRider(id);
+      setRiders((rs) => rs.filter((r) => r.id !== id));
+    } catch (e) {
+      // Surface the reason (e.g. 409: rider has payment records → deactivate
+      // instead) rather than silently failing.
+      const msg = e instanceof Error ? e.message : "Could not remove this rider.";
+      alert(msg);
+    }
   }
 
   return (

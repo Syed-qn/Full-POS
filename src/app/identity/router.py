@@ -22,7 +22,7 @@ from app.identity.schemas import (
     SignupIn,
     TokenOut,
 )
-from app.identity.service import DuplicatePhoneError
+from app.identity.service import DuplicatePhoneError, RiderHasHistoryError
 from app.ratelimit.deps import rate_limit_auth
 
 router = APIRouter(prefix="/api/v1", tags=["identity"])
@@ -142,9 +142,12 @@ async def delete_rider(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    deleted = await service.delete_rider(
-        session, restaurant_id=restaurant.id, rider_id=rider_id
-    )
+    try:
+        deleted = await service.delete_rider(
+            session, restaurant_id=restaurant.id, rider_id=rider_id
+        )
+    except RiderHasHistoryError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
 
