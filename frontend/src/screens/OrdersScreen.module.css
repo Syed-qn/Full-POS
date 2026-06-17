@@ -14,6 +14,32 @@
   padding: 10px 12px;
   box-shadow: var(--shadow-sm);
 }
+/* A labelled cluster of pills (used on the Customers filter bar). */
+.filterGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.filterLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.minSpend {
+  width: 140px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 7px 14px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.minSpend:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
 /* Rounded preset pills. */
 .presets {
   display: inline-flex;
