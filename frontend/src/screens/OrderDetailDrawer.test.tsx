@@ -75,7 +75,7 @@ const mockDetail: OrderDetailOut = {
   timeline: [
     {
       ts: "2026-06-10T09:10:00Z",
-      action: "status_change",
+      action: "order_status_transition",
       actor: "manager",
       after: { status: "confirmed" },
     },
@@ -142,8 +142,8 @@ describe("OrderDetailDrawer", () => {
     await waitFor(() => screen.getByText("Chicken Biryani"));
 
     fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
-    // The action text has underscores replaced with spaces
-    expect(screen.getByText("status change")).toBeInTheDocument();
+    // A status transition surfaces the actual new status, not a generic label
+    expect(screen.getByText("Status → Confirmed")).toBeInTheDocument();
   });
 
   // 2b. Tab switching — chat panel becomes visible

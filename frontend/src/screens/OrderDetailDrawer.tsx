@@ -13,6 +13,7 @@ import type {
   CustomerDetailOut,
   OrderDetailOut,
   OrderOut,
+  TimelineEventOut,
 } from "../lib/types";
 import s from "./OrderDetailDrawer.module.css";
 
@@ -245,6 +246,20 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
 
 // ── Timeline Tab ──────────────────────────────────────────────────────────────
 
+// A status transition audit row carries the new status in `after.status`. Surface
+// it ("Status → Ready") instead of the generic "order status transition" label.
+function timelineLabel(event: TimelineEventOut): string {
+  const titleCase = (s: string) =>
+    s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  if (event.action === "order_status_transition") {
+    const status = event.after?.status;
+    if (typeof status === "string" && status) {
+      return `Status → ${titleCase(status)}`;
+    }
+  }
+  return titleCase(event.action);
+}
+
 function TimelineTab({ detail }: { detail: OrderDetailOut }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<import("leaflet").Map | null>(null);
@@ -307,10 +322,15 @@ function TimelineTab({ detail }: { detail: OrderDetailOut }) {
               <span className={s.timelineDot} />
               <div className={s.timelineBody}>
                 <span className={s.timelineAction}>
-                  {event.action.replace(/_/g, " ")}
+                  {timelineLabel(event)}
                 </span>
                 <span className={s.timelineMeta}>
-                  {new Date(event.ts).toLocaleTimeString()} · {event.actor}
+                  {new Date(event.ts).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Dubai",
+                  })}{" "}
+                  · {event.actor}
                 </span>
               </div>
             </li>
@@ -358,6 +378,7 @@ function ChatTab({ detail }: { detail: OrderDetailOut }) {
             {new Date(msg.ts * 1000).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
+              timeZone: "Asia/Dubai",
             })}
           </span>
         </div>
