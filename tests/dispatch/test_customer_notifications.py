@@ -85,6 +85,52 @@ async def test_delivered_notifies_customer(db_session):
     assert "delivered" in delivered.payload["body"].lower()
 
 
+async def test_picked_falls_back_to_current_batch_on_stale_id(db_session):
+    """A stale/None batch_id (reassigned batch, test send) must still advance the
+    rider's CURRENT planned batch — not silently do nothing."""
+    r, rider, o, batch, c = await _seed(db_session, status="assigned")
+
+    # batch_id=None simulates a malformed/stale payload (e.g. "picked:test").
+    await handle_orders_picked(db_session, restaurant_id=r.id, rider=rider,
+                               batch_id=None, trigger_msg_id="wamid.x")
+    await db_session.commit()
+
+    await db_session.refresh(o)
+    assert o.status == "picked_up"  # fell back to the current planned batch
+    msgs = await _cust_msgs(db_session, c.phone)
+    assert any("picked up" in m.payload["body"].lower() for m in msgs)
+
+
+async def test_picked_with_no_batch_tells_rider(db_session):
+    """Tapping with no active batch replies instead of a silent no-op."""
+    r = await _restaurant(db_session)
+    rider = await _rider(db_session, r)
+    await db_session.commit()
+
+    await handle_orders_picked(db_session, restaurant_id=r.id, rider=rider,
+                               batch_id=999, trigger_msg_id="wamid.y")
+    await db_session.commit()
+
+    rider_msgs = await _cust_msgs(db_session, rider.phone)
+    assert any("no active batch" in m.payload["body"].lower() for m in rider_msgs)
+
+
+async def _restaurant(db_session):
+    from app.identity.models import Restaurant
+    r = Restaurant(name="R", phone="+9710000099", password_hash="x", lat=25.2, lng=55.2)
+    db_session.add(r)
+    await db_session.flush()
+    return r
+
+
+async def _rider(db_session, r):
+    rider = Rider(restaurant_id=r.id, name="X", phone="+971500000099",
+                  status="available", performance={})
+    db_session.add(rider)
+    await db_session.flush()
+    return rider
+
+
 async def test_notify_is_idempotent(db_session):
     r, rider, o, batch, c = await _seed(db_session, status="picked_up")
 

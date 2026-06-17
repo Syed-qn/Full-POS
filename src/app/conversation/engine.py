@@ -2105,6 +2105,11 @@ async def _handle_rider_inbound(
         # Accept either payload key shape ("button_id" from dispatch buttons,
         # "id" from the shared button helper).
         button_id = inbound.payload.get("button_id") or inbound.payload.get("id", "")
+        # Payloads can be stale/malformed (reassigned batch, a test send, a
+        # double-tap) — parse defensively and let the handlers fall back rather
+        # than crashing on int("test") or silently no-op'ing.
+        arg = button_id.split(":", 1)[1] if ":" in button_id else ""
+        arg_id = int(arg) if arg.isdigit() else None
         if button_id.startswith("picked:"):
             from app.dispatch.rider_flow import handle_orders_picked
 
@@ -2112,28 +2117,19 @@ async def _handle_rider_inbound(
                 session,
                 restaurant_id=restaurant_id,
                 rider=rider,
-                batch_id=int(button_id.split(":", 1)[1]),
+                batch_id=arg_id,
+                trigger_msg_id=inbound.wa_message_id,
             )
-        elif button_id.startswith("delivered:"):
+        elif button_id.startswith(("delivered:", "delivered_next:")):
             from app.dispatch.rider_flow import handle_delivered
 
-            await handle_delivered(
-                session,
-                restaurant_id=restaurant_id,
-                rider=rider,
-                order_id=int(button_id.split(":", 1)[1]),
-            )
-        elif button_id.startswith("delivered_next:"):
-            from app.dispatch.rider_flow import handle_delivered
-
-            await handle_delivered(
-                session,
-                restaurant_id=restaurant_id,
-                rider=rider,
-                order_id=int(button_id.split(":", 1)[1]),
-            )
-            # "Delivered and Next Order Location" click reveals next stop location immediately (bypass near wait for subsequent)
-            return
+            if arg_id is not None:
+                await handle_delivered(
+                    session,
+                    restaurant_id=restaurant_id,
+                    rider=rider,
+                    order_id=arg_id,
+                )
         return
     # Other rider message types (e.g. free text) are ignored — flow is button-only.
 

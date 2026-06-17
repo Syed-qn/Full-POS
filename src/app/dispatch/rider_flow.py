@@ -103,11 +103,38 @@ async def _send_stop(
 
 
 async def handle_orders_picked(
-    session: AsyncSession, *, restaurant_id: int, rider: Rider, batch_id: int
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider: Rider,
+    batch_id: int | None,
+    trigger_msg_id: str | None = None,
 ) -> None:
-    """Rider pressed "Orders Picked": advance the whole batch and send stop #1."""
-    batch = await session.get(Batch, batch_id)
-    if batch is None or batch.rider_id != rider.id:
+    """Rider pressed "Orders Picked": advance the whole batch and send stop #1.
+
+    Resilient to a stale/invalid ``batch_id`` (a reassigned batch, a double-tap,
+    a test send): fall back to the rider's current planned batch so the tap still
+    works, and always reply — never a silent no-op (which reads to the rider as
+    "the button is broken")."""
+    batch = await session.get(Batch, batch_id) if batch_id else None
+    if batch is None or batch.rider_id != rider.id or batch.status != "planned":
+        # Use the rider's current planned batch instead of trusting the payload.
+        batch = await session.scalar(
+            select(Batch)
+            .where(Batch.rider_id == rider.id, Batch.status == "planned")
+            .order_by(Batch.id.desc())
+            .limit(1)
+        )
+    if batch is None:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "You have no active batch to pick up right now. "
+                             "We'll message you when one is assigned."},
+            idempotency_key=f"nopick-{trigger_msg_id or rider.id}",
+        )
         return
     batch.status = "picked_up"
     bos = (
@@ -131,6 +158,15 @@ async def handle_orders_picked(
             first_order = order
     if first_order is not None:
         await _send_stop(session, restaurant_id, rider.phone, first_order)
+    else:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "That batch has no active stops left."},
+            idempotency_key=f"nostop-{trigger_msg_id or batch.id}",
+        )
 
 
 async def handle_delivered(
