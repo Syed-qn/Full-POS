@@ -22,3 +22,7 @@ ACCESS.md
 
 # graphify run metadata (not useful to team)
 graphify-out/cost.json
+
+# Python build artifacts
+build/
+*.egg-info/
