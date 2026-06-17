@@ -811,7 +811,12 @@ async def get_order_detail(
     )
     timeline = [
         TimelineEventOut(
-            ts=row.created_at,
+            # created_at is stored naive-UTC (TimestampMixin → TIMESTAMP WITHOUT
+            # TIME ZONE). Tag it UTC so the JSON carries an offset and the browser
+            # converts correctly instead of treating it as local time.
+            ts=row.created_at.replace(tzinfo=timezone.utc)
+            if row.created_at.tzinfo is None
+            else row.created_at,
             action=row.action,
             actor=row.actor,
             after=row.after,

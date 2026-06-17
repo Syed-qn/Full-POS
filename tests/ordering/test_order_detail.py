@@ -1,4 +1,5 @@
 # tests/ordering/test_order_detail.py
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -102,6 +103,10 @@ async def test_get_order_detail_timeline_from_audit_log(db_session, restaurant):
     assert len(detail.timeline) >= 1
     assert detail.timeline[0].action == "status_change"
     assert detail.timeline[0].actor == "manager"
+    # ts must be timezone-aware (UTC) so the dashboard converts to Asia/Dubai
+    # instead of rendering naive-UTC as browser-local time.
+    assert detail.timeline[0].ts.tzinfo is not None
+    assert detail.timeline[0].ts.utcoffset() == timedelta(0)
 
 
 async def test_get_order_detail_chat_from_conversation(db_session, restaurant):

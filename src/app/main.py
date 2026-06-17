@@ -104,6 +104,19 @@ def create_app() -> FastAPI:
     async def health() -> dict:
         return {"status": "ok"}
 
+    @app.get("/version")
+    async def version() -> dict:
+        # Render injects RENDER_GIT_COMMIT at build/runtime; lets us confirm
+        # exactly which commit is live instead of inferring it from behaviour.
+        import os
+
+        sha = (
+            os.getenv("RENDER_GIT_COMMIT")
+            or os.getenv("GIT_COMMIT")
+            or "unknown"
+        )
+        return {"commit": sha, "short": sha[:7] if sha != "unknown" else sha}
+
     from app.metrics import metrics_response
 
     @app.get("/metrics")
