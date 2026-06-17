@@ -18,7 +18,11 @@ from app.ordering.detail_schemas import (
     OrderSummaryOut,
 )
 from app.ordering.models import Customer, CustomerAddress, Order
-from app.ordering.service import patch_address, patch_customer
+from app.ordering.service import (
+    compute_customer_order_stats,
+    patch_address,
+    patch_customer,
+)
 
 router = APIRouter(prefix="/api/v1/ordering/customers", tags=["customers"])
 
@@ -80,15 +84,16 @@ async def list_customers(
             if rn and a.customer_id not in receiver_by_customer:
                 receiver_by_customer[a.customer_id] = rn
 
+    stats = await compute_customer_order_stats(session, [c.id for c in rows])
     items = [
         CustomerDetailOut(
             id=c.id,
             name=c.name or receiver_by_customer.get(c.id),
             phone=c.phone,
-            total_orders=c.total_orders,
-            total_spend=c.total_spend,
-            first_order_at=c.first_order_at,
-            last_order_at=c.last_order_at,
+            total_orders=stats.get(c.id, {}).get("total_orders", 0),
+            total_spend=stats.get(c.id, {}).get("total_spend", c.total_spend),
+            first_order_at=stats.get(c.id, {}).get("first_order_at") or c.first_order_at,
+            last_order_at=stats.get(c.id, {}).get("last_order_at") or c.last_order_at,
             marketing_opted_in=c.phone not in opted_out_phones,
         )
         for c in rows
@@ -136,14 +141,17 @@ async def get_customer_profile(
                 profile_name = a.receiver_name.strip()
                 break
 
+    # Live order stats from the orders table (denormalized columns are stale).
+    st = (await compute_customer_order_stats(session, [customer.id])).get(customer.id, {})
+
     return CustomerProfileOut(
         id=customer.id,
         name=profile_name,
         phone=customer.phone,
-        total_orders=customer.total_orders,
-        total_spend=customer.total_spend,
-        first_order_at=customer.first_order_at,
-        last_order_at=customer.last_order_at,
+        total_orders=st.get("total_orders", 0),
+        total_spend=st.get("total_spend", customer.total_spend),
+        first_order_at=st.get("first_order_at") or customer.first_order_at,
+        last_order_at=st.get("last_order_at") or customer.last_order_at,
         marketing_opted_in=not opted_out,
         tags=customer.tags if customer.tags is not None else {},
         addresses=[

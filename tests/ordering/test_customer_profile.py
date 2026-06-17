@@ -70,6 +70,44 @@ async def test_nameless_customer_shows_receiver_name(client, db_session, restaur
     assert resp.json()["name"] == "Asfer"
 
 
+async def test_customer_stats_derived_from_orders(client, db_session, restaurant):
+    """total_orders / total_spend come live from the orders table: a draft is
+    excluded from the count, and spend sums delivered orders only."""
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971507776666",
+        name="Maya", total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    db_session.add_all([
+        Order(
+            restaurant_id=restaurant.id, customer_id=customer.id, order_number="R-D1",
+            status="delivered", subtotal=Decimal("30.00"), delivery_fee_aed=Decimal("5.00"),
+            total=Decimal("35.00"), priority="normal", weather_delay_disclosed=False,
+        ),
+        Order(
+            restaurant_id=restaurant.id, customer_id=customer.id, order_number="R-D2",
+            status="draft", subtotal=Decimal("10.00"), delivery_fee_aed=Decimal("0.00"),
+            total=Decimal("10.00"), priority="normal", weather_delay_disclosed=False,
+        ),
+    ])
+    await db_session.commit()
+
+    resp = await client.get("/api/v1/ordering/customers", headers=_auth(restaurant.id))
+    assert resp.status_code == 200
+    row = next(c for c in resp.json()["items"] if c["phone"] == "+971507776666")
+    assert row["total_orders"] == 1  # draft excluded
+    assert Decimal(str(row["total_spend"])) == Decimal("35.00")  # delivered only
+
+    # Profile endpoint derives the same way.
+    resp = await client.get(
+        f"/api/v1/ordering/customers/{customer.id}", headers=_auth(restaurant.id)
+    )
+    body = resp.json()
+    assert body["total_orders"] == 1
+    assert Decimal(str(body["total_spend"])) == Decimal("35.00")
+
+
 async def test_list_customers_search_by_phone(client, db_session, restaurant):
     await _seed_customer(db_session, restaurant.id)
 

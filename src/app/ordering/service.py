@@ -195,6 +195,43 @@ async def upsert_address(
     return addr
 
 
+async def compute_customer_order_stats(
+    session: "AsyncSession", customer_ids: list[int]
+) -> dict[int, dict]:
+    """Live per-customer order stats straight from the orders table.
+
+    The denormalized Customer.total_orders / total_spend / first_order_at /
+    last_order_at columns are NOT maintained anywhere, so they're always their
+    creation defaults (0 / None). The orders table is the single source of
+    truth: total_orders counts non-draft orders, total_spend sums delivered
+    orders only (COD actually collected), and the timestamps span non-draft
+    orders. Returns {} for unknown ids (caller defaults to zeros).
+    """
+    if not customer_ids:
+        return {}
+    placed = Order.status != "draft"
+    rows = (await session.execute(
+        select(
+            Order.customer_id,
+            func.count(Order.id).filter(placed),
+            func.coalesce(func.sum(Order.total).filter(Order.status == "delivered"), 0),
+            func.min(Order.created_at).filter(placed),
+            func.max(Order.created_at).filter(placed),
+        )
+        .where(Order.customer_id.in_(customer_ids))
+        .group_by(Order.customer_id)
+    )).all()
+    return {
+        cid: {
+            "total_orders": cnt or 0,
+            "total_spend": Decimal(str(spend or 0)),
+            "first_order_at": first,
+            "last_order_at": last,
+        }
+        for cid, cnt, spend, first, last in rows
+    }
+
+
 async def create_draft_order(
     session: "AsyncSession",
     *,
