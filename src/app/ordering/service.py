@@ -232,6 +232,26 @@ async def compute_customer_order_stats(
     }
 
 
+async def recompute_customer_stats(session: "AsyncSession", customer_id: int) -> None:
+    """Refresh a customer's denormalized order stats from the orders table.
+
+    Idempotent — it RE-DERIVES the totals rather than incrementing, so it can
+    be called after any order transition without drift. Marketing segments
+    (marketing/segments.py) query these columns directly in SQL, so they must
+    stay in sync as orders progress. Called from fsm.transition and
+    dispatch.advance_delivery (the two order status chokepoints).
+    """
+    customer = await session.get(Customer, customer_id)
+    if customer is None:
+        return
+    stats = (await compute_customer_order_stats(session, [customer_id])).get(customer_id)
+    customer.total_orders = stats["total_orders"] if stats else 0
+    customer.total_spend = stats["total_spend"] if stats else Decimal("0.00")
+    customer.first_order_at = stats["first_order_at"] if stats else None
+    customer.last_order_at = stats["last_order_at"] if stats else None
+    await session.flush()
+
+
 async def create_draft_order(
     session: "AsyncSession",
     *,

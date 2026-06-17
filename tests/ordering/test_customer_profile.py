@@ -70,9 +70,12 @@ async def test_nameless_customer_shows_receiver_name(client, db_session, restaur
     assert resp.json()["name"] == "Asfer"
 
 
-async def test_customer_stats_derived_from_orders(client, db_session, restaurant):
-    """total_orders / total_spend come live from the orders table: a draft is
-    excluded from the count, and spend sums delivered orders only."""
+async def test_recompute_customer_stats_and_endpoints(client, db_session, restaurant):
+    """recompute_customer_stats rebuilds the denormalized columns from orders
+    (draft excluded from the count, spend = delivered only), and the list +
+    profile endpoints read those maintained columns."""
+    from app.ordering.service import recompute_customer_stats
+
     customer = Customer(
         restaurant_id=restaurant.id, phone="+971507776666",
         name="Maya", total_orders=0, total_spend=Decimal("0.00"),
@@ -91,21 +94,51 @@ async def test_customer_stats_derived_from_orders(client, db_session, restaurant
             total=Decimal("10.00"), priority="normal", weather_delay_disclosed=False,
         ),
     ])
+    await db_session.flush()
+
+    await recompute_customer_stats(db_session, customer.id)
     await db_session.commit()
+    await db_session.refresh(customer)
+    assert customer.total_orders == 1  # draft excluded
+    assert customer.total_spend == Decimal("35.00")  # delivered only
 
     resp = await client.get("/api/v1/ordering/customers", headers=_auth(restaurant.id))
-    assert resp.status_code == 200
     row = next(c for c in resp.json()["items"] if c["phone"] == "+971507776666")
-    assert row["total_orders"] == 1  # draft excluded
-    assert Decimal(str(row["total_spend"])) == Decimal("35.00")  # delivered only
+    assert row["total_orders"] == 1
+    assert Decimal(str(row["total_spend"])) == Decimal("35.00")
 
-    # Profile endpoint derives the same way.
     resp = await client.get(
         f"/api/v1/ordering/customers/{customer.id}", headers=_auth(restaurant.id)
     )
     body = resp.json()
     assert body["total_orders"] == 1
     assert Decimal(str(body["total_spend"])) == Decimal("35.00")
+
+
+async def test_advance_delivery_updates_customer_spend(db_session, restaurant):
+    """Delivering an order refreshes the customer's denormalized stats (the
+    delivery path bypasses fsm.transition, so it has its own recompute hook)."""
+    from app.dispatch.delivery import advance_delivery
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971502223333",
+        name="Sami", total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, order_number="R-A1",
+        status="arriving", subtotal=Decimal("40.00"), delivery_fee_aed=Decimal("10.00"),
+        total=Decimal("50.00"), priority="normal", weather_delay_disclosed=False,
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    await advance_delivery(db_session, order_id=order.id, to_status="delivered")
+    await db_session.commit()
+    await db_session.refresh(customer)
+    assert customer.total_orders == 1
+    assert customer.total_spend == Decimal("50.00")
 
 
 async def test_list_customers_search_by_phone(client, db_session, restaurant):

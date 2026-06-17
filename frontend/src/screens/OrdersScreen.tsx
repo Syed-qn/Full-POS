@@ -136,6 +136,7 @@ export function OrdersScreen() {
     <div className={s.screen}>
       <PageHeader title="Orders" subtitle="All delivery orders — live and past" />
       <div className={s.filterBar}>
+        <div className={s.filterTop}>
         <div className={s.presets} role="group" aria-label="Date range presets">
           {PRESETS.map((p) => (
             <button
@@ -192,12 +193,15 @@ export function OrdersScreen() {
             </option>
           ))}
         </select>
-        <input
-          className={s.search}
-          placeholder="Search #ID / name / phone"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        </div>
+        <div className={s.filterBottom}>
+          <input
+            className={s.search}
+            placeholder="Search #ID / name / phone"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
       <div className={s.tableCard}>
         <CompactTable<OrderOut>

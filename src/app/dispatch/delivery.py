@@ -66,6 +66,11 @@ async def advance_delivery(
         before=before,
         after={"status": to_status},
     )
+    # Delivery bypasses fsm.transition, so refresh the customer's denormalized
+    # stats here too — total_spend only moves once an order is delivered.
+    from app.ordering.service import recompute_customer_stats
+
+    await recompute_customer_stats(session, order.customer_id)
     return order
 
 

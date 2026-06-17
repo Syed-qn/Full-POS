@@ -121,3 +121,8 @@ async def transition(
         before={"status": str(before), **(extra_audit or {})},
         after={"status": str(new_status)},
     )
+    # Keep the customer's denormalized order stats (used by marketing segments)
+    # in sync. Local import avoids a service<->fsm import cycle.
+    from app.ordering.service import recompute_customer_stats
+
+    await recompute_customer_stats(session, order.customer_id)
