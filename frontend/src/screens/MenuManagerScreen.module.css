@@ -202,6 +202,11 @@
 }
 
 /* ---- Loading skeleton (mirrors the menu layout) ---- */
+.skWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .sk {
   display: block;
   position: relative;

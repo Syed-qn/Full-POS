@@ -24,4 +24,11 @@ describe("RidersScreen", () => {
     render(<RidersScreen />);
     await waitFor(() => expect(screen.getByText(/register your first rider/i)).toBeInTheDocument());
   });
+
+  it("shows a loading skeleton until riders resolve", () => {
+    vi.mocked(fetch).mockReturnValue(new Promise(() => {})); // never resolves
+    const { container } = render(<RidersScreen />);
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
+    expect(screen.queryByText(/register your first rider/i)).not.toBeInTheDocument();
+  });
 });

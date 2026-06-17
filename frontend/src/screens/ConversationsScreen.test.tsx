@@ -14,6 +14,13 @@ describe("ConversationsScreen", () => {
     await waitFor(() => expect(screen.getByText("+971501234567")).toBeInTheDocument());
   });
 
+  it("shows a loading skeleton until conversations resolve", () => {
+    vi.mocked(fetch).mockReturnValue(new Promise(() => {})); // never resolves
+    const { container } = render(<ConversationsScreen />);
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
+    expect(screen.queryByText(/no customer conversations yet/i)).not.toBeInTheDocument();
+  });
+
   it("opens a thread and shows takeover toggle", async () => {
     render(<ConversationsScreen />);
     await waitFor(() => screen.getByText("+971501234567"));

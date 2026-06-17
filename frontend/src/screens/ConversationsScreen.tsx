@@ -11,6 +11,7 @@ type Tab = "customer" | "rider";
 
 export function ConversationsScreen() {
   const [convs, setConvs] = useState<ConversationOut[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>("customer");
   const [activeId, setActiveId] = useState<number | null>(null);
   const [messages, setMessages] = useState<MessageOut[]>([]);
@@ -28,7 +29,7 @@ export function ConversationsScreen() {
   }
 
   useEffect(() => {
-    fetchConversations().then(setConvs);
+    fetchConversations().then(setConvs).finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -79,13 +80,26 @@ export function ConversationsScreen() {
           </button>
         </div>
         <div className={s.list}>
-          {visible.map((c) => (
-            <ConversationRow key={c.id} conversation={c} selected={c.id === activeId} onClick={() => setActiveId(c.id)} />
-          ))}
-          {visible.length === 0 && (
-            <div className={s.empty}>
-              No {tab === "customer" ? "customer" : "driver"} conversations yet.
+          {!loaded ? (
+            <div aria-busy="true" aria-label="Loading conversations">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className={s.skRow}>
+                  <span className={`${s.sk} ${s.skRowTop}`} />
+                  <span className={`${s.sk} ${s.skRowPreview}`} />
+                </div>
+              ))}
             </div>
+          ) : (
+            <>
+              {visible.map((c) => (
+                <ConversationRow key={c.id} conversation={c} selected={c.id === activeId} onClick={() => setActiveId(c.id)} />
+              ))}
+              {visible.length === 0 && (
+                <div className={s.empty}>
+                  No {tab === "customer" ? "customer" : "driver"} conversations yet.
+                </div>
+              )}
+            </>
           )}
         </div>
       </aside>

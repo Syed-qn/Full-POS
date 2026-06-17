@@ -50,3 +50,37 @@
   font-size: 13px;
   padding: 24px 0;
 }
+
+/* ---- Loading skeleton (mirrors the riders layout) ---- */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: riderSkShimmer 1.4s infinite;
+}
+@keyframes riderSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skStat { height: 16px; }
+.skCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.skLine { height: 12px; }
+.skLineLg { height: 16px; }

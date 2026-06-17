@@ -74,6 +74,8 @@ export function RidersScreen() {
         </div>
       )}
 
+      {!loaded && <RidersSkeleton />}
+
       {loaded && riders.length === 0 && (
         <div className={s.empty}>No riders yet — click "+ Add Rider" to register your first rider.</div>
       )}
@@ -107,5 +109,30 @@ export function RidersScreen() {
         />
       )}
     </div>
+  );
+}
+
+// Skeleton placeholder mirroring the riders layout (stats bar + a grid of
+// white rider-card placeholders) so the page keeps its shape while loading.
+// Returns a fragment so .stats and .grid are direct children of .root and
+// inherit its column gap.
+function RidersSkeleton() {
+  return (
+    <>
+      <div className={s.stats} aria-busy="true" aria-label="Loading riders">
+        {[70, 96, 104, 80].map((w, i) => (
+          <span key={i} className={`${s.sk} ${s.skStat}`} style={{ width: w }} />
+        ))}
+      </div>
+      <div className={s.grid}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className={s.skCard}>
+            <span className={`${s.sk} ${s.skLineLg}`} style={{ width: "55%" }} />
+            <span className={`${s.sk} ${s.skLine}`} style={{ width: "40%" }} />
+            <span className={`${s.sk} ${s.skLine}`} style={{ width: "70%" }} />
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

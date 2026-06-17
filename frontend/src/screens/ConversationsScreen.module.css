@@ -1,8 +1,10 @@
 .layout {
   display: grid;
   grid-template-columns: 320px 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 .sidebar {
   background: var(--bg-surface);
@@ -11,6 +13,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 .tabs {
   display: flex;
@@ -37,6 +40,7 @@
 .list {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 .viewer {
   background: var(--bg-surface);
@@ -46,6 +50,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 .viewerHead {
   display: flex;
@@ -54,6 +60,7 @@
 .thread {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 .composer {
   display: flex;
@@ -76,3 +83,32 @@
   font-size: 13px;
   padding: 24px;
 }
+
+/* ---- Loading skeleton (mirrors the conversation rows) ---- */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: convSkShimmer 1.4s infinite;
+}
+@keyframes convSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.skRowTop { height: 13px; width: 130px; }
+.skRowPreview { height: 11px; width: 75%; }

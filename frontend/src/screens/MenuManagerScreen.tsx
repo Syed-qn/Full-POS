@@ -343,7 +343,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 // and category grids of dish cards) so the page keeps its shape while loading.
 function MenuSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading menu">
+    <div className={s.skWrap} aria-busy="true" aria-label="Loading menu">
       <div className={s.stats}>
         {Array.from({ length: 3 }).map((_, i) => (
           <span key={i} className={`${s.sk} ${s.skStat}`} />
