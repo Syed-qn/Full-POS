@@ -109,7 +109,7 @@ async def test_item_collection_qty_parsing(db_session, restaurant):
 
 
 async def test_item_collection_no_match_polite_retry(db_session, restaurant):
-    """An unmatched dish query yields a polite retry asking for the dish number."""
+    """An unmatched dish query yields a polite retry asking for the dish name."""
     await _seed_menu(db_session, restaurant.id)
     await handle_inbound(db_session, _msg("hi", "wamid.greet_nm"), restaurant_id=restaurant.id)
     await db_session.commit()
@@ -123,7 +123,7 @@ async def test_item_collection_no_match_polite_retry(db_session, restaurant):
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     last = rows[-1].payload["body"].lower()
-    assert "number" in last or "didn't find" in last or "did not find" in last
+    assert "couldn't find" in last or "name" in last or "didn't find" in last
 
     from app.ordering.models import OrderItem
     items = (await db_session.execute(select(OrderItem))).scalars().all()
@@ -141,9 +141,9 @@ async def test_menu_request_renders_real_db_menu(db_session, restaurant):
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     body = rows[-1].payload["body"]
-    # Real seeded dishes with their real numbers/prices.
-    assert "110. Chicken Biryani" in body
-    assert "201. Mutton Karahi" in body
+    # Real seeded dishes (shown as bullets, no numbers), with their real prices.
+    assert "• Chicken Biryani" in body
+    assert "• Mutton Karahi" in body
     # Nothing invented.
     assert "Shawarma" not in body and "Lollipop" not in body
 
@@ -167,8 +167,8 @@ async def test_menu_request_after_order_renders_menu_and_resets_to_ordering(db_s
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     body = rows[-1].payload["body"]
-    assert "110. Chicken Biryani" in body
-    assert "201. Mutton Karahi" in body
+    assert "• Chicken Biryani" in body
+    assert "• Mutton Karahi" in body
     # Reset to a fresh ordering session so the next dish selection works.
     conv = await _conv(db_session)
     assert conv.state["dialogue_phase"] == "ordering"

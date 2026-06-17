@@ -13,8 +13,23 @@ from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
 import re as _re
 
-# A menu line looks like "5. Chicken Biryani — AED 28" (any dash/colon, any currency).
-_MENU_LINE = _re.compile(r"^\s*\d+[\.\)]\s+.+?(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.MULTILINE)
+
+def _aed(value) -> str:
+    """Format a money value as a plain AED amount string.
+
+    Strips trailing zeros (18.00 -> "18", 18.50 -> "18.5") but, unlike a bare
+    Decimal.normalize(), never emits scientific notation: Decimal('50').normalize()
+    is Decimal('5E+1'), which previously rendered as "AED 5E+1" in customer
+    messages. The ':f' presentation type forces fixed-point output.
+    """
+    return f"{Decimal(value).normalize():f}"
+
+
+# A menu line looks like "• Chicken Biryani — AED 28" or "5. Chicken Biryani — AED 28"
+# (leading bullet or number, any dash/colon, any currency).
+_MENU_LINE = _re.compile(
+    r"^\s*(?:\d+[\.\)]|[•\-\*])\s+.+?(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.MULTILINE
+)
 
 
 def _looks_like_menu(text: str) -> bool:
@@ -42,6 +57,31 @@ def _is_menu_request(text: str) -> bool:
     return any(k in t for k in keywords)
 
 
+_CATEGORY_EMOJI: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("biryani", "rice", "pulao"), "🍛"),
+    (("bread", "naan", "roti", "paratha"), "🍞"),
+    (("curry", "curries", "gravy", "masala"), "🥘"),
+    (("starter", "appetizer", "appetiser", "snack", "tikka", "kebab", "grill"), "🍢"),
+    (("drink", "beverage", "lassi", "juice", "shake", "tea", "coffee"), "🥤"),
+    (("dessert", "sweet", "ice", "kulfi"), "🍨"),
+    (("salad",), "🥗"),
+    (("soup",), "🍲"),
+)
+
+
+def _category_emoji(category: str) -> str:
+    """Pick a tasteful emoji for a menu category by keyword, default 🍽️.
+
+    Categories are restaurant-defined free text, so this is a best-effort match
+    on common words — anything unrecognised falls back to the generic plate.
+    """
+    c = (category or "").lower()
+    for keywords, emoji in _CATEGORY_EMOJI:
+        if any(k in c for k in keywords):
+            return emoji
+    return "🍽️"
+
+
 async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
     """Render the active menu as categorized text."""
     from app.menu.models import Dish, Menu
@@ -64,16 +104,17 @@ async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
     if not dish_list:
         return "Our menu is currently unavailable. Please try again later."
 
-    lines: list[str] = ["Welcome! Here is our menu:\n"]
+    lines: list[str] = ["👋 *Welcome! Here's our menu*"]
     current_category: str | None = None
     for dish in dish_list:
         if dish.category != current_category:
             current_category = dish.category
             if current_category:
-                lines.append(f"\n*{current_category}*")
-        price = Decimal(dish.price_aed).normalize()
-        lines.append(f"{dish.dish_number}. {dish.name} — AED {price}")
+                lines.append(f"\n{_category_emoji(current_category)} *{current_category}*")
+        price = _aed(dish.price_aed)
+        lines.append(f"• {dish.name} — AED {price}")
 
+    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
     return "\n".join(lines)
 
 
@@ -149,7 +190,7 @@ async def _handle_greeting(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="greeting-prompt",
-            body="Here's our menu! 😊 Reply with a dish name or number to order.",
+            body="Here's our menu! 😊 Reply with a dish name to order.",
         )
     else:
         # No image/PDF on file — send the full text menu
@@ -301,7 +342,7 @@ async def _handle_collecting_items(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="no-match",
             body="Sorry, I couldn't find that dish. Please reply with the dish "
-                 "number from the menu, or try a different name.",
+                 "name from the menu, or try a different spelling.",
         )
         return
 
@@ -314,13 +355,13 @@ async def _handle_collecting_items(
             dish = None
         if dish is None:
             options = " or ".join(
-                f"{d.dish_number}. {d.name} (AED {Decimal(d.price_aed).normalize()})"
+                f"{d.name} (AED {_aed(d.price_aed)})"
                 for d in result.candidates[:3]
             )
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ambiguous",
-                body=f"Did you mean {options}? Please reply with the dish number.",
+                body=f"Did you mean {options}? Just reply with the dish name.",
             )
             return
         # Arbiter resolved — fall through to add item below.
@@ -341,12 +382,12 @@ async def _handle_collecting_items(
     await add_item(session, order=order, dish=dish, qty=qty)
     _set_state(conv, dialogue_state="collecting_items")
 
-    price = Decimal(dish.price_aed).normalize()
+    price = _aed(dish.price_aed)
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="item-added",
         body=(
-            f"Added {qty}x {dish.dish_number}. {dish.name} (AED {price}).\n"
+            f"Added {qty}x {dish.name} (AED {price}).\n"
             f"Reply with more items, or send 'done' to proceed to delivery details."
         ),
     )
@@ -676,8 +717,8 @@ async def _send_order_summary(
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all()
     item_lines = "\n".join(
-        f"  {it.qty}x {it.dish_number}. {it.dish_name} — "
-        f"AED {Decimal(it.price_aed * it.qty).normalize()}"
+        f"  {it.qty}x {it.dish_name} — "
+        f"AED {_aed(it.price_aed * it.qty)}"
         for it in items
     )
 
@@ -706,9 +747,9 @@ async def _send_order_summary(
 
     summary = (
         f"Order summary:\n{item_lines}\n\n"
-        f"Subtotal: AED {Decimal(order.subtotal).normalize()}\n"
-        f"Delivery fee: AED {Decimal(order.delivery_fee_aed).normalize()}\n"
-        f"Total: AED {Decimal(order.total).normalize()}\n"
+        f"Subtotal: AED {_aed(order.subtotal)}\n"
+        f"Delivery fee: AED {_aed(order.delivery_fee_aed)}\n"
+        f"Total: AED {_aed(order.total)}\n"
         f"Payment: COD (cash on delivery)\n"
         f"{address_block}"
         f"ETA: 40 minutes{weather_note}\n\n"
@@ -756,7 +797,7 @@ async def _handle_order_confirmation(
             prefix="order-confirmed",
             body=(
                 f"Order confirmed! Order #{order.order_number}.\n"
-                f"Total: AED {Decimal(order.total).normalize()} "
+                f"Total: AED {_aed(order.total)} "
                 f"(COD — cash on delivery).\n"
                 f"Your food will arrive within 40 minutes."
             ),
@@ -846,7 +887,7 @@ async def _handle_modify_intent(
         prefix="modify-start",
         body=(
             f"Sure, let's modify order #{order.order_number}. "
-            f"Reply with updated dishes (e.g. '2x 110' or names from menu), or 'done' when ready to review changes. "
+            f"Reply with updated dishes (e.g. '2x Butter Chicken'), or 'done' when ready to review changes. "
             f"After you confirm, the 40-min SLA clock restarts."
         ),
     )
@@ -906,13 +947,13 @@ async def _handle_modify_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="no-match-mod",
-            body="Sorry, I couldn't find that dish. Please reply with the dish number from the menu, or try a different name.",
+            body="Sorry, I couldn't find that dish. Please reply with the dish name from the menu, or try a different spelling.",
         )
         return
 
     if result.confidence == MatchConfidence.AMBIGUOUS:
         options = " or ".join(
-            f"{d.dish_number}. {d.name} (AED {Decimal(d.price_aed).normalize()})"
+            f"{d.name} (AED {_aed(d.price_aed)})"
             for d in result.candidates[:3]
         )
         await _send_text(
@@ -934,12 +975,12 @@ async def _handle_modify_items(
     })
     _set_state(conv, dialogue_state="modify_items", modify_proposed=proposed)
 
-    price = Decimal(dish.price_aed).normalize()
+    price = _aed(dish.price_aed)
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="item-proposed",
         body=(
-            f"Added {qty}x {dish.dish_number}. {dish.name} (AED {price}) to your modification.\n"
+            f"Added {qty}x {dish.name} (AED {price}) to your modification.\n"
             f"Reply with more items, or send 'done' to review and confirm (SLA restarts on confirm)."
         ),
     )
@@ -968,14 +1009,14 @@ async def _send_modify_summary(
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all())
     curr_lines = "\n".join(
-        f"  {it.qty}x {it.dish_number}. {it.dish_name} — "
-        f"AED {Decimal(it.price_aed * it.qty).normalize()}"
+        f"  {it.qty}x {it.dish_name} — "
+        f"AED {_aed(it.price_aed * it.qty)}"
         for it in current_items
     ) or "  (none)"
 
     prop_lines = "\n".join(
-        f"  {p['qty']}x {p.get('dish_number', '?')}. {p.get('name', '?')} — "
-        f"AED {Decimal(str(p['price_aed'])) * p['qty'] :.2f}"
+        f"  {p['qty']}x {p.get('name', '?')} — "
+        f"AED {_aed(Decimal(str(p['price_aed'])) * p['qty'])}"
         for p in proposed
     ) or "  (none)"
 
@@ -985,9 +1026,9 @@ async def _send_modify_summary(
     body = (
         f"Current order #{order.order_number}:\n{curr_lines}\n\n"
         f"Proposed new items:\n{prop_lines}\n\n"
-        f"New subtotal: AED {new_sub.normalize()}\n"
-        f"Delivery: AED {Decimal(order.delivery_fee_aed or 0).normalize()}\n"
-        f"New total: AED {new_total.normalize()}\n\n"
+        f"New subtotal: AED {_aed(new_sub)}\n"
+        f"Delivery: AED {_aed(order.delivery_fee_aed or 0)}\n"
+        f"New total: AED {_aed(new_total)}\n\n"
         f"Confirm these changes? (COD, 40-min SLA restarts after your confirm)"
     )
     await _send_buttons(
@@ -1068,7 +1109,7 @@ async def _handle_modify_confirm(
             prefix="modify-confirmed",
             body=(
                 f"Order #{order.order_number} updated!\n"
-                f"New total: AED {Decimal(order.total).normalize()} (COD).\n"
+                f"New total: AED {_aed(order.total)} (COD).\n"
                 f"The 40-minute delivery window restarts now."
             ),
         )
@@ -1247,10 +1288,10 @@ async def _build_cart_summary(session: AsyncSession, conv) -> str:
     if not items:
         return ""
     lines = [
-        f"{it.qty}x {it.dish_name} (AED {Decimal(it.price_aed * it.qty).normalize()})"
+        f"{it.qty}x {it.dish_name} (AED {_aed(it.price_aed * it.qty)})"
         for it in items
     ]
-    return ", ".join(lines) + f" | Subtotal: AED {Decimal(order.subtotal).normalize()}"
+    return ", ".join(lines) + f" | Subtotal: AED {_aed(order.subtotal)}"
 
 
 async def _build_history(
@@ -1427,7 +1468,7 @@ async def _build_context(
             )).all()
             item_lines = "\n".join(
                 f"  {it.qty}x {it.dish_number}. {it.dish_name} — "
-                f"AED {Decimal(it.price_aed * it.qty).normalize()}"
+                f"AED {_aed(it.price_aed * it.qty)}"
                 for it in items
             )
             weather_note = ""
@@ -1437,9 +1478,9 @@ async def _build_context(
                 weather_note = "\n⚠️ Weather may cause delays beyond usual ETA."
             ctx["order_summary"] = (
                 f"{item_lines}\n\n"
-                f"Subtotal: AED {Decimal(order.subtotal).normalize()}\n"
-                f"Delivery fee: AED {Decimal(order.delivery_fee_aed).normalize()}\n"
-                f"Total: AED {Decimal(order.total).normalize()}\n"
+                f"Subtotal: AED {_aed(order.subtotal)}\n"
+                f"Delivery fee: AED {_aed(order.delivery_fee_aed)}\n"
+                f"Total: AED {_aed(order.total)}\n"
                 f"Payment: COD (cash on delivery)\n"
                 f"ETA: ~40 minutes{weather_note}"
             )
@@ -1762,7 +1803,7 @@ async def _execute_confirm_order(
         prefix="order-confirmed",
         body=(
             f"Order confirmed! 🎉 Order #{order.order_number}\n"
-            f"Total: AED {Decimal(order.total).normalize()} (COD — cash on delivery)\n"
+            f"Total: AED {_aed(order.total)} (COD — cash on delivery)\n"
             f"Your food will arrive within ~40 minutes. We'll keep you posted! 🛵"
         ),
     )
@@ -1844,7 +1885,7 @@ async def _dispatch_action(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                     prefix="ai-no-match",
                     body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
-                         "Try the dish number (e.g. 110) or check the menu spelling.",
+                         "Try the exact dish name or check the menu spelling.",
                 )
         else:
             if reply:
@@ -2095,7 +2136,7 @@ async def _handle_customer_ai(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ai-fallback",
-            body="Sorry, having a moment 😅 Type the dish number to order (e.g. 110) or send 'hi' to start.",
+            body="Sorry, having a moment 😅 Type the dish name to order, or send 'hi' to start.",
         )
         return
 

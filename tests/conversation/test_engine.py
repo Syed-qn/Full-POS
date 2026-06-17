@@ -49,8 +49,9 @@ async def test_greeting_sends_menu_to_outbox(db_session, restaurant):
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     assert len(rows) == 1
     body: str = rows[0].payload["body"]
-    assert "110. Chicken Biryani — AED 22" in body
-    assert "201. Mutton Karahi — AED 35" in body
+    assert "• Chicken Biryani — AED 22" in body
+    assert "• Mutton Karahi — AED 35" in body
+    assert "110." not in body  # dish numbers are not shown to customers
     assert "Falooda" not in body  # unavailable
 
 
