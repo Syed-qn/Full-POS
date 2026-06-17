@@ -191,8 +191,10 @@ async def test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_
     payload = msg.payload or {}
     assert "buttons" in payload
     titles = [b.get("title", "") for b in payload.get("buttons", [])]
-    assert any("Delivered" in t or "Collect money" in t for t in titles)
-    assert "Delivered and Next Order Location" in titles
+    # WhatsApp caps reply-button titles at 20 chars, so titles are shortened.
+    assert all(len(t) <= 20 for t in titles)
+    assert any("Delivered" in t or "Collect" in t for t in titles)
+    assert "Delivered & next" in titles
     body = payload.get("body", "")
     assert "Near" in body or "stop" in body.lower()
     # customer contact in body for rider (safe check; seed uses customer_id)

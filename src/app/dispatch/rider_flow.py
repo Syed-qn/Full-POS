@@ -88,7 +88,7 @@ async def _send_stop(
     coords = await _dropoff_coords(session, order)
     nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
     # COD-only platform: every delivery collects cash.
-    title = "Collect money & delivered" if order.total else "Delivered"
+    title = "Collect & delivered" if order.total else "Delivered"
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -264,7 +264,7 @@ async def _send_stop(
     """
     coords = await _dropoff_coords(session, order)
     nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
-    title = "Collect money & delivered" if order.total else "Delivered"
+    title = "Collect & delivered" if order.total else "Delivered"
     # customer contact for rider msg (transcript)
     cust_name = ""
     if order.customer_id:
@@ -275,7 +275,7 @@ async def _send_stop(
     buttons = [{"id": f"delivered:{order.id}", "title": title}]
     # dual if near or force (for delivered_next path)
     if force_next:
-        buttons.append({"id": f"delivered_next:{order.id}", "title": "Delivered and Next Order Location"})
+        buttons.append({"id": f"delivered_next:{order.id}", "title": "Delivered & next"})
         body = f"{cust_name}Near stop for Order {order.order_number}{nav}. Choose:"
     await enqueue_message(
         session,
@@ -322,7 +322,7 @@ async def _send_delivery_choice(
     """Dual buttons when near per spec/transcript."""
     coords = await _dropoff_coords(session, order)
     nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
-    title = "Collect money & delivered" if order.total else "Delivered"
+    title = "Collect & delivered" if order.total else "Delivered"
     cust_name = ""
     if order.customer_id:
         cust = await session.get(Customer, order.customer_id)
@@ -331,7 +331,7 @@ async def _send_delivery_choice(
     body = f"{cust_name}Near stop for Order {order.order_number}{nav}. Choose:"
     buttons = [
         {"id": f"delivered:{order.id}", "title": title},
-        {"id": f"delivered_next:{order.id}", "title": "Delivered and Next Order Location"},
+        {"id": f"delivered_next:{order.id}", "title": "Delivered & next"},
     ]
     await enqueue_message(
         session,
