@@ -2145,6 +2145,32 @@ async def _handle_location_pin(
     )
 
 
+# A bare "no more / that's it / done" reply to the "Anything else?" prompt must
+# move the order to checkout — never re-add a dish. The LLM occasionally defaults
+# to repeating the last add_item here, which loops ("Butter Chicken added!" on
+# every "No"). This deterministic guard catches the common English/Hinglish
+# closing phrases before the model runs, so the loop can't happen for them.
+_CLOSING_PHRASES: frozenset[str] = frozenset({
+    "no", "no more", "nope", "na", "nah", "np", "no thanks", "no thank you",
+    "nothing", "nothing else", "nothing more", "that's all", "thats all",
+    "that's it", "thats it", "thats all thanks", "done", "im done", "i'm done",
+    "all done", "finish", "finished", "complete", "checkout", "check out",
+    "proceed", "place order", "place the order", "order", "all good", "im good",
+    "i'm good", "good", "bas", "bus", "khalas", "khalaas", "khallas", "enough",
+})
+
+
+def _normalise_closing(text: str | None) -> str:
+    """Lowercase + strip punctuation/emoji/extra spaces so "No.", "Np!", and
+    "That's all 🙏" all normalise to a comparable closing phrase."""
+    import re
+
+    if not text:
+        return ""
+    t = re.sub(r"[^\w\s']", " ", text.lower())
+    return re.sub(r"\s+", " ", t).strip()
+
+
 async def _handle_customer_ai(
     session: AsyncSession,
     conv: Conversation,
@@ -2155,6 +2181,7 @@ async def _handle_customer_ai(
     """Phase-aware AI handler: owns the entire customer conversation."""
     from app.identity.models import Restaurant as RestaurantModel
     from app.llm.factory import get_conversation_agent
+    from app.llm.port import ConversationAgentResult
 
     if restaurant is None:
         restaurant = await session.get(RestaurantModel, restaurant_id)
@@ -2163,6 +2190,25 @@ async def _handle_customer_ai(
     phase = _resolve_phase(conv)
     history = await _build_history(session, conv, limit=10)
     context = await _build_context(session, conv, restaurant_id, phase, restaurant)
+
+    # Deterministic closing-intent guard: in the ordering phase, a bare closing
+    # reply with a non-empty cart goes straight to address capture — bypassing
+    # the LLM so it can never loop by re-adding the last dish (observed bug).
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and _normalise_closing(inbound.payload.get("text")) in _CLOSING_PHRASES
+        and (context.get("cart_summary") or "").strip()
+    ):
+        await _dispatch_action(
+            session, conv, inbound, restaurant_id,
+            ConversationAgentResult(
+                message="Great! Let's get your delivery details 😊",
+                action="proceed_to_address", action_data={},
+            ),
+            phase, restaurant,
+        )
+        return
 
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:

@@ -309,6 +309,13 @@ YOUR JOB:
 - Upsell ONCE (only if cart has ≥1 item and you haven't already suggested): "Want to add a drink? 😊"
 - NEVER ask for address or location in this phase.
 - If cart is not empty and customer says they are done → proceed_to_address.
+- A NEGATIVE or closing reply to "anything else?" — "no" / "nope" / "no more" /
+  "that's it" / "nothing else" / "I'm good" / "np" — when the cart is NOT empty
+  means they are finished → proceed_to_address. If the cart IS empty, no_action.
+- CRITICAL: ONLY use add_item when the customer NAMES a dish (or a number/qty of
+  one). NEVER re-add a dish the customer did not just name. If the message is not
+  a dish, a quantity change, a removal, or a question, do NOT use add_item —
+  choose proceed_to_address (cart not empty) or no_action.
 """
 
 _ADDRESS_BLOCK = """

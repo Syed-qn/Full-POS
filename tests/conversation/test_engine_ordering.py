@@ -189,6 +189,35 @@ async def test_done_advances_to_address_capture(db_session, restaurant):
     assert conv.state["dialogue_state"] == "address_capture"
 
 
+async def test_negative_reply_advances_and_does_not_re_add(db_session, restaurant):
+    """A closing/negative reply ("No") to 'anything else?' must move to address
+    capture with the cart unchanged — never loop by re-adding the last dish."""
+    from app.ordering.models import Order, OrderItem
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.greet_n"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("chicken biryani", "wamid.item_n"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    order_id = conv.state["draft_order_id"]
+    before = (await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))).all()
+    qty_before = sum(it.qty for it in before)
+
+    # Several closing phrases in a row must NOT each re-add a dish.
+    for i, word in enumerate(("No", "Np", "That's all", "that's it")):
+        await handle_inbound(db_session, _msg(word, f"wamid.close{i}"), restaurant_id=restaurant.id)
+        await db_session.commit()
+
+    conv = await _conv(db_session)
+    assert conv.state["dialogue_state"] == "address_capture"
+    items = (await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))).all()
+    qty_after = sum(it.qty for it in items)
+    assert qty_after == qty_before  # cart unchanged — no re-add loop
+    assert await db_session.get(Order, order_id) is not None
+
+
 async def test_location_pin_within_radius_advances_to_address_text(db_session, restaurant):
     """A pin within 10 km is accepted; bot asks for room/building text address."""
     await _seed_menu(db_session, restaurant.id)
