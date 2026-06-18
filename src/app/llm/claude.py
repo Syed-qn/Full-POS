@@ -379,7 +379,7 @@ STRICT RULES — read carefully before choosing an action:
 LOCATION: NEVER invent or guess the restaurant's area, neighbourhood, or landmarks.
 If asked where you are located, offer to share the exact location pin instead.
 
-Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. Max 10 km.
+Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. For the delivery radius and fees, rely only on the delivery info provided — never invent a distance limit.
 ALWAYS call take_action — never reply without the tool.
 """
 

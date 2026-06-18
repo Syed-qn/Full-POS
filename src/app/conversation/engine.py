@@ -484,7 +484,7 @@ async def _finalize_with_stored_address(
     """Attach a returning customer's saved address to the draft and summarise."""
     from datetime import datetime, timezone
 
-    from app.ordering.fees import UndeliverableError, calculate_fee
+    from app.ordering.fees import UndeliverableError, calculate_fee, radius_km
     from app.ordering.models import Order
 
     draft_order_id = conv.state.get("draft_order_id")
@@ -501,14 +501,15 @@ async def _finalize_with_stored_address(
     fee = Decimal("0.00")
     if stored.latitude is not None and stored.longitude is not None:
         dist = await _road_distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
+        settings = await _fee_settings_for(session, restaurant_id)
         try:
-            fee = calculate_fee(dist, await _fee_settings_for(session, restaurant_id))
+            fee = calculate_fee(dist, settings)
         except UndeliverableError:
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="undeliverable-saved",
                 body="Sorry, your saved address is outside our delivery area "
-                     "(maximum 10 km). Please share a new location.",
+                     f"(maximum {radius_km(settings):g} km). Please share a new location.",
             )
             return
 
@@ -531,7 +532,7 @@ async def _handle_address_capture(
 ) -> None:
     """Capture delivery address: location pin (fee/radius check) or text address."""
     from app.identity.models import Restaurant
-    from app.ordering.fees import UndeliverableError, calculate_fee
+    from app.ordering.fees import UndeliverableError, calculate_fee, radius_km
     from app.ordering.service import get_last_address, get_or_create_customer
 
     restaurant = await session.get(Restaurant, restaurant_id)
@@ -586,14 +587,15 @@ async def _handle_address_capture(
         lat = inbound.payload["latitude"]
         lon = inbound.payload["longitude"]
         dist = await _road_distance_km(rest_lat, rest_lng, lat, lon)
+        settings = await _fee_settings_for(session, restaurant_id)
         try:
-            fee = calculate_fee(dist, await _fee_settings_for(session, restaurant_id))
+            fee = calculate_fee(dist, settings)
         except UndeliverableError:
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="undeliverable",
                 body="Sorry, your location is outside our delivery area "
-                     "(maximum 10 km). We can't deliver there.",
+                     f"(maximum {radius_km(settings):g} km). We can't deliver there.",
             )
             return
 
@@ -1436,8 +1438,8 @@ async def _build_context(
         ctx["apt_room"] = conv.state.get("pending_room", "")
         ctx["building"] = conv.state.get("pending_building", "")
         ctx["receiver_name"] = conv.state.get("pending_receiver", "")
-        max_km = restaurant.settings.get("max_radius_km", 10) if restaurant else 10
-        ctx["max_radius_km"] = max_km
+        from app.ordering.fees import radius_km
+        ctx["max_radius_km"] = radius_km(await _fee_settings_for(session, restaurant_id))
 
         from app.ordering.models import Customer, CustomerAddress
         customer = await session.scalar(
@@ -2053,11 +2055,14 @@ async def _handle_location_pin(
     customer shared their pin. The follow-up apt/building/receiver collection
     stays AI-driven.
     """
-    from app.ordering.fees import UndeliverableError, calculate_fee
+    from app.ordering.fees import UndeliverableError, calculate_fee, radius_km
 
     lat = float(inbound.payload.get("latitude", 0))
     lng = float(inbound.payload.get("longitude", 0))
-    max_km = restaurant.settings.get("max_radius_km", 10) if restaurant else 10
+    # Radius is driven by the restaurant's largest fee tier (single source of
+    # truth — same threshold calculate_fee enforces below).
+    settings = await _fee_settings_for(session, restaurant_id)
+    max_km = radius_km(settings)
 
     dist_km = await _road_distance_km(restaurant.lat, restaurant.lng, lat, lng)
 
@@ -2067,7 +2072,7 @@ async def _handle_location_pin(
             prefix="out-of-range",
             body=(
                 f"Sorry, your location is {dist_km:.1f} km away. "
-                f"We deliver within {max_km} km. "
+                f"We deliver within {max_km:g} km. "
                 "Unfortunately we can't deliver to you at this time 😔"
             ),
         )
@@ -2080,7 +2085,7 @@ async def _handle_location_pin(
 
     # Authoritative deliverability + fee from the restaurant's tiers.
     try:
-        fee = calculate_fee(dist_km, await _fee_settings_for(session, restaurant_id))
+        fee = calculate_fee(dist_km, settings)
     except UndeliverableError:
         await _send_out_of_range()
         return

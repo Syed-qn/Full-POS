@@ -49,6 +49,17 @@ def fee_settings_from_restaurant(restaurant_settings: dict | None) -> dict | Non
     return {"tiers": tiers}
 
 
+def radius_km(settings: dict | None) -> float:
+    """The delivery radius in km = the largest tier's ``max_km``.
+
+    Single source of truth so the deliverability gate, the customer-facing
+    "maximum N km" messages, and the LLM context never diverge. ``settings`` is
+    the ``calculate_fee`` shape ({"tiers": [...]}); ``None`` → spec defaults (10 km).
+    """
+    tiers = (settings or {}).get("tiers", _DEFAULT_TIERS)
+    return max(t["max_km"] for t in tiers)
+
+
 def _fmt_aed(fee_str: str) -> str:
     """Render a stored fee string as a clean integer/decimal (no 1E+1 sci-notation)."""
     return f"{Decimal(fee_str).normalize():f}"
