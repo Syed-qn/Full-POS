@@ -31,6 +31,20 @@ const DEFAULT_TIERS: FeeTier[] = [
   { max_km: 10, fee_aed: 10 },
 ];
 
+// Human-readable band a tier actually covers, e.g. "0–3 km · Free" or
+// "3–5 km · AED 5". The lower bound is the next-smallest tier below this one
+// (0 for the first), computed from the other tiers so it's correct even while
+// the rows are still unsorted mid-edit. A 0 fee reads as "Free" to make the
+// free band unmistakable (this was the source of confusion).
+function tierBandLabel(tier: FeeTier, all: FeeTier[]): string {
+  const lower = all
+    .map((t) => t.max_km)
+    .filter((km) => km < tier.max_km)
+    .reduce((mx, km) => Math.max(mx, km), 0);
+  const fee = tier.fee_aed === 0 ? "Free" : `AED ${tier.fee_aed}`;
+  return `${lower}–${tier.max_km} km · ${fee}`;
+}
+
 // Upper limit a manager may set for a tier's distance. The radius = largest
 // tier, so this also caps the delivery radius. Spec default is 10 km; raised so
 // restaurants with wider coverage can opt in.
@@ -300,7 +314,7 @@ export function SettingsScreen() {
           <div className={s.rowStacked}>
             <div className={s.rowLabel}>
               <span className={s.rowName}>Distance fee tiers</span>
-              <span className={s.rowHint}>Charged by delivery distance. The largest tier sets your delivery radius (max {MAX_TIER_KM} km).</span>
+              <span className={s.rowHint}>Each row sets the fee up to that distance — the smallest row starts at 0 km. Set a fee to 0 for free delivery. The largest tier sets your delivery radius (max {MAX_TIER_KM} km).</span>
             </div>
           <div className={s.tierTable}>
             <div className={s.tierHead}>
@@ -309,34 +323,39 @@ export function SettingsScreen() {
               <span />
             </div>
             {tiers.map((tier, i) => (
-              <div key={i} className={s.tierRow}>
-                <input
-                  type="number"
-                  min={1}
-                  max={MAX_TIER_KM}
-                  value={tier.max_km}
-                  onChange={(e) => updateTier(i, "max_km", Number(e.target.value))}
-                  onFocus={(e) => e.target.select()}
-                  className={s.input}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={tier.fee_aed}
-                  onChange={(e) => updateTier(i, "fee_aed", Number(e.target.value))}
-                  onFocus={(e) => e.target.select()}
-                  className={s.input}
-                />
-                <button
-                  type="button"
-                  className={s.tierRemove}
-                  onClick={() => removeTier(i)}
-                  aria-label="Remove tier"
-                  title="Remove tier"
-                >
-                  ×
-                </button>
+              <div key={i} className={s.tierItem}>
+                <div className={s.tierRow}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_TIER_KM}
+                    value={tier.max_km}
+                    onChange={(e) => updateTier(i, "max_km", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    className={s.input}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={tier.fee_aed}
+                    onChange={(e) => updateTier(i, "fee_aed", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()}
+                    className={s.input}
+                  />
+                  <button
+                    type="button"
+                    className={s.tierRemove}
+                    onClick={() => removeTier(i)}
+                    aria-label="Remove tier"
+                    title="Remove tier"
+                  >
+                    ×
+                  </button>
+                </div>
+                <span className={s.tierBand}>
+                  {tierBandLabel(tier, tiers)}
+                </span>
               </div>
             ))}
             <button type="button" className={s.addTier} onClick={addTier}>

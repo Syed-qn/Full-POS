@@ -223,6 +223,11 @@
   color: var(--text-muted);
   padding: 0 2px;
 }
+.tierItem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 .tierRow {
   display: grid;
   grid-template-columns: 1fr 1fr 34px;
@@ -232,6 +237,12 @@
 .tierRow .input {
   max-width: 100%;
   width: 100%;
+}
+.tierBand {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-left: 2px;
 }
 .tierRemove {
   width: 34px;
