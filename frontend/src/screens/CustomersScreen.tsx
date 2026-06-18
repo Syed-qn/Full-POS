@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CompactTable, type Column } from "../components/CompactTable";
 import { listCustomers } from "../lib/customerApi";
+import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { CustomerDetailOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import s from "./OrdersScreen.module.css";
@@ -32,6 +33,10 @@ export function CustomersScreen() {
   const [minSpend, setMinSpend] = useState("");
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
+
+  usePollingRefresh(() => {
+    listCustomers().then((r) => setCustomers(r.items)).catch(() => {});
+  });
 
   useEffect(() => {
     listCustomers().then((r) => setCustomers(r.items));

@@ -4,6 +4,7 @@ import { ConversationRow } from "../components/ConversationRow";
 import { MessageBubble } from "../components/MessageBubble";
 import { SectionBanner } from "../components/SectionBanner";
 import { fetchConversations, fetchMessages, sendMessage, setTakeover } from "../lib/conversationsApi";
+import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { ConversationOut, MessageOut } from "../lib/types";
 import s from "./ConversationsScreen.module.css";
 
@@ -33,6 +34,13 @@ export function ConversationsScreen() {
     fetchConversations().then(setConvs).finally(() => setLoaded(true));
   }, []);
 
+  // Live updates: refresh the thread list in the background. The effect below
+  // depends on `convs`, so a poll also refreshes the open thread's messages —
+  // new incoming WhatsApp messages appear without a manual refresh.
+  usePollingRefresh(() => {
+    fetchConversations().then(setConvs).catch(() => {});
+  });
+
   useEffect(() => {
     if (activeId === null) return;
     fetchMessages(activeId).then(setMessages);
@@ -40,11 +48,22 @@ export function ConversationsScreen() {
     setTakeoverState(c?.manual_takeover ?? false);
   }, [activeId, convs]);
 
-  // Keep the thread pinned to the newest message (on open and on each new one).
+  // Auto-scroll to the newest message ONLY when the thread is opened/switched or
+  // a new message actually arrives — never on a routine poll that returns the
+  // same messages, so reading back through history isn't yanked to the bottom.
+  const lastLenRef = useRef(0);
+  const scrollNextRef = useRef(false);
+  useEffect(() => { scrollNextRef.current = true; }, [activeId]);
   useEffect(() => {
     const el = threadRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, activeId]);
+    if (!el) return;
+    const grew = messages.length > lastLenRef.current;
+    if (scrollNextRef.current || grew) {
+      el.scrollTop = el.scrollHeight;
+      scrollNextRef.current = false;
+    }
+    lastLenRef.current = messages.length;
+  }, [messages]);
 
   async function toggleTakeover() {
     if (activeId === null) return;

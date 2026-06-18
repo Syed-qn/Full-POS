@@ -4,6 +4,7 @@ import { RiderAddModal } from "../components/RiderAddModal";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
 import { deleteRider, fetchRiders, setRiderStatus } from "../lib/ridersApi";
+import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
 
@@ -18,6 +19,11 @@ export function RidersScreen() {
       .then(setRiders)
       .finally(() => setLoaded(true));
   }, []);
+
+  // Live updates: refresh rider list/status in the background (no skeleton flash).
+  usePollingRefresh(() => {
+    fetchRiders().then(setRiders).catch(() => {});
+  });
 
   const counts = useMemo(() => {
     const c = { available: 0, on_delivery: 0, off_shift: 0, deactivated: 0 };

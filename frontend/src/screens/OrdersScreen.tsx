@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CompactTable, type Column } from "../components/CompactTable";
 import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
 import { fetchOrders } from "../lib/ordersApi";
+import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { OrderOut, OrderStatus } from "../lib/types";
 import { OrderDetailDrawer } from "./OrderDetailDrawer";
 import { PageHeader } from "../components/PageHeader";
@@ -78,6 +79,12 @@ export function OrdersScreen() {
   useEffect(() => {
     fetchOrders().then(setOrders);
   }, []);
+
+  // Live updates: new orders + status/SLA changes appear without a refresh.
+  // Filters are applied client-side (useMemo), so they survive each poll.
+  usePollingRefresh(() => {
+    fetchOrders().then(setOrders).catch(() => {});
+  });
 
   function applyPreset(key: Exclude<PresetKey, "custom">) {
     const [from, to] = presetRange(key, new Date());
