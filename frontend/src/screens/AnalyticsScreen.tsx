@@ -50,6 +50,35 @@ function forecastCount(f: ForecastResult): number {
   return Object.values(p).filter((v): v is number => typeof v === "number").reduce((a, b) => a + b, 0);
 }
 
+// Skeletons mirror each card's loaded shape: a column chart for the forecast,
+// a row of stat boxes for the campaign summary.
+function ForecastSkeleton() {
+  const bars = [62, 88, 74, 96];
+  return (
+    <div className={s.skChart} aria-busy="true" aria-label="Loading forecast">
+      {bars.map((h, i) => (
+        <div key={i} className={s.skBarCol}>
+          <span className={`${s.sk} ${s.skBar}`} style={{ height: `${h}%` }} />
+          <span className={`${s.sk} ${s.skBarLabel}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CampaignSkeleton() {
+  return (
+    <div className={s.statRow} aria-busy="true" aria-label="Loading campaigns">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className={s.statBox}>
+          <span className={`${s.sk} ${s.skStatNum}`} />
+          <span className={`${s.sk} ${s.skStatLabel}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AnalyticsScreen() {
   const { data: forecasts, error: fErr } = usePoll<Partial<Record<Horizon, ForecastResult>>>(fetchAllForecasts, 60_000);
   const { data: campaigns, error: cErr } = usePoll<CampaignResponse[]>(fetchCampaignSummary, 60_000);
@@ -91,7 +120,7 @@ export function AnalyticsScreen() {
         </div>
 
         {forecasts === null ? (
-          <div className={s.loading}>Loading…</div>
+          <ForecastSkeleton />
         ) : !hasForecasts || forecastChart.length === 0 ? (
           <div className={s.empty}>
             <div className={s.emptyIcon}>📊</div>
@@ -132,7 +161,7 @@ export function AnalyticsScreen() {
         </div>
 
         {campaigns === null ? (
-          <div className={s.loading}>Loading…</div>
+          <CampaignSkeleton />
         ) : !campaignStats ? (
           <div className={s.empty}>
             <div className={s.emptyIcon}>📣</div>
@@ -141,19 +170,19 @@ export function AnalyticsScreen() {
           </div>
         ) : (
           <div className={s.statRow}>
-            <div className={s.statBox} style={{ borderTopColor: "#2563eb" }}>
+            <div className={s.statBox}>
               <div className={s.statNum}>{campaignStats.total}</div>
               <div className={s.statLabel}>Campaigns sent</div>
             </div>
-            <div className={s.statBox} style={{ borderTopColor: "#059669" }}>
+            <div className={s.statBox}>
               <div className={s.statNum}>{campaignStats.sent}</div>
               <div className={s.statLabel}>Messages delivered</div>
             </div>
-            <div className={s.statBox} style={{ borderTopColor: "#7c3aed" }}>
+            <div className={s.statBox}>
               <div className={s.statNum}>{campaignStats.converted}</div>
               <div className={s.statLabel}>Orders from campaigns</div>
             </div>
-            <div className={s.statBox} style={{ borderTopColor: "#d97706" }}>
+            <div className={s.statBox}>
               <div className={s.statNum}>{campaignStats.rate}%</div>
               <div className={s.statLabel}>Success rate</div>
             </div>

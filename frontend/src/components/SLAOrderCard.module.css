@@ -1,54 +1,104 @@
+/* Single-row alert line: id · who · status · timer chip · dismiss. */
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-}
-.top {
+  border-radius: 10px;
+  padding: 9px 12px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
 }
+.card:hover { border-color: var(--accent-primary); }
+
 .id {
   font-family: var(--font-mono);
   font-weight: 700;
   font-size: 13px;
   color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Customer + items take the flexible middle and truncate gracefully. */
+.who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 .cust {
   font-weight: 600;
   font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .items {
   font-size: 12px;
   color: var(--text-secondary);
-}
-.foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .rider {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--accent-rider);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.warn {
-  border-color: var(--sla-warn);
+
+/* Timer chip — colored pill keyed to the SLA tier. */
+.timerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.critical {
-  border-color: var(--sla-critical);
-  border-width: 2px;
-  animation: pulse-critical 2s infinite;
+.chipWarn {
+  color: var(--sla-warn);
+  background: color-mix(in srgb, var(--sla-warn) 16%, transparent);
 }
+.chipCritical {
+  color: var(--sla-critical);
+  background: color-mix(in srgb, var(--sla-critical) 16%, transparent);
+}
+.chipBreach {
+  color: #fff;
+  background: var(--sla-breach);
+}
+
+.dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 6px;
+  transition: color 0.12s, background 0.12s;
+}
+.dismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+}
+
+/* SLA lane accents — the timer chip carries the tier color, so the row keeps a
+   clean uniform border (no heavy colored stripe). Breach gets a faint tint. */
+.warn { border-color: color-mix(in srgb, var(--sla-warn) 35%, var(--border-subtle)); }
+.critical { border-color: color-mix(in srgb, var(--sla-critical) 35%, var(--border-subtle)); }
 .breach {
-  border-color: var(--sla-breach);
-  border-width: 2px;
-  background: rgba(255, 29, 55, 0.22);
-  animation: pulse-critical 1s infinite;
+  border-color: color-mix(in srgb, var(--sla-breach) 40%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-breach) 5%, var(--bg-surface));
 }

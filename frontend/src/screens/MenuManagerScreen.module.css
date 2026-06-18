@@ -226,8 +226,18 @@
   100% { transform: translateX(100%); }
 }
 .skStat { height: 16px; width: 90px; }
-.skSearch { height: 38px; flex: 1 1 280px; max-width: 360px; border-radius: var(--radius); }
-.skSegment { height: 38px; width: 220px; margin-left: auto; border-radius: 8px; }
+/* Filter placeholders mirror the real controls: white surface + border (not the
+   grey skeleton fill) with the shimmer sweeping over them. */
+.skSearch {
+  height: 38px; flex: 1 1 280px; max-width: 360px; border-radius: var(--radius);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+}
+.skSegment {
+  height: 38px; width: 220px; margin-left: auto; border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+}
 .skChip { height: 28px; border-radius: 999px; }
 .skCatName { height: 15px; width: 120px; }
 .skCard {

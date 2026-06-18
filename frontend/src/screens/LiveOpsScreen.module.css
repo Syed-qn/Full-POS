@@ -305,22 +305,21 @@
 
 /* ── Urgent ─── */
 .urgentCard {
-  background: linear-gradient(180deg, #fff8f0 0%, var(--bg-surface) 100%);
-  border: 1px solid #f59e0b;
-  border-left: 4px solid #f59e0b;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 14px 16px;
   box-shadow: var(--shadow-sm);
 }
 .urgentTitle {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #92400e;
+  color: var(--text-secondary);
   margin-bottom: 12px;
 }
 .urgentPulse {
@@ -396,3 +395,41 @@
   text-align: center;
   line-height: 1.6;
 }
+
+/* ── Loading skeleton (mirrors the home layout) ── */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: liveOpsSkShimmer 1.4s infinite;
+}
+@keyframes liveOpsSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skIcon { width: 30px; height: 30px; border-radius: 8px; }
+.skLabel { width: 90px; height: 10px; }
+.skValue { width: 64px; height: 30px; margin-top: 2px; }
+.skSub { width: 80px; height: 12px; }
+.skCardTitle { width: 120px; height: 12px; margin-bottom: 16px; }
+.skDonut { width: 168px; height: 168px; border-radius: 50%; flex-shrink: 0; }
+.skDot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.skLine { height: 12px; }
+.skLineSm { width: 34px; height: 12px; }
+.skPill { width: 64px; height: 20px; border-radius: 999px; }
+.skFeedRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.skFeedRow:last-child { border-bottom: none; }

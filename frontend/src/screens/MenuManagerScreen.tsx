@@ -4,7 +4,8 @@ import { DiffPanel } from "../components/DiffPanel";
 import { DishCard } from "../components/DishCard";
 import { DishEditModal } from "../components/DishEditModal";
 import { SectionBanner } from "../components/SectionBanner";
-import { activateMenu, fetchActiveMenu, getMenu, patchDish, setAvailability, uploadMenu } from "../lib/menuApi";
+import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, uploadMenu } from "../lib/menuApi";
+import { toast } from "../components/Toaster";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import s from "./MenuManagerScreen.module.css";
@@ -103,6 +104,18 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       setError("Failed to reorder dishes.");
     } finally {
       reloadDishes();
+    }
+  }
+
+  async function onDeleteDish(dish: DishOut) {
+    if (activeMenuId === null) return;
+    if (!window.confirm(`Delete “${dish.name}” from the menu?`)) return;
+    try {
+      await deleteDish(activeMenuId, dish.id);
+      toast(`“${dish.name}” deleted.`);
+      reloadDishes();
+    } catch {
+      toast("Failed to delete dish.", "error");
     }
   }
 
@@ -290,7 +303,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
           {canReorder && grouped.length > 0 && (
             <div className={s.reorderHint}>
-              Drag dishes within a category to reorder — numbers update automatically.
+              Drag dishes within a category to reorder. Tap “Available” to mark a dish unavailable (and tap again to bring it back).
             </div>
           )}
 
@@ -315,7 +328,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
                     onDrop={canReorder ? () => onDropDish(items, d.id) : undefined}
                     onDragEnd={() => { setDragId(null); setOverId(null); }}
                   >
-                    <DishCard dish={d} onToggle={onToggle} onEdit={setEditing} />
+                    <DishCard dish={d} onToggle={onToggle} onEdit={setEditing} onDelete={onDeleteDish} />
                   </div>
                 ))}
               </div>

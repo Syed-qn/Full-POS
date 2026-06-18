@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
-import { SectionBanner } from "../components/SectionBanner";
+import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
 import type { RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
@@ -8,6 +8,17 @@ import { LocationPicker } from "../components/LocationPicker";
 import s from "./SettingsScreen.module.css";
 
 type Tab = "general" | "fees" | "hours" | "batching";
+
+const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
+  { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
+    title: "General", blurb: "Your restaurant's name and pickup location." },
+  { key: "fees", label: "Delivery Fees", icon: "🛵", desc: "Distance pricing",
+    title: "Delivery Fees", blurb: "Charge by delivery distance. Max radius is 10 km." },
+  { key: "hours", label: "Opening Hours", icon: "🕒", desc: "When you're open",
+    title: "Opening Hours", blurb: "Hours the bot tells customers. Times are Asia/Dubai." },
+  { key: "batching", label: "Batching", icon: "📦", desc: "Order grouping",
+    title: "Order Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
+];
 
 interface FeeTier {
   max_km: number;
@@ -19,6 +30,11 @@ const DEFAULT_TIERS: FeeTier[] = [
   { max_km: 5, fee_aed: 5 },
   { max_km: 10, fee_aed: 10 },
 ];
+
+// Upper limit a manager may set for a tier's distance. The radius = largest
+// tier, so this also caps the delivery radius. Spec default is 10 km; raised so
+// restaurants with wider coverage can opt in.
+const MAX_TIER_KM = 25;
 
 // Opening hours. Index 0=Mon .. 6=Sun (matches backend app.conversation.hours).
 interface DayHours {
@@ -38,8 +54,6 @@ function defaultHours(): DayHours[] {
 export function SettingsScreen() {
   const [me, setMe] = useState<RestaurantOut | null>(null);
   const [tab, setTab] = useState<Tab>("general");
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // General tab
   const [name, setName] = useState("");
@@ -85,10 +99,8 @@ export function SettingsScreen() {
   }, []);
 
   function flash(err?: string) {
-    if (err) { setError(err); return; }
-    setError(null);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    if (err) { toast(err, "error"); return; }
+    toast("Settings saved.", "success");
   }
 
   async function saveGeneral() {
@@ -132,9 +144,9 @@ export function SettingsScreen() {
 
   async function saveFees() {
     if (tiers.length === 0) { flash("Add at least one fee tier."); return; }
-    // Validate: max_km within 1–10 (the delivery radius), fee_aed >= 0.
+    // Validate: max_km within 1–MAX_TIER_KM (the delivery radius), fee_aed >= 0.
     for (const t of tiers) {
-      if (t.max_km <= 0 || t.max_km > 10) { flash("Max km must be between 1 and 10."); return; }
+      if (t.max_km <= 0 || t.max_km > MAX_TIER_KM) { flash(`Max km must be between 1 and ${MAX_TIER_KM}.`); return; }
       if (t.fee_aed < 0) { flash("Fee cannot be negative."); return; }
     }
     const kms = tiers.map((t) => t.max_km);
@@ -195,15 +207,15 @@ export function SettingsScreen() {
   }
 
   function updateTier(i: number, field: keyof FeeTier, val: number) {
-    // Clamp km to the 10 km radius; fees can't be negative.
-    const clamped = field === "max_km" ? Math.min(10, Math.max(0, val)) : Math.max(0, val);
+    // Clamp km to the max allowed radius; fees can't be negative.
+    const clamped = field === "max_km" ? Math.min(MAX_TIER_KM, Math.max(0, val)) : Math.max(0, val);
     setTiers((prev) => prev.map((t, idx) => (idx === i ? { ...t, [field]: clamped } : t)));
   }
 
   function addTier() {
     setTiers((prev) => {
       const lastKm = prev.length ? prev[prev.length - 1].max_km : 0;
-      return [...prev, { max_km: Math.min(10, lastKm + 1), fee_aed: 0 }];
+      return [...prev, { max_km: Math.min(MAX_TIER_KM, lastKm + 1), fee_aed: 0 }];
     });
   }
 
@@ -211,55 +223,85 @@ export function SettingsScreen() {
     setTiers((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  const activeMeta = TABS.find((t) => t.key === tab)!;
+
   return (
     <div className={s.screen}>
       <PageHeader title="Settings" subtitle="Restaurant profile and delivery rules" />
-      <div className={s.tabs}>
-        {(["general", "fees", "hours", "batching"] as Tab[]).map((t) => (
-          <button key={t} className={`${s.tab} ${tab === t ? s.active : ""}`} onClick={() => { setTab(t); setSaved(false); setError(null); }}>
-            {t}
-          </button>
-        ))}
-      </div>
 
-      {saved && <SectionBanner tone="success">Settings saved.</SectionBanner>}
-      {error && <SectionBanner tone="warning">{error}</SectionBanner>}
+      <div className={s.layout}>
+        <nav className={s.nav} aria-label="Settings sections">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              className={`${s.navItem} ${tab === t.key ? s.navActive : ""}`}
+              onClick={() => setTab(t.key)}
+              aria-current={tab === t.key}
+            >
+              <span className={s.navIcon} aria-hidden>{t.icon}</span>
+              <span className={s.navText}>
+                <span className={s.navLabel}>{t.label}</span>
+                <span className={s.navDesc}>{t.desc}</span>
+              </span>
+            </button>
+          ))}
+        </nav>
 
-      {tab === "general" && (
+        <div className={s.panel}>
+          <header className={s.secHead}>
+            <h2 className={s.secTitle}>{activeMeta.title}</h2>
+            <p className={s.secBlurb}>{activeMeta.blurb}</p>
+          </header>
+
+          {tab === "general" && (
         <div className={s.section}>
-          <label className={s.field}>
-            <span className="label-upper">Restaurant Name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={255}
-              className={s.input}
-            />
-          </label>
-          <div className={s.fieldReadonly}>
-            <span className="label-upper">Phone (WABA number)</span>
-            <span className={s.readonlyValue}>{me?.phone ?? "—"}</span>
-            <span className={s.hint}>WhatsApp Business Account number — cannot be changed here.</span>
+          <div className={s.row2}>
+            <label className={s.col}>
+              <span className={s.rowName}>Restaurant Name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={255}
+                className={s.input}
+              />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Phone (WABA number)</span>
+              <input
+                type="text"
+                value={me?.phone ?? ""}
+                disabled
+                className={s.input}
+                aria-label="Phone (WABA number)"
+              />
+              <span className={s.rowHint}>🔒 WhatsApp Business number — locked.</span>
+            </label>
           </div>
-          <div className={s.field}>
-            <span className="label-upper">Restaurant Location</span>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Restaurant Location</span>
+              <span className={s.rowHint}>Used to measure delivery distance &amp; fees.</span>
+            </div>
             <LocationPicker
               lat={Number(lat)}
               lng={Number(lng)}
               onChange={(la, ln) => { setLat(String(la)); setLng(String(ln)); }}
             />
-            <span className={s.hint}>Used to measure delivery distance &amp; fees.</span>
           </div>
-          <Button onClick={saveGeneral}>Save</Button>
+          <div className={s.actions}>
+            <Button onClick={saveGeneral}>Save</Button>
+          </div>
         </div>
       )}
 
       {tab === "fees" && (
         <div className={s.section}>
-          <p className={s.note}>
-            Fee tiers apply per delivery distance. Max radius is 10 km — addresses beyond are rejected automatically.
-          </p>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Distance fee tiers</span>
+              <span className={s.rowHint}>Charged by delivery distance. The largest tier sets your delivery radius (max {MAX_TIER_KM} km).</span>
+            </div>
           <div className={s.tierTable}>
             <div className={s.tierHead}>
               <span>Up to (km)</span>
@@ -271,7 +313,7 @@ export function SettingsScreen() {
                 <input
                   type="number"
                   min={1}
-                  max={10}
+                  max={MAX_TIER_KM}
                   value={tier.max_km}
                   onChange={(e) => updateTier(i, "max_km", Number(e.target.value))}
                   onFocus={(e) => e.target.select()}
@@ -301,24 +343,29 @@ export function SettingsScreen() {
               + Add tier
             </button>
           </div>
-          <Button onClick={saveFees}>Save Fee Tiers</Button>
+          </div>
+          <div className={s.actions}>
+            <Button onClick={saveFees}>Save Fee Tiers</Button>
+          </div>
         </div>
       )}
 
       {tab === "hours" && (
         <div className={s.section}>
-          <p className={s.note}>
-            Opening hours the bot tells customers. Times are Asia/Dubai. Leave “No fixed
-            hours” on to stay always available.
-          </p>
-          <label className={s.hoursToggle}>
-            <input
-              type="checkbox"
-              checked={noFixedHours}
-              onChange={(e) => setNoFixedHours(e.target.checked)}
-            />
-            <span>No fixed hours (always available)</span>
-          </label>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Availability</span>
+              <span className={s.rowHint}>Keep this on to stay always available, or set per-day hours below.</span>
+            </div>
+            <label className={s.hoursToggle}>
+              <input
+                type="checkbox"
+                checked={noFixedHours}
+                onChange={(e) => setNoFixedHours(e.target.checked)}
+              />
+              <span>No fixed hours (always available)</span>
+            </label>
+          </div>
 
           {!noFixedHours && (
             <>
@@ -362,41 +409,51 @@ export function SettingsScreen() {
               </button>
             </>
           )}
-          <Button onClick={saveHours}>Save Hours</Button>
+          <div className={s.actions}>
+            <Button onClick={saveHours}>Save Hours</Button>
+          </div>
         </div>
       )}
 
       {tab === "batching" && (
         <div className={s.section}>
-          <label className={s.field}>
-            <span className="label-upper">Max orders per batch</span>
-            <input
-              aria-label="orders per batch"
-              type="number"
-              min={1}
-              max={6}
-              value={ordersPerBatch}
-              onChange={(e) => setOrdersPerBatch(Number(e.target.value))}
-              onFocus={(e) => e.target.select()}
-              className={s.input}
-            />
-          </label>
-          <label className={s.field}>
-            <span className="label-upper">Max items per order</span>
-            <input
-              aria-label="items per order"
-              type="number"
-              min={1}
-              max={100}
-              value={itemsPerOrder}
-              onChange={(e) => setItemsPerOrder(Number(e.target.value))}
-              onFocus={(e) => e.target.select()}
-              className={s.input}
-            />
-          </label>
-          <Button onClick={saveBatching}>Save</Button>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Max orders per batch</span>
+              <input
+                aria-label="orders per batch"
+                type="number"
+                min={1}
+                max={6}
+                value={ordersPerBatch}
+                onChange={(e) => setOrdersPerBatch(Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>How many orders a rider can carry together.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Max items per order</span>
+              <input
+                aria-label="items per order"
+                type="number"
+                min={1}
+                max={100}
+                value={itemsPerOrder}
+                onChange={(e) => setItemsPerOrder(Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Upper limit a customer can add to one order.</span>
+            </label>
+          </div>
+          <div className={s.actions}>
+            <Button onClick={saveBatching}>Save</Button>
+          </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

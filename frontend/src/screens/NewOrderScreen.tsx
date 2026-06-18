@@ -74,8 +74,13 @@ export function NewOrderScreen() {
         const tiers = (r.settings as Record<string, unknown>)?.delivery_fee_tiers;
         if (Array.isArray(tiers) && tiers.length > 0) {
           const opts = buildFeeOptions(tiers as FeeTier[]);
-          setFeeOptions(opts);
-          setFee(opts[0].value);
+          // Always offer a free-delivery choice (comps / promos) even when no
+          // tier is free, and select it by default.
+          const withFree = opts.some((o) => o.value === "0.00")
+            ? opts
+            : [{ value: "0.00", label: "Free delivery" }, ...opts];
+          setFeeOptions(withFree);
+          setFee(withFree[0].value);
         }
       })
       .catch(() => {})
@@ -347,7 +352,7 @@ export function NewOrderScreen() {
                         <span
                           className={`${s.dishName} ${qty > 0 ? s.dishNameActive : ""}`}
                         >
-                          {dish.dish_number}. {dish.name}
+                          {dish.name}
                         </span>
                         <span className={s.dishPrice}>
                           · AED {dish.price_aed}

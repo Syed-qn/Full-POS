@@ -1,62 +1,158 @@
 .screen {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 640px;
+  gap: 18px;
 }
 
-/* ---- Segmented tabs ---- */
-.tabs {
-  display: inline-flex;
-  align-self: flex-start;
-  background: var(--bg-surface-inset);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 3px;
+/* ---- Two-column layout: vertical nav + open content panel ---- */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
+  align-items: start;
 }
-.tab {
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* ---- Vertical nav ---- */
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 16px;
+}
+@media (max-width: 720px) {
+  .nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+  }
+}
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
   background: none;
-  border: none;
-  color: var(--text-secondary);
-  padding: 7px 18px;
-  border-radius: 7px;
-  text-transform: capitalize;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 12px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: background 0.12s, color 0.12s;
+  color: var(--text-secondary);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.tab:hover {
-  color: var(--text-primary);
-}
-.active {
-  color: var(--text-primary);
+.navItem:hover { background: var(--bg-surface-inset); color: var(--text-primary); }
+.navActive {
   background: var(--bg-surface);
+  border-color: var(--border-subtle);
   box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
+}
+.navIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-size: 16px;
+  background: var(--bg-surface-inset);
+}
+.navActive .navIcon {
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+}
+.navText { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.navLabel { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.navDesc { font-size: 11px; color: var(--text-muted); line-height: 1.2; }
+@media (max-width: 720px) {
+  .navDesc { display: none; }
+  .navItem { width: auto; white-space: nowrap; }
 }
 
-/* ---- Section card ---- */
+/* ---- Content panel (white card) ---- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  padding: 4px 24px 24px;
+}
+.secHead {
+  padding: 18px 0 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.secTitle { font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.secBlurb { display: none; }
+
+/* ---- Rows (label left, control right) ---- */
 .section {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-  padding: 22px;
 }
-/* Save buttons size to their content, not the full card width. */
-.section > button {
-  align-self: flex-start;
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
-
-.field {
+.rowStacked {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+/* Two fields side by side on a single row. */
+.row2 {
+  display: flex;
+  gap: 24px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.col {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 7px;
+  min-width: 0;
 }
+.col .input { width: 100%; max-width: none; }
+.col .inputNum { width: 110px; }
+/* Compact two-up (e.g. batching): tighter row, fields fill their columns. */
+.row2Compact { max-width: 460px; }
+.row2Compact .col .inputNum { width: 100%; }
+@media (max-width: 560px) {
+  .row2 { flex-direction: column; gap: 16px; }
+}
+.rowLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.rowName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.rowHint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* ---- Inputs ---- */
 .input {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
@@ -64,53 +160,49 @@
   padding: 9px 12px;
   color: var(--text-primary);
   width: 100%;
-  max-width: 360px;
+  max-width: 320px;
   font-size: 13px;
   box-sizing: border-box;
-  transition: border-color 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
 .input:focus {
   outline: none;
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 16%, transparent);
 }
+.input:disabled {
+  background: var(--bg-surface-inset);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  -webkit-text-fill-color: var(--text-secondary);
+}
+/* Right-aligned inline controls in a .row keep their natural size. */
+.row > .input { flex: 0 0 auto; width: 320px; }
+.inputNum { width: 110px; text-align: left; }
+.row > .inputNum { width: 110px; }
 
 /* ---- Read-only (locked) field ---- */
-.fieldReadonly {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.coords {
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-}
 .readonlyValue {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
   font-family: var(--font-mono);
   color: var(--text-primary);
-  background: var(--bg-surface-inset);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  padding: 9px 12px;
-  max-width: 360px;
+  flex-shrink: 0;
 }
 .readonlyValue::before {
   content: "🔒";
   font-size: 12px;
 }
-.hint {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.note {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
+
+/* ---- Save footer ---- */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 18px;
 }
 
 /* ---- Fee tier table ---- */
@@ -118,7 +210,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 400px;
+  max-width: 420px;
 }
 .tierHead {
   display: grid;
@@ -139,6 +231,7 @@
 }
 .tierRow .input {
   max-width: 100%;
+  width: 100%;
 }
 .tierRemove {
   width: 34px;
@@ -179,10 +272,16 @@
 .hoursToggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 11px 14px;
+  max-width: 440px;
 }
 .hoursToggle input {
   width: 16px;
@@ -193,14 +292,19 @@
 .hoursList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   max-width: 440px;
+  padding: 14px 0 4px;
 }
 .hourRow {
   display: grid;
   grid-template-columns: 150px 1fr;
   gap: 10px;
   align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface);
 }
 .hourDay {
   display: flex;

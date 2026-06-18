@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { Toaster } from "./components/Toaster";
 import { isAuthenticated } from "./lib/auth";
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
@@ -20,6 +21,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <>
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
@@ -34,5 +36,7 @@ export default function App() {
       <Route path="/settings" element={<Guarded><SettingsScreen /></Guarded>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <Toaster />
+    </>
   );
 }

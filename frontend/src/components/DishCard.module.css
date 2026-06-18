@@ -23,19 +23,37 @@
 .clickable {
   cursor: pointer;
 }
-.editHint {
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.editBtn,
+.deleteBtn {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-muted);
-  transition: color 0.12s;
+  border-radius: 7px;
+  padding: 4px 11px;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.clickable:hover .editHint {
+.editBtn { color: var(--text-secondary); }
+.editBtn:hover {
+  border-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+.deleteBtn { color: var(--text-muted); }
+.deleteBtn:hover {
+  border-color: #b02a2a;
+  color: #b02a2a;
+  background: #fdeaea;
 }
 .top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 .num {
   font-family: var(--font-mono);

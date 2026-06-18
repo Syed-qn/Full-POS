@@ -10,9 +10,9 @@ const dish: DishOut = {
 };
 
 describe("DishCard", () => {
-  it("renders number, name, price", () => {
+  it("renders name and price (dish number is hidden from the UI)", () => {
     render(<DishCard dish={dish} onToggle={() => {}} />);
-    expect(screen.getByText("#110")).toBeInTheDocument();
+    expect(screen.queryByText("#110")).not.toBeInTheDocument();
     expect(screen.getByText("Chicken Biryani")).toBeInTheDocument();
     expect(screen.getByText("AED 22.00")).toBeInTheDocument();
   });

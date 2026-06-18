@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "./Button";
+import { toast } from "./Toaster";
 import { addDish, deleteDish, patchDish } from "../lib/menuApi";
 import { ApiError } from "../lib/apiClient";
 import type { DishOut } from "../lib/types";
@@ -75,8 +76,10 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     try {
       if (isNew) {
         await addDish(menuId, body);
+        toast(`“${body.name}” added to the menu.`);
       } else {
         await patchDish(menuId, d!.id, body);
+        toast(`“${body.name}” updated.`);
       }
       onSaved();
       onClose();
@@ -92,6 +95,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     setError(null);
     try {
       await deleteDish(menuId, d.id);
+      toast(`“${d.name}” deleted.`);
       onSaved();
       onClose();
     } catch (err) {
@@ -104,7 +108,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     <div className={s.overlay} onClick={onClose}>
       <div className={s.modal} onClick={(e) => e.stopPropagation()}>
         <div className={s.header}>
-          <h2 className={s.title}>{isNew ? `Add dish #${dishNumber}` : `Edit #${d?.dish_number} — ${d?.name}`}</h2>
+          <h2 className={s.title}>{isNew ? "Add dish" : `Edit — ${d?.name}`}</h2>
           <button className={s.close} onClick={onClose} aria-label="Close">×</button>
         </div>
 

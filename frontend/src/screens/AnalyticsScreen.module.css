@@ -36,6 +36,50 @@
   padding: 12px 0;
 }
 
+/* ── Loading skeletons (mirror each card's loaded shape) ── */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: analyticsSkShimmer 1.4s infinite;
+}
+@keyframes analyticsSkShimmer {
+  100% { transform: translateX(100%); }
+}
+/* Forecast: column-chart placeholder */
+.skChart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 24px;
+  height: 200px;
+  padding: 8px 8px 0;
+}
+.skBarCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  max-width: 64px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.skBar { width: 100%; border-radius: 6px 6px 0 0; }
+.skBarLabel { width: 70%; height: 12px; }
+/* Campaign: stat-box placeholders */
+.skStatNum { width: 48px; height: 28px; }
+.skStatLabel { width: 80px; height: 12px; }
+
 /* Empty states */
 .empty {
   display: flex;
@@ -72,7 +116,6 @@
   min-width: 130px;
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-subtle);
-  border-top: 3px solid var(--accent-primary);
   border-radius: var(--radius);
   padding: 16px;
   display: flex;

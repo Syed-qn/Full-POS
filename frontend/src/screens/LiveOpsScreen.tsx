@@ -45,6 +45,57 @@ const STATUS_COLORS: Record<string, string> = {
   on_resale:            "#8b929b",
 };
 
+// Loading skeleton mirroring the home layout: 4 KPI cards + a donut card and
+// the orders-feed card. Shown until the first poll resolves.
+function LiveOpsSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading live operations">
+      <div className={s.kpiStrip}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={s.stat}>
+            <div className={s.statTop}>
+              <span className={`${s.sk} ${s.skIcon}`} />
+              <span className={`${s.sk} ${s.skLabel}`} />
+            </div>
+            <span className={`${s.sk} ${s.skValue}`} />
+            <span className={`${s.sk} ${s.skSub}`} />
+          </div>
+        ))}
+      </div>
+
+      <div className={s.grid2} style={{ marginTop: 20 }}>
+        <div className={s.card}>
+          <span className={`${s.sk} ${s.skCardTitle}`} />
+          <div className={s.statusBody}>
+            <span className={`${s.sk} ${s.skDonut}`} />
+            <div className={s.legend}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className={s.legendRow}>
+                  <span className={`${s.sk} ${s.skDot}`} />
+                  <span className={`${s.sk} ${s.skLine}`} style={{ flex: 1 }} />
+                  <span className={`${s.sk} ${s.skLineSm}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className={s.card}>
+          <span className={`${s.sk} ${s.skCardTitle}`} />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className={s.skFeedRow}>
+              <span className={`${s.sk} ${s.skLineSm}`} style={{ width: 36 }} />
+              <span className={`${s.sk} ${s.skLine}`} style={{ flex: 1 }} />
+              <span className={`${s.sk} ${s.skLineSm}`} style={{ width: 54 }} />
+              <span className={`${s.sk} ${s.skPill}`} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatCard({
   icon, label, value, accent, sub,
 }: {
@@ -64,12 +115,19 @@ function StatCard({
 
 export function LiveOpsScreen() {
   const { data, error } = usePoll<OrderOut[]>(fetchOrders, 4000);
+  // First paint, before the initial poll resolves — show the skeleton.
+  const loading = data === null && error == null;
   const orders = data ?? [];
   const nav = useNavigate();
   const [filter, setFilter] = useState<OrderOut["status"] | "all">("all");
+  // Manager-dismissed urgent alerts (kept in memory only — a page refresh
+  // re-surfaces anything still breaching so nothing is silently lost).
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
   const activeOrders = orders.filter((o) => ACTIVE.includes(o.status));
-  const urgent = activeOrders.filter((o) => remainingMs(o.sla_started_at) <= 10 * 60_000);
+  const urgent = activeOrders
+    .filter((o) => remainingMs(o.sla_started_at) <= 10 * 60_000)
+    .filter((o) => !dismissed.has(o.id));
 
   const kpis = useMemo(() => {
     const delivered = orders.filter((o) => o.status === "delivered").length;
@@ -142,6 +200,10 @@ export function LiveOpsScreen() {
         </div>
       </header>
 
+      {loading ? (
+        <LiveOpsSkeleton />
+      ) : (
+      <>
       {/* ── KPI cards ─── */}
       <div className={s.kpiStrip}>
         <StatCard icon="📦" label="Orders Today" value={String(kpis.total)}
@@ -163,7 +225,14 @@ export function LiveOpsScreen() {
           </div>
           <div className={s.urgentList}>
             {urgent.map((o) => (
-              <SLAOrderCard key={o.id} order={o} onClick={() => nav(`/orders?id=${o.id}`)} />
+              <SLAOrderCard
+                key={o.id}
+                order={o}
+                onClick={() => nav(`/orders?id=${o.id}`)}
+                onDismiss={() =>
+                  setDismissed((prev) => new Set(prev).add(o.id))
+                }
+              />
             ))}
           </div>
         </div>
@@ -227,6 +296,8 @@ export function LiveOpsScreen() {
           />
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

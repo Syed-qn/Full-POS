@@ -50,4 +50,18 @@ describe("SLAOrderCard", () => {
     fireEvent.keyDown(card, { key: " " });
     expect(onClick).toHaveBeenCalledTimes(2);
   });
+
+  it("renders no dismiss button unless onDismiss is provided", () => {
+    render(<SLAOrderCard order={order()} />);
+    expect(screen.queryByLabelText(/dismiss alert/i)).not.toBeInTheDocument();
+  });
+
+  it("dismiss button fires onDismiss without triggering the card onClick", () => {
+    const onClick = vi.fn();
+    const onDismiss = vi.fn();
+    render(<SLAOrderCard order={order()} onClick={onClick} onDismiss={onDismiss} />);
+    fireEvent.click(screen.getByLabelText(/dismiss alert/i));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });

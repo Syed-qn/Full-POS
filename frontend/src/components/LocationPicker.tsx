@@ -59,6 +59,19 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
   const [address, setAddress] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  // A moved/searched pin is staged here until the user confirms (Save) or
+  // discards it (Cancel) — so a stray drag never silently changes the location.
+  const [pending, setPending] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Stage a new pin position without committing it upstream yet.
+  function propose(la: number, ln: number) {
+    const r = { lat: round6(la), lng: round6(ln) };
+    setPending(r);
+    markerRef.current?.setLatLng([r.lat, r.lng]);
+    mapObj.current?.panTo([r.lat, r.lng]);
+  }
+  const proposeRef = useRef(propose);
+  proposeRef.current = propose;
 
   // Initialise the map once.
   useEffect(() => {
@@ -81,11 +94,10 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
 
       marker.on("dragend", () => {
         const p = marker.getLatLng();
-        onChangeRef.current(round6(p.lat), round6(p.lng));
+        proposeRef.current(p.lat, p.lng);
       });
       map.on("click", (e: import("leaflet").LeafletMouseEvent) => {
-        marker.setLatLng(e.latlng);
-        onChangeRef.current(round6(e.latlng.lat), round6(e.latlng.lng));
+        proposeRef.current(e.latlng.lat, e.latlng.lng);
       });
 
       setTimeout(() => map.invalidateSize(), 120);
@@ -110,17 +122,22 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
     }
   }, [lat, lng]);
 
+  // The pin currently shown = the staged (pending) position if any, else the
+  // committed prop coords.
+  const activeLat = pending ? pending.lat : lat;
+  const activeLng = pending ? pending.lng : lng;
+
   // Reverse-geocode the current pin so the manager sees the real address.
   useEffect(() => {
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return;
+    if (!Number.isFinite(activeLat) || !Number.isFinite(activeLng) || (activeLat === 0 && activeLng === 0)) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      reverseGeocode(lat, lng)
+      reverseGeocode(activeLat, activeLng)
         .then((a) => { if (!cancelled) setAddress(a); })
         .catch(() => { if (!cancelled) setAddress(null); });
     }, 500);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [lat, lng]);
+  }, [activeLat, activeLng]);
 
   // Debounced address search.
   useEffect(() => {
@@ -141,7 +158,21 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
     setQuery(place.label);
     setShowResults(false);
     setAddress(place.label);
-    onChangeRef.current(round6(place.lat), round6(place.lng));
+    propose(place.lat, place.lng);
+  }
+
+  function saveLocation() {
+    if (!pending) return;
+    onChangeRef.current(pending.lat, pending.lng);
+    setPending(null);
+  }
+
+  function cancelLocation() {
+    if (!pending) return;
+    // Snap the pin back to the last committed location.
+    markerRef.current?.setLatLng([lat, lng]);
+    mapObj.current?.panTo([lat, lng]);
+    setPending(null);
   }
 
   function useMyLocation() {
@@ -154,7 +185,7 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false);
-        onChangeRef.current(round6(pos.coords.latitude), round6(pos.coords.longitude));
+        propose(pos.coords.latitude, pos.coords.longitude);
       },
       () => {
         setLocating(false);
@@ -165,43 +196,69 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
   }
 
   return (
-    <div className={s.wrap}>
+    <div className={s.card}>
       <div className={s.searchWrap}>
+        <span className={s.searchIcon} aria-hidden>🔍</span>
         <input
           className={s.search}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length && setShowResults(true)}
-          placeholder="Search an address or place… (e.g. Al Karama, Dubai)"
+          placeholder="Search an address or place…"
         />
-        {searching && <span className={s.spinner}>…</span>}
+        {searching && <span className={s.spinner} />}
         {showResults && results.length > 0 && (
           <ul className={s.results}>
             {results.map((r, i) => (
               <li key={i} className={s.resultItem} onMouseDown={() => pick(r)}>
-                {r.label}
+                <span className={s.resultPin} aria-hidden>📍</span>
+                <span className={s.resultLabel}>{r.label}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      <div ref={mapRef} className={s.map} />
-
-      <div className={s.controls}>
-        <button type="button" className={s.locBtn} onClick={useMyLocation} disabled={locating}>
-          {locating ? "Locating…" : "📍 Use my current location"}
+      <div className={s.mapWrap}>
+        <div ref={mapRef} className={s.map} />
+        <button
+          type="button"
+          className={s.locBtn}
+          onClick={useMyLocation}
+          disabled={locating}
+        >
+          {locating ? "Locating…" : "📍 My location"}
         </button>
-        <span className={s.tip}>Search, drag the pin, or click the map.</span>
       </div>
 
-      {address && (
-        <div className={s.address}>
-          <span className={s.addrIcon}>📌</span>
-          <span className={s.addrText}>{address}</span>
-        </div>
-      )}
-      {geoError && <span className={s.error}>{geoError}</span>}
+      <div className={s.footer}>
+        {address ? (
+          <div className={s.address}>
+            <span className={s.addrIcon} aria-hidden>📍</span>
+            <div className={s.addrTextWrap}>
+              <span className={s.addrLabel}>{pending ? "New location" : "Selected location"}</span>
+              <span className={s.addrText}>{address}</span>
+            </div>
+          </div>
+        ) : (
+          <span className={s.tip}>Search, drag the pin, or click the map to set your location.</span>
+        )}
+
+        {pending && (
+          <div className={s.confirmBar}>
+            <span className={s.pendingNote}>Pin moved — save to apply.</span>
+            <div className={s.confirmBtns}>
+              <button type="button" className={s.cancelBtn} onClick={cancelLocation}>
+                Cancel
+              </button>
+              <button type="button" className={s.saveBtn} onClick={saveLocation}>
+                Save location
+              </button>
+            </div>
+          </div>
+        )}
+        {geoError && <span className={s.error}>{geoError}</span>}
+      </div>
     </div>
   );
 }

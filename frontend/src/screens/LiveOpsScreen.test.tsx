@@ -12,6 +12,17 @@ describe("LiveOpsScreen", () => {
   });
   afterEach(() => vi.useRealTimers());
 
+  it("shows the loading skeleton before the first poll resolves", () => {
+    render(
+      <MemoryRouter>
+        <LiveOpsScreen />
+      </MemoryRouter>,
+    );
+    // data is still null on first paint → skeleton, not KPI values.
+    expect(screen.getByLabelText("Loading live operations")).toBeInTheDocument();
+    expect(screen.queryByText("Orders Today")).not.toBeInTheDocument();
+  });
+
   it("renders KPI strip and the live feed from fixtures", async () => {
     render(
       <MemoryRouter>
