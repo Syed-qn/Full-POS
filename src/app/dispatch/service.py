@@ -336,27 +336,19 @@ async def _enqueue_rider_assignment(
         )
         return
 
-    # Free-form rich summary (dev/test/mock + inside-24h window).
-    from app.dispatch.rider_flow import _stop_details
-
-    blocks: list[str] = []
-    for o in orders:
-        name, address_str, _coords = await _stop_details(session, o)
-        lines = [f"*Order {o.order_number}*"]
-        if name:
-            lines.append(f"👤 {name}")
-        if address_str:
-            lines.append(f"📍 {address_str}")
-        if o.total:
-            lines.append(f"💵 Collect AED {o.total:.2f}")
-        blocks.append("\n".join(lines))
-
-    header = (
-        "🛵 *New delivery assigned*"
-        if len(orders) == 1
-        else f"🛵 *New batch assigned* — {len(orders)} orders"
-    )
-    body = header + "\n\n" + "\n\n".join(blocks) + "\n\nTap below once you've picked up."
+    # Slim assignment — just the order number(s). The full per-stop details
+    # (name / address / COD / map) are revealed AFTER the rider taps "Orders
+    # Picked" (see rider_flow._send_stop), so this stays a short heads-up.
+    if len(orders) == 1:
+        body = (
+            f"🛵 *New delivery* — Order {orders[0].order_number}.\n"
+            "Tap below once you've picked up."
+        )
+    else:
+        body = (
+            f"🛵 *New batch* — {len(orders)} orders: {order_numbers}.\n"
+            "Tap below once you've picked up."
+        )
 
     await enqueue_message(
         session,
