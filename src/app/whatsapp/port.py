@@ -6,6 +6,7 @@ from typing import Protocol
 class OutboundMessageType(StrEnum):
     TEXT = "text"
     BUTTONS = "buttons"
+    CTA_URL = "cta_url"
     LIST = "list"
     LOCATION_REQUEST = "location_request"
     IMAGE = "image"

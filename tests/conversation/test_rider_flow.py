@@ -197,8 +197,8 @@ async def test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_
     assert "Delivered & next" in titles
     body = payload.get("body", "")
     assert "Near" in body or "stop" in body.lower()
-    # customer contact in body for rider (safe check; seed uses customer_id)
-    assert "Customer:" in body or "Contact" in body or "Next stop" in body
+    # customer details in body for rider (safe check; seed uses customer_id)
+    assert "Name:" in body or "stop" in body.lower()
 
     # click delivered_next for o1 -> delivered + immediate next stop for o2
     inbound_next = InboundMessage(
@@ -220,4 +220,4 @@ async def test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_
         .order_by(OutboxMessage.id.desc())
     )
     assert msg2 is not None
-    assert f"Next stop: Order {o2.order_number}" in (msg2.payload or {}).get("body", "")
+    assert f"Next stop — Order {o2.order_number}" in (msg2.payload or {}).get("body", "")

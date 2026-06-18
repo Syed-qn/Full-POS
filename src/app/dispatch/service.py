@@ -273,15 +273,12 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             result.assigned_count += 1
 
         rider.status = "on_delivery"
-        order_numbers = ", ".join(
-            orders_by_id[pc.order_id].order_number for pc in planned.orders
-        )
         await _enqueue_rider_assignment(
             session,
             restaurant_id=restaurant_id,
             rider_phone=rider.phone,
             batch_id=batch.id,
-            order_numbers=order_numbers,
+            orders=[orders_by_id[pc.order_id] for pc in planned.orders],
         )
 
     return result
@@ -293,7 +290,7 @@ async def _enqueue_rider_assignment(
     restaurant_id: int,
     rider_phone: str,
     batch_id: int,
-    order_numbers: str,
+    orders: list,
 ) -> None:
     """Notify the rider of a new batch.
 
@@ -301,12 +298,15 @@ async def _enqueue_rider_assignment(
     free-form interactive button is rejected. When ``wa_rider_assign_template``
     is configured we send an approved TEMPLATE (delivers anytime); the quick-reply
     button still carries ``picked:{batch_id}`` so the existing rider flow is
-    unchanged. With no template configured we keep the free-form button (works
-    only inside the 24h window) so dev/test/mock behaviour is identical.
+    unchanged. With no template configured we send a rich free-form summary
+    (customer name, address, COD amount per order) so the rider knows the job
+    up-front; the map/navigation link is intentionally withheld until pickup
+    (flow integrity — see rider_flow).
     """
     from app.config import get_settings
 
     settings = get_settings()
+    order_numbers = ", ".join(o.order_number for o in orders)
     tmpl = settings.wa_rider_assign_template
     if tmpl:
         await enqueue_message(
@@ -336,13 +336,35 @@ async def _enqueue_rider_assignment(
         )
         return
 
+    # Free-form rich summary (dev/test/mock + inside-24h window).
+    from app.dispatch.rider_flow import _stop_details
+
+    blocks: list[str] = []
+    for o in orders:
+        name, address_str, _coords = await _stop_details(session, o)
+        lines = [f"*Order {o.order_number}*"]
+        if name:
+            lines.append(f"👤 {name}")
+        if address_str:
+            lines.append(f"📍 {address_str}")
+        if o.total:
+            lines.append(f"💵 Collect AED {o.total:.2f}")
+        blocks.append("\n".join(lines))
+
+    header = (
+        "🛵 *New delivery assigned*"
+        if len(orders) == 1
+        else f"🛵 *New batch assigned* — {len(orders)} orders"
+    )
+    body = header + "\n\n" + "\n\n".join(blocks) + "\n\nTap below once you've picked up."
+
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
         to_phone=rider_phone,
         msg_type=OutboundMessageType.BUTTONS,
         payload={
-            "body": f"New batch assigned. Orders: {order_numbers}",
+            "body": body,
             "buttons": [{"id": f"picked:{batch_id}", "title": "Orders Picked"}],
         },
         idempotency_key=f"assign-{batch_id}",
@@ -464,6 +486,6 @@ async def reassign_order(
         restaurant_id=restaurant_id,
         rider_phone=new_rider.phone,
         batch_id=batch.id,
-        order_numbers=order.order_number,
+        orders=[order],
     )
     return order

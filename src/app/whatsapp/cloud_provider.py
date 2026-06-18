@@ -44,6 +44,24 @@ def _build_graph_payload(msg: OutboundMessage) -> dict[str, Any]:
             },
         }
 
+    elif msg.type == OutboundMessageType.CTA_URL:
+        # payload: {"body": str, "button_label": str, "url": str}
+        # Single tappable URL button (e.g. "Open in Maps"). WhatsApp does not
+        # allow combining a URL button with quick-reply buttons in one message,
+        # so this is sent as its own message.
+        base["type"] = "interactive"
+        base["interactive"] = {
+            "type": "cta_url",
+            "body": {"text": msg.payload["body"]},
+            "action": {
+                "name": "cta_url",
+                "parameters": {
+                    "display_text": msg.payload["button_label"],
+                    "url": msg.payload["url"],
+                },
+            },
+        }
+
     elif msg.type == OutboundMessageType.LIST:
         # payload: {"body": str, "button_label": str, "sections": [...]}
         base["type"] = "interactive"

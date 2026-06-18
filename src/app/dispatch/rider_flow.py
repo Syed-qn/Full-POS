@@ -85,24 +85,79 @@ async def _dropoff_coords(
     return (addr.latitude, addr.longitude)
 
 
-async def _send_stop(
-    session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order
+async def _stop_details(
+    session: AsyncSession, order: Order
+) -> tuple[str, str, tuple[float, float] | None]:
+    """Gather the rider-facing delivery details: customer name, a readable
+    address, and drop-off coordinates (only present for orders placed with a
+    WhatsApp location pin)."""
+    name = ""
+    address_str = ""
+    coords: tuple[float, float] | None = None
+    if order.customer_id:
+        cust = await session.get(Customer, order.customer_id)
+        if cust and cust.name:
+            name = cust.name
+    if order.address_id:
+        addr = await session.get(CustomerAddress, order.address_id)
+        if addr:
+            if not name and addr.receiver_name:
+                name = addr.receiver_name
+            parts = [
+                p for p in (addr.room_apartment, addr.building, addr.additional_details) if p
+            ]
+            address_str = ", ".join(parts)
+            if addr.latitude is not None and addr.longitude is not None:
+                coords = (addr.latitude, addr.longitude)
+    return name, address_str, coords
+
+
+def _stop_body(
+    order: Order,
+    name: str,
+    address_str: str,
+    coords: tuple[float, float] | None,
+    *,
+    near: bool = False,
+) -> str:
+    """Beautified WhatsApp message for the rider's current stop (bold labels,
+    name / address / COD amount, and a tappable Map link when coordinates exist)."""
+    head = "Near stop" if near else "Next stop"
+    lines = [f"🛵 *{head} — Order {order.order_number}*", ""]
+    if name:
+        lines.append(f"👤 *Name:* {name}")
+    if address_str:
+        lines.append(f"📍 *Address:* {address_str}")
+    if order.total:
+        lines.append(f"💵 *Collect (COD):* AED {order.total:.2f}")
+    if near:
+        lines.append("\nYou're close — choose below once delivered.")
+    return "\n".join(lines)
+
+
+async def _send_map_button(
+    session: AsyncSession,
+    restaurant_id: int,
+    rider_phone: str,
+    order: Order,
+    coords: tuple[float, float],
+    *,
+    key_suffix: str = "",
 ) -> None:
-    """Send the rider the next stop: nav link + Delivered button (COD-aware)."""
-    coords = await _dropoff_coords(session, order)
-    nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
-    # COD-only platform: every delivery collects cash.
-    title = "Collect & delivered" if order.total else "Delivered"
+    """Send a tappable “Open in Maps” URL button for this stop. Sent as its own
+    message because WhatsApp can't mix a URL button with the Delivered quick-reply
+    button. Only called when the order has drop-off coordinates (WhatsApp orders)."""
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
         to_phone=rider_phone,
-        msg_type=OutboundMessageType.BUTTONS,
+        msg_type=OutboundMessageType.CTA_URL,
         payload={
-            "body": f"Next stop: Order {order.order_number}{nav}",
-            "buttons": [{"id": f"delivered:{order.id}", "title": title}],
+            "body": f"🗺️ Navigation for Order {order.order_number}",
+            "button_label": "Open in Maps",
+            "url": _maps_link(*coords),
         },
-        idempotency_key=f"stop-{order.id}",
+        idempotency_key=f"map-{order.id}{key_suffix}",
     )
 
 
@@ -285,21 +340,18 @@ async def _send_stop(
     ``key_suffix`` makes the idempotency key unique for an intentional re-send
     (e.g. rider re-tapped because the first stop message was lost).
     """
-    coords = await _dropoff_coords(session, order)
-    nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
+    name, address_str, coords = await _stop_details(session, order)
     title = "Collect & delivered" if order.total else "Delivered"
-    # customer contact for rider msg (transcript)
-    cust_name = ""
-    if order.customer_id:
-        cust = await session.get(Customer, order.customer_id)
-        if cust:
-            cust_name = f"Customer: {cust.name}. "
-    body = f"{cust_name}Next stop: Order {order.order_number}{nav}"
+    body = _stop_body(order, name, address_str, coords, near=force_next)
     buttons = [{"id": f"delivered:{order.id}", "title": title}]
     # dual if near or force (for delivered_next path)
     if force_next:
         buttons.append({"id": f"delivered_next:{order.id}", "title": "Delivered & next"})
-        body = f"{cust_name}Near stop for Order {order.order_number}{nav}. Choose:"
+    # Map button first so the details+Delivered message stays the latest send.
+    if coords:
+        await _send_map_button(
+            session, restaurant_id, rider_phone, order, coords, key_suffix=key_suffix
+        )
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -343,19 +395,15 @@ async def _send_delivery_choice(
     session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order
 ) -> None:
     """Dual buttons when near per spec/transcript."""
-    coords = await _dropoff_coords(session, order)
-    nav = f"\nNavigate: {_maps_link(*coords)}" if coords else ""
+    name, address_str, coords = await _stop_details(session, order)
     title = "Collect & delivered" if order.total else "Delivered"
-    cust_name = ""
-    if order.customer_id:
-        cust = await session.get(Customer, order.customer_id)
-        if cust:
-            cust_name = f"Customer: {cust.name}. "
-    body = f"{cust_name}Near stop for Order {order.order_number}{nav}. Choose:"
+    body = _stop_body(order, name, address_str, coords, near=True)
     buttons = [
         {"id": f"delivered:{order.id}", "title": title},
         {"id": f"delivered_next:{order.id}", "title": "Delivered & next"},
     ]
+    # No map button here: in the near flow this runs right after _send_stop in
+    # the same transaction, which already enqueued the map button for this order.
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
