@@ -30,6 +30,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from app.obs.sentry import init_sentry
     init_sentry(settings.sentry_dsn, environment=settings.env)
 
+    # Surface the active geo provider on boot so a misconfigured production
+    # (defaulting to the offline straight-line fallback instead of Google road
+    # distance) is obvious in the logs rather than silently mis-pricing delivery.
+    import logging
+
+    _log = logging.getLogger("app.geo")
+    if settings.geo_provider == "google_maps" and settings.google_maps_api_key.get_secret_value():
+        _log.info("geo provider: google_maps (real road distance)")
+    else:
+        _log.warning(
+            "geo provider: %s WITHOUT a Google key — delivery distances are "
+            "STRAIGHT-LINE estimates, not road distance. Set APP_GEO_PROVIDER="
+            "google_maps + APP_GOOGLE_MAPS_API_KEY to fix.",
+            settings.geo_provider,
+        )
+
     # One Redis connection shared by the rate limiter and the geocode cache.
     if settings.rate_limit_enabled or settings.geocode_cache_enabled:
         redis_conn = await aioredis.from_url(

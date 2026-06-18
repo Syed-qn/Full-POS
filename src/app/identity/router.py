@@ -68,6 +68,48 @@ async def me(restaurant: Restaurant = Depends(current_restaurant)):
     return restaurant
 
 
+@router.get("/geo/health")
+async def geo_health(
+    lat: float | None = None,
+    lng: float | None = None,
+    restaurant: Restaurant = Depends(current_restaurant),
+):
+    """Diagnose delivery-distance accuracy in the live environment.
+
+    Without params: reports the configured provider + whether a Google key is
+    present + the restaurant's saved location. With ``lat``/``lng`` (a test
+    customer pin): also returns the road distance vs straight-line distance and
+    whether real road distance is actually in effect — so a silent fallback to
+    straight-line (which mis-prices delivery) is visible without reading logs.
+    """
+    import asyncio
+
+    from app.config import get_settings
+    from app.geo.factory import get_geo_provider
+    from app.geo.haversine import distance_km as _haversine
+
+    settings = get_settings()
+    out: dict = {
+        "configured_provider": settings.geo_provider,
+        "google_key_present": bool(settings.google_maps_api_key.get_secret_value()),
+        "restaurant_location": {"lat": restaurant.lat, "lng": restaurant.lng},
+    }
+    if lat is not None and lng is not None:
+        road = await asyncio.to_thread(
+            get_geo_provider().distance_km, restaurant.lat, restaurant.lng, lat, lng
+        )
+        straight = _haversine(restaurant.lat, restaurant.lng, lat, lng)
+        # If road distance equals straight-line to the metre, the provider fell
+        # back to haversine (real road distance is essentially never identical).
+        real = settings.geo_provider == "google_maps" and abs(road - straight) > 1e-4
+        out["test"] = {
+            "road_km": round(road, 3),
+            "straight_line_km": round(straight, 3),
+            "using_real_road_distance": real,
+        }
+    return out
+
+
 @router.patch("/me", response_model=RestaurantOut)
 async def patch_me(
     body: ProfilePatch,

@@ -71,6 +71,28 @@ def test_shift_window_start_is_8am_dubai():
     assert (start_early.hour, start_early.day) == (8, 17)
 
 
+async def test_geo_health_reports_provider_and_distance(client, auth_headers):
+    # No params → provider config only.
+    base = await client.get("/api/v1/geo/health", headers=auth_headers)
+    assert base.status_code == 200
+    body = base.json()
+    assert "configured_provider" in body
+    assert "google_key_present" in body
+    assert "restaurant_location" in body
+    assert "test" not in body
+
+    # With a test pin → distance comparison block. Tests run the offline (fake)
+    # provider, so road distance == straight-line and real-road-distance is False.
+    with_pin = await client.get(
+        "/api/v1/geo/health?lat=25.10&lng=55.15", headers=auth_headers
+    )
+    assert with_pin.status_code == 200
+    test = with_pin.json()["test"]
+    assert test["road_km"] >= 0
+    assert test["straight_line_km"] >= 0
+    assert test["using_real_road_distance"] is False
+
+
 async def test_duplicate_rider_phone_409(client, auth_headers):
     body = {"name": "Ahmed", "phone": "+971509998888"}
     await client.post("/api/v1/riders", json=body, headers=auth_headers)

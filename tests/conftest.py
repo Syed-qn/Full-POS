@@ -7,6 +7,10 @@ os.environ.setdefault("APP_LLM_PROVIDER", "fake")  # never hit real AI APIs in t
 # runtime .env (which may be set to "cloud" for live WhatsApp). The simulator
 # router only mounts under "mock", and tests rely on it.
 os.environ.setdefault("APP_WHATSAPP_PROVIDER", "mock")
+# Pin geo to the offline provider so tests never make live Google Maps calls
+# (the runtime .env may set google_maps + a real key). Tests that exercise the
+# google_maps path override settings/get_geo_provider explicitly.
+os.environ.setdefault("APP_GEO_PROVIDER", "fake")
 
 
 import pytest
