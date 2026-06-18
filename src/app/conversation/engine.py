@@ -278,6 +278,44 @@ async def _send_buttons(
     )
 
 
+async def _send_location_request(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    prefix: str,
+    body: str,
+) -> None:
+    """Ask for the delivery pin via WhatsApp's NATIVE location-request message — a
+    "Send location" button that opens the customer's map picker so they share a
+    real GPS pin (→ LOCATION inbound).
+
+    A plain reply button can't trigger location sharing: tapping it just sends a
+    button reply, which had no handler and looped back to the same prompt. The
+    location_request_message is the correct mechanism.
+    """
+    import time
+
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=inbound.from_phone,
+        msg_type=OutboundMessageType.LOCATION_REQUEST,
+        payload={"body": body},
+        idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
+    )
+    await record_message(
+        session,
+        conversation_id=conv.id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="location_request",
+        payload={"body": body},
+        ts=int(time.time()),
+    )
+
+
 async def _handle_collecting_items(
     session: AsyncSession,
     conv: Conversation,
@@ -315,11 +353,10 @@ async def _handle_collecting_items(
             )
             return
         _set_state(conv, dialogue_state="address_capture")
-        await _send_buttons(
+        await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ask-location",
-            body="Great! Please share your delivery location pin, or type your address.",
-            buttons=[{"id": "share_location", "title": "Share location"}],
+            body="Great! Please share your delivery location 📍 — tap the button below to send your pin.",
         )
         return
 
@@ -556,11 +593,10 @@ async def _handle_address_capture(
                 return
         if btn_id == "new_address":
             _set_state(conv, address_offer_made=True)
-            await _send_buttons(
+            await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ask-location",
-                body="Please share your delivery location pin, or type your address.",
-                buttons=[{"id": "share_location", "title": "Share location"}],
+                body="Please share your delivery location 📍 — tap the button below to send your pin.",
             )
             return
 
@@ -1940,23 +1976,21 @@ async def _dispatch_action(
         # can't route the rider to the customer (it falls back to the restaurant
         # location) and the fee/radius check has no real distance. The pin is
         # mandatory; the follow-up apt/building/receiver collection stays AI-driven.
-        await _send_buttons(
+        await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ai-proceed-addr-loc",
             body="Great! Please share your delivery location 📍 — tap the button below "
-                 "(or use the 📎 attachment → Location) so the rider reaches you exactly.",
-            buttons=[{"id": "share_location", "title": "Share location 📍"}],
+                 "to send your pin so the rider reaches you exactly.",
         )
         return
 
     # ── address_capture actions ───────────────────────────────────────────
     if action == "send_location_request":
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
-        await _send_buttons(
+        await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="loc-request",
-            body=reply or "Please share your delivery location 📍",
-            buttons=[{"id": "share_location", "title": "Share location 📍"}],
+            body=reply or "Please share your delivery location 📍 — tap the button below to send your pin.",
         )
         return
 
@@ -1986,13 +2020,12 @@ async def _dispatch_action(
         if conv.state.get("pin_lat") is None:
             _set_state(conv, dialogue_phase="address_capture",
                        dialogue_state="address_capture")
-            await _send_buttons(
+            await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="need-location-pin",
                 body="Almost there! Please share your delivery location 📍 first — "
-                     "tap the button (or 📎 → Location) so the rider can reach you "
+                     "tap the button below to send your pin so the rider can reach you "
                      "exactly. Then I'll take your apartment/building and receiver name.",
-                buttons=[{"id": "share_location", "title": "Share location 📍"}],
             )
             return
         if apt_room and building and receiver_name:
@@ -2336,11 +2369,22 @@ async def handle_inbound(
         if btn_id == "new_address":
             _set_state(conv, address_offer_made=True,
                        dialogue_phase="address_capture", dialogue_state="address_capture")
-            await _send_buttons(
+            await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ask-new-address",
-                body="Please share your location 📍 or type your delivery address.",
-                buttons=[{"id": "share_location", "title": "Share location 📍"}],
+                body="Please share your delivery location 📍 — tap the button below to send your pin.",
+            )
+            return
+        if btn_id == "share_location":
+            # Native location-request buttons no longer produce a button reply, but
+            # a stale (pre-update) reply button could still arrive — re-send the
+            # native request instead of falling through to the AI (which looped).
+            _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
+            await _send_location_request(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="share-loc-retry",
+                body="Please tap the button below to share your delivery location 📍, "
+                     "or use 📎 → Location.",
             )
             return
 
