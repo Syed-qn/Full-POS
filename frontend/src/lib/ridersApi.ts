@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import type { RiderOut, RiderStatus } from "./types";
+import type { RiderLocationOut, RiderOut, RiderStatus } from "./types";
 
 export interface RiderIn {
   name: string;
@@ -24,4 +24,9 @@ export async function updateRider(id: number, data: Partial<RiderIn>): Promise<R
 
 export async function deleteRider(id: number): Promise<void> {
   await apiClient.delete(`/api/v1/riders/${id}`);
+}
+
+/** Latest location ping for one rider, or null if they've never shared one. */
+export async function fetchRiderLocation(id: number): Promise<RiderLocationOut | null> {
+  return apiClient.get<RiderLocationOut | null>(`/api/v1/riders/${id}/location`);
 }

@@ -96,6 +96,16 @@ async def test_orders_picked_advances_all_and_sends_first_stop(db_session):
     )
     assert msg is not None  # first-stop nav sent
 
+    # A live-location request is sent on pickup (so the dashboard can track them).
+    live = await db_session.scalar(
+        select(OutboxMessage).where(
+            OutboxMessage.to_phone == rider.phone,
+            OutboxMessage.idempotency_key == f"livereq-{batch.id}",
+        )
+    )
+    assert live is not None
+    assert "live location" in live.payload["body"].lower()
+
 
 async def test_delivered_marks_delivered_and_records_cod(db_session):
     r, rider, batch, orders = await _seed_batch(db_session, n_orders=1)

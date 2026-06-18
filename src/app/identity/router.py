@@ -16,6 +16,7 @@ from app.identity.schemas import (
     ProfilePatch,
     RestaurantOut,
     RiderIn,
+    RiderLocationOut,
     RiderOut,
     RiderPatch,
     SettingsPatch,
@@ -101,6 +102,23 @@ async def list_riders(
     session: AsyncSession = Depends(get_session),
 ):
     return await service.list_riders(session, restaurant.id)
+
+
+@router.get("/riders/{rider_id}/location", response_model=RiderLocationOut | None)
+async def rider_location(
+    rider_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Latest location ping for the live-tracking map. 200 with the pin, 200 with
+    null when the rider hasn't shared a location yet, 404 when the rider is
+    unknown to this tenant."""
+    result = await service.latest_rider_location(
+        session, restaurant_id=restaurant.id, rider_id=rider_id
+    )
+    if result is False:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
+    return result
 
 
 @router.patch("/riders/{rider_id}", response_model=RiderOut)

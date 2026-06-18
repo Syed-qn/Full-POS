@@ -161,6 +161,30 @@ async def _send_map_button(
     )
 
 
+async def _send_live_location_request(
+    session: AsyncSession, restaurant_id: int, rider_phone: str, batch_id: int
+) -> None:
+    """Ask the rider to start sharing live location for this run.
+
+    WhatsApp gives no API to switch live location on — the rider must tap it in
+    their app — so this is an instructional text. We suggest the 1-hour option
+    (comfortably covers the 40-min SLA) and it expires on its own afterwards, so
+    there's no "turn it off" step. Idempotent per batch."""
+    body = (
+        "📍 *Share your live location* so we can track this delivery.\n\n"
+        "Tap 📎 (attach) → *Location* → *Share live location* → choose *1 hour*.\n\n"
+        "It stops automatically after the hour — no need to turn it off."
+    )
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=rider_phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={"body": body},
+        idempotency_key=f"livereq-{batch_id}",
+    )
+
+
 async def handle_orders_picked(
     session: AsyncSession,
     *,
@@ -236,6 +260,11 @@ async def handle_orders_picked(
         if first_order is None:
             first_order = order
     if first_order is not None:
+        # Prompt live-location sharing for the run (sent before the stop so the
+        # Delivered-button message stays the rider's latest/most-actionable msg).
+        await _send_live_location_request(
+            session, restaurant_id, rider.phone, batch.id
+        )
         await _send_stop(session, restaurant_id, rider.phone, first_order)
     else:
         await enqueue_message(

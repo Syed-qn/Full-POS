@@ -9,6 +9,66 @@ async def test_create_and_list_riders(client, auth_headers):
 
     listing = await client.get("/api/v1/riders", headers=auth_headers)
     assert [r["name"] for r in listing.json()] == ["Ahmed"]
+    # New riders have no deliveries — both tallies start at 0.
+    assert listing.json()[0]["delivered_24h"] == 0
+    assert listing.json()[0]["delivered_lifetime"] == 0
+    # No location shared yet → null position fields.
+    assert listing.json()[0]["last_lat"] is None
+    assert listing.json()[0]["last_location_at"] is None
+
+
+async def test_rider_location_endpoint(client, auth_headers, db_session):
+    from app.dispatch.rider_location import update_rider_location
+    from app.identity.models import Rider
+
+    rider = (
+        await client.post(
+            "/api/v1/riders",
+            json={"name": "Ahmed", "phone": "+971509998888"},
+            headers=auth_headers,
+        )
+    ).json()
+
+    # No ping yet → 200 with null body.
+    empty = await client.get(f"/api/v1/riders/{rider['id']}/location", headers=auth_headers)
+    assert empty.status_code == 200
+    assert empty.json() is None
+
+    # Ingest a location ping the way the rider inbound flow does (client + this
+    # session share one transaction, so the insert is visible to the next call).
+    rider_row = await db_session.get(Rider, rider["id"])
+    await update_rider_location(db_session, rider=rider_row, latitude=25.2, longitude=55.27)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/v1/riders/{rider['id']}/location", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["lat"] == 25.2 and body["lng"] == 55.27
+    assert "ts" in body
+
+    # Also surfaced on the list endpoint's latest-position fields.
+    listing = await client.get("/api/v1/riders", headers=auth_headers)
+    assert listing.json()[0]["last_lat"] == 25.2
+
+    # Unknown rider → 404.
+    missing = await client.get("/api/v1/riders/999999/location", headers=auth_headers)
+    assert missing.status_code == 404
+
+
+def test_shift_window_start_is_8am_dubai():
+    from datetime import datetime, timezone
+
+    from app.identity.service import DUBAI, _shift_window_start
+
+    # 10:00 Dubai → window started at 08:00 Dubai the same day.
+    now = datetime(2026, 6, 18, 6, 0, tzinfo=timezone.utc)  # 10:00 Dubai (+4)
+    start = _shift_window_start(now).astimezone(DUBAI)
+    assert (start.hour, start.minute, start.day) == (8, 0, 18)
+
+    # 07:00 Dubai (before the 08:00 cutover) → window is yesterday's 08:00.
+    early = datetime(2026, 6, 18, 3, 0, tzinfo=timezone.utc)  # 07:00 Dubai
+    start_early = _shift_window_start(early).astimezone(DUBAI)
+    assert (start_early.hour, start_early.day) == (8, 17)
 
 
 async def test_duplicate_rider_phone_409(client, auth_headers):

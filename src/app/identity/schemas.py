@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -52,6 +53,25 @@ class RiderOut(BaseModel):
     name: str
     phone: str
     status: str
+    # Delivery tallies (default 0 so create/update responses, which don't compute
+    # them, stay valid). Populated by list_riders: 08:00→08:00 shift + lifetime.
+    delivered_24h: int = 0
+    delivered_lifetime: int = 0
+    # Latest known position (most recent WhatsApp location ping). None until the
+    # rider has ever shared a location. Populated by list_riders only.
+    last_lat: float | None = None
+    last_lng: float | None = None
+    last_location_at: datetime | None = None
+
+
+class RiderLocationOut(BaseModel):
+    """A rider's most recent location ping — for the dashboard live-tracking map."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    lat: float
+    lng: float
+    ts: datetime
 
 
 class SettingsPatch(BaseModel):

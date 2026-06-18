@@ -1,11 +1,16 @@
 # src/app/identity/service.py
-from sqlalchemy import delete, select
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.audit import record_audit
 from app.identity.auth import hash_password
 from app.identity.models import Restaurant, Rider
+
+DUBAI = ZoneInfo("Asia/Dubai")
 
 
 class DuplicatePhoneError(Exception):
@@ -81,11 +86,90 @@ async def create_rider(
     return rider
 
 
+def _shift_window_start(now_utc: datetime) -> datetime:
+    """Start of the current operational day in the restaurant's timezone.
+
+    Riders' shifts are counted on an 08:00→08:00 (Asia/Dubai) cycle rather than
+    a rolling 24h or midnight day, so a "24h" delivery tally reflects the active
+    shift the manager is watching. Returns a UTC-aware datetime to compare
+    against ``Order.delivered_at`` (stored UTC)."""
+    local = now_utc.astimezone(DUBAI)
+    eight = local.replace(hour=8, minute=0, second=0, microsecond=0)
+    if local < eight:
+        eight -= timedelta(days=1)
+    return eight.astimezone(timezone.utc)
+
+
 async def list_riders(session: AsyncSession, restaurant_id: int) -> list[Rider]:
+    from app.dispatch.models import RiderLocation
+    from app.ordering.models import Order
+
     rows = await session.scalars(
         select(Rider).where(Rider.restaurant_id == restaurant_id).order_by(Rider.id)
     )
-    return list(rows)
+    riders = list(rows)
+
+    # Per-rider delivery tallies: lifetime (all delivered) + current 08:00→08:00
+    # shift window. One grouped query, then attach to each rider for RiderOut.
+    window_start = _shift_window_start(datetime.now(timezone.utc))
+    counts = await session.execute(
+        select(
+            Order.rider_id,
+            func.count().label("lifetime"),
+            func.count(case((Order.delivered_at >= window_start, 1))).label("today"),
+        )
+        .where(
+            Order.restaurant_id == restaurant_id,
+            Order.status == "delivered",
+            Order.rider_id.is_not(None),
+        )
+        .group_by(Order.rider_id)
+    )
+    tally = {rid: (lifetime, today) for rid, lifetime, today in counts}
+
+    # Latest location ping per rider (DISTINCT ON keeps only the newest row per
+    # rider) so the dashboard can show a live-tracking dot + "seen X ago".
+    pings = await session.scalars(
+        select(RiderLocation)
+        .where(RiderLocation.restaurant_id == restaurant_id)
+        .order_by(RiderLocation.rider_id, RiderLocation.ts.desc())
+        .distinct(RiderLocation.rider_id)
+    )
+    latest = {p.rider_id: p for p in pings}
+
+    for rider in riders:
+        lifetime, today = tally.get(rider.id, (0, 0))
+        rider.delivered_lifetime = lifetime
+        rider.delivered_24h = today
+        ping = latest.get(rider.id)
+        rider.last_lat = ping.latitude if ping else None
+        rider.last_lng = ping.longitude if ping else None
+        rider.last_location_at = ping.ts if ping else None
+    return riders
+
+
+async def latest_rider_location(
+    session: AsyncSession, *, restaurant_id: int, rider_id: int
+):
+    """Most recent location ping for one rider (tenant-scoped), or None.
+
+    Returns a lightweight object with ``lat``/``lng``/``ts`` for the live-tracking
+    map's polling endpoint. ``None`` distinguishes "no ping yet" from "no rider"
+    (the router turns a missing rider into a 404)."""
+    from app.dispatch.models import RiderLocation
+
+    rider = await session.get(Rider, rider_id)
+    if rider is None or rider.restaurant_id != restaurant_id:
+        return False  # signal "rider not found" to the router
+    ping = await session.scalar(
+        select(RiderLocation)
+        .where(RiderLocation.rider_id == rider_id)
+        .order_by(RiderLocation.ts.desc())
+        .limit(1)
+    )
+    if ping is None:
+        return None
+    return {"lat": ping.latitude, "lng": ping.longitude, "ts": ping.ts}
 
 
 async def set_rider_status(

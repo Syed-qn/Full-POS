@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
 import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { apiClient } from "../lib/apiClient";
 import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
@@ -62,6 +63,7 @@ export function OrderDetailDrawer({
   const [tab, setTab] = useState<Tab>("overview");
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [riders, setRiders] = useState<RiderOut[]>([]);
   const [reassignTo, setReassignTo] = useState<number | "">("");
@@ -122,11 +124,6 @@ export function OrderDetailDrawer({
 
   async function cancelOrderAction() {
     if (!basicOrder) return;
-    const postCook = detail?.status === "preparing";
-    const msg = postCook
-      ? "Cancel this order? It's already being cooked, so the food will be put up for auto-resale."
-      : "Cancel this order? This cannot be undone.";
-    if (!window.confirm(msg)) return;
     setCancelling(true);
     setActionError(null);
     try {
@@ -134,6 +131,7 @@ export function OrderDetailDrawer({
       setBasicOrder(updated);
       const d = await fetchOrderDetail(basicOrder.id);
       setDetail(d);
+      setConfirmCancel(false);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Failed to cancel order");
     } finally {
@@ -187,7 +185,7 @@ export function OrderDetailDrawer({
               {CANCELLABLE.has(detail.status) && (
                 <Button
                   variant="danger"
-                  onClick={cancelOrderAction}
+                  onClick={() => { setActionError(null); setConfirmCancel(true); }}
                   disabled={advancing || cancelling}
                 >
                   {cancelling ? "Cancelling…" : "Cancel Order"}
@@ -259,6 +257,22 @@ export function OrderDetailDrawer({
             )}
           </div>
         </div>
+      )}
+      {confirmCancel && (
+        <ConfirmDialog
+          title="Cancel this order?"
+          message={
+            detail?.status === "preparing"
+              ? "It's already being cooked, so the food will be put up for auto-resale. This cannot be undone."
+              : "This cannot be undone."
+          }
+          confirmLabel="Cancel order"
+          cancelLabel="Keep order"
+          danger
+          busy={cancelling}
+          onConfirm={cancelOrderAction}
+          onCancel={() => setConfirmCancel(false)}
+        />
       )}
     </SideDrawer>
   );

@@ -1,6 +1,24 @@
+import { useState } from "react";
 import { Button } from "./Button";
+import { RiderMapModal } from "./RiderMapModal";
 import type { RiderOut, RiderStatus } from "../lib/types";
 import s from "./RiderCard.module.css";
+
+/** "2 min ago" style relative time from an ISO timestamp. */
+function seenAgo(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "recently";
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (secs < 45) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  return `${Math.round(hrs / 24)} d ago`;
+}
+
+// A ping fresher than this means the rider is actively sharing live location.
+const LIVE_MS = 3 * 60 * 1000;
 
 const STATUS_LABEL: Record<RiderStatus, string> = {
   available: "Available",
@@ -37,6 +55,13 @@ export function RiderCard({
   const offShift = rider.status === "off_shift";
   const deactivated = rider.status === "deactivated";
   const color = STATUS_COLOR[rider.status];
+  const [showMap, setShowMap] = useState(false);
+
+  // Loose `!= null` so a backend that hasn't shipped these fields yet (value is
+  // `undefined`, not `null`) reads as "no location" instead of rendering NaN.
+  const hasLocation = rider.last_lat != null && rider.last_lng != null;
+  const lastSeenMs = rider.last_location_at ? new Date(rider.last_location_at).getTime() : NaN;
+  const isLive = !Number.isNaN(lastSeenMs) && Date.now() - lastSeenMs < LIVE_MS;
 
   return (
     <div data-testid="rider-card" className={`${s.card} ${stale ? s.stale : ""} ${deactivated ? s.dim : ""}`}>
@@ -64,8 +89,38 @@ export function RiderCard({
       {stale && <span className={s.staleBadge}>Location stale</span>}
 
       <div className={s.locRow}>
-        <span className={s.locDot} />
-        Location: live tracking phase
+        <span
+          className={s.locDot}
+          style={isLive ? undefined : { background: "var(--text-muted)", boxShadow: "none" }}
+        />
+        <span className={s.locText}>
+          {hasLocation
+            ? isLive
+              ? `Live · seen ${seenAgo(rider.last_location_at!)}`
+              : `Last seen ${seenAgo(rider.last_location_at!)}`
+            : "No location shared yet"}
+        </span>
+        {hasLocation && (
+          <button type="button" className={s.viewMap} onClick={() => setShowMap(true)}>
+            View on map
+          </button>
+        )}
+      </div>
+
+      <div className={s.deliveries}>
+        <div className={s.deliveryStat}>
+          <span className={s.deliveryNum}>{rider.delivered_24h}</span>
+          <span className={s.deliveryLabel}>
+            Today<span className={s.deliveryHint}>shift · 8am to 8am</span>
+          </span>
+        </div>
+        <span className={s.deliveryDivider} />
+        <div className={s.deliveryStat}>
+          <span className={s.deliveryNum}>{rider.delivered_lifetime}</span>
+          <span className={s.deliveryLabel}>
+            Lifetime<span className={s.deliveryHint}>all time</span>
+          </span>
+        </div>
       </div>
 
       <div className={s.actions}>
@@ -87,6 +142,8 @@ export function RiderCard({
           Remove
         </Button>
       </div>
+
+      {showMap && <RiderMapModal rider={rider} onClose={() => setShowMap(false)} />}
     </div>
   );
 }

@@ -126,9 +126,73 @@
 .locDot {
   width: 7px;
   height: 7px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--accent-rider);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-rider) 18%, transparent);
+}
+.locText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viewMap {
+  margin-left: auto;
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.viewMap:hover {
+  text-decoration: underline;
+}
+.deliveries {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  /* Sit closer to the location row above — trims the card's 12px column gap. */
+  margin-top: -5px;
+}
+.deliveryStat {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.deliveryNum {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.deliveryLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.deliveryHint {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.deliveryDivider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-subtle);
+  margin: 0 12px;
 }
 .actions {
   display: flex;

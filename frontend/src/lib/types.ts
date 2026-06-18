@@ -19,6 +19,21 @@ export interface RiderOut {
   name: string;
   phone: string;
   status: RiderStatus;
+  /** Deliveries completed in the current 08:00→08:00 shift window. */
+  delivered_24h: number;
+  /** Deliveries completed all-time. */
+  delivered_lifetime: number;
+  /** Latest known position (most recent WhatsApp location ping), or null. */
+  last_lat: number | null;
+  last_lng: number | null;
+  /** ISO timestamp of the latest location ping, or null if never shared. */
+  last_location_at: string | null;
+}
+
+export interface RiderLocationOut {
+  lat: number;
+  lng: number;
+  ts: string;
 }
 
 export interface DishOut {
