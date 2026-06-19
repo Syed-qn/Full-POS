@@ -26,10 +26,37 @@
 }
 
 .map {
-  height: 380px;
+  height: clamp(380px, 60vh, 600px);
   border-radius: 16px;
   overflow: hidden;
   background: #e2e8f0;
+}
+
+/* On phones, make tracking feel like a full-screen map app: the card fills the
+   viewport and the map grows to take all the space left over. */
+@media (max-width: 640px) {
+  .page {
+    padding: 0;
+    place-items: stretch;
+    background: #fff;
+  }
+  .card {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 16px;
+  }
+  .map {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 55vh;
+    border-radius: 12px;
+  }
 }
 
 .infoRow {

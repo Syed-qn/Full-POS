@@ -74,6 +74,9 @@ export function PublicTrackingScreen() {
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: "© OpenStreetMap contributors",
         }).addTo(map);
+        // The map container is sized by CSS (and flex-grows on mobile); re-measure
+        // once layout settles so tiles fill the box instead of rendering partial.
+        setTimeout(() => map.invalidateSize(), 0);
         markerRef.current = L.circleMarker(pos, {
           radius: 10,
           color: "#fff",
@@ -89,7 +92,12 @@ export function PublicTrackingScreen() {
   }, [location]);
 
   useEffect(() => {
+    const onResize = () => leafletMapRef.current?.invalidateSize();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
     return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
       leafletMapRef.current?.remove();
       leafletMapRef.current = null;
     };
