@@ -225,7 +225,8 @@ async def test_location_pin_within_radius_advances_to_address_text(db_session, r
     await handle_inbound(db_session, _msg("hi", "wamid.greet3"), restaurant_id=restaurant.id)
     await db_session.commit()
     conv = await _conv(db_session)
-    conv.state = {**conv.state, "dialogue_state": "address_capture"}
+    conv.state = {**conv.state, "dialogue_phase": "address_capture",
+                  "dialogue_state": "address_capture"}
     await db_session.commit()
 
     await handle_inbound(db_session, _loc_msg(25.2100, 55.2750, "wamid.pin1"), restaurant_id=restaurant.id)
@@ -243,7 +244,8 @@ async def test_location_pin_beyond_radius_sends_undeliverable(db_session, restau
     await handle_inbound(db_session, _msg("hi", "wamid.greet4"), restaurant_id=restaurant.id)
     await db_session.commit()
     conv = await _conv(db_session)
-    conv.state = {**conv.state, "dialogue_state": "address_capture"}
+    conv.state = {**conv.state, "dialogue_phase": "address_capture",
+                  "dialogue_state": "address_capture"}
     await db_session.commit()
 
     # Abu Dhabi pin — far from Dubai restaurant (25.2048, 55.2708)
@@ -292,6 +294,7 @@ async def test_order_confirmation_message_includes_totals_and_eta(db_session, re
     conv = await _conv(db_session)
     conv.state = {
         **conv.state,
+        "dialogue_phase": "awaiting_confirmation",
         "dialogue_state": "order_confirmation",
         "pending_order_id": order.id,
     }
@@ -625,6 +628,7 @@ async def test_modify_order_dialogue_flow_after_placed_restarts_sla_and_updates_
     conv = await _conv(db_session)
     conv.state = {
         **conv.state,
+        "dialogue_phase": "post_order",
         "dialogue_state": "order_placed",
         "pending_order_id": order.id,
     }

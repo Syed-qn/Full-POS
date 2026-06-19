@@ -294,3 +294,55 @@ async def test_address_step_recovers_stale_draft_pointer(db_session, restaurant)
                               Message.direction == "outbound")
     )).all()
     assert not any("cart is empty" in (m.payload or {}).get("body", "") for m in msgs)
+
+
+async def test_greeting_starts_fresh_and_drops_abandoned_cart(db_session, restaurant):
+    """A pure greeting ("As salam walekum") means start fresh.
+
+    Live bug: a customer who added a dish, never bought it, then greeted again
+    was shown the OLD cart ("You've got 1x ... in your cart") instead of a fresh
+    start. A pure-greeting message must clear the stale draft pointer so the
+    abandoned cart cannot carry into the new order — in ANY state.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.conversation.engine import _build_cart_summary
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507111222"
+
+    # Customer adds a dish (creates a draft) then walks away.
+    add_result = ConversationAgentResult(
+        message="Chicken Biryani added!",
+        action="add_item",
+        action_data={"dish_query": "biryani", "qty": 1, "special_note": ""},
+    )
+    add_inbound = InboundMessage(
+        wa_message_id="wamid.greet-add", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "one biryani"}, restaurant_phone=restaurant.phone,
+        timestamp=1717662000,
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=add_result)):
+        await handle_inbound(db_session, add_inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    assert conv.state.get("draft_order_id") is not None  # cart exists
+
+    # Customer greets again instead of buying — must start fresh.
+    greet_inbound = InboundMessage(
+        wa_message_id="wamid.greet-hi", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "As salam walekum"}, restaurant_phone=restaurant.phone,
+        timestamp=1717662050,
+    )
+    await handle_inbound(db_session, greet_inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(conv)
+    assert conv.state.get("draft_order_id") is None        # abandoned cart dropped
+    assert await _build_cart_summary(db_session, conv) == ""  # fresh, empty cart

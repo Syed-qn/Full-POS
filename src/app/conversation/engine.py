@@ -60,6 +60,40 @@ def _is_menu_request(text: str) -> bool:
     return any(k in t for k in keywords)
 
 
+# Words that, on their own, mean "hello" (a greeting = start a fresh order).
+_GREET_WORDS = frozenset({
+    "hi", "hii", "hiii", "hey", "heya", "hello", "helo", "hellow", "yo", "yoo",
+    "salam", "salaam", "salams", "asalam", "asalaam", "assalam", "assalaam",
+    "assalamu", "asalamualaikum", "assalamualaikum", "salamualaikum",
+    "alaikum", "alaykum", "aleikum", "walaikum", "walekum", "waalaikum",
+    "namaste", "marhaba", "ahlan", "hala", "greetings", "start",
+    "morning", "afternoon", "evening",
+})
+# Filler words allowed to surround a greeting without making it "not a greeting".
+_GREET_FILLER = frozenset({
+    "as", "o", "u", "wa", "there", "everyone", "team", "bro", "sir", "maam",
+    "madam", "good", "and", "the", "a", "dear", "please",
+})
+
+
+def _is_pure_greeting(text: str | None) -> bool:
+    """True if the message is ONLY a greeting, with no ordering content.
+
+    A greeting means "start fresh", so we only treat a message as one when every
+    word is a greeting or filler token — e.g. "hi", "As salam walekum",
+    "hello there", "good morning". "hi I want biryani" is NOT a pure greeting and
+    must reach the ordering flow so the dish still gets added.
+    """
+    if not text:
+        return False
+    tokens = _re.findall(r"[a-z]+", text.lower())
+    if not tokens or len(tokens) > 6:
+        return False
+    if not any(t in _GREET_WORDS for t in tokens):
+        return False
+    return all(t in _GREET_WORDS or t in _GREET_FILLER for t in tokens)
+
+
 _CATEGORY_EMOJI: tuple[tuple[tuple[str, ...], str], ...] = (
     (("biryani", "rice", "pulao"), "🍛"),
     (("bread", "naan", "roti", "paratha"), "🍞"),
@@ -2438,15 +2472,19 @@ async def handle_inbound(
     from app.identity.models import Restaurant as RestaurantModel
     restaurant = await session.get(RestaurantModel, restaurant_id)
 
-    # First contact: greeting fires when dialogue_state is "greeting" AND the message
-    # is a greeting word — ordering requests on first contact go straight to AI.
-    _GREETING_WORDS = frozenset({"hi", "hey", "hello", "salam", "salaam", "start", "menu"})
-    if inbound.type == MessageType.TEXT and conv.state.get("dialogue_state", "greeting") == "greeting":
-        import re as _re
-        _txt_words = set(_re.findall(r'\b\w+\b', (inbound.payload.get("text") or "").lower()))
-        if _txt_words & _GREETING_WORDS:
-            await _handle_greeting(session, conv, inbound, restaurant_id)
-            return
+    # A pure greeting ("hi", "As salam walekum", "hello") means START FRESH — in
+    # ANY state, not just on first contact. Drop any stale/abandoned draft so an
+    # old, never-purchased cart can never silently carry into the new order. This
+    # matches the "Send 'hi' to start a new order" copy used throughout. A message
+    # that mixes a greeting with an order ("hi, one biryani") is NOT a pure
+    # greeting and falls through to the ordering flow so the dish still lands.
+    if inbound.type == MessageType.TEXT and _is_pure_greeting(inbound.payload.get("text")):
+        if conv.state.get("draft_order_id") is not None:
+            _logger.info("greeting reset abandoned draft for conv=%s", conv.id)
+        _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
+                   draft_order_id=None, pending_order_id=None)
+        await _handle_greeting(session, conv, inbound, restaurant_id)
+        return
 
     # Location pin → address capture handler (needs geo validation before AI).
     # Pings outside address_capture (e.g. repeated live-location updates after
