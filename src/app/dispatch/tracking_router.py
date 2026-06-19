@@ -178,6 +178,15 @@ async def update_order_location(
         heading=body.heading,
     )
     if was_first_ping:
+        # Rider's live location just went ON. Flow integrity: reveal the rider's
+        # first delivery stop now, and notify the customer their order is on the
+        # way + Track link (deferred from pickup so neither happens before GPS).
+        from app.dispatch.rider_flow import reveal_first_stop_on_tracking_live
+
+        await reveal_first_stop_on_tracking_live(
+            session, restaurant_id=access.order.restaurant_id,
+            rider_id=access.session.rider_id,
+        )
         await _notify_customers_tracking_live(session, rider_id=access.session.rider_id)
     await session.commit()
     if was_first_ping:

@@ -87,6 +87,38 @@ async def _notify_customer_status(
         idempotency_key=key,
     )
 
+async def reveal_first_stop_on_tracking_live(
+    session: AsyncSession, *, restaurant_id: int, rider_id: int
+) -> None:
+    """Reveal the rider's first delivery stop once their live GPS goes on.
+
+    Flow integrity: at pickup the rider only gets the "Start live tracker" prompt;
+    the customer's location + details + Delivered button are sent here, on the
+    first GPS ping. Sends the first still-undelivered stop in the rider's active
+    (picked_up) batch. ``_send_stop`` is idempotent per order, so repeat pings
+    (we only call this on the first) never double-send."""
+    rider = await session.get(Rider, rider_id)
+    if rider is None:
+        return
+    bo = await session.scalar(
+        select(BatchOrder)
+        .join(Batch, BatchOrder.batch_id == Batch.id)
+        .where(
+            Batch.rider_id == rider_id,
+            Batch.status == "picked_up",
+            BatchOrder.delivered_at.is_(None),
+        )
+        .order_by(BatchOrder.sequence)
+        .limit(1)
+    )
+    if bo is None:
+        return
+    order = await session.get(Order, bo.order_id)
+    if order is None:
+        return
+    await _send_stop(session, restaurant_id, rider.phone, order)
+
+
 # ~100 m per spec §4.4 + transcript (geofence worker). Button click ONLY way to reveal next location (flow integrity).
 NEAR_KM = 0.1
 # Power bank + constant power supply provided per ops policy for all-day live location sharing.
@@ -152,35 +184,14 @@ def _stop_body(
         lines.append(f"📍 *Address:* {address_str}")
     if order.total:
         lines.append(f"💵 *Collect (COD):* AED {order.total:.2f}")
+    # Navigation link in the body (WhatsApp auto-links it) instead of a separate
+    # CTA-button message — fewer back-to-back messages = WhatsApp is far less
+    # likely to drop/delay the last one (which buried the customer details).
+    if coords:
+        lines.append(f"🗺️ *Navigate:* {_maps_link(*coords)}")
     if near:
         lines.append("\nYou're close — choose below once delivered.")
     return "\n".join(lines)
-
-
-async def _send_map_button(
-    session: AsyncSession,
-    restaurant_id: int,
-    rider_phone: str,
-    order: Order,
-    coords: tuple[float, float],
-    *,
-    key_suffix: str = "",
-) -> None:
-    """Send a tappable “Open in Maps” URL button for this stop. Sent as its own
-    message because WhatsApp can't mix a URL button with the Delivered quick-reply
-    button. Only called when the order has drop-off coordinates (WhatsApp orders)."""
-    await enqueue_message(
-        session,
-        restaurant_id=restaurant_id,
-        to_phone=rider_phone,
-        msg_type=OutboundMessageType.CTA_URL,
-        payload={
-            "body": f"🗺️ Navigation for Order {order.order_number}",
-            "button_label": "Open in Maps",
-            "url": _maps_link(*coords),
-        },
-        idempotency_key=f"map-{order.id}{key_suffix}",
-    )
 
 
 async def _send_live_location_request(
@@ -196,7 +207,8 @@ async def _send_live_location_request(
         "📍 *Share your live location* so we can track this delivery.\n\n"
         "Tap *Start live tracker* below — tracking starts automatically, just "
         "allow location if your phone asks, and keep the page open. "
-        "You must start it before you can mark a stop delivered.\n\n"
+        "As soon as it's on, I'll send your first delivery stop (customer "
+        "address + Delivered button).\n\n"
         "It stops automatically when the delivery ends."
     )
     first_order = await session.scalar(
@@ -315,12 +327,14 @@ async def handle_orders_picked(
         if first_order is None:
             first_order = order
     if first_order is not None:
-        # Prompt live-location sharing for the run (sent before the stop so the
-        # Delivered-button message stays the rider's latest/most-actionable msg).
+        # Flow integrity: at pickup we ONLY prompt the rider to start live
+        # tracking. The customer's location + details + Delivered button are
+        # revealed once the rider's GPS actually goes on (first ping →
+        # reveal_first_stop_on_tracking_live), so the rider can't head to the
+        # customer without live tracking running.
         await _send_live_location_request(
             session, restaurant_id, rider.phone, batch.id
         )
-        await _send_stop(session, restaurant_id, rider.phone, first_order)
     else:
         await enqueue_message(
             session,
@@ -481,9 +495,12 @@ async def _send_stop(
     session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order,
     *, force_next: bool = False, key_suffix: str = "",
 ) -> None:
-    """Send the rider the next stop: nav link + Delivered button (COD-aware).
-    If near (~100m) or force_next, send dual buttons per spec §4.4 (button click mandatory for next location).
-    Include customer contact for rider (name); customer side uses "Message rider" button (no raw phone leak).
+    """Send the rider the next stop as a SINGLE message: details + nav link in the
+    body + Delivered button (COD-aware). Sending the nav as a link in the body
+    (not a separate CTA message) avoids a back-to-back message burst — WhatsApp was
+    dropping/delaying the last of three rapid messages, so the rider saw the
+    tracker + nav but not the stop details until later.
+    If near (~100m) or force_next, send dual buttons per spec §4.4.
     ``key_suffix`` makes the idempotency key unique for an intentional re-send
     (e.g. rider re-tapped because the first stop message was lost).
     """
@@ -494,11 +511,6 @@ async def _send_stop(
     # dual if near or force (for delivered_next path)
     if force_next:
         buttons.append({"id": f"delivered_next:{order.id}", "title": "Delivered & next"})
-    # Map button first so the details+Delivered message stays the latest send.
-    if coords:
-        await _send_map_button(
-            session, restaurant_id, rider_phone, order, coords, key_suffix=key_suffix
-        )
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -549,8 +561,8 @@ async def _send_delivery_choice(
         {"id": f"delivered:{order.id}", "title": title},
         {"id": f"delivered_next:{order.id}", "title": "Delivered & next"},
     ]
-    # No map button here: in the near flow this runs right after _send_stop in
-    # the same transaction, which already enqueued the map button for this order.
+    # The nav link is already in the stop body (sent by _send_stop just before
+    # this in the near flow), so no separate navigation message is needed.
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,

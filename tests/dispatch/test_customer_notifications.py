@@ -61,10 +61,12 @@ async def _cust_msgs(db_session, phone):
     ).all()
 
 
-async def test_pickup_defers_customer_notify_until_gps_live(db_session):
-    """At pickup the customer gets NOTHING — the 'on the way' + Track link is
-    deferred until the rider's live location actually starts (so the link never
-    opens an empty map). Once GPS goes live the customer gets a CTA Track button."""
+async def test_pickup_gates_stop_and_customer_notify_behind_gps(db_session):
+    """Flow integrity: at pickup the rider gets ONLY the Start-live-tracker prompt
+    (no customer location/details), and the customer gets nothing. The moment the
+    rider's GPS goes live (first ping) the rider gets the stop + Delivered button
+    and the customer gets the 'on the way' + Track link."""
+    from app.dispatch.rider_flow import reveal_first_stop_on_tracking_live
     from app.dispatch.tracking_router import _notify_customers_tracking_live
 
     r, rider, o, batch, c = await _seed(db_session, status="assigned")
@@ -72,21 +74,32 @@ async def test_pickup_defers_customer_notify_until_gps_live(db_session):
     await handle_orders_picked(db_session, restaurant_id=r.id, rider=rider, batch_id=batch.id)
     await db_session.commit()
 
-    # No customer notification yet at pickup time.
+    # At pickup: rider got the Start-live-tracker prompt but NOT the stop details.
+    rider_msgs = await _cust_msgs(db_session, rider.phone)
+    assert any("start live tracker" in (m.payload.get("button_label", "").lower())
+               for m in rider_msgs)
+    assert not any(m.idempotency_key == f"stop-{o.id}" for m in rider_msgs)
+    # And the customer got nothing yet.
     assert await _cust_msgs(db_session, c.phone) == []
 
-    # Rider's live location goes on → notify (what the first GPS ping triggers).
+    # Rider's live location goes on (first GPS ping) → reveal stop + notify customer.
+    await reveal_first_stop_on_tracking_live(db_session, restaurant_id=r.id, rider_id=rider.id)
     await _notify_customers_tracking_live(db_session, rider_id=rider.id)
     await db_session.commit()
 
+    # Rider now has the stop (customer details + Delivered button).
+    rider_msgs = await _cust_msgs(db_session, rider.phone)
+    stop = next((m for m in rider_msgs if m.idempotency_key == f"stop-{o.id}"), None)
+    assert stop is not None
+    assert stop.payload["type"] == OutboundMessageType.BUTTONS
+
+    # Customer now gets the 'on the way' + Track CTA button.
     msgs = await _cust_msgs(db_session, c.phone)
     assert len(msgs) == 1
     assert "picked up" in msgs[0].payload["body"].lower()
-    # Live tracker is a tappable "Track my order" CTA URL button (not a raw link).
     assert msgs[0].payload["type"] == OutboundMessageType.CTA_URL
     assert "track my order" in msgs[0].payload["button_label"].lower()
     assert "/track/" in msgs[0].payload["url"]
-    assert "/track/" not in msgs[0].payload["body"]
     assert msgs[0].idempotency_key == f"cust-picked_up-{o.id}"
 
 
