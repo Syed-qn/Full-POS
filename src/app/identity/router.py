@@ -196,6 +196,29 @@ async def patch_rider(
     return rider
 
 
+@router.post("/riders/{rider_id}/app-invite")
+async def invite_rider_to_app(
+    rider_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Generate a one-time pairing code for the rider and send it (with the APK
+    link) over WhatsApp, so they can pair the native tracking app."""
+    from app.dispatch.rider_app import _PAIRING_TTL_MINUTES, send_rider_app_pairing
+    from app.identity.models import Rider
+    from app.outbox.service import deliver_pending
+
+    rider = await session.scalar(
+        select(Rider).where(Rider.id == rider_id, Rider.restaurant_id == restaurant.id)
+    )
+    if rider is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
+    code = await send_rider_app_pairing(session, rider=rider)
+    await session.commit()
+    await deliver_pending(session, restaurant.id)
+    return {"success": True, "code": code, "expires_in_minutes": _PAIRING_TTL_MINUTES}
+
+
 @router.delete("/riders/{rider_id}", status_code=204)
 async def delete_rider(
     rider_id: int,

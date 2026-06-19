@@ -30,3 +30,14 @@ export async function deleteRider(id: number): Promise<void> {
 export async function fetchRiderLocation(id: number): Promise<RiderLocationOut | null> {
   return apiClient.get<RiderLocationOut | null>(`/api/v1/riders/${id}/location`);
 }
+
+export interface AppInviteOut {
+  success: boolean;
+  code: string;
+  expires_in_minutes: number;
+}
+
+/** Generate + WhatsApp the rider a one-time pairing code for the tracking app. */
+export async function inviteRiderToApp(id: number): Promise<AppInviteOut> {
+  return apiClient.post<AppInviteOut>(`/api/v1/riders/${id}/app-invite`, {});
+}

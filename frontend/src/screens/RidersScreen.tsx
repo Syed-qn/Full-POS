@@ -3,7 +3,7 @@ import { RiderCard } from "../components/RiderCard";
 import { RiderAddModal } from "../components/RiderAddModal";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
-import { deleteRider, fetchRiders, setRiderStatus } from "../lib/ridersApi";
+import { deleteRider, fetchRiders, inviteRiderToApp, setRiderStatus } from "../lib/ridersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
@@ -34,6 +34,18 @@ export function RidersScreen() {
   async function onStatusChange(id: number, status: RiderStatus) {
     const updated = await setRiderStatus(id, status);
     setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
+  }
+
+  async function onInviteApp(id: number) {
+    try {
+      const res = await inviteRiderToApp(id);
+      alert(
+        `Pairing code ${res.code} sent to the rider on WhatsApp ` +
+          `(valid ${res.expires_in_minutes} min). They enter it in the Rider Tracker app.`,
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not send the app link.");
+    }
   }
 
   async function onDelete(id: number) {
@@ -94,6 +106,7 @@ export function RidersScreen() {
             onStatusChange={onStatusChange}
             onDelete={onDelete}
             onEdit={setEditing}
+            onInviteApp={onInviteApp}
           />
         ))}
       </div>

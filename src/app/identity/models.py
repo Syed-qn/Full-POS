@@ -1,6 +1,7 @@
 import copy
+from datetime import datetime
 
-from sqlalchemy import BigInteger, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +43,16 @@ class Rider(Base, TimestampMixin):
     phone: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="available")
     # available | on_delivery | off_shift | deactivated
+    # Native rider app (Android) auth: the rider pairs ONCE with a short code sent
+    # via WhatsApp; the app then stores `device_token` (long-lived bearer) and
+    # streams background GPS. pairing_code is the one-time, expiring pairing code.
+    device_token: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True, nullable=True
+    )
+    pairing_code: Mapped[str | None] = mapped_column(String(12), index=True, nullable=True)
+    pairing_code_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Rolling delivery performance (Phase 4) — feeds dispatch scoring.
     performance: Mapped[dict] = mapped_column(
         JSONB,

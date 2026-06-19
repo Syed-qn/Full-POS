@@ -44,12 +44,14 @@ export function RiderCard({
   onStatusChange,
   onDelete,
   onEdit,
+  onInviteApp,
   stale = false,
 }: {
   rider: RiderOut;
   onStatusChange: (id: number, status: RiderStatus) => void;
   onDelete: (id: number) => void;
   onEdit?: (rider: RiderOut) => void;
+  onInviteApp?: (id: number) => void;
   stale?: boolean;
 }) {
   const offShift = rider.status === "off_shift";
@@ -136,6 +138,11 @@ export function RiderCard({
             <Button variant="ghost" onClick={() => onStatusChange(rider.id, "deactivated")}>
               Deactivate
             </Button>
+            {onInviteApp && (
+              <Button variant="ghost" onClick={() => onInviteApp(rider.id)}>
+                Send app link
+              </Button>
+            )}
           </>
         )}
         <Button variant="danger" onClick={() => onDelete(rider.id)} className={s.removeBtn}>

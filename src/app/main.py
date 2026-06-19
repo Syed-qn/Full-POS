@@ -12,6 +12,7 @@ from app.cod.router import router as cod_router
 from app.config import get_settings
 from app.conversation.router import router as conversation_router
 from app.db import get_engine
+from app.dispatch.rider_app_router import router as rider_app_router
 from app.dispatch.router import router as dispatch_router
 from app.dispatch.tracking_router import router as tracking_router
 from app.identity.router import router as identity_router
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(cod_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
+    app.include_router(rider_app_router)
 
     if settings.whatsapp_provider == "mock":
         from apps.simulator.router import router as simulator_router

@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Rider Tracker",
+    "slug": "rider-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.restaurant.ridertracker",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "Rider Tracker shares your location with the restaurant so customers can track their delivery."
+        }
+      ]
+    ],
+    "extra": {
+      "apiBase": "https://restaurant-whatsapp-service.onrender.com",
+      "eas": { "projectId": "REPLACE_WITH_EAS_PROJECT_ID" }
+    }
+  }
+}

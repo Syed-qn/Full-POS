@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
     upload_dir: str = "var/uploads"
     public_base_url: str = "http://localhost:8000"
+    # Public download link for the Android rider app APK, included in the WhatsApp
+    # pairing message. Leave empty to send just the code (no install link).
+    rider_app_apk_url: str = ""
 
     # WhatsApp
     whatsapp_provider: str = "mock"  # mock | cloud
