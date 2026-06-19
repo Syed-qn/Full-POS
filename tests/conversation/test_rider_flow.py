@@ -17,6 +17,20 @@ from app.outbox.models import OutboxMessage
 from app.whatsapp.port import InboundMessage, MessageType
 
 
+async def _start_tracker(db_session, restaurant_id, rider_id):
+    """Simulate the rider starting the live tracker (a recent GPS ping), which is
+    now required before a stop can be marked delivered."""
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import RiderLocation
+
+    db_session.add(RiderLocation(
+        rider_id=rider_id, restaurant_id=restaurant_id,
+        latitude=25.1, longitude=55.2, ts=datetime.now(timezone.utc),
+    ))
+    await db_session.flush()
+
+
 async def _seed_batch(db_session, n_orders=2):
     r = Restaurant(name="R", phone="+9714445555", password_hash="x", lat=25.2, lng=55.2)
     db_session.add(r)
@@ -112,6 +126,7 @@ async def test_delivered_marks_delivered_and_records_cod(db_session):
     o = orders[0]
     o.status = "picked_up"
     batch.status = "picked_up"
+    await _start_tracker(db_session, r.id, rider.id)
     await db_session.commit()
     inbound = InboundMessage(
         wa_message_id="d-1",
@@ -137,6 +152,7 @@ async def test_last_delivery_frees_rider(db_session):
     o = orders[0]
     o.status = "picked_up"
     batch.status = "picked_up"
+    await _start_tracker(db_session, r.id, rider.id)
     await db_session.commit()
     inbound = InboundMessage(
         wa_message_id="d-2",

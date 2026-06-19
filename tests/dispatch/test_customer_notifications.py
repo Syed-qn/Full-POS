@@ -74,7 +74,18 @@ async def test_pickup_notifies_customer_on_the_way(db_session):
 
 
 async def test_delivered_notifies_customer(db_session):
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import RiderLocation
+
     r, rider, o, batch, c = await _seed(db_session, status="picked_up")
+
+    # Tracker must be live (recent GPS ping) before a stop can be delivered.
+    db_session.add(RiderLocation(
+        rider_id=rider.id, restaurant_id=r.id, latitude=25.1, longitude=55.2,
+        ts=datetime.now(timezone.utc),
+    ))
+    await db_session.commit()
 
     await handle_delivered(db_session, restaurant_id=r.id, rider=rider, order_id=o.id)
     await db_session.commit()
@@ -159,3 +170,24 @@ async def test_notify_is_idempotent(db_session):
     msgs = [m for m in await _cust_msgs(db_session, c.phone)
             if m.idempotency_key == f"cust-picked_up-{o.id}"]
     assert len(msgs) == 1  # second call deduped, no duplicate ping
+
+
+async def test_delivered_blocked_until_tracker_started(db_session):
+    """Rider can't mark a stop delivered until live tracking is on. Without a
+    recent GPS ping, handle_delivered must NOT advance and must re-send the
+    Start-live-tracker button."""
+    r, rider, o, batch, c = await _seed(db_session, status="picked_up")
+
+    await handle_delivered(db_session, restaurant_id=r.id, rider=rider, order_id=o.id,
+                           trigger_msg_id="wamid.try1")
+    await db_session.commit()
+
+    await db_session.refresh(o)
+    assert o.status == "picked_up"  # NOT advanced to delivered
+    # customer was NOT told delivered
+    cust = await _cust_msgs(db_session, c.phone)
+    assert not any(m.idempotency_key == f"cust-delivered-{o.id}" for m in cust)
+    # rider got the Start-live-tracker button re-prompt
+    rider_msgs = await _cust_msgs(db_session, rider.phone)
+    assert any("start live tracker" in (m.payload.get("button_label", "").lower())
+               for m in rider_msgs)

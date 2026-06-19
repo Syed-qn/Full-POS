@@ -15,6 +15,7 @@ dropoff_lat/lon columns); the nav link is omitted gracefully when absent.
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -180,10 +181,10 @@ async def _send_live_location_request(
     there's no "turn it off" step. Idempotent per batch."""
     body = (
         "📍 *Share your live location* so we can track this delivery.\n\n"
-        "Open the rider tracker link below, allow GPS, and keep the page open.\n\n"
+        "Tap *Start live tracker* below, allow GPS, and keep the page open. "
+        "You must start it before you can mark a stop delivered.\n\n"
         "It stops automatically when the delivery ends."
     )
-    rider_tracking_url: str | None = None
     first_order = await session.scalar(
         select(Order)
         .join(BatchOrder, BatchOrder.order_id == Order.id)
@@ -198,8 +199,23 @@ async def _send_live_location_request(
         )
 
         tracking = await ensure_tracking_session(session, order=first_order)
-        rider_tracking_url = build_rider_tracking_url(tracking.rider_token)
-        body = f"{body}\n\nStart rider tracker:\n{rider_tracking_url}"
+        # Tappable button (CTA URL) instead of a raw link. The rider just tapped
+        # "Orders Picked", so their 24h window is open and a free-form interactive
+        # button delivers without a pre-approved template.
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider_phone,
+            msg_type=OutboundMessageType.CTA_URL,
+            payload={
+                "body": body,
+                "button_label": "Start live tracker",
+                "url": build_rider_tracking_url(tracking.rider_token),
+            },
+            idempotency_key=f"livereq-{batch_id}",
+        )
+        return
+    # No order/rider resolved — still send the instruction (no button to attach).
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -302,12 +318,75 @@ async def handle_orders_picked(
         )
 
 
-async def handle_delivered(
-    session: AsyncSession, *, restaurant_id: int, rider: Rider, order_id: int
+# Live tracking must be ON when a stop is delivered. A ping within this window
+# means the rider's tracker page is open and sharing GPS (it posts every ~5s).
+_TRACKER_LIVE_WINDOW_MIN = 15
+
+
+async def _rider_tracker_is_live(session: AsyncSession, rider_id: int) -> bool:
+    """True if the rider has shared a GPS ping recently (tracker page is open)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=_TRACKER_LIVE_WINDOW_MIN)
+    row = await session.scalar(
+        select(RiderLocation.id)
+        .where(RiderLocation.rider_id == rider_id, RiderLocation.ts >= cutoff)
+        .limit(1)
+    )
+    return row is not None
+
+
+async def _send_start_tracker_required(
+    session: AsyncSession, restaurant_id: int, rider: Rider, order: Order,
+    trigger_msg_id: str | None,
 ) -> None:
-    """Rider pressed "Delivered": finish this order + record COD + send next stop."""
+    """Re-send the Start-live-tracker button when the rider tries to deliver
+    without GPS sharing on. Uses the run's shared tracker (the batch's first
+    order session) so it's the same page they were given at pickup."""
+    from app.dispatch.tracking_live import build_rider_tracking_url, ensure_tracking_session
+
+    first = order
+    bo = await session.scalar(select(BatchOrder).where(BatchOrder.order_id == order.id))
+    if bo is not None:
+        fo = await session.scalar(
+            select(Order)
+            .join(BatchOrder, BatchOrder.order_id == Order.id)
+            .where(BatchOrder.batch_id == bo.batch_id)
+            .order_by(BatchOrder.sequence)
+            .limit(1)
+        )
+        if fo is not None:
+            first = fo
+    tracking = await ensure_tracking_session(session, order=first)
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=rider.phone,
+        msg_type=OutboundMessageType.CTA_URL,
+        payload={
+            "body": "⚠️ *Start the live tracker first.*\nTap below, allow GPS, and keep "
+                    "the page open — then tap *Delivered* again.",
+            "button_label": "Start live tracker",
+            "url": build_rider_tracking_url(tracking.rider_token),
+        },
+        idempotency_key=f"tracker-required-{order.id}-{trigger_msg_id or rider.id}",
+    )
+
+
+async def handle_delivered(
+    session: AsyncSession, *, restaurant_id: int, rider: Rider, order_id: int,
+    trigger_msg_id: str | None = None,
+) -> None:
+    """Rider pressed "Delivered": finish this order + record COD + send next stop.
+
+    Gated on live tracking: the rider must have GPS sharing on (a recent ping)
+    before a stop can be marked delivered. If not, re-send the tracker button and
+    do NOT advance the order."""
     order = await session.get(Order, order_id)
     if order is None or order.rider_id != rider.id:
+        return
+    if not await _rider_tracker_is_live(session, rider.id):
+        await _send_start_tracker_required(
+            session, restaurant_id, rider, order, trigger_msg_id
+        )
         return
     # Collapse the geofence "arriving" step on the rider's physical confirmation.
     if order.status == "picked_up":

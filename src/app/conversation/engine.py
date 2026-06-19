@@ -2441,6 +2441,7 @@ async def _handle_rider_inbound(
                     restaurant_id=restaurant_id,
                     rider=rider,
                     order_id=arg_id,
+                    trigger_msg_id=inbound.wa_message_id,
                 )
         return
     # Other rider message types (e.g. free text) are ignored — flow is button-only.
