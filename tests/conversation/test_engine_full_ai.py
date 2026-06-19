@@ -396,3 +396,74 @@ async def test_new_order_clears_previous_address_state(db_session, restaurant):
     assert conv.state.get("address_offer_made") is None        # offer flag reset
     assert conv.state.get("pin_lat") is None                   # stale pin cleared
     assert conv.state.get("distance_km") is None               # stale distance cleared
+
+
+def test_is_tracking_query_detection():
+    """'live location' / 'where is my order' style messages are tracking queries."""
+    from app.conversation.engine import _is_tracking_query
+
+    assert _is_tracking_query("Can I see live location")
+    assert _is_tracking_query("where is my order")
+    assert _is_tracking_query("track my order")
+    assert _is_tracking_query("Where is my rider?")
+    assert not _is_tracking_query("one chicken biryani")
+    assert not _is_tracking_query("hi")
+    assert not _is_tracking_query("")
+
+
+async def test_tracking_query_replies_with_live_link(db_session, restaurant):
+    """A 'see live location' message on an en-route order re-sends the track link."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.dispatch.models import OrderTrackingSession
+    from app.identity.models import Rider
+    from app.ordering.models import Customer, Order
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507555666"
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone=phone, name="Asfer",
+        usual_order_times={}, tags={}, total_orders=1, total_spend=Decimal("10.00"),
+    )
+    db_session.add(customer)
+    rider = Rider(restaurant_id=restaurant.id, name="Live Rider", phone="+971500000001",
+                  status="on_delivery")
+    db_session.add(rider)
+    await db_session.flush()
+
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, rider_id=rider.id,
+        order_number="R1-0007", status="picked_up", priority="normal",
+        weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("10.00"), total=Decimal("10.00"),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    db_session.add(OrderTrackingSession(
+        order_id=order.id, rider_id=rider.id, restaurant_id=restaurant.id,
+        tracking_token="tok_TESTTRACK123", rider_token="rtok_TEST123",
+        status="active", started_at=now, expires_at=now + timedelta(hours=2),
+    ))
+    await db_session.commit()
+
+    inbound = InboundMessage(
+        wa_message_id="wamid.track-q", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "Can I see live location"}, restaurant_phone=restaurant.phone,
+        timestamp=1717664000,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    from app.conversation.service import get_or_create_conversation
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    rows = (await db_session.scalars(
+        select(Message).where(Message.conversation_id == conv.id,
+                              Message.direction == "outbound").order_by(Message.id.desc())
+    )).all()
+    body = rows[0].payload.get("body", "")
+    assert "/track/tok_TESTTRACK123" in body

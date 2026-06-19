@@ -76,6 +76,28 @@ _GREET_FILLER = frozenset({
 })
 
 
+def _is_tracking_query(text: str | None) -> bool:
+    """True for short 'where is my order / show me the live location' messages.
+
+    Routed deterministically to the status handler so re-sharing the live tracking
+    link never depends on the LLM correctly classifying it (it sometimes replied
+    "let me check…" and never sent the link).
+    """
+    if not text:
+        return False
+    t = text.strip().lower()
+    if not t or len(t) > 60:
+        return False
+    phrases = (
+        "where is my order", "where's my order", "where is my food",
+        "where is my rider", "where is the rider", "where is my delivery",
+        "track my order", "track order", "tracking", "live location",
+        "live tracking", "see location", "see the location", "rider location",
+        "track rider", "where is it", "status of my order", "order status",
+    )
+    return any(p in t for p in phrases)
+
+
 def _is_pure_greeting(text: str | None) -> bool:
     """True if the message is ONLY a greeting, with no ordering content.
 
@@ -1280,6 +1302,16 @@ async def _handle_status_query(
         body = await build_tracking_reply(
             session, order=order, geo=get_geo_provider()
         )
+        # Re-share the live tracking link so "where is my order" / "can I see the
+        # live location" always hands back the clickable map, not just a text ETA.
+        from app.dispatch.models import OrderTrackingSession
+        from app.dispatch.tracking_live import build_tracking_url
+
+        tracking = await session.scalar(
+            select(OrderTrackingSession).where(OrderTrackingSession.order_id == order.id)
+        )
+        if tracking is not None and tracking.tracking_token:
+            body += f"\n\nTrack your rider live:\n{build_tracking_url(tracking.tracking_token)}"
     else:
         status_messages = {
             str(OrderStatus.DRAFT): "Your order is being assembled.",
@@ -2567,6 +2599,11 @@ async def handle_inbound(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="menu-request", body=await _render_menu(session, restaurant_id),
             )
+            return
+        # "Where is my order / can I see the live location" → answer with the
+        # current status + ETA + the live tracking link, deterministically.
+        if _is_tracking_query(text):
+            await _handle_status_query(session, conv, inbound, restaurant_id)
             return
 
     # All remaining text + button_reply → AI
