@@ -117,6 +117,38 @@ async def test_assigns_nearest_available_rider(db_session):
     assert "composite" in assignment.algorithm_score
 
 
+async def test_dispatch_survives_missing_rider_locations(db_session, monkeypatch):
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id,
+        name="Fallback",
+        phone="+971500000111",
+        status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 111)
+    await db_session.commit()
+
+    from app.dispatch import service as dispatch_service
+
+    async def _no_positions(session, restaurant_id):
+        return {}
+
+    monkeypatch.setattr(dispatch_service, "_latest_rider_positions", _no_positions)
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    await db_session.refresh(rider)
+    assert result.assigned_count == 1
+    assert order.status == "assigned"
+    assert order.rider_id == rider.id
+    assert rider.status == "on_delivery"
+
+
 async def test_assignment_default_is_freeform_button(db_session):
     """With no template configured, the rider notification stays a free-form
     interactive button (unchanged dev/test/mock behaviour)."""

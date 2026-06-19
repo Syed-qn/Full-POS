@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
@@ -94,14 +95,22 @@ run_dispatch = run_dispatch_engine
 async def _latest_rider_positions(
     session: AsyncSession, restaurant_id: int
 ) -> dict[int, tuple[float, float]]:
-    """Latest (lat, lon) ping per rider from rider_locations."""
-    rows = (
-        await session.scalars(
-            select(RiderLocation)
-            .where(RiderLocation.restaurant_id == restaurant_id)
-            .order_by(RiderLocation.ts.asc())
-        )
-    ).all()
+    """Latest (lat, lon) ping per rider from rider_locations.
+
+    Some deployed databases can lag migrations. If the rider-location table or
+    its query path is unavailable, degrade to an empty mapping so dispatch still
+    runs by treating riders as co-located with the restaurant.
+    """
+    try:
+        rows = (
+            await session.scalars(
+                select(RiderLocation)
+                .where(RiderLocation.restaurant_id == restaurant_id)
+                .order_by(RiderLocation.ts.asc())
+            )
+        ).all()
+    except ProgrammingError:
+        return {}
     # ascending order -> later rows overwrite earlier ones, leaving the latest.
     return {row.rider_id: (row.latitude, row.longitude) for row in rows}
 
