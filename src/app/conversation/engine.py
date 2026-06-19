@@ -1700,7 +1700,15 @@ async def _execute_ai_add_item(
     order = await session.get(Order, draft_order_id) if draft_order_id else None
     if order is None:
         order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
-        _set_state(conv, draft_order_id=order.id)
+        # New order starts: clear address/location state left over from a previous
+        # order so a returning customer is re-offered their saved address every
+        # time, and the fee/distance is recomputed for THIS order rather than
+        # reused from the last one.
+        _set_state(
+            conv, draft_order_id=order.id, address_offer_made=None,
+            saved_address_id=None, pin_lat=None, pin_lon=None,
+            distance_km=None, delivery_fee=None,
+        )
     await add_item(session, order=order, dish=dish, qty=qty, notes=special_note or None)
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     return True

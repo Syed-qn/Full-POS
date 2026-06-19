@@ -346,3 +346,53 @@ async def test_greeting_starts_fresh_and_drops_abandoned_cart(db_session, restau
     await db_session.refresh(conv)
     assert conv.state.get("draft_order_id") is None        # abandoned cart dropped
     assert await _build_cart_summary(db_session, conv) == ""  # fresh, empty cart
+
+
+async def test_new_order_clears_previous_address_state(db_session, restaurant):
+    """Starting a new order must clear address state from the previous order.
+
+    Returning-customer bug: after the first order set address_offer_made=True
+    (and pinned a location), the SECOND order skipped the "Use saved address"
+    offer and reused stale pin/fee. A fresh draft must reset that state so every
+    order re-offers the saved address and recomputes distance/fee.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507333444"
+
+    # Simulate state left over from a previous order (offer made, pin set), no draft.
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    conv.state = {
+        **conv.state,
+        "dialogue_phase": "ordering", "dialogue_state": "collecting_items",
+        "address_offer_made": True, "saved_address_id": 42,
+        "pin_lat": 25.1, "pin_lon": 55.2, "distance_km": 3.0, "delivery_fee": "5",
+        "draft_order_id": None,
+    }
+    await db_session.commit()
+
+    add_result = ConversationAgentResult(
+        message="Added!", action="add_item",
+        action_data={"dish_query": "biryani", "qty": 1, "special_note": ""},
+    )
+    inbound = InboundMessage(
+        wa_message_id="wamid.reorder", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "one biryani"}, restaurant_phone=restaurant.phone,
+        timestamp=1717663000,
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=add_result)):
+        await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(conv)
+    assert conv.state.get("draft_order_id") is not None       # new order created
+    assert conv.state.get("address_offer_made") is None        # offer flag reset
+    assert conv.state.get("pin_lat") is None                   # stale pin cleared
+    assert conv.state.get("distance_km") is None               # stale distance cleared
