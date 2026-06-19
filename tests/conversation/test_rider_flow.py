@@ -121,6 +121,39 @@ async def test_orders_picked_advances_all_and_sends_first_stop(db_session):
     assert "live location" in live.payload["body"].lower()
 
 
+async def test_orders_picked_paired_app_rider_skips_web_tracker(db_session):
+    """A rider paired with the native app (device_token set) streams GPS from the
+    app, so pickup must NOT send the web 'Start live tracker' CTA — just a plain
+    confirmation text under the same livereq idempotency key."""
+    r, rider, batch, orders = await _seed_batch(db_session)
+    rider.device_token = "dev-token-xyz"
+    await db_session.commit()
+
+    inbound = InboundMessage(
+        wa_message_id="b-paired-1",
+        from_phone=rider.phone,
+        type=MessageType.BUTTON_REPLY,
+        payload={"button_id": f"picked:{batch.id}"},
+        restaurant_phone=r.phone,
+        timestamp=0,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=r.id)
+    await db_session.commit()
+
+    live = await db_session.scalar(
+        select(OutboxMessage).where(
+            OutboxMessage.to_phone == rider.phone,
+            OutboxMessage.idempotency_key == f"livereq-{batch.id}",
+        )
+    )
+    assert live is not None
+    # Plain text confirmation, NOT the web tracker CTA button.
+    assert live.payload["type"] == "text"
+    assert "button_label" not in live.payload
+    assert "url" not in live.payload
+    assert "pickup confirmed" in live.payload["body"].lower()
+
+
 async def test_delivered_marks_delivered_and_records_cod(db_session):
     r, rider, batch, orders = await _seed_batch(db_session, n_orders=1)
     o = orders[0]

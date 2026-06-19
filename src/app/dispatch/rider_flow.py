@@ -332,9 +332,24 @@ async def handle_orders_picked(
         # revealed once the rider's GPS actually goes on (first ping →
         # reveal_first_stop_on_tracking_live), so the rider can't head to the
         # customer without live tracking running.
-        await _send_live_location_request(
-            session, restaurant_id, rider.phone, batch.id
-        )
+        if rider.device_token:
+            # Paired native Android app: it streams background GPS continuously
+            # while running, so there's no web tracker to open — just confirm
+            # the pickup. The first stop is revealed on the app's next GPS ping.
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=rider.phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={"body": "✅ *Pickup confirmed.*\n\nYour Rider app is sharing "
+                                 "live location automatically — just keep it open. "
+                                 "I'll send your first delivery stop in a moment."},
+                idempotency_key=f"livereq-{batch.id}",
+            )
+        else:
+            await _send_live_location_request(
+                session, restaurant_id, rider.phone, batch.id
+            )
     else:
         await enqueue_message(
             session,
@@ -369,6 +384,19 @@ async def _send_start_tracker_required(
     """Re-send the Start-live-tracker button when the rider tries to deliver
     without GPS sharing on. Uses the run's shared tracker (the batch's first
     order session) so it's the same page they were given at pickup."""
+    if rider.device_token:
+        # Paired native-app rider: no web tracker page — their app must be
+        # running to stream GPS. Tell them to reopen it instead of a link.
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "⚠️ *Open your Rider app first.*\nLaunch it and allow "
+                             "location, keep it running, then tap *Delivered* again."},
+            idempotency_key=f"tracker-required-{order.id}-{trigger_msg_id or rider.id}",
+        )
+        return
     from app.dispatch.tracking_live import build_rider_tracking_url, ensure_tracking_session
 
     first = order
