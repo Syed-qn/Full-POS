@@ -31,6 +31,17 @@ export function RiderTrackingScreen() {
   const lastSentMsRef = useRef(0);
   const storageKey = useMemo(() => `rider-tracking-queue:${riderToken}`, [riderToken]);
 
+  // Override the app's forced 1440px desktop viewport with the device width while
+  // this rider-facing page (used on a phone) is mounted; restore on leave.
+  useEffect(() => {
+    const vp = document.querySelector('meta[name="viewport"]');
+    const prev = vp?.getAttribute("content") ?? null;
+    vp?.setAttribute("content", "width=device-width, initial-scale=1");
+    return () => {
+      if (vp && prev !== null) vp.setAttribute("content", prev);
+    };
+  }, []);
+
   useEffect(() => {
     try {
       queueRef.current = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as QueueItem[];

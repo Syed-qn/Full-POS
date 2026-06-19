@@ -22,6 +22,18 @@ export function PublicTrackingScreen() {
   const leafletMapRef = useRef<import("leaflet").Map | null>(null);
   const markerRef = useRef<import("leaflet").CircleMarker | null>(null);
 
+  // The app forces a 1440px desktop viewport for the manager dashboard, which
+  // makes this customer-facing page render zoomed-out on phones. Override it to
+  // the device width while this screen is mounted, then restore on leave.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="viewport"]');
+    const prev = meta?.getAttribute("content") ?? null;
+    meta?.setAttribute("content", "width=device-width, initial-scale=1");
+    return () => {
+      if (meta && prev !== null) meta.setAttribute("content", prev);
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
     async function load() {
