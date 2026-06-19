@@ -8,6 +8,12 @@ export interface TrackingLocationOut {
   status: string;
 }
 
+export interface TrackingPoint {
+  latitude: number;
+  longitude: number;
+  label?: string | null;
+}
+
 export interface PublicTrackingOut {
   orderId: number;
   orderNumber: string;
@@ -15,6 +21,8 @@ export interface PublicTrackingOut {
   trackingUrl: string;
   lastUpdatedAt: string | null;
   location: TrackingLocationOut | null;
+  restaurant?: TrackingPoint | null;
+  destination?: TrackingPoint | null;
 }
 
 export interface RiderTrackingOut {
@@ -27,11 +35,31 @@ export interface RiderTrackingOut {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
+/** Error that carries the HTTP status + parsed `detail` so callers can show a
+ *  friendly state (e.g. 410 → "tracking ended") instead of raw JSON. */
+export class TrackingError extends Error {
+  status: number;
+  detail: string;
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "TrackingError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 async function trackingRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE}${path}`, init);
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(text || `${resp.status}`);
+    let detail = text || `${resp.status}`;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
+    } catch {
+      /* not JSON — keep raw text */
+    }
+    throw new TrackingError(resp.status, detail);
   }
   return resp.json() as Promise<T>;
 }

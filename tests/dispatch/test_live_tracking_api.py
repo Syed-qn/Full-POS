@@ -92,7 +92,14 @@ async def test_live_tracking_start_update_public_and_stop(client, db_session):
 
     public_before = await client.get(f"/api/v1/track/{started['tracking_token']}")
     assert public_before.status_code == 200
-    assert public_before.json()["location"] is None
+    body = public_before.json()
+    assert body["location"] is None
+    # Journey endpoints for the customer map (restaurant → rider → destination).
+    assert body["restaurant"]["latitude"] == 25.2048
+    assert body["restaurant"]["longitude"] == 55.2708
+    assert body["restaurant"]["label"] == "Track House"
+    assert body["destination"]["latitude"] == 25.2100
+    assert body["destination"]["longitude"] == 55.2750
 
     update = await client.post(
         f"/api/v1/orders/{order.id}/location",

@@ -59,6 +59,43 @@
   }
 }
 
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dotFrom,
+.dotRider,
+.dotTo {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.15);
+}
+
+.dotFrom {
+  background: #f97316;
+}
+
+.dotRider {
+  background: #16a34a;
+}
+
+.dotTo {
+  background: #2563eb;
+}
+
 .infoRow {
   display: flex;
   justify-content: space-between;
@@ -76,6 +113,33 @@
 .error {
   margin-bottom: 12px;
   color: #b91c1c;
+}
+
+.endState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 40px 16px 24px;
+}
+
+.endEmoji {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.endTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #0f172a;
+}
+
+.endText {
+  margin: 0;
+  max-width: 420px;
+  color: #475569;
+  line-height: 1.5;
 }
 
 .waiting {

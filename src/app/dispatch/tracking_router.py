@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.dispatch.tracking_live import (
-    TRACKING_EXPIRED,
     TRACKING_STOPPED,
     build_rider_tracking_url,
     build_tracking_url,
@@ -58,6 +57,12 @@ class LatestLocationOut(BaseModel):
     status: str
 
 
+class TrackingPointOut(BaseModel):
+    latitude: float
+    longitude: float
+    label: str | None = None
+
+
 class TrackingPublicOut(BaseModel):
     orderId: int
     orderNumber: str
@@ -65,6 +70,10 @@ class TrackingPublicOut(BaseModel):
     trackingUrl: str
     lastUpdatedAt: datetime | None = None
     location: LatestLocationOut | None = None
+    # Journey endpoints so the customer map can show restaurant → rider →
+    # destination (Swiggy/Zomato style), not just the rider dot.
+    restaurant: TrackingPointOut | None = None
+    destination: TrackingPointOut | None = None
 
 
 class RiderTrackingOut(BaseModel):
@@ -210,6 +219,29 @@ async def get_public_tracking(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "tracking link not found")
     if not is_tracking_accessible(access.session):
         raise HTTPException(status.HTTP_410_GONE, "tracking link expired")
+
+    # Resolve the journey endpoints so the customer map can draw
+    # restaurant (from) → rider → delivery address (to).
+    from app.identity.models import Restaurant
+    from app.ordering.models import CustomerAddress
+
+    restaurant_pt: TrackingPointOut | None = None
+    rest = await session.get(Restaurant, access.order.restaurant_id)
+    if rest is not None and rest.lat is not None and rest.lng is not None:
+        restaurant_pt = TrackingPointOut(
+            latitude=rest.lat, longitude=rest.lng, label=rest.name
+        )
+
+    destination_pt: TrackingPointOut | None = None
+    if access.order.address_id is not None:
+        addr = await session.get(CustomerAddress, access.order.address_id)
+        if addr is not None and addr.latitude is not None and addr.longitude is not None:
+            destination_pt = TrackingPointOut(
+                latitude=addr.latitude,
+                longitude=addr.longitude,
+                label="Delivery address",
+            )
+
     return TrackingPublicOut(
         orderId=access.order.id,
         orderNumber=access.order.order_number,
@@ -217,6 +249,8 @@ async def get_public_tracking(
         trackingUrl=build_tracking_url(access.session.tracking_token),
         lastUpdatedAt=access.session.last_location_at,
         location=_to_location_out(access),
+        restaurant=restaurant_pt,
+        destination=destination_pt,
     )
 
 
