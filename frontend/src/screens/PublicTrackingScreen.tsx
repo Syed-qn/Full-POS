@@ -40,6 +40,34 @@ function pinIcon(L: typeof import("leaflet"), emoji: string, bg: string) {
   });
 }
 
+// Live rider marker: a round green dot with the 🛵 glyph, plus a directional
+// arrow that rotates to the rider's GPS heading (0 = north, clockwise) so the
+// bike "faces" where it's travelling — like Uber/Swiggy. When heading is
+// unknown (rider stationary / no fix) the arrow is omitted.
+function riderIcon(L: typeof import("leaflet"), heading: number | null | undefined) {
+  const hasHeading = typeof heading === "number" && !Number.isNaN(heading);
+  const arrow = hasHeading
+    ? `<div style="position:absolute;inset:0;transform:rotate(${heading}deg);">` +
+      `<div style="position:absolute;top:-3px;left:50%;transform:translateX(-50%);` +
+      `width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;` +
+      `border-bottom:11px solid #16a34a;"></div>` +
+      `</div>`
+    : "";
+  return L.divIcon({
+    className: "",
+    html:
+      `<div style="position:relative;width:40px;height:40px;">` +
+      arrow +
+      `<div style="position:absolute;top:4px;left:4px;width:32px;height:32px;` +
+      `border-radius:50%;background:#16a34a;border:2px solid #fff;` +
+      `box-shadow:0 2px 6px rgba(15,23,42,.35);display:flex;align-items:center;` +
+      `justify-content:center;font-size:17px;line-height:1;">🛵</div>` +
+      `</div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+}
+
 export function PublicTrackingScreen() {
   const { trackingToken = "" } = useParams();
   const [tracking, setTracking] = useState<PublicTrackingOut | null>(null);
@@ -184,23 +212,29 @@ export function PublicTrackingScreen() {
           .addTo(map)
           .bindPopup(dest.label ?? "Delivery address");
       }
-      // Rider (moving) — created on first GPS fix, then just repositioned.
+      // Rider (moving) — created on first GPS fix, then repositioned + re-faced
+      // to the latest heading on every update.
       if (riderPos) {
+        const heading = location?.heading ?? null;
         if (!riderRef.current) {
-          riderRef.current = L.marker(riderPos, { icon: pinIcon(L, "🛵", "#16a34a"), zIndexOffset: 1000 })
+          riderRef.current = L.marker(riderPos, { icon: riderIcon(L, heading), zIndexOffset: 1000 })
             .addTo(map)
             .bindPopup("Your rider");
         } else {
           riderRef.current.setLatLng(riderPos);
+          riderRef.current.setIcon(riderIcon(L, heading));
         }
       }
 
-      // Route corridor restaurant → (rider) → destination.
-      const line: [number, number][] = [];
-      if (restaurant) line.push([restaurant.latitude, restaurant.longitude]);
-      if (riderPos) line.push(riderPos);
-      if (dest) line.push([dest.latitude, dest.longitude]);
-      if (line.length >= 2) {
+      // The delivery route is restaurant (kitchen) → customer address — a single
+      // fixed corridor. The rider is a live marker that moves ALONG it; we do NOT
+      // bend the line to the rider's current ping (that made it look like
+      // "restaurant → rider"). Drawn only when we have both endpoints.
+      if (restaurant && dest) {
+        const line: [number, number][] = [
+          [restaurant.latitude, restaurant.longitude],
+          [dest.latitude, dest.longitude],
+        ];
         if (!routeRef.current) {
           routeRef.current = L.polyline(line, {
             color: "#16a34a",
