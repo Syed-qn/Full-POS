@@ -22,6 +22,10 @@ router = APIRouter(tags=["rider-app"])
 _bearer = HTTPBearer(auto_error=False)
 
 
+class RiderAppInfoOut(BaseModel):
+    apkUrl: str | None = None
+
+
 class PairIn(BaseModel):
     code: str = Field(min_length=4, max_length=12)
 
@@ -82,6 +86,14 @@ async def _active_order(session: AsyncSession, rider_id: int):
         .order_by(Order.id)
         .limit(1)
     )
+
+
+@router.get("/api/v1/rider-app/info", response_model=RiderAppInfoOut)
+async def rider_app_info():
+    """Public: the configured APK download link (for the dashboard banner)."""
+    from app.config import get_settings
+
+    return RiderAppInfoOut(apkUrl=get_settings().rider_app_apk_url or None)
 
 
 @router.post("/api/v1/rider-app/pair", response_model=PairOut)

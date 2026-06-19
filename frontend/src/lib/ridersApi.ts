@@ -41,3 +41,8 @@ export interface AppInviteOut {
 export async function inviteRiderToApp(id: number): Promise<AppInviteOut> {
   return apiClient.post<AppInviteOut>(`/api/v1/riders/${id}/app-invite`, {});
 }
+
+/** The configured rider-app APK download link (null if not set up yet). */
+export async function fetchRiderAppInfo(): Promise<{ apkUrl: string | null }> {
+  return apiClient.get<{ apkUrl: string | null }>("/api/v1/rider-app/info");
+}

@@ -4,6 +4,46 @@
   gap: 16px;
 }
 
+/* ---- Rider app banner ---- */
+.appBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: color-mix(in srgb, var(--accent-rider) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--accent-rider) 30%, var(--border-subtle));
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.appBannerIcon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.appBannerText {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.appBannerLink {
+  flex-shrink: 0;
+  background: var(--accent-rider);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+
+.appBannerMuted {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ---- Stats summary ---- */
 .stats {
   display: flex;
