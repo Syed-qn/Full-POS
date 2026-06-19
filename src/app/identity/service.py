@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, delete, func, select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -100,8 +101,30 @@ def _shift_window_start(now_utc: datetime) -> datetime:
     return eight.astimezone(timezone.utc)
 
 
-async def list_riders(session: AsyncSession, restaurant_id: int) -> list[Rider]:
+async def _latest_rider_locations(
+    session: AsyncSession, *, restaurant_id: int
+) -> dict[int, object]:
+    """Best-effort latest ping map keyed by rider_id.
+
+    Some deployed databases can lag schema migrations. If the rider-location
+    table/query is unavailable, degrade to an empty map so the Riders screen
+    still loads and shows the rider rows without live-position metadata.
+    """
     from app.dispatch.models import RiderLocation
+
+    try:
+        pings = await session.scalars(
+            select(RiderLocation)
+            .where(RiderLocation.restaurant_id == restaurant_id)
+            .order_by(RiderLocation.rider_id, RiderLocation.ts.desc())
+            .distinct(RiderLocation.rider_id)
+        )
+    except ProgrammingError:
+        return {}
+    return {p.rider_id: p for p in pings}
+
+
+async def list_riders(session: AsyncSession, restaurant_id: int) -> list[Rider]:
     from app.ordering.models import Order
 
     rows = await session.scalars(
@@ -129,13 +152,7 @@ async def list_riders(session: AsyncSession, restaurant_id: int) -> list[Rider]:
 
     # Latest location ping per rider (DISTINCT ON keeps only the newest row per
     # rider) so the dashboard can show a live-tracking dot + "seen X ago".
-    pings = await session.scalars(
-        select(RiderLocation)
-        .where(RiderLocation.restaurant_id == restaurant_id)
-        .order_by(RiderLocation.rider_id, RiderLocation.ts.desc())
-        .distinct(RiderLocation.rider_id)
-    )
-    latest = {p.rider_id: p for p in pings}
+    latest = await _latest_rider_locations(session, restaurant_id=restaurant_id)
 
     for rider in riders:
         lifetime, today = tally.get(rider.id, (0, 0))
@@ -161,12 +178,15 @@ async def latest_rider_location(
     rider = await session.get(Rider, rider_id)
     if rider is None or rider.restaurant_id != restaurant_id:
         return False  # signal "rider not found" to the router
-    ping = await session.scalar(
-        select(RiderLocation)
-        .where(RiderLocation.rider_id == rider_id)
-        .order_by(RiderLocation.ts.desc())
-        .limit(1)
-    )
+    try:
+        ping = await session.scalar(
+            select(RiderLocation)
+            .where(RiderLocation.rider_id == rider_id)
+            .order_by(RiderLocation.ts.desc())
+            .limit(1)
+        )
+    except ProgrammingError:
+        return None
     if ping is None:
         return None
     return {"lat": ping.latitude, "lng": ping.longitude, "ts": ping.ts}

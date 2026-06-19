@@ -55,6 +55,28 @@ async def test_rider_location_endpoint(client, auth_headers, db_session):
     assert missing.status_code == 404
 
 
+async def test_list_riders_survives_missing_location_table(client, auth_headers, monkeypatch):
+    from app.identity import service as identity_service
+
+    rider = (
+        await client.post(
+            "/api/v1/riders",
+            json={"name": "Ahmed", "phone": "+971509998888"},
+            headers=auth_headers,
+        )
+    ).json()
+
+    async def _no_locations(session, *, restaurant_id):
+        return {}
+
+    monkeypatch.setattr(identity_service, "_latest_rider_locations", _no_locations)
+
+    listing = await client.get("/api/v1/riders", headers=auth_headers)
+    assert listing.status_code == 200
+    assert listing.json()[0]["id"] == rider["id"]
+    assert listing.json()[0]["last_lat"] is None
+
+
 def test_shift_window_start_is_8am_dubai():
     from datetime import datetime, timezone
 
