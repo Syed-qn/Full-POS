@@ -56,6 +56,14 @@ async def _notify_customer_status(
     if customer is None or not customer.phone:
         return
     body = await build_tracking_reply(session, order=order, geo=get_geo_provider())
+    if status_key == "picked_up":
+        from app.dispatch.tracking_live import build_tracking_url, ensure_tracking_session
+
+        tracking = await ensure_tracking_session(session, order=order)
+        body = (
+            f"{body}\n\nTrack your rider live:\n"
+            f"{build_tracking_url(tracking.tracking_token)}"
+        )
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -172,9 +180,26 @@ async def _send_live_location_request(
     there's no "turn it off" step. Idempotent per batch."""
     body = (
         "📍 *Share your live location* so we can track this delivery.\n\n"
-        "Tap 📎 (attach) → *Location* → *Share live location* → choose *1 hour*.\n\n"
-        "It stops automatically after the hour — no need to turn it off."
+        "Open the rider tracker link below, allow GPS, and keep the page open.\n\n"
+        "It stops automatically when the delivery ends."
     )
+    rider_tracking_url: str | None = None
+    first_order = await session.scalar(
+        select(Order)
+        .join(BatchOrder, BatchOrder.order_id == Order.id)
+        .where(BatchOrder.batch_id == batch_id)
+        .order_by(BatchOrder.sequence)
+        .limit(1)
+    )
+    if first_order is not None and first_order.rider_id is not None:
+        from app.dispatch.tracking_live import (
+            build_rider_tracking_url,
+            ensure_tracking_session,
+        )
+
+        tracking = await ensure_tracking_session(session, order=first_order)
+        rider_tracking_url = build_rider_tracking_url(tracking.rider_token)
+        body = f"{body}\n\nStart rider tracker:\n{rider_tracking_url}"
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,

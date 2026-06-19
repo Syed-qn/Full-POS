@@ -21,6 +21,9 @@ async def update_rider_location(
     rider: Rider,
     latitude: float,
     longitude: float,
+    accuracy: float | None = None,
+    speed: float | None = None,
+    heading: float | None = None,
     ts: datetime | None = None,
 ) -> RiderLocation:
     """Append a rider location ping + best-effort Redis GEO hot copy. Caller commits."""
@@ -30,6 +33,9 @@ async def update_rider_location(
         restaurant_id=rider.restaurant_id,
         latitude=latitude,
         longitude=longitude,
+        accuracy=accuracy,
+        speed=speed,
+        heading=heading,
         ts=now,
     )
     session.add(ping)

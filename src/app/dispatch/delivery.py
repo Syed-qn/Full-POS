@@ -55,6 +55,9 @@ async def advance_delivery(
         if order.sla_deadline is not None:
             order.late = now > order.sla_deadline
         await _complete_batch_order(session, order, now)
+        from app.dispatch.tracking_live import TRACKING_EXPIRED, stop_tracking_session
+
+        await stop_tracking_session(session, order_id=order.id, reason=TRACKING_EXPIRED)
 
     await record_audit(
         session,

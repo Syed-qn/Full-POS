@@ -48,7 +48,33 @@ class RiderLocation(Base, TimestampMixin):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
+    accuracy: Mapped[float | None] = mapped_column(Float)
+    speed: Mapped[float | None] = mapped_column(Float)
+    heading: Mapped[float | None] = mapped_column(Float)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class OrderTrackingSession(Base, TimestampMixin):
+    """Per-order live tracking session with public + rider access tokens."""
+
+    __tablename__ = "order_tracking_sessions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), unique=True, index=True)
+    rider_id: Mapped[int] = mapped_column(ForeignKey("riders.id"), index=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    tracking_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    rider_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    latest_latitude: Mapped[float | None] = mapped_column(Float)
+    latest_longitude: Mapped[float | None] = mapped_column(Float)
+    latest_accuracy: Mapped[float | None] = mapped_column(Float)
+    latest_speed: Mapped[float | None] = mapped_column(Float)
+    latest_heading: Mapped[float | None] = mapped_column(Float)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_location_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class Assignment(Base, TimestampMixin):

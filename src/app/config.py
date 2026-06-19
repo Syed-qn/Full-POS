@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_model: str = "deepseek-chat"
     upload_dir: str = "var/uploads"
+    public_base_url: str = "http://localhost:8000"
 
     # WhatsApp
     whatsapp_provider: str = "mock"  # mock | cloud

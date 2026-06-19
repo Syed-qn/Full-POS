@@ -69,6 +69,7 @@ async def test_pickup_notifies_customer_on_the_way(db_session):
     msgs = await _cust_msgs(db_session, c.phone)
     assert len(msgs) == 1
     assert "picked up" in msgs[0].payload["body"].lower()
+    assert "/track/" in msgs[0].payload["body"]
     assert msgs[0].idempotency_key == f"cust-picked_up-{o.id}"
 
 

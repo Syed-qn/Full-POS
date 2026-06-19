@@ -11,6 +11,8 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { MenuManagerScreen } from "./screens/MenuManagerScreen";
 import { NewOrderScreen } from "./screens/NewOrderScreen";
 import { OrdersScreen } from "./screens/OrdersScreen";
+import { PublicTrackingScreen } from "./screens/PublicTrackingScreen";
+import { RiderTrackingScreen } from "./screens/RiderTrackingScreen";
 import { RidersScreen } from "./screens/RidersScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 
@@ -24,6 +26,8 @@ export default function App() {
     <>
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
+      <Route path="/track/:trackingToken" element={<PublicTrackingScreen />} />
+      <Route path="/rider-track/:riderToken" element={<RiderTrackingScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
       <Route path="/customers" element={<Guarded><CustomersScreen /></Guarded>} />
