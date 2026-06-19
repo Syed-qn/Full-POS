@@ -222,3 +222,38 @@ async def test_delete_address_linked_to_open_order_returns_409(client, db_sessio
         headers=_auth(restaurant.id),
     )
     assert resp.status_code == 409
+
+
+async def test_delete_customer_removes_record(client, db_session, restaurant):
+    customer, addr = await _seed_customer(db_session, restaurant.id)
+
+    resp = await client.delete(
+        f"/api/v1/ordering/customers/{customer.id}",
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 204
+
+    profile_resp = await client.get(
+        f"/api/v1/ordering/customers/{customer.id}",
+        headers=_auth(restaurant.id),
+    )
+    assert profile_resp.status_code == 404
+
+
+async def test_delete_customer_linked_to_order_returns_409(client, db_session, restaurant):
+    customer, _addr = await _seed_customer(db_session, restaurant.id)
+
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-CUST", status="delivered",
+        subtotal=Decimal("22.00"), delivery_fee_aed=Decimal("0.00"),
+        total=Decimal("22.00"),
+    )
+    db_session.add(order)
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/ordering/customers/{customer.id}",
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 409

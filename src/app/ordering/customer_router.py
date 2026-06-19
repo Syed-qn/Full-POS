@@ -1,6 +1,6 @@
 # src/app/ordering/customer_router.py
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -275,5 +275,51 @@ async def delete_address(
         )
 
     await session.delete(addr)
+    await session.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/{customer_id}", status_code=204)
+async def delete_customer(
+    customer_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.id == customer_id,
+            Customer.restaurant_id == restaurant.id,
+        )
+    )
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    has_orders = await session.scalar(
+        select(Order.id).where(
+            Order.customer_id == customer_id,
+            Order.restaurant_id == restaurant.id,
+        ).limit(1)
+    )
+    if has_orders:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete customer linked to existing orders",
+        )
+
+    await session.execute(
+        delete(CustomerAddress).where(CustomerAddress.customer_id == customer_id)
+    )
+    await session.execute(
+        delete(OptOut).where(
+            OptOut.restaurant_id == restaurant.id,
+            OptOut.phone == customer.phone,
+        )
+    )
+    from app.marketing.models import MarketingSend
+
+    await session.execute(
+        delete(MarketingSend).where(MarketingSend.customer_id == customer_id)
+    )
+    await session.delete(customer)
     await session.commit()
     return Response(status_code=204)
