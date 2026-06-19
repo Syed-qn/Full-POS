@@ -286,10 +286,21 @@ export function PublicTrackingScreen() {
           <span className={s.legendItem}>
             <span className={s.dotRider} /> Rider
           </span>
-          <span className={s.legendItem}>
-            <span className={s.dotTo} /> {tracking?.destination?.label ?? "You"}
-          </span>
+          {/* Only show the delivery-address marker in the legend when we actually
+              have a pin for it — otherwise it promised a blue dot that never
+              appears on the map (confusing). */}
+          {tracking?.destination ? (
+            <span className={s.legendItem}>
+              <span className={s.dotTo} /> {tracking.destination.label ?? "Delivery address"}
+            </span>
+          ) : null}
         </div>
+        {tracking && !tracking.destination ? (
+          <p className={s.note}>
+            📍 Exact delivery pin not shared for this order — the map shows the
+            restaurant and your rider only.
+          </p>
+        ) : null}
         <div className={s.infoRow}>
           <span>Last updated</span>
           <strong>{formatTime(location?.updatedAt ?? tracking?.lastUpdatedAt)}</strong>

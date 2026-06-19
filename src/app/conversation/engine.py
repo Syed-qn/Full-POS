@@ -98,6 +98,31 @@ def _is_tracking_query(text: str | None) -> bool:
     return any(p in t for p in phrases)
 
 
+def _is_restaurant_location_request(text: str | None) -> bool:
+    """True when the customer is asking WHERE THE RESTAURANT is (to self-pickup /
+    "I'll come direct"), so we send the restaurant's location pin deterministically.
+
+    Without this the LLM (which only has the restaurant's area name in context, no
+    pin) improvises and asks the CUSTOMER to share THEIR location — which both
+    fails the request and can push them into the address-capture flow.
+    """
+    if not text:
+        return False
+    t = text.strip().lower()
+    if not t or len(t) > 80:
+        return False
+    phrases = (
+        "restaurant location", "restaurant address", "your location", "your address",
+        "your exact location", "exact location", "where are you located",
+        "where is the restaurant", "where's the restaurant", "where is your restaurant",
+        "where are you", "where r u", "location pin", "send location", "share location",
+        "pickup location", "pick up location", "pickup address", "self pickup",
+        "i will come", "i'll come", "ill come", "come direct", "come and collect",
+        "collect myself", "collect it myself", "pick it up myself", "pick up myself",
+    )
+    return any(p in t for p in phrases)
+
+
 def _is_pure_greeting(text: str | None) -> bool:
     """True if the message is ONLY a greeting, with no ordering content.
 
@@ -1269,6 +1294,59 @@ async def _handle_modify_confirm(
     await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
 
 
+async def _handle_restaurant_location_request(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> None:
+    """Send the restaurant's location as a native WhatsApp pin + a short text.
+
+    Read-only: does NOT touch the dialogue phase or any draft order, so asking
+    "what's your location, I'll come direct" never spins up an order or pushes the
+    customer into address capture (the old AI behaviour)."""
+    import time
+
+    if restaurant is None or restaurant.lat is None or restaurant.lng is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="rest-loc-missing",
+            body="Sorry, we don't have our exact location pin set up yet. "
+                 "Please contact us for directions.",
+        )
+        return
+
+    name = restaurant.name or "Restaurant"
+    payload = {
+        "latitude": restaurant.lat,
+        "longitude": restaurant.lng,
+        "name": name,
+    }
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=inbound.from_phone,
+        msg_type=OutboundMessageType.LOCATION,
+        payload=payload,
+        idempotency_key=f"rest-loc-{conv.id}-{inbound.wa_message_id}",
+    )
+    await record_message(
+        session,
+        conversation_id=conv.id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="location",
+        payload={"type": "location", **payload},
+        ts=int(time.time()),
+    )
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="rest-loc-note",
+        body=f"📍 Here's *{name}* — tap the pin above for directions. See you soon! 🛵",
+    )
+
+
 async def _handle_status_query(
     session: AsyncSession,
     conv: Conversation,
@@ -1303,7 +1381,12 @@ async def _handle_status_query(
         )
         return
 
-    terminal = {
+    # Statuses that are NOT a live, placed order to report for "where is my order".
+    # DRAFT is an incomplete/abandoned cart (not placed) — reporting it as
+    # "being assembled" misleads the customer, e.g. a stale draft surfacing right
+    # after a real order was delivered. Treat it like "no active order".
+    excluded = {
+        str(OrderStatus.DRAFT),
         str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
         str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
         str(OrderStatus.WRITTEN_OFF),
@@ -1313,7 +1396,7 @@ async def _handle_status_query(
         .where(
             Order.restaurant_id == restaurant_id,
             Order.customer_id == customer.id,
-            Order.status.notin_(terminal),
+            Order.status.notin_(excluded),
         )
         .order_by(Order.created_at.desc())
         .limit(1)
@@ -2651,6 +2734,15 @@ async def handle_inbound(
         # current status + ETA + the live tracking link, deterministically.
         if _is_tracking_query(text):
             await _handle_status_query(session, conv, inbound, restaurant_id)
+            return
+        # "What's your location / I'll come direct" → send the restaurant's pin
+        # deterministically (the LLM has no pin and would ask the CUSTOMER for
+        # theirs). Skip while capturing the delivery address so we don't talk over
+        # that flow — there "share location" means the customer's own pin.
+        if _resolve_phase(conv) != "address_capture" and _is_restaurant_location_request(text):
+            await _handle_restaurant_location_request(
+                session, conv, inbound, restaurant_id, restaurant
+            )
             return
 
     # All remaining text + button_reply → AI

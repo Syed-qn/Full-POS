@@ -194,7 +194,8 @@ async def _send_live_location_request(
     there's no "turn it off" step. Idempotent per batch."""
     body = (
         "📍 *Share your live location* so we can track this delivery.\n\n"
-        "Tap *Start live tracker* below, allow GPS, and keep the page open. "
+        "Tap *Start live tracker* below — tracking starts automatically, just "
+        "allow location if your phone asks, and keep the page open. "
         "You must start it before you can mark a stop delivered.\n\n"
         "It stops automatically when the delivery ends."
     )

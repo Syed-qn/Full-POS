@@ -29,6 +29,7 @@ export function RiderTrackingScreen() {
   const queueRef = useRef<QueueItem[]>([]);
   const flushingRef = useRef(false);
   const lastSentMsRef = useRef(0);
+  const autoStartedRef = useRef(false);
   const storageKey = useMemo(() => `rider-tracking-queue:${riderToken}`, [riderToken]);
 
   // Override the app's forced 1440px desktop viewport with the device width while
@@ -58,6 +59,19 @@ export function RiderTrackingScreen() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load rider tracker"));
   }, [riderToken]);
+
+  // Auto-start GPS the moment the page opens (the rider already tapped the
+  // "Start live tracker" button to get here — that's the user gesture). This
+  // removes the extra manual "Start tracking" tap. The browser still prompts for
+  // location permission the FIRST time; once granted it auto-starts silently on
+  // every future delivery. Runs once per mount.
+  useEffect(() => {
+    if (meta && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      startTracking();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta]);
 
   useEffect(() => {
     function handleOnline() {
@@ -174,14 +188,16 @@ export function RiderTrackingScreen() {
         </div>
         <div className={s.actions}>
           <button className={s.primary} onClick={startTracking}>
-            {tracking ? "Restart GPS" : "Start tracking"}
+            {tracking ? "Restart GPS" : "Enable GPS"}
           </button>
           <button className={s.secondary} onClick={stopTrackingNow}>
             Stop tracking
           </button>
         </div>
         <p className={s.help}>
-          Keep this page open during delivery. If you go offline, updates are queued and sent when the network returns.
+          Tracking starts automatically — just allow location if asked, and keep
+          this page open during delivery. If you go offline, updates are queued and
+          sent when the network returns.
         </p>
       </section>
     </main>

@@ -74,6 +74,20 @@ def _build_graph_payload(msg: OutboundMessage) -> dict[str, Any]:
             },
         }
 
+    elif msg.type == OutboundMessageType.LOCATION:
+        # payload: {"latitude": float, "longitude": float, "name": str?, "address": str?}
+        # Sends a native WhatsApp location pin (opens in the recipient's maps app).
+        loc: dict[str, Any] = {
+            "latitude": msg.payload["latitude"],
+            "longitude": msg.payload["longitude"],
+        }
+        if msg.payload.get("name"):
+            loc["name"] = msg.payload["name"]
+        if msg.payload.get("address"):
+            loc["address"] = msg.payload["address"]
+        base["type"] = "location"
+        base["location"] = loc
+
     elif msg.type == OutboundMessageType.LOCATION_REQUEST:
         # payload: {"body": str}
         base["type"] = "interactive"

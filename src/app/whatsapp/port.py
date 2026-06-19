@@ -9,6 +9,7 @@ class OutboundMessageType(StrEnum):
     CTA_URL = "cta_url"
     LIST = "list"
     LOCATION_REQUEST = "location_request"
+    LOCATION = "location"
     IMAGE = "image"
     DOCUMENT = "document"
     TEMPLATE = "template"

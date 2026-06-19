@@ -3,7 +3,24 @@ import hmac
 
 import pytest
 
-from app.whatsapp.cloud_provider import CloudAPIProvider, verify_signature
+from app.whatsapp.cloud_provider import CloudAPIProvider, _build_graph_payload, verify_signature
+from app.whatsapp.port import OutboundMessage, OutboundMessageType
+
+
+def test_build_location_payload():
+    """LOCATION type maps to a native WhatsApp location message with coords."""
+    msg = OutboundMessage(
+        to_phone="+971500000000",
+        type=OutboundMessageType.LOCATION,
+        payload={"latitude": 25.2048, "longitude": 55.2708, "name": "Track House"},
+        idempotency_key="loc-1",
+    )
+    out = _build_graph_payload(msg)
+    assert out["type"] == "location"
+    assert out["location"]["latitude"] == 25.2048
+    assert out["location"]["longitude"] == 55.2708
+    assert out["location"]["name"] == "Track House"
+    assert "address" not in out["location"]  # omitted when not provided
 
 
 def test_verify_signature_valid():

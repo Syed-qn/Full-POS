@@ -411,6 +411,94 @@ def test_is_tracking_query_detection():
     assert not _is_tracking_query("")
 
 
+def test_is_restaurant_location_request_detection():
+    """'where are you / I'll come direct' messages ask for the restaurant pin."""
+    from app.conversation.engine import _is_restaurant_location_request
+
+    assert _is_restaurant_location_request("Restaurant location")
+    assert _is_restaurant_location_request("what is your exact location i will come direct")
+    assert _is_restaurant_location_request("where are you located")
+    assert _is_restaurant_location_request("send me your location pin")
+    assert _is_restaurant_location_request("I'll come and collect myself")
+    assert not _is_restaurant_location_request("where is my order")
+    assert not _is_restaurant_location_request("one chicken biryani")
+    assert not _is_restaurant_location_request("")
+
+
+async def test_restaurant_location_request_sends_pin_no_draft(db_session, restaurant):
+    """Asking for the restaurant location sends a native pin and must NOT create a
+    draft order or push the customer into address capture."""
+    from app.outbox.models import OutboxMessage
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971509998888"
+    inbound = InboundMessage(
+        wa_message_id="wamid.restloc", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "what is your exact location i will come direct"},
+        restaurant_phone=restaurant.phone, timestamp=1717664000,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    msgs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == phone)
+    )).all()
+    loc = [m for m in msgs if m.payload.get("type") == "location"]
+    assert loc, "should send a native location pin"
+    assert loc[0].payload["latitude"] == restaurant.lat
+    assert loc[0].payload["longitude"] == restaurant.lng
+
+    from app.conversation.service import get_or_create_conversation
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    assert conv.state.get("draft_order_id") is None
+    assert conv.state.get("dialogue_phase") != "address_capture"
+
+
+async def test_status_query_ignores_stale_draft(db_session, restaurant):
+    """After a real order is delivered, a leftover DRAFT cart must NOT be reported
+    as 'being assembled' — it's an incomplete cart, not a placed order."""
+    from app.ordering.models import Customer, Order
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507770001"
+    customer = Customer(
+        restaurant_id=restaurant.id, phone=phone, name="A",
+        usual_order_times={}, tags={}, total_orders=1, total_spend=Decimal("10.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    for num, st in (("R1-D1", "delivered"), ("R1-D2", "draft")):
+        db_session.add(Order(
+            restaurant_id=restaurant.id, customer_id=customer.id, order_number=num,
+            status=st, priority="normal", weather_delay_disclosed=False,
+            delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("10.00"),
+            total=Decimal("10.00"),
+        ))
+    await db_session.commit()
+
+    inbound = InboundMessage(
+        wa_message_id="wamid.stq", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "where is my order"}, restaurant_phone=restaurant.phone,
+        timestamp=1717664000,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    from app.conversation.service import get_or_create_conversation
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    rows = (await db_session.scalars(
+        select(Message).where(Message.conversation_id == conv.id,
+                              Message.direction == "outbound").order_by(Message.id.desc())
+    )).all()
+    body = rows[0].payload.get("body", "")
+    assert "being assembled" not in body.lower()
+    assert "active orders" in body.lower()
+
+
 async def test_tracking_query_replies_with_live_link(db_session, restaurant):
     """A 'see live location' message on an en-route order re-sends the track link."""
     from datetime import datetime, timedelta, timezone
