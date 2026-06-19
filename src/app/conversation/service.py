@@ -100,6 +100,26 @@ async def set_manual_takeover(
     return True
 
 
+async def reset_conversation_state(
+    session: AsyncSession,
+    *,
+    conversation_id: int,
+    restaurant_id: int | None = None,
+) -> bool:
+    """Clear a conversation's bot state and disable manual takeover.
+
+    Keeps message history intact, but removes any stale draft/order pointers so
+    the next inbound message starts a fresh ordering flow.
+    """
+    conv = await session.get(Conversation, conversation_id)
+    if conv is None or (restaurant_id is not None and conv.restaurant_id != restaurant_id):
+        return False
+    conv.state = {}
+    conv.manual_takeover = False
+    conv.taken_over_by = None
+    return True
+
+
 async def send_manual_message(
     session: AsyncSession,
     *,

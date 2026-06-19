@@ -130,6 +130,41 @@ async def test_takeover_other_tenant_is_404(client, auth_headers, db_session):
     assert resp.status_code == 404
 
 
+async def test_reset_clears_state_and_takeover(client, auth_headers, db_session):
+    restaurant = await _restaurant(db_session)
+    conv = await _seed_conversation(db_session, restaurant.id, "+971500000013")
+    conv.state = {"draft_order_id": 99, "dialogue_phase": "awaiting_address"}
+    conv.manual_takeover = True
+    conv.taken_over_by = restaurant.id
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/conversations/{conv.id}/reset",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 204
+    await db_session.refresh(conv)
+    assert conv.state == {}
+    assert conv.manual_takeover is False
+    assert conv.taken_over_by is None
+
+
+async def test_reset_other_tenant_is_404(client, auth_headers, db_session):
+    other = Restaurant(
+        name="Other3", phone="+971599999997", password_hash="x", lat=25.0, lng=55.0
+    )
+    db_session.add(other)
+    await db_session.flush()
+    conv = await _seed_conversation(db_session, other.id, "+971500000014")
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/conversations/{conv.id}/reset",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
 async def test_send_message_records_outbound_and_delivers(
     client, auth_headers, db_session, monkeypatch
 ):

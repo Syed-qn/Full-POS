@@ -101,6 +101,22 @@ async def toggle_takeover(
     await session.commit()
 
 
+@router.post("/{conversation_id}/reset", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_conversation(
+    conversation_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    ok = await service.reset_conversation_state(
+        session,
+        conversation_id=conversation_id,
+        restaurant_id=restaurant.id,
+    )
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
+    await session.commit()
+
+
 @router.post(
     "/{conversation_id}/messages",
     response_model=DashboardMessageOut,
