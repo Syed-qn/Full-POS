@@ -61,10 +61,23 @@ async def _notify_customer_status(
         from app.dispatch.tracking_live import build_tracking_url, ensure_tracking_session
 
         tracking = await ensure_tracking_session(session, order=order)
-        body = (
-            f"{body}\n\nTrack your rider live:\n"
-            f"{build_tracking_url(tracking.tracking_token)}"
+        # Hand the customer a tappable "Track your rider" button (CTA URL) instead
+        # of a raw link — mirrors the rider's "Start live tracker" button. The
+        # customer ordered minutes ago, so their 24h window is open and a free-form
+        # interactive button delivers without a pre-approved template.
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=customer.phone,
+            msg_type=OutboundMessageType.CTA_URL,
+            payload={
+                "body": f"{body}\n\nTrack your order live on the map below.",
+                "button_label": "Track my order",
+                "url": build_tracking_url(tracking.tracking_token),
+            },
+            idempotency_key=key,
         )
+        return
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,

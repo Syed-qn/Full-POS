@@ -18,6 +18,7 @@ from app.dispatch.rider_flow import (
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, Order
 from app.outbox.models import OutboxMessage
+from app.whatsapp.port import OutboundMessageType
 
 
 async def _seed(db_session, status="assigned"):
@@ -69,7 +70,12 @@ async def test_pickup_notifies_customer_on_the_way(db_session):
     msgs = await _cust_msgs(db_session, c.phone)
     assert len(msgs) == 1
     assert "picked up" in msgs[0].payload["body"].lower()
-    assert "/track/" in msgs[0].payload["body"]
+    # Live tracker is a tappable "Track my order" CTA URL button (not a raw
+    # link in the body), mirroring the rider's "Start live tracker" button.
+    assert msgs[0].payload["type"] == OutboundMessageType.CTA_URL
+    assert "track my order" in msgs[0].payload["button_label"].lower()
+    assert "/track/" in msgs[0].payload["url"]
+    assert "/track/" not in msgs[0].payload["body"]
     assert msgs[0].idempotency_key == f"cust-picked_up-{o.id}"
 
 

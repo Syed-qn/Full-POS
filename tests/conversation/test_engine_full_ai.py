@@ -465,5 +465,9 @@ async def test_tracking_query_replies_with_live_link(db_session, restaurant):
         select(Message).where(Message.conversation_id == conv.id,
                               Message.direction == "outbound").order_by(Message.id.desc())
     )).all()
-    body = rows[0].payload.get("body", "")
-    assert "/track/tok_TESTTRACK123" in body
+    # The live tracker is now handed back as a tappable "Track my order" CTA URL
+    # button (mirroring the rider's button), not a raw link in the body.
+    payload = rows[0].payload
+    assert payload.get("type") == "cta_url"
+    assert "track my order" in payload.get("button_label", "").lower()
+    assert "/track/tok_TESTTRACK123" in payload.get("url", "")

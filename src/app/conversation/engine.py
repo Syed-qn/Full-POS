@@ -337,6 +337,43 @@ async def _send_buttons(
     )
 
 
+async def _send_cta_url(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    prefix: str,
+    body: str,
+    button_label: str,
+    url: str,
+) -> None:
+    """Send a tappable URL button (CTA URL) to the customer — e.g. the live
+    tracking link as a "Track your rider" button instead of a raw link. The
+    customer is mid-order (24h window open), so a free-form interactive button
+    delivers without a pre-approved template."""
+    import time
+
+    payload = {"body": body, "button_label": button_label, "url": url}
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=inbound.from_phone,
+        msg_type=OutboundMessageType.CTA_URL,
+        payload=payload,
+        idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
+    )
+    await record_message(
+        session,
+        conversation_id=conv.id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="cta_url",
+        payload={"type": "cta_url", **payload},
+        ts=int(time.time()),
+    )
+
+
 async def _send_location_request(
     session: AsyncSession,
     *,
@@ -1303,7 +1340,9 @@ async def _handle_status_query(
             session, order=order, geo=get_geo_provider()
         )
         # Re-share the live tracking link so "where is my order" / "can I see the
-        # live location" always hands back the clickable map, not just a text ETA.
+        # live location" always hands back the clickable map — as a tappable
+        # "Track your rider" button (CTA URL), mirroring the rider's button,
+        # instead of a raw link.
         from app.dispatch.models import OrderTrackingSession
         from app.dispatch.tracking_live import build_tracking_url
 
@@ -1311,7 +1350,14 @@ async def _handle_status_query(
             select(OrderTrackingSession).where(OrderTrackingSession.order_id == order.id)
         )
         if tracking is not None and tracking.tracking_token:
-            body += f"\n\nTrack your rider live:\n{build_tracking_url(tracking.tracking_token)}"
+            await _send_cta_url(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="status-reply",
+                body=f"{body}\n\nTrack your order live on the map below.",
+                button_label="Track my order",
+                url=build_tracking_url(tracking.tracking_token),
+            )
+            return
     else:
         status_messages = {
             str(OrderStatus.DRAFT): "Your order is being assembled.",
