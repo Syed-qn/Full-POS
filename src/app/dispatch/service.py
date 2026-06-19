@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
@@ -109,7 +109,11 @@ async def _latest_rider_positions(
                 .order_by(RiderLocation.ts.asc())
             )
         ).all()
-    except ProgrammingError:
+    except (ProgrammingError, OperationalError):
+        # A lagging DB (e.g. missing rider-location columns) aborts the current
+        # transaction. Roll back so the surrounding dispatch run can keep using
+        # the session instead of failing the next query with InFailedSqlTransaction.
+        await session.rollback()
         return {}
     # ascending order -> later rows overwrite earlier ones, leaving the latest.
     return {row.rider_id: (row.latitude, row.longitude) for row in rows}

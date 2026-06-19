@@ -1,7 +1,7 @@
 """order_tracking_sessions
 
 Revision ID: c4a8b1f7d2e1
-Revises: fef0973b618c
+Revises: a1b2c3d4e5f6
 Create Date: 2026-06-19 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "c4a8b1f7d2e1"
-down_revision: Union[str, Sequence[str], None] = "fef0973b618c"
+down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
