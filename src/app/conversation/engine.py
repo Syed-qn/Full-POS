@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -12,6 +13,8 @@ from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
 
 import re as _re
+
+_logger = logging.getLogger(__name__)
 
 
 def _aed(value) -> str:
@@ -1317,6 +1320,69 @@ async def _fetch_conversation_history(
     return merged
 
 
+async def _order_has_items(session: AsyncSession, order_id: int) -> bool:
+    from app.ordering.models import OrderItem
+
+    item_id = await session.scalar(
+        select(OrderItem.id).where(OrderItem.order_id == order_id).limit(1)
+    )
+    return item_id is not None
+
+
+async def _resolve_draft_order(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, phone: str
+):
+    """Return the live draft order for this conversation, resilient to a stale or
+    missing draft_order_id pointer in conv.state.
+
+    The cart is a DRAFT Order row; conv.state only holds a foreign-key handle
+    (draft_order_id). If that pointer is lost or points at a vanished row (e.g. a
+    retried/duplicated webhook, or state that didn't persist across requests), the
+    customer's items are still in the DB on their most-recent draft order. Recover
+    it and re-link conv.state instead of telling them "your cart is empty".
+    Returns the Order, or None only when the customer genuinely has no draft items.
+    """
+    from app.ordering.models import Customer, Order
+
+    draft_order_id = conv.state.get("draft_order_id")
+    if draft_order_id:
+        order = await session.get(Order, draft_order_id)
+        if order is not None and await _order_has_items(session, order.id):
+            return order
+
+    # Pointer is stale/missing — fall back to the customer's latest non-empty draft.
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id, Customer.phone == phone
+        )
+    )
+    if customer is None:
+        return None
+    candidates = (
+        await session.scalars(
+            select(Order)
+            .where(
+                Order.restaurant_id == restaurant_id,
+                Order.customer_id == customer.id,
+                Order.status == "draft",
+            )
+            .order_by(Order.id.desc())
+            .limit(5)
+        )
+    ).all()
+    for order in candidates:
+        if await _order_has_items(session, order.id):
+            if order.id != draft_order_id:
+                _logger.warning(
+                    "recovered stale draft pointer: conv=%s phone=%s "
+                    "state_draft=%s -> draft=%s",
+                    conv.id, phone, draft_order_id, order.id,
+                )
+                _set_state(conv, draft_order_id=order.id)
+            return order
+    return None
+
+
 async def _build_cart_summary(session: AsyncSession, conv) -> str:
     from app.ordering.models import Order, OrderItem
 
@@ -1675,7 +1741,6 @@ async def _execute_save_address(
 ) -> None:
     """Store address, attach to draft order, transition to awaiting_confirmation."""
     from app.ordering.fees import calculate_fee
-    from app.ordering.models import Order
     from app.ordering.service import get_or_create_customer, upsert_address
 
     customer = await get_or_create_customer(
@@ -1691,8 +1756,9 @@ async def _execute_save_address(
         receiver_name=receiver_name,
         confirmed=True,
     )
-    draft_order_id = conv.state.get("draft_order_id")
-    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    order = await _resolve_draft_order(
+        session, conv, restaurant_id, inbound.from_phone
+    )
     if order is None:
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -1790,7 +1856,7 @@ async def _attach_saved_address_to_order(
 ) -> None:
     """Reuse saved address — attach to draft order and transition to confirmation."""
     from app.ordering.fees import calculate_fee
-    from app.ordering.models import CustomerAddress, Order
+    from app.ordering.models import CustomerAddress
 
     addr = await session.get(CustomerAddress, address_id)
     if addr is None:
@@ -1800,8 +1866,9 @@ async def _attach_saved_address_to_order(
             body="Couldn't load your saved address. Please share your location 📍",
         )
         return
-    draft_order_id = conv.state.get("draft_order_id")
-    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    order = await _resolve_draft_order(
+        session, conv, restaurant_id, inbound.from_phone
+    )
     if order is None:
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,

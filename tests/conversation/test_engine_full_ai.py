@@ -216,3 +216,81 @@ async def test_location_pin_outside_radius_rejected(db_session, restaurant):
     await db_session.refresh(conv)
     phase = conv.state.get("dialogue_phase") or conv.state.get("dialogue_state")
     assert phase == "ordering"
+
+
+async def test_address_step_recovers_stale_draft_pointer(db_session, restaurant):
+    """Cart must NOT be lost if draft_order_id goes missing from conv.state.
+
+    Live bug: customer adds a dish, shares location, then on the apt/building/
+    receiver step the bot replied "Your cart is empty" — the draft_order_id
+    pointer had been lost while the draft order + items still existed. The
+    address handler must recover the customer's latest non-empty draft instead
+    of declaring the cart empty.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+    from app.menu.models import Dish
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507000111"
+
+    # A real draft order with one item exists for this customer...
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone=phone
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    dish = await db_session.scalar(select(Dish))
+    await add_item(db_session, order=order, dish=dish, qty=1, notes=None)
+
+    # ...but the conversation has reached address_capture WITHOUT a draft pointer
+    # (simulates the lost-pointer failure), with a location pin already shared.
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    conv.state = {
+        **conv.state,
+        "dialogue_phase": "address_capture",
+        "dialogue_state": "address_capture",
+        "pin_lat": 25.1877,
+        "pin_lon": 55.2633,
+        "distance_km": 1.0,
+        # NOTE: no draft_order_id on purpose
+    }
+    await db_session.commit()
+
+    fake_result = ConversationAgentResult(
+        message="Saving your address",
+        action="save_address_text",
+        action_data={"apt_room": "123", "building": "Tower 5", "receiver_name": "asfer"},
+    )
+    inbound = InboundMessage(
+        wa_message_id="wamid.addr-recover",
+        from_phone=phone,
+        type=MessageType.TEXT,
+        payload={"text": "123, Tower 5, asfer"},
+        restaurant_phone=restaurant.phone,
+        timestamp=1717661000,
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=fake_result)):
+        await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    # Recovered: pointer re-linked, address attached, advanced to confirmation.
+    await db_session.refresh(conv)
+    assert conv.state.get("draft_order_id") == order.id
+    assert conv.state.get("dialogue_phase") == "awaiting_confirmation"
+    await db_session.refresh(order)
+    assert order.address_id is not None
+
+    # The customer must NOT have been told the cart is empty.
+    msgs = (await db_session.scalars(
+        select(Message).where(Message.conversation_id == conv.id,
+                              Message.direction == "outbound")
+    )).all()
+    assert not any("cart is empty" in (m.payload or {}).get("body", "") for m in msgs)
