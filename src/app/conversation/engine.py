@@ -1381,22 +1381,17 @@ async def _handle_status_query(
         )
         return
 
-    # Statuses that are NOT a live, placed order to report for "where is my order".
-    # DRAFT is an incomplete/abandoned cart (not placed) — reporting it as
-    # "being assembled" misleads the customer, e.g. a stale draft surfacing right
-    # after a real order was delivered. Treat it like "no active order".
-    excluded = {
-        str(OrderStatus.DRAFT),
-        str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
-        str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
-        str(OrderStatus.WRITTEN_OFF),
-    }
+    # "Where is my order" means the customer's LATEST order. Report the most
+    # recent PLACED order (DRAFT is an incomplete/abandoned cart, never placed —
+    # excluded). Crucially we do NOT skip terminal orders: if their latest order
+    # was delivered we must say "delivered", not dig up an older still-open order
+    # and report it (which read as "ready in 40 min" right after a delivery).
     order = await session.scalar(
         select(Order)
         .where(
             Order.restaurant_id == restaurant_id,
             Order.customer_id == customer.id,
-            Order.status.notin_(excluded),
+            Order.status != str(OrderStatus.DRAFT),
         )
         .order_by(Order.created_at.desc())
         .limit(1)
@@ -1406,8 +1401,38 @@ async def _handle_status_query(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="status-no-order",
-            body="You don't have any active orders right now. "
+            body="You don't have any orders yet. "
                  "Send 'hi' to place a new order.",
+        )
+        return
+
+    # Terminal outcomes get a clear, final message (no ETA / no tracking link).
+    _terminal_messages = {
+        str(OrderStatus.DELIVERED): (
+            f"Your order #{order.order_number} was delivered. Enjoy! 🎉\n\n"
+            "Send 'hi' to place a new order."
+        ),
+        str(OrderStatus.CANCELLED): (
+            f"Your order #{order.order_number} was cancelled. "
+            "Send 'hi' to place a new order."
+        ),
+        str(OrderStatus.UNDELIVERABLE): (
+            f"Sorry, your order #{order.order_number} couldn't be delivered. "
+            "Please contact the restaurant for help."
+        ),
+        str(OrderStatus.RESOLD): (
+            f"Your order #{order.order_number} was cancelled. "
+            "Send 'hi' to place a new order."
+        ),
+        str(OrderStatus.WRITTEN_OFF): (
+            f"Your order #{order.order_number} was closed. "
+            "Send 'hi' to place a new order."
+        ),
+    }
+    if str(order.status) in _terminal_messages:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="status-terminal", body=_terminal_messages[str(order.status)],
         )
         return
 

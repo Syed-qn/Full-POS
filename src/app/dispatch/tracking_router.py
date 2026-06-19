@@ -164,6 +164,10 @@ async def update_order_location(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "token does not match order")
     if not is_tracking_accessible(access.session):
         raise HTTPException(status.HTTP_410_GONE, "tracking session expired")
+    # First ping = the rider's live location just went ON. We defer the customer's
+    # "on the way" + Track link to this moment (not pickup) so the link always
+    # works when tapped, instead of opening an empty "waiting for rider" map.
+    was_first_ping = access.session.last_location_at is None
     await record_tracking_location(
         session,
         tracking=access.session,
@@ -173,8 +177,46 @@ async def update_order_location(
         speed=body.speed,
         heading=body.heading,
     )
+    if was_first_ping:
+        await _notify_customers_tracking_live(session, rider_id=access.session.rider_id)
     await session.commit()
+    if was_first_ping:
+        # Location POSTs aren't webhook calls, so nothing flushes the outbox for
+        # us — deliver the just-enqueued customer notifications now.
+        from app.outbox.service import deliver_pending
+
+        await deliver_pending(session, access.order.restaurant_id)
     return TrackingAckOut()
+
+
+async def _notify_customers_tracking_live(session: AsyncSession, *, rider_id: int) -> None:
+    """Notify the customer(s) of this rider's en-route orders that the order is on
+    the way, now that live GPS is on — idempotent per (order, picked_up). Covers a
+    batched run (every undelivered stop), not just the order that posted."""
+    from sqlalchemy import select as _select
+
+    from app.dispatch.rider_flow import _notify_customer_status
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Order
+
+    en_route = (
+        await session.scalars(
+            _select(Order).where(
+                Order.rider_id == rider_id,
+                Order.status.in_(
+                    [
+                        str(OrderStatus.ASSIGNED),
+                        str(OrderStatus.PICKED_UP),
+                        str(OrderStatus.ARRIVING),
+                    ]
+                ),
+            )
+        )
+    ).all()
+    for order in en_route:
+        await _notify_customer_status(
+            session, restaurant_id=order.restaurant_id, order=order, status_key="picked_up"
+        )
 
 
 @router.get("/api/v1/orders/{order_id}/location", response_model=LatestLocationOut)

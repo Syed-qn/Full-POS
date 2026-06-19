@@ -456,9 +456,29 @@ async def test_restaurant_location_request_sends_pin_no_draft(db_session, restau
     assert conv.state.get("dialogue_phase") != "address_capture"
 
 
+async def _status_reply_body(db_session, restaurant, phone, wamid):
+    """Helper: send 'where is my order' and return the latest outbound body."""
+    inbound = InboundMessage(
+        wa_message_id=wamid, from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "where is my order"}, restaurant_phone=restaurant.phone,
+        timestamp=1717664000,
+    )
+    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+    from app.conversation.service import get_or_create_conversation
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    rows = (await db_session.scalars(
+        select(Message).where(Message.conversation_id == conv.id,
+                              Message.direction == "outbound").order_by(Message.id.desc())
+    )).all()
+    return rows[0].payload.get("body", "")
+
+
 async def test_status_query_ignores_stale_draft(db_session, restaurant):
-    """After a real order is delivered, a leftover DRAFT cart must NOT be reported
-    as 'being assembled' — it's an incomplete cart, not a placed order."""
+    """A leftover DRAFT cart must never be reported as 'being assembled' — it's an
+    incomplete cart, not a placed order. The latest PLACED order is reported."""
     from app.ordering.models import Customer, Order
 
     await _seed_menu(db_session, restaurant.id)
@@ -478,25 +498,46 @@ async def test_status_query_ignores_stale_draft(db_session, restaurant):
         ))
     await db_session.commit()
 
-    inbound = InboundMessage(
-        wa_message_id="wamid.stq", from_phone=phone, type=MessageType.TEXT,
-        payload={"text": "where is my order"}, restaurant_phone=restaurant.phone,
-        timestamp=1717664000,
+    body = await _status_reply_body(db_session, restaurant, phone, "wamid.stq")
+    assert "being assembled" not in body.lower()  # draft never shown
+
+
+async def test_status_query_reports_latest_not_older_open_order(db_session, restaurant):
+    """The bug: an OLDER still-confirmed order shadowed a NEWER delivered order, so
+    'where is my order' said 'ready in 40 min' right after a delivery. The latest
+    order (delivered) must be reported instead."""
+    from datetime import datetime, timedelta
+
+    from app.ordering.models import Customer, Order
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507770002"
+    customer = Customer(
+        restaurant_id=restaurant.id, phone=phone, name="Asfer",
+        usual_order_times={}, tags={}, total_orders=2, total_spend=Decimal("20.00"),
     )
-    await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    db_session.add(customer)
+    await db_session.flush()
+    now = datetime.utcnow()
+    # Older order stuck at 'confirmed', then a NEWER order that got delivered.
+    db_session.add(Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-0008",
+        status="confirmed", priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        created_at=now - timedelta(minutes=2),
+    ))
+    db_session.add(Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-0009",
+        status="delivered", priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        created_at=now,
+    ))
     await db_session.commit()
 
-    from app.conversation.service import get_or_create_conversation
-    conv = await get_or_create_conversation(
-        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
-    )
-    rows = (await db_session.scalars(
-        select(Message).where(Message.conversation_id == conv.id,
-                              Message.direction == "outbound").order_by(Message.id.desc())
-    )).all()
-    body = rows[0].payload.get("body", "")
-    assert "being assembled" not in body.lower()
-    assert "active orders" in body.lower()
+    body = await _status_reply_body(db_session, restaurant, phone, "wamid.stq2")
+    assert "R1-0009" in body and "delivered" in body.lower()
+    assert "R1-0008" not in body
+    assert "40 minutes" not in body
 
 
 async def test_tracking_query_replies_with_live_link(db_session, restaurant):

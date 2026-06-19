@@ -308,10 +308,10 @@ async def handle_orders_picked(
         if order is None:
             continue
         await advance_delivery(session, order_id=order.id, to_status="picked_up")
-        # Proactively tell the customer their order is on the way.
-        await _notify_customer_status(
-            session, restaurant_id=restaurant_id, order=order, status_key="picked_up"
-        )
+        # NOTE: the customer's "on the way" + Track link is intentionally NOT sent
+        # here. It's deferred until the rider's live location actually goes on
+        # (first GPS ping → tracking_router._notify_customers_tracking_live) so the
+        # Track link never opens an empty "waiting for rider" map.
         if first_order is None:
             first_order = order
     if first_order is not None:

@@ -61,17 +61,28 @@ async def _cust_msgs(db_session, phone):
     ).all()
 
 
-async def test_pickup_notifies_customer_on_the_way(db_session):
+async def test_pickup_defers_customer_notify_until_gps_live(db_session):
+    """At pickup the customer gets NOTHING — the 'on the way' + Track link is
+    deferred until the rider's live location actually starts (so the link never
+    opens an empty map). Once GPS goes live the customer gets a CTA Track button."""
+    from app.dispatch.tracking_router import _notify_customers_tracking_live
+
     r, rider, o, batch, c = await _seed(db_session, status="assigned")
 
     await handle_orders_picked(db_session, restaurant_id=r.id, rider=rider, batch_id=batch.id)
     await db_session.commit()
 
+    # No customer notification yet at pickup time.
+    assert await _cust_msgs(db_session, c.phone) == []
+
+    # Rider's live location goes on → notify (what the first GPS ping triggers).
+    await _notify_customers_tracking_live(db_session, rider_id=rider.id)
+    await db_session.commit()
+
     msgs = await _cust_msgs(db_session, c.phone)
     assert len(msgs) == 1
     assert "picked up" in msgs[0].payload["body"].lower()
-    # Live tracker is a tappable "Track my order" CTA URL button (not a raw
-    # link in the body), mirroring the rider's "Start live tracker" button.
+    # Live tracker is a tappable "Track my order" CTA URL button (not a raw link).
     assert msgs[0].payload["type"] == OutboundMessageType.CTA_URL
     assert "track my order" in msgs[0].payload["button_label"].lower()
     assert "/track/" in msgs[0].payload["url"]
@@ -115,8 +126,8 @@ async def test_picked_falls_back_to_current_batch_on_stale_id(db_session):
 
     await db_session.refresh(o)
     assert o.status == "picked_up"  # fell back to the current planned batch
-    msgs = await _cust_msgs(db_session, c.phone)
-    assert any("picked up" in m.payload["body"].lower() for m in msgs)
+    # (Customer 'on the way' notification is deferred to the first GPS ping now,
+    #  so it is intentionally NOT asserted here — this test is about batch advance.)
 
 
 async def test_picked_resends_current_stop_when_already_in_progress(db_session):
