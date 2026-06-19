@@ -15,7 +15,18 @@
         "FOREGROUND_SERVICE_LOCATION"
       ]
     },
+    "splash": {
+      "backgroundColor": "#ffffff",
+      "resizeMode": "contain"
+    },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "resizeMode": "contain"
+        }
+      ],
       [
         "expo-location",
         {
@@ -26,7 +37,10 @@
     ],
     "extra": {
       "apiBase": "https://restaurant-whatsapp-service.onrender.com",
-      "eas": { "projectId": "REPLACE_WITH_EAS_PROJECT_ID" }
-    }
+      "eas": {
+        "projectId": "72a399a4-84d6-46f5-a97f-fbc35ddfd30d"
+      }
+    },
+    "owner": "catalystiqs-organization"
   }
 }
