@@ -3,6 +3,7 @@ import { RiderCard } from "../components/RiderCard";
 import { RiderAddModal } from "../components/RiderAddModal";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
+import { toast } from "../components/Toaster";
 import { deleteRider, fetchRiderAppInfo, fetchRiders, inviteRiderToApp, setRiderStatus } from "../lib/ridersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { RiderOut, RiderStatus } from "../lib/types";
@@ -43,12 +44,12 @@ export function RidersScreen() {
   async function onInviteApp(id: number) {
     try {
       const res = await inviteRiderToApp(id);
-      alert(
-        `Pairing code ${res.code} sent to the rider on WhatsApp ` +
-          `(valid ${res.expires_in_minutes} min). They enter it in the Rider Tracker app.`,
+      toast(
+        `Pairing code ${res.code} sent on WhatsApp (valid ${res.expires_in_minutes} min).`,
+        "success",
       );
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Could not send the app link.");
+      toast(e instanceof Error ? e.message : "Could not send the app link.", "error");
     }
   }
 
