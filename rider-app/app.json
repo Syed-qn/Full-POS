@@ -7,6 +7,7 @@
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.restaurant.ridertracker",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",

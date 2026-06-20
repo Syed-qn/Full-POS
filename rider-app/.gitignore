@@ -5,3 +5,6 @@ dist/
 *.aab
 .DS_Store
 npm-debug.*
+
+# Firebase secrets — never commit
+google-services.json

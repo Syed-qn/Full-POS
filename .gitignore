@@ -26,3 +26,7 @@ graphify-out/cost.json
 # Python build artifacts
 build/
 *.egg-info/
+
+# Firebase service-account key (FCM) — never commit
+*firebase-adminsdk*.json
+google-services.json
