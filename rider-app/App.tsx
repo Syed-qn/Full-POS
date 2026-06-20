@@ -23,6 +23,7 @@ import {
 } from "./api";
 import { onNotificationTap, registerForPush } from "./notifications";
 import {
+  sendCurrentLocation,
   startBackgroundTracking,
   stopBackgroundTracking,
   TOKEN_KEY,
@@ -161,7 +162,11 @@ function TrackingScreen({
   const doPickup = async () => {
     setBusy(true);
     try {
-      setRun(await pickup(token));
+      const r = await pickup(token);
+      setRun(r);
+      // Fire a fresh GPS fix so the customer's "on the way" + track link goes out
+      // right away instead of waiting on the next background interval.
+      sendCurrentLocation();
     } catch (e) {
       Alert.alert("Pickup failed", e instanceof Error ? e.message : "Try again");
     } finally {
@@ -172,7 +177,17 @@ function TrackingScreen({
   const doDelivered = async (stop: Stop) => {
     setBusy(true);
     try {
+      // Push a fresh GPS fix first so the server's live-tracking check passes even
+      // if Android throttled background updates while the app was idle.
+      await sendCurrentLocation();
       const res = await markDelivered(token, stop.orderId);
+      // Optimistically drop this stop so it disappears instantly, then reconcile
+      // with the server (handles batch-complete / a newly assigned next run).
+      setRun((r) =>
+        r
+          ? { ...r, stops: r.stops.map((s) => (s.orderId === stop.orderId ? { ...s, delivered: true } : s)) }
+          : r,
+      );
       await loadRun();
       if (res.batchComplete) {
         Alert.alert("All delivered", "Head back to the restaurant.");

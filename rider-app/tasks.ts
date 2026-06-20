@@ -67,3 +67,32 @@ export async function stopBackgroundTracking() {
   const running = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
   if (running) await Location.stopLocationUpdatesAsync(LOCATION_TASK);
 }
+
+/**
+ * Send ONE fresh GPS fix immediately (not waiting for the background interval).
+ * Used right before marking a stop delivered so the server's "is the rider live?"
+ * check always passes when the app is open — Android can throttle background
+ * updates, leaving the last ping stale. Best-effort: swallows errors.
+ */
+export async function sendCurrentLocation(): Promise<void> {
+  try {
+    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+    const pos = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+    await fetch(`${API_BASE}/api/v1/rider-app/location`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        speed: pos.coords.speed,
+        heading: pos.coords.heading,
+      }),
+    });
+  } catch {
+    // Best-effort — if this fails the delivered call may still 409, with a clear message.
+  }
+}
