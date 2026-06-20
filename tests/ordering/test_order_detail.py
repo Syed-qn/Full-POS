@@ -371,15 +371,14 @@ async def test_api_reassign_unknown_order_returns_404(client, db_session, restau
     assert resp.status_code == 404
 
 
-async def test_api_reassign_delivers_notification_to_new_rider(client, db_session, restaurant, monkeypatch):
-    """Reassign must actually DELIVER the rider notification (not leave it pending).
-    Regression: the endpoint committed the outbox row but never flushed it, so on
-    a beat-less deploy the rider got nothing."""
+async def test_api_reassign_notifies_new_rider_by_push_not_whatsapp(client, db_session, restaurant, monkeypatch):
+    """App-only rider flow: reassign wakes the new rider by PUSH, never WhatsApp."""
     from sqlalchemy import select
 
     from app.config import get_settings
     from app.dispatch.models import Batch, BatchOrder
     from app.identity.models import Rider
+    from app.notifications.factory import get_fake_push_provider
     from app.outbox.models import OutboxMessage
 
     monkeypatch.setattr(get_settings(), "outbox_sync_delivery", True)
@@ -387,7 +386,7 @@ async def test_api_reassign_delivers_notification_to_new_rider(client, db_sessio
     r1 = Rider(restaurant_id=restaurant.id, name="R1", phone="+971500000077",
                status="on_delivery", performance={})
     r2 = Rider(restaurant_id=restaurant.id, name="R2", phone="+971500000078",
-               status="available", performance={})
+               status="available", push_token="ExponentPushToken[r2]", performance={})
     db_session.add_all([r1, r2])
     await db_session.flush()
 
@@ -406,6 +405,8 @@ async def test_api_reassign_delivers_notification_to_new_rider(client, db_sessio
     db_session.add(BatchOrder(batch_id=batch.id, order_id=order.id, sequence=1))
     await db_session.commit()
 
+    fake = get_fake_push_provider()
+    fake.sent.clear()
     resp = await client.post(
         f"/api/v1/orders/{order.id}/reassign",
         json={"rider_id": r2.id},
@@ -414,13 +415,14 @@ async def test_api_reassign_delivers_notification_to_new_rider(client, db_sessio
     assert resp.status_code == 200
     assert resp.json()["rider_name"] == "R2"
 
+    # Push to the new rider; zero WhatsApp to either rider.
+    assert any(m.to_token == "ExponentPushToken[r2]" for m in fake.sent)
     rows = (
         await db_session.execute(
-            select(OutboxMessage).where(OutboxMessage.to_phone == r2.phone)
+            select(OutboxMessage).where(OutboxMessage.to_phone.in_([r1.phone, r2.phone]))
         )
     ).scalars().all()
-    assert len(rows) == 1
-    assert rows[0].status == "sent"  # delivered, not left pending
+    assert rows == []
 
 
 async def test_api_reassign_non_assigned_order_returns_422(client, db_session, restaurant):

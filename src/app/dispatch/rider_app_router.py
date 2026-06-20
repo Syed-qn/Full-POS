@@ -270,17 +270,13 @@ async def rider_app_location(
         heading=body.heading,
     )
     if first_ping_orders:
-        # An order's live tracking just went on → reveal the rider's stop and
-        # notify the customer (deferred from pickup until GPS is actually on).
-        from app.dispatch.rider_flow import (
-            _notify_customer_status,
-            reveal_first_stop_on_tracking_live,
-        )
+        # An order's live tracking just went on → notify the customer their order
+        # is on the way + Track link (deferred from pickup until GPS is actually
+        # on). The rider sees their stop in the app (GET /rider-app/orders), so no
+        # rider-facing WhatsApp is sent here — riders never receive WhatsApp.
+        from app.dispatch.rider_flow import _notify_customer_status
         from app.ordering.models import Order
 
-        await reveal_first_stop_on_tracking_live(
-            session, restaurant_id=rider.restaurant_id, rider_id=rider.id
-        )
         for oid in first_ping_orders:
             order = await session.get(Order, oid)
             if order is not None:

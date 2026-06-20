@@ -18,7 +18,6 @@ from app.dispatch.service import run_dispatch_engine
 from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order
 from app.outbox.models import OutboxMessage
-from app.whatsapp.port import OutboundMessageType
 
 
 async def _seed_restaurant(db_session, lat=25.2048, lng=55.2708):
@@ -149,13 +148,15 @@ async def test_dispatch_survives_missing_rider_locations(db_session, monkeypatch
     assert rider.status == "on_delivery"
 
 
-async def test_assignment_default_is_freeform_button(db_session):
-    """With no template configured, the rider notification stays a free-form
-    interactive button (unchanged dev/test/mock behaviour)."""
+async def test_assignment_notifies_rider_by_push_not_whatsapp(db_session):
+    """App-only rider flow: a new assignment wakes the rider by PUSH, and NO
+    WhatsApp message is ever sent to the rider."""
+    from app.notifications.factory import get_fake_push_provider
+
     r = await _seed_restaurant(db_session)
     rider = Rider(
         restaurant_id=r.id, name="Rdr", phone="+971500000009",
-        status="available",
+        status="available", push_token="ExponentPushToken[xyz]",
         performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
     )
     db_session.add(rider)
@@ -164,57 +165,18 @@ async def test_assignment_default_is_freeform_button(db_session):
     await _ready_order(db_session, r.id, 25.2050, 55.2710, 9)
     await db_session.commit()
 
+    fake = get_fake_push_provider()
+    fake.sent.clear()
     await run_dispatch_engine(db_session, restaurant_id=r.id)
     await db_session.commit()
 
+    # No WhatsApp to the rider — ever.
     msg = await db_session.scalar(
         select(OutboxMessage).where(OutboxMessage.to_phone == rider.phone)
     )
-    assert msg is not None
-    assert msg.payload["type"] == str(OutboundMessageType.BUTTONS)
-    assert msg.payload["buttons"][0]["id"].startswith("picked:")
-    assert msg.payload["buttons"][0]["title"] == "Orders Picked"
-
-
-async def test_assignment_uses_template_when_configured(db_session, monkeypatch):
-    """When wa_rider_assign_template is set, the assignment is sent as a TEMPLATE
-    (delivers outside the 24h window) with the order numbers as body param and
-    picked:{batch_id} as the quick-reply button payload."""
-    from app.config import get_settings
-
-    settings = get_settings()
-    monkeypatch.setattr(settings, "wa_rider_assign_template", "rider_assignment")
-    monkeypatch.setattr(settings, "wa_rider_assign_template_lang", "en")
-
-    r = await _seed_restaurant(db_session)
-    rider = Rider(
-        restaurant_id=r.id, name="Rdr", phone="+971500000010",
-        status="available",
-        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
-    )
-    db_session.add(rider)
-    await db_session.flush()
-    await _ping(db_session, rider, r.id, 25.2050, 55.2710)
-    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 10)
-    await db_session.commit()
-
-    await run_dispatch_engine(db_session, restaurant_id=r.id)
-    await db_session.commit()
-
-    msg = await db_session.scalar(
-        select(OutboxMessage).where(OutboxMessage.to_phone == rider.phone)
-    )
-    assert msg is not None
-    assert msg.payload["type"] == str(OutboundMessageType.TEMPLATE)
-    assert msg.payload["name"] == "rider_assignment"
-    assert msg.payload["language"] == "en"
-    comps = msg.payload["components"]
-    body = next(c for c in comps if c["type"] == "body")
-    assert body["parameters"][0]["text"] == order.order_number
-    btn = next(c for c in comps if c["type"] == "button")
-    assert btn["sub_type"] == "quick_reply"
-    batch = await db_session.scalar(select(Batch).where(Batch.rider_id == rider.id))
-    assert btn["parameters"][0]["payload"] == f"picked:{batch.id}"
+    assert msg is None
+    # A push was sent instead.
+    assert any(m.to_token == "ExponentPushToken[xyz]" for m in fake.sent)
 
 
 async def test_reassign_moves_order_and_frees_old_rider(db_session):
@@ -240,14 +202,19 @@ async def test_reassign_moves_order_and_frees_old_rider(db_session):
     assert order.rider_id == rider_a.id  # auto-assigned to the only rider
 
     # Manager picks a different rider.
+    from app.notifications.factory import get_fake_push_provider
+
     rider_b = Rider(
         restaurant_id=r.id, name="B", phone="+971500000022", status="available",
+        push_token="ExponentPushToken[b]",
         performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
     )
     db_session.add(rider_b)
     await db_session.flush()
     old_batch = await db_session.scalar(select(Batch).where(Batch.rider_id == rider_a.id))
 
+    fake = get_fake_push_provider()
+    fake.sent.clear()
     await reassign_order(
         db_session, restaurant_id=r.id, order_id=order.id, new_rider_id=rider_b.id
     )
@@ -267,11 +234,12 @@ async def test_reassign_moves_order_and_frees_old_rider(db_session):
     bo = await db_session.scalar(select(BatchOrder).where(BatchOrder.order_id == order.id))
     assert bo.batch_id == new_batch.id
 
-    # New rider notified.
-    msg = await db_session.scalar(
+    # New rider notified by PUSH (never WhatsApp).
+    assert any(m.to_token == "ExponentPushToken[b]" for m in fake.sent)
+    whatsapp_to_b = await db_session.scalar(
         select(OutboxMessage).where(OutboxMessage.to_phone == rider_b.phone)
     )
-    assert msg is not None
+    assert whatsapp_to_b is None
 
 
 async def test_reassign_rejects_non_assigned_order(db_session):

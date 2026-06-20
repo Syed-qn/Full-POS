@@ -75,10 +75,12 @@ async def test_pair_then_location_reveals_stop_and_notifies(client, db_session):
 
     msgs = (await db_session.scalars(select(OutboxMessage))).all()
     keys = {m.idempotency_key for m in msgs}
-    # rider got the stop (customer details + Delivered button)
-    assert f"stop-{o.id}" in keys
-    # customer got the "on the way" + track link
+    # App-only rider flow: the rider gets NO WhatsApp stop (they see it in the app).
+    assert f"stop-{o.id}" not in keys
+    # The customer still gets the "on the way" + track link on the first GPS ping.
     assert f"cust-picked_up-{o.id}" in keys
+    # And nothing was sent to the rider's phone over WhatsApp.
+    assert all(m.to_phone != rider.phone for m in msgs)
 
     # the order's tracking session now has the live position
     ts = await db_session.scalar(

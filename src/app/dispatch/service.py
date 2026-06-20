@@ -289,15 +289,9 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             result.assigned_count += 1
 
         rider.status = "on_delivery"
-        await _enqueue_rider_assignment(
-            session,
-            restaurant_id=restaurant_id,
-            rider_phone=rider.phone,
-            batch_id=batch.id,
-            orders=[orders_by_id[pc.order_id] for pc in planned.orders],
-        )
-        # Wake the native app (if the rider runs it) so they open it → GPS streams
-        # and the run shows up. Best-effort: never let a push failure break dispatch.
+        # App-only rider flow: the rider is notified by PUSH (native app), never
+        # WhatsApp. They open the app → GPS streams and the run shows up. Best-effort:
+        # never let a push failure break dispatch.
         from app.dispatch.rider_app import notify_rider_assigned
 
         try:
@@ -308,85 +302,6 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             _logger.exception("assignment push failed for rider %s", rider.id)
 
     return result
-
-
-async def _enqueue_rider_assignment(
-    session: AsyncSession,
-    *,
-    restaurant_id: int,
-    rider_phone: str,
-    batch_id: int,
-    orders: list,
-) -> None:
-    """Notify the rider of a new batch.
-
-    Rider assignment is business-INITIATED, so outside WhatsApp's 24h window a
-    free-form interactive button is rejected. When ``wa_rider_assign_template``
-    is configured we send an approved TEMPLATE (delivers anytime); the quick-reply
-    button still carries ``picked:{batch_id}`` so the existing rider flow is
-    unchanged. With no template configured we send a rich free-form summary
-    (customer name, address, COD amount per order) so the rider knows the job
-    up-front; the map/navigation link is intentionally withheld until pickup
-    (flow integrity — see rider_flow).
-    """
-    from app.config import get_settings
-
-    settings = get_settings()
-    order_numbers = ", ".join(o.order_number for o in orders)
-    tmpl = settings.wa_rider_assign_template
-    if tmpl:
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=rider_phone,
-            msg_type=OutboundMessageType.TEMPLATE,
-            payload={
-                "name": tmpl,
-                "language": settings.wa_rider_assign_template_lang,
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": order_numbers}],
-                    },
-                    {
-                        "type": "button",
-                        "sub_type": "quick_reply",
-                        "index": "0",
-                        "parameters": [
-                            {"type": "payload", "payload": f"picked:{batch_id}"}
-                        ],
-                    },
-                ],
-            },
-            idempotency_key=f"assign-{batch_id}",
-        )
-        return
-
-    # Slim assignment — just the order number(s). The full per-stop details
-    # (name / address / COD / map) are revealed AFTER the rider taps "Orders
-    # Picked" (see rider_flow._send_stop), so this stays a short heads-up.
-    if len(orders) == 1:
-        body = (
-            f"🛵 *New delivery* — Order {orders[0].order_number}.\n"
-            "Tap below once you've picked up."
-        )
-    else:
-        body = (
-            f"🛵 *New batch* — {len(orders)} orders: {order_numbers}.\n"
-            "Tap below once you've picked up."
-        )
-
-    await enqueue_message(
-        session,
-        restaurant_id=restaurant_id,
-        to_phone=rider_phone,
-        msg_type=OutboundMessageType.BUTTONS,
-        payload={
-            "body": body,
-            "buttons": [{"id": f"picked:{batch_id}", "title": "Orders Picked"}],
-        },
-        idempotency_key=f"assign-{batch_id}",
-    )
 
 
 async def reassign_order(
@@ -498,12 +413,11 @@ async def reassign_order(
             if old_batch is not None:
                 old_batch.status = "completed"
 
-    # Notify the new rider (template-aware → delivers even outside the 24h window).
-    await _enqueue_rider_assignment(
-        session,
-        restaurant_id=restaurant_id,
-        rider_phone=new_rider.phone,
-        batch_id=batch.id,
-        orders=[order],
-    )
+    # Notify the new rider by PUSH (app-only rider flow — never WhatsApp).
+    from app.dispatch.rider_app import notify_rider_assigned
+
+    try:
+        await notify_rider_assigned(session, rider=new_rider, order_count=1)
+    except Exception:  # noqa: BLE001 - push is best-effort
+        _logger.exception("reassignment push failed for rider %s", new_rider.id)
     return order

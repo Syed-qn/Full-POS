@@ -159,6 +159,8 @@ async def mark_batch_picked_up(
             return PickupResult(PickupOutcome.NO_BATCH_RESEND, resend_order=order)
         return PickupResult(PickupOutcome.NO_BATCH_NONE)
 
+    from app.dispatch.tracking_live import ensure_tracking_session
+
     batch.status = "picked_up"
     bos = (
         await session.scalars(
@@ -173,6 +175,10 @@ async def mark_batch_picked_up(
         if order is None:
             continue
         await advance_delivery(session, order_id=order.id, to_status="picked_up")
+        # Create the live-tracking session now so the rider's first GPS ping (from
+        # the native app) is detected and reveals the customer's track link. The
+        # customer notification itself stays deferred to that first ping. Idempotent.
+        await ensure_tracking_session(session, order=order)
         if first_order is None:
             first_order = order
     if first_order is None:
