@@ -234,6 +234,63 @@ async def test_outbox_message_enqueued_after_manual_order(db_session, restaurant
     assert order.order_number in outbox[0].payload["body"]
 
 
+async def test_manual_order_geocodes_address_to_pin(db_session, restaurant):
+    """A typed manual address is geocoded to a drop-off pin so the rider gets a
+    Navigate link and the customer's tracking map has a destination."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    order = await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990777",
+        customer_name="Pin User",
+        items=[{"dish_id": biryani_id, "qty": 1, "notes": None}],
+        apt_room="Apt 12",
+        building="Marina Tower",  # offline gazetteer resolves "marina" → coords
+        receiver_name="Pin User",
+        address_notes=None,
+        delivery_fee_aed=Decimal("0.00"),
+    )
+    await db_session.commit()
+
+    addr = await db_session.get(CustomerAddress, order.address_id)
+    assert addr is not None
+    assert addr.latitude is not None and addr.longitude is not None
+    # Dubai Marina centroid from the offline gazetteer.
+    assert round(addr.latitude, 3) == 25.081
+
+
+async def test_manual_order_unknown_building_degrades_to_no_pin(db_session, restaurant):
+    """If geocoding can't resolve the building, the order still succeeds with a
+    null pin (text-only address) — no crash, same as before."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    order = await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990778",
+        customer_name="NoPin User",
+        items=[{"dish_id": biryani_id, "qty": 1, "notes": None}],
+        apt_room="Apt 9",
+        building="Zzqq Unknown Place 9981",  # not in any gazetteer
+        receiver_name="NoPin User",
+        address_notes=None,
+        delivery_fee_aed=Decimal("0.00"),
+    )
+    await db_session.commit()
+
+    assert order.status == "confirmed"
+    addr = await db_session.get(CustomerAddress, order.address_id)
+    assert addr is not None
+    assert addr.latitude is None and addr.longitude is None
+
+
 def _token(restaurant_id: int) -> str:
     from app.identity.auth import create_access_token
     return create_access_token(restaurant_id=restaurant_id)

@@ -752,6 +752,43 @@ async def _auto_dispatch_on_ready(session: "AsyncSession", restaurant_id: int) -
         _logger.exception("auto-dispatch outbox delivery failed (restaurant_id=%s)", restaurant_id)
 
 
+async def _geocode_manual_address(
+    session: "AsyncSession", restaurant_id: int, building: str
+) -> tuple[float | None, float | None]:
+    """Best-effort geocode of a typed manual-order address to a drop-off pin.
+
+    The manager only types a building/area (no map pin), so we resolve it to
+    coordinates via the geo provider — anchored to the restaurant's area for
+    accuracy. Returns ``(None, None)`` when the address is blank, geocoding is
+    unavailable, or no match is found; the order then behaves as before (text
+    address only, no Navigate link / destination pin).
+    """
+    from app.geo.cache import geocode_cached, reverse_geocode_cached
+    from app.identity.models import Restaurant
+
+    query = (building or "").strip()
+    if not query:
+        return (None, None)
+    try:
+        restaurant = await session.get(Restaurant, restaurant_id)
+        if restaurant is not None and restaurant.lat is not None and restaurant.lng is not None:
+            # Anchor to the restaurant's CITY (the "…, City" tail of the area
+            # label), not its specific area — appending a narrow area like
+            # "Downtown" would fight the building's own area; the city only
+            # disambiguates the emirate/country.
+            label = await reverse_geocode_cached(restaurant.lat, restaurant.lng)
+            city = label.split(",")[-1].strip() if label else ""
+            if city:
+                query = f"{query}, {city}"
+        coords = await geocode_cached(query)
+    except Exception:  # noqa: BLE001 - geocoding is best-effort; never block the order
+        _logger.exception("manual-order geocode failed (restaurant_id=%s)", restaurant_id)
+        return (None, None)
+    if coords is None:
+        return (None, None)
+    return (coords[0], coords[1])
+
+
 async def create_manual_order(
     session: "AsyncSession",
     *,
@@ -806,12 +843,17 @@ async def create_manual_order(
         customer.name = customer_name
         await session.flush()
 
-    # 4. Store delivery address
+    # 4. Store delivery address. Manual orders are typed (no GPS pin), so geocode
+    #    the building text to a drop-off pin — without it the rider gets no
+    #    Navigate link and the customer's tracking map has no destination. Anchor
+    #    the query to the restaurant's area so an ambiguous building name resolves
+    #    in the right city; degrade gracefully to no-pin if geocoding can't match.
+    lat, lng = await _geocode_manual_address(session, restaurant_id, building)
     address = await upsert_address(
         session,
         customer_id=customer.id,
-        latitude=None,
-        longitude=None,
+        latitude=lat,
+        longitude=lng,
         room_apartment=apt_room,
         building=building,
         receiver_name=receiver_name,

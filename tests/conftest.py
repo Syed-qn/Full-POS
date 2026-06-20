@@ -11,6 +11,10 @@ os.environ.setdefault("APP_WHATSAPP_PROVIDER", "mock")
 # (the runtime .env may set google_maps + a real key). Tests that exercise the
 # google_maps path override settings/get_geo_provider explicitly.
 os.environ.setdefault("APP_GEO_PROVIDER", "fake")
+# Pin push to the in-memory fake provider so rider-assignment tests inspect
+# FakePushProvider.sent instead of hitting the real Expo push API (the runtime
+# .env may set APP_PUSH_PROVIDER=expo for live devices).
+os.environ.setdefault("APP_PUSH_PROVIDER", "fake")
 
 
 import pytest
