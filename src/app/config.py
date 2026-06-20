@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Public download link for the Android rider app APK, included in the WhatsApp
     # pairing message. Leave empty to send just the code (no install link).
     rider_app_apk_url: str = ""
+    # Push notifications to the native rider app. fake = record only (tests/dev);
+    # expo = call the Expo Push API.
+    push_provider: str = "fake"  # fake | expo
 
     # WhatsApp
     whatsapp_provider: str = "mock"  # mock | cloud

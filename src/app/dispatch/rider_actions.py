@@ -60,6 +60,69 @@ class DeliverResult:
     batch_complete: bool = False     # DELIVERED: last stop in the batch
 
 
+@dataclass
+class StopView:
+    order_id: int
+    order_number: str
+    sequence: int
+    customer_name: str
+    address: str
+    latitude: float | None
+    longitude: float | None
+    cod_amount: float
+    delivered: bool
+
+
+@dataclass
+class RunView:
+    batch_id: int
+    status: str  # "planned" | "picked_up"
+    stops: list[StopView]
+
+
+async def get_active_run(session: AsyncSession, *, rider: Rider) -> RunView | None:
+    """Read-model of the rider's current run for the native app: the active batch
+    (planned or picked_up) and its stops with customer/address/COD. Returns None
+    when the rider has no active batch. Read-only — no transitions."""
+    from app.dispatch.rider_flow import _stop_details
+
+    batch = await session.scalar(
+        select(Batch)
+        .where(Batch.rider_id == rider.id, Batch.status.in_(["planned", "picked_up"]))
+        .order_by(Batch.id.desc())
+        .limit(1)
+    )
+    if batch is None:
+        return None
+    bos = (
+        await session.scalars(
+            select(BatchOrder)
+            .where(BatchOrder.batch_id == batch.id)
+            .order_by(BatchOrder.sequence)
+        )
+    ).all()
+    stops: list[StopView] = []
+    for bo in bos:
+        order = await session.get(Order, bo.order_id)
+        if order is None:
+            continue
+        name, address, coords = await _stop_details(session, order)
+        stops.append(
+            StopView(
+                order_id=order.id,
+                order_number=order.order_number,
+                sequence=bo.sequence,
+                customer_name=name,
+                address=address,
+                latitude=coords[0] if coords else None,
+                longitude=coords[1] if coords else None,
+                cod_amount=float(order.total or 0),
+                delivered=bo.delivered_at is not None,
+            )
+        )
+    return RunView(batch_id=batch.id, status=batch.status, stops=stops)
+
+
 async def mark_batch_picked_up(
     session: AsyncSession, *, restaurant_id: int, rider: Rider, batch_id: int | None
 ) -> PickupResult:

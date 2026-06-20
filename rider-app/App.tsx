@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,19 +14,21 @@ import {
 } from "react-native";
 
 import {
+  getOrders,
+  mapsLink,
+  markDelivered,
+  pickup,
+  type Run,
+  type Stop,
+} from "./api";
+import { onNotificationTap, registerForPush } from "./notifications";
+import {
   startBackgroundTracking,
   stopBackgroundTracking,
   TOKEN_KEY,
 } from "./tasks";
 
 const API_BASE = (Constants.expoConfig?.extra?.apiBase as string) ?? "";
-
-type Me = {
-  riderName: string;
-  activeOrderNumber: string | null;
-  customerName: string | null;
-  tracking: boolean;
-};
 
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
@@ -115,15 +119,13 @@ function TrackingScreen({
   token: string;
   onUnpair: () => void;
 }) {
-  const [me, setMe] = useState<Me | null>(null);
   const [status, setStatus] = useState("Starting…");
+  const [run, setRun] = useState<Run | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const loadMe = useCallback(async () => {
+  const loadRun = useCallback(async () => {
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/rider-app/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) setMe(await resp.json());
+      setRun(await getOrders(token));
     } catch {
       /* keep last */
     }
@@ -134,8 +136,8 @@ function TrackingScreen({
     (async () => {
       try {
         await startBackgroundTracking();
-        if (alive) setStatus("Live — tracking active");
-      } catch (e) {
+        if (alive) setStatus("Live — sharing location");
+      } catch {
         if (alive) {
           setStatus("Location permission needed");
           Alert.alert(
@@ -144,32 +146,118 @@ function TrackingScreen({
           );
         }
       }
+      registerForPush(token);
     })();
-    loadMe();
-    const timer = setInterval(loadMe, 15000);
+    loadRun();
+    const timer = setInterval(loadRun, 15000);
+    const unsub = onNotificationTap(loadRun); // tap "New delivery" → refresh
     return () => {
       alive = false;
       clearInterval(timer);
+      unsub();
     };
-  }, [loadMe]);
+  }, [loadRun, token]);
+
+  const doPickup = async () => {
+    setBusy(true);
+    try {
+      setRun(await pickup(token));
+    } catch (e) {
+      Alert.alert("Pickup failed", e instanceof Error ? e.message : "Try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelivered = async (stop: Stop) => {
+    setBusy(true);
+    try {
+      const res = await markDelivered(token, stop.orderId);
+      await loadRun();
+      if (res.batchComplete) {
+        Alert.alert("All delivered", "Head back to the restaurant.");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Try again";
+      Alert.alert("Couldn't mark delivered", msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pending = (run?.stops ?? []).filter((s) => !s.delivered);
+  const hasRun = !!run?.batchId;
+  const pickedUp = run?.status === "picked_up";
 
   return (
     <View style={styles.screen}>
-      <View style={styles.center}>
-        <Text style={styles.title}>{me?.riderName ?? "Rider"}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Deliveries</Text>
         <View style={styles.statusPill}>
           <Text style={styles.statusPillText}>{status}</Text>
         </View>
-        <Text style={styles.subtitle}>
-          {me?.tracking
-            ? `Delivering ${me.activeOrderNumber ?? ""}${me.customerName ? ` · ${me.customerName}` : ""}`
-            : "No active delivery — keep the app running, it'll track your next one."}
-        </Text>
-        <Text style={styles.note}>
-          Keep this app open or in the background during your shift. Tracking
-          continues automatically for every delivery — no need to reopen.
-        </Text>
       </View>
+
+      <ScrollView contentContainerStyle={styles.list}>
+        {!hasRun ? (
+          <Text style={styles.subtitle}>
+            No active delivery — keep the app running, you'll be notified when one
+            is assigned.
+          </Text>
+        ) : !pickedUp ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>
+              {pending.length} {pending.length === 1 ? "order" : "orders"} ready to pick up
+            </Text>
+            {pending.map((s) => (
+              <Text key={s.orderId} style={styles.cardLine}>
+                • {s.orderNumber}
+                {s.customerName ? ` · ${s.customerName}` : ""}
+              </Text>
+            ))}
+            <Pressable
+              style={[styles.button, busy && styles.buttonDisabled]}
+              disabled={busy}
+              onPress={doPickup}
+            >
+              <Text style={styles.buttonText}>{busy ? "…" : "Picked up — start run"}</Text>
+            </Pressable>
+          </View>
+        ) : pending.length === 0 ? (
+          <Text style={styles.subtitle}>All delivered. Head back to the restaurant.</Text>
+        ) : (
+          pending.map((s, i) => (
+            <View key={s.orderId} style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {i === 0 ? "Next stop" : "Then"} · {s.orderNumber}
+              </Text>
+              {s.customerName ? <Text style={styles.cardLine}>👤 {s.customerName}</Text> : null}
+              {s.address ? <Text style={styles.cardLine}>📍 {s.address}</Text> : null}
+              <Text style={styles.cardLine}>💵 Collect AED {s.codAmount.toFixed(2)}</Text>
+              <View style={styles.cardActions}>
+                {s.latitude != null && s.longitude != null ? (
+                  <Pressable
+                    style={[styles.button, styles.buttonAlt]}
+                    onPress={() => Linking.openURL(mapsLink(s.latitude!, s.longitude!))}
+                  >
+                    <Text style={styles.buttonAltText}>Navigate</Text>
+                  </Pressable>
+                ) : null}
+                {i === 0 ? (
+                  <Pressable
+                    style={[styles.button, busy && styles.buttonDisabled]}
+                    disabled={busy}
+                    onPress={() => doDelivered(s)}
+                  >
+                    <Text style={styles.buttonText}>{busy ? "…" : "Collected & delivered"}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ))
+        )}
+      </ScrollView>
+
       <Pressable style={styles.linkButton} onPress={onUnpair}>
         <Text style={styles.linkButtonText}>Unpair this device</Text>
       </Pressable>
@@ -180,19 +268,27 @@ function TrackingScreen({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#f8fafc", padding: 24, justifyContent: "space-between" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   title: { fontSize: 26, fontWeight: "700", color: "#0f172a" },
-  subtitle: { fontSize: 15, color: "#475569", textAlign: "center" },
+  subtitle: { fontSize: 15, color: "#475569", textAlign: "center", marginTop: 24 },
   note: { fontSize: 13, color: "#64748b", textAlign: "center", marginTop: 8, paddingHorizontal: 12 },
   input: {
     width: "100%", borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 12,
     padding: 16, fontSize: 22, textAlign: "center", letterSpacing: 4, backgroundColor: "#fff",
   },
-  button: { width: "100%", backgroundColor: "#16a34a", borderRadius: 12, padding: 16, alignItems: "center" },
+  button: { flex: 1, backgroundColor: "#16a34a", borderRadius: 12, padding: 16, alignItems: "center", marginTop: 12 },
+  buttonAlt: { backgroundColor: "#e2e8f0" },
+  buttonAltText: { color: "#0f172a", fontSize: 16, fontWeight: "600" },
   buttonDisabled: { backgroundColor: "#94a3b8" },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   error: { color: "#b91c1c" },
   statusPill: { backgroundColor: "#dcfce7", paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
-  statusPillText: { color: "#166534", fontWeight: "600" },
+  statusPillText: { color: "#166534", fontWeight: "600", fontSize: 12 },
   linkButton: { alignItems: "center", padding: 12 },
   linkButtonText: { color: "#64748b" },
+  list: { gap: 12, paddingBottom: 12 },
+  card: { backgroundColor: "#fff", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#e2e8f0" },
+  cardTitle: { fontSize: 16, fontWeight: "700", color: "#0f172a", marginBottom: 6 },
+  cardLine: { fontSize: 14, color: "#334155", marginTop: 2 },
+  cardActions: { flexDirection: "row", gap: 10 },
 });

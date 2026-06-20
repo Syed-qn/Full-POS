@@ -112,6 +112,37 @@ async def get_rider_by_device_token(
     return await session.scalar(select(Rider).where(Rider.device_token == token))
 
 
+async def set_push_token(session: AsyncSession, *, rider: Rider, push_token: str) -> None:
+    """Store the rider's Expo push token (set by the app after it registers for
+    notifications). Caller commits."""
+    rider.push_token = (push_token or "").strip() or None
+    await session.flush()
+
+
+async def notify_rider_assigned(
+    session: AsyncSession, *, rider: Rider, order_count: int
+) -> bool:
+    """Push the rider that a delivery was assigned, so they open the app (which
+    then streams GPS + shows the run). Best-effort: a paired rider with no push
+    token, or a push failure, returns False and never raises. Returns True if a
+    push was sent."""
+    if not rider.push_token:
+        return False
+    from app.notifications.factory import get_push_provider
+    from app.notifications.port import PushMessage
+
+    provider = get_push_provider()
+    plural = "deliveries" if order_count != 1 else "delivery"
+    return await provider.send(
+        PushMessage(
+            to_token=rider.push_token,
+            title="New delivery assigned",
+            body=f"You have {order_count} {plural} ready — open the app to start.",
+            data={"type": "assignment"},
+        )
+    )
+
+
 async def record_rider_app_location(
     session: AsyncSession,
     *,

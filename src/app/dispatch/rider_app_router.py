@@ -15,6 +15,7 @@ from app.dispatch.rider_app import (
     get_rider_by_device_token,
     record_rider_app_location,
     redeem_pairing_code,
+    set_push_token,
 )
 from app.identity.models import Rider
 
@@ -43,6 +44,10 @@ class RiderAppMeOut(BaseModel):
     tracking: bool = False
 
 
+class PushTokenIn(BaseModel):
+    push_token: str = Field(min_length=1, max_length=255)
+
+
 class LocationIn(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
@@ -53,6 +58,30 @@ class LocationIn(BaseModel):
 
 class AckOut(BaseModel):
     success: bool = True
+
+
+class StopOut(BaseModel):
+    orderId: int
+    orderNumber: str
+    sequence: int
+    customerName: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    codAmount: float = 0.0
+    delivered: bool = False
+
+
+class RunOut(BaseModel):
+    batchId: int | None = None
+    status: str | None = None  # planned | picked_up | None (no active run)
+    stops: list[StopOut] = []
+
+
+class DeliveredOut(BaseModel):
+    success: bool = True
+    batchComplete: bool = False
+    nextOrderId: int | None = None
 
 
 async def _current_rider(
@@ -121,6 +150,107 @@ async def rider_app_me(
         activeOrderNumber=order.order_number if order else None,
         customerName=customer.name if customer else None,
         tracking=order is not None,
+    )
+
+
+@router.post("/api/v1/rider-app/push-token", response_model=AckOut)
+async def rider_app_push_token(
+    body: PushTokenIn,
+    rider: Rider = Depends(_current_rider),
+    session: AsyncSession = Depends(get_session),
+):
+    """Register/refresh the rider's Expo push token (called by the app on launch)."""
+    await set_push_token(session, rider=rider, push_token=body.push_token)
+    await session.commit()
+    return AckOut()
+
+
+@router.get("/api/v1/rider-app/orders", response_model=RunOut)
+async def rider_app_orders(
+    rider: Rider = Depends(_current_rider),
+    session: AsyncSession = Depends(get_session),
+):
+    """The rider's current run (active batch + stops) for the app to render."""
+    return await get_active_run_response(session, rider)
+
+
+@router.post("/api/v1/rider-app/orders/pickup", response_model=RunOut)
+async def rider_app_pickup(
+    rider: Rider = Depends(_current_rider),
+    session: AsyncSession = Depends(get_session),
+):
+    """Mark the rider's batch picked up (same FSM as the WhatsApp 'Orders Picked').
+
+    No live-location prompt here — the app IS the GPS source; it streams location
+    via /rider-app/location, and the first ping reveals the customer's stop. The
+    app then re-reads /rider-app/orders to show the run."""
+    from app.dispatch.rider_actions import mark_batch_picked_up
+
+    await mark_batch_picked_up(
+        session, restaurant_id=rider.restaurant_id, rider=rider, batch_id=None
+    )
+    await session.commit()
+    run = await get_active_run_response(session, rider)
+    return run
+
+
+@router.post("/api/v1/rider-app/orders/{order_id}/delivered", response_model=DeliveredOut)
+async def rider_app_delivered(
+    order_id: int,
+    rider: Rider = Depends(_current_rider),
+    session: AsyncSession = Depends(get_session),
+):
+    """Mark one stop delivered + record COD (same FSM as the WhatsApp 'Delivered').
+
+    Gated on live GPS (a recent ping) — the app should be streaming location. On
+    success the customer is notified and the next stop, if any, is reported."""
+    from app.dispatch.rider_actions import DeliverOutcome, mark_order_delivered
+
+    result = await mark_order_delivered(
+        session, restaurant_id=rider.restaurant_id, rider=rider, order_id=order_id
+    )
+    if result.outcome is DeliverOutcome.IGNORED:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "order not found")
+    if result.outcome is DeliverOutcome.NOT_LIVE:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "location sharing is off — keep the app open with GPS on",
+        )
+    await session.commit()
+    # Flush the customer 'delivered' notification now (no Celery on Render).
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, rider.restaurant_id)
+    return DeliveredOut(
+        batchComplete=result.batch_complete,
+        nextOrderId=result.next_order.id if result.next_order else None,
+    )
+
+
+async def get_active_run_response(session: AsyncSession, rider: Rider) -> RunOut:
+    """Build the RunOut payload for ``rider`` (shared by GET /orders and pickup)."""
+    from app.dispatch.rider_actions import get_active_run
+
+    run = await get_active_run(session, rider=rider)
+    if run is None:
+        return RunOut()
+    return RunOut(
+        batchId=run.batch_id,
+        status=run.status,
+        stops=[
+            StopOut(
+                orderId=s.order_id,
+                orderNumber=s.order_number,
+                sequence=s.sequence,
+                customerName=s.customer_name or None,
+                address=s.address or None,
+                latitude=s.latitude,
+                longitude=s.longitude,
+                codAmount=s.cod_amount,
+                delivered=s.delivered,
+            )
+            for s in run.stops
+        ],
     )
 
 

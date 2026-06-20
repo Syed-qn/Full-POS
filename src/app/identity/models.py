@@ -53,6 +53,9 @@ class Rider(Base, TimestampMixin):
     pairing_code_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Expo push token (native app) — set by the app after it registers for
+    # notifications, used to wake the rider when a delivery is assigned.
+    push_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Rolling delivery performance (Phase 4) — feeds dispatch scoring.
     performance: Mapped[dict] = mapped_column(
         JSONB,

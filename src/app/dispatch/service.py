@@ -22,6 +22,7 @@ Schema adaptation (Phase-3 T2 flags — NO new migration required):
     remain dispatchable.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -41,6 +42,8 @@ from app.ordering.fsm import OrderStatus
 from app.ordering.models import CustomerAddress, Order
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -293,6 +296,16 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             batch_id=batch.id,
             orders=[orders_by_id[pc.order_id] for pc in planned.orders],
         )
+        # Wake the native app (if the rider runs it) so they open it → GPS streams
+        # and the run shows up. Best-effort: never let a push failure break dispatch.
+        from app.dispatch.rider_app import notify_rider_assigned
+
+        try:
+            await notify_rider_assigned(
+                session, rider=rider, order_count=len(planned.orders)
+            )
+        except Exception:  # noqa: BLE001 - push is best-effort
+            _logger.exception("assignment push failed for rider %s", rider.id)
 
     return result
 
