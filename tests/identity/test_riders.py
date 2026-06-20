@@ -17,6 +17,28 @@ async def test_create_and_list_riders(client, auth_headers):
     assert listing.json()[0]["last_location_at"] is None
 
 
+async def test_create_rider_auto_sends_app_invite(client, auth_headers, db_session):
+    """Adding a rider in ops automatically WhatsApps them the app link + pairing
+    code — no separate manual invite step."""
+    from sqlalchemy import select
+
+    from app.outbox.models import OutboxMessage
+
+    resp = await client.post(
+        "/api/v1/riders",
+        json={"name": "Bilal", "phone": "+971509997777"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    msg = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971509997777")
+    )
+    assert msg is not None
+    assert msg.idempotency_key.startswith("app-pair-")
+    assert "pairing" in msg.payload["body"].lower()
+
+
 async def test_rider_location_endpoint(client, auth_headers, db_session):
     from app.dispatch.rider_location import update_rider_location
     from app.identity.models import Rider

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +29,8 @@ from app.identity.service import DuplicatePhoneError, RiderHasHistoryError
 from app.ratelimit.deps import rate_limit_auth
 
 router = APIRouter(prefix="/api/v1", tags=["identity"])
+
+_logger = logging.getLogger(__name__)
 
 _DUMMY_HASH = hash_password("dummy-timing-equalizer-not-a-real-password")
 
@@ -128,7 +132,7 @@ async def create_rider(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await service.create_rider(
+        rider = await service.create_rider(
             session,
             restaurant_id=restaurant.id,
             name=body.name,
@@ -136,6 +140,20 @@ async def create_rider(
         )
     except DuplicatePhoneError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+    # Auto-invite: as soon as a rider is added, WhatsApp them the app download
+    # link + a one-time pairing code so they can install and pair the rider app.
+    # Best-effort — a send hiccup must not fail the (already-committed) creation.
+    try:
+        from app.dispatch.rider_app import send_rider_app_pairing
+        from app.outbox.service import deliver_pending
+
+        await send_rider_app_pairing(session, rider=rider)
+        await session.commit()
+        await deliver_pending(session, restaurant.id)
+    except Exception:  # noqa: BLE001 - invite is best-effort
+        _logger.exception("auto app-invite failed for rider %s", rider.id)
+    return rider
 
 
 @router.get("/riders", response_model=list[RiderOut])
