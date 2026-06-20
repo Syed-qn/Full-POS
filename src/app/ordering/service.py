@@ -169,17 +169,28 @@ async def upsert_address(
     additional_details: str | None = None,
     confirmed: bool = False,
 ) -> CustomerAddress:
-    addr = CustomerAddress(
-        customer_id=customer_id,
-        latitude=latitude,
-        longitude=longitude,
-        room_apartment=room_apartment,
-        building=building,
-        receiver_name=receiver_name,
-        additional_details=additional_details,
-        confirmed=confirmed,
+    # One address per customer: overwrite the existing row in place instead of
+    # appending a new one. When a customer shares a new current-location pin /
+    # address, the old saved address is fully replaced (pin, room, building,
+    # receiver) — so "use saved address" next time offers the latest one and the
+    # DB never accumulates stale duplicates. We update the same row get_last_address
+    # would surface (most recently used) so both functions agree on "the" address.
+    addr = await session.scalar(
+        select(CustomerAddress)
+        .where(CustomerAddress.customer_id == customer_id)
+        .order_by(CustomerAddress.last_used_at.desc().nullslast(), CustomerAddress.id.desc())
+        .limit(1)
     )
-    session.add(addr)
+    if addr is None:
+        addr = CustomerAddress(customer_id=customer_id)
+        session.add(addr)
+    addr.latitude = latitude
+    addr.longitude = longitude
+    addr.room_apartment = room_apartment
+    addr.building = building
+    addr.receiver_name = receiver_name
+    addr.additional_details = additional_details
+    addr.confirmed = confirmed
     await session.flush()
 
     # The WhatsApp flow only ever asks "who should the rider ask for?", never a

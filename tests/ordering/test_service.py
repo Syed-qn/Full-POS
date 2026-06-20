@@ -82,6 +82,43 @@ async def test_upsert_address_does_not_overwrite_existing_customer_name(db_sessi
     assert customer.name == "Ali Hassan"
 
 
+async def test_upsert_address_overwrites_in_place_one_per_customer(db_session, restaurant):
+    """A customer keeps exactly ONE saved address — a new address overwrites the
+    old one (pin, room, building, receiver) rather than appending a second row."""
+    from sqlalchemy import func, select
+
+    from app.ordering.models import CustomerAddress
+    from app.ordering.service import get_last_address, get_or_create_customer, upsert_address
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000003"
+    )
+
+    first = await upsert_address(
+        db_session, customer_id=customer.id, latitude=25.10, longitude=55.10,
+        room_apartment="12", building="Tower A", receiver_name="Asfer", confirmed=True,
+    )
+    second = await upsert_address(
+        db_session, customer_id=customer.id, latitude=25.20, longitude=55.20,
+        room_apartment="34", building="Tower B", receiver_name="Asfer", confirmed=True,
+    )
+
+    # Same row reused — not a new one.
+    assert second.id == first.id
+    count = await db_session.scalar(
+        select(func.count()).select_from(CustomerAddress).where(
+            CustomerAddress.customer_id == customer.id
+        )
+    )
+    assert count == 1
+
+    # The saved address now reflects the latest pin + details.
+    saved = await get_last_address(db_session, customer.id)
+    assert saved is not None
+    assert (saved.latitude, saved.longitude) == (25.20, 55.20)
+    assert (saved.room_apartment, saved.building) == ("34", "Tower B")
+
+
 def _token_for(restaurant_id: int) -> str:
     """Bearer token for the dynamically-seeded restaurant fixture."""
     from app.identity.auth import create_access_token
