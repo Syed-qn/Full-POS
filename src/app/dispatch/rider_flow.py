@@ -332,18 +332,20 @@ async def handle_orders_picked(
         # revealed once the rider's GPS actually goes on (first ping →
         # reveal_first_stop_on_tracking_live), so the rider can't head to the
         # customer without live tracking running.
-        if rider.device_token:
-            # Paired native Android app: it streams background GPS continuously
-            # while running, so there's no web tracker to open — just confirm
-            # the pickup. The first stop is revealed on the app's next GPS ping.
+        # Decide on the LIVE state, not on whether the rider was ever paired: a
+        # paired rider whose native app is closed shares no GPS, so they still
+        # need the web tracker link. Only skip it when the rider is ACTUALLY
+        # streaming right now (a recent ping — native app running in background
+        # OR a tracker page already open).
+        if await _rider_tracker_is_live(session, rider.id):
             await enqueue_message(
                 session,
                 restaurant_id=restaurant_id,
                 to_phone=rider.phone,
                 msg_type=OutboundMessageType.TEXT,
-                payload={"body": "✅ *Pickup confirmed.*\n\nYour Rider app is sharing "
-                                 "live location automatically — just keep it open. "
-                                 "I'll send your first delivery stop in a moment."},
+                payload={"body": "✅ *Pickup confirmed.*\n\nYou're already sharing live "
+                                 "location — just keep it on. I'll send your first "
+                                 "delivery stop in a moment."},
                 idempotency_key=f"livereq-{batch.id}",
             )
         else:
@@ -383,20 +385,13 @@ async def _send_start_tracker_required(
 ) -> None:
     """Re-send the Start-live-tracker button when the rider tries to deliver
     without GPS sharing on. Uses the run's shared tracker (the batch's first
-    order session) so it's the same page they were given at pickup."""
-    if rider.device_token:
-        # Paired native-app rider: no web tracker page — their app must be
-        # running to stream GPS. Tell them to reopen it instead of a link.
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=rider.phone,
-            msg_type=OutboundMessageType.TEXT,
-            payload={"body": "⚠️ *Open your Rider app first.*\nLaunch it and allow "
-                             "location, keep it running, then tap *Delivered* again."},
-            idempotency_key=f"tracker-required-{order.id}-{trigger_msg_id or rider.id}",
-        )
-        return
+    order session) so it's the same page they were given at pickup.
+
+    Always offers the web tracker link: a rider who isn't currently sharing GPS
+    needs *a* way to start (the native app may be closed or not installed), and
+    the web page works for everyone. Riders running the app instead won't hit
+    this path — their background pings keep them 'live' (_rider_tracker_is_live).
+    """
     from app.dispatch.tracking_live import build_rider_tracking_url, ensure_tracking_session
 
     first = order

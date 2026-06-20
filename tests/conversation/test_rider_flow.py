@@ -121,17 +121,10 @@ async def test_orders_picked_advances_all_and_sends_first_stop(db_session):
     assert "live location" in live.payload["body"].lower()
 
 
-async def test_orders_picked_paired_app_rider_skips_web_tracker(db_session):
-    """A rider paired with the native app (device_token set) streams GPS from the
-    app, so pickup must NOT send the web 'Start live tracker' CTA — just a plain
-    confirmation text under the same livereq idempotency key."""
-    r, rider, batch, orders = await _seed_batch(db_session)
-    rider.device_token = "dev-token-xyz"
-    await db_session.commit()
-
+async def _pick_up(db_session, r, batch):
     inbound = InboundMessage(
-        wa_message_id="b-paired-1",
-        from_phone=rider.phone,
+        wa_message_id=f"b-{batch.id}",
+        from_phone=(await db_session.get(Rider, batch.rider_id)).phone,
         type=MessageType.BUTTON_REPLY,
         payload={"button_id": f"picked:{batch.id}"},
         restaurant_phone=r.phone,
@@ -139,6 +132,18 @@ async def test_orders_picked_paired_app_rider_skips_web_tracker(db_session):
     )
     await handle_inbound(db_session, inbound, restaurant_id=r.id)
     await db_session.commit()
+
+
+async def test_orders_picked_while_already_sharing_skips_web_tracker(db_session):
+    """A rider already streaming GPS (recent ping — native app running OR tracker
+    page open) gets a plain confirmation at pickup, NOT the web tracker CTA. The
+    decision is on LIVE state, not on whether they were ever paired."""
+    r, rider, batch, orders = await _seed_batch(db_session)
+    rider.device_token = "dev-token-xyz"  # paired …
+    await _start_tracker(db_session, r.id, rider.id)  # … AND currently sharing
+    await db_session.commit()
+
+    await _pick_up(db_session, r, batch)
 
     live = await db_session.scalar(
         select(OutboxMessage).where(
@@ -152,6 +157,29 @@ async def test_orders_picked_paired_app_rider_skips_web_tracker(db_session):
     assert "button_label" not in live.payload
     assert "url" not in live.payload
     assert "pickup confirmed" in live.payload["body"].lower()
+
+
+async def test_orders_picked_paired_but_app_closed_still_gets_web_tracker(db_session):
+    """The real bug: a rider paired (device_token set) but NOT currently sharing
+    (native app closed → no recent ping) MUST still get the web tracker link, or
+    they have no way to share GPS and the first stop never arrives."""
+    r, rider, batch, orders = await _seed_batch(db_session)
+    rider.device_token = "dev-token-xyz"  # paired, but no recent ping
+    await db_session.commit()
+
+    await _pick_up(db_session, r, batch)
+
+    live = await db_session.scalar(
+        select(OutboxMessage).where(
+            OutboxMessage.to_phone == rider.phone,
+            OutboxMessage.idempotency_key == f"livereq-{batch.id}",
+        )
+    )
+    assert live is not None
+    # Web tracker CTA link, so the rider can start sharing without the app.
+    assert live.payload["type"] == "cta_url"
+    assert live.payload.get("button_label") == "Start live tracker"
+    assert "url" in live.payload
 
 
 async def test_delivered_marks_delivered_and_records_cod(db_session):
