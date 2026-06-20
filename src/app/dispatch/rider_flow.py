@@ -20,8 +20,6 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.cod.service import record_collection
-from app.dispatch.delivery import advance_delivery
 from app.dispatch.models import Batch, BatchOrder, RiderLocation
 from app.geo.haversine import distance_km
 from app.identity.models import Rider
@@ -265,68 +263,39 @@ async def handle_orders_picked(
     Resilient to a stale/invalid ``batch_id`` (a reassigned batch, a double-tap,
     a test send): fall back to the rider's current planned batch so the tap still
     works, and always reply — never a silent no-op (which reads to the rider as
-    "the button is broken")."""
-    batch = await session.get(Batch, batch_id) if batch_id else None
-    if batch is None or batch.rider_id != rider.id or batch.status != "planned":
-        # Use the rider's current planned batch instead of trusting the payload.
-        batch = await session.scalar(
-            select(Batch)
-            .where(Batch.rider_id == rider.id, Batch.status == "planned")
-            .order_by(Batch.id.desc())
-            .limit(1)
+    "the button is broken"). The FSM transition lives in
+    ``rider_actions.mark_batch_picked_up``; this handler only renders the
+    WhatsApp reply for each outcome."""
+    from app.dispatch.rider_actions import PickupOutcome, mark_batch_picked_up
+
+    result = await mark_batch_picked_up(
+        session, restaurant_id=restaurant_id, rider=rider, batch_id=batch_id
+    )
+    if result.outcome is PickupOutcome.NO_BATCH_RESEND:
+        # Mid-run, no new batch: re-send the current stop (unique suffix so the
+        # re-send isn't deduped against the original).
+        await _send_stop(session, restaurant_id, rider.phone, result.resend_order,
+                         key_suffix=f"-resend-{trigger_msg_id or 'x'}")
+    elif result.outcome is PickupOutcome.NO_BATCH_NONE:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "You have no active batch to pick up right now. "
+                             "We'll message you when one is assigned."},
+            idempotency_key=f"nopick-{trigger_msg_id or rider.id}",
         )
-    if batch is None:
-        # No new batch to pick up. The rider may already be mid-run and just
-        # never received (or lost) their current stop — re-send it so tapping
-        # again recovers it. Otherwise tell them there's nothing to pick up.
-        bo = await session.scalar(
-            select(BatchOrder)
-            .join(Batch, BatchOrder.batch_id == Batch.id)
-            .where(
-                Batch.rider_id == rider.id,
-                Batch.status == "picked_up",
-                BatchOrder.delivered_at.is_(None),
-            )
-            .order_by(BatchOrder.sequence)
-            .limit(1)
+    elif result.outcome is PickupOutcome.NO_STOPS:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=rider.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "That batch has no active stops left."},
+            idempotency_key=f"nostop-{trigger_msg_id or result.batch_id}",
         )
-        order = await session.get(Order, bo.order_id) if bo is not None else None
-        if order is not None:
-            # Unique suffix so the re-send isn't deduped against the original stop.
-            await _send_stop(session, restaurant_id, rider.phone, order,
-                             key_suffix=f"-resend-{trigger_msg_id or 'x'}")
-        else:
-            await enqueue_message(
-                session,
-                restaurant_id=restaurant_id,
-                to_phone=rider.phone,
-                msg_type=OutboundMessageType.TEXT,
-                payload={"body": "You have no active batch to pick up right now. "
-                                 "We'll message you when one is assigned."},
-                idempotency_key=f"nopick-{trigger_msg_id or rider.id}",
-            )
-        return
-    batch.status = "picked_up"
-    bos = (
-        await session.scalars(
-            select(BatchOrder)
-            .where(BatchOrder.batch_id == batch.id)
-            .order_by(BatchOrder.sequence)
-        )
-    ).all()
-    first_order: Order | None = None
-    for bo in bos:
-        order = await session.get(Order, bo.order_id)
-        if order is None:
-            continue
-        await advance_delivery(session, order_id=order.id, to_status="picked_up")
-        # NOTE: the customer's "on the way" + Track link is intentionally NOT sent
-        # here. It's deferred until the rider's live location actually goes on
-        # (first GPS ping → tracking_router._notify_customers_tracking_live) so the
-        # Track link never opens an empty "waiting for rider" map.
-        if first_order is None:
-            first_order = order
-    if first_order is not None:
+    else:  # PICKED_UP
         # Flow integrity: at pickup we ONLY prompt the rider to start live
         # tracking. The customer's location + details + Delivered button are
         # revealed once the rider's GPS actually goes on (first ping →
@@ -346,21 +315,12 @@ async def handle_orders_picked(
                 payload={"body": "✅ *Pickup confirmed.*\n\nYou're already sharing live "
                                  "location — just keep it on. I'll send your first "
                                  "delivery stop in a moment."},
-                idempotency_key=f"livereq-{batch.id}",
+                idempotency_key=f"livereq-{result.batch_id}",
             )
         else:
             await _send_live_location_request(
-                session, restaurant_id, rider.phone, batch.id
+                session, restaurant_id, rider.phone, result.batch_id
             )
-    else:
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=rider.phone,
-            msg_type=OutboundMessageType.TEXT,
-            payload={"body": "That batch has no active stops left."},
-            idempotency_key=f"nostop-{trigger_msg_id or batch.id}",
-        )
 
 
 # Live tracking must be ON when a stop is delivered. A ping within this window
@@ -430,79 +390,33 @@ async def handle_delivered(
 
     Gated on live tracking: the rider must have GPS sharing on (a recent ping)
     before a stop can be marked delivered. If not, re-send the tracker button and
-    do NOT advance the order."""
-    order = await session.get(Order, order_id)
-    if order is None or order.rider_id != rider.id:
+    do NOT advance the order. The FSM transition (deliver + COD + next-stop +
+    re-dispatch) lives in ``rider_actions.mark_order_delivered``; this handler
+    only renders the WhatsApp reply."""
+    from app.dispatch.rider_actions import DeliverOutcome, mark_order_delivered
+
+    result = await mark_order_delivered(
+        session, restaurant_id=restaurant_id, rider=rider, order_id=order_id
+    )
+    if result.outcome is DeliverOutcome.IGNORED:
         return
-    if not await _rider_tracker_is_live(session, rider.id):
+    if result.outcome is DeliverOutcome.NOT_LIVE:
         await _send_start_tracker_required(
-            session, restaurant_id, rider, order, trigger_msg_id
+            session, restaurant_id, rider, result.order, trigger_msg_id
         )
         return
-    # Collapse the geofence "arriving" step on the rider's physical confirmation.
-    if order.status == "picked_up":
-        await advance_delivery(session, order_id=order.id, to_status="arriving")
-    await advance_delivery(session, order_id=order.id, to_status="delivered")
-    # Proactively tell the customer their order has been delivered.
-    await _notify_customer_status(
-        session, restaurant_id=restaurant_id, order=order, status_key="delivered"
-    )
-    # COD-only platform: every delivery collects the order total in cash.
-    await record_collection(
-        session,
-        restaurant_id=restaurant_id,
-        order_id=order.id,
-        rider_id=rider.id,
-        amount=order.total,
-    )
-    # Reveal the next stop, or signal the run is complete.
-    bo = await session.scalar(
-        select(BatchOrder).where(BatchOrder.order_id == order.id)
-    )
-    if bo is None:
-        return
-    remaining = (
-        await session.scalars(
-            select(BatchOrder)
-            .where(
-                BatchOrder.batch_id == bo.batch_id,
-                BatchOrder.delivered_at.is_(None),
-            )
-            .order_by(BatchOrder.sequence)
-        )
-    ).all()
-    if remaining:
-        nxt = await session.get(Order, remaining[0].order_id)
-        if nxt is not None:
-            await _send_stop(session, restaurant_id, rider.phone, nxt)
-    else:
+    # DELIVERED: reveal the next stop, or signal the run is complete.
+    if result.next_order is not None:
+        await _send_stop(session, restaurant_id, rider.phone, result.next_order)
+    elif result.batch_complete:
         await enqueue_message(
             session,
             restaurant_id=restaurant_id,
             to_phone=rider.phone,
             msg_type=OutboundMessageType.TEXT,
             payload={"body": "All delivered. Head back to the restaurant."},
-            idempotency_key=f"headback-{bo.batch_id}-{rider.id}",
+            idempotency_key=f"headback-{result.batch_id}-{rider.id}",
         )
-        # The batch is complete and the rider was just freed (status -> available
-        # in delivery._complete_batch_order). Re-run dispatch so any orders left
-        # waiting in `ready` (no rider was available when they became ready) are
-        # picked up immediately, instead of sitting until the next order hits
-        # `ready`. Production has no Celery beat sweeper (see CLAUDE.md), so a
-        # freed rider would otherwise never trigger a re-scan on its own. The
-        # rider-assignment + customer pushes this enqueues are delivered by the
-        # webhook's restaurant-wide outbox claim after this transaction commits.
-        # Best-effort: a dispatch error must never undo the delivery just recorded.
-        from app.dispatch.service import run_dispatch_engine
-
-        try:
-            await run_dispatch_engine(session, restaurant_id=restaurant_id)
-        except Exception:  # noqa: BLE001 - re-dispatch must not break delivery
-            _logger.exception(
-                "re-dispatch after freeing rider %s failed (restaurant_id=%s)",
-                rider.id,
-                restaurant_id,
-            )
 
 
 async def _get_latest_rider_location(session: AsyncSession, rider_id: int) -> tuple[float, float] | None:
