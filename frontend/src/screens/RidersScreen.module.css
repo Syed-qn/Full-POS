@@ -82,7 +82,9 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* Wider cards so the action row (Start/End shift · Deactivate · Send app link
+     · Remove) has room and doesn't compress. */
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
   gap: 16px;
 }
 .empty {

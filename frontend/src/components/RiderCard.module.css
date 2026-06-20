@@ -196,8 +196,12 @@
 }
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+.actions :global(button) {
+  white-space: nowrap;
 }
 .removeBtn {
   margin-left: auto;
