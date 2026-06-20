@@ -162,11 +162,12 @@ function TrackingScreen({
   const doPickup = async () => {
     setBusy(true);
     try {
-      const r = await pickup(token);
-      setRun(r);
-      // Fire a fresh GPS fix so the customer's "on the way" + track link goes out
-      // right away instead of waiting on the next background interval.
-      sendCurrentLocation();
+      setRun(await pickup(token));
+      // NOTE: do NOT fire an explicit GPS ping here. The background task's first
+      // ping (within a few seconds) reveals the customer's "on the way" + track
+      // link exactly once. An extra ping here races with the background one — both
+      // get treated as the "first ping" and the customer notification is delivered
+      // twice.
     } catch (e) {
       Alert.alert("Pickup failed", e instanceof Error ? e.message : "Try again");
     } finally {
