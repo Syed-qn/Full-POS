@@ -1,29 +1,47 @@
 """Marketing REST API — templates, segments, campaigns, analytics."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
+from app.marketing.copywriter import draft_template
 from app.marketing.models import Campaign, Segment, WaTemplate
 from app.marketing.schemas import (
+    BroadcastRequest,
+    BroadcastResponse,
     CampaignCreate,
     CampaignResponse,
+    ImageUploadResponse,
     SegmentCreate,
     SegmentResponse,
     TemplateCreate,
+    TemplateDraftRequest,
+    TemplateDraftResponse,
     TemplateResponse,
 )
 from app.marketing.service import (
     campaign_stats,
     create_campaign,
     create_segment,
+    refresh_template,
+    run_campaign_send,
+    submit_template,
 )
+from app.marketing.template_factory import get_template_provider
 
 router = APIRouter(prefix="/api/v1/marketing", tags=["marketing"])
+
+_IMAGE_MIMES = {"image/jpeg", "image/png"}
+_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # Meta header-image limit
 
 
 # ── Segments ────────────────────────────────────────────────────────────────
@@ -109,6 +127,85 @@ async def list_templates(
     ]
 
 
+@router.post("/templates/draft", response_model=TemplateDraftResponse)
+async def draft_wa_template(
+    body: TemplateDraftRequest,
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> TemplateDraftResponse:
+    """AI-draft a compliant template body from a plain-English offer (DSC-style)."""
+    out = await draft_template(restaurant_name=restaurant.name, describe=body.describe)
+    return TemplateDraftResponse(**out)
+
+
+@router.post("/templates/image", response_model=ImageUploadResponse)
+async def upload_template_image(
+    file: UploadFile,
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> ImageUploadResponse:
+    """Store a header image and return a public URL (used as the template's
+    IMAGE header — Meta uploads it on submit, and the dashboard previews it)."""
+    if (file.content_type or "") not in _IMAGE_MIMES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Header image must be JPG or PNG")
+    content = await file.read()
+    if len(content) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Image exceeds 5 MB")
+    settings = get_settings()
+    ext = "png" if (file.content_type == "image/png") else "jpg"
+    rel = f"marketing/{restaurant.id}/{uuid.uuid4().hex}.{ext}"
+    dest = os.path.join(settings.upload_dir, rel)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as fh:
+        fh.write(content)
+    url = f"{settings.public_base_url.rstrip('/')}/media/{rel}"
+    return ImageUploadResponse(url=url)
+
+
+@router.post("/templates/{template_id}/submit", response_model=TemplateResponse)
+async def submit_wa_template(
+    template_id: int,
+    session: AsyncSession = Depends(get_session),
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> TemplateResponse:
+    """Lint + submit a draft template to Meta for approval."""
+    try:
+        tpl = await submit_template(
+            session,
+            restaurant_id=restaurant.id,
+            wa_template_id=template_id,
+            provider=get_template_provider(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+    await session.commit()
+    return TemplateResponse(
+        id=tpl.id, meta_template_name=tpl.meta_template_name,
+        status=tpl.status, rejection_reason=tpl.rejection_reason,
+    )
+
+
+@router.post("/templates/{template_id}/refresh", response_model=TemplateResponse)
+async def refresh_wa_template(
+    template_id: int,
+    session: AsyncSession = Depends(get_session),
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> TemplateResponse:
+    """Re-poll a pending template's Meta approval status (manual, web-only safe)."""
+    try:
+        tpl = await refresh_template(
+            session,
+            restaurant_id=restaurant.id,
+            wa_template_id=template_id,
+            provider=get_template_provider(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    await session.commit()
+    return TemplateResponse(
+        id=tpl.id, meta_template_name=tpl.meta_template_name,
+        status=tpl.status, rejection_reason=tpl.rejection_reason,
+    )
+
+
 # ── Campaigns ────────────────────────────────────────────────────────────────
 
 @router.post("/campaigns", status_code=201)
@@ -145,6 +242,49 @@ async def list_campaigns(
         CampaignResponse(id=r.id, type=r.type, status=r.status, stats=r.stats or {})
         for r in rows
     ]
+
+
+@router.post("/broadcast", response_model=BroadcastResponse, status_code=201)
+async def broadcast_now(
+    body: BroadcastRequest,
+    session: AsyncSession = Depends(get_session),
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> BroadcastResponse:
+    """Send an APPROVED template to all opted-in customers (or a segment) NOW.
+
+    Creates a campaign, runs the compliant send (opt-out → UAE window → 24h cap),
+    then flushes the outbox synchronously (no Celery needed). Re-runnable: the
+    per-(campaign,customer) ledger makes repeats idempotent."""
+    from app.outbox.service import deliver_pending
+
+    try:
+        camp = await create_campaign(
+            session,
+            restaurant_id=restaurant.id,
+            type=body.type,
+            template_id=body.template_id,
+            segment_id=body.segment_id,
+            coupon_value=body.coupon_value,
+        )
+        camp.status = "sending"
+        await session.flush()
+        summary = await run_campaign_send(
+            session,
+            campaign=camp,
+            provider=get_template_provider(),
+            now_utc=datetime.now(timezone.utc),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+    await session.commit()
+    await deliver_pending(session, restaurant.id)
+    return BroadcastResponse(
+        campaign_id=camp.id,
+        queued=summary.get("queued", 0),
+        suppressed_cap=summary.get("suppressed_cap", 0),
+        suppressed_optout=summary.get("suppressed_optout", 0),
+        suppressed_window=summary.get("suppressed_window", 0),
+    )
 
 
 @router.get("/campaigns/{campaign_id}/stats")

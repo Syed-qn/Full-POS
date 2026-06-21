@@ -237,6 +237,35 @@ async def submit_template(
     return tpl
 
 
+async def refresh_template(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    wa_template_id: int,
+    provider: TemplatePort,
+) -> WaTemplate:
+    """Re-poll ONE template's Meta status (for web-only prod with no beat worker).
+
+    No-op unless the template is ``pending_meta`` with a Meta id. Maps the live
+    status onto our row + rejection_reason. Caller commits."""
+    tpl = await session.get(WaTemplate, wa_template_id)
+    if tpl is None or tpl.restaurant_id != restaurant_id:
+        raise ValueError(f"template {wa_template_id} not found for restaurant")
+    if tpl.status != "pending_meta" or not tpl.meta_template_id:
+        return tpl
+    result = await provider.get_status(tpl.meta_template_id)
+    tpl.status = (
+        "approved"
+        if result.status == TemplateStatus.APPROVED
+        else "rejected"
+        if result.status == TemplateStatus.REJECTED
+        else "pending_meta"
+    )
+    tpl.rejection_reason = result.rejection_reason
+    await session.flush()
+    return tpl
+
+
 # ---------------------------------------------------------------------------
 # Compliant send pipeline
 # ---------------------------------------------------------------------------

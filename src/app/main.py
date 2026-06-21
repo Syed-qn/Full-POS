@@ -144,6 +144,13 @@ def create_app() -> FastAPI:
         body, content_type = metrics_response()
         return Response(content=body, media_type=content_type)
 
+    # Serve uploaded media (marketing template header images) so Meta can fetch
+    # the image on submit and the dashboard can preview it. Mounted before the SPA
+    # catch-all so /media/* isn't shadowed.
+    media_dir = Path(settings.upload_dir)
+    media_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
+
     # Serve the built React dashboard (single-service deploy): the Docker build
     # drops the compiled SPA at /app/static. Absent in local dev — there you run
     # the vite dev server. Mounted LAST so it never shadows the API/health/metrics
