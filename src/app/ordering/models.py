@@ -80,6 +80,10 @@ class Order(Base, TimestampMixin):
     sla_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sla_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     promised_eta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Kitchen "plate by" deadline = sla_confirmed_at + customer SLA − drive time to the
+    # delivery address − handling − batch safety. Distance-driven, not hardcoded. Null
+    # when the order has no geocoded drop-off (can't compute a drive leg).
+    prep_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     late: Mapped[bool | None] = mapped_column(Boolean)
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CompactTable, type Column } from "../components/CompactTable";
 import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
+import { PrepCountdown } from "../components/PrepCountdown";
 import { fetchOrders } from "../lib/ordersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { OrderOut, OrderStatus } from "../lib/types";
@@ -137,6 +138,16 @@ export function OrdersScreen() {
     { key: "total", header: "Total", render: (o) => <span className={s.mono}>AED {o.total_aed}</span> },
     { key: "rider", header: "Rider", render: (o) => o.rider_name ?? "—" },
     { key: "status", header: "Status", render: (o) => <StatusPill status={o.status} /> },
+    {
+      key: "kitchen",
+      header: "Kitchen",
+      render: (o) =>
+        o.status === "confirmed" || o.status === "preparing" ? (
+          <PrepCountdown prepDeadline={o.prep_deadline} />
+        ) : (
+          <span className={s.mono}>—</span>
+        ),
+    },
   ];
 
   return (

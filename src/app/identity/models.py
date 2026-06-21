@@ -20,6 +20,12 @@ DEFAULT_SETTINGS: dict = {
     # (default, safe). "ortools" = SLA-first VRP route optimizer (opt-in pilot).
     # Existing rows without this key read as "greedy" via .get() in the service.
     "dispatch_engine": "greedy",
+    # Kitchen prep deadline tuning (minutes), read via .get() with these defaults.
+    # handling = pickup/hand-off slack reserved for the rider at the restaurant;
+    # batch_safety = margin so an order that later joins a batch (extra inter-stop
+    # drive) still makes the SLA. Both subtracted from the drive budget — not hardcoded.
+    "prep_handling_minutes": 5,
+    "batch_safety_minutes": 5,
 }
 
 

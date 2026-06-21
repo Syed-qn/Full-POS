@@ -312,3 +312,38 @@ async def test_customer_outbox_message_created_on_breach_40(db_session: AsyncSes
         )
     )
     assert cust_msg is not None
+
+
+async def test_prep_late_alerts_manager_when_past_plate_by(db_session: AsyncSession):
+    """An order still cooking past its prep_deadline fires a 'prep_late' event + a
+    manager WhatsApp alert; one that is still within the deadline does not."""
+    r = await _seed_restaurant(db_session)
+    c = await _seed_customer(db_session, r.id, idx=900)
+    now = datetime.now(timezone.utc)
+
+    late = await _seed_order(db_session, r.id, c.id, elapsed_minutes=10.0, status="preparing", idx=91)
+    late.prep_deadline = now - timedelta(minutes=2)  # plate-by already passed
+    on_time = await _seed_order(db_session, r.id, c.id, elapsed_minutes=2.0, status="preparing", idx=92)
+    on_time.prep_deadline = now + timedelta(minutes=15)  # plenty of time
+    await db_session.commit()
+
+    with patch("app.sla.monitor.async_session_factory", _make_session_factory(db_session)):
+        await _run_monitor()
+
+    late_events = {
+        e.type for e in (await db_session.scalars(
+            select(SlaEvent).where(SlaEvent.order_id == late.id)
+        )).all()
+    }
+    assert "prep_late" in late_events
+    ontime_events = {
+        e.type for e in (await db_session.scalars(
+            select(SlaEvent).where(SlaEvent.order_id == on_time.id)
+        )).all()
+    }
+    assert "prep_late" not in ontime_events
+
+    msgs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+    )).all()
+    assert any(late.order_number in str(m.payload) for m in msgs)

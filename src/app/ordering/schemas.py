@@ -27,6 +27,7 @@ class OrderOut(BaseModel):
     rider_id: Optional[int]
     rider_name: Optional[str]
     sla_started_at: Optional[str]   # ISO 8601 of sla_confirmed_at
+    prep_deadline: Optional[str]    # ISO 8601 — kitchen "plate by" time (distance-driven)
     created_at: str
     address: Optional[str]
     lat: Optional[float]

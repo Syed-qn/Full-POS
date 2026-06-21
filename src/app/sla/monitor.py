@@ -68,7 +68,57 @@ async def _run_monitor() -> None:
                 if elapsed_min < threshold_min:
                     continue
                 await _fire_event(session, order=order, event_type=event_type, now=now)
+
+            # Kitchen plate-by deadline: while the order is still cooking, warn the
+            # manager the moment it passes its distance-driven prep_deadline so they can
+            # push the kitchen before the drive budget is gone.
+            if order.status in (str(OrderStatus.CONFIRMED), str(OrderStatus.PREPARING)):
+                pd = order.prep_deadline
+                if pd is not None:
+                    if pd.tzinfo is None:
+                        pd = pd.replace(tzinfo=timezone.utc)
+                    if now >= pd:
+                        await _fire_prep_late(session, order=order, now=now)
         await session.commit()
+
+
+async def _fire_prep_late(
+    session: AsyncSession, *, order: Order, now: datetime
+) -> None:
+    """Manager alert when an order is still cooking past its plate-by deadline. Idempotent
+    via the uq_sla_events_order_type constraint (one 'prep_late' row per order)."""
+    stmt = (
+        pg_insert(SlaEvent)
+        .values(
+            order_id=order.id,
+            restaurant_id=order.restaurant_id,
+            type="prep_late",
+            ts=now,
+            notified={},
+        )
+        .on_conflict_do_nothing(constraint="uq_sla_events_order_type")
+        .returning(SlaEvent.id)
+    )
+    if (await session.execute(stmt)).first() is None:
+        return  # already fired
+
+    from app.identity.models import Restaurant as RestaurantModel
+
+    restaurant = await session.get(RestaurantModel, order.restaurant_id)
+    if restaurant:
+        await enqueue_message(
+            session,
+            restaurant_id=order.restaurant_id,
+            to_phone=restaurant.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": (
+                    f"👨‍🍳 Plate {order.order_number} NOW — it's past the kitchen "
+                    "deadline and the delivery still needs time to make the 40-min SLA."
+                )
+            },
+            idempotency_key=f"prep-late-{order.id}",
+        )
 
 
 async def _fire_event(

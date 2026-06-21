@@ -105,6 +105,9 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         rider_id=order.rider_id,
         rider_name=rider_name,
         sla_started_at=sla_started_at,
+        prep_deadline=(
+            order.prep_deadline.isoformat() if order.prep_deadline else None
+        ),
         created_at=order.created_at.isoformat(),
         address=address_str,
         lat=lat,

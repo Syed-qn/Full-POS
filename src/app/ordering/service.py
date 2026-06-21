@@ -12,11 +12,49 @@ from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 
 from app.audit.service import record_audit
+from app.config import get_settings
+from app.geo.factory import get_geo_provider
+from app.identity.models import Restaurant
 from app.ordering.fsm import OrderStatus
 from app.ordering.fsm import transition as fsm_transition
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 
 _logger = logging.getLogger(__name__)
+
+
+async def compute_prep_deadline(
+    session: "AsyncSession", order: Order, now: datetime
+) -> datetime | None:
+    """Kitchen "plate by" time: the latest the order can be ready and still leave enough
+    of the customer SLA to drive it to the address. Distance-driven, not hardcoded:
+
+        prep_deadline = sla_confirmed_at + customer_SLA − drive(restaurant→address)
+                        − prep_handling − batch_safety
+
+    ``now`` is the SLA-clock start (sla_confirmed_at). Returns None when the order has no
+    geocoded drop-off (no drive leg to reason about). Never earlier than ``now`` — a
+    delivery too far to make the SLA even with instant cooking yields "plate now", and
+    the SLA monitor / predictive-breach path takes it from there. Handling + batch-safety
+    minutes come from the restaurant's settings (per-tenant tunable)."""
+    if order.address_id is None:
+        return None
+    addr = await session.get(CustomerAddress, order.address_id)
+    if addr is None or addr.latitude is None or addr.longitude is None:
+        return None
+    restaurant = await session.get(Restaurant, order.restaurant_id)
+    if restaurant is None or restaurant.lat is None or restaurant.lng is None:
+        return None
+
+    geo = get_geo_provider()
+    dist_km = geo.distance_km(restaurant.lat, restaurant.lng, addr.latitude, addr.longitude)
+    drive_min = geo.eta_minutes(dist_km, buffer_minutes=0)
+
+    rs = restaurant.settings or {}
+    handling = int(rs.get("prep_handling_minutes", 5))
+    safety = int(rs.get("batch_safety_minutes", 5))
+    budget = get_settings().sla_customer_minutes - drive_min - handling - safety
+    deadline = now + timedelta(minutes=budget)
+    return max(deadline, now)
 
 
 def _compute_exclusion_hash(
@@ -479,6 +517,7 @@ async def finalize_confirmation(
     order.sla_confirmed_at = now
     order.sla_deadline = now + timedelta(minutes=40)
     order.promised_eta = order.sla_deadline
+    order.prep_deadline = await compute_prep_deadline(session, order, now)
     await session.flush()
 
 
@@ -554,6 +593,7 @@ async def modify_order(
     order.sla_confirmed_at = now
     order.sla_deadline = now + timedelta(minutes=40)
     order.promised_eta = order.sla_deadline
+    order.prep_deadline = await compute_prep_deadline(session, order, now)
     await session.flush()
 
     await record_audit(
@@ -1115,6 +1155,7 @@ async def get_order_detail(
         created_at=order.created_at,
         delivered_at=order.delivered_at,
         sla_deadline=order.sla_deadline,
+        prep_deadline=order.prep_deadline,
         timeline=timeline,
         chat=chat,
         route=route,

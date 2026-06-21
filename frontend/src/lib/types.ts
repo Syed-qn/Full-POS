@@ -100,6 +100,8 @@ export interface OrderOut {
   rider_name: string | null;
   /** ISO 8601 — when the 40-min SLA clock started (order confirmed). */
   sla_started_at: string | null;
+  /** ISO 8601 — distance-driven kitchen "plate by" deadline (null if no drop-off pin). */
+  prep_deadline: string | null;
   created_at: string;
   address: string | null;
   lat: number | null;
@@ -194,6 +196,7 @@ export interface OrderDetailOut {
   created_at: string;
   delivered_at: string | null;
   sla_deadline: string | null;
+  prep_deadline: string | null;
   timeline: TimelineEventOut[];
   chat: ChatMessageOut[];
   route: GpsPingOut[];

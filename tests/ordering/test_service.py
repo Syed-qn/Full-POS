@@ -409,3 +409,73 @@ async def test_order_has_rider_id_column(db_session, restaurant):
     # performance JSONB default present
     assert rider.performance["on_time_pct"] == 100.0
     assert rider.performance["total_deliveries"] == 0
+
+
+async def test_prep_deadline_is_distance_driven(db_session, restaurant):
+    """Kitchen plate-by deadline shrinks with delivery distance and is null without a pin."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.ordering.models import Order
+    from app.ordering.service import compute_prep_deadline
+
+    c = Customer(
+        restaurant_id=restaurant.id, phone="+971507000001", name="P",
+        usual_order_times={}, tags={}, total_orders=0, total_spend="0.00",
+    )
+    db_session.add(c)
+    await db_session.flush()
+    near = CustomerAddress(customer_id=c.id, latitude=25.2050, longitude=55.2710, confirmed=True)
+    far = CustomerAddress(customer_id=c.id, latitude=25.2500, longitude=55.3200, confirmed=True)
+    db_session.add_all([near, far])
+    await db_session.flush()
+
+    def _order(num, addr_id):
+        o = Order(
+            restaurant_id=restaurant.id, customer_id=c.id, order_number=num,
+            status="confirmed", subtotal=Decimal("10.00"), total=Decimal("10.00"),
+            address_id=addr_id,
+        )
+        db_session.add(o)
+        return o
+
+    o_near, o_far, o_none = _order("P1", near.id), _order("P2", far.id), _order("P3", None)
+    await db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    d_near = await compute_prep_deadline(db_session, o_near, now)
+    d_far = await compute_prep_deadline(db_session, o_far, now)
+    d_none = await compute_prep_deadline(db_session, o_none, now)
+
+    assert d_none is None  # no drop-off pin -> no drive leg -> no deadline
+    assert d_near is not None and d_far is not None
+    # Farther delivery eats more of the 40-min budget -> kitchen must plate EARLIER.
+    assert now <= d_far < d_near
+    # Never looser than the customer SLA itself.
+    assert d_near <= now + timedelta(minutes=40)
+
+
+async def test_finalize_confirmation_sets_prep_deadline(db_session, restaurant):
+    """Confirming an order populates prep_deadline alongside the SLA clock."""
+    from app.ordering.models import Order
+    from app.ordering.service import finalize_confirmation
+
+    c = Customer(
+        restaurant_id=restaurant.id, phone="+971507000002", name="Q",
+        usual_order_times={}, tags={}, total_orders=0, total_spend="0.00",
+    )
+    db_session.add(c)
+    await db_session.flush()
+    addr = CustomerAddress(customer_id=c.id, latitude=25.2055, longitude=55.2715, confirmed=True)
+    db_session.add(addr)
+    await db_session.flush()
+    o = Order(
+        restaurant_id=restaurant.id, customer_id=c.id, order_number="Q1",
+        status="draft", subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        address_id=addr.id,
+    )
+    db_session.add(o)
+    await db_session.flush()
+
+    await finalize_confirmation(db_session, order=o)
+    assert o.prep_deadline is not None
+    assert o.sla_confirmed_at < o.prep_deadline <= o.sla_deadline

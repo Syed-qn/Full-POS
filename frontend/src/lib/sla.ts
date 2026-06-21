@@ -37,3 +37,12 @@ export function formatCountdown(ms: number): string {
   const ss = String(totalSec % 60).padStart(2, "0");
   return `${mm}:${ss}`;
 }
+
+/** Milliseconds remaining until an absolute deadline (negative once past it). */
+export function remainingToDeadline(
+  deadlineIso: string | null,
+  now: number = Date.now()
+): number | null {
+  if (!deadlineIso) return null;
+  return Date.parse(deadlineIso) - now;
+}
