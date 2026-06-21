@@ -30,3 +30,7 @@ build/
 # Firebase service-account key (FCM) — never commit
 *firebase-adminsdk*.json
 google-services.json
+
+# Stray root npm artifacts (no root package.json — frontend has its own)
+/node_modules/
+/package-lock.json
