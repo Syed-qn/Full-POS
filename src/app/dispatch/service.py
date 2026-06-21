@@ -35,6 +35,7 @@ from app.audit.service import record_audit
 from app.config import get_settings
 from app.dispatch.batching import OrderCandidate, build_batches, compute_batch_total_est_min
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
+from app.dispatch.optimizer import OptOrder, OptRider, optimize_dispatch
 from app.dispatch.scoring import RiderCandidate, rank_riders
 from app.geo.factory import get_geo_provider
 from app.geo.haversine import distance_km
@@ -144,6 +145,182 @@ async def _dropoff_coords(
     return coords
 
 
+async def _commit_route(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider: Rider,
+    stops: list[tuple[Order, float, float]],
+    total_est: int,
+    algorithm_score: dict,
+    now: datetime,
+) -> int:
+    """Persist one rider's route: Batch + BatchOrder + Assignment, flip statuses, audit,
+    and push-notify the rider. Shared by both the greedy and OR-Tools engines so the
+    write path (and its audit trail) is identical. Returns the number of orders assigned.
+    """
+    batch = Batch(
+        restaurant_id=restaurant_id,
+        rider_id=rider.id,
+        status="planned",
+        route={"stops": [{"order_id": o.id, "lat": lat, "lon": lon} for o, lat, lon in stops]},
+        total_est_min=total_est,
+    )
+    session.add(batch)
+    await session.flush()
+
+    for seq, (order, _lat, _lon) in enumerate(stops, start=1):
+        before = {"status": order.status, "rider_id": order.rider_id}
+        order.status = "assigned"
+        order.rider_id = rider.id
+        session.add(BatchOrder(batch_id=batch.id, order_id=order.id, sequence=seq))
+        session.add(
+            Assignment(
+                order_id=order.id,
+                rider_id=rider.id,
+                batch_id=batch.id,
+                assigned_at=now,
+                algorithm_score=algorithm_score,
+            )
+        )
+        await record_audit(
+            session,
+            actor="system",
+            restaurant_id=restaurant_id,
+            entity="order",
+            entity_id=str(order.id),
+            action="state_transition",
+            before=before,
+            after={"status": "assigned", "rider_id": rider.id},
+        )
+
+    rider.status = "on_delivery"
+    # App-only rider flow: notify by PUSH (native app), never WhatsApp. Best-effort.
+    from app.dispatch.rider_app import notify_rider_assigned
+
+    try:
+        await notify_rider_assigned(session, rider=rider, order_count=len(stops))
+    except Exception:  # noqa: BLE001 - push is best-effort
+        _logger.exception("assignment push failed for rider %s", rider.id)
+    return len(stops)
+
+
+async def _dispatch_ortools(
+    session: AsyncSession,
+    *,
+    restaurant: Restaurant,
+    restaurant_id: int,
+    candidates: list[OrderCandidate],
+    orders_by_id: dict[int, Order],
+    origin: tuple[float, float] | None,
+    geo,
+    now: datetime,
+    customer_sla_min: int,
+) -> DispatchResult:
+    """SLA-first VRP dispatch (opt-in per restaurant). Optimises routes + assignment in
+    one solve, drops orders that can't meet SLA, and warns the manager about the drops.
+
+    Scope (phase 3a): plans the unassigned ready orders over the available riders. The
+    materialised write path is identical to greedy (``_commit_route``)."""
+    result = DispatchResult()
+    if origin is None:
+        # No restaurant coords -> can't build a travel model; leave for the greedy path.
+        result.needs_retry = True
+        return result
+
+    riders = (
+        await session.scalars(
+            select(Rider).where(
+                Rider.restaurant_id == restaurant_id,
+                Rider.status == "available",
+            )
+        )
+    ).all()
+    positions = await _latest_rider_positions(session, restaurant_id)
+
+    opt_orders = [
+        OptOrder(
+            order_id=c.order_id,
+            lat=c.lat,
+            lon=c.lon,
+            minutes_elapsed=c.minutes_elapsed,
+            priority=c.priority,
+        )
+        for c in candidates
+    ]
+    opt_riders = [
+        OptRider(
+            rider_id=rd.id,
+            lat=positions.get(rd.id, (restaurant.lat, restaurant.lng))[0],
+            lon=positions.get(rd.id, (restaurant.lat, restaurant.lng))[1],
+            active_load=await _active_order_count(session, rd.id),
+        )
+        for rd in riders
+    ]
+    coords = {c.order_id: (c.lat, c.lon) for c in candidates}
+    riders_by_id = {rd.id: rd for rd in riders}
+
+    plan = optimize_dispatch(
+        orders=opt_orders,
+        riders=opt_riders,
+        origin=origin,
+        customer_sla_min=customer_sla_min,
+        geo_provider=geo,
+    )
+
+    for route in plan.routes:
+        rider = riders_by_id.get(route.rider_id)
+        if rider is None:
+            continue
+        stops = [(orders_by_id[oid], *coords[oid]) for oid in route.order_ids]
+        total_est = max(
+            (int(round(route.projected_minutes.get(oid, 0))) for oid in route.order_ids),
+            default=1,
+        )
+        result.assigned_count += await _commit_route(
+            session,
+            restaurant_id=restaurant_id,
+            rider=rider,
+            stops=stops,
+            total_est=max(1, total_est),
+            algorithm_score={
+                "engine": "ortools",
+                "projected_min": {
+                    str(oid): round(route.projected_minutes.get(oid, 0), 1)
+                    for oid in route.order_ids
+                },
+            },
+            now=now,
+        )
+
+    if plan.unassigned:
+        # Best-effort: these couldn't be served within SLA now (no capacity or already
+        # too late). Leave them ready and warn the manager — same intent as the greedy
+        # predictive-breach alert, aggregated for the whole drop set.
+        result.unassigned_count += len(plan.unassigned)
+        result.needs_retry = True
+        numbers = ", ".join(
+            orders_by_id[oid].order_number for oid in plan.unassigned
+        )
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=restaurant.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": (
+                    f"⚠️ {len(plan.unassigned)} order(s) can't meet the {customer_sla_min}-min "
+                    f"SLA with current riders: {numbers}. Add a rider or mark priority now."
+                )
+            },
+            idempotency_key=(
+                f"slabreach-opt-{restaurant_id}-"
+                f"{min(plan.unassigned)}-{int(now.timestamp() // 60)}"
+            ),
+        )
+    return result
+
+
 async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult:
     restaurant = await session.get(Restaurant, restaurant_id)
     now = datetime.now(timezone.utc)
@@ -229,8 +406,25 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
         if restaurant.lat is not None and restaurant.lng is not None
         else None
     )
-    batches = build_batches(candidates, geo_provider=geo, origin=origin)
     orders_by_id = {o.id: o for o in ready}
+
+    # Per-restaurant engine flag (spec §4.3). Default greedy; "ortools" opts into the
+    # SLA-first VRP optimizer. Unknown values fall back to greedy.
+    engine = (restaurant.settings or {}).get("dispatch_engine", "greedy")
+    if engine == "ortools" and candidates:
+        return await _dispatch_ortools(
+            session,
+            restaurant=restaurant,
+            restaurant_id=restaurant_id,
+            candidates=candidates,
+            orders_by_id=orders_by_id,
+            origin=origin,
+            geo=geo,
+            now=now,
+            customer_sla_min=_customer_sla_min,
+        )
+
+    batches = build_batches(candidates, geo_provider=geo, origin=origin)
     result = DispatchResult()
 
     for planned in batches:
@@ -314,62 +508,18 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
         rider = next(rd for rd in riders if rd.id == best_id)
 
         total_est = compute_batch_total_est_min(planned, geo_provider=geo, origin=origin)
-        batch = Batch(
+        stops = [
+            (orders_by_id[pc.order_id], pc.lat, pc.lon) for pc in planned.orders
+        ]
+        result.assigned_count += await _commit_route(
+            session,
             restaurant_id=restaurant_id,
-            rider_id=rider.id,
-            status="planned",
-            route={
-                "stops": [
-                    {"order_id": pc.order_id, "lat": pc.lat, "lon": pc.lon}
-                    for pc in planned.orders
-                ]
-            },
-            total_est_min=total_est,
+            rider=rider,
+            stops=stops,
+            total_est=total_est,
+            algorithm_score=scored[0].breakdown,
+            now=now,
         )
-        session.add(batch)
-        await session.flush()
-
-        for seq, pc in enumerate(planned.orders, start=1):
-            order = orders_by_id[pc.order_id]
-            before = {"status": order.status, "rider_id": order.rider_id}
-            order.status = "assigned"
-            order.rider_id = rider.id
-            session.add(
-                BatchOrder(batch_id=batch.id, order_id=order.id, sequence=seq)
-            )
-            session.add(
-                Assignment(
-                    order_id=order.id,
-                    rider_id=rider.id,
-                    batch_id=batch.id,
-                    assigned_at=now,
-                    algorithm_score=scored[0].breakdown,
-                )
-            )
-            await record_audit(
-                session,
-                actor="system",
-                restaurant_id=restaurant_id,
-                entity="order",
-                entity_id=str(order.id),
-                action="state_transition",
-                before=before,
-                after={"status": "assigned", "rider_id": rider.id},
-            )
-            result.assigned_count += 1
-
-        rider.status = "on_delivery"
-        # App-only rider flow: the rider is notified by PUSH (native app), never
-        # WhatsApp. They open the app → GPS streams and the run shows up. Best-effort:
-        # never let a push failure break dispatch.
-        from app.dispatch.rider_app import notify_rider_assigned
-
-        try:
-            await notify_rider_assigned(
-                session, rider=rider, order_count=len(planned.orders)
-            )
-        except Exception:  # noqa: BLE001 - push is best-effort
-            _logger.exception("assignment push failed for rider %s", rider.id)
 
     return result
 

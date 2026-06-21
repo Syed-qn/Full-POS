@@ -20,8 +20,11 @@ from app.ordering.models import Customer, CustomerAddress, Order
 from app.outbox.models import OutboxMessage
 
 
-async def _seed_restaurant(db_session, lat=25.2048, lng=55.2708):
-    r = Restaurant(name="R", phone="+9710000000", password_hash="x", lat=lat, lng=lng)
+async def _seed_restaurant(db_session, lat=25.2048, lng=55.2708, dispatch_engine="greedy"):
+    r = Restaurant(
+        name="R", phone="+9710000000", password_hash="x", lat=lat, lng=lng,
+        settings={"dispatch_engine": dispatch_engine},
+    )
     db_session.add(r)
     await db_session.flush()
     return r
@@ -404,6 +407,60 @@ async def test_unassigned_order_within_sla_no_breach_warning(db_session):
     ).all()
     bodies = " ".join(str(m.payload) for m in msgs).lower()
     assert "cannot" not in bodies and "can't" not in bodies
+
+
+async def test_ortools_engine_assigns_and_tags_score(db_session):
+    """With the per-restaurant flag set to 'ortools', dispatch runs the VRP optimizer,
+    assigns orders, and tags the assignment score with engine=ortools."""
+    r = await _seed_restaurant(db_session, dispatch_engine="ortools")
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000044", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    o1 = await _ready_order(db_session, r.id, 25.2050, 55.2710, 41)
+    o2 = await _ready_order(db_session, r.id, 25.2055, 55.2715, 42)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(o1)
+    await db_session.refresh(o2)
+    assert o1.status == "assigned" and o2.status == "assigned"
+    assert result.assigned_count == 2
+    a = await db_session.scalar(select(Assignment).where(Assignment.order_id == o1.id))
+    assert a.algorithm_score.get("engine") == "ortools"
+
+
+async def test_ortools_engine_drops_impossible_and_warns(db_session):
+    """OR-Tools engine: an order already past SLA is dropped (left ready) and the
+    manager is warned; a feasible order in the same run is still assigned."""
+    r = await _seed_restaurant(db_session, dispatch_engine="ortools")
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000045", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    good = await _ready_order(db_session, r.id, 25.2050, 55.2710, 43, minutes_since_sla=2)
+    late = await _ready_order(db_session, r.id, 25.2300, 55.3200, 44, minutes_since_sla=50)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(good)
+    await db_session.refresh(late)
+    assert good.status == "assigned"
+    assert late.status == "ready"  # dropped, not faked into a doomed route
+    alert = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+    )
+    assert alert is not None and "O44" in str(alert.payload)
 
 
 async def test_rider_set_on_delivery_and_batch_created(db_session):

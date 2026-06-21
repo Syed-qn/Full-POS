@@ -16,6 +16,10 @@ DEFAULT_SETTINGS: dict = {
         {"max_km": 10, "fee_aed": 10},
     ],
     "max_radius_km": 10,
+    # Dispatch engine per restaurant (spec §4.3). "greedy" = proximity batching
+    # (default, safe). "ortools" = SLA-first VRP route optimizer (opt-in pilot).
+    # Existing rows without this key read as "greedy" via .get() in the service.
+    "dispatch_engine": "greedy",
 }
 
 

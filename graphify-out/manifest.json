@@ -805,9 +805,9 @@
     "semantic_hash": "1f4e40918e5c20e9dcffd583b0a7e8db"
   },
   "src/app/identity/models.py": {
-    "mtime": 1782052600.5849652,
-    "ast_hash": "c40c3c98be62f825bba3d17775af284d",
-    "semantic_hash": "c40c3c98be62f825bba3d17775af284d"
+    "mtime": 1782069754.7974403,
+    "ast_hash": "3706f978328e8ec1a2b83fa66e80ba4f",
+    "semantic_hash": "3706f978328e8ec1a2b83fa66e80ba4f"
   },
   "src/app/identity/router.py": {
     "mtime": 1782052600.5889373,
@@ -2343,5 +2343,15 @@
     "mtime": 1782052600.5269003,
     "ast_hash": "2dd651ad85c54e2fabf08e87eafe64b6",
     "semantic_hash": "2dd651ad85c54e2fabf08e87eafe64b6"
+  },
+  "src/app/dispatch/optimizer.py": {
+    "mtime": 1782069551.793712,
+    "ast_hash": "5d1124f67d4c5efb63037338f3794d33",
+    "semantic_hash": "5d1124f67d4c5efb63037338f3794d33"
+  },
+  "tests/dispatch/test_optimizer.py": {
+    "mtime": 1782069603.0150826,
+    "ast_hash": "3e495904a2a6253f0b9a98f561102ada",
+    "semantic_hash": "3e495904a2a6253f0b9a98f561102ada"
   }
 }
