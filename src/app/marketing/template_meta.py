@@ -24,6 +24,7 @@ Auto-delete EOD and poll are in worker/service (not here).
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 from urllib.parse import urlencode
 
@@ -35,6 +36,23 @@ from app.marketing.template_port import (
     TemplateSpec,
     TemplateStatus,
 )
+
+_BODY_VAR_RE = re.compile(r"\{\{\s*(\d+)\s*\}\}")
+
+
+def _body_example_values(body: str) -> list[str] | None:
+    """One sample value per ``{{n}}`` placeholder in the body, in order.
+
+    Meta REQUIRES an example for every BODY variable: without it an IMAGE-header
+    template is rejected with a hard 400 (subcode 2388043 "component of type BODY
+    is missing expected field(s) (example)") and a text-only template is
+    auto-rejected. ``{{1}}`` is the customer's name by this app's convention
+    (copywriter greets with it); generic sample for any further variables.
+    """
+    nums = sorted({int(n) for n in _BODY_VAR_RE.findall(body or "")})
+    if not nums:
+        return None
+    return ["Ahmed" if i == 1 else "Sample" for i in nums]
 
 
 def _get_graph_base() -> str:
@@ -57,7 +75,11 @@ def _build_components(spec: TemplateSpec, *, header_handle: str | None = None) -
             comp["example"] = {"header_handle": [h] if h else []}
         components.append(comp)
 
-    components.append({"type": "BODY", "text": spec.body})
+    body_comp: dict[str, Any] = {"type": "BODY", "text": spec.body}
+    body_examples = _body_example_values(spec.body)
+    if body_examples:
+        body_comp["example"] = {"body_text": [body_examples]}
+    components.append(body_comp)
 
     if spec.footer:
         components.append({"type": "FOOTER", "text": spec.footer})
