@@ -111,6 +111,22 @@ def test_locked_order_stays_with_its_current_rider():
     assert route_for_2.rider_id == 2
 
 
+def test_infeasible_locked_order_drops_without_blocking_others():
+    """A locked (already-assigned) order that can no longer meet SLA must fall out of the
+    plan ('leave as-is') rather than making the whole solve infeasible — the feasible
+    free order is still served."""
+    orders = [
+        _order(1, 25.2050, 55.2710, elapsed=2.0),                     # free, easy
+        _order(2, 25.2300, 55.3200, elapsed=50.0, locked_rider_id=2),  # locked, already late
+    ]
+    plan = optimize_dispatch(
+        orders=orders, riders=[_rider(1), _rider(2)], origin=DEPOT
+    )
+    served = {oid for r in plan.routes for oid in r.order_ids}
+    assert 1 in served
+    assert 2 in plan.unassigned
+
+
 def test_no_riders_drops_everything():
     """No riders -> nothing can be served, all orders returned as unassigned."""
     orders = [_order(1, 25.2050, 55.2710), _order(2, 25.2055, 55.2715)]

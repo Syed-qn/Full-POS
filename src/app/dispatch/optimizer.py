@@ -50,6 +50,10 @@ _SCALE = 100
 # Dropping an order must always cost more than any conceivable route, so the solver
 # only drops when an order genuinely cannot be served within the SLA.
 _DROP_PENALTY = 10_000_000
+# Locked (already-assigned) orders are far more expensive to drop — the solver keeps
+# them on their current rider unless they are genuinely infeasible, in which case a drop
+# means "leave the existing assignment untouched" rather than blocking the whole plan.
+_LOCKED_DROP_PENALTY = 100_000_000
 
 
 @dataclass
@@ -219,8 +223,15 @@ def optimize_dispatch(
         index = manager.NodeToIndex(node)
         time_dim.CumulVar(index).SetMax(_budget_units(order, customer_sla_min))
         if order.locked_rider_id is not None and order.locked_rider_id in rider_index:
-            # Pinned to its current rider; mandatory (no drop).
-            routing.VehicleVar(index).SetValue(rider_index[order.locked_rider_id])
+            # Pinned to its current rider: forbid every OTHER vehicle, but still allow a
+            # drop (sentinel -1) at a very high penalty so an infeasible locked order
+            # falls out of the plan ("leave as-is") instead of making the whole solve
+            # infeasible and blocking new dispatch.
+            v = rider_index[order.locked_rider_id]
+            for w in range(n_vehicles):
+                if w != v:
+                    routing.solver().Add(routing.VehicleVar(index) != w)
+            routing.AddDisjunction([index], _LOCKED_DROP_PENALTY)
         else:
             # Droppable at high penalty → serve as many as possible, then min drive.
             routing.AddDisjunction([index], _DROP_PENALTY)

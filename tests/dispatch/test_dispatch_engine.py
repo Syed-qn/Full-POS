@@ -11,7 +11,7 @@ Schema adaptation (per Phase-3 T2 flags — NO new migration):
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
 from app.dispatch.service import run_dispatch_engine
@@ -461,6 +461,73 @@ async def test_ortools_engine_drops_impossible_and_warns(db_session):
         select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
     )
     assert alert is not None and "O44" in str(alert.payload)
+
+
+async def test_ortools_busy_rider_absorbs_new_nearby_order(db_session):
+    """Phase 3b: a new ready order is added to an in-flight rider's route (their already-
+    assigned order participates as locked context) when no free rider is available —
+    instead of sitting unassigned. Re-running is idempotent (no duplicate batch rows)."""
+    r = await _seed_restaurant(db_session, dispatch_engine="ortools")
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000046", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    o1 = await _ready_order(db_session, r.id, 25.2050, 55.2710, 46, minutes_since_sla=2)
+    await db_session.commit()
+
+    # First run assigns o1 to the only rider (rider -> on_delivery).
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(o1)
+    await db_session.refresh(rider)
+    assert o1.status == "assigned" and rider.status == "on_delivery"
+
+    # A new nearby order arrives; the rider is busy (no free rider).
+    o2 = await _ready_order(db_session, r.id, 25.2052, 55.2712, 47, minutes_since_sla=1)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(o1)
+    await db_session.refresh(o2)
+    # New order absorbed by the in-flight rider; original still on that rider.
+    assert o2.status == "assigned" and o2.rider_id == rider.id
+    assert o1.rider_id == rider.id
+    # Idempotent: each order maps to exactly one BatchOrder (unique constraint holds).
+    for oid in (o1.id, o2.id):
+        cnt = await db_session.scalar(
+            select(func.count(BatchOrder.id)).where(BatchOrder.order_id == oid)
+        )
+        assert cnt == 1
+
+
+async def test_ortools_reopt_unchanged_route_is_noop(db_session):
+    """Re-running dispatch with no new orders does not churn an already-optimal route."""
+    r = await _seed_restaurant(db_session, dispatch_engine="ortools")
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000048", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    o1 = await _ready_order(db_session, r.id, 25.2050, 55.2710, 49, minutes_since_sla=2)
+    await db_session.commit()
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    batch_count_1 = await db_session.scalar(select(func.count(Batch.id)))
+
+    # No new orders -> second run is a no-op (no new batch, no error).
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    batch_count_2 = await db_session.scalar(select(func.count(Batch.id)))
+    assert batch_count_2 == batch_count_1
+    assert result.assigned_count == 0
 
 
 async def test_rider_set_on_delivery_and_batch_created(db_session):

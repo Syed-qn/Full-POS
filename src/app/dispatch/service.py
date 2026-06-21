@@ -25,9 +25,9 @@ Schema adaptation (Phase-3 T2 flags — NO new migration required):
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,7 +41,7 @@ from app.geo.factory import get_geo_provider
 from app.geo.haversine import distance_km
 from app.identity.models import Restaurant, Rider
 from app.ordering.fsm import OrderStatus
-from app.ordering.models import CustomerAddress, Order
+from app.ordering.models import Customer, CustomerAddress, Order
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
 
@@ -220,34 +220,75 @@ async def _dispatch_ortools(
     """SLA-first VRP dispatch (opt-in per restaurant). Optimises routes + assignment in
     one solve, drops orders that can't meet SLA, and warns the manager about the drops.
 
-    Scope (phase 3a): plans the unassigned ready orders over the available riders. The
-    materialised write path is identical to greedy (``_commit_route``)."""
+    Scope (phase 3b): re-optimises UNASSIGNED ready orders together with ASSIGNED-but-
+    not-yet-picked orders. Already-assigned orders are locked to their current rider
+    (never moved cross-rider — no churn of a rider's identity) but may be re-sequenced or
+    have a new nearby order inserted before them; when that shifts a customer's ETA we
+    message them. A locked order that can no longer meet SLA simply falls out of the
+    re-plan (its existing assignment is left untouched). Write path = ``_commit_route``.
+    """
     result = DispatchResult()
     if origin is None:
         # No restaurant coords -> can't build a travel model; leave for the greedy path.
         result.needs_retry = True
         return result
 
+    ready_ids = {c.order_id for c in candidates}
+
+    # Assigned-but-not-picked orders are eligible for re-optimisation (food not yet
+    # collected, so re-sequencing is safe). picked_up / arriving are left alone.
+    movable = (
+        await session.scalars(
+            select(Order).where(
+                Order.restaurant_id == restaurant_id,
+                Order.status == str(OrderStatus.ASSIGNED),
+                Order.rider_id.is_not(None),
+            )
+        )
+    ).all()
+    movable_coords = await _dropoff_coords(session, list(movable))
+    movable = [m for m in movable if m.id in movable_coords]  # need a drop pin
+    movable_ids = {m.id for m in movable}
+
+    orders_by_id = dict(orders_by_id)
+    coords = {c.order_id: (c.lat, c.lon) for c in candidates}
+    for m in movable:
+        orders_by_id[m.id] = m
+        coords[m.id] = movable_coords[m.id]
+
+    # Vehicle pool: available riders + the (busy) riders currently holding movable orders.
+    busy_rider_ids = {m.rider_id for m in movable}
     riders = (
         await session.scalars(
             select(Rider).where(
                 Rider.restaurant_id == restaurant_id,
-                Rider.status == "available",
+                (Rider.status == "available") | (Rider.id.in_(busy_rider_ids)),
             )
         )
     ).all()
+    riders_by_id = {rd.id: rd for rd in riders}
     positions = await _latest_rider_positions(session, restaurant_id)
 
     opt_orders = [
         OptOrder(
-            order_id=c.order_id,
-            lat=c.lat,
-            lon=c.lon,
-            minutes_elapsed=c.minutes_elapsed,
-            priority=c.priority,
+            order_id=c.order_id, lat=c.lat, lon=c.lon,
+            minutes_elapsed=c.minutes_elapsed, priority=c.priority,
         )
         for c in candidates
     ]
+    for m in movable:
+        if m.rider_id not in riders_by_id:
+            continue  # rider not loadable -> leave this order as-is
+        opt_orders.append(
+            OptOrder(
+                order_id=m.id,
+                lat=movable_coords[m.id][0],
+                lon=movable_coords[m.id][1],
+                minutes_elapsed=_minutes_since_sla(m, now),
+                priority=m.priority or "normal",
+                locked_rider_id=m.rider_id,
+            )
+        )
     opt_riders = [
         OptRider(
             rider_id=rd.id,
@@ -257,27 +298,52 @@ async def _dispatch_ortools(
         )
         for rd in riders
     ]
-    coords = {c.order_id: (c.lat, c.lon) for c in candidates}
-    riders_by_id = {rd.id: rd for rd in riders}
 
     plan = optimize_dispatch(
-        orders=opt_orders,
-        riders=opt_riders,
-        origin=origin,
-        customer_sla_min=customer_sla_min,
-        geo_provider=geo,
+        orders=opt_orders, riders=opt_riders, origin=origin,
+        customer_sla_min=customer_sla_min, geo_provider=geo,
     )
+
+    # Current per-rider sequence of movable orders (to detect unchanged routes).
+    current: dict[int, list[int]] = {}
+    if movable_ids:
+        rows = (
+            await session.execute(
+                select(BatchOrder.order_id, Batch.rider_id, BatchOrder.sequence)
+                .join(Batch, BatchOrder.batch_id == Batch.id)
+                .where(BatchOrder.order_id.in_(movable_ids))
+                .order_by(BatchOrder.sequence)
+            )
+        ).all()
+        for order_id, rider_id, _seq in rows:
+            current.setdefault(rider_id, []).append(order_id)
 
     for route in plan.routes:
         rider = riders_by_id.get(route.rider_id)
         if rider is None:
             continue
-        stops = [(orders_by_id[oid], *coords[oid]) for oid in route.order_ids]
+        new_ids = route.order_ids
+        # Unchanged route (same movable orders, same order, nothing new) -> no churn.
+        if new_ids == current.get(rider.id, []) and not (set(new_ids) & ready_ids):
+            continue
+
+        # Tear down any existing batch rows for the movable orders we are re-placing
+        # (BatchOrder.order_id is unique, so the old row must go before re-committing).
+        movable_in_route = [oid for oid in new_ids if oid in movable_ids]
+        if movable_in_route:
+            await session.execute(
+                delete(BatchOrder).where(BatchOrder.order_id.in_(movable_in_route))
+            )
+            await session.execute(
+                delete(Assignment).where(Assignment.order_id.in_(movable_in_route))
+            )
+
+        stops = [(orders_by_id[oid], *coords[oid]) for oid in new_ids]
         total_est = max(
-            (int(round(route.projected_minutes.get(oid, 0))) for oid in route.order_ids),
+            (int(round(route.projected_minutes.get(oid, 0))) for oid in new_ids),
             default=1,
         )
-        result.assigned_count += await _commit_route(
+        await _commit_route(
             session,
             restaurant_id=restaurant_id,
             rider=rider,
@@ -287,21 +353,41 @@ async def _dispatch_ortools(
                 "engine": "ortools",
                 "projected_min": {
                     str(oid): round(route.projected_minutes.get(oid, 0), 1)
-                    for oid in route.order_ids
+                    for oid in new_ids
                 },
             },
             now=now,
         )
+        result.assigned_count += sum(1 for oid in new_ids if oid in ready_ids)
 
-    if plan.unassigned:
-        # Best-effort: these couldn't be served within SLA now (no capacity or already
-        # too late). Leave them ready and warn the manager — same intent as the greedy
-        # predictive-breach alert, aggregated for the whole drop set.
-        result.unassigned_count += len(plan.unassigned)
-        result.needs_retry = True
-        numbers = ", ".join(
-            orders_by_id[oid].order_number for oid in plan.unassigned
+        # Proactively message customers whose ETA shifted because of the re-plan.
+        for oid in new_ids:
+            if oid not in movable_ids:
+                continue
+            await _notify_eta_change(
+                session,
+                restaurant_id=restaurant_id,
+                order=orders_by_id[oid],
+                projected_min=route.projected_minutes.get(oid, 0.0),
+                now=now,
+            )
+
+    # Remove any batches left empty by the teardown above.
+    await session.flush()
+    await session.execute(
+        delete(Batch).where(
+            Batch.restaurant_id == restaurant_id,
+            Batch.id.not_in(select(BatchOrder.batch_id)),
         )
+    )
+
+    # Best-effort: only READY orders that were dropped are a manager problem; dropped
+    # movable orders simply keep their existing assignment.
+    dropped_ready = [oid for oid in plan.unassigned if oid in ready_ids]
+    if dropped_ready:
+        result.unassigned_count += len(dropped_ready)
+        result.needs_retry = True
+        numbers = ", ".join(orders_by_id[oid].order_number for oid in dropped_ready)
         await enqueue_message(
             session,
             restaurant_id=restaurant_id,
@@ -309,16 +395,68 @@ async def _dispatch_ortools(
             msg_type=OutboundMessageType.TEXT,
             payload={
                 "body": (
-                    f"⚠️ {len(plan.unassigned)} order(s) can't meet the {customer_sla_min}-min "
+                    f"⚠️ {len(dropped_ready)} order(s) can't meet the {customer_sla_min}-min "
                     f"SLA with current riders: {numbers}. Add a rider or mark priority now."
                 )
             },
             idempotency_key=(
                 f"slabreach-opt-{restaurant_id}-"
-                f"{min(plan.unassigned)}-{int(now.timestamp() // 60)}"
+                f"{min(dropped_ready)}-{int(now.timestamp() // 60)}"
             ),
         )
     return result
+
+
+def _minutes_since_sla(order: Order, now: datetime) -> float:
+    """Minutes since the order's SLA clock started (0 if unset)."""
+    if order.sla_confirmed_at is None:
+        return 0.0
+    sla = order.sla_confirmed_at
+    if sla.tzinfo is None:
+        sla = sla.replace(tzinfo=timezone.utc)
+    return max(0.0, (now - sla).total_seconds() / 60.0)
+
+
+async def _notify_eta_change(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    order: Order,
+    projected_min: float,
+    now: datetime,
+) -> None:
+    """If a re-plan shifted an order's ETA by more than 5 min, message the customer and
+    update ``promised_eta``. Idempotent per order per target-ETA minute (no spam)."""
+    if order.sla_confirmed_at is None:
+        return
+    base = order.sla_confirmed_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    new_eta = base + timedelta(minutes=projected_min)
+    old = order.promised_eta
+    if old is not None and old.tzinfo is None:
+        old = old.replace(tzinfo=timezone.utc)
+    if old is not None and abs((new_eta - old).total_seconds()) <= 5 * 60:
+        return  # change too small to bother the customer
+
+    order.promised_eta = new_eta
+    customer = await session.get(Customer, order.customer_id)
+    if customer is None:
+        return
+    eta_min = max(1, int(round((new_eta - now).total_seconds() / 60.0)))
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=customer.phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={
+            "body": (
+                f"Update on your order {order.order_number}: it's now arriving in about "
+                f"{eta_min} min. Thanks for your patience! 🙏"
+            )
+        },
+        idempotency_key=f"eta-change-{order.id}-{int(new_eta.timestamp() // 60)}",
+    )
 
 
 async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult:
