@@ -740,9 +740,9 @@
     "semantic_hash": "1166ddb1136c21b0405a6941fa3aa416"
   },
   "src/app/dispatch/service.py": {
-    "mtime": 1782067734.2438056,
-    "ast_hash": "1c9db0e34d45d42fd177aaf288ddef40",
-    "semantic_hash": "1c9db0e34d45d42fd177aaf288ddef40"
+    "mtime": 1782067926.712909,
+    "ast_hash": "232123419e2bd7d2e2815dd5c4969d7e",
+    "semantic_hash": "232123419e2bd7d2e2815dd5c4969d7e"
   },
   "src/app/dispatch/tracking.py": {
     "mtime": 1780761626.0110302,
@@ -1355,9 +1355,9 @@
     "semantic_hash": "f9d90c48ac04e44040fd1a38fbcb3d9f"
   },
   "tests/dispatch/test_dispatch_engine.py": {
-    "mtime": 1782067734.2458377,
-    "ast_hash": "9c4804f55659b41a5d690b2f71b4ee3e",
-    "semantic_hash": "9c4804f55659b41a5d690b2f71b4ee3e"
+    "mtime": 1782067879.5981987,
+    "ast_hash": "a51b6cca27a13fc9e871b08a18c1d955",
+    "semantic_hash": "a51b6cca27a13fc9e871b08a18c1d955"
   },
   "tests/dispatch/test_dispatch_router.py": {
     "mtime": 1780761763.6019237,
@@ -2100,9 +2100,9 @@
     "semantic_hash": "4be5c139c24715d1dafdd2a4831f169d"
   },
   "understanding.txt": {
-    "mtime": 1782054021.1744304,
-    "ast_hash": "f31607fe8a38183d29e4cadfd88ae574",
-    "semantic_hash": "f31607fe8a38183d29e4cadfd88ae574"
+    "mtime": 1782068036.8676853,
+    "ast_hash": "ff0000210a5ee52261709b301fa6fb24",
+    "semantic_hash": "ff0000210a5ee52261709b301fa6fb24"
   },
   "alembic/versions/a1b2c3d4e5f6_backfill_customer_order_stats.py": {
     "mtime": 1782052600.3461096,

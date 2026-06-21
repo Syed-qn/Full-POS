@@ -353,6 +353,59 @@ async def test_ungeocoded_order_skipped_not_faked_to_restaurant(db_session):
     assert "ONOGEO" in str(alert.payload)
 
 
+async def test_unassigned_order_past_sla_projection_warns_manager(db_session):
+    """Predictive breach warning: when an order can't be assigned (no riders) AND its
+    projected completion already blows the 40-min customer SLA, the manager is warned
+    NOW (at dispatch) rather than only when the 40-min timer trips. Reuses the depot-leg
+    projection (GAP#1) — order 38 min elapsed + ~km drive -> projected > 40."""
+    r = await _seed_restaurant(db_session)  # restaurant at 25.2048,55.2708
+    # No riders available.
+    # Drop-off ~3km away so depot leg adds several minutes on top of 38 elapsed.
+    order = await _ready_order(
+        db_session, r.id, 25.2300, 55.2900, 7, minutes_since_sla=38
+    )
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.status == "ready"
+    assert result.needs_retry is True
+    msgs = (
+        await db_session.scalars(
+            select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+        )
+    ).all()
+    bodies = " ".join(str(m.payload) for m in msgs)
+    # A distinct breach-prediction alert naming the order, not just the generic retry note.
+    assert "O7" in bodies
+    assert "40" in bodies and ("can't" in bodies.lower() or "cannot" in bodies.lower())
+
+
+async def test_unassigned_order_within_sla_no_breach_warning(db_session):
+    """Counterpart: an unassigned order that CAN still make 40 min gets only the normal
+    'waiting, will retry' note — no false breach alarm."""
+    r = await _seed_restaurant(db_session)
+    order = await _ready_order(
+        db_session, r.id, 25.2050, 55.2710, 8, minutes_since_sla=2
+    )
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.status == "ready"
+    msgs = (
+        await db_session.scalars(
+            select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+        )
+    ).all()
+    bodies = " ".join(str(m.payload) for m in msgs).lower()
+    assert "cannot" not in bodies and "can't" not in bodies
+
+
 async def test_rider_set_on_delivery_and_batch_created(db_session):
     r = await _seed_restaurant(db_session)
     rider = Rider(

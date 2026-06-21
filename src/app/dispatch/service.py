@@ -32,6 +32,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
+from app.config import get_settings
 from app.dispatch.batching import OrderCandidate, build_batches, compute_batch_total_est_min
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
 from app.dispatch.scoring import RiderCandidate, rank_riders
@@ -146,6 +147,7 @@ async def _dropoff_coords(
 async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult:
     restaurant = await session.get(Restaurant, restaurant_id)
     now = datetime.now(timezone.utc)
+    _customer_sla_min = get_settings().sla_customer_minutes
 
     ready = (
         await session.scalars(
@@ -260,6 +262,34 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                     f"{int(now.timestamp())}"
                 ),
             )
+            # Predictive breach warning: if this batch could not meet the 40-min
+            # customer SLA even if a rider left RIGHT NOW (projected = elapsed +
+            # depot/route + buffer, per GAP#1), the wait alone guarantees a breach.
+            # Tell the manager now instead of waiting for the 40-min monitor tick —
+            # the only fix is adding a rider or marking the order priority.
+            projected = compute_batch_total_est_min(
+                planned, geo_provider=geo, origin=origin
+            )
+            if projected > _customer_sla_min:
+                numbers = ", ".join(
+                    orders_by_id[pc.order_id].order_number for pc in planned.orders
+                )
+                await enqueue_message(
+                    session,
+                    restaurant_id=restaurant_id,
+                    to_phone=restaurant.phone,
+                    msg_type=OutboundMessageType.TEXT,
+                    payload={
+                        "body": (
+                            f"⚠️ Order(s) {numbers} can't meet the {_customer_sla_min}-min "
+                            f"SLA with current riders (projected ~{projected} min and still "
+                            "waiting). Add a rider or mark priority now."
+                        )
+                    },
+                    idempotency_key=(
+                        f"slabreach-pred-{restaurant_id}-{planned.seed.order_id}"
+                    ),
+                )
             continue
 
         positions = await _latest_rider_positions(session, restaurant_id)
