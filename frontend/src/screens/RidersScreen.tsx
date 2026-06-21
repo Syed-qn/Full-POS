@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { RiderCard } from "../components/RiderCard";
 import { RiderAddModal } from "../components/RiderAddModal";
+import { AppInviteModal } from "../components/AppInviteModal";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
-import { toast } from "../components/Toaster";
-import { deleteRider, fetchRiderAppInfo, fetchRiders, inviteRiderToApp, setRiderStatus } from "../lib/ridersApi";
+import { apiClient } from "../lib/apiClient";
+import { deleteRider, fetchRiderAppInfo, fetchRiders, setRiderStatus } from "../lib/ridersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
-import type { RiderOut, RiderStatus } from "../lib/types";
+import type { RestaurantOut, RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
 
 export function RidersScreen() {
@@ -14,7 +15,9 @@ export function RidersScreen() {
   const [loaded, setLoaded] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<RiderOut | null>(null);
+  const [inviteFor, setInviteFor] = useState<RiderOut | null>(null);
   const [apkUrl, setApkUrl] = useState<string | null>(null);
+  const [restaurantPhone, setRestaurantPhone] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRiders()
@@ -22,6 +25,10 @@ export function RidersScreen() {
       .finally(() => setLoaded(true));
     fetchRiderAppInfo()
       .then((info) => setApkUrl(info.apkUrl))
+      .catch(() => {});
+    apiClient
+      .get<RestaurantOut>("/api/v1/me")
+      .then((me) => setRestaurantPhone(me.phone))
       .catch(() => {});
   }, []);
 
@@ -41,16 +48,11 @@ export function RidersScreen() {
     setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
   }
 
-  async function onInviteApp(id: number) {
-    try {
-      const res = await inviteRiderToApp(id);
-      toast(
-        `Pairing code ${res.code} sent on WhatsApp (valid ${res.expires_in_minutes} min).`,
-        "success",
-      );
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not send the app link.", "error");
-    }
+  function onInviteApp(id: number) {
+    // Open a confirmation dialog (the rider must message the restaurant first so
+    // WhatsApp's 24h window is open) instead of sending immediately.
+    const rider = riders.find((r) => r.id === id);
+    if (rider) setInviteFor(rider);
   }
 
   async function onDelete(id: number) {
@@ -146,6 +148,14 @@ export function RidersScreen() {
           onSaved={(rider) =>
             setRiders((rs) => rs.map((r) => (r.id === rider.id ? rider : r)))
           }
+        />
+      )}
+
+      {inviteFor && (
+        <AppInviteModal
+          rider={inviteFor}
+          restaurantPhone={restaurantPhone}
+          onClose={() => setInviteFor(null)}
         />
       )}
     </div>
