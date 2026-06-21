@@ -1624,6 +1624,12 @@ async def _build_cart_summary(session: AsyncSession, conv) -> str:
     return ", ".join(lines) + f" | Subtotal: AED {_aed(order.subtotal)}"
 
 
+def _cart_tail(cart: str) -> str:
+    """Trailing cart line for edit confirmations so the customer always sees the
+    current cart right after a remove / quantity change."""
+    return f"\n\n🛒 {cart}" if cart else "\n\n🛒 Your cart is now empty."
+
+
 async def _build_history(
     session: AsyncSession,
     conv: Conversation,
@@ -1749,6 +1755,9 @@ async def _build_context(
 
     ctx["delivery_info"] = delivery_info_text(restaurant.settings if restaurant else None)
     ctx["hours_info"] = _hours_info(restaurant)
+    # Contact number the bot can hand out for anything it can't handle (complaints,
+    # special arrangements, off-topic asks) — "please call us on …".
+    ctx["restaurant_phone"] = (restaurant.phone if restaurant else "") or ""
 
     if phase == "ordering":
         ctx["menu_text"] = await _render_menu(session, restaurant_id)
@@ -1900,67 +1909,85 @@ async def _execute_ai_add_item(
     return True
 
 
+async def _resolve_cart_dish(session: AsyncSession, *, order_id: int, candidates):
+    """Pick the matched candidate that is ACTUALLY in the cart, so "remove biryani"
+    / "make it 4" target the dish the customer added even when the name matches
+    several menu items. Returns the in-cart Dish candidate, or None if none of the
+    candidates are in the cart."""
+    from app.ordering.models import OrderItem
+
+    if not candidates:
+        return None
+    ids = {c.id for c in candidates}
+    in_cart = set(
+        (
+            await session.scalars(
+                select(OrderItem.dish_id).where(
+                    OrderItem.order_id == order_id,
+                    OrderItem.dish_id.in_(ids),
+                )
+            )
+        ).all()
+    )
+    for c in candidates:
+        if c.id in in_cart:
+            return c
+    return None
+
+
 async def _execute_ai_remove_item(
     session: AsyncSession, conv: Conversation, restaurant_id: int, dish_query: str
-) -> None:
-    """Remove matching dish from draft order cart."""
-    from app.ordering.models import Order, OrderItem
+) -> tuple[str, str | None]:
+    """Remove a dish entirely from the draft cart.
+
+    Returns ``(outcome, dish_name)`` where outcome is "removed" (taken off),
+    "not_in_cart" (matched a menu dish but it wasn't in the cart), or "no_match"
+    (couldn't match the query / nothing to remove)."""
+    from app.ordering.models import Order
+    from app.ordering.service import remove_item
 
     draft_order_id = conv.state.get("draft_order_id")
     if not draft_order_id or not dish_query:
-        return
+        return ("no_match", None)
     order = await session.get(Order, draft_order_id)
     if order is None:
-        return
+        return ("no_match", None)
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
-        return
-    target_dish_id = result.candidates[0].id
-    item = await session.scalar(
-        select(OrderItem).where(
-            OrderItem.order_id == order.id,
-            OrderItem.dish_id == target_dish_id,
-        )
-    )
-    if item:
-        await session.delete(item)
-        all_items = (await session.scalars(
-            select(OrderItem).where(OrderItem.order_id == order.id)
-        )).all()
-        order.subtotal = sum(Decimal(i.price_aed) * i.qty for i in all_items)
-        order.total = order.subtotal + Decimal(order.delivery_fee_aed or "0")
+        return ("no_match", None)
+    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
+    if dish is None:
+        return ("not_in_cart", result.candidates[0].name)
+    # Remove the whole line — "remove X" means take that dish off the cart.
+    removed = await remove_item(session, order=order, dish=dish, qty=10**9)
+    return ("removed" if removed > 0 else "not_in_cart", dish.name)
 
 
 async def _execute_ai_update_qty(
     session: AsyncSession, conv: Conversation, restaurant_id: int,
     dish_query: str, qty: int
-) -> None:
-    """Update quantity of matching dish in draft order."""
-    from app.ordering.models import Order, OrderItem
+) -> tuple[str, str | None]:
+    """Set a cart dish to an exact quantity (``qty <= 0`` removes it).
+
+    Returns ``(outcome, dish_name)``: "updated", "removed", "not_in_cart", or
+    "no_match"."""
+    from app.ordering.models import Order
+    from app.ordering.service import set_item_qty
 
     draft_order_id = conv.state.get("draft_order_id")
-    if not draft_order_id or not dish_query or qty < 1:
-        return
+    if not draft_order_id or not dish_query:
+        return ("no_match", None)
     order = await session.get(Order, draft_order_id)
     if order is None:
-        return
+        return ("no_match", None)
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
-        return
-    target_dish_id = result.candidates[0].id
-    item = await session.scalar(
-        select(OrderItem).where(
-            OrderItem.order_id == order.id,
-            OrderItem.dish_id == target_dish_id,
-        )
-    )
-    if item:
-        item.qty = qty
-        all_items = (await session.scalars(
-            select(OrderItem).where(OrderItem.order_id == order.id)
-        )).all()
-        order.subtotal = sum(Decimal(i.price_aed) * i.qty for i in all_items)
-        order.total = order.subtotal + Decimal(order.delivery_fee_aed or "0")
+        return ("no_match", None)
+    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
+    if dish is None:
+        return ("not_in_cart", result.candidates[0].name)
+    await set_item_qty(session, order=order, dish_id=dish.id, qty=qty)
+    return ("removed" if qty <= 0 else "updated", dish.name)
 
 
 async def _execute_save_address(
@@ -2234,19 +2261,43 @@ async def _dispatch_action(
 
     if action == "remove_item":
         dish_query = data.get("dish_query", "")
-        await _execute_ai_remove_item(session, conv, restaurant_id, dish_query)
-        if reply:
-            await _send_text(session, conv=conv, inbound=inbound,
-                             restaurant_id=restaurant_id, prefix="ai-remove", body=reply)
+        outcome, dish_name = await _execute_ai_remove_item(
+            session, conv, restaurant_id, dish_query
+        )
+        cart = await _build_cart_summary(session, conv)
+        if outcome == "removed":
+            body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "not_in_cart":
+            body = f"{dish_name} isn't in your cart.{_cart_tail(cart)}"
+        else:  # no_match
+            body = reply or (
+                f"I couldn't find '{dish_query}' to remove. Tell me the dish name "
+                "and I'll take it off 😊"
+            )
+        await _send_text(session, conv=conv, inbound=inbound,
+                         restaurant_id=restaurant_id, prefix="ai-remove", body=body)
         return
 
     if action == "update_qty":
         dish_query = data.get("dish_query", "")
         qty = int(data.get("qty") or 1)
-        await _execute_ai_update_qty(session, conv, restaurant_id, dish_query, qty)
-        if reply:
-            await _send_text(session, conv=conv, inbound=inbound,
-                             restaurant_id=restaurant_id, prefix="ai-qty", body=reply)
+        outcome, dish_name = await _execute_ai_update_qty(
+            session, conv, restaurant_id, dish_query, qty
+        )
+        cart = await _build_cart_summary(session, conv)
+        if outcome == "updated":
+            body = f"Updated — {qty}x {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "removed":
+            body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "not_in_cart":
+            body = f"{dish_name} isn't in your cart yet — want me to add {qty}? 😊"
+        else:  # no_match
+            body = reply or (
+                f"I couldn't find '{dish_query}' in your cart to change. "
+                "Which dish should I update?"
+            )
+        await _send_text(session, conv=conv, inbound=inbound,
+                         restaurant_id=restaurant_id, prefix="ai-qty", body=body)
         return
 
     if action == "proceed_to_address":

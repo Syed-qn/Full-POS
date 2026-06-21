@@ -179,6 +179,81 @@ async def test_add_item_action_updates_cart(db_session, restaurant):
     assert "biryani" in items[0].dish_name.lower()
 
 
+async def test_update_qty_and_remove_item_actions(db_session, restaurant):
+    """AI cart edits: add → 'make it 4' (update_qty) → add a 2nd dish →
+    'remove' the first. Cart must reflect each edit exactly."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.llm.port import ConversationAgentResult
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"),
+        category="Rice", is_available=True, name_normalized="chicken biryani",
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=120,
+        name="Mutton Biryani", price_aed=Decimal("30.00"),
+        category="Rice", is_available=True, name_normalized="mutton biryani",
+    ))
+    await db_session.commit()
+
+    phone = "+971501230111"
+
+    def _inb(wamid: str, text: str) -> InboundMessage:
+        return InboundMessage(
+            wa_message_id=wamid, from_phone=phone, type=MessageType.TEXT,
+            payload={"text": text}, restaurant_phone=restaurant.phone,
+            timestamp=1717660000,
+        )
+
+    results = [
+        ConversationAgentResult(message="Added!", action="add_item",
+                                action_data={"dish_query": "chicken biryani", "qty": 1, "special_note": ""}),
+        ConversationAgentResult(message="ok", action="update_qty",
+                                action_data={"dish_query": "chicken biryani", "qty": 4}),
+        ConversationAgentResult(message="Added!", action="add_item",
+                                action_data={"dish_query": "mutton biryani", "qty": 1, "special_note": ""}),
+        ConversationAgentResult(message="ok", action="remove_item",
+                                action_data={"dish_query": "chicken biryani"}),
+    ]
+
+    async def _drive(wamid, text):
+        with patch("app.llm.fake.FakeConversationAgent.respond",
+                   new=AsyncMock(return_value=results.pop(0))):
+            await handle_inbound(db_session, _inb(wamid, text), restaurant_id=restaurant.id)
+        await db_session.commit()
+
+    from app.conversation.service import get_or_create_conversation
+
+    async def _cart():
+        conv = await get_or_create_conversation(
+            db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+        )
+        draft = conv.state.get("draft_order_id")
+        items = (await db_session.scalars(
+            select(OrderItem).where(OrderItem.order_id == draft)
+        )).all()
+        return {i.dish_name.lower(): i.qty for i in items}
+
+    await _drive("wamid.e1", "chicken biryani")
+    assert (await _cart()) == {"chicken biryani": 1}
+
+    await _drive("wamid.e2", "make it 4")
+    assert (await _cart()) == {"chicken biryani": 4}      # update_qty = new TOTAL
+
+    await _drive("wamid.e3", "mutton biryani")
+    assert (await _cart()) == {"chicken biryani": 4, "mutton biryani": 1}
+
+    await _drive("wamid.e4", "remove chicken biryani")
+    assert (await _cart()) == {"mutton biryani": 1}        # only the named dish removed
+
+
 async def test_location_pin_outside_radius_rejected(db_session, restaurant):
     """Location pin outside restaurant's max_radius_km → polite rejection, no crash."""
     from unittest.mock import MagicMock, patch
