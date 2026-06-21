@@ -62,6 +62,33 @@ async def test_unsupported_mime_rejected():
         await extractor.extract_menu(files)
 
 
+async def test_pdf_sent_as_document_block():
+    """A PDF menu is attached as a base64 document (Claude reads it natively) —
+    never decoded to text."""
+    extractor = _make_extractor()
+    files = [UploadedFile(filename="menu.pdf", content=b"%PDF-1.4 binary", mime="application/pdf")]
+    drafts = await extractor.extract_menu(files)
+    assert len(drafts) == 2
+    call = extractor._client.messages.create.call_args
+    blocks = call.kwargs["messages"][0]["content"]
+    assert any(b.get("type") == "document" for b in blocks)
+
+
+async def test_text_menu_accepted_as_text_block():
+    """A plain-text menu is included verbatim as a text block (not rejected)."""
+    extractor = _make_extractor()
+    files = [UploadedFile(
+        filename="menu.txt",
+        content="110 Chicken Biryani AED 22\n201 Mutton Karahi AED 35".encode(),
+        mime="text/plain",
+    )]
+    drafts = await extractor.extract_menu(files)
+    assert len(drafts) == 2  # parsed from the mocked tool response
+    call = extractor._client.messages.create.call_args
+    sent = json.dumps(call.kwargs)
+    assert "Chicken Biryani" in sent  # the menu text reached the model
+
+
 async def test_empty_files_rejected():
     extractor = _make_extractor()
 

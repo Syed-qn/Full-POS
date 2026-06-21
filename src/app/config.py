@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_audience_manager: str = "manager"
     jwt_audience_rider: str = "rider"
     llm_provider: str = "fake"  # fake | claude | deepseek
+    # Which provider extracts dishes from uploaded menus (PDF/image/text).
+    # "auto" = use Claude when an Anthropic key is set (it reads PDFs/images
+    # natively so no dishes are missed), else fall back to llm_provider. The chat
+    # provider (e.g. DeepSeek) can't ingest binaries, so PDFs need Claude.
+    menu_extractor_provider: str = "auto"  # auto | claude | deepseek | fake
     anthropic_api_key: SecretStr = SecretStr("")
     claude_model: str = "claude-opus-4-8"
     deepseek_api_key: SecretStr = SecretStr("")

@@ -74,7 +74,21 @@ class ClaudeExtractor:
                     },
                 })
             else:
-                raise ValueError(f"Unsupported file type: {f.mime}")
+                # Text-based menu (txt/csv/markdown). Include it verbatim. An
+                # unknown "application/octet-stream" is accepted only if it cleanly
+                # decodes as UTF-8 (a real binary like tiff/docx/xlsx won't, and is
+                # rejected as unsupported).
+                is_text = f.mime.startswith("text/")
+                if not is_text and f.mime == "application/octet-stream":
+                    try:
+                        f.content.decode("utf-8")
+                        is_text = True
+                    except UnicodeDecodeError:
+                        is_text = False
+                if not is_text:
+                    raise ValueError(f"Unsupported file type: {f.mime}")
+                text = f.content.decode("utf-8", errors="replace")
+                content.append({"type": "text", "text": f"--- {f.filename} ---\n{text}"})
         content.append({"type": "text", "text": _PROMPT})
 
         response = await self._client.messages.create(

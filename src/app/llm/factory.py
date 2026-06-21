@@ -8,16 +8,25 @@ from app.llm.port import MenuExtractor
 @lru_cache
 def get_menu_extractor() -> MenuExtractor:
     settings = get_settings()
-    if settings.llm_provider == "claude":
+    provider = settings.menu_extractor_provider or "auto"
+    if provider == "auto":
+        # Menus arrive as PDFs/images. Only a multimodal model (Claude) can read
+        # those natively — DeepSeek's chat API can't ingest binaries, so a PDF
+        # gets decoded as garbage and dishes are lost. Prefer Claude whenever an
+        # Anthropic key is configured; otherwise fall back to the chat provider.
+        if settings.anthropic_api_key.get_secret_value():
+            provider = "claude"
+        else:
+            provider = settings.llm_provider
+    if provider == "claude":
         from app.llm.claude import ClaudeExtractor
         return ClaudeExtractor()
-    elif settings.llm_provider == "deepseek":
+    if provider == "deepseek":
         from app.llm.deepseek import DeepSeekExtractor
         return DeepSeekExtractor()
-    elif settings.llm_provider == "fake":
+    if provider == "fake":
         return FakeExtractor()
-    else:
-        raise ValueError(f"Unknown llm_provider: {settings.llm_provider!r}")
+    raise ValueError(f"Unknown menu extractor provider: {provider!r}")
 
 
 @lru_cache
