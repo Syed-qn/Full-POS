@@ -45,7 +45,7 @@ celery_app.conf.update(
     beat_schedule={
         "sla-monitor-tick": {
             "task": "sla.monitor_tick",
-            "schedule": 60.0,  # every 60 seconds
+            "schedule": 30.0,  # every 30s — spec §4.5 heartbeat (GAP#6: was 60s)
         },
         "nightly-forecast-all-tenants": {
             "task": "ml.forecast_all_tenants",

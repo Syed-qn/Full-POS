@@ -74,35 +74,61 @@ def _travel_time_min(
     return (d / speed_kmh) * 60.0
 
 
+def _leg_minutes(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    geo_provider: "GeoPort | None" = None,
+) -> float:
+    """Travel minutes for one leg via geo port (road/traffic when google) or haversine fallback."""
+    if geo_provider is not None:
+        d = geo_provider.distance_km(lat1, lon1, lat2, lon2)
+        return float(geo_provider.eta_minutes(d, buffer_minutes=0))
+    return _travel_time_min(lat1, lon1, lat2, lon2)
+
+
 def _compute_route_time_to_stops(
-    orders_in_seq: list[OrderCandidate], geo_provider: "GeoPort | None" = None
+    orders_in_seq: list[OrderCandidate],
+    geo_provider: "GeoPort | None" = None,
+    origin: tuple[float, float] | None = None,
 ) -> list[float]:
-    """Cumulative route_time_to_that_stop (mins) for sequenced stops (inter-stop travel sum).
+    """Cumulative route_time_to_that_stop (mins) for sequenced stops.
+
+    Per spec §4.3.2 the route time TO a stop is measured from where the rider starts —
+    the restaurant. ``origin`` (restaurant lat/lon) supplies the depot->first-stop leg so
+    the FIRST stop is no longer treated as zero travel (GAP#1). Subsequent stops add the
+    sequenced inter-stop legs on top.
 
     Sequence = input list order (as built by greedy append; spec notes nearest-neighbor later).
     If geo_provider (GeoPort) given: use its .distance_km (road/traffic when google) + .eta_minutes(dist,0).
     Else: haversine + static CITY_SPEED (25kmh per spec graceful + fake).
-    Returns [0.0 for first, cum1 for 2nd, ...]
+    origin=None preserves legacy behaviour (first stop = 0.0) for back-compat callers/tests.
+    Returns [route_to_first, cum1 for 2nd, ...]
     """
     if not orders_in_seq:
         return []
-    times: list[float] = [0.0]
-    cum = 0.0
+    if origin is not None:
+        first = orders_in_seq[0]
+        depot_leg = _leg_minutes(origin[0], origin[1], first.lat, first.lon, geo_provider)
+    else:
+        depot_leg = 0.0
+    times: list[float] = [depot_leg]
+    cum = depot_leg
     for i in range(1, len(orders_in_seq)):
         prev = orders_in_seq[i - 1]
         curr = orders_in_seq[i]
-        if geo_provider is not None:
-            d = geo_provider.distance_km(prev.lat, prev.lon, curr.lat, curr.lon)
-            leg = float(geo_provider.eta_minutes(d, buffer_minutes=0))
-        else:
-            leg = _travel_time_min(prev.lat, prev.lon, curr.lat, curr.lon)
+        leg = _leg_minutes(prev.lat, prev.lon, curr.lat, curr.lon, geo_provider)
         cum += leg
         times.append(cum)
     return times
 
 
 def _within_internal_target(
-    batch: PlannedBatch, candidate: OrderCandidate, geo_provider: "GeoPort | None" = None
+    batch: PlannedBatch,
+    candidate: OrderCandidate,
+    geo_provider: "GeoPort | None" = None,
+    origin: tuple[float, float] | None = None,
 ) -> bool:
     """Every order (incl. candidate) must still clear the 30-min internal target.
 
@@ -112,7 +138,7 @@ def _within_internal_target(
     40min customer via overall design (internal 30 + buf).
     """
     temp = batch.orders + [candidate]
-    route_times = _compute_route_time_to_stops(temp, geo_provider)
+    route_times = _compute_route_time_to_stops(temp, geo_provider, origin=origin)
     n = len(temp)
     projected_buffer = max(0, n - 1) * SLA_BUFFER_PER_ORDER_MIN
     for i, o in enumerate(temp):
@@ -129,6 +155,7 @@ def build_batches(
     proximity_km: float = DEFAULT_PROXIMITY_KM,
     window_min: int = DEFAULT_WINDOW_MIN,
     geo_provider: "GeoPort | None" = None,
+    origin: tuple[float, float] | None = None,
 ) -> list[PlannedBatch]:
     """Greedy proximity batching (with inter-stop travel gap fix per GAP#4/spec §4.3).
 
@@ -170,7 +197,9 @@ def build_batches(
             if (
                 within_proximity
                 and within_window
-                and _within_internal_target(batch, order, geo_provider=geo_provider)
+                and _within_internal_target(
+                    batch, order, geo_provider=geo_provider, origin=origin
+                )
             ):
                 batch.orders.append(order)
                 placed = True
@@ -184,7 +213,9 @@ def build_batches(
 
 
 def compute_batch_total_est_min(
-    batch: PlannedBatch, geo_provider: "GeoPort | None" = None
+    batch: PlannedBatch,
+    geo_provider: "GeoPort | None" = None,
+    origin: tuple[float, float] | None = None,
 ) -> int:
     """Compute total_est_min for Batch (max over stops of elapsed + route_to_stop + buffer).
 
@@ -193,7 +224,7 @@ def compute_batch_total_est_min(
     """
     if not batch.orders:
         return 0
-    route_times = _compute_route_time_to_stops(batch.orders, geo_provider)
+    route_times = _compute_route_time_to_stops(batch.orders, geo_provider, origin=origin)
     buf = batch.sla_buffer_min
     projs = [
         o.minutes_elapsed + route_times[i] + buf for i, o in enumerate(batch.orders)

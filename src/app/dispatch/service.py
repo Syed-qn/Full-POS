@@ -163,12 +163,19 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     # (exclusion_hash from cancel after cooking; prevents same phone/person/address from re-buying per spec).
 
     dropoffs = await _dropoff_coords(session, ready)
-    # Orders missing a geocoded drop-off fall back to the restaurant location so
-    # they are still batched/dispatched rather than silently dropped.
     geo = get_geo_provider()
     candidates = []
+    skipped_no_geo: list[Order] = []
     for o in ready:
-        lat, lon = dropoffs.get(o.id, (restaurant.lat, restaurant.lng))
+        coords = dropoffs.get(o.id)
+        if coords is None:
+            # GAP#7: an order with no geocoded drop-off must NOT be faked to the
+            # restaurant location — that makes it look like a zero-distance delivery,
+            # so it batches as best-case and silently breaches the SLA on the road.
+            # Surface it for manual handling instead of masking the distance.
+            skipped_no_geo.append(o)
+            continue
+        lat, lon = coords
         # Real elapsed from sla_confirmed_at (set at order confirm/modify per ordering/service + spec);
         # fallback 0 if not present (e.g. legacy tests). Uses UTC.
         minutes_elapsed = 0.0
@@ -187,7 +194,40 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                 priority=o.priority or "normal",
             )
         )
-    batches = build_batches(candidates, geo_provider=geo)
+
+    if skipped_no_geo:
+        # Leave these orders ready/unassigned and alert the manager so a human can
+        # add a delivery pin; auto-dispatch can't place them safely without coords.
+        result_numbers = ", ".join(o.order_number for o in skipped_no_geo)
+        _logger.warning(
+            "dispatch: %d order(s) skipped — no geocoded drop-off: %s",
+            len(skipped_no_geo),
+            result_numbers,
+        )
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=restaurant.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": (
+                    f"{len(skipped_no_geo)} ready order(s) have no delivery location "
+                    f"and can't be auto-dispatched: {result_numbers}. "
+                    "Add a delivery pin to dispatch them."
+                )
+            },
+            idempotency_key=(
+                f"nogeo-{restaurant_id}-{skipped_no_geo[0].id}-{int(now.timestamp() // 60)}"
+            ),
+        )
+
+    # Restaurant pickup coords seed the depot->first-stop leg (GAP#1, spec §4.3.2).
+    origin = (
+        (restaurant.lat, restaurant.lng)
+        if restaurant.lat is not None and restaurant.lng is not None
+        else None
+    )
+    batches = build_batches(candidates, geo_provider=geo, origin=origin)
     orders_by_id = {o.id: o for o in ready}
     result = DispatchResult()
 
@@ -243,7 +283,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
         best_id = scored[0].rider_id
         rider = next(rd for rd in riders if rd.id == best_id)
 
-        total_est = compute_batch_total_est_min(planned, geo_provider=geo)
+        total_est = compute_batch_total_est_min(planned, geo_provider=geo, origin=origin)
         batch = Batch(
             restaurant_id=restaurant_id,
             rider_id=rider.id,

@@ -130,6 +130,40 @@ def test_inter_stop_travel_time_affects_internal_target_and_forces_fresh_batch()
     assert all(len(b.orders) == 1 for b in batches)
 
 
+def test_origin_depot_leg_counts_toward_internal_target():
+    """GAP#1 (spec §4.3.2): route_time_to_that_stop must include the restaurant->first-stop
+    (depot) leg for EVERY order, not just inter-stop legs.
+
+    Two orders ~70 m apart (proximity+window OK) but ~14 km from the restaurant origin.
+    Without origin: proj(seed) = 2 elapsed + 0 depot + 10 buf = 12 <= 30 -> 1 batch.
+    With origin: depot leg ~33 min pushes proj(seed) = 2 + 33 + 10 > 30 -> cannot fit -> 2 batches.
+    """
+    o1 = OrderCandidate(1, 25.3000, 55.4000, BASE, minutes_elapsed=2.0)
+    o2 = OrderCandidate(2, 25.3005, 55.4005, BASE, minutes_elapsed=2.0)  # ~70 m from o1
+    restaurant_origin = (25.2048, 55.2708)  # ~14 km away
+
+    no_origin = build_batches([o1, o2], max_per_batch=3, proximity_km=1.0, window_min=10)
+    assert len(no_origin) == 1, "without depot leg the two would batch (legacy back-compat)"
+
+    with_origin = build_batches(
+        [o1, o2], max_per_batch=3, proximity_km=1.0, window_min=10, origin=restaurant_origin
+    )
+    assert len(with_origin) == 2, "depot leg (restaurant->first stop) must count -> cannot fit"
+
+
+def test_compute_total_est_includes_depot_leg():
+    """GAP#1: total_est_min for a batch must include the restaurant->first-stop drive time."""
+    from app.dispatch.batching import PlannedBatch, compute_batch_total_est_min
+
+    far_stop = OrderCandidate(1, 25.3000, 55.4000, BASE, minutes_elapsed=0.0)
+    batch = PlannedBatch(orders=[far_stop])
+    origin = (25.2048, 55.2708)  # ~14 km
+    est_no_origin = compute_batch_total_est_min(batch)
+    est_with_origin = compute_batch_total_est_min(batch, origin=origin)
+    assert est_with_origin > est_no_origin
+    assert est_with_origin >= 25, "14 km depot leg must add a meaningful drive estimate"
+
+
 def test_planned_batch_and_compute_respects_geo_port_equiv_for_inter_stop():
     """Unit drive: when geo passed (future), inter calc uses its distance/eta; haversine fallback when None.
     (In practice engine passes get_geo_provider() which for tests is Fake equiv to haversine 25kmh.)

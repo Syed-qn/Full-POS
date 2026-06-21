@@ -304,6 +304,55 @@ async def test_no_available_riders_alerts_manager_and_leaves_unassigned(db_sessi
     assert alert is not None  # manager alerted
 
 
+async def test_ungeocoded_order_skipped_not_faked_to_restaurant(db_session):
+    """GAP#7: an order with no geocoded drop-off must be skipped (left ready) and the
+    manager alerted — NOT faked to the restaurant location (which masks distance as 0
+    and produces a silent SLA breach on the road)."""
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id,
+        name="X",
+        phone="+971500000009",
+        status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    # Order with NO address -> no drop-off coords.
+    c = Customer(
+        restaurant_id=r.id, phone="+971509999999", name="NoGeo", usual_order_times={},
+        tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(c)
+    await db_session.flush()
+    now = datetime.now(timezone.utc)
+    order = Order(
+        restaurant_id=r.id, customer_id=c.id, order_number="ONOGEO", status="ready",
+        priority="normal", weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("10.00"), total=Decimal("10.00"), address_id=None,
+        sla_confirmed_at=now, sla_deadline=now + timedelta(minutes=40),
+        promised_eta=now + timedelta(minutes=40),
+    )
+    db_session.add(order)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.status == "ready"  # left unassigned, not dispatched
+    assert order.rider_id is None
+    # Not batched
+    assert await db_session.scalar(select(Batch).where(Batch.rider_id == rider.id)) is None
+    # Manager alerted about the missing delivery location
+    alert = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+    )
+    assert alert is not None
+    assert "ONOGEO" in str(alert.payload)
+
+
 async def test_rider_set_on_delivery_and_batch_created(db_session):
     r = await _seed_restaurant(db_session)
     rider = Rider(

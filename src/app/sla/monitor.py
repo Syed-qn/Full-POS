@@ -1,6 +1,6 @@
 """SLA monitor Celery task (spec §4.4, P4-T14).
 
-Scans all open orders every 60s. Fires idempotent SlaEvent rows at:
+Scans all open orders every 30s (spec §4.5 heartbeat). Fires idempotent SlaEvent rows at:
   yellow_30 (30 min) — customer + manager outbox alert
   red_35   (35 min) — manager alert only
   breach_40 (40 min) — manager alert + auto-coupon if NOT weather_delay_disclosed
