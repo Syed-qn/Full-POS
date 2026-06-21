@@ -193,7 +193,12 @@
 .empty {
   color: var(--text-muted);
   font-size: 13px;
-  padding: 24px 0;
+  padding: 32px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
 }
 .reorderHint {
   font-size: 12px;

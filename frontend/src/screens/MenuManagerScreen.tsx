@@ -232,17 +232,21 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
               data-testid="menu-upload"
             />
             {dishes.length > 0 && activeMenuId !== null && (
-              <Button onClick={() => setEditing("new")}>+ Add dish</Button>
+              <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
             )}
-            {/* Upload new menu button hidden for now — re-enable when ready.
-            <Button onClick={() => fileRef.current?.click()}>Upload new menu</Button> */}
+            <Button onClick={() => fileRef.current?.click()}>
+              {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
+            </Button>
           </>
         }
       />
       {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
-        <div className={s.empty}>Upload your first menu to get started.</div>
+        <div className={s.empty}>
+          <p>Upload your first menu (PDF, image, or text) to get started.</p>
+          <Button onClick={() => fileRef.current?.click()}>Upload menu</Button>
+        </div>
       ) : (
         <>
           <div className={s.stats}>
