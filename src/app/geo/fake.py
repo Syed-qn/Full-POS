@@ -56,6 +56,21 @@ class FakeGeoProvider:
         raw = (distance_km / _CITY_SPEED_KMH) * 60
         return max(1, math.ceil(raw)) + buffer_minutes
 
+    def suggest(self, query, *, near=None, limit=5):
+        """Offline address candidates from the Dubai gazetteer (dev/tests).
+
+        Returns gazetteer areas whose name appears in (or fuzzily matches) the
+        query, as AddressSuggestion(description, lat, lng). Empty on no match.
+        """
+        from app.geo.port import AddressSuggestion
+
+        coords = self.geocode(query or "")
+        if coords is None:
+            return []
+        # Label it by the matched area name (reverse from coords for a clean title).
+        label = self.reverse_geocode(coords[0], coords[1]) or (query or "").strip()
+        return [AddressSuggestion(description=label, latitude=coords[0], longitude=coords[1])][:limit]
+
     def geocode(self, address: str) -> tuple[float, float] | None:
         """Resolve a known Dubai area name in the address to coordinates.
 

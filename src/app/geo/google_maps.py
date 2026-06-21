@@ -114,6 +114,45 @@ class GoogleMapsGeoProvider:
         raw = (distance_km / _CITY_SPEED_KMH) * 60
         return max(1, math.ceil(raw)) + buffer_minutes
 
+    def suggest(self, query, *, near=None, limit=5):
+        """Address candidates via the Google Geocoding API, biased toward ``near``.
+
+        Uses a viewport ``bounds`` box around the restaurant (NOT a country lock)
+        so it works wherever the restaurant is — UAE, India, anywhere. Returns up
+        to ``limit`` AddressSuggestion(description, lat, lng); empty on no
+        match / any failure.
+        """
+        from app.geo.port import AddressSuggestion
+
+        if not self._api_key or not query or not query.strip():
+            return []
+        params = {"address": query.strip(), "key": self._api_key, "language": "en"}
+        if near is not None:
+            lat, lng = near
+            # ~30 km box around the restaurant to bias (not restrict) results.
+            d = 0.27
+            params["bounds"] = f"{lat - d},{lng - d}|{lat + d},{lng + d}"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(_GEOCODE_URL, params=params)
+            resp.raise_for_status()
+            results = resp.json().get("results") or []
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully on any failure
+            logger.warning("Google suggest failed for %r: %s", query, exc)
+            return []
+        out: list[AddressSuggestion] = []
+        for r in results[: max(1, limit)]:
+            loc = (r.get("geometry") or {}).get("location") or {}
+            if "lat" not in loc or "lng" not in loc:
+                continue
+            desc = _strip_plus_code(r.get("formatted_address") or query.strip())
+            out.append(
+                AddressSuggestion(
+                    description=desc, latitude=float(loc["lat"]), longitude=float(loc["lng"])
+                )
+            )
+        return out
+
     def geocode(self, address: str) -> tuple[float, float] | None:
         """Geocode a free-text address via the Google Geocoding API.
 

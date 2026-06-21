@@ -24,6 +24,9 @@ export interface ManualOrderAddressIn {
   building: string;
   receiver_name: string;
   notes: string | null;
+  // Exact pin from the map picker; omitted → backend geocodes the building text.
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface ManualOrderIn {

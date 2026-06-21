@@ -1,4 +1,14 @@
+from dataclasses import dataclass
 from typing import Protocol
+
+
+@dataclass
+class AddressSuggestion:
+    """One geocoded address candidate for the manual-order type-ahead."""
+
+    description: str   # human-readable address, e.g. "Marina Tower, Dubai Marina"
+    latitude: float
+    longitude: float
 
 
 class GeoPort(Protocol):
@@ -22,6 +32,21 @@ class GeoPort(Protocol):
 
     def eta_minutes(self, distance_km: float, buffer_minutes: int = 0) -> int:
         """Return ETA in whole minutes. buffer_minutes added after calculation."""
+        ...
+
+    def suggest(
+        self,
+        query: str,
+        *,
+        near: tuple[float, float] | None = None,
+        limit: int = 5,
+    ) -> list[AddressSuggestion]:
+        """Return up to ``limit`` address candidates for ``query``, each with a
+        human description and exact coordinates, biased toward ``near`` (the
+        restaurant's location). Powers the manual-order address type-ahead so the
+        manager picks a real place instead of relying on blind geocoding. Empty
+        list on no match / any failure.
+        """
         ...
 
     def geocode(self, address: str) -> tuple[float, float] | None:

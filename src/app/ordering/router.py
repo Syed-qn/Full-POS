@@ -156,6 +156,8 @@ async def create_manual_order_endpoint(
             receiver_name=body.address.receiver_name,
             address_notes=body.address.notes,
             delivery_fee_aed=body.delivery_fee_aed,
+            latitude=body.address.latitude,
+            longitude=body.address.longitude,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

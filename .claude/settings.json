@@ -1,7 +1,50 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -c \"re.sub\\(r\\\\\"\\\\\\\\\\\\\\\\D\\\\\"\" src/app/webhook/normalizer.py)"
+      "Bash(grep -c \"re.sub\\(r\\\\\"\\\\\\\\\\\\\\\\D\\\\\"\" src/app/webhook/normalizer.py)",
+      "Bash(xargs grep -l \"c4a8b1f7d2e1\")",
+      "Bash(.venv/Scripts/alembic heads *)",
+      "Bash(.venv/Scripts/alembic current *)",
+      "Bash(.venv/Scripts/alembic history *)",
+      "Bash(.venv/Scripts/alembic upgrade *)",
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(.venv/Scripts/python -m pytest tests/dispatch -q)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python /tmp/repro_cart.py)",
+      "Bash(sed -i 's/+971509999001/+971509999077/' /tmp/repro_cart.py *)",
+      "Bash(.venv/Scripts/python -m pytest tests/conversation/test_engine_full_ai.py::test_address_step_recovers_stale_draft_pointer -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/conversation -q)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python -c ' *)",
+      "Bash(.venv/Scripts/python -m pytest tests/conversation/test_engine_full_ai.py::test_greeting_starts_fresh_and_drops_abandoned_cart -q)",
+      "Bash(.venv/Scripts/python -m pytest \"tests/conversation/test_engine_ordering.py::test_location_pin_beyond_radius_sends_undeliverable\" -q)",
+      "Bash(.venv/Scripts/python /tmp/reset_prod.py)",
+      "Bash(.venv/Scripts/python /tmp/check_prod.py)",
+      "Bash(curl -s -m 60 -o /tmp/resp.txt -w \"HTTP %{http_code}\\\\n\" -X POST \"https://restaurant-whatsapp-service.onrender.com/api/v1/auth/login\" -H \"Content-Type: application/json\" -d '{\"phone\":\"+918754568384\",\"password\":\"password123\"}')",
+      "Bash(.venv/Scripts/python -m pytest tests/conversation tests/dispatch -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch/test_customer_notifications.py tests/conversation/test_engine_full_ai.py::test_tracking_query_replies_with_live_link -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/dispatch/rider_flow.py src/app/conversation/engine.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch/test_live_tracking_api.py -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/dispatch/tracking_router.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/whatsapp/test_cloud_provider.py tests/conversation/test_engine_full_ai.py -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/conversation tests/whatsapp tests/dispatch -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/conversation/engine.py src/app/whatsapp/cloud_provider.py src/app/whatsapp/port.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch/test_customer_notifications.py tests/conversation/test_rider_flow.py -q)",
+      "Bash(.venv/Scripts/python.exe -)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch/test_customer_notifications.py tests/dispatch/test_live_tracking_api.py -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch tests/conversation tests/outbox tests/webhook -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/dispatch/tracking_router.py src/app/dispatch/rider_flow.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/webhook/test_webhook_router.py::test_post_webhook_processes_message_and_queues_outbox -q)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch/test_customer_notifications.py tests/dispatch/test_live_tracking_api.py tests/conversation/test_rider_flow.py -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/dispatch/rider_flow.py src/app/dispatch/tracking_router.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch/test_rider_app.py -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch tests/identity tests/outbox -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/dispatch/rider_app.py src/app/dispatch/rider_app_router.py src/app/identity/router.py src/app/identity/models.py src/app/main.py src/app/config.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/dispatch tests/identity tests/conversation -q)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/)",
+      "Bash(.venv/Scripts/python.exe -m ruff check src/app/dispatch/rider_app_router.py)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   },
   "hooks": {
@@ -11,10 +54,10 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git commit*)",
             "command": "cd \"/Users/syed/Files/untitled folder 2/Work/Catalystiq/Restaurant Whatsapp Service\" && source .env 2>/dev/null && export DEEPSEEK_API_KEY=\"$APP_DEEPSEEK_API_KEY\" && PYTHON=$(cat \"graphify-out/.graphify_python\") && \"$PYTHON\" -m graphify . --update --no-viz 2>&1 | tail -5",
-            "async": true,
-            "statusMessage": "Updating knowledge graph..."
+            "if": "Bash(git commit*)",
+            "statusMessage": "Updating knowledge graph...",
+            "async": true
           }
         ]
       }

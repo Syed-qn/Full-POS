@@ -763,7 +763,9 @@ async def _geocode_manual_address(
     unavailable, or no match is found; the order then behaves as before (text
     address only, no Navigate link / destination pin).
     """
-    from app.geo.cache import geocode_cached, reverse_geocode_cached
+    import asyncio
+
+    from app.geo.factory import get_geo_provider
     from app.identity.models import Restaurant
 
     query = (building or "").strip()
@@ -771,22 +773,21 @@ async def _geocode_manual_address(
         return (None, None)
     try:
         restaurant = await session.get(Restaurant, restaurant_id)
+        near = None
         if restaurant is not None and restaurant.lat is not None and restaurant.lng is not None:
-            # Anchor to the restaurant's CITY (the "…, City" tail of the area
-            # label), not its specific area — appending a narrow area like
-            # "Downtown" would fight the building's own area; the city only
-            # disambiguates the emirate/country.
-            label = await reverse_geocode_cached(restaurant.lat, restaurant.lng)
-            city = label.split(",")[-1].strip() if label else ""
-            if city:
-                query = f"{query}, {city}"
-        coords = await geocode_cached(query)
+            near = (restaurant.lat, restaurant.lng)
+        # Bias to the restaurant's actual location (works in any country — the old
+        # path was hard-locked to the UAE). Take the top candidate. Provider call
+        # is sync (httpx); run it off the event loop.
+        suggestions = await asyncio.to_thread(
+            get_geo_provider().suggest, query, near=near, limit=1
+        )
     except Exception:  # noqa: BLE001 - geocoding is best-effort; never block the order
         _logger.exception("manual-order geocode failed (restaurant_id=%s)", restaurant_id)
         return (None, None)
-    if coords is None:
+    if not suggestions:
         return (None, None)
-    return (coords[0], coords[1])
+    return (suggestions[0].latitude, suggestions[0].longitude)
 
 
 async def create_manual_order(
@@ -801,6 +802,8 @@ async def create_manual_order(
     receiver_name: str,
     address_notes: str | None,
     delivery_fee_aed: Decimal,
+    latitude: float | None = None,
+    longitude: float | None = None,
 ) -> "Order":
     """Create a confirmed delivery order on behalf of a walk-in/phone customer.
 
@@ -848,7 +851,11 @@ async def create_manual_order(
     #    Navigate link and the customer's tracking map has no destination. Anchor
     #    the query to the restaurant's area so an ambiguous building name resolves
     #    in the right city; degrade gracefully to no-pin if geocoding can't match.
-    lat, lng = await _geocode_manual_address(session, restaurant_id, building)
+    #    When the manager picked a suggestion in the form, use that exact pin.
+    if latitude is not None and longitude is not None:
+        lat, lng = latitude, longitude
+    else:
+        lat, lng = await _geocode_manual_address(session, restaurant_id, building)
     address = await upsert_address(
         session,
         customer_id=customer.id,

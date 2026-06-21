@@ -263,6 +263,45 @@ async def test_manual_order_geocodes_address_to_pin(db_session, restaurant):
     assert round(addr.latitude, 3) == 25.081
 
 
+async def test_manual_order_uses_explicit_pin_when_provided(db_session, restaurant):
+    """When the manager picks a pin on the map, those exact coords are stored —
+    no geocoding of the building text."""
+    from app.ordering.service import create_manual_order
+
+    menu = await _seed_menu(db_session, restaurant.id)
+    biryani_id = await _get_dish_id(db_session, menu.id, "Chicken Biryani")
+
+    order = await create_manual_order(
+        db_session,
+        restaurant_id=restaurant.id,
+        customer_phone="+971509990779",
+        customer_name="Pin Picker",
+        items=[{"dish_id": biryani_id, "qty": 1, "notes": None}],
+        apt_room="Apt 7",
+        building="Anything At All",  # would NOT geocode — but pin overrides
+        receiver_name="Pin Picker",
+        address_notes=None,
+        delivery_fee_aed=Decimal("0.00"),
+        latitude=25.1972,
+        longitude=55.2744,
+    )
+    await db_session.commit()
+
+    addr = await db_session.get(CustomerAddress, order.address_id)
+    assert (addr.latitude, addr.longitude) == (25.1972, 55.2744)
+
+
+def test_fake_geo_suggest_returns_candidates():
+    """The offline provider's suggest() backs the no-pin geocode fallback."""
+    from app.geo.fake import FakeGeoProvider
+
+    out = FakeGeoProvider().suggest("Dubai Marina tower", near=(25.2, 55.27))
+    assert out and out[0].latitude and out[0].longitude
+    assert isinstance(out[0].description, str)
+    # Unknown place → no candidates.
+    assert FakeGeoProvider().suggest("zzqq nowhere 9981") == []
+
+
 async def test_manual_order_unknown_building_degrades_to_no_pin(db_session, restaurant):
     """If geocoding can't resolve the building, the order still succeeds with a
     null pin (text-only address) — no crash, same as before."""

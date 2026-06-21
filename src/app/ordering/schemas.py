@@ -57,6 +57,10 @@ class ManualOrderAddressIn(BaseModel):
     building: str = Field(min_length=1)
     receiver_name: str = Field(min_length=1)
     notes: str | None = None
+    # Exact pin from the map picker (manager searched/dropped a pin). When
+    # present these are used as-is; otherwise the building text is geocoded.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class AddressOut(BaseModel):

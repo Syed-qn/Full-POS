@@ -5,6 +5,7 @@ import { createManualOrder, lookupCustomer } from "../lib/manualOrderApi";
 import { apiClient } from "../lib/apiClient";
 import type { DishOut, MenuOut, RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
+import { LocationPicker } from "../components/LocationPicker";
 import s from "./NewOrderScreen.module.css";
 
 type FeeOption = string;
@@ -52,6 +53,10 @@ export function NewOrderScreen() {
   const [building, setBuilding] = useState("");
   const [receiverName, setReceiverName] = useState("");
   const [addressNotes, setAddressNotes] = useState("");
+  // Exact delivery pin from the map picker (search/drag). Null until set; when
+  // set it's sent as the order's drop-off so the rider gets a Navigate link and
+  // the customer sees a live ETA. If left unset the backend geocodes Building.
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
 
   const [feeOptions, setFeeOptions] = useState<FeeChoice[]>([]);
   const [feesLoading, setFeesLoading] = useState(true);
@@ -186,6 +191,8 @@ export function NewOrderScreen() {
           building: building.trim(),
           receiver_name: receiverName.trim(),
           notes: addressNotes.trim() || null,
+          latitude: pin?.lat ?? null,
+          longitude: pin?.lng ?? null,
         },
         delivery_fee_aed: fee,
       });
@@ -277,6 +284,20 @@ export function NewOrderScreen() {
                 value={building}
                 onChange={(e) => setBuilding(e.target.value)}
                 placeholder="Marina Tower"
+              />
+              <span className={s.fieldHint}>Shown to the rider as the address label.</span>
+            </div>
+
+            <div className={s.field}>
+              <label className={s.label}>Delivery location {pin ? "✓" : "(recommended)"}</label>
+              <span className={s.fieldHint}>
+                Search an address or drop the pin so the rider navigates to the exact spot.
+                {!pin && " If you skip this, we'll estimate it from the building name."}
+              </span>
+              <LocationPicker
+                lat={pin?.lat ?? NaN}
+                lng={pin?.lng ?? NaN}
+                onChange={(lat, lng) => setPin({ lat, lng })}
               />
             </div>
 
