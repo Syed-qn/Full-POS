@@ -39,6 +39,28 @@ async def test_create_template(client, auth_headers):
     assert resp.json()["meta_template_name"] == "promo_test"
 
 
+async def test_create_template_duplicate_name_auto_suffixes(client, auth_headers):
+    """Re-drafting the same offer (same suggested name) must NOT 500 on the unique
+    (restaurant, name, language) constraint — the draft name auto-suffixes instead."""
+    payload = {
+        "meta_template_name": "promo_dup",
+        "body": "Hi {{1}}, deal!",
+        "language": "en",
+        "category": "MARKETING",
+    }
+    first = await client.post("/api/v1/marketing/templates", json=payload, headers=auth_headers)
+    assert first.status_code == 201
+    assert first.json()["meta_template_name"] == "promo_dup"
+
+    second = await client.post("/api/v1/marketing/templates", json=payload, headers=auth_headers)
+    assert second.status_code == 201
+    assert second.json()["meta_template_name"] == "promo_dup_2"
+
+    third = await client.post("/api/v1/marketing/templates", json=payload, headers=auth_headers)
+    assert third.status_code == 201
+    assert third.json()["meta_template_name"] == "promo_dup_3"
+
+
 async def test_create_campaign_draft(client, auth_headers):
     resp = await client.post(
         "/api/v1/marketing/campaigns",
@@ -109,6 +131,38 @@ async def test_submit_then_broadcast_flow(client, auth_headers):
     assert "campaign_id" in body
     # No opted-in customers seeded → 0 queued, but the flow completes cleanly.
     assert body["queued"] >= 0
+
+
+async def test_submit_image_template_without_app_id_gives_clear_error(client, auth_headers, monkeypatch):
+    """An IMAGE-header template submitted to real Meta with no APP_WA_APP_ID must
+    return a clear 422 (not a 500) telling the manager to set the App ID."""
+    from app.config import get_settings
+
+    tpl = (
+        await client.post(
+            "/api/v1/marketing/templates",
+            json={
+                "meta_template_name": "img_promo",
+                "body": "Hi {{1}}, big offer today! Reply to order.",
+                "footer": "Reply STOP to opt out",
+                "header": {"type": "IMAGE", "image_url": "https://example.com/x.jpg"},
+            },
+            headers=auth_headers,
+        )
+    ).json()
+
+    monkeypatch.setenv("APP_MARKETING_SEND_DRY_RUN", "false")
+    monkeypatch.setenv("APP_MARKETING_TEMPLATE_PROVIDER", "meta")
+    monkeypatch.setenv("APP_WA_APP_ID", "")
+    get_settings.cache_clear()
+    try:
+        resp = await client.post(
+            f"/api/v1/marketing/templates/{tpl['id']}/submit", headers=auth_headers
+        )
+        assert resp.status_code == 422
+        assert "APP_WA_APP_ID" in resp.json()["detail"]
+    finally:
+        get_settings.cache_clear()
 
 
 async def test_broadcast_rejects_unapproved_template(client, auth_headers):
