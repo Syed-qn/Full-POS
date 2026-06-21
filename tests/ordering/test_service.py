@@ -479,3 +479,47 @@ async def test_finalize_confirmation_sets_prep_deadline(db_session, restaurant):
     await finalize_confirmation(db_session, order=o)
     assert o.prep_deadline is not None
     assert o.sla_confirmed_at < o.prep_deadline <= o.sla_deadline
+
+
+async def test_prep_deadline_recomputed_and_kitchen_warned_on_repin(db_session, restaurant):
+    """Re-pinning to a farther address while the order is confirmed, then starting the
+    kitchen, tightens prep_deadline and pings the kitchen to expedite."""
+    from app.ordering.models import Order
+    from app.ordering.service import advance_kitchen_status, finalize_confirmation
+    from app.outbox.models import OutboxMessage
+    from sqlalchemy import select as _select
+
+    c = Customer(
+        restaurant_id=restaurant.id, phone="+971507000003", name="R",
+        usual_order_times={}, tags={}, total_orders=0, total_spend="0.00",
+    )
+    db_session.add(c)
+    await db_session.flush()
+    addr = CustomerAddress(customer_id=c.id, latitude=25.2050, longitude=55.2710, confirmed=True)
+    db_session.add(addr)
+    await db_session.flush()
+    o = Order(
+        restaurant_id=restaurant.id, customer_id=c.id, order_number="R1",
+        status="draft", subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        address_id=addr.id,
+    )
+    db_session.add(o)
+    await db_session.flush()
+
+    await finalize_confirmation(db_session, order=o)
+    before = o.prep_deadline
+    assert before is not None
+
+    # Customer re-pins to a much farther address.
+    addr.latitude = 25.2500
+    addr.longitude = 55.3200
+    await db_session.flush()
+
+    await advance_kitchen_status(db_session, order=o)  # confirmed -> preparing
+    assert o.status == "preparing"
+    assert o.prep_deadline < before  # farther delivery -> must plate earlier
+
+    msg = await db_session.scalar(
+        _select(OutboxMessage).where(OutboxMessage.to_phone == restaurant.phone)
+    )
+    assert msg is not None and "R1" in str(msg.payload)

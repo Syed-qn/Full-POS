@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
@@ -752,6 +753,11 @@ async def advance_kitchen_status(
             f"Only confirmed or preparing orders can be advanced."
         )
     await fsm_transition(session, order, next_status, actor=actor)
+    # When the kitchen starts the dish, refresh the plate-by deadline from current
+    # delivery inputs (a re-pinned address or live traffic may have moved it since
+    # confirm) and warn the kitchen if it just got tighter.
+    if next_status == OrderStatus.PREPARING:
+        await _refresh_prep_deadline(session, order)
     await session.commit()
     await session.refresh(order)
     # Event-driven dispatch: as soon as an order is READY, assign a rider — no
@@ -761,6 +767,45 @@ async def advance_kitchen_status(
     if order.status == "ready":
         await _auto_dispatch_on_ready(session, order.restaurant_id)
     return order
+
+
+async def _refresh_prep_deadline(session: "AsyncSession", order: Order) -> None:
+    """Recompute prep_deadline from current inputs (clock start = sla_confirmed_at, so it
+    stays absolute). If the new plate-by is more than 5 min EARLIER than the stored one
+    — e.g. the customer re-pinned to a farther address while it was confirmed — update it
+    and ping the kitchen so they can expedite. Idempotent per order per target minute."""
+    base = order.sla_confirmed_at or datetime.now(timezone.utc)
+    new = await compute_prep_deadline(session, order, base)
+    if new is None:
+        return
+    old = order.prep_deadline
+    if old is not None and old.tzinfo is None:
+        old = old.replace(tzinfo=timezone.utc)
+    order.prep_deadline = new
+
+    if old is None or (old - new).total_seconds() <= 5 * 60:
+        return  # not materially tighter — no need to nudge the kitchen
+
+    restaurant = await session.get(Restaurant, order.restaurant_id)
+    if restaurant is None:
+        return
+    local = new.astimezone(ZoneInfo("Asia/Dubai"))
+    from app.outbox.service import enqueue_message
+    from app.whatsapp.port import OutboundMessageType
+
+    await enqueue_message(
+        session,
+        restaurant_id=order.restaurant_id,
+        to_phone=restaurant.phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={
+            "body": (
+                f"⏱️ Heads up — order {order.order_number} now needs to be plated by "
+                f"{local:%H:%M} (the delivery got farther). Expedite to keep the 40-min SLA."
+            )
+        },
+        idempotency_key=f"prep-tighten-{order.id}-{int(new.timestamp() // 60)}",
+    )
 
 
 async def _auto_dispatch_on_ready(session: "AsyncSession", restaurant_id: int) -> None:
