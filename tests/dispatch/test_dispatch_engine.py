@@ -530,6 +530,63 @@ async def test_ortools_reopt_unchanged_route_is_noop(db_session):
     assert result.assigned_count == 0
 
 
+async def test_dispatch_metrics_increment(db_session):
+    """Greedy dispatch bumps the engine run + assigned-order counters (observability)."""
+    from app.metrics import DISPATCH_ORDERS, DISPATCH_RUNS
+
+    runs_before = DISPATCH_RUNS.labels(engine="greedy")._value.get()
+    assigned_before = DISPATCH_ORDERS.labels(engine="greedy", outcome="assigned")._value.get()
+
+    r = await _seed_restaurant(db_session)  # greedy
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000050", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    await _ready_order(db_session, r.id, 25.2050, 55.2710, 51)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    assert DISPATCH_RUNS.labels(engine="greedy")._value.get() == runs_before + 1
+    assert (
+        DISPATCH_ORDERS.labels(engine="greedy", outcome="assigned")._value.get()
+        == assigned_before + 1
+    )
+
+
+async def test_shadow_compare_logs_when_enabled(db_session, caplog):
+    """With dispatch_shadow_compare on, a greedy run also logs the ortools plan it would
+    have produced (no writes)."""
+    import logging as _logging
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    settings.dispatch_shadow_compare = True
+    try:
+        r = await _seed_restaurant(db_session)  # greedy
+        rider = Rider(
+            restaurant_id=r.id, name="X", phone="+971500000052", status="available",
+            performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+        )
+        db_session.add(rider)
+        await db_session.flush()
+        await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+        await _ready_order(db_session, r.id, 25.2050, 55.2710, 53)
+        await db_session.commit()
+
+        with caplog.at_level(_logging.INFO, logger="app.dispatch.service"):
+            await run_dispatch_engine(db_session, restaurant_id=r.id)
+            await db_session.commit()
+        assert any("shadow-compare" in rec.getMessage() for rec in caplog.records)
+    finally:
+        settings.dispatch_shadow_compare = False
+
+
 async def test_rider_set_on_delivery_and_batch_created(db_session):
     r = await _seed_restaurant(db_session)
     rider = Rider(

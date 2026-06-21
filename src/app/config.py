@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     sla_customer_minutes: int = 40
     sla_internal_target_minutes: int = 30
     sla_buffer_per_order_minutes: int = 10
+    # When true, restaurants still on greedy ALSO run the OR-Tools optimizer in shadow
+    # (no writes) so we can log what it WOULD do vs greedy before flipping the flag.
+    dispatch_shadow_compare: bool = False
 
     # Rate limiting (redis token bucket)
     rate_limit_enabled: bool = True

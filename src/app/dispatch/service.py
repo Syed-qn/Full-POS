@@ -23,6 +23,7 @@ Schema adaptation (Phase-3 T2 flags — NO new migration required):
 """
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -39,6 +40,7 @@ from app.dispatch.optimizer import OptOrder, OptRider, optimize_dispatch
 from app.dispatch.scoring import RiderCandidate, rank_riders
 from app.geo.factory import get_geo_provider
 from app.geo.haversine import distance_km
+from app.metrics import DISPATCH_ORDERS, DISPATCH_RUNS, DISPATCH_SOLVE_SECONDS
 from app.identity.models import Restaurant, Rider
 from app.ordering.fsm import OrderStatus
 from app.ordering.models import Customer, CustomerAddress, Order
@@ -299,10 +301,12 @@ async def _dispatch_ortools(
         for rd in riders
     ]
 
+    _t0 = time.perf_counter()
     plan = optimize_dispatch(
         orders=opt_orders, riders=opt_riders, origin=origin,
         customer_sla_min=customer_sla_min, geo_provider=geo,
     )
+    DISPATCH_SOLVE_SECONDS.labels(engine="ortools").observe(time.perf_counter() - _t0)
 
     # Current per-rider sequence of movable orders (to detect unchanged routes).
     current: dict[int, list[int]] = {}
@@ -403,6 +407,15 @@ async def _dispatch_ortools(
                 f"slabreach-opt-{restaurant_id}-"
                 f"{min(dropped_ready)}-{int(now.timestamp() // 60)}"
             ),
+        )
+
+    if result.assigned_count:
+        DISPATCH_ORDERS.labels(engine="ortools", outcome="assigned").inc(
+            result.assigned_count
+        )
+    if dropped_ready:
+        DISPATCH_ORDERS.labels(engine="ortools", outcome="dropped").inc(
+            len(dropped_ready)
         )
     return result
 
@@ -550,6 +563,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     # SLA-first VRP optimizer. Unknown values fall back to greedy.
     engine = (restaurant.settings or {}).get("dispatch_engine", "greedy")
     if engine == "ortools" and candidates:
+        DISPATCH_RUNS.labels(engine="ortools").inc()
         return await _dispatch_ortools(
             session,
             restaurant=restaurant,
@@ -562,7 +576,19 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             customer_sla_min=_customer_sla_min,
         )
 
+    DISPATCH_RUNS.labels(engine="greedy").inc()
+    _t0 = time.perf_counter()
     batches = build_batches(candidates, geo_provider=geo, origin=origin)
+    DISPATCH_SOLVE_SECONDS.labels(engine="greedy").observe(time.perf_counter() - _t0)
+
+    # Shadow compare: run the optimizer in-memory (no writes) and log what it WOULD do,
+    # so we can evaluate ortools-vs-greedy on real traffic before flipping a restaurant.
+    if candidates and get_settings().dispatch_shadow_compare and origin is not None:
+        _log_shadow_compare(
+            candidates=candidates, restaurant=restaurant, origin=origin, geo=geo,
+            greedy_batches=batches, customer_sla_min=_customer_sla_min,
+        )
+
     result = DispatchResult()
 
     for planned in batches:
@@ -659,7 +685,62 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             now=now,
         )
 
+    if result.assigned_count:
+        DISPATCH_ORDERS.labels(engine="greedy", outcome="assigned").inc(
+            result.assigned_count
+        )
+    if result.unassigned_count:
+        DISPATCH_ORDERS.labels(engine="greedy", outcome="dropped").inc(
+            result.unassigned_count
+        )
     return result
+
+
+def _log_shadow_compare(
+    *,
+    candidates: list[OrderCandidate],
+    restaurant: Restaurant,
+    origin: tuple[float, float],
+    geo,
+    greedy_batches,
+    customer_sla_min: int,
+) -> None:
+    """Run the optimizer in-memory (no writes) and log served/dropped vs greedy.
+
+    Read-only evaluation harness: lets ops compare the OR-Tools plan against the greedy
+    plan on live traffic before opting a restaurant in. Never raises into dispatch."""
+    try:
+        opt_orders = [
+            OptOrder(
+                order_id=c.order_id, lat=c.lat, lon=c.lon,
+                minutes_elapsed=c.minutes_elapsed, priority=c.priority,
+            )
+            for c in candidates
+        ]
+        # Shadow uses the available riders as anonymous depot-co-located vehicles; this is
+        # an approximation (no live positions) — good enough for served/dropped counts.
+        n_riders = max(1, len(greedy_batches))
+        opt_riders = [
+            OptRider(rider_id=i, lat=origin[0], lon=origin[1]) for i in range(n_riders)
+        ]
+        _t0 = time.perf_counter()
+        plan = optimize_dispatch(
+            orders=opt_orders, riders=opt_riders, origin=origin,
+            customer_sla_min=customer_sla_min, geo_provider=geo,
+        )
+        DISPATCH_SOLVE_SECONDS.labels(engine="ortools_shadow").observe(
+            time.perf_counter() - _t0
+        )
+        greedy_served = sum(len(b.orders) for b in greedy_batches)
+        opt_served = sum(len(r.order_ids) for r in plan.routes)
+        _logger.info(
+            "dispatch shadow-compare restaurant=%s orders=%d | greedy: %d batches / %d served"
+            " | ortools: %d routes / %d served / %d dropped",
+            restaurant.id, len(candidates), len(greedy_batches), greedy_served,
+            len(plan.routes), opt_served, len(plan.unassigned),
+        )
+    except Exception:  # noqa: BLE001 - shadow eval must never break dispatch
+        _logger.exception("dispatch shadow-compare failed")
 
 
 async def reassign_order(

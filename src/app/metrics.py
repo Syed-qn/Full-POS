@@ -53,6 +53,28 @@ RATE_LIMIT_REJECTIONS = Counter(
     registry=REGISTRY,
 )
 
+# Dispatch engine observability (greedy vs ortools).
+DISPATCH_RUNS = Counter(
+    "dispatch_runs_total",
+    "Dispatch engine runs",
+    ["engine"],
+    registry=REGISTRY,
+)
+
+DISPATCH_ORDERS = Counter(
+    "dispatch_orders_total",
+    "Orders processed by the dispatch engine, by outcome",
+    ["engine", "outcome"],  # outcome: assigned | dropped
+    registry=REGISTRY,
+)
+
+DISPATCH_SOLVE_SECONDS = Histogram(
+    "dispatch_solve_seconds",
+    "Wall time of one dispatch plan computation",
+    ["engine"],
+    registry=REGISTRY,
+)
+
 
 def metrics_response() -> tuple[bytes, str]:
     """Return (body_bytes, content_type) for the /metrics handler."""
