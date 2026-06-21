@@ -6,6 +6,7 @@ import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CountdownTimer } from "../components/CountdownTimer";
+import { PrepCountdown } from "../components/PrepCountdown";
 import { apiClient } from "../lib/apiClient";
 import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
 import { cancelOrder, fetchOrder, reassignOrder } from "../lib/ordersApi";
@@ -174,6 +175,37 @@ export function OrderDetailDrawer({
               </span>
             ) : null}
           </div>
+
+          {(detail.status === "confirmed" || detail.status === "preparing") &&
+            detail.prep_deadline && (
+              <div
+                style={{
+                  display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+                  padding: "6px 0",
+                }}
+              >
+                {detail.status === "confirmed" && detail.cook_estimate_minutes != null ? (
+                  <PrepCountdown
+                    prepDeadline={new Date(
+                      Date.parse(detail.prep_deadline) -
+                        detail.cook_estimate_minutes * 60_000
+                    ).toISOString()}
+                    label="Start"
+                  />
+                ) : (
+                  <PrepCountdown prepDeadline={detail.prep_deadline} label="Plate" />
+                )}
+                <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+                  {detail.cook_estimate_minutes != null
+                    ? `~${detail.cook_estimate_minutes} min cook · `
+                    : ""}
+                  plate by{" "}
+                  {new Date(detail.prep_deadline).toLocaleTimeString([], {
+                    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Dubai",
+                  })}
+                </span>
+              </div>
+            )}
 
           {(KITCHEN_ADVANCEABLE.has(detail.status) || CANCELLABLE.has(detail.status)) && (
             <div className={s.actionBar}>

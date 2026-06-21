@@ -173,6 +173,37 @@ async def test_update_delivery_settings(client, auth_headers):
     assert resp.json()["settings"]["max_radius_km"] == 10
 
 
+async def test_update_dispatch_and_kitchen_settings(client, auth_headers):
+    """The dispatch engine + kitchen-timing tunables are settable via the settings PATCH."""
+    resp = await client.patch(
+        "/api/v1/settings",
+        json={
+            "dispatch_engine": "ortools",
+            "prep_handling_minutes": 7,
+            "batch_safety_minutes": 3,
+            "default_prep_minutes": 18,
+            "batch_expedite_radius_km": 2.0,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    sset = resp.json()["settings"]
+    assert sset["dispatch_engine"] == "ortools"
+    assert sset["prep_handling_minutes"] == 7
+    assert sset["batch_safety_minutes"] == 3
+    assert sset["default_prep_minutes"] == 18
+    assert sset["batch_expedite_radius_km"] == 2.0
+
+
+async def test_dispatch_engine_rejects_unknown_value(client, auth_headers):
+    resp = await client.patch(
+        "/api/v1/settings",
+        json={"dispatch_engine": "magic"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
 async def test_edit_rider_name_and_phone(client, auth_headers):
     rider = (
         await client.post(

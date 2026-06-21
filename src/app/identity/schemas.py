@@ -79,6 +79,13 @@ class SettingsPatch(BaseModel):
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
     delivery_fee_tiers: list[dict] | None = None
     open_hours: dict | None = None
+    # Dispatch engine + kitchen-timing tunables (per-restaurant; defaults in
+    # DEFAULT_SETTINGS). All optional so a PATCH only touches what it sends.
+    dispatch_engine: Literal["greedy", "ortools"] | None = None
+    prep_handling_minutes: int | None = Field(default=None, ge=0, le=30)
+    batch_safety_minutes: int | None = Field(default=None, ge=0, le=30)
+    default_prep_minutes: int | None = Field(default=None, ge=1, le=180)
+    batch_expedite_radius_km: float | None = Field(default=None, gt=0, le=10)
 
     @field_validator("open_hours")
     @classmethod

@@ -1,1 +1,1 @@
-{"nodes": [{"id": "understanding_deliver_pending", "label": "deliver_pending", "file_type": "code", "source_file": "src/app/outbox/worker.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
+{"nodes": [{"id": "understanding_deliver_pending", "label": "deliver_pending()", "file_type": "code", "source_file": "src/app/outbox/worker.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

@@ -7,7 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "hours" | "batching";
+type Tab = "general" | "fees" | "hours" | "batching" | "dispatch";
 
 const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
   { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
@@ -18,6 +18,8 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Opening Hours", blurb: "Hours the bot tells customers. Times are Asia/Dubai." },
   { key: "batching", label: "Batching", icon: "📦", desc: "Order grouping",
     title: "Order Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
+  { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
+    title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
 ];
 
 interface FeeTier {
@@ -78,6 +80,13 @@ export function SettingsScreen() {
   const [ordersPerBatch, setOrdersPerBatch] = useState(3);
   const [itemsPerOrder, setItemsPerOrder] = useState(20);
 
+  // Dispatch & Kitchen tab
+  const [dispatchEngine, setDispatchEngine] = useState<"greedy" | "ortools">("greedy");
+  const [prepHandling, setPrepHandling] = useState(5);
+  const [batchSafety, setBatchSafety] = useState(5);
+  const [defaultPrep, setDefaultPrep] = useState(15);
+  const [expediteRadius, setExpediteRadius] = useState(1.5);
+
   // Fees tab
   const [tiers, setTiers] = useState<FeeTier[]>(DEFAULT_TIERS);
 
@@ -94,6 +103,11 @@ export function SettingsScreen() {
       const sset = r.settings as Record<string, unknown>;
       if (typeof sset.max_orders_per_batch === "number") setOrdersPerBatch(sset.max_orders_per_batch);
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
+      if (sset.dispatch_engine === "ortools" || sset.dispatch_engine === "greedy") setDispatchEngine(sset.dispatch_engine);
+      if (typeof sset.prep_handling_minutes === "number") setPrepHandling(sset.prep_handling_minutes);
+      if (typeof sset.batch_safety_minutes === "number") setBatchSafety(sset.batch_safety_minutes);
+      if (typeof sset.default_prep_minutes === "number") setDefaultPrep(sset.default_prep_minutes);
+      if (typeof sset.batch_expedite_radius_km === "number") setExpediteRadius(sset.batch_expedite_radius_km);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
       // Opening hours: settings.open_hours.days maps "0".."6" -> ["HH:MM","HH:MM"].
       const oh = sset.open_hours as { days?: Record<string, [string, string]> } | undefined;
@@ -149,6 +163,21 @@ export function SettingsScreen() {
       await apiClient.patch("/api/v1/settings", {
         max_orders_per_batch: ordersPerBatch,
         max_items_per_order: itemsPerOrder,
+      });
+      flash();
+    } catch {
+      flash("Failed to save.");
+    }
+  }
+
+  async function saveDispatch() {
+    try {
+      await apiClient.patch("/api/v1/settings", {
+        dispatch_engine: dispatchEngine,
+        prep_handling_minutes: prepHandling,
+        batch_safety_minutes: batchSafety,
+        default_prep_minutes: defaultPrep,
+        batch_expedite_radius_km: expediteRadius,
       });
       flash();
     } catch {
@@ -468,6 +497,70 @@ export function SettingsScreen() {
           </div>
           <div className={s.actions}>
             <Button onClick={saveBatching}>Save</Button>
+          </div>
+        </div>
+      )}
+
+      {tab === "dispatch" && (
+        <div className={s.section}>
+          <label className={s.col}>
+            <span className={s.rowName}>Dispatch engine</span>
+            <select
+              aria-label="dispatch engine"
+              value={dispatchEngine}
+              onChange={(e) => setDispatchEngine(e.target.value as "greedy" | "ortools")}
+              className={s.input}
+            >
+              <option value="greedy">Greedy (default) — proximity batching</option>
+              <option value="ortools">OR-Tools — SLA-first route optimizer</option>
+            </select>
+            <span className={s.rowHint}>
+              OR-Tools optimizes routes + assignment jointly and drops orders that can't
+              make the 40-min SLA (with a manager alert). Pilot per restaurant.
+            </span>
+          </label>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Pickup handling (min)</span>
+              <input
+                aria-label="prep handling minutes" type="number" min={0} max={30}
+                value={prepHandling} onChange={(e) => setPrepHandling(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Slack reserved for the rider hand-off at pickup.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Batch safety (min)</span>
+              <input
+                aria-label="batch safety minutes" type="number" min={0} max={30}
+                value={batchSafety} onChange={(e) => setBatchSafety(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Margin so an order that joins a batch still makes the SLA.</span>
+            </label>
+          </div>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Default cook time (min)</span>
+              <input
+                aria-label="default prep minutes" type="number" min={1} max={180}
+                value={defaultPrep} onChange={(e) => setDefaultPrep(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Used for a dish with no prep time set, for the "start by" estimate.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Batch expedite radius (km)</span>
+              <input
+                aria-label="batch expedite radius km" type="number" min={0.1} max={10} step={0.1}
+                value={expediteRadius} onChange={(e) => setExpediteRadius(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Nudge the kitchen to rush a cooking order within this distance of a run going out.</span>
+            </label>
+          </div>
+          <div className={s.actions}>
+            <Button onClick={saveDispatch}>Save</Button>
           </div>
         </div>
       )}
