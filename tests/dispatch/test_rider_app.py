@@ -90,6 +90,26 @@ async def test_pair_then_location_reveals_stop_and_notifies(client, db_session):
     assert ts.last_location_at is not None
 
 
+async def test_two_pings_yield_single_first_ping(db_session):
+    """Two GPS fixes (the app pings from the foreground poll AND the background
+    stream) must claim 'first ping' only ONCE, so the customer's picked-up
+    notification can't be sent twice."""
+    from app.dispatch.rider_app import record_rider_app_location
+
+    r, rider, c, o = await _seed(db_session)
+
+    first = await record_rider_app_location(
+        db_session, rider=rider, latitude=25.2055, longitude=55.2750
+    )
+    second = await record_rider_app_location(
+        db_session, rider=rider, latitude=25.2056, longitude=55.2751
+    )
+
+    # Only the very first fix is reported as a first ping for the order.
+    assert first == [o.id]
+    assert second == []
+
+
 async def test_me_endpoint_returns_active_order(client, db_session):
     r, rider, c, o = await _seed(db_session)
     code = await create_pairing_code(db_session, rider=rider)

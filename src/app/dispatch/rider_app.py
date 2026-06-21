@@ -20,6 +20,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dispatch.tracking_live import (
@@ -158,6 +159,30 @@ async def record_rider_app_location(
     FIRST ping (so the caller can reveal that stop + notify the customer)."""
     _validate_coordinates(latitude, longitude)
     now = _now()
+    # Atomically CLAIM the first ping per order: stamp last_location_at only on
+    # sessions that have never received one. The conditional UPDATE ... WHERE
+    # last_location_at IS NULL ... RETURNING guarantees exactly ONE concurrent
+    # ping wins per order, so the customer's "on the way" notification fires once
+    # even though the app pings from two sources at once (foreground poll +
+    # background GPS stream). The old read-then-write let both pings see NULL and
+    # each notify, double-messaging the customer.
+    first_ping_order_ids: list[int] = list(
+        (
+            await session.execute(
+                sa_update(OrderTrackingSession)
+                .where(
+                    OrderTrackingSession.rider_id == rider.id,
+                    OrderTrackingSession.status == TRACKING_ACTIVE,
+                    OrderTrackingSession.last_location_at.is_(None),
+                )
+                .values(last_location_at=now)
+                .returning(OrderTrackingSession.order_id)
+                .execution_options(synchronize_session=False)
+            )
+        )
+        .scalars()
+        .all()
+    )
     sessions = (
         await session.scalars(
             select(OrderTrackingSession).where(
@@ -166,10 +191,7 @@ async def record_rider_app_location(
             )
         )
     ).all()
-    first_ping_order_ids: list[int] = []
     for s in sessions:
-        if s.last_location_at is None:
-            first_ping_order_ids.append(s.order_id)
         s.latest_latitude = latitude
         s.latest_longitude = longitude
         s.latest_accuracy = accuracy
