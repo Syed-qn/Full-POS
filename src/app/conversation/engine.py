@@ -1936,14 +1936,16 @@ async def _resolve_cart_dish(session: AsyncSession, *, order_id: int, candidates
 
 
 async def _execute_ai_remove_item(
-    session: AsyncSession, conv: Conversation, restaurant_id: int, dish_query: str
+    session: AsyncSession, conv: Conversation, restaurant_id: int,
+    dish_query: str, qty: int | None = None,
 ) -> tuple[str, str | None]:
-    """Remove a dish entirely from the draft cart.
+    """Remove a dish from the draft cart. ``qty=None`` removes the whole dish;
+    a number removes that many units (capped at what's in the cart).
 
-    Returns ``(outcome, dish_name)`` where outcome is "removed" (taken off),
-    "not_in_cart" (matched a menu dish but it wasn't in the cart), or "no_match"
-    (couldn't match the query / nothing to remove)."""
-    from app.ordering.models import Order
+    Returns ``(outcome, dish_name)`` where outcome is "removed" (dish gone),
+    "reduced" (some units left), "not_in_cart" (matched a menu dish but it wasn't
+    in the cart), or "no_match" (couldn't match the query)."""
+    from app.ordering.models import Order, OrderItem
     from app.ordering.service import remove_item
 
     draft_order_id = conv.state.get("draft_order_id")
@@ -1958,9 +1960,22 @@ async def _execute_ai_remove_item(
     dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
     if dish is None:
         return ("not_in_cart", result.candidates[0].name)
-    # Remove the whole line — "remove X" means take that dish off the cart.
-    removed = await remove_item(session, order=order, dish=dish, qty=10**9)
-    return ("removed" if removed > 0 else "not_in_cart", dish.name)
+    # Units of this dish currently in the cart (so "remove" with no number — or a
+    # number ≥ what's there — clears the whole line).
+    in_cart_units = sum(
+        i.qty for i in (
+            await session.scalars(
+                select(OrderItem).where(
+                    OrderItem.order_id == order.id, OrderItem.dish_id == dish.id
+                )
+            )
+        ).all()
+    )
+    to_remove = in_cart_units if qty is None or qty >= in_cart_units else qty
+    removed = await remove_item(session, order=order, dish=dish, qty=to_remove)
+    if removed <= 0:
+        return ("not_in_cart", dish.name)
+    return ("removed" if removed >= in_cart_units else "reduced", dish.name)
 
 
 async def _execute_ai_update_qty(
@@ -2261,12 +2276,16 @@ async def _dispatch_action(
 
     if action == "remove_item":
         dish_query = data.get("dish_query", "")
+        raw_qty = data.get("qty")
+        rm_qty = int(raw_qty) if raw_qty is not None else None
         outcome, dish_name = await _execute_ai_remove_item(
-            session, conv, restaurant_id, dish_query
+            session, conv, restaurant_id, dish_query, rm_qty
         )
         cart = await _build_cart_summary(session, conv)
         if outcome == "removed":
             body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "reduced":
+            body = f"Done — removed {rm_qty}x {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "not_in_cart":
             body = f"{dish_name} isn't in your cart.{_cart_tail(cart)}"
         else:  # no_match

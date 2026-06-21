@@ -233,7 +233,10 @@ _DS_TOOL = {
                     "description": (
                         "For add_item: how many to add (default 1). "
                         "For update_qty: the NEW TOTAL quantity, not a delta "
-                        "(e.g. 'make it 4' → qty=4)."
+                        "(e.g. 'make it 4' → qty=4). "
+                        "For remove_item: how many units to take off; OMIT it to "
+                        "remove the dish entirely ('remove 2 biryani' → qty=2; "
+                        "'remove the biryani' → no qty)."
                     ),
                 },
                 "special_note": {
@@ -337,11 +340,12 @@ CHANGING QUANTITY — action="update_qty" (dish_query + qty = the NEW TOTAL, not
     "actually 3 biryanis"     → update_qty dish_query="biryani" qty=3
   "make it N" right after adding a dish refers to THAT dish.
 
-REMOVING — action="remove_item" (dish_query = the dish to take off; removes it entirely):
-    "remove mutton biryani"   → remove_item dish_query="mutton biryani"
+REMOVING — action="remove_item" (dish_query = the dish to take off):
+    "remove mutton biryani"   → remove_item dish_query="mutton biryani"  (no qty = remove it all)
     "remove the biryani from cart" / "cancel the karahi" / "take off the coke" /
-    "I don't want the biryani" → remove_item dish_query="..."
-  To only REDUCE the count (not remove), use update_qty instead.
+    "I don't want the biryani" → remove_item dish_query="..."  (no qty)
+    "remove 2 biryani"        → remove_item dish_query="biryani" qty=2   (take off 2 units)
+  Omit qty to remove the dish entirely; give qty only when the customer names a number.
 
 FINISHING
 - Cart NOT empty + a done/closing signal — "done" / "that's all" / "checkout" /
@@ -505,12 +509,17 @@ class DeepSeekConversationAgent:
             max_tokens=512,
         )
 
+        # Pass qty through as-is (None when the customer gave no number). add_item
+        # and update_qty default it to 1 downstream; remove_item treats None as
+        # "remove the whole dish" vs a number as "remove that many units".
+        _q = inp.get("qty")
+        qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
         return ConversationAgentResult(
             message=inp.get("reply", ""),
             action=inp.get("action", "no_action"),
             action_data={
                 "dish_query": inp.get("dish_query", ""),
-                "qty": int(inp.get("qty") or 1),
+                "qty": qty,
                 "special_note": inp.get("special_note", ""),
                 "apt_room": inp.get("apt_room", ""),
                 "building": inp.get("building", ""),

@@ -254,6 +254,58 @@ async def test_update_qty_and_remove_item_actions(db_session, restaurant):
     assert (await _cart()) == {"mutton biryani": 1}        # only the named dish removed
 
 
+async def test_remove_item_partial_quantity(db_session, restaurant):
+    """'remove 2 biryani' takes off 2 units (reduce); a bare 'remove' clears it."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.llm.port import ConversationAgentResult
+    from app.ordering.models import OrderItem
+
+    await _seed_menu(db_session, restaurant.id)  # Chicken Biryani #110
+    phone = "+971501230222"
+
+    def _inb(wamid: str, text: str) -> InboundMessage:
+        return InboundMessage(
+            wa_message_id=wamid, from_phone=phone, type=MessageType.TEXT,
+            payload={"text": text}, restaurant_phone=restaurant.phone, timestamp=1717660000,
+        )
+
+    results = [
+        ConversationAgentResult(message="Added!", action="add_item",
+                                action_data={"dish_query": "biryani", "qty": 3, "special_note": ""}),
+        ConversationAgentResult(message="ok", action="remove_item",
+                                action_data={"dish_query": "biryani", "qty": 2}),     # reduce 3→1
+        ConversationAgentResult(message="ok", action="remove_item",
+                                action_data={"dish_query": "biryani"}),               # no qty → clear
+    ]
+
+    async def _drive(wamid, text):
+        with patch("app.llm.fake.FakeConversationAgent.respond",
+                   new=AsyncMock(return_value=results.pop(0))):
+            await handle_inbound(db_session, _inb(wamid, text), restaurant_id=restaurant.id)
+        await db_session.commit()
+
+    from app.conversation.service import get_or_create_conversation
+
+    async def _cart():
+        conv = await get_or_create_conversation(
+            db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+        )
+        items = (await db_session.scalars(
+            select(OrderItem).where(OrderItem.order_id == conv.state.get("draft_order_id"))
+        )).all()
+        return {i.dish_name.lower(): i.qty for i in items}
+
+    await _drive("wamid.p1", "3 biryani")
+    assert (await _cart()) == {"chicken biryani": 3}
+
+    await _drive("wamid.p2", "remove 2 biryani")
+    assert (await _cart()) == {"chicken biryani": 1}        # reduced, not cleared
+
+    await _drive("wamid.p3", "remove biryani")
+    assert (await _cart()) == {}                            # whole dish gone
+
+
 async def test_location_pin_outside_radius_rejected(db_session, restaurant):
     """Location pin outside restaurant's max_radius_km → polite rejection, no crash."""
     from unittest.mock import MagicMock, patch
