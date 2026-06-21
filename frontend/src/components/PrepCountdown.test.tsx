@@ -24,4 +24,9 @@ describe("PrepCountdown", () => {
     expect(screen.getByText("🍳 Plate now")).toBeInTheDocument();
     expect(screen.getByTestId("prep-countdown").className).toContain("breach");
   });
+
+  it("uses a custom label (e.g. Start)", () => {
+    render(<PrepCountdown prepDeadline={inMin(8)} label="Start" />);
+    expect(screen.getByText("🍳 Start in 08:00")).toBeInTheDocument();
+  });
 });

@@ -73,6 +73,7 @@ const mockDetail: OrderDetailOut = {
   delivered_at: "2026-06-10T09:38:00Z",
   sla_deadline: null,
   prep_deadline: null,
+  cook_estimate_minutes: null,
   timeline: [
     {
       ts: "2026-06-10T09:10:00Z",
@@ -108,6 +109,7 @@ const mockBasicOrder: OrderOut = {
   rider_name: "Ahmed Hassan",
   sla_started_at: null,
   prep_deadline: null,
+  cook_estimate_minutes: null,
   created_at: "2026-06-10T09:00:00Z",
   address: "Apt 404, Marina Tower",
   lat: 25.2,

@@ -10,7 +10,7 @@ Idempotency: uq_sla_events_order_type blocks duplicate rows; ON CONFLICT DO NOTH
 from __future__ import annotations
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from celery import shared_task
@@ -69,30 +69,57 @@ async def _run_monitor() -> None:
                     continue
                 await _fire_event(session, order=order, event_type=event_type, now=now)
 
+            pd = order.prep_deadline
+            if pd is not None and pd.tzinfo is None:
+                pd = pd.replace(tzinfo=timezone.utc)
+
+            # "Start cooking by" = prep_deadline − cook estimate. While the order is still
+            # only CONFIRMED (not started), warn once it's past the point where even the
+            # slowest dish can't finish in time.
+            if (
+                order.status == str(OrderStatus.CONFIRMED)
+                and pd is not None
+                and order.cook_estimate_minutes is not None
+            ):
+                start_by = pd - timedelta(minutes=order.cook_estimate_minutes)
+                if now >= start_by:
+                    await _fire_kitchen_event(
+                        session, order=order, now=now, event_type="start_late",
+                        body=(
+                            f"🔥 Start cooking {order.order_number} NOW — it won't be "
+                            "ready in time for the 40-min SLA otherwise."
+                        ),
+                    )
+
             # Kitchen plate-by deadline: while the order is still cooking, warn the
             # manager the moment it passes its distance-driven prep_deadline so they can
             # push the kitchen before the drive budget is gone.
-            if order.status in (str(OrderStatus.CONFIRMED), str(OrderStatus.PREPARING)):
-                pd = order.prep_deadline
-                if pd is not None:
-                    if pd.tzinfo is None:
-                        pd = pd.replace(tzinfo=timezone.utc)
-                    if now >= pd:
-                        await _fire_prep_late(session, order=order, now=now)
+            if (
+                order.status in (str(OrderStatus.CONFIRMED), str(OrderStatus.PREPARING))
+                and pd is not None
+                and now >= pd
+            ):
+                await _fire_kitchen_event(
+                    session, order=order, now=now, event_type="prep_late",
+                    body=(
+                        f"👨‍🍳 Plate {order.order_number} NOW — it's past the kitchen "
+                        "deadline and the delivery still needs time to make the 40-min SLA."
+                    ),
+                )
         await session.commit()
 
 
-async def _fire_prep_late(
-    session: AsyncSession, *, order: Order, now: datetime
+async def _fire_kitchen_event(
+    session: AsyncSession, *, order: Order, now: datetime, event_type: str, body: str
 ) -> None:
-    """Manager alert when an order is still cooking past its plate-by deadline. Idempotent
-    via the uq_sla_events_order_type constraint (one 'prep_late' row per order)."""
+    """Manager kitchen alert (start_late / prep_late). Idempotent via the
+    uq_sla_events_order_type constraint (one row per order per type)."""
     stmt = (
         pg_insert(SlaEvent)
         .values(
             order_id=order.id,
             restaurant_id=order.restaurant_id,
-            type="prep_late",
+            type=event_type,
             ts=now,
             notified={},
         )
@@ -111,13 +138,8 @@ async def _fire_prep_late(
             restaurant_id=order.restaurant_id,
             to_phone=restaurant.phone,
             msg_type=OutboundMessageType.TEXT,
-            payload={
-                "body": (
-                    f"👨‍🍳 Plate {order.order_number} NOW — it's past the kitchen "
-                    "deadline and the delivery still needs time to make the 40-min SLA."
-                )
-            },
-            idempotency_key=f"prep-late-{order.id}",
+            payload={"body": body},
+            idempotency_key=f"{event_type}-{order.id}",
         )
 
 

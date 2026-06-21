@@ -84,6 +84,9 @@ class Order(Base, TimestampMixin):
     # delivery address − handling − batch safety. Distance-driven, not hardcoded. Null
     # when the order has no geocoded drop-off (can't compute a drive leg).
     prep_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Estimated minutes to cook this order (slowest dish gates readiness). With
+    # prep_deadline it yields "start cooking by" = prep_deadline − cook_estimate_minutes.
+    cook_estimate_minutes: Mapped[int | None] = mapped_column(Integer)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     late: Mapped[bool | None] = mapped_column(Boolean)
 

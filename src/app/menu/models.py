@@ -44,6 +44,9 @@ class Dish(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(String(2000))
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     name_normalized: Mapped[str | None] = mapped_column(String(256))
+    # Estimated cook time for one portion (minutes). Null = unknown -> the order's cook
+    # estimate falls back to the restaurant's default_prep_minutes setting.
+    prep_minutes: Mapped[int | None] = mapped_column(Integer)
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
 

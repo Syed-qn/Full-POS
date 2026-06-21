@@ -16,6 +16,7 @@ from app.audit.service import record_audit
 from app.config import get_settings
 from app.geo.factory import get_geo_provider
 from app.identity.models import Restaurant
+from app.menu.models import Dish
 from app.ordering.fsm import OrderStatus
 from app.ordering.fsm import transition as fsm_transition
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
@@ -56,6 +57,27 @@ async def compute_prep_deadline(
     budget = get_settings().sla_customer_minutes - drive_min - handling - safety
     deadline = now + timedelta(minutes=budget)
     return max(deadline, now)
+
+
+async def compute_cook_estimate(session: "AsyncSession", order: Order) -> int | None:
+    """Estimated minutes to cook the order. Kitchens cook in parallel, so the slowest
+    single dish gates readiness → max prep_minutes across the order's lines, falling back
+    to the restaurant's default_prep_minutes for any dish without a set time. Returns None
+    for an order with no items."""
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    if not items:
+        return None
+    restaurant = await session.get(Restaurant, order.restaurant_id)
+    default = int((restaurant.settings or {}).get("default_prep_minutes", 15)) if restaurant else 15
+    dishes = (
+        await session.scalars(
+            select(Dish).where(Dish.id.in_({i.dish_id for i in items}))
+        )
+    ).all()
+    prep_by = {d.id: d.prep_minutes for d in dishes}
+    return max((prep_by.get(i.dish_id) or default) for i in items)
 
 
 def _compute_exclusion_hash(
@@ -519,6 +541,7 @@ async def finalize_confirmation(
     order.sla_deadline = now + timedelta(minutes=40)
     order.promised_eta = order.sla_deadline
     order.prep_deadline = await compute_prep_deadline(session, order, now)
+    order.cook_estimate_minutes = await compute_cook_estimate(session, order)
     await session.flush()
 
 
@@ -595,6 +618,7 @@ async def modify_order(
     order.sla_deadline = now + timedelta(minutes=40)
     order.promised_eta = order.sla_deadline
     order.prep_deadline = await compute_prep_deadline(session, order, now)
+    order.cook_estimate_minutes = await compute_cook_estimate(session, order)
     await session.flush()
 
     await record_audit(
@@ -1201,6 +1225,7 @@ async def get_order_detail(
         delivered_at=order.delivered_at,
         sla_deadline=order.sla_deadline,
         prep_deadline=order.prep_deadline,
+        cook_estimate_minutes=order.cook_estimate_minutes,
         timeline=timeline,
         chat=chat,
         route=route,

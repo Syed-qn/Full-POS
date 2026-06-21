@@ -1,1 +1,1 @@
-{"nodes": [{"id": "riders_create_endpoint", "label": "POST /api/v1/riders", "file_type": "code", "source_file": "src/app/identity/router.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
+{"nodes": [{"id": "understanding_create_rider", "label": "create_rider", "file_type": "code", "source_file": "src/app/identity/router.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

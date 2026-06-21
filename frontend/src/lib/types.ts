@@ -102,6 +102,8 @@ export interface OrderOut {
   sla_started_at: string | null;
   /** ISO 8601 — distance-driven kitchen "plate by" deadline (null if no drop-off pin). */
   prep_deadline: string | null;
+  /** Estimated cook minutes; "start by" = prep_deadline − this. */
+  cook_estimate_minutes: number | null;
   created_at: string;
   address: string | null;
   lat: number | null;
@@ -197,6 +199,7 @@ export interface OrderDetailOut {
   delivered_at: string | null;
   sla_deadline: string | null;
   prep_deadline: string | null;
+  cook_estimate_minutes: number | null;
   timeline: TimelineEventOut[];
   chat: ChatMessageOut[];
   route: GpsPingOut[];

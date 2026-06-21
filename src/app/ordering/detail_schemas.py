@@ -86,6 +86,7 @@ class OrderDetailOut(BaseModel):
     delivered_at: datetime | None
     sla_deadline: datetime | None
     prep_deadline: datetime | None
+    cook_estimate_minutes: int | None
     timeline: list[TimelineEventOut]
     chat: list[ChatMessageOut]
     route: list[GpsPingOut]

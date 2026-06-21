@@ -11,7 +11,7 @@ function order(over: Partial<OrderOut> = {}): OrderOut {
     id: 47, status: "preparing", customer_name: "Ali", customer_phone: "+9715",
     items: [{ dish_number: 110, name: "Biryani", qty: 2, price_aed: "22.00" }],
     total_aed: "44.00", rider_id: null, rider_name: null,
-    sla_started_at: iso(32), prep_deadline: null, created_at: iso(33), address: "J1", lat: null, lng: null, ...over,
+    sla_started_at: iso(32), prep_deadline: null, cook_estimate_minutes: null, created_at: iso(33), address: "J1", lat: null, lng: null, ...over,
   };
 }
 

@@ -92,11 +92,98 @@ async def run_dispatch_engine(
 ) -> DispatchResult:
     """Assign ready orders to nearest available riders. Idempotent per call."""
     async with _restaurant_lock(restaurant_id):
-        return await _dispatch(session, restaurant_id)
+        result = await _dispatch(session, restaurant_id)
+        # After assigning, nudge the kitchen to rush still-cooking orders that are
+        # headed to the same area as a run going out now, so they catch the next batch.
+        await _nudge_batchable_cooking_orders(session, restaurant_id)
+        return result
 
 
 # Alias used by dispatch router (spec §4.3)
 run_dispatch = run_dispatch_engine
+
+
+async def _nudge_batchable_cooking_orders(
+    session: AsyncSession, restaurant_id: int
+) -> None:
+    """Tell the kitchen to prioritise a still-cooking order when its delivery is in the
+    same area as an order being delivered now — so it can ride the next batch to that
+    area instead of needing a fresh rider. Advisory + idempotent (one 'batch_expedite'
+    event per order via uq_sla_events_order_type). Best-effort; never breaks dispatch."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.sla.models import SlaEvent
+
+    try:
+        restaurant = await session.get(Restaurant, restaurant_id)
+        if restaurant is None:
+            return
+        radius = float((restaurant.settings or {}).get("batch_expedite_radius_km", 1.5))
+        now = datetime.now(timezone.utc)
+
+        assigned = (
+            await session.scalars(
+                select(Order).where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.status == str(OrderStatus.ASSIGNED),
+                )
+            )
+        ).all()
+        cooking = (
+            await session.scalars(
+                select(Order).where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.status.in_(
+                        [str(OrderStatus.CONFIRMED), str(OrderStatus.PREPARING)]
+                    ),
+                )
+            )
+        ).all()
+        if not assigned or not cooking:
+            return
+
+        dest_coords = await _dropoff_coords(session, list(assigned))
+        cook_coords = await _dropoff_coords(session, list(cooking))
+        dest_pts = [dest_coords[o.id] for o in assigned if o.id in dest_coords]
+        if not dest_pts:
+            return
+
+        for co in cooking:
+            cc = cook_coords.get(co.id)
+            if cc is None:
+                continue
+            if not any(distance_km(cc[0], cc[1], dp[0], dp[1]) <= radius for dp in dest_pts):
+                continue
+            stmt = (
+                pg_insert(SlaEvent)
+                .values(
+                    order_id=co.id,
+                    restaurant_id=restaurant_id,
+                    type="batch_expedite",
+                    ts=now,
+                    notified={},
+                )
+                .on_conflict_do_nothing(constraint="uq_sla_events_order_type")
+                .returning(SlaEvent.id)
+            )
+            if (await session.execute(stmt)).first() is None:
+                continue  # already nudged for this order
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=restaurant.phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={
+                    "body": (
+                        f"🍱 Order {co.order_number} is headed to the same area as a "
+                        "delivery going out now — prioritise it so it can batch the next "
+                        "run (saves a rider trip)."
+                    )
+                },
+                idempotency_key=f"batch-expedite-{co.id}",
+            )
+    except Exception:  # noqa: BLE001 - advisory nudge must never break dispatch
+        _logger.exception("batch-expedite nudge failed (restaurant_id=%s)", restaurant_id)
 
 
 async def _latest_rider_positions(

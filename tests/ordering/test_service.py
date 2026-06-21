@@ -523,3 +523,50 @@ async def test_prep_deadline_recomputed_and_kitchen_warned_on_repin(db_session, 
         _select(OutboxMessage).where(OutboxMessage.to_phone == restaurant.phone)
     )
     assert msg is not None and "R1" in str(msg.payload)
+
+
+async def test_cook_estimate_is_slowest_dish_with_default_fallback(db_session, restaurant):
+    """Cook estimate = slowest dish's prep_minutes; dishes without a time use the
+    restaurant default_prep_minutes."""
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import Order, OrderItem
+    from app.ordering.service import compute_cook_estimate
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active")
+    db_session.add(menu)
+    await db_session.flush()
+    slow = Dish(menu_id=menu.id, restaurant_id=restaurant.id, name="Biryani", prep_minutes=22)
+    fast = Dish(menu_id=menu.id, restaurant_id=restaurant.id, name="Salad", prep_minutes=5)
+    unknown = Dish(menu_id=menu.id, restaurant_id=restaurant.id, name="Mystery")  # no prep
+    db_session.add_all([slow, fast, unknown])
+    await db_session.flush()
+
+    c = Customer(
+        restaurant_id=restaurant.id, phone="+971507000004", name="K",
+        usual_order_times={}, tags={}, total_orders=0, total_spend="0.00",
+    )
+    db_session.add(c)
+    await db_session.flush()
+
+    def _order(num):
+        o = Order(
+            restaurant_id=restaurant.id, customer_id=c.id, order_number=num,
+            status="confirmed", subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        )
+        db_session.add(o)
+        return o
+
+    def _item(o, d):
+        db_session.add(OrderItem(
+            order_id=o.id, dish_id=d.id, dish_number=d.dish_number or 0,
+            dish_name=d.name, price_aed=Decimal("10.00"), qty=1,
+        ))
+
+    o_mix, o_unknown = _order("K1"), _order("K2")
+    await db_session.flush()
+    _item(o_mix, slow); _item(o_mix, fast)   # max(22, 5) = 22
+    _item(o_unknown, unknown)                 # falls back to default 15
+    await db_session.flush()
+
+    assert await compute_cook_estimate(db_session, o_mix) == 22
+    assert await compute_cook_estimate(db_session, o_unknown) == 15

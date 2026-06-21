@@ -108,6 +108,7 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         prep_deadline=(
             order.prep_deadline.isoformat() if order.prep_deadline else None
         ),
+        cook_estimate_minutes=order.cook_estimate_minutes,
         created_at=order.created_at.isoformat(),
         address=address_str,
         lat=lat,

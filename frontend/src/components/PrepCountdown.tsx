@@ -8,7 +8,14 @@ import s from "./CountdownTimer.module.css";
  * 40-min SLA to drive the order. Renders nothing when there's no deadline (no drop-off
  * pin). Goes urgent under 5 min and flips to "Plate now" once past.
  */
-export function PrepCountdown({ prepDeadline }: { prepDeadline: string | null }) {
+export function PrepCountdown({
+  prepDeadline,
+  label = "Plate",
+}: {
+  prepDeadline: string | null;
+  /** Verb shown in the badge — "Plate" (cooking) or "Start" (not started yet). */
+  label?: string;
+}) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -25,9 +32,9 @@ export function PrepCountdown({ prepDeadline }: { prepDeadline: string | null })
     <span
       data-testid="prep-countdown"
       className={`${s.timer} ${urgent ? s.urgent : ""} ${late ? s.breach : ""}`}
-      title="Kitchen plate-by deadline (distance-driven)"
+      title="Kitchen deadline (distance-driven)"
     >
-      {late ? "🍳 Plate now" : `🍳 Plate in ${formatCountdown(rem)}`}
+      {late ? `🍳 ${label} now` : `🍳 ${label} in ${formatCountdown(rem)}`}
     </span>
   );
 }

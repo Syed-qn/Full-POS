@@ -26,6 +26,9 @@ DEFAULT_SETTINGS: dict = {
     # drive) still makes the SLA. Both subtracted from the drive budget — not hardcoded.
     "prep_handling_minutes": 5,
     "batch_safety_minutes": 5,
+    # Fallback cook time (minutes) for a dish with no prep_minutes set — used to estimate
+    # an order's "start cooking by" time.
+    "default_prep_minutes": 15,
 }
 
 

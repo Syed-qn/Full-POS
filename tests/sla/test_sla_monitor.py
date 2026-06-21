@@ -347,3 +347,30 @@ async def test_prep_late_alerts_manager_when_past_plate_by(db_session: AsyncSess
         select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
     )).all()
     assert any(late.order_number in str(m.payload) for m in msgs)
+
+
+async def test_start_late_alerts_when_past_start_by(db_session: AsyncSession):
+    """A confirmed (not yet started) order past 'start cooking by' = prep_deadline −
+    cook_estimate fires a 'start_late' event + manager alert."""
+    r = await _seed_restaurant(db_session)
+    c = await _seed_customer(db_session, r.id, idx=950)
+    now = datetime.now(timezone.utc)
+
+    o = await _seed_order(db_session, r.id, c.id, elapsed_minutes=8.0, status="confirmed", idx=95)
+    o.prep_deadline = now + timedelta(minutes=10)   # plate by in 10 min
+    o.cook_estimate_minutes = 20                     # needs 20 min -> start_by was 10 min ago
+    await db_session.commit()
+
+    with patch("app.sla.monitor.async_session_factory", _make_session_factory(db_session)):
+        await _run_monitor()
+
+    events = {
+        e.type for e in (await db_session.scalars(
+            select(SlaEvent).where(SlaEvent.order_id == o.id)
+        )).all()
+    }
+    assert "start_late" in events
+    msgs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+    )).all()
+    assert any(o.order_number in str(m.payload) for m in msgs)

@@ -716,3 +716,59 @@ async def test_advance_to_ready_auto_assigns_rider(db_session):
     assert o.status == "assigned"
     assert o.rider_id == rider.id
     assert rider.status == "on_delivery"
+
+
+async def test_batch_expedite_nudges_kitchen_for_same_area_cooking_order(db_session):
+    """A still-cooking order whose delivery is in the same area as an order going out now
+    gets a 'batch_expedite' kitchen nudge; a far cooking order does not."""
+    from app.sla.models import SlaEvent
+
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000060", status="on_delivery",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+
+    async def _order(num, lat, lon, status, rider_id=None):
+        c = Customer(
+            restaurant_id=r.id, phone=f"+971509{num}", name="C",
+            usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+        )
+        db_session.add(c)
+        await db_session.flush()
+        addr = CustomerAddress(customer_id=c.id, latitude=lat, longitude=lon, confirmed=True)
+        db_session.add(addr)
+        await db_session.flush()
+        o = Order(
+            restaurant_id=r.id, customer_id=c.id, order_number=num, status=status,
+            rider_id=rider_id, subtotal=Decimal("10.00"), total=Decimal("10.00"),
+            address_id=addr.id,
+        )
+        db_session.add(o)
+        await db_session.flush()
+        return o
+
+    # Delivery going out now → area A.
+    await _order("A1", 25.2050, 55.2710, "assigned", rider_id=rider.id)
+    near = await _order("N1", 25.2055, 55.2715, "preparing")   # ~70 m from A
+    far = await _order("F1", 25.2500, 55.3200, "preparing")    # ~6 km away
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    near_events = {e.type for e in (await db_session.scalars(
+        select(SlaEvent).where(SlaEvent.order_id == near.id)
+    )).all()}
+    far_events = {e.type for e in (await db_session.scalars(
+        select(SlaEvent).where(SlaEvent.order_id == far.id)
+    )).all()}
+    assert "batch_expedite" in near_events
+    assert "batch_expedite" not in far_events
+
+    msg = await db_session.scalar(
+        select(OutboxMessage).where(OutboxMessage.to_phone == r.phone)
+    )
+    assert msg is not None and "N1" in str(msg.payload)
