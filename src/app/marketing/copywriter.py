@@ -24,7 +24,9 @@ _PROMPT = (
     "- Start by greeting the customer with the placeholder {{{{1}}}} (their name), "
     "e.g. 'Hi {{{{1}}}},'.\n"
     "- Use {{{{1}}}} EXACTLY once and no other placeholders.\n"
-    "- Max ~400 characters, no emoji spam, no shortened links, no ALL CAPS words.\n"
+    "- Max ~400 characters. A few tasteful, relevant emojis are welcome (about "
+    "1-4, e.g. 🍽️🔥😋🎉) to make it pop — don't overdo it. No shortened links, "
+    "no ALL CAPS words.\n"
     "- End with a clear call to action (e.g. 'Reply to order').\n"
     'Reply with ONLY JSON: {{"body": "...", "footer": "Reply STOP to opt out"}}'
 )
@@ -37,8 +39,8 @@ def _slug(describe: str) -> str:
 
 def _fallback(describe: str) -> dict:
     body = (
-        f"Hi {{{{1}}}}, we've got something for you at our restaurant: "
-        f"{describe.strip()}. Reply to this message to order. See you soon!"
+        f"Hi {{{{1}}}}, we've got something tasty for you 😋 "
+        f"{describe.strip()}. Reply to this message to order. See you soon! 🍽️"
     )
     return {"body": body, "footer": "Reply STOP to opt out"}
 
