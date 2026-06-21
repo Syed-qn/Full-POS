@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { logout } from "../lib/auth";
 import s from "./NavSidebar.module.css";
 
 const ITEMS: Array<{ to: string; label: string; icon: string }> = [
@@ -15,6 +16,13 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
 ];
 
 export function NavSidebar({ unread = 0 }: { unread?: number }) {
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <nav className={s.nav}>
       <div className={s.logo}>OPS</div>
@@ -32,6 +40,10 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
           )}
         </NavLink>
       ))}
+      <button type="button" className={`${s.item} ${s.logout}`} onClick={handleLogout}>
+        <span className={s.icon}>🚪</span>
+        Logout
+      </button>
     </nav>
   );
 }

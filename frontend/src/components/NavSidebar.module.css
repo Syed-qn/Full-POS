@@ -46,6 +46,16 @@
   color: var(--accent-primary);
   font-weight: 600;
 }
+.logout {
+  margin-top: auto;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  cursor: pointer;
+  width: 100%;
+  font-family: inherit;
+  box-sizing: border-box;
+}
 .badge {
   font-family: var(--font-mono);
   font-size: 10px;
