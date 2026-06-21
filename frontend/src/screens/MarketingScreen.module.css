@@ -28,6 +28,50 @@
   margin-bottom: 2px;
 }
 
+/* Two-section create: preview (left) + form (right) */
+.createBody {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.previewCol {
+  flex: 0 1 320px;
+  min-width: 260px;
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.formCol {
+  flex: 1 1 360px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sendBtn {
+  margin-left: auto;
+  background: #25d366;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sendBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.sendBtnArmed {
+  background: var(--sla-critical);
+}
+
 .note {
   font-size: 12px;
   color: var(--text-muted);
@@ -107,6 +151,80 @@
   color: var(--text-muted);
   font-size: 13px;
   padding: 14px 0;
+}
+
+/* ---- Live WhatsApp preview ---- */
+.previewLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--text-secondary);
+  margin-top: 14px;
+}
+.previewWrap {
+  margin-top: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--text-muted) 6%, transparent),
+      color-mix(in srgb, var(--text-muted) 6%, transparent) 2px,
+      transparent 2px,
+      transparent 12px
+    ),
+    var(--bg-surface-inset);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.bubble {
+  max-width: 320px;
+  background: color-mix(in srgb, #25d366 16%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, #25d366 30%, var(--border-subtle));
+  border-radius: 10px 10px 10px 2px;
+  padding: 8px 10px 6px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+.bubbleImg {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  display: block;
+}
+.bubbleBody {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubbleFooter {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.bubbleTime {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 2px;
+}
+.bubbleBtn {
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+  background: var(--bg-surface);
+  border: 1px solid color-mix(in srgb, #25d366 30%, var(--border-subtle));
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #128c7e;
 }
 
 .tplPick {
