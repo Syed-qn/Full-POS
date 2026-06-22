@@ -18,6 +18,7 @@ all timestamps are UTC.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from decimal import Decimal
@@ -269,19 +270,47 @@ async def refresh_template(
 # ---------------------------------------------------------------------------
 # Compliant send pipeline
 # ---------------------------------------------------------------------------
-def _build_payload(tpl: WaTemplate, *, coupon_code: str | None, image_url: str | None) -> dict:
-    """Assemble the TEMPLATE outbox payload (name, language, components)."""
+_BODY_VAR_RE = re.compile(r"\{\{\s*(\d+)\s*\}\}")
+
+
+def _build_payload(
+    tpl: WaTemplate,
+    *,
+    customer_name: str | None,
+    coupon_code: str | None,
+    image_url: str | None,
+) -> dict:
+    """Assemble the TEMPLATE outbox payload the Cloud API provider expects.
+
+    Key is ``name`` (NOT ``template_name``) — the provider reads ``payload['name']``,
+    so the wrong key silently failed every live send. Body variables are filled in
+    order to match the template's ``{{n}}`` count or Meta rejects the message:
+    ``{{1}}`` is the customer's name (copywriter convention), and when a coupon is
+    issued it fills the LAST variable (e.g. ``...use code {{2}}``).
+    """
     components: list[dict] = []
-    if image_url:
+    # An IMAGE-header template REQUIRES a header image parameter at send time or
+    # Meta rejects it. Use the campaign's image if set, else fall back to the image
+    # the template itself was approved with (stored on the header).
+    header_img = image_url
+    if not header_img and isinstance(tpl.header, dict) and \
+            str(tpl.header.get("type", "")).upper() == "IMAGE":
+        header_img = tpl.header.get("image_url") or tpl.header.get("url")
+    if header_img:
         components.append(
-            {"type": "header", "parameters": [{"type": "image", "image": {"link": image_url}}]}
+            {"type": "header", "parameters": [{"type": "image", "image": {"link": header_img}}]}
         )
-    if coupon_code:
+    n_vars = len({int(m) for m in _BODY_VAR_RE.findall(tpl.body or "")})
+    if n_vars:
+        name = (customer_name or "").strip() or "there"
+        values = [name] * n_vars
+        if coupon_code:
+            values[-1] = coupon_code  # last var carries the code (e.g. "use {{2}}")
         components.append(
-            {"type": "body", "parameters": [{"type": "text", "text": coupon_code}]}
+            {"type": "body", "parameters": [{"type": "text", "text": v} for v in values]}
         )
     payload = {
-        "template_name": tpl.meta_template_name,
+        "name": tpl.meta_template_name,
         "language": tpl.language,
         "components": components,
         # STOP quick-reply keeps every marketing message opt-out-able.
@@ -394,7 +423,8 @@ async def run_campaign_send(
                     )
                     coupon_code = coupon.code
             payload = _build_payload(
-                tpl, coupon_code=coupon_code, image_url=campaign.image_url
+                tpl, customer_name=cust.name,
+                coupon_code=coupon_code, image_url=campaign.image_url,
             )
             idempotency_key = f"campaign:{campaign.id}:customer:{cust.id}"
             inserted = await _insert_send(

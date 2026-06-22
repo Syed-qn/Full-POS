@@ -163,8 +163,8 @@ async def test_submit_template_lint_failure_raises(db_session, restaurant):
 # ---------------------------------------------------------------------------
 # run_campaign_send — the core compliant pipeline
 # ---------------------------------------------------------------------------
-async def _approved_campaign(db_session, restaurant, provider):
-    tpl = await _seed_template(db_session, restaurant)
+async def _approved_campaign(db_session, restaurant, provider, *, body=_COMPLIANT_BODY):
+    tpl = await _seed_template(db_session, restaurant, body=body)
     await service.submit_template(
         db_session,
         restaurant_id=restaurant.id,
@@ -300,9 +300,58 @@ async def test_run_campaign_send_is_idempotent(db_session, restaurant):
     assert send_count == 1
 
 
+def test_build_payload_uses_name_key_and_fills_body_variable():
+    """Regression: the outbox payload must use 'name' (the Cloud API provider reads
+    payload['name']) — the old 'template_name' key KeyError'd every live send — and
+    must fill the {{1}} body variable so Meta doesn't reject on a param mismatch."""
+    from app.marketing.models import WaTemplate
+    from app.marketing.service import _build_payload
+
+    tpl = WaTemplate(
+        restaurant_id=1, meta_template_name="promo_biryani_20260101", language="en",
+        category="marketing", body="Hi {{1}}, craving biryani? 20% off. Reply to order.",
+        footer="Reply STOP to opt out", buttons=[], status="approved",
+    )
+    p = _build_payload(tpl, customer_name="Asfer", coupon_code=None, image_url=None)
+    assert p["name"] == "promo_biryani_20260101"
+    assert "template_name" not in p
+    body = next(c for c in p["components"] if c["type"] == "body")
+    assert [pr["text"] for pr in body["parameters"]] == ["Asfer"]
+
+    # Missing name → safe fallback, never an empty parameter.
+    p2 = _build_payload(tpl, customer_name=None, coupon_code=None, image_url=None)
+    body2 = next(c for c in p2["components"] if c["type"] == "body")
+    assert body2["parameters"][0]["text"] == "there"
+
+    # A variable-free template sends no body params (Meta would reject extras).
+    plain = WaTemplate(
+        restaurant_id=1, meta_template_name="plain_20260101", language="en",
+        category="marketing", body="Flat 20% off all biryani today. Reply to order.",
+        footer="Reply STOP to opt out", buttons=[], status="approved",
+    )
+    p3 = _build_payload(plain, customer_name="Asfer", coupon_code=None, image_url=None)
+    assert not [c for c in p3["components"] if c["type"] == "body"]
+
+    # An IMAGE-header template with no campaign image falls back to its own image,
+    # so the required header parameter is always present.
+    img_tpl = WaTemplate(
+        restaurant_id=1, meta_template_name="img_20260101", language="en",
+        category="marketing", body="Hi {{1}}, treat yourself! Reply to order.",
+        header={"type": "IMAGE", "image_url": "https://x/y.jpg"},
+        footer="Reply STOP to opt out", buttons=[], status="approved",
+    )
+    p4 = _build_payload(img_tpl, customer_name="Asfer", coupon_code=None, image_url=None)
+    header = next(c for c in p4["components"] if c["type"] == "header")
+    assert header["parameters"][0]["image"]["link"] == "https://x/y.jpg"
+
+
 async def test_run_campaign_send_with_coupon_injects_code(db_session, restaurant):
     provider = MockTemplateProvider()
-    camp = await _approved_campaign(db_session, restaurant, provider)
+    # A coupon needs a {{n}} variable to live in; it fills the LAST body variable.
+    camp = await _approved_campaign(
+        db_session, restaurant, provider,
+        body="Hi {{1}}, a treat for you! Use code {{2}} on your next order.",
+    )
     camp.coupon_value = "10"
     await db_session.flush()
     cust = await _customer(db_session, restaurant, "+971500000050")
