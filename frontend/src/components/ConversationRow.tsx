@@ -30,11 +30,11 @@ export function ConversationRow({
           className={`${s.pill} ${conversation.manual_takeover ? s.pillHuman : s.pillBot}`}
           title={
             conversation.manual_takeover
-              ? "A human is handling this chat (bot paused)"
-              : "The bot is handling this chat automatically"
+              ? "A human is handling this chat (AI paused)"
+              : "The AI is handling this chat automatically"
           }
         >
-          {conversation.manual_takeover ? "🙋 Human" : "🤖 Bot"}
+          {conversation.manual_takeover ? "🙋 Human" : "🤖 AI"}
         </span>
       </div>
       <span className={s.preview}>{conversation.last_message_preview ?? "—"}</span>

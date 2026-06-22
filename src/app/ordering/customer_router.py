@@ -18,7 +18,7 @@ from app.ordering.detail_schemas import (
     OrderSummaryOut,
 )
 from app.ordering.models import Customer, CustomerAddress, Order
-from app.ordering.service import patch_address, patch_customer
+from app.ordering.service import compute_usual_order_time, patch_address, patch_customer
 
 router = APIRouter(prefix="/api/v1/ordering/customers", tags=["customers"])
 
@@ -127,6 +127,7 @@ async def get_customer_profile(
     )
 
     opted_out = await is_opted_out(session, restaurant_id=restaurant.id, phone=customer.phone)
+    usual_order_time = await compute_usual_order_time(session, customer.id)
 
     # Fall back to the most recent address receiver when no name is on file.
     profile_name = customer.name
@@ -144,6 +145,7 @@ async def get_customer_profile(
         total_spend=customer.total_spend,
         first_order_at=customer.first_order_at,
         last_order_at=customer.last_order_at,
+        usual_order_time=usual_order_time,
         marketing_opted_in=not opted_out,
         tags=customer.tags if customer.tags is not None else {},
         addresses=[

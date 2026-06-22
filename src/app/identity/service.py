@@ -87,20 +87,6 @@ async def create_rider(
     return rider
 
 
-def _shift_window_start(now_utc: datetime) -> datetime:
-    """Start of the current operational day in the restaurant's timezone.
-
-    Riders' shifts are counted on an 08:00→08:00 (Asia/Dubai) cycle rather than
-    a rolling 24h or midnight day, so a "24h" delivery tally reflects the active
-    shift the manager is watching. Returns a UTC-aware datetime to compare
-    against ``Order.delivered_at`` (stored UTC)."""
-    local = now_utc.astimezone(DUBAI)
-    eight = local.replace(hour=8, minute=0, second=0, microsecond=0)
-    if local < eight:
-        eight -= timedelta(days=1)
-    return eight.astimezone(timezone.utc)
-
-
 async def _latest_rider_locations(
     session: AsyncSession, *, restaurant_id: int
 ) -> dict[int, object]:
@@ -132,9 +118,9 @@ async def list_riders(session: AsyncSession, restaurant_id: int) -> list[Rider]:
     )
     riders = list(rows)
 
-    # Per-rider delivery tallies: lifetime (all delivered) + current 08:00→08:00
-    # shift window. One grouped query, then attach to each rider for RiderOut.
-    window_start = _shift_window_start(datetime.now(timezone.utc))
+    # Per-rider delivery tallies: lifetime (all delivered) + a rolling last-24h
+    # window. One grouped query, then attach to each rider for RiderOut.
+    window_start = datetime.now(timezone.utc) - timedelta(hours=24)
     counts = await session.execute(
         select(
             Order.rider_id,

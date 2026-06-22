@@ -227,6 +227,7 @@ export interface OrderSummaryOut {
 }
 
 export interface CustomerProfileOut extends CustomerDetailOut {
+  usual_order_time: string | null;
   tags: Record<string, unknown>;
   addresses: AddressDetailOut[];
   recent_orders: OrderSummaryOut[];

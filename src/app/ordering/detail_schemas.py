@@ -123,6 +123,7 @@ class CustomerProfileOut(BaseModel):
     total_spend: Decimal
     first_order_at: datetime | None
     last_order_at: datetime | None
+    usual_order_time: str | None = None
     marketing_opted_in: bool
     tags: dict
     addresses: list[AddressDetailOut]

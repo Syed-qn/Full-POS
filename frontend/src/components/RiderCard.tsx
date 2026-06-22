@@ -113,7 +113,7 @@ export function RiderCard({
         <div className={s.deliveryStat}>
           <span className={s.deliveryNum}>{rider.delivered_24h}</span>
           <span className={s.deliveryLabel}>
-            Today<span className={s.deliveryHint}>shift · 8am to 8am</span>
+            Today<span className={s.deliveryHint}>last 24 hrs</span>
           </span>
         </div>
         <span className={s.deliveryDivider} />

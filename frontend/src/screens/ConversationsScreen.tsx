@@ -136,7 +136,7 @@ export function ConversationsScreen() {
           <>
             <div className={s.viewerHead}>
               <Button variant={takeover ? "danger" : "ghost"} onClick={toggleTakeover}>
-                {takeover ? "Return to bot" : "Take over"}
+                {takeover ? "Return to AI" : "Take over"}
               </Button>
             </div>
             {takeover && (

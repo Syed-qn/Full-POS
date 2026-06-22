@@ -125,6 +125,7 @@ export function CustomerProfileScreen() {
                   ? new Date(profile.last_order_at).toLocaleDateString()
                   : "—"}
               />
+              <Stat label="Usually Orders" value={profile.usual_order_time ?? "—"} />
             </div>
           </section>
         </div>

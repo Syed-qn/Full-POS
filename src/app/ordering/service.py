@@ -304,6 +304,63 @@ async def compute_customer_order_stats(
     }
 
 
+def _format_usual_order_time(hours: list[float]) -> str | None:
+    """Human label for when a customer typically orders, e.g. "Evenings (~8:20 PM)".
+
+    `hours` are local (Asia/Dubai) hours-of-day as floats (hour + minute/60).
+    Uses a circular mean so times that straddle midnight (e.g. 23:30 and 00:30)
+    average correctly to ~00:00 instead of noon. Returns None if there's no data.
+    """
+    if not hours:
+        return None
+    import math
+
+    angles = [h / 24.0 * 2 * math.pi for h in hours]
+    mean_sin = sum(math.sin(a) for a in angles) / len(angles)
+    mean_cos = sum(math.cos(a) for a in angles) / len(angles)
+    mean_angle = math.atan2(mean_sin, mean_cos)
+    mean_hour = (mean_angle / (2 * math.pi) * 24.0) % 24.0
+
+    h = int(mean_hour)
+    m = int(round((mean_hour - h) * 60))
+    if m == 60:
+        h = (h + 1) % 24
+        m = 0
+    if 5 <= h < 12:
+        daypart = "Mornings"
+    elif 12 <= h < 17:
+        daypart = "Afternoons"
+    elif 17 <= h < 21:
+        daypart = "Evenings"
+    else:
+        daypart = "Late night"
+    suffix = "AM" if h < 12 else "PM"
+    h12 = h % 12 or 12
+    return f"{daypart} (~{h12}:{m:02d} {suffix})"
+
+
+async def compute_usual_order_time(
+    session: "AsyncSession", customer_id: int
+) -> str | None:
+    """Typical local time-of-day this customer places orders (None if no orders)."""
+    rows = (await session.scalars(
+        select(Order.created_at).where(
+            Order.customer_id == customer_id,
+            Order.status != "draft",
+        )
+    )).all()
+    tz = ZoneInfo("Asia/Dubai")
+    hours: list[float] = []
+    for created in rows:
+        if created is None:
+            continue
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        local = created.astimezone(tz)
+        hours.append(local.hour + local.minute / 60.0)
+    return _format_usual_order_time(hours)
+
+
 async def recompute_customer_stats(session: "AsyncSession", customer_id: int) -> None:
     """Refresh a customer's denormalized order stats from the orders table.
 
