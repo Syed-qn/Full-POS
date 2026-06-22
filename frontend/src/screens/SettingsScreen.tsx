@@ -468,9 +468,10 @@ export function SettingsScreen() {
 
       {tab === "batching" && (
         <div className={s.section}>
-          <div className={`${s.row2} ${s.row2Compact}`}>
-            <label className={s.col}>
-              <span className={s.rowName}>Max orders per batch</span>
+          <div className={s.cardGrid}>
+            <label className={s.settingCard}>
+              <span className={s.settingIcon}>🛵</span>
+              <span className={s.settingName}>Max orders per batch</span>
               <input
                 aria-label="orders per batch"
                 type="number"
@@ -479,12 +480,13 @@ export function SettingsScreen() {
                 value={ordersPerBatch}
                 onChange={(e) => setOrdersPerBatch(Number(e.target.value))}
                 onFocus={(e) => e.target.select()}
-                className={`${s.input} ${s.inputNum}`}
+                className={`${s.input} ${s.settingInput}`}
               />
-              <span className={s.rowHint}>How many orders a rider can carry together.</span>
+              <span className={s.settingHint}>How many orders a rider can carry together.</span>
             </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Max items per order</span>
+            <label className={s.settingCard}>
+              <span className={s.settingIcon}>🧾</span>
+              <span className={s.settingName}>Max items per order</span>
               <input
                 aria-label="items per order"
                 type="number"
@@ -493,12 +495,13 @@ export function SettingsScreen() {
                 value={itemsPerOrder}
                 onChange={(e) => setItemsPerOrder(Number(e.target.value))}
                 onFocus={(e) => e.target.select()}
-                className={`${s.input} ${s.inputNum}`}
+                className={`${s.input} ${s.settingInput}`}
               />
-              <span className={s.rowHint}>Upper limit a customer can add to one order.</span>
+              <span className={s.settingHint}>Upper limit a customer can add to one order.</span>
             </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Confirm large quantity above</span>
+            <label className={`${s.settingCard} ${s.settingCardAccent}`}>
+              <span className={s.settingIcon}>🙋</span>
+              <span className={s.settingName}>Confirm large quantity above</span>
               <input
                 aria-label="max item quantity"
                 type="number"
@@ -507,9 +510,9 @@ export function SettingsScreen() {
                 value={maxItemQty}
                 onChange={(e) => setMaxItemQty(Number(e.target.value))}
                 onFocus={(e) => e.target.select()}
-                className={`${s.input} ${s.inputNum}`}
+                className={`${s.input} ${s.settingInput}`}
               />
-              <span className={s.rowHint}>
+              <span className={s.settingHint}>
                 If a customer asks for more than this of one item, the bot pauses
                 and a human confirms before adding it.
               </span>
