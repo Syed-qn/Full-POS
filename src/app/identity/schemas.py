@@ -77,6 +77,8 @@ class RiderLocationOut(BaseModel):
 class SettingsPatch(BaseModel):
     max_orders_per_batch: int | None = Field(default=None, ge=1, le=6)
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
+    # Single-line quantity above which the bot escalates to a human (anomaly guard).
+    max_item_qty: int | None = Field(default=None, ge=1, le=100000)
     delivery_fee_tiers: list[dict] | None = None
     open_hours: dict | None = None
     # Dispatch engine + kitchen-timing tunables (per-restaurant; defaults in

@@ -2217,6 +2217,46 @@ async def _execute_cancel_order(
     )
 
 
+_DEFAULT_MAX_ITEM_QTY = 10
+
+
+def _max_item_qty(restaurant) -> int:
+    """Per-restaurant single-line quantity threshold. Above it, a request is an
+    anomaly (e.g. "100000 lemon mints") and is escalated to a human rather than
+    auto-added. Manager-configurable in OPS Settings (settings.max_item_qty);
+    defaults to 10."""
+    try:
+        return int((getattr(restaurant, "settings", None) or {}).get(
+            "max_item_qty", _DEFAULT_MAX_ITEM_QTY
+        ))
+    except (TypeError, ValueError):
+        return _DEFAULT_MAX_ITEM_QTY
+
+
+async def _escalate_large_qty(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    qty: int,
+    dish_query: str,
+) -> None:
+    """Hand the chat to a human and tell the customer we'll confirm. Used when a
+    requested quantity exceeds the restaurant's anomaly threshold — we never
+    auto-add an unusually large line; a manager confirms it from the dashboard."""
+    conv.manual_takeover = True
+    item = (dish_query or "").strip() or "that"
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="qty-anomaly",
+        body=(
+            f"That's a large quantity ({qty}x {item})! 🤔 I've flagged your order "
+            "for our team to confirm — someone will be with you shortly to finalise it. 😊"
+        ),
+    )
+
+
 async def _dispatch_action(
     session: AsyncSession,
     conv: Conversation,
@@ -2254,6 +2294,12 @@ async def _dispatch_action(
         dish_query = data.get("dish_query", "")
         qty = int(data.get("qty") or 1)
         special_note = data.get("special_note", "")
+        if dish_query and qty > _max_item_qty(restaurant):
+            await _escalate_large_qty(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                qty=qty, dish_query=dish_query,
+            )
+            return
         if dish_query:
             added = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty, special_note
@@ -2300,6 +2346,12 @@ async def _dispatch_action(
     if action == "update_qty":
         dish_query = data.get("dish_query", "")
         qty = int(data.get("qty") or 1)
+        if dish_query and qty > _max_item_qty(restaurant):
+            await _escalate_large_qty(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                qty=qty, dish_query=dish_query,
+            )
+            return
         outcome, dish_name = await _execute_ai_update_qty(
             session, conv, restaurant_id, dish_query, qty
         )

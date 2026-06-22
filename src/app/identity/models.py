@@ -10,6 +10,10 @@ from app.db import Base, TimestampMixin
 DEFAULT_SETTINGS: dict = {
     "max_orders_per_batch": 3,
     "max_items_per_order": 20,
+    # Quantity of a SINGLE line above which the bot treats the request as an
+    # anomaly (e.g. "100000 lemon mints") and hands the chat to a human to confirm
+    # instead of auto-adding it. Manager-editable in OPS Settings; read via .get().
+    "max_item_qty": 10,
     "delivery_fee_tiers": [
         {"max_km": 3, "fee_aed": 0},
         {"max_km": 5, "fee_aed": 5},

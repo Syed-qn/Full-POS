@@ -79,6 +79,7 @@ export function SettingsScreen() {
   // Batching tab
   const [ordersPerBatch, setOrdersPerBatch] = useState(3);
   const [itemsPerOrder, setItemsPerOrder] = useState(20);
+  const [maxItemQty, setMaxItemQty] = useState(10);
 
   // Dispatch & Kitchen tab
   const [dispatchEngine, setDispatchEngine] = useState<"greedy" | "ortools">("greedy");
@@ -103,6 +104,7 @@ export function SettingsScreen() {
       const sset = r.settings as Record<string, unknown>;
       if (typeof sset.max_orders_per_batch === "number") setOrdersPerBatch(sset.max_orders_per_batch);
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
+      if (typeof sset.max_item_qty === "number") setMaxItemQty(sset.max_item_qty);
       if (sset.dispatch_engine === "ortools" || sset.dispatch_engine === "greedy") setDispatchEngine(sset.dispatch_engine);
       if (typeof sset.prep_handling_minutes === "number") setPrepHandling(sset.prep_handling_minutes);
       if (typeof sset.batch_safety_minutes === "number") setBatchSafety(sset.batch_safety_minutes);
@@ -163,6 +165,7 @@ export function SettingsScreen() {
       await apiClient.patch("/api/v1/settings", {
         max_orders_per_batch: ordersPerBatch,
         max_items_per_order: itemsPerOrder,
+        max_item_qty: maxItemQty,
       });
       flash();
     } catch {
@@ -493,6 +496,23 @@ export function SettingsScreen() {
                 className={`${s.input} ${s.inputNum}`}
               />
               <span className={s.rowHint}>Upper limit a customer can add to one order.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Confirm large quantity above</span>
+              <input
+                aria-label="max item quantity"
+                type="number"
+                min={1}
+                max={100000}
+                value={maxItemQty}
+                onChange={(e) => setMaxItemQty(Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>
+                If a customer asks for more than this of one item, the bot pauses
+                and a human confirms before adding it.
+              </span>
             </label>
           </div>
           <div className={s.actions}>
