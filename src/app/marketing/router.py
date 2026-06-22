@@ -31,6 +31,7 @@ from app.marketing.schemas import (
 )
 from app.marketing.service import (
     campaign_stats,
+    campaign_stats_bulk,
     create_campaign,
     create_segment,
     refresh_template,
@@ -286,8 +287,14 @@ async def list_campaigns(
             select(Campaign).where(Campaign.restaurant_id == restaurant.id)
         )
     ).all()
+    # Merge in real sent/delivered/converted from the send ledger so the Reports
+    # page (which reads stats.sent / stats.converted) isn't stuck at 0.
+    live = await campaign_stats_bulk(session, restaurant_id=restaurant.id)
     return [
-        CampaignResponse(id=r.id, type=r.type, status=r.status, stats=r.stats or {})
+        CampaignResponse(
+            id=r.id, type=r.type, status=r.status,
+            stats={**(r.stats or {}), **live.get(r.id, {})},
+        )
         for r in rows
     ]
 

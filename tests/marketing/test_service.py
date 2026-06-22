@@ -345,6 +345,22 @@ def test_build_payload_uses_name_key_and_fills_body_variable():
     assert header["parameters"][0]["image"]["link"] == "https://x/y.jpg"
 
 
+async def test_campaign_stats_bulk_aggregates_sends(db_session, restaurant):
+    """The campaigns list / Reports page reads stats.sent — bulk stats must surface
+    the real sent count from the ledger (not the always-0 stored campaign.stats)."""
+    provider = MockTemplateProvider()
+    camp = await _approved_campaign(db_session, restaurant, provider)
+    await _customer(db_session, restaurant, "+971500000081")
+    await _customer(db_session, restaurant, "+971500000082")
+    await service.run_campaign_send(
+        db_session, campaign=camp, provider=provider, now_utc=NOW_IN_WINDOW
+    )
+    bulk = await service.campaign_stats_bulk(db_session, restaurant_id=restaurant.id)
+    assert bulk[camp.id]["sent"] == 2
+    assert bulk[camp.id]["converted"] == 0
+    assert bulk[camp.id]["conversion_rate"] == 0.0
+
+
 async def test_run_campaign_send_with_coupon_injects_code(db_session, restaurant):
     provider = MockTemplateProvider()
     # A coupon needs a {{n}} variable to live in; it fills the LAST body variable.

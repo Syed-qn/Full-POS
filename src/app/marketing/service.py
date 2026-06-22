@@ -579,6 +579,58 @@ async def record_conversion(
 # ---------------------------------------------------------------------------
 # Analytics
 # ---------------------------------------------------------------------------
+async def campaign_stats_bulk(
+    session: AsyncSession, *, restaurant_id: int
+) -> dict[int, dict]:
+    """Real send/delivery/conversion counts per campaign, from ``MarketingSend``.
+
+    For the campaigns list + Reports page (which read ``stats.sent`` /
+    ``stats.converted``): the stored ``Campaign.stats`` only holds queued/suppressed
+    counts, so these have to be aggregated from the send ledger. One grouped query
+    over all of a tenant's campaigns (not N+1). ``sent`` counts attempted/delivered
+    sends (sent|delivered|read); ``delivered`` counts confirmed (delivered|read).
+    """
+    status_rows = (
+        await session.execute(
+            select(
+                MarketingSend.campaign_id,
+                MarketingSend.status,
+                func.count(MarketingSend.id),
+            )
+            .where(MarketingSend.restaurant_id == restaurant_id)
+            .group_by(MarketingSend.campaign_id, MarketingSend.status)
+        )
+    ).all()
+    conv_rows = (
+        await session.execute(
+            select(MarketingSend.campaign_id, func.count(MarketingSend.id))
+            .where(
+                MarketingSend.restaurant_id == restaurant_id,
+                MarketingSend.converted_order_id.is_not(None),
+            )
+            .group_by(MarketingSend.campaign_id)
+        )
+    ).all()
+    converted_by = {cid: n for cid, n in conv_rows}
+
+    by_campaign: dict[int, dict[str, int]] = {}
+    for cid, status, n in status_rows:
+        by_campaign.setdefault(cid, {})[status] = n
+
+    out: dict[int, dict] = {}
+    for cid, statuses in by_campaign.items():
+        sent = sum(statuses.get(s, 0) for s in _SENT_STATUSES)
+        delivered = statuses.get("delivered", 0) + statuses.get("read", 0)
+        converted = converted_by.get(cid, 0)
+        out[cid] = {
+            "sent": sent,
+            "delivered": delivered,
+            "converted": converted,
+            "conversion_rate": round(converted / sent, 4) if sent else 0.0,
+        }
+    return out
+
+
 async def campaign_stats(
     session: AsyncSession,
     *,
