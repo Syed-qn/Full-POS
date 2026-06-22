@@ -20,6 +20,10 @@ export interface TemplateResponse {
   meta_template_name: string;
   status: string;
   rejection_reason: string | null;
+  body?: string | null;
+  header?: { type?: string; image_url?: string; text?: string } | null;
+  footer?: string | null;
+  buttons?: { type?: string; label?: string; url?: string }[] | null;
 }
 
 /** Shape returned by GET /campaigns/{id}/stats */
@@ -118,6 +122,11 @@ export async function submitTemplate(id: number): Promise<TemplateResponse> {
 /** POST /templates/{id}/refresh — re-poll Meta approval status. */
 export async function refreshTemplate(id: number): Promise<TemplateResponse> {
   return apiClient.post<TemplateResponse>(`/api/v1/marketing/templates/${id}/refresh`);
+}
+
+/** DELETE /templates/{id} — remove a template (Meta + dashboard). */
+export async function deleteTemplate(id: number): Promise<void> {
+  return apiClient.delete<void>(`/api/v1/marketing/templates/${id}`);
 }
 
 /** POST /broadcast — send an approved template to opted-in customers now. */

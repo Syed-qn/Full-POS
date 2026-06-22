@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     marketing_ephemeral_delete_hour: int = 23  # Asia/Dubai EOD for ephemeral daily specials (spec §4.7)
     marketing_ephemeral_delete_minute: int = 30
     marketing_template_poll_minutes: int = 2  # poll pending_meta status interval
+    # Shared secret guarding the public POST /api/v1/marketing/tick heartbeat that
+    # drives the "Today's Special" auto-timed send. An external cron job sends it
+    # as the X-Tick-Secret header. Empty (default) DISABLES the endpoint (503) so
+    # it's never open. Generate a long random value and set it on the server + cron.
+    marketing_tick_secret: SecretStr = SecretStr("")
 
     # Geo
     geo_provider: str = "fake"  # fake | google_maps

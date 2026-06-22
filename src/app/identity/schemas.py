@@ -88,6 +88,44 @@ class SettingsPatch(BaseModel):
     batch_safety_minutes: int | None = Field(default=None, ge=0, le=30)
     default_prep_minutes: int | None = Field(default=None, ge=1, le=180)
     batch_expedite_radius_km: float | None = Field(default=None, gt=0, le=10)
+    # Today's Special automation (marketing). Sent as a whole object by the UI.
+    todays_special: dict | None = None
+
+    @field_validator("todays_special")
+    @classmethod
+    def _validate_todays_special(cls, v: dict | None) -> dict | None:
+        """Validate the auto-special config: ``{enabled: bool, template_id: int|null,
+        lead_minutes: 0..120, default_time: "HH:MM"}``. Keeps the cron-driven
+        sender from reading a broken config."""
+        if v is None:
+            return v
+        if not isinstance(v, dict):
+            raise ValueError("todays_special must be an object")
+        enabled = v.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ValueError("todays_special.enabled must be a boolean")
+        template_id = v.get("template_id")
+        if template_id is not None and not isinstance(template_id, int):
+            raise ValueError("todays_special.template_id must be an integer or null")
+        lead = v.get("lead_minutes", 15)
+        if not isinstance(lead, int) or not (0 <= lead <= 120):
+            raise ValueError("todays_special.lead_minutes must be 0..120")
+        default_time = v.get("default_time", "11:45")
+        try:
+            hh, mm = str(default_time).split(":")
+            h, m = int(hh), int(mm)
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("todays_special.default_time must be 'HH:MM'") from exc
+        if not (0 <= h <= 23 and 0 <= m <= 59):
+            raise ValueError("todays_special.default_time must be valid 24h 'HH:MM'")
+        if enabled and template_id is None:
+            raise ValueError("select an approved template before enabling Today's Special")
+        return {
+            "enabled": enabled,
+            "template_id": template_id,
+            "lead_minutes": lead,
+            "default_time": f"{h:02d}:{m:02d}",
+        }
 
     @field_validator("open_hours")
     @classmethod

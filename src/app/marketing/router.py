@@ -6,7 +6,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,14 +34,30 @@ from app.marketing.service import (
     campaign_stats_bulk,
     create_campaign,
     create_segment,
+    delete_template,
     refresh_template,
     run_campaign_send,
+    run_todays_special_tick,
     submit_template,
 )
 from app.marketing.template_factory import get_template_provider
 
 router = APIRouter(prefix="/api/v1/marketing", tags=["marketing"])
 _logger = logging.getLogger(__name__)
+
+
+def _template_response(tpl: WaTemplate) -> TemplateResponse:
+    """Serialize a WaTemplate (incl. content, so the dashboard can preview it)."""
+    return TemplateResponse(
+        id=tpl.id,
+        meta_template_name=tpl.meta_template_name,
+        status=tpl.status,
+        rejection_reason=tpl.rejection_reason,
+        body=tpl.body,
+        header=tpl.header,
+        footer=tpl.footer,
+        buttons=tpl.buttons,
+    )
 
 _IMAGE_MIMES = {"image/jpeg", "image/png"}
 _MAX_IMAGE_BYTES = 5 * 1024 * 1024  # Meta header-image limit
@@ -123,12 +139,7 @@ async def create_wa_template(
     session.add(tpl)
     await session.flush()
     await session.commit()
-    return TemplateResponse(
-        id=tpl.id,
-        meta_template_name=tpl.meta_template_name,
-        status=tpl.status,
-        rejection_reason=None,
-    )
+    return _template_response(tpl)
 
 
 @router.get("/templates")
@@ -138,18 +149,32 @@ async def list_templates(
 ) -> list[TemplateResponse]:
     rows = (
         await session.scalars(
-            select(WaTemplate).where(WaTemplate.restaurant_id == restaurant.id)
+            select(WaTemplate).where(
+                WaTemplate.restaurant_id == restaurant.id,
+                WaTemplate.status != "deleted",
+            )
         )
     ).all()
-    return [
-        TemplateResponse(
-            id=r.id,
-            meta_template_name=r.meta_template_name,
-            status=r.status,
-            rejection_reason=r.rejection_reason,
-        )
-        for r in rows
-    ]
+    return [_template_response(r) for r in rows]
+
+
+@router.delete("/templates/{template_id}", status_code=204)
+async def delete_wa_template(
+    template_id: int,
+    session: AsyncSession = Depends(get_session),
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> None:
+    """Delete a template — removes it from Meta (best-effort) and hides it from the
+    list. Soft-delete so existing campaigns keep their FK."""
+    ok = await delete_template(
+        session,
+        restaurant_id=restaurant.id,
+        template_id=template_id,
+        provider=get_template_provider(),
+    )
+    await session.commit()
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
 
 
 @router.post("/templates/draft", response_model=TemplateDraftResponse)
@@ -226,10 +251,7 @@ async def submit_wa_template(
             status.HTTP_502_BAD_GATEWAY, f"WhatsApp template submission failed: {exc}"
         )
     await session.commit()
-    return TemplateResponse(
-        id=tpl.id, meta_template_name=tpl.meta_template_name,
-        status=tpl.status, rejection_reason=tpl.rejection_reason,
-    )
+    return _template_response(tpl)
 
 
 @router.post("/templates/{template_id}/refresh", response_model=TemplateResponse)
@@ -249,10 +271,7 @@ async def refresh_wa_template(
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
     await session.commit()
-    return TemplateResponse(
-        id=tpl.id, meta_template_name=tpl.meta_template_name,
-        status=tpl.status, rejection_reason=tpl.rejection_reason,
-    )
+    return _template_response(tpl)
 
 
 # ── Campaigns ────────────────────────────────────────────────────────────────
@@ -340,6 +359,39 @@ async def broadcast_now(
         suppressed_optout=summary.get("suppressed_optout", 0),
         suppressed_window=summary.get("suppressed_window", 0),
     )
+
+
+@router.post("/tick")
+async def todays_special_tick(
+    x_tick_secret: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Heartbeat for the Today's Special auto-timed send — called by an external
+    cron job (Render free tier has no Celery beat), NOT a manager.
+
+    Guarded by the ``X-Tick-Secret`` header matching ``APP_MARKETING_TICK_SECRET``.
+    Runs across ALL tenants (cron hits one URL for the platform): each enabled
+    restaurant's due customers are sent and their outbox flushed synchronously.
+    """
+    from app.outbox.service import deliver_pending
+
+    secret = get_settings().marketing_tick_secret.get_secret_value()
+    if not secret:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "tick not configured")
+    if x_tick_secret != secret:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "invalid tick secret")
+
+    totals = await run_todays_special_tick(
+        session, now_utc=datetime.now(timezone.utc)
+    )
+    await session.commit()
+    for restaurant_id in totals.get("restaurants", []):
+        await deliver_pending(session, restaurant_id)
+    return {
+        "queued": totals.get("queued", 0),
+        "suppressed": totals.get("suppressed", 0),
+        "restaurants": len(totals.get("restaurants", [])),
+    }
 
 
 @router.get("/campaigns/{campaign_id}/stats")

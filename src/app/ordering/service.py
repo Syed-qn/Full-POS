@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -304,22 +306,50 @@ async def compute_customer_order_stats(
     }
 
 
-def _format_usual_order_time(hours: list[float]) -> str | None:
-    """Human label for when a customer typically orders, e.g. "Evenings (~8:20 PM)".
+@dataclass(frozen=True)
+class OrderTimePrediction:
+    """When a customer typically orders, derived from their order history.
 
-    `hours` are local (Asia/Dubai) hours-of-day as floats (hour + minute/60).
-    Uses a circular mean so times that straddle midnight (e.g. 23:30 and 00:30)
-    average correctly to ~00:00 instead of noon. Returns None if there's no data.
+    ``minute_of_day`` is the circular-mean order time in Asia/Dubai minutes
+    (0..1439). ``order_count`` is how many non-draft orders fed the estimate.
+    ``concentration`` is the resultant length R∈[0,1] of the circular mean —
+    1.0 = every order at the same clock time, ~0 = scattered across the day —
+    so callers can require a tight habit before trusting the time.
+    """
+
+    minute_of_day: int
+    order_count: int
+    concentration: float
+
+
+def _circular_stats(hours: list[float]) -> tuple[float, float] | None:
+    """Circular mean of hours-of-day → ``(mean_hour, R)`` or None if empty.
+
+    Treats the 24h clock as a circle so times straddling midnight (23:30 +
+    00:30) average to ~00:00, not noon. ``R`` (resultant length, 0..1) measures
+    how clustered the times are.
     """
     if not hours:
         return None
-    import math
-
     angles = [h / 24.0 * 2 * math.pi for h in hours]
     mean_sin = sum(math.sin(a) for a in angles) / len(angles)
     mean_cos = sum(math.cos(a) for a in angles) / len(angles)
     mean_angle = math.atan2(mean_sin, mean_cos)
     mean_hour = (mean_angle / (2 * math.pi) * 24.0) % 24.0
+    resultant = math.hypot(mean_sin, mean_cos)
+    return mean_hour, resultant
+
+
+def _format_usual_order_time(hours: list[float]) -> str | None:
+    """Human label for when a customer typically orders, e.g. "Evenings (~8:20 PM)".
+
+    `hours` are local (Asia/Dubai) hours-of-day as floats (hour + minute/60).
+    Returns None if there's no data.
+    """
+    stats = _circular_stats(hours)
+    if stats is None:
+        return None
+    mean_hour, _ = stats
 
     h = int(mean_hour)
     m = int(round((mean_hour - h) * 60))
@@ -339,10 +369,8 @@ def _format_usual_order_time(hours: list[float]) -> str | None:
     return f"{daypart} (~{h12}:{m:02d} {suffix})"
 
 
-async def compute_usual_order_time(
-    session: "AsyncSession", customer_id: int
-) -> str | None:
-    """Typical local time-of-day this customer places orders (None if no orders)."""
+async def _order_hours_dubai(session: "AsyncSession", customer_id: int) -> list[float]:
+    """Local (Asia/Dubai) hour-of-day floats for a customer's non-draft orders."""
     rows = (await session.scalars(
         select(Order.created_at).where(
             Order.customer_id == customer_id,
@@ -358,7 +386,34 @@ async def compute_usual_order_time(
             created = created.replace(tzinfo=timezone.utc)
         local = created.astimezone(tz)
         hours.append(local.hour + local.minute / 60.0)
-    return _format_usual_order_time(hours)
+    return hours
+
+
+async def compute_usual_order_time(
+    session: "AsyncSession", customer_id: int
+) -> str | None:
+    """Typical local time-of-day this customer places orders (None if no orders)."""
+    return _format_usual_order_time(await _order_hours_dubai(session, customer_id))
+
+
+async def predict_order_time(
+    session: "AsyncSession", customer_id: int
+) -> OrderTimePrediction | None:
+    """Numeric prediction of a customer's usual order time (None if no orders).
+
+    Backs the Today's Special automation: marketing schedules each send a few
+    minutes before ``minute_of_day``, but only trusts it when ``order_count`` and
+    ``concentration`` show a real habit (see app.marketing.todays_special).
+    """
+    hours = await _order_hours_dubai(session, customer_id)
+    stats = _circular_stats(hours)
+    if stats is None:
+        return None
+    mean_hour, resultant = stats
+    minute = round(mean_hour * 60) % 1440
+    return OrderTimePrediction(
+        minute_of_day=minute, order_count=len(hours), concentration=resultant
+    )
 
 
 async def recompute_customer_stats(session: "AsyncSession", customer_id: int) -> None:

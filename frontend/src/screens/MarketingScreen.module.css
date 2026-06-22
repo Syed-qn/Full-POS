@@ -4,10 +4,86 @@
   gap: 16px;
 }
 
+/* Header row with the "New template" action on the right. */
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 16px;
+}
+
+/* Templates (left) + Today's Special (right), side by side; stack when narrow. */
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+/* ---- Create-template dialog ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  z-index: 50;
+}
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.25));
+  padding: 20px 24px 24px;
+  width: min(880px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* Narrow dialog for the read-only template preview. */
+.previewModal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.25));
+  padding: 18px 20px 22px;
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.previewModal .modalHead .cardTitle {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  word-break: break-all;
+}
+.modalClose {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.modalClose:hover {
+  color: var(--text-primary);
 }
 
 .card {
@@ -54,7 +130,8 @@
 }
 
 .sendBtn {
-  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: #25d366;
   color: #fff;
   border: none;
@@ -262,11 +339,18 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 .tplName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-primary);
 }
 .badge {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 600;
   border-radius: 12px;
@@ -291,11 +375,82 @@
   color: var(--sla-critical);
 }
 .refresh {
-  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: none;
   border: none;
   color: var(--accent-primary);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+/* Right-aligned cluster of per-template actions (refresh / send / delete). */
+.tplActions {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Pagination footer pinned to the bottom so the card fills the column height. */
+.tplPager {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.pagerBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.pagerBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pagerInfo {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 96px;
+  text-align: center;
+}
+.previewBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+.previewBtn:hover {
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+.deleteTpl {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.12s, color 0.12s;
+}
+.deleteTpl:hover {
+  background: color-mix(in srgb, var(--sla-critical) 12%, transparent);
+  color: var(--sla-critical);
+}
+.deleteTpl:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

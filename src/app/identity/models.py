@@ -33,6 +33,17 @@ DEFAULT_SETTINGS: dict = {
     # Fallback cook time (minutes) for a dish with no prep_minutes set — used to estimate
     # an order's "start cooking by" time.
     "default_prep_minutes": 15,
+    # Today's Special automation (marketing). When enabled, every opted-in customer
+    # is sent the chosen APPROVED template ~lead_minutes before their predicted usual
+    # order time (clamped to the UAE 9am-6pm window). Customers without a clear habit
+    # get default_time. Driven by the cron-pinged POST /marketing/tick. See
+    # app.marketing.todays_special.
+    "todays_special": {
+        "enabled": False,
+        "template_id": None,
+        "lead_minutes": 15,
+        "default_time": "11:45",
+    },
 }
 
 

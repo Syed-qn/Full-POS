@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from decimal import Decimal
 
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
 from app.coupons.service import issue_coupon
+from app.identity.models import Restaurant
 from app.marketing.compliance import lint_template
 from app.marketing.models import Campaign, MarketingSend, Segment, WaTemplate
 from app.marketing.naming import next_available_name
@@ -36,10 +38,22 @@ from app.marketing.optout import is_opted_out
 from app.marketing.segments import evaluate_segment, preview_count, validate_dsl
 from app.marketing.template_port import TemplatePort, TemplateSpec, TemplateStatus
 from app.marketing.throttle import can_send_marketing, count_sends_last_24h
+from app.marketing.todays_special import (
+    DEFAULT_LEAD_MINUTES,
+    desired_send_minute,
+    is_due,
+    parse_hhmm,
+)
 from app.marketing.window import is_within_uae_window
 from app.ordering.models import Customer, Order
+from app.ordering.service import predict_order_time
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
+
+_DUBAI = ZoneInfo("Asia/Dubai")
+# Default fallback send time (Dubai minute-of-day) for customers without a
+# trustworthy ordering habit — 11:45, just before the typical lunch rush.
+_DEFAULT_SPECIAL_MINUTE = 11 * 60 + 45
 
 # Status values consuming a recipient's 24h allowance — must match throttle.
 _SENT_STATUSES: frozenset[str] = frozenset({"sent", "delivered", "read"})
@@ -380,80 +394,16 @@ async def run_campaign_send(
     }
 
     for cust in customers:
-        opted_out = await is_opted_out(
-            session, restaurant_id=campaign.restaurant_id, phone=cust.phone
-        )
-        sends_24h = await count_sends_last_24h(
+        reason = await _send_to_customer(
             session,
-            restaurant_id=campaign.restaurant_id,
-            phone=cust.phone,
+            campaign=campaign,
+            tpl=tpl,
+            customer=cust,
             now_utc=now_utc,
-        )
-        decision = can_send_marketing(
-            now_utc=now_utc,
-            sends_last_24h=sends_24h,
-            opted_out=opted_out,
             within_window=within_window,
         )
-
-        if decision.allowed:
-            coupon_code: str | None = None
-            if campaign.coupon_value:
-                # Promo coupons reference the recipient's most recent order
-                # (the apology-coupon primitive requires an order FK). Customers
-                # with no order history simply receive the message without a code.
-                last_order_id = (
-                    await session.execute(
-                        select(Order.id)
-                        .where(
-                            Order.restaurant_id == campaign.restaurant_id,
-                            Order.customer_id == cust.id,
-                        )
-                        .order_by(Order.id.desc())
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
-                if last_order_id is not None:
-                    coupon = await issue_coupon(
-                        session,
-                        restaurant_id=campaign.restaurant_id,
-                        customer_id=cust.id,
-                        order_id=last_order_id,
-                        discount_aed=Decimal(str(campaign.coupon_value)),
-                    )
-                    coupon_code = coupon.code
-            payload = _build_payload(
-                tpl, customer_name=cust.name,
-                coupon_code=coupon_code, image_url=campaign.image_url,
-            )
-            idempotency_key = f"campaign:{campaign.id}:customer:{cust.id}"
-            inserted = await _insert_send(
-                session,
-                campaign=campaign,
-                customer=cust,
-                status="sent",
-                sent_at=now_utc,
-            )
-            if inserted:
-                await enqueue_message(
-                    session,
-                    restaurant_id=campaign.restaurant_id,
-                    to_phone=cust.phone,
-                    msg_type=OutboundMessageType.TEMPLATE,
-                    payload=payload,
-                    idempotency_key=idempotency_key,
-                )
-                summary["queued"] += 1
-        else:
-            inserted = await _insert_send(
-                session,
-                campaign=campaign,
-                customer=cust,
-                status=decision.reason,
-                sent_at=None,
-            )
-            if inserted:
-                summary[decision.reason] += 1
+        if reason in summary:
+            summary[reason] += 1
 
     campaign.status = "sent"
     campaign.stats = summary
@@ -468,6 +418,92 @@ async def run_campaign_send(
         after=summary,
     )
     return summary
+
+
+async def _send_to_customer(
+    session: AsyncSession,
+    *,
+    campaign: Campaign,
+    tpl: WaTemplate,
+    customer: Customer,
+    now_utc: datetime,
+    within_window: bool,
+) -> str:
+    """Apply the compliance gate to one recipient and enqueue if allowed.
+
+    Returns the outcome: ``"queued"``, a ``"suppressed_*"`` reason, or
+    ``"duplicate"`` when a ledger row for this (campaign, customer) already
+    existed (skip-on-conflict). Shared by ``run_campaign_send`` (whole audience)
+    and ``run_todays_special_tick`` (per-customer timed). Caller commits.
+    """
+    opted_out = await is_opted_out(
+        session, restaurant_id=campaign.restaurant_id, phone=customer.phone
+    )
+    sends_24h = await count_sends_last_24h(
+        session,
+        restaurant_id=campaign.restaurant_id,
+        phone=customer.phone,
+        now_utc=now_utc,
+    )
+    decision = can_send_marketing(
+        now_utc=now_utc,
+        sends_last_24h=sends_24h,
+        opted_out=opted_out,
+        within_window=within_window,
+    )
+
+    if not decision.allowed:
+        inserted = await _insert_send(
+            session, campaign=campaign, customer=customer,
+            status=decision.reason, sent_at=None,
+        )
+        return decision.reason if inserted else "duplicate"
+
+    coupon_code: str | None = None
+    if campaign.coupon_value:
+        # Promo coupons reference the recipient's most recent order (the
+        # apology-coupon primitive requires an order FK). Customers with no
+        # order history simply receive the message without a code.
+        last_order_id = (
+            await session.execute(
+                select(Order.id)
+                .where(
+                    Order.restaurant_id == campaign.restaurant_id,
+                    Order.customer_id == customer.id,
+                )
+                .order_by(Order.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if last_order_id is not None:
+            coupon = await issue_coupon(
+                session,
+                restaurant_id=campaign.restaurant_id,
+                customer_id=customer.id,
+                order_id=last_order_id,
+                discount_aed=Decimal(str(campaign.coupon_value)),
+            )
+            coupon_code = coupon.code
+
+    inserted = await _insert_send(
+        session, campaign=campaign, customer=customer,
+        status="sent", sent_at=now_utc,
+    )
+    if not inserted:
+        return "duplicate"
+    payload = _build_payload(
+        tpl, customer_name=customer.name,
+        coupon_code=coupon_code, image_url=campaign.image_url,
+    )
+    await enqueue_message(
+        session,
+        restaurant_id=campaign.restaurant_id,
+        to_phone=customer.phone,
+        msg_type=OutboundMessageType.TEMPLATE,
+        payload=payload,
+        idempotency_key=f"campaign:{campaign.id}:customer:{customer.id}",
+    )
+    return "queued"
 
 
 async def _insert_send(
@@ -499,6 +535,147 @@ async def _insert_send(
     )
     result = await session.execute(stmt)
     return result.first() is not None
+
+
+# ---------------------------------------------------------------------------
+# Today's Special — per-customer auto-timed daily send
+# ---------------------------------------------------------------------------
+async def ensure_todays_special_campaign(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    template_id: int,
+    day_anchor_utc: datetime,
+) -> Campaign:
+    """Get-or-create today's ``todays_special`` campaign for a restaurant.
+
+    Keyed on ``scheduled_at == day_anchor_utc`` (the Dubai day-start), so there's
+    exactly one campaign per restaurant per day regardless of wall-clock. That
+    campaign carries the whole day's per-customer sends, and the
+    ``(campaign, customer)`` unique constraint then guarantees each customer is
+    sent at most once that day. If the manager swapped the template mid-day, the
+    existing campaign is repointed. Caller commits.
+    """
+    existing = (
+        await session.execute(
+            select(Campaign)
+            .where(
+                Campaign.restaurant_id == restaurant_id,
+                Campaign.type == "todays_special",
+                Campaign.scheduled_at == day_anchor_utc,
+            )
+            .order_by(Campaign.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.template_id != template_id:
+            existing.template_id = template_id
+            await session.flush()
+        return existing
+    camp = await create_campaign(
+        session,
+        restaurant_id=restaurant_id,
+        type="todays_special",
+        template_id=template_id,
+        scheduled_at=day_anchor_utc,
+    )
+    camp.status = "sending"
+    await session.flush()
+    return camp
+
+
+async def run_todays_special_tick(
+    session: AsyncSession,
+    *,
+    now_utc: datetime,
+) -> dict:
+    """Heartbeat for the Today's Special automation (called by the secured
+    ``/marketing/tick`` endpoint on a cron schedule).
+
+    For every restaurant with the toggle enabled and an APPROVED template, send
+    the special to each opted-in customer whose predicted send-time is due this
+    minute. Idempotent across ticks (per-day campaign + unique ledger). Returns a
+    summary plus the list of restaurant ids that queued messages so the caller
+    can flush their outbox. Does NOT commit.
+    """
+    local = now_utc.astimezone(_DUBAI)
+    now_minute = local.hour * 60 + local.minute
+    day_anchor_utc = local.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).astimezone(timezone.utc)
+    within_window = is_within_uae_window(now_utc)
+
+    totals = {"queued": 0, "suppressed": 0, "restaurants": []}
+    restaurants = (await session.scalars(select(Restaurant))).all()
+    for restaurant in restaurants:
+        cfg = (restaurant.settings or {}).get("todays_special") or {}
+        if not cfg.get("enabled"):
+            continue
+        template_id = cfg.get("template_id")
+        if not template_id:
+            continue
+        tpl = await session.get(WaTemplate, template_id)
+        if tpl is None or tpl.restaurant_id != restaurant.id or tpl.status != "approved":
+            continue
+        lead = int(cfg.get("lead_minutes", DEFAULT_LEAD_MINUTES))
+        default_minute = parse_hhmm(
+            cfg.get("default_time"), default=_DEFAULT_SPECIAL_MINUTE
+        )
+
+        campaign = await ensure_todays_special_campaign(
+            session,
+            restaurant_id=restaurant.id,
+            template_id=template_id,
+            day_anchor_utc=day_anchor_utc,
+        )
+
+        # Customers already handled today for this campaign — skip (cheap guard;
+        # the unique constraint is the real safety net).
+        done = set(
+            (
+                await session.scalars(
+                    select(MarketingSend.customer_id).where(
+                        MarketingSend.campaign_id == campaign.id
+                    )
+                )
+            ).all()
+        )
+        customers = (
+            await session.scalars(
+                select(Customer).where(Customer.restaurant_id == restaurant.id)
+            )
+        ).all()
+
+        queued_here = 0
+        for cust in customers:
+            if cust.id in done:
+                continue
+            pred = await predict_order_time(session, cust.id)
+            desired = desired_send_minute(
+                pred, lead_minutes=lead, default_minute=default_minute
+            )
+            if not is_due(desired, now_minute):
+                continue
+            reason = await _send_to_customer(
+                session,
+                campaign=campaign,
+                tpl=tpl,
+                customer=cust,
+                now_utc=now_utc,
+                within_window=within_window,
+            )
+            if reason == "queued":
+                queued_here += 1
+                totals["queued"] += 1
+            elif reason.startswith("suppressed"):
+                totals["suppressed"] += 1
+
+        if queued_here:
+            totals["restaurants"].append(restaurant.id)
+
+    await session.flush()
+    return totals
 
 
 # ---------------------------------------------------------------------------
@@ -721,6 +898,45 @@ async def poll_template_statuses(
             after={"updated": updated},
         )
     return updated
+
+
+async def delete_template(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    template_id: int,
+    provider: TemplatePort,
+) -> bool:
+    """Manager-initiated template delete.
+
+    Best-effort removes it from Meta (if it was ever submitted), then soft-deletes
+    locally (``status="deleted"`` + ``deleted_at``) so it drops out of the list and
+    its name enters the 30-day reuse blackout (naming.is_name_reusable). Soft —
+    not a hard DELETE — because campaigns may FK-reference it. Returns False if the
+    template isn't found for this restaurant. Caller commits.
+    """
+    tpl = await session.get(WaTemplate, template_id)
+    if tpl is None or tpl.restaurant_id != restaurant_id or tpl.status == "deleted":
+        return False
+    if tpl.meta_template_id:
+        try:
+            await provider.delete(
+                name=tpl.meta_template_name, meta_template_id=tpl.meta_template_id
+            )
+        except Exception:  # noqa: BLE001 — Meta delete is best-effort
+            pass
+    tpl.status = "deleted"
+    tpl.deleted_at = datetime.now(timezone.utc)
+    await session.flush()
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="wa_template",
+        entity_id=str(template_id),
+        action="deleted",
+    )
+    return True
 
 
 async def cleanup_ephemeral_templates(

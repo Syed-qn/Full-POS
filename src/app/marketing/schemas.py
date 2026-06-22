@@ -52,6 +52,11 @@ class TemplateResponse(BaseModel):
     meta_template_name: str
     status: str
     rejection_reason: str | None = None
+    # Content — lets the dashboard preview the message without a second fetch.
+    body: str | None = None
+    header: dict[str, Any] | None = None
+    footer: str | None = None
+    buttons: list[dict] | None = None
 
 
 class TemplateDraftRequest(BaseModel):
