@@ -475,7 +475,7 @@ export function SettingsScreen() {
           <div className={s.cardGrid}>
             <label className={s.settingCard}>
               <span className={s.settingIcon}>🛵</span>
-              <span className={s.settingName}>Max orders per batch</span>
+              <span className={s.settingName}>Max orders per rider</span>
               <input
                 aria-label="orders per batch"
                 type="number"
@@ -486,7 +486,11 @@ export function SettingsScreen() {
                 onFocus={(e) => e.target.select()}
                 className={`${s.input} ${s.settingInput}`}
               />
-              <span className={s.settingHint}>How many orders a rider can carry together.</span>
+              <span className={s.settingHint}>
+                Most orders one rider carries in a single trip. Extra ready orders go to
+                the next rider — e.g. set 3, and if 5 are ready one rider takes 3 and
+                another takes 2.
+              </span>
             </label>
             <label className={s.settingCard}>
               <span className={s.settingIcon}>🧾</span>
