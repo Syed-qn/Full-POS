@@ -43,6 +43,11 @@ class Dish(Base, TimestampMixin):
     category: Mapped[str | None] = mapped_column(String(128))
     description: Mapped[str | None] = mapped_column(String(2000))
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Optional serving-size variants, e.g. Chicken Biryani → 1 serve / 4 serve, each
+    # with its own price. Empty list = flat dish (today's behaviour, base price_aed
+    # applies). Element shape: {"name": str, "price_aed": decimal-string, "dish_number": int|null}.
+    # Prices are stored as strings (JSONB has no Decimal); the schema layer coerces.
+    variants: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     name_normalized: Mapped[str | None] = mapped_column(String(256))
     # Estimated cook time for one portion (minutes). Null = unknown -> the order's cook
     # estimate falls back to the restaurant's default_prep_minutes setting.

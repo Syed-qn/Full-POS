@@ -21,12 +21,19 @@ export async function setAvailability(dishId: number, isAvailable: boolean): Pro
   });
 }
 
+export interface VariantInput {
+  name: string;
+  price_aed: string;
+  dish_number?: number | null;
+}
+
 export interface DishInput {
   dish_number: number;
   name: string;
   price_aed: string;
   category?: string | null;
   description?: string | null;
+  variants?: VariantInput[];
 }
 
 export type DishPatchInput = Partial<DishInput>;

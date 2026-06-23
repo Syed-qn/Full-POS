@@ -13,7 +13,16 @@ from app.llm.port import MenuExtractor, UploadedFile
 from app.menu import service
 from app.menu.models import Dish, Menu
 from app.ordering.matching import normalize_name
-from app.menu.schemas import AvailabilityIn, DiffOut, DishIn, DishOut, DishPatch, MenuOut, MenuWithDiffOut
+from app.menu.schemas import (
+    AvailabilityIn,
+    DiffOut,
+    DishIn,
+    DishOut,
+    DishPatch,
+    MenuOut,
+    MenuWithDiffOut,
+    serialize_variants,
+)
 from app.menu.service import MenuIncompleteError
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
@@ -119,7 +128,10 @@ async def add_dish(
     )
     if dup:
         raise HTTPException(status.HTTP_409_CONFLICT, "dish number already in menu")
-    dish = Dish(menu_id=menu.id, restaurant_id=restaurant.id, **body.model_dump())
+    data = body.model_dump()
+    # JSONB can't store Decimal — store variants with string prices (canonical shape).
+    data["variants"] = serialize_variants(body.variants)
+    dish = Dish(menu_id=menu.id, restaurant_id=restaurant.id, **data)
     dish.name_normalized = normalize_name(dish.name)
     session.add(dish)
     await session.flush()
@@ -145,6 +157,9 @@ async def patch_dish(
     if dish is None or dish.menu_id != menu.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dish not found")
     changes = body.model_dump(exclude_unset=True)
+    if "variants" in changes:
+        # Serialize to canonical JSONB shape (string prices); None means "clear".
+        changes["variants"] = serialize_variants(body.variants or [])
     if "dish_number" in changes:
         dup = await session.scalar(
             select(Dish).where(

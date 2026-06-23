@@ -49,6 +49,21 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
   const [price, setPrice] = useState(d?.price_aed ?? "");
   const [category, setCategory] = useState(d?.category ?? "");
   const [description, setDescription] = useState(d?.description ?? "");
+  // Serving-size variants (e.g. 1 serve / 4 serve), each with its own price. Empty
+  // = flat dish priced at the base price above.
+  const [variants, setVariants] = useState<{ name: string; price_aed: string }[]>(
+    (d?.variants ?? []).map((v) => ({ name: v.name, price_aed: v.price_aed })),
+  );
+
+  function setVariant(i: number, patch: Partial<{ name: string; price_aed: string }>) {
+    setVariants((vs) => vs.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
+  }
+  function addVariant() {
+    setVariants((vs) => [...vs, { name: "", price_aed: "" }]);
+  }
+  function removeVariant(i: number) {
+    setVariants((vs) => vs.filter((_, idx) => idx !== i));
+  }
 
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -60,7 +75,12 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     new Set([...PRESET_CATEGORIES, ...categories, ...(category ? [category] : [])]),
   );
 
-  const canSave = name.trim() !== "" && price.trim() !== "" && !busy;
+  // Every variant row must be fully filled (name + positive price) before save —
+  // mirrors the backend activation guard so the manager fixes it here, not later.
+  const variantsValid = variants.every(
+    (v) => v.name.trim() !== "" && v.price_aed.trim() !== "" && Number(v.price_aed) > 0,
+  );
+  const canSave = name.trim() !== "" && price.trim() !== "" && variantsValid && !busy;
 
   async function onSave() {
     if (!canSave) return;
@@ -72,6 +92,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
       price_aed: price.trim(),
       category: category.trim() || null,
       description: description.trim() || null,
+      variants: variants.map((v) => ({ name: v.name.trim(), price_aed: v.price_aed.trim() })),
     };
     try {
       if (isNew) {
@@ -163,6 +184,46 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               rows={3}
             />
           </label>
+
+          <div className={s.variants}>
+            <div className={s.variantsHead}>
+              <span className={s.label}>Serving sizes</span>
+              <span className={s.hint}>
+                Optional — e.g. 1 serve / 4 serve, each its own price
+              </span>
+            </div>
+            {variants.map((v, i) => (
+              <div className={s.variantRow} key={i}>
+                <input
+                  className={`${s.input} ${s.variantName}`}
+                  value={v.name}
+                  onChange={(e) => setVariant(i, { name: e.target.value })}
+                  placeholder="4 serve"
+                  aria-label={`Serving size ${i + 1} name`}
+                />
+                <input
+                  className={`${s.input} ${s.variantPrice}`}
+                  type="number"
+                  step="0.01"
+                  value={v.price_aed}
+                  onChange={(e) => setVariant(i, { price_aed: e.target.value })}
+                  placeholder="AED"
+                  aria-label={`Serving size ${i + 1} price`}
+                />
+                <button
+                  type="button"
+                  className={s.variantRemove}
+                  onClick={() => removeVariant(i)}
+                  aria-label={`Remove serving size ${i + 1}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button type="button" className={s.addVariant} onClick={addVariant}>
+              + Add serving size
+            </button>
+          </div>
         </div>
 
         <div className={s.footer}>

@@ -28,4 +28,16 @@ describe("DishCard", () => {
     render(<DishCard dish={{ ...dish, dish_number: null }} onToggle={() => {}} />);
     expect(screen.getByTestId("dish-card").className).toContain("error");
   });
+
+  it("shows a price range when the dish has serving-size variants", () => {
+    const withVariants: DishOut = {
+      ...dish,
+      variants: [
+        { name: "1 serve", price_aed: "18", dish_number: null },
+        { name: "4 serve", price_aed: "60", dish_number: null },
+      ],
+    };
+    render(<DishCard dish={withVariants} onToggle={() => {}} />);
+    expect(screen.getByText("AED 18 – 60")).toBeInTheDocument();
+  });
 });

@@ -8,6 +8,7 @@ from pydantic import BaseModel, computed_field
 class OrderItemDetailOut(BaseModel):
     dish_number: int
     dish_name: str
+    variant_name: str | None = None
     qty: int
     price_aed: Decimal
 

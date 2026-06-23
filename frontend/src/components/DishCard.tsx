@@ -13,6 +13,18 @@ export function DishCard({
   onDelete?: (dish: DishOut) => void;
 }) {
   const hasError = dish.dish_number === null || dish.price_aed === null;
+  // When a dish offers serving sizes, show the price span (e.g. "AED 18 – 60")
+  // instead of a single base price, so the manager sees the range at a glance.
+  const variants = dish.variants ?? [];
+  let priceLabel = `AED ${dish.price_aed ?? "—"}`;
+  if (variants.length > 0) {
+    const nums = variants.map((v) => Number(v.price_aed)).filter((n) => !Number.isNaN(n));
+    if (nums.length > 0) {
+      const lo = Math.min(...nums);
+      const hi = Math.max(...nums);
+      priceLabel = lo === hi ? `AED ${lo}` : `AED ${lo} – ${hi}`;
+    }
+  }
   return (
     <div
       data-testid="dish-card"
@@ -38,7 +50,7 @@ export function DishCard({
       <div className={s.name}>{dish.name}</div>
       {dish.description && <div className={s.desc}>{dish.description}</div>}
       <div className={s.priceRow}>
-        <span className={s.price}>AED {dish.price_aed ?? "—"}</span>
+        <span className={s.price}>{priceLabel}</span>
         <div className={s.actions}>
           {hasError && <span className={s.warn}>Needs number & price</span>}
           {onDelete && (

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_audit
 from app.conversation.models import Conversation
 from app.conversation.service import get_or_create_conversation, record_message
-from app.ordering.matching import MatchConfidence, find_dish_matches
+from app.ordering.matching import MatchConfidence, find_dish_matches, resolve_variant
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
@@ -876,7 +876,8 @@ async def _send_order_summary(
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all()
     item_lines = "\n".join(
-        f"  {it.qty}x {it.dish_name} — "
+        f"  {it.qty}x {it.dish_name}"
+        f"{f' ({it.variant_name})' if it.variant_name else ''} — "
         f"AED {_aed(it.price_aed * it.qty)}"
         for it in items
     )
@@ -1618,7 +1619,9 @@ async def _build_cart_summary(session: AsyncSession, conv) -> str:
     if not items:
         return ""
     lines = [
-        f"{it.qty}x {it.dish_name} (AED {_aed(it.price_aed * it.qty)})"
+        f"{it.qty}x {it.dish_name}"
+        f"{f' ({it.variant_name})' if it.variant_name else ''} "
+        f"(AED {_aed(it.price_aed * it.qty)})"
         for it in items
     ]
     return ", ".join(lines) + f" | Subtotal: AED {_aed(order.subtotal)}"
@@ -1861,32 +1864,32 @@ async def _build_context(
     return ctx
 
 
-async def _execute_ai_add_item(
+def _variant_question(dish) -> str:
+    """One-line size question listing each variant's name + price, e.g.
+    "Which size for Chicken Biryani — 1 serve (AED 18) or 4 serve (AED 60)?"."""
+    opts = " or ".join(
+        f"{v.get('name')} (AED {_aed(Decimal(str(v.get('price_aed'))))})"
+        for v in (dish.variants or [])
+    )
+    return f"Which size for {dish.name} — {opts}?"
+
+
+async def _add_dish_to_cart(
     session: AsyncSession,
     conv,
     inbound: InboundMessage,
     restaurant_id: int,
-    dish_query: str,
+    *,
+    dish,
     qty: int,
-    special_note: str = "",
-) -> bool:
-    """Find and add a dish; return True if successfully added."""
+    notes: str | None,
+    variant: dict | None = None,
+):
+    """Ensure a draft order exists for this conversation and add the dish (optionally
+    a chosen serving-size variant) to it. Shared by the direct add path and the
+    variant-resolution path so order/state setup stays identical."""
     from app.ordering.models import Order
     from app.ordering.service import add_item, create_draft_order, get_or_create_customer
-
-    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
-    if result.confidence == MatchConfidence.NO_MATCH:
-        return False
-    if result.confidence == MatchConfidence.AMBIGUOUS:
-        from app.llm.factory import get_arbiter
-        try:
-            dish = await get_arbiter().arbitrate(dish_query, result.candidates[:3])
-        except Exception:
-            dish = None
-        if dish is None:
-            dish = result.candidates[0]
-    else:
-        dish = result.candidates[0]
 
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone
@@ -1904,8 +1907,118 @@ async def _execute_ai_add_item(
             saved_address_id=None, pin_lat=None, pin_lon=None,
             distance_km=None, delivery_fee=None,
         )
-    await add_item(session, order=order, dish=dish, qty=qty, notes=special_note or None)
+    await add_item(session, order=order, dish=dish, qty=qty, notes=notes, variant=variant)
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+    return order
+
+
+async def _execute_ai_add_item(
+    session: AsyncSession,
+    conv,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    dish_query: str,
+    qty: int,
+    special_note: str = "",
+) -> str:
+    """Find and add a dish. Returns "added", "no_match", or "awaiting_variant"
+    (a size question was just sent and the item is deferred until the reply)."""
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH:
+        return "no_match"
+    if result.confidence == MatchConfidence.AMBIGUOUS:
+        from app.llm.factory import get_arbiter
+        try:
+            dish = await get_arbiter().arbitrate(dish_query, result.candidates[:3])
+        except Exception:
+            dish = None
+        if dish is None:
+            dish = result.candidates[0]
+    else:
+        dish = result.candidates[0]
+
+    # Serving-size variants: if the dish has them and the customer hasn't already
+    # named a size (in the dish query or the note), ask ONE question and defer the
+    # add. The matcher resolves "family biryani"/"4 serve" directly so a customer
+    # who already said the size skips the question.
+    variants = getattr(dish, "variants", None) or []
+    if variants:
+        variant = resolve_variant(dish, dish_query)
+        if variant is None and special_note:
+            variant = resolve_variant(dish, special_note)
+        if variant is None:
+            _set_state(
+                conv,
+                awaiting_variant={"dish_id": dish.id, "qty": qty, "notes": special_note or None},
+                variant_retries=0,
+            )
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="variant-ask", body=_variant_question(dish),
+            )
+            return "awaiting_variant"
+        await _add_dish_to_cart(
+            session, conv, inbound, restaurant_id,
+            dish=dish, qty=qty, notes=special_note or None, variant=variant,
+        )
+        return "added"
+
+    await _add_dish_to_cart(
+        session, conv, inbound, restaurant_id,
+        dish=dish, qty=qty, notes=special_note or None,
+    )
+    return "added"
+
+
+async def _handle_variant_reply(
+    session: AsyncSession,
+    conv,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> bool:
+    """Resolve a pending serving-size question from the customer's text reply.
+
+    On a recognized size → add the item and confirm. On an unrecognized reply →
+    re-ask ONCE, then default to the first listed (cheapest) variant rather than
+    looping forever. Returns True if it handled the message (caller should stop)."""
+    pending = conv.state.get("awaiting_variant")
+    if not pending or inbound.type != MessageType.TEXT:
+        return False
+    from app.menu.models import Dish
+
+    dish = await session.get(Dish, pending.get("dish_id"))
+    if dish is None or not (dish.variants or []):
+        _set_state(conv, awaiting_variant=None, variant_retries=None)
+        return False
+
+    text = (inbound.payload.get("text") or "").strip()
+    variant = resolve_variant(dish, text)
+    if variant is None:
+        retries = int(conv.state.get("variant_retries") or 0)
+        if retries < 1:
+            _set_state(conv, variant_retries=retries + 1)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="variant-reask",
+                body="Sorry, I didn't catch the size. " + _variant_question(dish),
+            )
+            return True
+        # Give up gracefully: default to the first listed variant.
+        variant = dish.variants[0]
+
+    qty = int(pending.get("qty") or 1)
+    notes = pending.get("notes")
+    await _add_dish_to_cart(
+        session, conv, inbound, restaurant_id,
+        dish=dish, qty=qty, notes=notes, variant=variant,
+    )
+    _set_state(conv, awaiting_variant=None, variant_retries=None)
+    line_total = Decimal(str(variant["price_aed"])) * qty
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="variant-added",
+        body=f"Added {qty}x {dish.name} ({variant['name']}) — AED {_aed(line_total)} ✅",
+    )
     return True
 
 
@@ -2301,19 +2414,21 @@ async def _dispatch_action(
             )
             return
         if dish_query:
-            added = await _execute_ai_add_item(
+            status = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty, special_note
             )
-            if added and reply:
+            if status == "added" and reply:
                 await _send_text(session, conv=conv, inbound=inbound,
                                  restaurant_id=restaurant_id, prefix="ai-add", body=reply)
-            elif not added:
+            elif status == "no_match":
                 await _send_text(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                     prefix="ai-no-match",
                     body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
                          "Try the exact dish name or check the menu spelling.",
                 )
+            # status == "awaiting_variant": the size question was already sent;
+            # suppress the AI reply so the customer sees only the one question.
         else:
             if reply:
                 await _send_text(session, conv=conv, inbound=inbound,
@@ -2799,9 +2914,17 @@ async def handle_inbound(
         if conv.state.get("draft_order_id") is not None:
             _logger.info("greeting reset abandoned draft for conv=%s", conv.id)
         _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
-                   draft_order_id=None, pending_order_id=None)
+                   draft_order_id=None, pending_order_id=None,
+                   awaiting_variant=None, variant_retries=None)
         await _handle_greeting(session, conv, inbound, restaurant_id)
         return
+
+    # A pending serving-size question takes the next text reply (e.g. "4 serve")
+    # before the AI runs, so the answer prices the deferred item instead of being
+    # re-interpreted as a new order. Greeting/STOP above already pre-empt this.
+    if conv.state.get("awaiting_variant"):
+        if await _handle_variant_reply(session, conv, inbound, restaurant_id):
+            return
 
     # Location pin → address capture handler (needs geo validation before AI).
     # Pings outside address_capture (e.g. repeated live-location updates after

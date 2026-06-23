@@ -36,6 +36,12 @@ export interface RiderLocationOut {
   ts: string;
 }
 
+export interface VariantOut {
+  name: string;
+  price_aed: string;
+  dish_number: number | null;
+}
+
 export interface DishOut {
   id: number;
   dish_number: number | null;
@@ -44,6 +50,7 @@ export interface DishOut {
   category: string | null;
   description: string | null;
   is_available: boolean;
+  variants?: VariantOut[];
 }
 
 export interface DiffOut {
@@ -133,6 +140,7 @@ export interface MessageOut {
 export interface OrderItemDetailOut {
   dish_number: number;
   dish_name: string;
+  variant_name?: string | null;
   qty: number;
   price_aed: string;
   line_total: string;

@@ -110,6 +110,9 @@ class OrderItem(Base, TimestampMixin):
     dish_id: Mapped[int] = mapped_column(ForeignKey("dishes.id"))
     dish_number: Mapped[int] = mapped_column(Integer)
     dish_name: Mapped[str] = mapped_column(String(256))
+    # Chosen serving-size label (e.g. "4 serve"), snapshotted like dish_name. Null for
+    # flat dishes with no variants. price_aed already snapshots the resolved variant price.
+    variant_name: Mapped[str | None] = mapped_column(String(128))
     price_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2))
     qty: Mapped[int] = mapped_column(Integer, default=1)
     notes: Mapped[str | None] = mapped_column(String(512))  # verbatim special request

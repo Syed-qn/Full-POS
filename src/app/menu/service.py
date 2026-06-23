@@ -129,9 +129,33 @@ class MenuIncompleteError(Exception):
     pass
 
 
+def _variants_incomplete(dish: Dish) -> bool:
+    """True if any serving-size variant on the dish lacks a name or a positive price.
+
+    Mirrors the base "dish needs number and price" rule (spec §): a variant without a
+    price would let an order be placed with no resolvable amount, so it blocks activation.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    for v in (dish.variants or []):
+        if not (v.get("name") or "").strip():
+            return True
+        raw = v.get("price_aed")
+        if raw in (None, ""):
+            return True
+        try:
+            if Decimal(str(raw)) <= 0:
+                return True
+        except (InvalidOperation, ValueError):
+            return True
+    return False
+
+
 async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
     incomplete = [
-        d for d in menu.dishes if d.dish_number is None or d.price_aed is None
+        d
+        for d in menu.dishes
+        if d.dish_number is None or d.price_aed is None or _variants_incomplete(d)
     ]
     if incomplete:
         names = ", ".join(d.name for d in incomplete[:5])

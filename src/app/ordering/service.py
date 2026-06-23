@@ -469,15 +469,24 @@ async def add_item(
     dish: "Dish",
     qty: int = 1,
     notes: str | None = None,
+    variant: dict | None = None,
 ) -> OrderItem:
-    # Merge into an existing line for the same dish + notes so the cart shows
-    # "2x Mango Lassi" instead of two separate "1x" lines (matches how real
-    # ordering apps present a cart).
+    # When a serving-size variant is chosen, snapshot its name + price; otherwise the
+    # dish behaves exactly as before (base price, no variant label).
+    variant_name = variant.get("name") if variant else None
+    unit_price = Decimal(str(variant["price_aed"])) if variant else dish.price_aed
+
+    # Merge into an existing line for the same dish + variant + notes so the cart shows
+    # "2x Mango Lassi" instead of two separate "1x" lines (matches how real ordering
+    # apps present a cart). A different variant is a separate line.
     existing_line = (
         await session.scalars(
             select(OrderItem).where(
                 OrderItem.order_id == order.id,
                 OrderItem.dish_id == dish.id,
+                OrderItem.variant_name.is_(variant_name)
+                if variant_name is None
+                else OrderItem.variant_name == variant_name,
                 OrderItem.notes.is_(notes) if notes is None else OrderItem.notes == notes,
             )
         )
@@ -491,7 +500,8 @@ async def add_item(
             dish_id=dish.id,
             dish_number=dish.dish_number,
             dish_name=dish.name,
-            price_aed=dish.price_aed,
+            variant_name=variant_name,
+            price_aed=unit_price,
             qty=qty,
             notes=notes,
         )
@@ -1169,6 +1179,7 @@ async def get_order_detail(
         OrderItemDetailOut(
             dish_number=i.dish_number,
             dish_name=i.dish_name,
+            variant_name=i.variant_name,
             qty=i.qty,
             price_aed=i.price_aed,
         )

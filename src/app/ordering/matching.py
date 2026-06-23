@@ -35,6 +35,49 @@ def normalize_name(raw: str) -> str:
     return collapsed.strip().casefold()
 
 
+def resolve_variant(dish: "Dish", query: str) -> dict | None:
+    """Match a free-text size query against a dish's serving-size variants.
+
+    Returns the matching variant dict (``{"name", "price_aed", "dish_number"}``) or
+    None when nothing matches. Matching is in-memory (variants are JSONB on the dish,
+    not a queryable table) and tolerant: exact normalized equality first, then
+    substring/word-containment either direction (so "fam" → "Family", "family
+    biryani" → "Family"). Returns None for a dish without variants.
+    """
+    variants = getattr(dish, "variants", None) or []
+    if not variants:
+        return None
+    nq = normalize_name(query)
+    if not nq:
+        return None
+    q_tokens = set(nq.split())
+    # 1) exact normalized match wins outright.
+    for v in variants:
+        if normalize_name(v.get("name", "")) == nq:
+            return v
+    # 2) score each variant on shared signal and pick the SINGLE best. Scoring
+    #    (not first-hit) avoids a word common to several variants — e.g. "serve"
+    #    in both "1 serve"/"4 serve" — falsely matching whichever is listed first;
+    #    the distinguishing token ("4") breaks the tie. Ambiguous ties → None.
+    best_score = 0
+    best: dict | None = None
+    tie = False
+    for v in variants:
+        nv = normalize_name(v.get("name", ""))
+        if not nv:
+            continue
+        score = len(q_tokens & set(nv.split()))
+        if nv in nq or nq in nv:
+            score += 2
+        if score > best_score:
+            best_score, best, tie = score, v, False
+        elif score == best_score and score > 0:
+            tie = True
+    if best_score == 0 or tie:
+        return None
+    return best
+
+
 class MatchConfidence(StrEnum):
     DIRECT = "direct"        # 1 strong match; gap large enough
     AMBIGUOUS = "ambiguous"  # 2+ candidates within threshold of each other

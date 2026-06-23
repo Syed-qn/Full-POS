@@ -29,15 +29,19 @@ RIDER_PHONE = "+971501111111"
 # Dubai (Business Bay) coords — within UAE service area.
 LAT, LNG = 25.1877, 55.2633
 
-# (dish_number, name, price_aed, category)
+# (dish_number, name, price_aed, category, variants)
+# variants: optional serving sizes [{name, price_aed}] — base price is the "from" price.
 DISHES = [
-    (1, "Chicken Biryani", "28.00", "Biryani"),
-    (2, "Mutton Biryani", "35.00", "Biryani"),
-    (3, "Veg Biryani", "22.00", "Biryani"),
-    (4, "Butter Chicken", "32.00", "Curries"),
-    (5, "Paneer Tikka Masala", "26.00", "Curries"),
-    (6, "Garlic Naan", "6.00", "Breads"),
-    (7, "Mango Lassi", "12.00", "Drinks"),
+    (1, "Chicken Biryani", "28.00", "Biryani", [
+        {"name": "1 serve", "price_aed": "28.00", "dish_number": None},
+        {"name": "4 serve", "price_aed": "95.00", "dish_number": None},
+    ]),
+    (2, "Mutton Biryani", "35.00", "Biryani", []),
+    (3, "Veg Biryani", "22.00", "Biryani", []),
+    (4, "Butter Chicken", "32.00", "Curries", []),
+    (5, "Paneer Tikka Masala", "26.00", "Curries", []),
+    (6, "Garlic Naan", "6.00", "Breads", []),
+    (7, "Mango Lassi", "12.00", "Drinks", []),
 ]
 
 
@@ -72,7 +76,7 @@ async def main() -> None:
             menu = Menu(restaurant_id=restaurant.id, version=1, status="active")
             session.add(menu)
             await session.flush()
-            for number, name, price, category in DISHES:
+            for number, name, price, category, variants in DISHES:
                 session.add(
                     Dish(
                         menu_id=menu.id,
@@ -83,6 +87,7 @@ async def main() -> None:
                         category=category,
                         is_available=True,
                         name_normalized=normalize_name(name),
+                        variants=variants,
                     )
                 )
         else:

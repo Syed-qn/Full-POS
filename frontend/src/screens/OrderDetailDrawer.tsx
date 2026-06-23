@@ -354,7 +354,10 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
           {detail.items.map((item, i) => (
             <div key={i} className={s.itemRow}>
               <span className={s.itemQtyBadge}>{item.qty}×</span>
-              <span className={s.itemName}>{item.dish_name}</span>
+              <span className={s.itemName}>
+                {item.dish_name}
+                {item.variant_name ? ` (${item.variant_name})` : ""}
+              </span>
               <span className={s.itemPrice}>AED {item.line_total}</span>
             </div>
           ))}
