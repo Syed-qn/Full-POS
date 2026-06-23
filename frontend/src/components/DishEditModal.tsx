@@ -75,10 +75,22 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     new Set([...PRESET_CATEGORIES, ...categories, ...(category ? [category] : [])]),
   );
 
-  // Every variant row must be fully filled (name + positive price) before save —
-  // mirrors the backend activation guard so the manager fixes it here, not later.
+  // A serving size of 1 (or "single") is just the base price above — it doesn't
+  // belong in the variants list, which is for bigger/sharing portions only.
+  function servesTooSmall(vName: string): boolean {
+    const n = vName.trim().toLowerCase();
+    if (["1", "single", "one", "single serve", "1 serve"].includes(n)) return true;
+    const m = n.match(/^(\d+)/);
+    return m !== null && Number(m[1]) <= 1;
+  }
+  // Every variant row must be fully filled (name + positive price, 2+ servings)
+  // before save — mirrors the backend activation guard so the manager fixes it here.
   const variantsValid = variants.every(
-    (v) => v.name.trim() !== "" && v.price_aed.trim() !== "" && Number(v.price_aed) > 0,
+    (v) =>
+      v.name.trim() !== "" &&
+      v.price_aed.trim() !== "" &&
+      Number(v.price_aed) > 0 &&
+      !servesTooSmall(v.name),
   );
   const canSave = name.trim() !== "" && price.trim() !== "" && variantsValid && !busy;
 
@@ -149,14 +161,14 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
           <div className={s.row}>
             <label className={s.field}>
-              <span className={s.label}>Price (AED) *</span>
+              <span className={s.label}>Price (AED) — single serve *</span>
               <input
                 className={s.input}
                 type="number"
                 step="0.01"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="28.00"
+                placeholder="20.00"
               />
             </label>
             <label className={s.field}>
@@ -187,9 +199,10 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
           <div className={s.variants}>
             <div className={s.variantsHead}>
-              <span className={s.label}>Serving sizes</span>
+              <span className={s.label}>Serving sizes (2+ only)</span>
               <span className={s.hint}>
-                Optional — e.g. 1 serve / 4 serve, each its own price
+                Optional — bigger portions only, e.g. 2 serve / Family. The single
+                serve is the price above.
               </span>
             </div>
             {variants.map((v, i) => (
@@ -220,6 +233,11 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                 </button>
               </div>
             ))}
+            {variants.some((v) => servesTooSmall(v.name)) && (
+              <span className={s.hint} style={{ color: "#b02a2a" }}>
+                A single serve is the base price above — serving sizes must be 2 or more.
+              </span>
+            )}
             <button type="button" className={s.addVariant} onClick={addVariant}>
               + Add serving size
             </button>

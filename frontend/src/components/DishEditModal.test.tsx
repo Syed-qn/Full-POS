@@ -34,7 +34,7 @@ describe("DishEditModal serving-size variants", () => {
     );
 
     await userEvent.type(screen.getByPlaceholderText("Chicken Biryani"), "Chicken Biryani");
-    await userEvent.type(screen.getByPlaceholderText("28.00"), "18.00");
+    await userEvent.type(screen.getByPlaceholderText("20.00"), "18.00");
 
     await userEvent.click(screen.getByRole("button", { name: /add serving size/i }));
     await userEvent.type(screen.getByLabelText("Serving size 1 name"), "4 serve");
@@ -59,10 +59,31 @@ describe("DishEditModal serving-size variants", () => {
       />,
     );
     await userEvent.type(screen.getByPlaceholderText("Chicken Biryani"), "Biryani");
-    await userEvent.type(screen.getByPlaceholderText("28.00"), "18.00");
+    await userEvent.type(screen.getByPlaceholderText("20.00"), "18.00");
     await userEvent.click(screen.getByRole("button", { name: /add serving size/i }));
     // Name typed, price left blank → save disabled.
     await userEvent.type(screen.getByLabelText("Serving size 1 name"), "4 serve");
     expect(screen.getByRole("button", { name: "Add dish" })).toBeDisabled();
+  });
+
+  it("blocks a serving size of 1 (single serve is the base price)", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("{}", { status: 200 }))));
+    render(
+      <DishEditModal
+        menuId={5}
+        dish="new"
+        categories={[]}
+        nextNumber={300}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    await userEvent.type(screen.getByPlaceholderText("Chicken Biryani"), "Biryani");
+    await userEvent.type(screen.getByPlaceholderText("20.00"), "20");
+    await userEvent.click(screen.getByRole("button", { name: /add serving size/i }));
+    await userEvent.type(screen.getByLabelText("Serving size 1 name"), "1 serve");
+    await userEvent.type(screen.getByLabelText("Serving size 1 price"), "20");
+    expect(screen.getByRole("button", { name: "Add dish" })).toBeDisabled();
+    expect(screen.getByText(/must be 2 or more/i)).toBeInTheDocument();
   });
 });

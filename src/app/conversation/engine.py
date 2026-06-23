@@ -1864,16 +1864,6 @@ async def _build_context(
     return ctx
 
 
-def _variant_question(dish) -> str:
-    """One-line size question listing each variant's name + price, e.g.
-    "Which size for Chicken Biryani — 1 serve (AED 18) or 4 serve (AED 60)?"."""
-    opts = " or ".join(
-        f"{v.get('name')} (AED {_aed(Decimal(str(v.get('price_aed'))))})"
-        for v in (dish.variants or [])
-    )
-    return f"Which size for {dish.name} — {opts}?"
-
-
 async def _add_dish_to_cart(
     session: AsyncSession,
     conv,
@@ -1921,8 +1911,12 @@ async def _execute_ai_add_item(
     qty: int,
     special_note: str = "",
 ) -> str:
-    """Find and add a dish. Returns "added", "no_match", or "awaiting_variant"
-    (a size question was just sent and the item is deferred until the reply)."""
+    """Find and add a dish. Returns "added" or "no_match".
+
+    Serving-size variants are OPT-IN bigger portions on top of the base single
+    serve. The customer is never interrogated: ordering a dish plainly adds the
+    single serve at the base price. A bigger portion is applied only when the
+    customer NAMES it ("family biryani", "4 serve") — the matcher resolves it."""
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH:
         return "no_match"
@@ -1937,89 +1931,19 @@ async def _execute_ai_add_item(
     else:
         dish = result.candidates[0]
 
-    # Serving-size variants: if the dish has them and the customer hasn't already
-    # named a size (in the dish query or the note), ask ONE question and defer the
-    # add. The matcher resolves "family biryani"/"4 serve" directly so a customer
-    # who already said the size skips the question.
-    variants = getattr(dish, "variants", None) or []
-    if variants:
+    # Apply a variant ONLY if the customer explicitly named one; otherwise the
+    # base price (single serve) stands. No "which size?" question.
+    variant = None
+    if getattr(dish, "variants", None):
         variant = resolve_variant(dish, dish_query)
         if variant is None and special_note:
             variant = resolve_variant(dish, special_note)
-        if variant is None:
-            _set_state(
-                conv,
-                awaiting_variant={"dish_id": dish.id, "qty": qty, "notes": special_note or None},
-                variant_retries=0,
-            )
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="variant-ask", body=_variant_question(dish),
-            )
-            return "awaiting_variant"
-        await _add_dish_to_cart(
-            session, conv, inbound, restaurant_id,
-            dish=dish, qty=qty, notes=special_note or None, variant=variant,
-        )
-        return "added"
 
     await _add_dish_to_cart(
         session, conv, inbound, restaurant_id,
-        dish=dish, qty=qty, notes=special_note or None,
+        dish=dish, qty=qty, notes=special_note or None, variant=variant,
     )
     return "added"
-
-
-async def _handle_variant_reply(
-    session: AsyncSession,
-    conv,
-    inbound: InboundMessage,
-    restaurant_id: int,
-) -> bool:
-    """Resolve a pending serving-size question from the customer's text reply.
-
-    On a recognized size → add the item and confirm. On an unrecognized reply →
-    re-ask ONCE, then default to the first listed (cheapest) variant rather than
-    looping forever. Returns True if it handled the message (caller should stop)."""
-    pending = conv.state.get("awaiting_variant")
-    if not pending or inbound.type != MessageType.TEXT:
-        return False
-    from app.menu.models import Dish
-
-    dish = await session.get(Dish, pending.get("dish_id"))
-    if dish is None or not (dish.variants or []):
-        _set_state(conv, awaiting_variant=None, variant_retries=None)
-        return False
-
-    text = (inbound.payload.get("text") or "").strip()
-    variant = resolve_variant(dish, text)
-    if variant is None:
-        retries = int(conv.state.get("variant_retries") or 0)
-        if retries < 1:
-            _set_state(conv, variant_retries=retries + 1)
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="variant-reask",
-                body="Sorry, I didn't catch the size. " + _variant_question(dish),
-            )
-            return True
-        # Give up gracefully: default to the first listed variant.
-        variant = dish.variants[0]
-
-    qty = int(pending.get("qty") or 1)
-    notes = pending.get("notes")
-    await _add_dish_to_cart(
-        session, conv, inbound, restaurant_id,
-        dish=dish, qty=qty, notes=notes, variant=variant,
-    )
-    _set_state(conv, awaiting_variant=None, variant_retries=None)
-    line_total = Decimal(str(variant["price_aed"])) * qty
-    await _send_text(
-        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix="variant-added",
-        body=f"Added {qty}x {dish.name} ({variant['name']}) — AED {_aed(line_total)} ✅",
-    )
-    return True
 
 
 async def _resolve_cart_dish(session: AsyncSession, *, order_id: int, candidates):
@@ -2427,8 +2351,6 @@ async def _dispatch_action(
                     body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
                          "Try the exact dish name or check the menu spelling.",
                 )
-            # status == "awaiting_variant": the size question was already sent;
-            # suppress the AI reply so the customer sees only the one question.
         else:
             if reply:
                 await _send_text(session, conv=conv, inbound=inbound,
@@ -2914,17 +2836,9 @@ async def handle_inbound(
         if conv.state.get("draft_order_id") is not None:
             _logger.info("greeting reset abandoned draft for conv=%s", conv.id)
         _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
-                   draft_order_id=None, pending_order_id=None,
-                   awaiting_variant=None, variant_retries=None)
+                   draft_order_id=None, pending_order_id=None)
         await _handle_greeting(session, conv, inbound, restaurant_id)
         return
-
-    # A pending serving-size question takes the next text reply (e.g. "4 serve")
-    # before the AI runs, so the answer prices the deferred item instead of being
-    # re-interpreted as a new order. Greeting/STOP above already pre-empt this.
-    if conv.state.get("awaiting_variant"):
-        if await _handle_variant_reply(session, conv, inbound, restaurant_id):
-            return
 
     # Location pin → address capture handler (needs geo validation before AI).
     # Pings outside address_capture (e.g. repeated live-location updates after
