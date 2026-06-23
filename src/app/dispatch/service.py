@@ -24,11 +24,10 @@ Schema adaptation (Phase-3 T2 flags — NO new migration required):
 
 import logging
 import time
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,23 +62,29 @@ class DispatchResult:
     needs_retry: bool = False
 
 
-@asynccontextmanager
-async def _restaurant_lock(restaurant_id: int):
-    """Best-effort per-restaurant lock. No-op if redis unavailable (tests)."""
-    try:
-        from app.redis_client import get_redis  # provided by Phase 2 if present
+# Namespace for the per-restaurant dispatch advisory lock (arbitrary constant; keeps
+# our lock keys from colliding with any other advisory-lock user).
+_DISPATCH_LOCK_CLASS = 4_919_001
 
-        redis = get_redis()
-        lock = redis.lock(f"dispatch_lock:{restaurant_id}", timeout=30)
-        acquired = await lock.acquire(blocking=False)
-        try:
-            yield acquired
-        finally:
-            if acquired:
-                await lock.release()
-    except Exception:
-        # redis missing/unreachable -> proceed without distributed lock
-        yield True
+
+async def _acquire_dispatch_lock(session: AsyncSession, restaurant_id: int) -> None:
+    """Serialize dispatch per restaurant with a transaction-scoped Postgres advisory
+    lock. Without this, two orders marked ready a fraction of a second apart trigger
+    two concurrent dispatch runs that don't see each other — so they get assigned
+    ONE-BY-ONE instead of batched. The lock makes the second run wait, then see both
+    ready orders in one pass and batch them. Auto-released on commit/rollback, so it
+    needs no redis and works on the web-only (Render) deploy.
+
+    Best-effort: a backend without advisory locks (e.g. SQLite in a unit test) just
+    proceeds unserialized rather than erroring.
+    """
+    try:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:c, :o)"),
+            {"c": _DISPATCH_LOCK_CLASS, "o": restaurant_id},
+        )
+    except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
+        _logger.debug("advisory dispatch lock unavailable; proceeding unserialized")
 
 
 async def _active_order_count(session: AsyncSession, rider_id: int) -> int:
@@ -97,12 +102,15 @@ async def run_dispatch_engine(
     session: AsyncSession, *, restaurant_id: int
 ) -> DispatchResult:
     """Assign ready orders to nearest available riders. Idempotent per call."""
-    async with _restaurant_lock(restaurant_id):
-        result = await _dispatch(session, restaurant_id)
-        # After assigning, nudge the kitchen to rush still-cooking orders that are
-        # headed to the same area as a run going out now, so they catch the next batch.
-        await _nudge_batchable_cooking_orders(session, restaurant_id)
-        return result
+    # Serialize concurrent dispatch for this restaurant so near-simultaneous "ready"
+    # events are considered together (and can batch) instead of racing into one-by-one
+    # assignments. Held until this transaction commits/rolls back.
+    await _acquire_dispatch_lock(session, restaurant_id)
+    result = await _dispatch(session, restaurant_id)
+    # After assigning, nudge the kitchen to rush still-cooking orders that are
+    # headed to the same area as a run going out now, so they catch the next batch.
+    await _nudge_batchable_cooking_orders(session, restaurant_id)
+    return result
 
 
 # Alias used by dispatch router (spec §4.3)
