@@ -86,4 +86,44 @@ describe("DishEditModal serving-size variants", () => {
     expect(screen.getByRole("button", { name: "Add dish" })).toBeDisabled();
     expect(screen.getByText(/must be 2 or more/i)).toBeInTheDocument();
   });
+
+  it("drink category shows Sizes editor and allows Large/Small (no 2+ rule)", async () => {
+    let posted: any = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === "PATCH") {
+          posted = JSON.parse(init.body as string);
+          return Promise.resolve(new Response(JSON.stringify({ id: 7 }), { status: 200 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }),
+    );
+    const drink = {
+      id: 7, dish_number: 300, name: "Lemon Mint", price_aed: "10.00",
+      category: "Drinks", description: null, is_available: true, variants: [],
+    } as any;
+    render(
+      <DishEditModal
+        menuId={5}
+        dish={drink}
+        categories={[]}
+        nextNumber={301}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+
+    // Editor reads "Sizes", not "Serving sizes".
+    expect(screen.getByText("Sizes")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /add size/i }));
+    await userEvent.type(screen.getByLabelText("Size 1 name"), "Large");
+    await userEvent.type(screen.getByLabelText("Size 1 price"), "12");
+
+    // No 2+ rule for drinks → no error, save enabled, "Large" submits.
+    expect(screen.queryByText(/must be 2 or more/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(posted.variants).toEqual([{ name: "Large", price_aed: "12" }]);
+  });
 });

@@ -26,6 +26,17 @@ const PRESET_CATEGORIES = [
   "Other",
 ];
 
+/** Categories whose variants are SIZES (Large/Small), not bigger food portions.
+ *  Mirrors the bot's _DRINK_CATEGORY_HINTS so the editor matches the ordering flow. */
+const DRINK_CATEGORY_HINTS = [
+  "drink", "beverage", "juice", "soda", "water", "tea", "coffee", "shake",
+  "smoothie", "mocktail", "lassi", "cola", "mint",
+];
+function isDrinkCategory(cat: string): boolean {
+  const c = cat.trim().toLowerCase();
+  return DRINK_CATEGORY_HINTS.some((h) => c.includes(h));
+}
+
 interface Props {
   menuId: number;
   /** Existing dish to edit, or "new" to create one. */
@@ -75,16 +86,18 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     new Set([...PRESET_CATEGORIES, ...categories, ...(category ? [category] : [])]),
   );
 
-  // A serving size of 1 (or "single") is just the base price above — it doesn't
-  // belong in the variants list, which is for bigger/sharing portions only.
+  // Drinks pick a SIZE (Large/Small) — anything goes; food serving sizes are bigger
+  // portions only, so a "1 serve" there is just the base price and is rejected.
+  const isDrink = isDrinkCategory(category);
   function servesTooSmall(vName: string): boolean {
+    if (isDrink) return false; // drink sizes (Large/Small) have no 2+ rule
     const n = vName.trim().toLowerCase();
     if (["1", "single", "one", "single serve", "1 serve"].includes(n)) return true;
     const m = n.match(/^(\d+)/);
     return m !== null && Number(m[1]) <= 1;
   }
-  // Every variant row must be fully filled (name + positive price, 2+ servings)
-  // before save — mirrors the backend activation guard so the manager fixes it here.
+  // Every variant row must be fully filled (name + positive price; food also 2+
+  // servings) before save — mirrors the backend activation guard.
   const variantsValid = variants.every(
     (v) =>
       v.name.trim() !== "" &&
@@ -161,7 +174,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
           <div className={s.row}>
             <label className={s.field}>
-              <span className={s.label}>Price (AED) — single serve *</span>
+              <span className={s.label}>{isDrink ? "Base price (AED) *" : "Price (AED) — single serve *"}</span>
               <input
                 className={s.input}
                 type="number"
@@ -199,10 +212,11 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
           <div className={s.variants}>
             <div className={s.variantsHead}>
-              <span className={s.label}>Serving sizes (2+ only)</span>
+              <span className={s.label}>{isDrink ? "Sizes" : "Serving sizes (2+ only)"}</span>
               <span className={s.hint}>
-                Optional — bigger portions only, e.g. 2 serve / Family. The single
-                serve is the price above.
+                {isDrink
+                  ? "Optional — e.g. Large / Small, each with its own price. The bot asks the customer which size."
+                  : "Optional — bigger portions only, e.g. 2 serve / Family. The single serve is the price above."}
               </span>
             </div>
             {variants.map((v, i) => (
@@ -211,8 +225,8 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                   className={`${s.input} ${s.variantName}`}
                   value={v.name}
                   onChange={(e) => setVariant(i, { name: e.target.value })}
-                  placeholder="4 serve"
-                  aria-label={`Serving size ${i + 1} name`}
+                  placeholder={isDrink ? "Large" : "4 serve"}
+                  aria-label={isDrink ? `Size ${i + 1} name` : `Serving size ${i + 1} name`}
                 />
                 <input
                   className={`${s.input} ${s.variantPrice}`}
@@ -221,25 +235,25 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                   value={v.price_aed}
                   onChange={(e) => setVariant(i, { price_aed: e.target.value })}
                   placeholder="AED"
-                  aria-label={`Serving size ${i + 1} price`}
+                  aria-label={isDrink ? `Size ${i + 1} price` : `Serving size ${i + 1} price`}
                 />
                 <button
                   type="button"
                   className={s.variantRemove}
                   onClick={() => removeVariant(i)}
-                  aria-label={`Remove serving size ${i + 1}`}
+                  aria-label={isDrink ? `Remove size ${i + 1}` : `Remove serving size ${i + 1}`}
                 >
                   ×
                 </button>
               </div>
             ))}
-            {variants.some((v) => servesTooSmall(v.name)) && (
+            {!isDrink && variants.some((v) => servesTooSmall(v.name)) && (
               <span className={s.hint} style={{ color: "#b02a2a" }}>
                 A single serve is the base price above — serving sizes must be 2 or more.
               </span>
             )}
             <button type="button" className={s.addVariant} onClick={addVariant}>
-              + Add serving size
+              {isDrink ? "+ Add size" : "+ Add serving size"}
             </button>
           </div>
         </div>
