@@ -1955,8 +1955,8 @@ async def _offer_bundle_choice(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="bundle-offer",
         body=(
-            f"We have a {bundle['name']} {dish.name} for AED {bundle_price} "
-            f"(vs AED {single_total} for {qty} separate). Add the {bundle['name']}? "
+            f"We have a {dish.name} ({bundle['name']}) for AED {bundle_price} "
+            f"(vs AED {single_total} for {qty} separate). Add the combo? "
             f"Reply yes, or no to keep them separate 😊"
         ),
     )
