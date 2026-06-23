@@ -698,14 +698,36 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     # before a rider is committed — the standard "batching window". A held order is
     # simply skipped this pass and re-evaluated by the periodic dispatch sweep
     # (dispatch.sweep_ready) until it finds a batch-mate or the window matures. We
-    # never hold an order that already has a batch-mate ready within proximity, is
-    # priority, or is under SLA pressure (waiting the window would risk the internal
-    # target). Applies to BOTH engines, so it sits before the engine branch.
+    # only hold when a batch is actually PLAUSIBLE — i.e. another order is cooking
+    # nearby (confirmed/preparing) and could become ready inside the window. We never
+    # hold an order that already has a ready batch-mate within proximity, has no nearby
+    # mate in the pipeline at all, is priority, or is under SLA pressure (waiting the
+    # window would risk the internal target). Applies to BOTH engines, so it sits
+    # before the engine branch.
     rs = restaurant.settings or {}
     hold_seconds = int(rs.get("batch_hold_seconds", 0) or 0)
     if hold_seconds > 0 and candidates:
         hold_proximity_km = float(rs.get("batch_proximity_km", 1.0))
         internal_target = get_settings().sla_internal_target_minutes
+        # Plausible upcoming batch-mates: orders still in the kitchen (confirmed/
+        # preparing, not yet assigned) that could become ready within the window. A
+        # lone ready order is only worth holding if such a mate exists *nearby* —
+        # otherwise we'd just burn SLA waiting for a batch that can never form.
+        pipeline_orders = (
+            await session.scalars(
+                select(Order).where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.status.in_(
+                        [str(OrderStatus.CONFIRMED), str(OrderStatus.PREPARING)]
+                    ),
+                    Order.rider_id.is_(None),
+                )
+            )
+        ).all()
+        pipeline_coords = await _dropoff_coords(session, list(pipeline_orders))
+        pipeline_pts = [
+            pipeline_coords[o.id] for o in pipeline_orders if o.id in pipeline_coords
+        ]
         eligible: list[OrderCandidate] = []
         held: list[OrderCandidate] = []
         for c in candidates:
@@ -718,6 +740,11 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                 and distance_km(c.lat, c.lon, other.lat, other.lon) <= hold_proximity_km
                 for other in candidates
             )
+            # A mate that's still cooking nearby and could join once it's ready.
+            has_pipeline_mate = any(
+                distance_km(c.lat, c.lon, plat, plon) <= hold_proximity_km
+                for plat, plon in pipeline_pts
+            )
             # Would waiting out the rest of the window push it past the internal target?
             sla_pressure = (
                 c.minutes_elapsed + max(0.0, hold_seconds - waited) / 60.0
@@ -728,6 +755,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                 or waited >= hold_seconds
                 or has_mate
                 or sla_pressure
+                or not has_pipeline_mate  # nothing nearby to wait for → assign now
             ):
                 eligible.append(c)
             else:

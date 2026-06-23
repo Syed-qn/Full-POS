@@ -1,10 +1,13 @@
 """Batch hold-window tests (opt-in ``batch_hold_seconds``).
 
-The hold window briefly defers a freshly-ready, lone order so a nearby order can
-join its batch before a rider is committed — the standard "batching window". A held
-order is skipped this dispatch pass and re-evaluated by the periodic dispatch sweep
-until it finds a batch-mate or the window matures. We must NEVER hold an order that:
+The hold window briefly defers a freshly-ready order so a nearby order can join its
+batch before a rider is committed — the standard "batching window". A held order is
+skipped this dispatch pass and re-evaluated by the periodic dispatch sweep until it
+finds a batch-mate or the window matures. We only hold when a batch is actually
+PLAUSIBLE: another order is cooking nearby (confirmed/preparing) that could become
+ready inside the window. We must NEVER hold an order that:
   * already has a batch-mate ready within proximity,
+  * has no nearby mate in the kitchen pipeline at all (nothing to wait for),
   * is priority, or
   * is under SLA pressure (waiting the window would risk the internal target).
 Default ``batch_hold_seconds`` = 0 keeps the original assign-immediately behaviour.
@@ -80,6 +83,31 @@ async def _ready_order(
     return o
 
 
+async def _pipeline_order(db_session, r, lat, lon, num, status="preparing"):
+    """An order still in the kitchen (confirmed/preparing, unassigned) — a plausible
+    upcoming batch-mate. It is NOT a dispatch candidate itself."""
+    c = Customer(
+        restaurant_id=r.id, phone=f"+97152{num:07d}", name="C", usual_order_times={},
+        tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(c)
+    await db_session.flush()
+    addr = CustomerAddress(customer_id=c.id, latitude=lat, longitude=lon, confirmed=True)
+    db_session.add(addr)
+    await db_session.flush()
+    now = datetime.now(timezone.utc)
+    o = Order(
+        restaurant_id=r.id, customer_id=c.id, order_number=f"P{num}", status=status,
+        priority="normal", weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("10.00"), total=Decimal("10.00"), address_id=addr.id,
+        sla_confirmed_at=now, sla_deadline=now + timedelta(minutes=40),
+        promised_eta=now + timedelta(minutes=40),
+    )
+    db_session.add(o)
+    await db_session.flush()
+    return o
+
+
 async def test_hold_disabled_assigns_immediately(db_session):
     """Default batch_hold_seconds=0 → a lone fresh order is assigned at once (no regression)."""
     r = await _restaurant(db_session, hold_seconds=0)
@@ -95,11 +123,30 @@ async def test_hold_disabled_assigns_immediately(db_session):
     assert res.assigned_count == 1
 
 
-async def test_lone_fresh_order_is_held(db_session):
-    """A single fresh order is held (not assigned) while the window is open."""
+async def test_lone_fresh_order_no_mate_assigns_immediately(db_session):
+    """A fresh order with nothing else cooking nearby has no plausible batch-mate, so
+    holding would just burn SLA → it is assigned at once."""
+    r = await _restaurant(db_session, hold_seconds=120)
+    rd = await _rider(db_session, r)
+    o = await _ready_order(db_session, r, 25.2050, 55.2710, 2, ready_minutes_ago=0)
+    await db_session.commit()
+
+    res = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(o)
+    assert o.status == "assigned"
+    assert o.rider_id == rd.id
+    assert res.assigned_count == 1
+
+
+async def test_lone_order_held_when_pipeline_mate_cooking_nearby(db_session):
+    """A fresh order IS held while a nearby order is still cooking — that order could
+    become ready inside the window and batch with it."""
     r = await _restaurant(db_session, hold_seconds=120)
     await _rider(db_session, r)
-    o = await _ready_order(db_session, r, 25.2050, 55.2710, 2, ready_minutes_ago=0)
+    o = await _ready_order(db_session, r, 25.2050, 55.2710, 20, ready_minutes_ago=0)
+    # ~0.03 km away, still in the kitchen → a plausible upcoming batch-mate.
+    await _pipeline_order(db_session, r, 25.2052, 55.2712, 21, status="preparing")
     await db_session.commit()
 
     res = await run_dispatch_engine(db_session, restaurant_id=r.id)
@@ -110,11 +157,31 @@ async def test_lone_fresh_order_is_held(db_session):
     assert res.assigned_count == 0
 
 
+async def test_lone_order_not_held_when_pipeline_mate_is_far(db_session):
+    """A cooking order exists but far outside proximity → not a plausible mate, so the
+    ready order is assigned immediately rather than held."""
+    r = await _restaurant(db_session, hold_seconds=120)
+    rd = await _rider(db_session, r)
+    o = await _ready_order(db_session, r, 25.2050, 55.2710, 22, ready_minutes_ago=0)
+    # ~3 km away — well beyond batch_proximity_km=1.0.
+    await _pipeline_order(db_session, r, 25.2320, 55.2710, 23, status="preparing")
+    await db_session.commit()
+
+    res = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(o)
+    assert o.status == "assigned"
+    assert o.rider_id == rd.id
+    assert res.assigned_count == 1
+
+
 async def test_held_order_releases_after_window(db_session):
-    """Once it has waited past the window, the lone order is dispatched."""
+    """Once it has waited past the window, the order is dispatched even though a mate is
+    still cooking nearby — the window matured."""
     r = await _restaurant(db_session, hold_seconds=120)
     rd = await _rider(db_session, r)
     o = await _ready_order(db_session, r, 25.2050, 55.2710, 3, ready_minutes_ago=3)  # 180s > 120
+    await _pipeline_order(db_session, r, 25.2052, 55.2712, 31, status="preparing")
     await db_session.commit()
 
     res = await run_dispatch_engine(db_session, restaurant_id=r.id)
@@ -153,6 +220,7 @@ async def test_sla_pressure_overrides_hold(db_session):
     o = await _ready_order(
         db_session, r, 25.2050, 55.2710, 6, ready_minutes_ago=0, elapsed_min=29,
     )
+    await _pipeline_order(db_session, r, 25.2052, 55.2712, 61, status="preparing")
     await db_session.commit()
 
     res = await run_dispatch_engine(db_session, restaurant_id=r.id)
@@ -170,6 +238,7 @@ async def test_priority_order_not_held(db_session):
     o = await _ready_order(
         db_session, r, 25.2050, 55.2710, 7, ready_minutes_ago=0, priority="priority",
     )
+    await _pipeline_order(db_session, r, 25.2052, 55.2712, 71, status="preparing")
     await db_session.commit()
 
     res = await run_dispatch_engine(db_session, restaurant_id=r.id)
