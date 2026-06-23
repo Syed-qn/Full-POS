@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     # When true, restaurants still on greedy ALSO run the OR-Tools optimizer in shadow
     # (no writes) so we can log what it WOULD do vs greedy before flipping the flag.
     dispatch_shadow_compare: bool = False
+    # Periodic dispatch sweep cadence (seconds): re-runs dispatch for every restaurant
+    # with ready+unassigned orders, so held (batch-window) orders are released once
+    # they mature and stuck no-rider orders keep retrying without a new ready event.
+    dispatch_sweep_seconds: float = 30.0
 
     # Rate limiting (redis token bucket)
     rate_limit_enabled: bool = True

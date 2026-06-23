@@ -91,6 +91,7 @@ export function SettingsScreen() {
   const [batchProximity, setBatchProximity] = useState(1.0);
   const [slaBuffer, setSlaBuffer] = useState(10);
   const [maxDetour, setMaxDetour] = useState(0); // 0 = corridor off
+  const [holdSeconds, setHoldSeconds] = useState(0); // 0 = batch hold window off
 
   // Fees tab
   const [tiers, setTiers] = useState<FeeTier[]>(DEFAULT_TIERS);
@@ -117,6 +118,7 @@ export function SettingsScreen() {
       if (typeof sset.batch_proximity_km === "number") setBatchProximity(sset.batch_proximity_km);
       if (typeof sset.sla_buffer_per_order_minutes === "number") setSlaBuffer(sset.sla_buffer_per_order_minutes);
       if (typeof sset.batch_max_detour_km === "number") setMaxDetour(sset.batch_max_detour_km);
+      if (typeof sset.batch_hold_seconds === "number") setHoldSeconds(sset.batch_hold_seconds);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
       // Opening hours: settings.open_hours.days maps "0".."6" -> ["HH:MM","HH:MM"].
       const oh = sset.open_hours as { days?: Record<string, [string, string]> } | undefined;
@@ -191,6 +193,7 @@ export function SettingsScreen() {
         batch_proximity_km: batchProximity,
         sla_buffer_per_order_minutes: slaBuffer,
         batch_max_detour_km: maxDetour,
+        batch_hold_seconds: holdSeconds,
       });
       flash();
     } catch {
@@ -623,6 +626,19 @@ export function SettingsScreen() {
               Corridor batching: let a rider drop an order that's at most this far off the
               route to a farther one (visited nearest-first). 0 keeps pure proximity. The
               40-min SLA is still enforced, so very distant tail orders still ride alone.
+            </span>
+          </label>
+          <label className={s.col}>
+            <span className={s.rowName}>Batch hold window (sec) — 0 = off</span>
+            <input
+              aria-label="batch hold seconds" type="number" min={0} max={600} step={10}
+              value={holdSeconds} onChange={(e) => setHoldSeconds(Number(e.target.value))}
+              onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+            />
+            <span className={s.rowHint}>
+              Wait this long before sending a lone ready order, so a nearby order can join
+              its trip (e.g. 90s). Orders that already have a batch-mate, are priority, or
+              are close to their SLA never wait. 0 dispatches each order immediately.
             </span>
           </label>
           <div className={s.actions}>

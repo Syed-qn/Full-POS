@@ -93,6 +93,9 @@ class SettingsPatch(BaseModel):
     batch_window_minutes: int | None = Field(default=None, ge=0, le=60)
     sla_buffer_per_order_minutes: int | None = Field(default=None, ge=0, le=30)
     batch_max_detour_km: float | None = Field(default=None, ge=0, le=10)
+    # Batching hold window: seconds to defer a lone fresh order so a neighbour can
+    # join its batch. 0 = off. Capped at 600s (10 min) to stay well under the SLA.
+    batch_hold_seconds: int | None = Field(default=None, ge=0, le=600)
     # Today's Special automation (marketing). Sent as a whole object by the UI.
     todays_special: dict | None = None
 

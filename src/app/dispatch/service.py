@@ -652,6 +652,56 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     )
     orders_by_id = {o.id: o for o in ready}
 
+    # ── Batch hold window (opt-in via batch_hold_seconds; 0 = off, default) ──────────
+    # Defer a freshly-ready LONE order briefly so a nearby order can join its batch
+    # before a rider is committed — the standard "batching window". A held order is
+    # simply skipped this pass and re-evaluated by the periodic dispatch sweep
+    # (dispatch.sweep_ready) until it finds a batch-mate or the window matures. We
+    # never hold an order that already has a batch-mate ready within proximity, is
+    # priority, or is under SLA pressure (waiting the window would risk the internal
+    # target). Applies to BOTH engines, so it sits before the engine branch.
+    rs = restaurant.settings or {}
+    hold_seconds = int(rs.get("batch_hold_seconds", 0) or 0)
+    if hold_seconds > 0 and candidates:
+        hold_proximity_km = float(rs.get("batch_proximity_km", 1.0))
+        internal_target = get_settings().sla_internal_target_minutes
+        eligible: list[OrderCandidate] = []
+        held: list[OrderCandidate] = []
+        for c in candidates:
+            ready_at = c.ready_at
+            if ready_at.tzinfo is None:
+                ready_at = ready_at.replace(tzinfo=timezone.utc)
+            waited = (now - ready_at).total_seconds()
+            has_mate = any(
+                other.order_id != c.order_id
+                and distance_km(c.lat, c.lon, other.lat, other.lon) <= hold_proximity_km
+                for other in candidates
+            )
+            # Would waiting out the rest of the window push it past the internal target?
+            sla_pressure = (
+                c.minutes_elapsed + max(0.0, hold_seconds - waited) / 60.0
+                >= internal_target
+            )
+            if (
+                c.priority != "normal"
+                or waited >= hold_seconds
+                or has_mate
+                or sla_pressure
+            ):
+                eligible.append(c)
+            else:
+                held.append(c)
+        if held:
+            _logger.info(
+                "dispatch: holding %d fresh order(s) up to %ds for batching "
+                "(restaurant_id=%s): %s",
+                len(held), hold_seconds, restaurant_id,
+                ", ".join(orders_by_id[c.order_id].order_number for c in held),
+            )
+        candidates = eligible
+        if not candidates:
+            return DispatchResult()
+
     # Per-restaurant engine flag (spec §4.3). Default greedy; "ortools" opts into the
     # SLA-first VRP optimizer. Unknown values fall back to greedy.
     engine = (restaurant.settings or {}).get("dispatch_engine", "greedy")
@@ -737,8 +787,10 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                     )
                 },
                 idempotency_key=(
+                    # Bucket per 10 min so the periodic dispatch sweep (every 30s)
+                    # re-tries the order without re-alerting the manager each tick.
                     f"norider-{restaurant_id}-{planned.seed.order_id}-"
-                    f"{int(now.timestamp())}"
+                    f"{int(now.timestamp() // 600)}"
                 ),
             )
             # Predictive breach warning: if this batch could not meet the 40-min

@@ -47,6 +47,12 @@ celery_app.conf.update(
             "task": "sla.monitor_tick",
             "schedule": 30.0,  # every 30s — spec §4.5 heartbeat (GAP#6: was 60s)
         },
+        "dispatch-sweep-ready": {
+            "task": "dispatch.sweep_ready",
+            # Re-dispatch restaurants with ready+unassigned orders: releases held
+            # (batch-window) orders once matured and retries stuck no-rider orders.
+            "schedule": settings.dispatch_sweep_seconds,
+        },
         "nightly-forecast-all-tenants": {
             "task": "ml.forecast_all_tenants",
             "schedule": crontab(hour=2, minute=0),  # 2am Asia/Dubai
@@ -87,6 +93,7 @@ celery_app.conf.update(
     },
 )
 celery_app.autodiscover_tasks(
-    ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation"],
+    ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation",
+     "app.dispatch"],
     related_name="worker",
 )

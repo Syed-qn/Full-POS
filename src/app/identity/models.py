@@ -40,6 +40,11 @@ DEFAULT_SETTINGS: dict = {
     "batch_window_minutes": 10,
     "sla_buffer_per_order_minutes": 10,
     "batch_max_detour_km": 0,
+    # Batching "hold window": seconds to defer a freshly-ready LONE order so a nearby
+    # order can join its batch before a rider is committed. 0 = off (assign at once).
+    # An order is never held if it already has a batch-mate, is priority, or is under
+    # SLA pressure. Released by the periodic dispatch sweep once it matures.
+    "batch_hold_seconds": 0,
     # Fallback cook time (minutes) for a dish with no prep_minutes set — used to estimate
     # an order's "start cooking by" time.
     "default_prep_minutes": 15,
