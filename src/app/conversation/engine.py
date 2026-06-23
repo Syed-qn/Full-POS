@@ -185,6 +185,75 @@ def _mentions_can_call(text: str | None) -> bool:
     return any(p in t for p in _CAN_CALL_PATTERNS)
 
 
+# Dish-info questions ("what's special in X", "what's in X", "tell me about X") are
+# answered with the dish's stored menu description VERBATIM when present, else a short
+# human one-liner. Longest prefixes first so "what's special in" wins over "what's".
+_DISH_INFO_PREFIXES = (
+    "what's special in ", "what is special in ", "whats special in ",
+    "what's special about ", "what is special about ", "whats special about ",
+    "what is special with ", "what's special with ",
+    "tell me more about ", "tell me about ", "more about ", "details of ",
+    "details about ", "info on ", "info about ", "describe ",
+    "what's in ", "what is in ", "whats in ",
+    "what's ", "what is ", "whats ", "what about ",
+)
+
+
+def _dish_info_question(text: str | None) -> str | None:
+    """If the message is a 'tell me about <dish>' style question, return the dish-name
+    part (stripped of filler); else None. Caller guards against menu requests and only
+    answers when it resolves to a real dish, so a non-dish 'what is …' falls through."""
+    if not text:
+        return None
+    t = " ".join(text.lower().split()).replace("’", "'")
+    for p in _DISH_INFO_PREFIXES:
+        if t.startswith(p):
+            name = t[len(p):].strip().rstrip("?").strip()
+            for lead in ("the ", "a ", "an ", "this ", "that ", "your ", "our "):
+                if name.startswith(lead):
+                    name = name[len(lead):].strip()
+            for tail in (" dish", " please", " pls", " like"):
+                if name.endswith(tail):
+                    name = name[: -len(tail)].strip()
+            return name or None
+    return None
+
+
+def _trim_description(text: str) -> str:
+    """Spec: customer-facing descriptions are at most 3 lines and carry no price."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    return "\n".join(lines[:3]).strip()
+
+
+async def _answer_dish_info(
+    session: AsyncSession, restaurant_id: int, name: str | None
+) -> str | None:
+    """Reply text for a dish-info question, or None to fall through to the AI.
+
+    Shows the dish's stored menu description verbatim when it has one; otherwise a
+    brief, human one-liner (never a price, ≤3 lines). Returns None when the query
+    doesn't resolve to a single dish, so ordinary questions never get hijacked."""
+    if not name:
+        return None
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=name)
+    if result.confidence != MatchConfidence.DIRECT or not result.candidates:
+        return None
+    dish = result.candidates[0]
+    desc = (getattr(dish, "description", None) or "").strip()
+    if desc:
+        return _trim_description(desc)
+    # No stored description → a short, human line so we still say *something*.
+    line = ""
+    try:
+        from app.llm.factory import get_describer
+        line = (get_describer().describe(dish.name, "") or "").strip()
+    except Exception:
+        line = ""
+    if not line:
+        line = f"{dish.name} is one of our favourites! Want me to add it? 😊"
+    return _trim_description(line)
+
+
 _CATEGORY_EMOJI: tuple[tuple[tuple[str, ...], str], ...] = (
     (("biryani", "rice", "pulao"), "🍛"),
     (("bread", "naan", "roti", "paratha"), "🍞"),
@@ -525,12 +594,14 @@ async def _handle_collecting_items(
         )
         return
 
-    # "What is X?" dish question → describer.
+    # "What is X?" dish question → stored menu description (verbatim) when present,
+    # else a short generated line via the describer.
     if dish_query.lower().startswith("what is "):
-        from app.llm.factory import get_describer
-
         item_name = dish_query[8:].strip().rstrip("?")
-        desc = get_describer().describe(item_name, "")
+        desc = await _answer_dish_info(session, restaurant_id, item_name)
+        if desc is None:
+            from app.llm.factory import get_describer
+            desc = get_describer().describe(item_name, "")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc", body=desc,
@@ -1142,9 +1213,11 @@ async def _handle_modify_items(
         return
 
     if lower_q.startswith("what is "):
-        from app.llm.factory import get_describer
         item_name = dish_query[8:].strip().rstrip("?")
-        desc = get_describer().describe(item_name, "")
+        desc = await _answer_dish_info(session, restaurant_id, item_name)
+        if desc is None:
+            from app.llm.factory import get_describer
+            desc = get_describer().describe(item_name, "")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc-mod", body=desc,
@@ -2941,6 +3014,25 @@ async def _handle_customer_ai(
             phase, restaurant,
         )
         return
+
+    # Dish-info question ("what's special in the biryani?") → answer with the dish's
+    # menu description (verbatim) when present, else a short human line. Deterministic
+    # so the manager's wording shows exactly. Only fires when it resolves to a real
+    # dish and isn't a menu request — otherwise it falls through to the AI (no break).
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and not _is_menu_request(inbound.payload.get("text") or "")
+    ):
+        _info_name = _dish_info_question(inbound.payload.get("text"))
+        if _info_name:
+            _info_reply = await _answer_dish_info(session, restaurant_id, _info_name)
+            if _info_reply:
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="dish-info", body=_info_reply,
+                )
+                return
 
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:
