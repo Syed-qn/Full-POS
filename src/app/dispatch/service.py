@@ -34,7 +34,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
 from app.config import get_settings
-from app.dispatch.batching import OrderCandidate, build_batches, compute_batch_total_est_min
+from app.dispatch.batching import (
+    OrderCandidate,
+    PlannedBatch,
+    _sequence_stops,
+    build_batches,
+    compute_batch_total_est_min,
+)
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
 from app.dispatch.optimizer import OptOrder, OptRider, optimize_dispatch
 from app.dispatch.scoring import RiderCandidate, rank_riders
@@ -689,6 +695,21 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             greedy_batches=batches, customer_sla_min=_customer_sla_min,
         )
 
+    # Assignment order: priority batches first (they bypass batching), then normal
+    # batches by LEAST SLA slack (highest projected completion) so a scarce rider goes to
+    # the order closest to its deadline rather than whichever became ready first. No
+    # cross-batch (Hungarian) matching is needed: every batch picks up at the SAME
+    # restaurant, so a rider's score (pickup distance + workload + on-time) is identical
+    # for all batches → per-batch best-available is already globally optimal. Route /
+    # drop-off-aware assignment is the OR-Tools engine's job, not greedy's.
+    _priority_batches = [b for b in batches if b.seed.priority != "normal"]
+    _normal_batches = [b for b in batches if b.seed.priority == "normal"]
+    _normal_batches.sort(
+        key=lambda b: compute_batch_total_est_min(b, geo_provider=geo, origin=origin),
+        reverse=True,
+    )
+    batches = _priority_batches + _normal_batches
+
     result = DispatchResult()
 
     for planned in batches:
@@ -771,9 +792,21 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
         best_id = scored[0].rider_id
         rider = next(rd for rd in riders if rd.id == best_id)
 
-        total_est = compute_batch_total_est_min(planned, geo_provider=geo, origin=origin)
+        # Deliver the batch's stops nearest-first from the restaurant (shortest route),
+        # not in arrival order. Corridor mode already sequenced them, so this is a no-op
+        # there. Build a LOCAL sequence — never mutate planned.orders, whose first element
+        # (seed) feeds the no-rider / breach idempotency keys above.
+        seq_orders = (
+            _sequence_stops(planned.orders, origin, geo)
+            if origin is not None
+            else planned.orders
+        )
+        seq_batch = PlannedBatch(
+            orders=seq_orders, per_order_buffer_min=planned.per_order_buffer_min
+        )
+        total_est = compute_batch_total_est_min(seq_batch, geo_provider=geo, origin=origin)
         stops = [
-            (orders_by_id[pc.order_id], pc.lat, pc.lon) for pc in planned.orders
+            (orders_by_id[pc.order_id], pc.lat, pc.lon) for pc in seq_orders
         ]
         result.assigned_count += await _commit_route(
             session,

@@ -674,6 +674,94 @@ async def test_inter_stop_travel_gap_splits_batch_and_sets_total_est_min(db_sess
 
 
 
+async def test_multistop_batch_persists_nearest_first_sequence(db_session):
+    """A batch's stops are delivered nearest-first from the restaurant, even when the
+    farther order arrived (seeded) first — not in arrival order."""
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="R", phone="+971500000021", status="available",
+        performance={"on_time_pct": 100.0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    # 'far' is added first -> seeds the batch; 'near' is closer to the restaurant.
+    # Both north of the restaurant and within 1 km of each other -> one batch.
+    far = await _ready_order(db_session, r.id, 25.2048 + 0.0054, 55.2708, 201)   # ~0.6 km
+    near = await _ready_order(db_session, r.id, 25.2048 + 0.0018, 55.2708, 202)  # ~0.2 km
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    batch = await db_session.scalar(select(Batch).where(Batch.rider_id == rider.id))
+    bos = (
+        await db_session.scalars(
+            select(BatchOrder)
+            .where(BatchOrder.batch_id == batch.id)
+            .order_by(BatchOrder.sequence)
+        )
+    ).all()
+    assert len(bos) == 2
+    assert bos[0].order_id == near.id  # nearer drop-off visited first
+    assert bos[1].order_id == far.id
+
+
+async def test_single_rider_goes_to_tightest_batch(db_session):
+    """With one rider and two separate batches, the rider goes to the order closest to
+    its SLA deadline — not the one that happened to become ready first."""
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="R", phone="+971500000022", status="available",
+        performance={"on_time_pct": 100.0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    # 'fresh' is created first (earlier updated_at -> seeded first today) but has lots of
+    # SLA slack; 'tight' is created second but is close to the 40-min deadline. They're
+    # far apart -> two separate single-order batches.
+    fresh = await _ready_order(db_session, r.id, 25.2048 + 0.018, 55.2708, 211, minutes_since_sla=2)
+    tight = await _ready_order(db_session, r.id, 25.2048, 55.2708 + 0.027, 212, minutes_since_sla=25)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(fresh)
+    await db_session.refresh(tight)
+    assert result.assigned_count == 1
+    assert tight.status == "assigned" and tight.rider_id == rider.id
+    assert fresh.status == "ready" and fresh.rider_id is None
+
+
+async def test_priority_batch_beats_tighter_normal_batch_for_scarce_rider(db_session):
+    """A priority order keeps first claim on a scarce rider even when a normal order is
+    closer to its SLA deadline (urgency ordering must not demote priority)."""
+    r = await _seed_restaurant(db_session)
+    rider = Rider(
+        restaurant_id=r.id, name="R", phone="+971500000023", status="available",
+        performance={"on_time_pct": 100.0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    prio = await _ready_order(db_session, r.id, 25.2048 + 0.018, 55.2708, 221, minutes_since_sla=2)
+    prio.priority = "priority"
+    await db_session.flush()
+    tight_normal = await _ready_order(db_session, r.id, 25.2048, 55.2708 + 0.027, 222, minutes_since_sla=25)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(prio)
+    await db_session.refresh(tight_normal)
+    assert result.assigned_count == 1
+    assert prio.status == "assigned" and prio.rider_id == rider.id
+    assert tight_normal.status == "ready"
+
+
 async def test_advance_to_ready_auto_assigns_rider(db_session):
     """Marking an order READY auto-dispatches a rider — no manual /dispatch/trigger
     and no Celery beat (the assignment happens in the kitchen-advance request)."""

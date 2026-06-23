@@ -4,6 +4,12 @@ Composite blends distance-to-pickup, current workload, and on-time %.
 Lower composite = better candidate. Riders are employees — there is no
 accept/reject; the engine assigns the best-scoring available rider.
 
+Note: pickup distance is rider→RESTAURANT (constant across batches, since every
+order is picked up there), so a rider's score does not depend on which batch it
+serves. The greedy engine therefore assigns the best available rider per batch with
+no cross-batch (Hungarian) matching — that is provably optimal here. Route /
+drop-off-aware assignment lives in the OR-Tools engine instead.
+
 The ``breakdown`` payload is persisted verbatim to ``assignments.algorithm_score``
 for dispatch explainability.
 """
