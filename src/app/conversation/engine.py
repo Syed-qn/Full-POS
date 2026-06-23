@@ -2015,6 +2015,94 @@ async def _handle_bundle_choice(
     return True
 
 
+# Menu categories whose variants are SIZES the customer picks (drinks), not
+# bigger-portion serving bundles like food. For these the bot ASKS which size when
+# none is named, instead of defaulting to a base serve.
+_DRINK_CATEGORY_HINTS = (
+    "drink", "beverage", "juice", "soda", "water", "tea", "coffee", "shake",
+    "smoothie", "mocktail", "lassi", "cola", "soft drink", "mojito", "mint",
+)
+
+
+def _is_size_choice_dish(dish) -> bool:
+    """True for drink-style dishes whose variants are sizes (Large/Small) to pick,
+    detected by the dish's menu category. Food (no/other category) is unaffected."""
+    cat = (getattr(dish, "category", None) or "").lower()
+    return any(h in cat for h in _DRINK_CATEGORY_HINTS)
+
+
+def _variant_options_text(dish) -> str:
+    """Human list of a dish's sizes, e.g. 'Large (AED 12) or Small (AED 8)'."""
+    parts = [
+        f"{v['name']} (AED {_aed(Decimal(str(v['price_aed'])))})"
+        for v in (getattr(dish, "variants", None) or [])
+    ]
+    return " or ".join(parts)
+
+
+async def _offer_size_choice(
+    session: AsyncSession, conv, inbound: InboundMessage, restaurant_id: int,
+    *, dish, qty: int, notes: str | None,
+) -> None:
+    """Ask which size for a drink-style dish (its variants are sizes). Defers the
+    add until the customer answers — same shape as the serving-size bundle offer."""
+    _set_state(conv, awaiting_size={
+        "dish_id": dish.id, "qty": qty, "notes": notes, "retries": 0,
+    })
+    qty_part = f"your {qty} {dish.name}s" if qty > 1 else f"the {dish.name}"
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="size-offer",
+        body=f"Sure! What size for {qty_part} — {_variant_options_text(dish)}? 😊",
+    )
+
+
+async def _handle_size_choice(
+    session: AsyncSession, conv, inbound: InboundMessage, restaurant_id: int
+) -> bool:
+    """Apply the customer's size reply to a pending drink size offer. Re-asks once
+    if the reply doesn't match a size, then defaults to the first size so the
+    conversation never loops. Returns True if it handled the message."""
+    pending = conv.state.get("awaiting_size")
+    if not pending:
+        return False
+    from app.menu.models import Dish
+    from app.ordering.service import add_item
+
+    dish = await session.get(Dish, pending.get("dish_id"))
+    if dish is None or not getattr(dish, "variants", None):
+        _set_state(conv, awaiting_size=None)
+        return False
+
+    qty = int(pending.get("qty") or 1)
+    notes = pending.get("notes")
+    text = inbound.payload.get("text") if inbound.type == MessageType.TEXT else None
+    variant = resolve_variant(dish, text) if text else None
+    if variant is None:
+        retries = int(pending.get("retries") or 0)
+        if retries < 1:
+            _set_state(conv, awaiting_size={**pending, "retries": retries + 1})
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="size-reask",
+                body=f"Sorry, which size — {_variant_options_text(dish)}? 😊",
+            )
+            return True
+        variant = dish.variants[0]  # give up asking → first size, never loop
+
+    order = await _ensure_draft_order(session, conv, inbound, restaurant_id)
+    await add_item(session, order=order, dish=dish, qty=qty, notes=notes, variant=variant)
+    _set_state(conv, awaiting_size=None, dialogue_phase="ordering",
+               dialogue_state="collecting_items")
+    cart = await _build_cart_summary(session, conv)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="size-applied",
+        body=f"Added {qty}x {dish.name} ({variant['name']}) ✅{_cart_tail(cart)}",
+    )
+    return True
+
+
 async def _execute_ai_add_item(
     session: AsyncSession,
     conv,
@@ -2054,6 +2142,15 @@ async def _execute_ai_add_item(
         if variant is None and special_note:
             variant = resolve_variant(dish, special_note)
         if variant is None:
+            # Drinks: variants are SIZES — ask which one (there's no default "single
+            # serve" like food). Food: a quantity that matches a serving-size bundle
+            # gets the combo offer instead.
+            if _is_size_choice_dish(dish):
+                await _offer_size_choice(
+                    session, conv, inbound, restaurant_id,
+                    dish=dish, qty=qty, notes=special_note or None,
+                )
+                return "awaiting_size"
             bundle = bundle_variant_for_qty(dish, qty)
             if bundle is not None:
                 await _offer_bundle_choice(
@@ -2978,7 +3075,8 @@ async def handle_inbound(
         if conv.state.get("draft_order_id") is not None:
             _logger.info("greeting reset abandoned draft for conv=%s", conv.id)
         _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
-                   draft_order_id=None, pending_order_id=None, awaiting_bundle=None)
+                   draft_order_id=None, pending_order_id=None, awaiting_bundle=None,
+                   awaiting_size=None)
         await _handle_greeting(session, conv, inbound, restaurant_id)
         return
 
@@ -2987,6 +3085,12 @@ async def handle_inbound(
     # items separate instead of being re-interpreted as a new order.
     if conv.state.get("awaiting_bundle"):
         if await _handle_bundle_choice(session, conv, inbound, restaurant_id):
+            return
+
+    # A pending drink size offer ("Large or Small?") takes the next reply before the
+    # AI runs, so the size answer is applied instead of read as a new order.
+    if conv.state.get("awaiting_size"):
+        if await _handle_size_choice(session, conv, inbound, restaurant_id):
             return
 
     # Location pin → address capture handler (needs geo validation before AI).
