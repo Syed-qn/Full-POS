@@ -78,6 +78,23 @@ def resolve_variant(dish: "Dish", query: str) -> dict | None:
     return best
 
 
+def bundle_variant_for_qty(dish: "Dish", qty: int) -> dict | None:
+    """Return the serving-size variant that bundles exactly ``qty`` servings, else None.
+
+    Reads the leading integer of each variant name ("2 serve" → 2, "4" → 4) and
+    matches it against the ordered quantity, so ordering 2 of a dish that has a
+    "2 serve" bundle uses the bundle's price instead of 2× the single serve. Only
+    qty ≥ 2 can match — a single serve is the base price, never a variant.
+    """
+    if qty < 2:
+        return None
+    for v in getattr(dish, "variants", None) or []:
+        m = re.match(r"\s*(\d+)", str(v.get("name", "")))
+        if m and int(m.group(1)) == qty:
+            return v
+    return None
+
+
 class MatchConfidence(StrEnum):
     DIRECT = "direct"        # 1 strong match; gap large enough
     AMBIGUOUS = "ambiguous"  # 2+ candidates within threshold of each other

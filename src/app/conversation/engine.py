@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_audit
 from app.conversation.models import Conversation
 from app.conversation.service import get_or_create_conversation, record_message
-from app.ordering.matching import MatchConfidence, find_dish_matches, resolve_variant
+from app.ordering.matching import (
+    MatchConfidence,
+    bundle_variant_for_qty,
+    find_dish_matches,
+    resolve_variant,
+)
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import InboundMessage, MessageType, OutboundMessageType
 
@@ -1931,13 +1936,19 @@ async def _execute_ai_add_item(
     else:
         dish = result.candidates[0]
 
-    # Apply a variant ONLY if the customer explicitly named one; otherwise the
-    # base price (single serve) stands. No "which size?" question.
+    # Pick a serving size: an explicitly-named one wins ("family biryani"); else,
+    # if the ordered quantity matches a bundle ("2" → the 2-serve size), use that
+    # bundle as a single unit at its price; else the base single serve stands.
     variant = None
     if getattr(dish, "variants", None):
         variant = resolve_variant(dish, dish_query)
         if variant is None and special_note:
             variant = resolve_variant(dish, special_note)
+        if variant is None:
+            bundle = bundle_variant_for_qty(dish, qty)
+            if bundle is not None:
+                variant = bundle
+                qty = 1  # the bundle already covers all the servings
 
     await _add_dish_to_cart(
         session, conv, inbound, restaurant_id,
@@ -2018,28 +2029,49 @@ async def _execute_ai_remove_item(
 async def _execute_ai_update_qty(
     session: AsyncSession, conv: Conversation, restaurant_id: int,
     dish_query: str, qty: int
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, bool]:
     """Set a cart dish to an exact quantity (``qty <= 0`` removes it).
 
-    Returns ``(outcome, dish_name)``: "updated", "removed", "not_in_cart", or
-    "no_match"."""
-    from app.ordering.models import Order
-    from app.ordering.service import set_item_qty
+    If the new quantity matches a serving-size bundle (e.g. 2 → a "2 serve" size),
+    the line switches to that bundle's price as a single unit; otherwise it reverts
+    to single×qty. Returns ``(outcome, dish_label, is_bundle)`` where outcome is
+    "updated", "removed", "not_in_cart", or "no_match"."""
+    from sqlalchemy import delete as sa_delete
+
+    from app.ordering.models import Order, OrderItem
+    from app.ordering.service import add_item, set_item_qty
 
     draft_order_id = conv.state.get("draft_order_id")
     if not draft_order_id or not dish_query:
-        return ("no_match", None)
+        return ("no_match", None, False)
     order = await session.get(Order, draft_order_id)
     if order is None:
-        return ("no_match", None)
+        return ("no_match", None, False)
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
-        return ("no_match", None)
+        return ("no_match", None, False)
     dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
     if dish is None:
-        return ("not_in_cart", result.candidates[0].name)
-    await set_item_qty(session, order=order, dish_id=dish.id, qty=qty)
-    return ("removed" if qty <= 0 else "updated", dish.name)
+        return ("not_in_cart", result.candidates[0].name, False)
+    if qty <= 0:
+        await set_item_qty(session, order=order, dish_id=dish.id, qty=0)
+        return ("removed", dish.name, False)
+
+    # Rebuild this dish's lines so a bundle qty switches to the bundle price and a
+    # non-bundle qty reverts to single×qty (set_item_qty alone would keep a stale
+    # bundle/single price). Clear, then re-add the right representation.
+    bundle = bundle_variant_for_qty(dish, qty)
+    await session.execute(
+        sa_delete(OrderItem).where(
+            OrderItem.order_id == order.id, OrderItem.dish_id == dish.id
+        )
+    )
+    await session.flush()
+    if bundle is not None:
+        await add_item(session, order=order, dish=dish, qty=1, variant=bundle)
+        return ("updated", f"{dish.name} ({bundle['name']})", True)
+    await add_item(session, order=order, dish=dish, qty=qty)
+    return ("updated", dish.name, False)
 
 
 async def _execute_save_address(
@@ -2389,12 +2421,17 @@ async def _dispatch_action(
                 qty=qty, dish_query=dish_query,
             )
             return
-        outcome, dish_name = await _execute_ai_update_qty(
+        outcome, dish_name, is_bundle = await _execute_ai_update_qty(
             session, conv, restaurant_id, dish_query, qty
         )
         cart = await _build_cart_summary(session, conv)
         if outcome == "updated":
-            body = f"Updated — {qty}x {dish_name} ✅{_cart_tail(cart)}"
+            # A bundle is one unit ("Chicken Biryani (2 serve)"), so don't prefix qty.
+            body = (
+                f"Updated — {dish_name} ✅{_cart_tail(cart)}"
+                if is_bundle
+                else f"Updated — {qty}x {dish_name} ✅{_cart_tail(cart)}"
+            )
         elif outcome == "removed":
             body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "not_in_cart":

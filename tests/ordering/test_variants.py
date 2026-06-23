@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from app.menu.models import Dish, Menu
-from app.ordering.matching import resolve_variant
+from app.ordering.matching import bundle_variant_for_qty, resolve_variant
 from app.ordering.service import add_item, create_draft_order, get_or_create_customer
 
 
@@ -51,6 +51,20 @@ def test_resolve_variant_fuzzy():
 
 def test_resolve_variant_no_variants_returns_none():
     assert resolve_variant(Dish(name="Mango Lassi", variants=[]), "large") is None
+
+
+def test_bundle_variant_for_qty():
+    dish = Dish(
+        name="Chicken Biryani",
+        variants=[
+            {"name": "2 serve", "price_aed": "30.00", "dish_number": None},
+            {"name": "4 serve", "price_aed": "55.00", "dish_number": None},
+        ],
+    )
+    assert bundle_variant_for_qty(dish, 2)["name"] == "2 serve"
+    assert bundle_variant_for_qty(dish, 4)["name"] == "4 serve"
+    assert bundle_variant_for_qty(dish, 3) is None  # no 3-serve bundle
+    assert bundle_variant_for_qty(dish, 1) is None  # single is the base price
 
 
 async def test_add_item_without_variant_unchanged(db_session, restaurant):
