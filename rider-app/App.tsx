@@ -256,7 +256,14 @@ function TrackingScreen({
               {s.customerName ? <Text style={styles.custName}>{s.customerName}</Text> : null}
               {s.address ? <Text style={styles.cardLine}>📍 {s.address}</Text> : null}
 
-              {s.customerPhone ? (
+              {s.doNotCall ? (
+                <View style={styles.noCallRow}>
+                  <Text style={styles.noCallText}>🚫 Don't call — message only</Text>
+                  {s.customerPhone ? (
+                    <Text style={styles.noCallPhone}>{s.customerPhone}</Text>
+                  ) : null}
+                </View>
+              ) : s.customerPhone ? (
                 <Pressable
                   style={styles.callRow}
                   onPress={() => Linking.openURL(`tel:${s.customerPhone}`)}
@@ -345,6 +352,13 @@ const styles = StyleSheet.create({
   },
   callText: { color: "#1d4ed8", fontSize: 14, fontWeight: "600" },
   callTag: { color: "#fff", backgroundColor: "#2563eb", fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
+  noCallRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#fef2f2", borderColor: "#fecaca", borderWidth: 1,
+    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginTop: 10,
+  },
+  noCallText: { color: "#b91c1c", fontSize: 14, fontWeight: "700" },
+  noCallPhone: { color: "#9ca3af", fontSize: 13, fontWeight: "600" },
   codChip: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#fffbeb", borderWidth: 1, borderColor: "#fde68a",

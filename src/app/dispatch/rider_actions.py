@@ -72,6 +72,7 @@ class StopView:
     cod_amount: float
     delivered: bool
     customer_phone: str = ""
+    do_not_call: bool = False
 
 
 @dataclass
@@ -107,7 +108,7 @@ async def get_active_run(session: AsyncSession, *, rider: Rider) -> RunView | No
         order = await session.get(Order, bo.order_id)
         if order is None:
             continue
-        name, address, coords, phone = await _stop_details(session, order)
+        name, address, coords, phone, do_not_call = await _stop_details(session, order)
         stops.append(
             StopView(
                 order_id=order.id,
@@ -120,6 +121,7 @@ async def get_active_run(session: AsyncSession, *, rider: Rider) -> RunView | No
                 cod_amount=float(order.total or 0),
                 delivered=bo.delivered_at is not None,
                 customer_phone=phone,
+                do_not_call=do_not_call,
             )
         )
     return RunView(batch_id=batch.id, status=batch.status, stops=stops)

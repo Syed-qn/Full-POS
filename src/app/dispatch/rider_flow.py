@@ -139,13 +139,15 @@ async def _dropoff_coords(
 
 async def _stop_details(
     session: AsyncSession, order: Order
-) -> tuple[str, str, tuple[float, float] | None, str]:
+) -> tuple[str, str, tuple[float, float] | None, str, bool]:
     """Gather the rider-facing delivery details: customer name, a readable
     address, drop-off coordinates (only present for orders placed with a WhatsApp
-    location pin), and the customer's phone number so the rider can call them."""
+    location pin), the customer's phone number, and whether the customer asked NOT
+    to be called (``do_not_call`` contact preference → rider should message only)."""
     name = ""
     address_str = ""
     phone = ""
+    do_not_call = False
     coords: tuple[float, float] | None = None
     if order.customer_id:
         cust = await session.get(Customer, order.customer_id)
@@ -154,6 +156,7 @@ async def _stop_details(
                 name = cust.name
             if cust.phone:
                 phone = cust.phone
+            do_not_call = bool((cust.tags or {}).get("do_not_call"))
     if order.address_id:
         addr = await session.get(CustomerAddress, order.address_id)
         if addr:
@@ -165,7 +168,7 @@ async def _stop_details(
             address_str = ", ".join(parts)
             if addr.latitude is not None and addr.longitude is not None:
                 coords = (addr.latitude, addr.longitude)
-    return name, address_str, coords, phone
+    return name, address_str, coords, phone, do_not_call
 
 
 def _stop_body(
@@ -175,12 +178,14 @@ def _stop_body(
     coords: tuple[float, float] | None,
     *,
     phone: str = "",
+    do_not_call: bool = False,
     near: bool = False,
 ) -> str:
     """Beautified WhatsApp message for the rider's current stop (bold labels,
     name / phone / address / COD amount, and a tappable Map link when coordinates
     exist). The customer's phone sits just above the COD line so the rider can call
-    ahead before collecting."""
+    ahead before collecting — unless the customer asked not to be called, in which
+    case a clear 'do not call' note replaces the call hint."""
     head = "Near stop" if near else "Next stop"
     lines = [f"🛵 *{head} — Order {order.order_number}*", ""]
     if name:
@@ -189,6 +194,8 @@ def _stop_body(
         lines.append(f"📍 *Address:* {address_str}")
     if phone:
         lines.append(f"📞 *Phone:* {phone}")
+    if do_not_call:
+        lines.append("🚫 *Please DON'T call* — message only 🙏")
     if order.total:
         lines.append(f"💵 *Collect (COD):* AED {order.total:.2f}")
     # Navigation link in the body (WhatsApp auto-links it) instead of a separate
@@ -450,9 +457,12 @@ async def _send_stop(
     ``key_suffix`` makes the idempotency key unique for an intentional re-send
     (e.g. rider re-tapped because the first stop message was lost).
     """
-    name, address_str, coords, phone = await _stop_details(session, order)
+    name, address_str, coords, phone, do_not_call = await _stop_details(session, order)
     title = "Collect & delivered" if order.total else "Delivered"
-    body = _stop_body(order, name, address_str, coords, phone=phone, near=force_next)
+    body = _stop_body(
+        order, name, address_str, coords,
+        phone=phone, do_not_call=do_not_call, near=force_next,
+    )
     buttons = [{"id": f"delivered:{order.id}", "title": title}]
     # dual if near or force (for delivered_next path)
     if force_next:
@@ -500,9 +510,12 @@ async def _send_delivery_choice(
     session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order
 ) -> None:
     """Dual buttons when near per spec/transcript."""
-    name, address_str, coords, phone = await _stop_details(session, order)
+    name, address_str, coords, phone, do_not_call = await _stop_details(session, order)
     title = "Collect & delivered" if order.total else "Delivered"
-    body = _stop_body(order, name, address_str, coords, phone=phone, near=True)
+    body = _stop_body(
+        order, name, address_str, coords,
+        phone=phone, do_not_call=do_not_call, near=True,
+    )
     buttons = [
         {"id": f"delivered:{order.id}", "title": title},
         {"id": f"delivered_next:{order.id}", "title": "Delivered & next"},

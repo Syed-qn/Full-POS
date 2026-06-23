@@ -71,6 +71,7 @@ class StopOut(BaseModel):
     longitude: float | None = None
     codAmount: float = 0.0
     delivered: bool = False
+    doNotCall: bool = False
 
 
 class RunOut(BaseModel):
@@ -250,6 +251,7 @@ async def get_active_run_response(session: AsyncSession, rider: Rider) -> RunOut
                 longitude=s.longitude,
                 codAmount=s.cod_amount,
                 delivered=s.delivered,
+                doNotCall=s.do_not_call,
             )
             for s in run.stops
         ],

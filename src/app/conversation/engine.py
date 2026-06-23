@@ -146,6 +146,27 @@ def _is_pure_greeting(text: str | None) -> bool:
     return all(t in _GREET_WORDS or t in _GREET_FILLER for t in tokens)
 
 
+# Natural-language phrases that mean "don't phone me" — captured as a persistent
+# customer contact preference and shown to the rider on every stop. Kept deliberately
+# tight (must mention call/phone/ring) so ordinary words never trigger it.
+_DO_NOT_CALL_PATTERNS = (
+    "dont call", "don't call", "do not call", "no call", "no calls", "without calling",
+    "dont phone", "don't phone", "do not phone", "no phone call", "dont ring",
+    "don't ring", "do not ring", "no ringing", "message instead", "text instead",
+    "just message", "just text", "only message", "only text", "message dont call",
+    "dont call just", "please dont call", "kindly dont call",
+)
+
+
+def _mentions_do_not_call(text: str | None) -> bool:
+    """True if the customer asked not to be phoned (rider should message only)."""
+    if not text:
+        return False
+    t = " ".join(text.lower().split())
+    t = t.replace("’", "'")  # normalise curly apostrophe
+    return any(p in t for p in _DO_NOT_CALL_PATTERNS)
+
+
 _CATEGORY_EMOJI: tuple[tuple[tuple[str, ...], str], ...] = (
     (("biryani", "rice", "pulao"), "🍛"),
     (("bread", "naan", "roti", "paratha"), "🍞"),
@@ -3064,6 +3085,19 @@ async def handle_inbound(
     # ── Customer conversation (full AI) ────────────────────────────────────
     from app.identity.models import Restaurant as RestaurantModel
     restaurant = await session.get(RestaurantModel, restaurant_id)
+
+    # "Don't call me" — capture as a persistent contact preference on the customer so
+    # every rider stop shows a "do not call, message only" flag. Non-intercepting: we
+    # set the flag and let the message continue through the normal flow (it may also
+    # carry an order, e.g. "one biryani, please don't call").
+    if inbound.type == MessageType.TEXT and _mentions_do_not_call(inbound.payload.get("text")):
+        from app.ordering.service import get_or_create_customer
+        _cust = await get_or_create_customer(
+            session, restaurant_id=restaurant_id, phone=inbound.from_phone
+        )
+        if not (_cust.tags or {}).get("do_not_call"):
+            _cust.tags = {**(_cust.tags or {}), "do_not_call": True}
+            _logger.info("customer %s set do_not_call preference", _cust.id)
 
     # A pure greeting ("hi", "As salam walekum", "hello") means START FRESH — in
     # ANY state, not just on first contact. Drop any stale/abandoned draft so an

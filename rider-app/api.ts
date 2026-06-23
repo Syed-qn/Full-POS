@@ -13,6 +13,7 @@ export type Stop = {
   longitude: number | null;
   codAmount: number;
   delivered: boolean;
+  doNotCall: boolean;
 };
 
 export type Run = {
