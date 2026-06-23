@@ -362,6 +362,14 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
             </div>
           ))}
         </div>
+        {detail.customer?.phone && (
+          <div className={s.customerContact}>
+            <span className={s.customerContactLabel}>Customer</span>
+            <a className={s.customerContactPhone} href={`tel:${detail.customer.phone}`}>
+              📞 {detail.customer.phone}
+            </a>
+          </div>
+        )}
         <div className={s.totals}>
           <div className={s.totalRow}>
             <span>Subtotal</span><span>AED {detail.subtotal}</span>

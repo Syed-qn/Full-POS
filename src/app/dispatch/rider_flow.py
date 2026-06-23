@@ -139,17 +139,21 @@ async def _dropoff_coords(
 
 async def _stop_details(
     session: AsyncSession, order: Order
-) -> tuple[str, str, tuple[float, float] | None]:
+) -> tuple[str, str, tuple[float, float] | None, str]:
     """Gather the rider-facing delivery details: customer name, a readable
-    address, and drop-off coordinates (only present for orders placed with a
-    WhatsApp location pin)."""
+    address, drop-off coordinates (only present for orders placed with a WhatsApp
+    location pin), and the customer's phone number so the rider can call them."""
     name = ""
     address_str = ""
+    phone = ""
     coords: tuple[float, float] | None = None
     if order.customer_id:
         cust = await session.get(Customer, order.customer_id)
-        if cust and cust.name:
-            name = cust.name
+        if cust:
+            if cust.name:
+                name = cust.name
+            if cust.phone:
+                phone = cust.phone
     if order.address_id:
         addr = await session.get(CustomerAddress, order.address_id)
         if addr:
@@ -161,7 +165,7 @@ async def _stop_details(
             address_str = ", ".join(parts)
             if addr.latitude is not None and addr.longitude is not None:
                 coords = (addr.latitude, addr.longitude)
-    return name, address_str, coords
+    return name, address_str, coords, phone
 
 
 def _stop_body(
@@ -170,16 +174,21 @@ def _stop_body(
     address_str: str,
     coords: tuple[float, float] | None,
     *,
+    phone: str = "",
     near: bool = False,
 ) -> str:
     """Beautified WhatsApp message for the rider's current stop (bold labels,
-    name / address / COD amount, and a tappable Map link when coordinates exist)."""
+    name / phone / address / COD amount, and a tappable Map link when coordinates
+    exist). The customer's phone sits just above the COD line so the rider can call
+    ahead before collecting."""
     head = "Near stop" if near else "Next stop"
     lines = [f"🛵 *{head} — Order {order.order_number}*", ""]
     if name:
         lines.append(f"👤 *Name:* {name}")
     if address_str:
         lines.append(f"📍 *Address:* {address_str}")
+    if phone:
+        lines.append(f"📞 *Phone:* {phone}")
     if order.total:
         lines.append(f"💵 *Collect (COD):* AED {order.total:.2f}")
     # Navigation link in the body (WhatsApp auto-links it) instead of a separate
@@ -441,9 +450,9 @@ async def _send_stop(
     ``key_suffix`` makes the idempotency key unique for an intentional re-send
     (e.g. rider re-tapped because the first stop message was lost).
     """
-    name, address_str, coords = await _stop_details(session, order)
+    name, address_str, coords, phone = await _stop_details(session, order)
     title = "Collect & delivered" if order.total else "Delivered"
-    body = _stop_body(order, name, address_str, coords, near=force_next)
+    body = _stop_body(order, name, address_str, coords, phone=phone, near=force_next)
     buttons = [{"id": f"delivered:{order.id}", "title": title}]
     # dual if near or force (for delivered_next path)
     if force_next:
@@ -491,9 +500,9 @@ async def _send_delivery_choice(
     session: AsyncSession, restaurant_id: int, rider_phone: str, order: Order
 ) -> None:
     """Dual buttons when near per spec/transcript."""
-    name, address_str, coords = await _stop_details(session, order)
+    name, address_str, coords, phone = await _stop_details(session, order)
     title = "Collect & delivered" if order.total else "Delivered"
-    body = _stop_body(order, name, address_str, coords, near=True)
+    body = _stop_body(order, name, address_str, coords, phone=phone, near=True)
     buttons = [
         {"id": f"delivered:{order.id}", "title": title},
         {"id": f"delivered_next:{order.id}", "title": "Delivered & next"},

@@ -65,6 +65,7 @@ class StopOut(BaseModel):
     orderNumber: str
     sequence: int
     customerName: str | None = None
+    customerPhone: str | None = None
     address: str | None = None
     latitude: float | None = None
     longitude: float | None = None
@@ -243,6 +244,7 @@ async def get_active_run_response(session: AsyncSession, rider: Rider) -> RunOut
                 orderNumber=s.order_number,
                 sequence=s.sequence,
                 customerName=s.customer_name or None,
+                customerPhone=s.customer_phone or None,
                 address=s.address or None,
                 latitude=s.latitude,
                 longitude=s.longitude,

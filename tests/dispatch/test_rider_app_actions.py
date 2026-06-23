@@ -105,6 +105,8 @@ async def test_app_orders_pickup_advances_batch(client, db_session):
     assert run["status"] == "planned"
     assert len(run["stops"]) == 2
     assert run["stops"][0]["codAmount"] == 10.0
+    # Customer phone is exposed to the rider so they can call ahead.
+    assert run["stops"][0]["customerPhone"] == "+971501112200"
 
     resp = await client.post("/api/v1/rider-app/orders/pickup",
                              headers={"Authorization": f"Bearer {token}"})
@@ -160,3 +162,16 @@ async def test_app_endpoints_require_device_token(client, db_session):
     await _seed(db_session)
     assert (await client.get("/api/v1/rider-app/orders")).status_code == 401
     assert (await client.post("/api/v1/rider-app/orders/pickup")).status_code == 401
+
+
+def test_stop_body_shows_customer_phone_above_cod():
+    """The rider's WhatsApp stop message lists the customer phone just above the
+    COD amount, so they can call ahead before collecting."""
+    from app.dispatch.rider_flow import _stop_body
+    from app.ordering.models import Order
+
+    order = Order(order_number="R1-0021", total=Decimal("34.00"))
+    body = _stop_body(order, "John", "Tower 5", None, phone="+971501112200")
+    assert "📞 *Phone:* +971501112200" in body
+    assert "💵 *Collect (COD):* AED 34.00" in body
+    assert body.index("+971501112200") < body.index("Collect (COD)")

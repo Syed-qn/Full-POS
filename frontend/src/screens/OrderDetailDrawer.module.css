@@ -178,6 +178,31 @@
   margin-top: 6px;
   padding-top: 8px;
 }
+.customerContact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.customerContactLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.customerContactPhone {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent, #2563eb);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.customerContactPhone:hover {
+  text-decoration: underline;
+}
 .payRow {
   display: flex;
   align-items: center;
