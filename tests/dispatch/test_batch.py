@@ -87,6 +87,50 @@ def test_priority_order_gets_own_batch():
     assert len(normal_batch.orders) == 2
 
 
+def test_configurable_proximity_widens_batching():
+    """A bigger proximity_km lets moderately-spaced drop-offs batch together."""
+    a = _order(1, 25.2048, 55.2708)
+    b = _order(2, 25.2150, 55.2708)  # ~1.1 km north
+    assert len(build_batches([a, b], proximity_km=1.0)) == 2  # default: too far
+    assert len(build_batches([a, b], proximity_km=2.0)) == 1  # widened: together
+
+
+def test_configurable_buffer_changes_sla_buffer():
+    """The per-stop SLA buffer is configurable (default 10)."""
+    a = _order(1, 25.2048, 55.2708)
+    b = _order(2, 25.2050, 55.2710)  # ~30 m
+    batches = build_batches([a, b], proximity_km=1.0, buffer_per_order=5)
+    assert len(batches) == 1
+    assert batches[0].sla_buffer_min == 5  # 1 extra stop x 5
+
+
+def test_corridor_batches_on_the_way_order():
+    """An order on the route to a farther one batches in corridor mode, even though the
+    two drop-offs are >1 km apart (a flat proximity radius would reject it)."""
+    origin = (25.200, 55.270)  # restaurant
+    far = _order(1, 25.225, 55.270)                       # ~2.8 km north (seed/oldest)
+    on_way = _order(2, 25.211, 55.270, ready_offset_s=60)  # ~1.2 km north, on the line
+
+    # Default proximity (1 km): drop-offs ~1.5 km apart -> two separate trips.
+    assert len(build_batches([far, on_way], proximity_km=1.0, origin=origin)) == 2
+
+    # Corridor on: folds in with a tiny detour, visited nearest-first.
+    corridor = build_batches(
+        [far, on_way], proximity_km=1.0, origin=origin, max_detour_km=0.6
+    )
+    assert len(corridor) == 1
+    assert [o.order_id for o in corridor[0].orders] == [2, 1]  # on_way before far
+
+
+def test_corridor_skips_off_route_order():
+    """Corridor mode still rejects an order that's off to the side (big detour)."""
+    origin = (25.200, 55.270)
+    north = _order(1, 25.225, 55.270)
+    east = _order(2, 25.205, 55.300, ready_offset_s=60)  # ~3 km east, off the corridor
+    res = build_batches([north, east], proximity_km=1.0, origin=origin, max_detour_km=0.6)
+    assert len(res) == 2
+
+
 def test_active_order_count_field_on_order_candidate():
     """OrderCandidate priority field defaults to 'normal' for backward compat."""
     oc = _order(99, 25.0, 55.0)

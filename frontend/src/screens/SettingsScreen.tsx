@@ -87,6 +87,10 @@ export function SettingsScreen() {
   const [batchSafety, setBatchSafety] = useState(5);
   const [defaultPrep, setDefaultPrep] = useState(15);
   const [expediteRadius, setExpediteRadius] = useState(1.5);
+  // Greedy batching geometry
+  const [batchProximity, setBatchProximity] = useState(1.0);
+  const [slaBuffer, setSlaBuffer] = useState(10);
+  const [maxDetour, setMaxDetour] = useState(0); // 0 = corridor off
 
   // Fees tab
   const [tiers, setTiers] = useState<FeeTier[]>(DEFAULT_TIERS);
@@ -110,6 +114,9 @@ export function SettingsScreen() {
       if (typeof sset.batch_safety_minutes === "number") setBatchSafety(sset.batch_safety_minutes);
       if (typeof sset.default_prep_minutes === "number") setDefaultPrep(sset.default_prep_minutes);
       if (typeof sset.batch_expedite_radius_km === "number") setExpediteRadius(sset.batch_expedite_radius_km);
+      if (typeof sset.batch_proximity_km === "number") setBatchProximity(sset.batch_proximity_km);
+      if (typeof sset.sla_buffer_per_order_minutes === "number") setSlaBuffer(sset.sla_buffer_per_order_minutes);
+      if (typeof sset.batch_max_detour_km === "number") setMaxDetour(sset.batch_max_detour_km);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
       // Opening hours: settings.open_hours.days maps "0".."6" -> ["HH:MM","HH:MM"].
       const oh = sset.open_hours as { days?: Record<string, [string, string]> } | undefined;
@@ -181,6 +188,9 @@ export function SettingsScreen() {
         batch_safety_minutes: batchSafety,
         default_prep_minutes: defaultPrep,
         batch_expedite_radius_km: expediteRadius,
+        batch_proximity_km: batchProximity,
+        sla_buffer_per_order_minutes: slaBuffer,
+        batch_max_detour_km: maxDetour,
       });
       flash();
     } catch {
@@ -582,6 +592,39 @@ export function SettingsScreen() {
               <span className={s.rowHint}>Nudge the kitchen to rush a cooking order within this distance of a run going out.</span>
             </label>
           </div>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Batch proximity (km)</span>
+              <input
+                aria-label="batch proximity km" type="number" min={0.1} max={10} step={0.1}
+                value={batchProximity} onChange={(e) => setBatchProximity(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>How close two drop-offs must be to share one rider trip (greedy engine).</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>SLA buffer per stop (min)</span>
+              <input
+                aria-label="sla buffer per order minutes" type="number" min={0} max={30}
+                value={slaBuffer} onChange={(e) => setSlaBuffer(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Minutes added for each extra stop in a batch. Lower = more batching, less safety margin.</span>
+            </label>
+          </div>
+          <label className={s.col}>
+            <span className={s.rowName}>On-the-way detour (km) — 0 = off</span>
+            <input
+              aria-label="batch max detour km" type="number" min={0} max={10} step={0.1}
+              value={maxDetour} onChange={(e) => setMaxDetour(Number(e.target.value))}
+              onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+            />
+            <span className={s.rowHint}>
+              Corridor batching: let a rider drop an order that's at most this far off the
+              route to a farther one (visited nearest-first). 0 keeps pure proximity. The
+              40-min SLA is still enforced, so very distant tail orders still ride alone.
+            </span>
+          </label>
           <div className={s.actions}>
             <Button onClick={saveDispatch}>Save</Button>
           </div>

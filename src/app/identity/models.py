@@ -30,6 +30,16 @@ DEFAULT_SETTINGS: dict = {
     # drive) still makes the SLA. Both subtracted from the drive budget — not hardcoded.
     "prep_handling_minutes": 5,
     "batch_safety_minutes": 5,
+    # Greedy batching geometry (per-restaurant; read via .get() with these defaults).
+    # proximity = how close two DROP-OFFS must be to share a rider trip; window =
+    # readiness spread allowed within a batch; sla_buffer = minutes added per extra
+    # stop. max_detour > 0 turns on "on-the-way" (corridor) batching: an order joins
+    # when inserting its stop adds at most this many km of detour to the route (it is
+    # then visited in nearest-first order). 0 = corridor off (pure proximity).
+    "batch_proximity_km": 1.0,
+    "batch_window_minutes": 10,
+    "sla_buffer_per_order_minutes": 10,
+    "batch_max_detour_km": 0,
     # Fallback cook time (minutes) for a dish with no prep_minutes set — used to estimate
     # an order's "start cooking by" time.
     "default_prep_minutes": 15,

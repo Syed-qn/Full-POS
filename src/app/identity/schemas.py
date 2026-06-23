@@ -88,6 +88,11 @@ class SettingsPatch(BaseModel):
     batch_safety_minutes: int | None = Field(default=None, ge=0, le=30)
     default_prep_minutes: int | None = Field(default=None, ge=1, le=180)
     batch_expedite_radius_km: float | None = Field(default=None, gt=0, le=10)
+    # Greedy batching geometry. max_detour_km = 0 turns corridor batching OFF.
+    batch_proximity_km: float | None = Field(default=None, gt=0, le=10)
+    batch_window_minutes: int | None = Field(default=None, ge=0, le=60)
+    sla_buffer_per_order_minutes: int | None = Field(default=None, ge=0, le=30)
+    batch_max_detour_km: float | None = Field(default=None, ge=0, le=10)
     # Today's Special automation (marketing). Sent as a whole object by the UI.
     todays_special: dict | None = None
 

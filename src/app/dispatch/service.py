@@ -663,9 +663,22 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             customer_sla_min=_customer_sla_min,
         )
 
+    # Per-restaurant batching geometry (defaults preserve the original behaviour).
+    rs = restaurant.settings or {}
+    _global = get_settings()
+    proximity_km = float(rs.get("batch_proximity_km", 1.0))
+    window_min = int(rs.get("batch_window_minutes", 10))
+    max_per = int(rs.get("max_orders_per_batch", 3))
+    buffer_per = int(rs.get("sla_buffer_per_order_minutes", _global.sla_buffer_per_order_minutes))
+    max_detour_km = float(rs.get("batch_max_detour_km", 0) or 0)
+
     DISPATCH_RUNS.labels(engine="greedy").inc()
     _t0 = time.perf_counter()
-    batches = build_batches(candidates, geo_provider=geo, origin=origin)
+    batches = build_batches(
+        candidates, geo_provider=geo, origin=origin,
+        max_per_batch=max_per, proximity_km=proximity_km, window_min=window_min,
+        buffer_per_order=buffer_per, max_detour_km=max_detour_km,
+    )
     DISPATCH_SOLVE_SECONDS.labels(engine="greedy").observe(time.perf_counter() - _t0)
 
     # Shadow compare: run the optimizer in-memory (no writes) and log what it WOULD do,

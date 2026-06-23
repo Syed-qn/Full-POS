@@ -50,12 +50,15 @@ class OrderCandidate:
 @dataclass
 class PlannedBatch:
     orders: list[OrderCandidate] = field(default_factory=list)
+    # Minutes added per *additional* stop. Defaults to the global setting; the engine
+    # passes a per-restaurant override so managers can trade safety for batching.
+    per_order_buffer_min: int = SLA_BUFFER_PER_ORDER_MIN
 
     @property
     def sla_buffer_min(self) -> int:
-        """+10 min per *additional* batched stop beyond the first."""
+        """Buffer for the whole batch = per_order_buffer × (extra stops beyond the first)."""
         extra = max(0, len(self.orders) - 1)
-        return extra * SLA_BUFFER_PER_ORDER_MIN
+        return extra * self.per_order_buffer_min
 
     @property
     def seed(self) -> OrderCandidate:
@@ -124,11 +127,68 @@ def _compute_route_time_to_stops(
     return times
 
 
+def _sequence_stops(
+    orders: list[OrderCandidate],
+    origin: tuple[float, float],
+    geo_provider: "GeoPort | None" = None,
+) -> list[OrderCandidate]:
+    """Order stops nearest-first from the restaurant (greedy nearest-neighbour), so a
+    stop on the way is visited before a farther one. Used only in corridor mode; the
+    default proximity path keeps the orders in arrival sequence."""
+    if len(orders) <= 1:
+        return list(orders)
+    remaining = list(orders)
+    seq: list[OrderCandidate] = []
+    cur = origin
+    while remaining:
+        nxt = min(
+            remaining,
+            key=lambda o: _leg_minutes(cur[0], cur[1], o.lat, o.lon, geo_provider),
+        )
+        seq.append(nxt)
+        cur = (nxt.lat, nxt.lon)
+        remaining.remove(nxt)
+    return seq
+
+
+def _insertion_detour_km(
+    batch_orders: list[OrderCandidate],
+    candidate: OrderCandidate,
+    origin: tuple[float, float],
+) -> float:
+    """Extra travel DISTANCE (km, haversine) to fold ``candidate`` into the route,
+    minimised over every insertion slot (including before the first stop).
+
+    Near 0 when the candidate sits on the corridor between the restaurant and an
+    existing stop (so a 5 km stop on the way to a 10 km stop reads as ~0 detour),
+    large when it's off to the side. This is what makes "on-the-way" batching work
+    where a flat drop-off-to-drop-off radius would reject it.
+    """
+    pts = [origin] + [(o.lat, o.lon) for o in batch_orders]
+    c = (candidate.lat, candidate.lon)
+    best: float | None = None
+    for i in range(len(pts)):
+        a = pts[i]
+        if i + 1 < len(pts):
+            b = pts[i + 1]
+            extra = (
+                distance_km(a[0], a[1], c[0], c[1])
+                + distance_km(c[0], c[1], b[0], b[1])
+                - distance_km(a[0], a[1], b[0], b[1])
+            )
+        else:
+            extra = distance_km(a[0], a[1], c[0], c[1])  # append at the end
+        best = extra if best is None else min(best, extra)
+    return max(0.0, best or 0.0)
+
+
 def _within_internal_target(
     batch: PlannedBatch,
     candidate: OrderCandidate,
     geo_provider: "GeoPort | None" = None,
     origin: tuple[float, float] | None = None,
+    buffer_per_order: int = SLA_BUFFER_PER_ORDER_MIN,
+    sequence: bool = False,
 ) -> bool:
     """Every order (incl. candidate) must still clear the 30-min internal target.
 
@@ -138,9 +198,13 @@ def _within_internal_target(
     40min customer via overall design (internal 30 + buf).
     """
     temp = batch.orders + [candidate]
+    # In corridor mode the route is resequenced nearest-first, so the SLA check scores
+    # the order against the optimized visit order (a near stop reached before a far one).
+    if sequence and origin is not None:
+        temp = _sequence_stops(temp, origin, geo_provider)
     route_times = _compute_route_time_to_stops(temp, geo_provider, origin=origin)
     n = len(temp)
-    projected_buffer = max(0, n - 1) * SLA_BUFFER_PER_ORDER_MIN
+    projected_buffer = max(0, n - 1) * buffer_per_order
     for i, o in enumerate(temp):
         proj = o.minutes_elapsed + route_times[i] + projected_buffer
         if proj > INTERNAL_TARGET_MIN:
@@ -156,6 +220,8 @@ def build_batches(
     window_min: int = DEFAULT_WINDOW_MIN,
     geo_provider: "GeoPort | None" = None,
     origin: tuple[float, float] | None = None,
+    buffer_per_order: int = SLA_BUFFER_PER_ORDER_MIN,
+    max_detour_km: float = 0.0,
 ) -> list[PlannedBatch]:
     """Greedy proximity batching (with inter-stop travel gap fix per GAP#4/spec §4.3).
 
@@ -174,11 +240,17 @@ def build_batches(
 
     remaining = sorted(orders, key=lambda o: o.ready_at)
 
+    # Corridor ("on-the-way") batching is opt-in: only when a positive max_detour_km is
+    # set AND we know the restaurant origin to measure the route from.
+    corridor = max_detour_km > 0 and origin is not None
+
     # Spec §4.3.2: priority orders bypass batching — each gets its own single-order batch.
     priority_orders = [o for o in remaining if o.priority != "normal"]
     normal_orders = [o for o in remaining if o.priority == "normal"]
     # Priority orders each get a dedicated batch; they are sealed — no normal order joins them.
-    priority_batches: list[PlannedBatch] = [PlannedBatch(orders=[o]) for o in priority_orders]
+    priority_batches: list[PlannedBatch] = [
+        PlannedBatch(orders=[o], per_order_buffer_min=buffer_per_order) for o in priority_orders
+    ]
     # Normal orders go through proximity logic into their own set of batches.
     normal_batches: list[PlannedBatch] = []
 
@@ -188,24 +260,35 @@ def build_batches(
             if len(batch.orders) >= max_per_batch:
                 continue
             seed = batch.seed
+            # Geometric gate: near the seed (radius) OR a small detour off the route
+            # (corridor). Either way the SLA check below still has the final say.
             within_proximity = (
                 distance_km(seed.lat, seed.lon, order.lat, order.lon) <= proximity_km
+            )
+            within_corridor = corridor and (
+                _insertion_detour_km(batch.orders, order, origin) <= max_detour_km
             )
             within_window = order.ready_at - seed.ready_at <= timedelta(
                 minutes=window_min
             )
             if (
-                within_proximity
+                (within_proximity or within_corridor)
                 and within_window
                 and _within_internal_target(
-                    batch, order, geo_provider=geo_provider, origin=origin
+                    batch, order, geo_provider=geo_provider, origin=origin,
+                    buffer_per_order=buffer_per_order, sequence=corridor,
                 )
             ):
                 batch.orders.append(order)
+                # Keep the persisted stop order = the optimized visit order.
+                if corridor:
+                    batch.orders = _sequence_stops(batch.orders, origin, geo_provider)
                 placed = True
                 break
         if not placed:
-            normal_batches.append(PlannedBatch(orders=[order]))
+            normal_batches.append(
+                PlannedBatch(orders=[order], per_order_buffer_min=buffer_per_order)
+            )
 
     batches = priority_batches + normal_batches
 
