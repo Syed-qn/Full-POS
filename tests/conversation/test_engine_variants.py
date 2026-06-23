@@ -66,27 +66,70 @@ async def _conv(db_session) -> Conversation:
 _BUNDLE = [{"name": "2 serve", "price_aed": "30.00", "dish_number": None}]
 
 
-async def test_ordering_qty_2_uses_the_bundle_price(db_session, restaurant):
+async def test_ordering_qty_2_offers_the_bundle_first(db_session, restaurant):
     await _seed_biryani(db_session, restaurant.id, _BUNDLE)
     await handle_inbound(db_session, _msg("hi", "g1"), restaurant_id=restaurant.id)
     await db_session.commit()
     conv = await _conv(db_session)
 
-    # Ordering quantity 2 of a dish that has a "2 serve" bundle → one bundle at AED 30.
+    # Ordering quantity 2 → bot ASKS (bundle vs separate); nothing added yet.
     status = await _execute_ai_add_item(
         db_session, conv, _msg("2 chicken biryani", "i1"), restaurant.id,
         "chicken biryani", 2, "",
     )
     await db_session.commit()
-    assert status == "added"
+    assert status == "awaiting_bundle"
+    body = (await _last_body(db_session)).lower()
+    assert "2 serve" in body and "30" in body
+    assert (await db_session.execute(select(OrderItem))).scalars().all() == []
+    conv = await _conv(db_session)
+    assert conv.state.get("awaiting_bundle") is not None
+
+
+async def test_bundle_offer_yes_adds_the_bundle(db_session, restaurant):
+    await _seed_biryani(db_session, restaurant.id, _BUNDLE)
+    await handle_inbound(db_session, _msg("hi", "g1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    await _execute_ai_add_item(
+        db_session, conv, _msg("2 chicken biryani", "i1"), restaurant.id,
+        "chicken biryani", 2, "",
+    )
+    await db_session.commit()
+
+    # "yes" → one bundle at AED 30.
+    await handle_inbound(db_session, _msg("yes", "i2"), restaurant_id=restaurant.id)
+    await db_session.commit()
     items = (await db_session.execute(select(OrderItem))).scalars().all()
     assert len(items) == 1
     assert items[0].variant_name == "2 serve"
     assert items[0].qty == 1
     assert items[0].price_aed == Decimal("30.00")
+    assert (await _conv(db_session)).state.get("awaiting_bundle") is None
 
 
-async def test_make_it_2_switches_single_to_bundle(db_session, restaurant):
+async def test_bundle_offer_no_keeps_them_separate(db_session, restaurant):
+    await _seed_biryani(db_session, restaurant.id, _BUNDLE)
+    await handle_inbound(db_session, _msg("hi", "g1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    await _execute_ai_add_item(
+        db_session, conv, _msg("2 chicken biryani", "i1"), restaurant.id,
+        "chicken biryani", 2, "",
+    )
+    await db_session.commit()
+
+    # "no" → keep 2 separate single serves at AED 20 each.
+    await handle_inbound(db_session, _msg("no", "i2"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    items = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert len(items) == 1
+    assert items[0].variant_name is None
+    assert items[0].qty == 2
+    assert items[0].price_aed == Decimal("20.00")
+
+
+async def test_make_it_2_offers_then_yes_switches_single_to_bundle(db_session, restaurant):
     await _seed_biryani(db_session, restaurant.id, _BUNDLE)
     await handle_inbound(db_session, _msg("hi", "g1"), restaurant_id=restaurant.id)
     await db_session.commit()
@@ -94,12 +137,17 @@ async def test_make_it_2_switches_single_to_bundle(db_session, restaurant):
     await db_session.commit()
     conv = await _conv(db_session)
 
-    outcome, label, is_bundle = await _execute_ai_update_qty(
-        db_session, conv, restaurant.id, "chicken biryani", 2
+    outcome, _name = await _execute_ai_update_qty(
+        db_session, conv, _msg("make it 2", "i2"), restaurant.id, "chicken biryani", 2
     )
     await db_session.commit()
-    assert outcome == "updated" and is_bundle
-    assert label == "Chicken Biryani (2 serve)"
+    assert outcome == "awaiting_bundle"
+    # still the single until they answer
+    items = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert len(items) == 1 and items[0].variant_name is None
+
+    await handle_inbound(db_session, _msg("yes", "i3"), restaurant_id=restaurant.id)
+    await db_session.commit()
     items = (await db_session.execute(select(OrderItem))).scalars().all()
     assert len(items) == 1
     assert items[0].variant_name == "2 serve"
@@ -107,22 +155,20 @@ async def test_make_it_2_switches_single_to_bundle(db_session, restaurant):
     assert items[0].price_aed == Decimal("30.00")
 
 
-async def test_make_it_3_with_no_bundle_reverts_to_singles(db_session, restaurant):
+async def test_make_it_3_no_bundle_updates_directly(db_session, restaurant):
     await _seed_biryani(db_session, restaurant.id, _BUNDLE)
     await handle_inbound(db_session, _msg("hi", "g1"), restaurant_id=restaurant.id)
     await db_session.commit()
     await handle_inbound(db_session, _msg("1 chicken biryani", "i1"), restaurant_id=restaurant.id)
     await db_session.commit()
     conv = await _conv(db_session)
-    # Bundle to 2 serve first…
-    await _execute_ai_update_qty(db_session, conv, restaurant.id, "chicken biryani", 2)
-    await db_session.commit()
-    # …then "make it 3" — no 3-serve bundle → 3× single at the base price.
-    outcome, _label, is_bundle = await _execute_ai_update_qty(
-        db_session, conv, restaurant.id, "chicken biryani", 3
+
+    # "make it 3" — no 3-serve bundle → straight to 3× single, no question.
+    outcome, _name = await _execute_ai_update_qty(
+        db_session, conv, _msg("make it 3", "i2"), restaurant.id, "chicken biryani", 3
     )
     await db_session.commit()
-    assert outcome == "updated" and not is_bundle
+    assert outcome == "updated"
     items = (await db_session.execute(select(OrderItem))).scalars().all()
     assert len(items) == 1
     assert items[0].variant_name is None

@@ -1869,6 +1869,32 @@ async def _build_context(
     return ctx
 
 
+async def _ensure_draft_order(
+    session: AsyncSession, conv, inbound: InboundMessage, restaurant_id: int
+):
+    """Return this conversation's draft order, creating one if needed.
+
+    On creation, clears address/location state left over from a previous order so a
+    returning customer is re-offered their saved address and the fee/distance is
+    recomputed for THIS order rather than reused from the last one."""
+    from app.ordering.models import Order
+    from app.ordering.service import create_draft_order, get_or_create_customer
+
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone
+    )
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None:
+        order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
+        _set_state(
+            conv, draft_order_id=order.id, address_offer_made=None,
+            saved_address_id=None, pin_lat=None, pin_lon=None,
+            distance_km=None, delivery_fee=None,
+        )
+    return order
+
+
 async def _add_dish_to_cart(
     session: AsyncSession,
     conv,
@@ -1880,31 +1906,113 @@ async def _add_dish_to_cart(
     notes: str | None,
     variant: dict | None = None,
 ):
-    """Ensure a draft order exists for this conversation and add the dish (optionally
-    a chosen serving-size variant) to it. Shared by the direct add path and the
-    variant-resolution path so order/state setup stays identical."""
-    from app.ordering.models import Order
-    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    """Ensure a draft order exists and add the dish (optionally a chosen serving-size
+    variant) to it. Shared by the direct add path and the variant paths."""
+    from app.ordering.service import add_item
 
-    customer = await get_or_create_customer(
-        session, restaurant_id=restaurant_id, phone=inbound.from_phone
-    )
-    draft_order_id = conv.state.get("draft_order_id")
-    order = await session.get(Order, draft_order_id) if draft_order_id else None
-    if order is None:
-        order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
-        # New order starts: clear address/location state left over from a previous
-        # order so a returning customer is re-offered their saved address every
-        # time, and the fee/distance is recomputed for THIS order rather than
-        # reused from the last one.
-        _set_state(
-            conv, draft_order_id=order.id, address_offer_made=None,
-            saved_address_id=None, pin_lat=None, pin_lon=None,
-            distance_km=None, delivery_fee=None,
-        )
+    order = await _ensure_draft_order(session, conv, inbound, restaurant_id)
     await add_item(session, order=order, dish=dish, qty=qty, notes=notes, variant=variant)
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     return order
+
+
+def _parse_bundle_choice(inbound: InboundMessage) -> str | None:
+    """Read a yes/no answer to a bundle offer → "bundle", "separate", or None."""
+    if inbound.type != MessageType.TEXT:
+        return None
+    t = (inbound.payload.get("text") or "").strip().lower()
+    if not t:
+        return None
+    if any(w in t for w in (
+        "separate", "single", "individual", "apart", "two plate", "2 plate",
+        "no thanks", "nope", "don't", "dont",
+    )):
+        return "separate"
+    if any(w in t for w in (
+        "yes", "yeah", "yep", "sure", "ok", "okay", "combo", "bundle", "together",
+        "share", "haan", "aiwa", "add that", "do it",
+    )):
+        return "bundle"
+    # A bare "no" (not part of "no thanks", handled above) → keep separate.
+    if t in ("no", "naa", "nah"):
+        return "separate"
+    return None
+
+
+async def _offer_bundle_choice(
+    session: AsyncSession, conv, inbound: InboundMessage, restaurant_id: int,
+    *, dish, qty: int, notes: str | None, bundle: dict,
+) -> None:
+    """Ask (in plain text) whether to use a serving-size bundle for this quantity,
+    or keep the items separate. Defers the add until the customer answers."""
+    single_total = _aed(Decimal(str(dish.price_aed)) * qty)
+    bundle_price = _aed(Decimal(str(bundle["price_aed"])))
+    _set_state(conv, awaiting_bundle={
+        "dish_id": dish.id, "qty": qty, "notes": notes,
+        "bundle_name": bundle["name"], "bundle_price": str(bundle["price_aed"]),
+    })
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="bundle-offer",
+        body=(
+            f"We have a {bundle['name']} {dish.name} for AED {bundle_price} "
+            f"(vs AED {single_total} for {qty} separate). Add the {bundle['name']}? "
+            f"Reply yes, or no to keep them separate 😊"
+        ),
+    )
+
+
+async def _handle_bundle_choice(
+    session: AsyncSession, conv, inbound: InboundMessage, restaurant_id: int
+) -> bool:
+    """Apply a pending bundle offer from the customer's yes/no reply.
+
+    "yes" → one bundle at its price; "no"/unclear → the items stay separate
+    (single × qty). Returns True if it handled the message."""
+    pending = conv.state.get("awaiting_bundle")
+    if not pending:
+        return False
+    from sqlalchemy import delete as sa_delete
+
+    from app.menu.models import Dish
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item
+
+    dish = await session.get(Dish, pending.get("dish_id"))
+    if dish is None:
+        _set_state(conv, awaiting_bundle=None)
+        return False
+
+    qty = int(pending.get("qty") or 1)
+    notes = pending.get("notes")
+    choice = _parse_bundle_choice(inbound)  # default (None) → keep separate
+    order = await _ensure_draft_order(session, conv, inbound, restaurant_id)
+
+    # Replace any existing lines for this dish (e.g. the single from "make it 2")
+    # with the chosen representation.
+    await session.execute(
+        sa_delete(OrderItem).where(
+            OrderItem.order_id == order.id, OrderItem.dish_id == dish.id
+        )
+    )
+    await session.flush()
+
+    if choice == "bundle":
+        bundle = {"name": pending["bundle_name"], "price_aed": pending["bundle_price"]}
+        await add_item(session, order=order, dish=dish, qty=1, notes=notes, variant=bundle)
+        label = f"{dish.name} ({bundle['name']})"
+    else:
+        await add_item(session, order=order, dish=dish, qty=qty, notes=notes)
+        label = f"{qty}x {dish.name}"
+
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items",
+               awaiting_bundle=None)
+    cart = await _build_cart_summary(session, conv)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="bundle-applied", body=f"Added {label} ✅{_cart_tail(cart)}",
+    )
+    return True
 
 
 async def _execute_ai_add_item(
@@ -1936,9 +2044,10 @@ async def _execute_ai_add_item(
     else:
         dish = result.candidates[0]
 
-    # Pick a serving size: an explicitly-named one wins ("family biryani"); else,
-    # if the ordered quantity matches a bundle ("2" → the 2-serve size), use that
-    # bundle as a single unit at its price; else the base single serve stands.
+    # Pick a serving size: an explicitly-named one wins ("family biryani") and is
+    # added straight away. Otherwise, if the ordered quantity matches a bundle
+    # ("2" → the 2-serve size), ASK whether to use the bundle or keep the items
+    # separate before adding. No variants / no match → base single serve.
     variant = None
     if getattr(dish, "variants", None):
         variant = resolve_variant(dish, dish_query)
@@ -1947,8 +2056,11 @@ async def _execute_ai_add_item(
         if variant is None:
             bundle = bundle_variant_for_qty(dish, qty)
             if bundle is not None:
-                variant = bundle
-                qty = 1  # the bundle already covers all the servings
+                await _offer_bundle_choice(
+                    session, conv, inbound, restaurant_id,
+                    dish=dish, qty=qty, notes=special_note or None, bundle=bundle,
+                )
+                return "awaiting_bundle"
 
     await _add_dish_to_cart(
         session, conv, inbound, restaurant_id,
@@ -2027,51 +2139,46 @@ async def _execute_ai_remove_item(
 
 
 async def _execute_ai_update_qty(
-    session: AsyncSession, conv: Conversation, restaurant_id: int,
-    dish_query: str, qty: int
-) -> tuple[str, str | None, bool]:
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage,
+    restaurant_id: int, dish_query: str, qty: int
+) -> tuple[str, str | None]:
     """Set a cart dish to an exact quantity (``qty <= 0`` removes it).
 
     If the new quantity matches a serving-size bundle (e.g. 2 → a "2 serve" size),
-    the line switches to that bundle's price as a single unit; otherwise it reverts
-    to single×qty. Returns ``(outcome, dish_label, is_bundle)`` where outcome is
-    "updated", "removed", "not_in_cart", or "no_match"."""
-    from sqlalchemy import delete as sa_delete
-
-    from app.ordering.models import Order, OrderItem
-    from app.ordering.service import add_item, set_item_qty
+    ASK whether to use the bundle or keep the items separate (outcome
+    "awaiting_bundle"); otherwise set it to single×qty. Returns
+    ``(outcome, dish_name)`` where outcome is "updated", "removed", "awaiting_bundle",
+    "not_in_cart", or "no_match"."""
+    from app.ordering.models import Order
+    from app.ordering.service import set_item_qty
 
     draft_order_id = conv.state.get("draft_order_id")
     if not draft_order_id or not dish_query:
-        return ("no_match", None, False)
+        return ("no_match", None)
     order = await session.get(Order, draft_order_id)
     if order is None:
-        return ("no_match", None, False)
+        return ("no_match", None)
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
-        return ("no_match", None, False)
+        return ("no_match", None)
     dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
     if dish is None:
-        return ("not_in_cart", result.candidates[0].name, False)
+        return ("not_in_cart", result.candidates[0].name)
     if qty <= 0:
         await set_item_qty(session, order=order, dish_id=dish.id, qty=0)
-        return ("removed", dish.name, False)
+        return ("removed", dish.name)
 
-    # Rebuild this dish's lines so a bundle qty switches to the bundle price and a
-    # non-bundle qty reverts to single×qty (set_item_qty alone would keep a stale
-    # bundle/single price). Clear, then re-add the right representation.
+    # If the new quantity matches a bundle, ask before pricing it differently.
     bundle = bundle_variant_for_qty(dish, qty)
-    await session.execute(
-        sa_delete(OrderItem).where(
-            OrderItem.order_id == order.id, OrderItem.dish_id == dish.id
-        )
-    )
-    await session.flush()
     if bundle is not None:
-        await add_item(session, order=order, dish=dish, qty=1, variant=bundle)
-        return ("updated", f"{dish.name} ({bundle['name']})", True)
-    await add_item(session, order=order, dish=dish, qty=qty)
-    return ("updated", dish.name, False)
+        await _offer_bundle_choice(
+            session, conv, inbound, restaurant_id,
+            dish=dish, qty=qty, notes=None, bundle=bundle,
+        )
+        return ("awaiting_bundle", dish.name)
+
+    await set_item_qty(session, order=order, dish_id=dish.id, qty=qty)
+    return ("updated", dish.name)
 
 
 async def _execute_save_address(
@@ -2421,17 +2528,15 @@ async def _dispatch_action(
                 qty=qty, dish_query=dish_query,
             )
             return
-        outcome, dish_name, is_bundle = await _execute_ai_update_qty(
-            session, conv, restaurant_id, dish_query, qty
+        outcome, dish_name = await _execute_ai_update_qty(
+            session, conv, inbound, restaurant_id, dish_query, qty
         )
+        if outcome == "awaiting_bundle":
+            # The bundle question was already sent; wait for the yes/no reply.
+            return
         cart = await _build_cart_summary(session, conv)
         if outcome == "updated":
-            # A bundle is one unit ("Chicken Biryani (2 serve)"), so don't prefix qty.
-            body = (
-                f"Updated — {dish_name} ✅{_cart_tail(cart)}"
-                if is_bundle
-                else f"Updated — {qty}x {dish_name} ✅{_cart_tail(cart)}"
-            )
+            body = f"Updated — {qty}x {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "removed":
             body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "not_in_cart":
@@ -2873,9 +2978,16 @@ async def handle_inbound(
         if conv.state.get("draft_order_id") is not None:
             _logger.info("greeting reset abandoned draft for conv=%s", conv.id)
         _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
-                   draft_order_id=None, pending_order_id=None)
+                   draft_order_id=None, pending_order_id=None, awaiting_bundle=None)
         await _handle_greeting(session, conv, inbound, restaurant_id)
         return
+
+    # A pending bundle offer ("2 serve for AED 30 — add it?") takes the next reply
+    # (yes/no) before the AI runs, so the answer applies the bundle or keeps the
+    # items separate instead of being re-interpreted as a new order.
+    if conv.state.get("awaiting_bundle"):
+        if await _handle_bundle_choice(session, conv, inbound, restaurant_id):
+            return
 
     # Location pin → address capture handler (needs geo validation before AI).
     # Pings outside address_capture (e.g. repeated live-location updates after
