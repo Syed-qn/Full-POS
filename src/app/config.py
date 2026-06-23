@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     # with ready+unassigned orders, so held (batch-window) orders are released once
     # they mature and stuck no-rider orders keep retrying without a new ready event.
     dispatch_sweep_seconds: float = 30.0
+    # Run the dispatch sweep IN-PROCESS from the web app (lifespan background task),
+    # not just via Celery beat. Needed on web-only deploys (e.g. Render) where no
+    # Celery worker/beat runs — otherwise held/stuck orders are never re-dispatched.
+    # Disabled in tests. Safe to leave on alongside Celery (dispatch is idempotent).
+    dispatch_inprocess_sweep: bool = True
 
     # Rate limiting (redis token bucket)
     rate_limit_enabled: bool = True

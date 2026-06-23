@@ -109,6 +109,39 @@ async def run_dispatch_engine(
 run_dispatch = run_dispatch_engine
 
 
+async def sweep_ready_once() -> int:
+    """Re-run dispatch for every restaurant that has ready + unassigned orders.
+
+    This is what RELEASES held (batch-window) orders once they mature and RETRIES
+    stuck no-rider orders — neither happens on its own because dispatch is otherwise
+    only triggered when an order is marked ready. Driven by the in-process sweep loop
+    (app.main lifespan) and the Celery beat task (apps.workers). Best-effort and
+    idempotent per tenant: one restaurant's failure never blocks the others. Returns
+    the number of restaurants swept.
+    """
+    from app.db import async_session_factory
+
+    async with async_session_factory() as session:
+        restaurant_ids = (
+            await session.scalars(
+                select(Order.restaurant_id)
+                .where(Order.status == "ready", Order.rider_id.is_(None))
+                .distinct()
+            )
+        ).all()
+    for restaurant_id in restaurant_ids:
+        async with async_session_factory() as session:
+            try:
+                await run_dispatch_engine(session, restaurant_id=restaurant_id)
+                await session.commit()
+            except Exception:  # noqa: BLE001 — keep sweeping the other tenants
+                _logger.exception(
+                    "dispatch sweep failed for restaurant_id=%s", restaurant_id
+                )
+                await session.rollback()
+    return len(restaurant_ids)
+
+
 async def _nudge_batchable_cooking_orders(
     session: AsyncSession, restaurant_id: int
 ) -> None:

@@ -20,6 +20,9 @@ os.environ.setdefault("APP_PUSH_PROVIDER", "fake")
 # enable live sending (APP_MARKETING_SEND_DRY_RUN=false / provider=meta).
 os.environ.setdefault("APP_MARKETING_SEND_DRY_RUN", "true")
 os.environ.setdefault("APP_MARKETING_TEMPLATE_PROVIDER", "mock")
+# Never start the in-process dispatch sweep loop during tests — it would re-dispatch
+# orders out from under tests on a timer. Production/dev leave it on (default True).
+os.environ.setdefault("APP_DISPATCH_INPROCESS_SWEEP", "false")
 
 
 import pytest

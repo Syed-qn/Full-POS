@@ -65,9 +65,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         set_geocode_redis(redis_conn)
 
+    # In-process dispatch sweep: re-runs dispatch for restaurants with ready+
+    # unassigned orders so held (batch-window) orders are released once they mature
+    # and stuck no-rider orders keep retrying. Essential on web-only deploys (Render)
+    # where no Celery beat/worker runs. Disabled in tests via APP_DISPATCH_INPROCESS_SWEEP.
+    import asyncio
+
+    sweep_task: asyncio.Task | None = None
+    if settings.dispatch_inprocess_sweep:
+        async def _dispatch_sweep_loop() -> None:
+            from app.dispatch.service import sweep_ready_once
+
+            interval = max(5.0, float(settings.dispatch_sweep_seconds))
+            while True:
+                try:
+                    await asyncio.sleep(interval)
+                    await sweep_ready_once()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — never let the loop die
+                    _log.exception("in-process dispatch sweep iteration failed")
+
+        sweep_task = asyncio.create_task(_dispatch_sweep_loop())
+        _log.info("in-process dispatch sweep started (every %ss)", settings.dispatch_sweep_seconds)
+
     yield  # serve requests
 
     # --- shutdown ---
+    if sweep_task is not None:
+        sweep_task.cancel()
+        try:
+            await sweep_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+
     if redis_conn is not None:
         from app.geo.cache import set_geocode_redis
 
