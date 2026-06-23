@@ -136,7 +136,23 @@ export function OrdersScreen() {
     { key: "cust", header: "Customer", render: (o) => o.customer_name },
     { key: "items", header: "Items", render: (o) => o.items.map((i) => `${i.qty}× ${i.name}`).join(", ") },
     { key: "total", header: "Total", render: (o) => <span className={s.mono}>AED {o.total_aed}</span> },
-    { key: "rider", header: "Rider", render: (o) => o.rider_name ?? "—" },
+    {
+      key: "rider",
+      header: "Rider",
+      render: (o) => (
+        <span className={s.riderCell}>
+          {o.rider_name ?? "—"}
+          {o.batch_size && o.batch_size > 1 ? (
+            <span
+              className={s.batchTag}
+              title={`Going out together on one trip: ${(o.batch_order_numbers ?? []).join(", ")}`}
+            >
+              🔗 {o.batch_size} together
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
     { key: "status", header: "Status", render: (o) => <StatusPill status={o.status} /> },
     {
       key: "kitchen",

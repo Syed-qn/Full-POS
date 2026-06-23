@@ -115,6 +115,11 @@ export interface OrderOut {
   address: string | null;
   lat: number | null;
   lng: number | null;
+  /** Rider-trip batching: when this order shares a trip with others, batch_size > 1
+   *  and batch_order_numbers lists every order on the trip (in delivery sequence). */
+  batch_id?: number | null;
+  batch_size?: number | null;
+  batch_order_numbers?: string[];
 }
 
 export interface ConversationOut {

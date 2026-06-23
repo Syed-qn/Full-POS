@@ -33,6 +33,12 @@ class OrderOut(BaseModel):
     address: Optional[str]
     lat: Optional[float]
     lng: Optional[float]
+    # Batching: when this order shares a rider trip with others, batch_size > 1 and
+    # batch_order_numbers lists every order on that trip (in delivery sequence) so the
+    # dashboard can show the manager which orders go out together.
+    batch_id: Optional[int] = None
+    batch_size: Optional[int] = None
+    batch_order_numbers: list[str] = Field(default_factory=list)
 
 
 class CustomerOut(BaseModel):

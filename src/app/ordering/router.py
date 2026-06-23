@@ -94,6 +94,28 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         order.sla_confirmed_at.isoformat() if order.sla_confirmed_at else None
     )
 
+    # Batching: if this order is part of a rider trip, list every order on that trip
+    # (in delivery sequence) so the dashboard can flag matched orders.
+    from app.dispatch.models import BatchOrder
+
+    batch_id: int | None = None
+    batch_order_numbers: list[str] = []
+    bo = await session.scalar(
+        select(BatchOrder).where(BatchOrder.order_id == order.id)
+    )
+    if bo is not None:
+        batch_id = bo.batch_id
+        batch_order_numbers = list(
+            (
+                await session.execute(
+                    select(Order.order_number)
+                    .join(BatchOrder, BatchOrder.order_id == Order.id)
+                    .where(BatchOrder.batch_id == bo.batch_id)
+                    .order_by(BatchOrder.sequence)
+                )
+            ).scalars().all()
+        )
+
     return OrderOut(
         id=order.id,
         order_number=order.order_number,
@@ -113,6 +135,9 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         address=address_str,
         lat=lat,
         lng=lng,
+        batch_id=batch_id,
+        batch_size=(len(batch_order_numbers) or None),
+        batch_order_numbers=batch_order_numbers,
     )
 
 
