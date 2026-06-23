@@ -248,26 +248,33 @@ function TrackingScreen({
                 <Text style={styles.cardTitle}>{s.orderNumber}</Text>
                 <View style={[styles.seqPill, i === 0 ? styles.seqPillFirst : styles.seqPillLater]}>
                   <Text style={i === 0 ? styles.seqPillFirstText : styles.seqPillLaterText}>
-                    {i === 0
-                      ? "① DELIVER THIS FIRST"
-                      : `STOP ${i + 1} OF ${pending.length} · LATER`}
+                    {i === 0 ? "DELIVER FIRST" : `LATER · ${i + 1}/${pending.length}`}
                   </Text>
                 </View>
               </View>
-              {s.customerName ? <Text style={styles.cardLine}>👤 {s.customerName}</Text> : null}
+
+              {s.customerName ? <Text style={styles.custName}>{s.customerName}</Text> : null}
               {s.address ? <Text style={styles.cardLine}>📍 {s.address}</Text> : null}
+
               {s.customerPhone ? (
-                <Text
-                  style={[styles.cardLine, styles.phoneLink]}
+                <Pressable
+                  style={styles.callRow}
                   onPress={() => Linking.openURL(`tel:${s.customerPhone}`)}
                 >
-                  📞 {s.customerPhone}  (tap to call)
-                </Text>
+                  <Text style={styles.callText}>📞 {s.customerPhone}</Text>
+                  <Text style={styles.callTag}>CALL</Text>
+                </Pressable>
               ) : null}
-              <Text style={styles.cardAmount}>💵 Collect AED {s.codAmount.toFixed(2)}</Text>
+
+              <View style={styles.codChip}>
+                <Text style={styles.codLabel}>💵 Collect cash</Text>
+                <Text style={styles.codAmount}>AED {s.codAmount.toFixed(2)}</Text>
+              </View>
+
               {i === 0 ? null : (
-                <Text style={styles.cardHint}>Finish the stop above first — its button appears here next.</Text>
+                <Text style={styles.cardHint}>Deliver the stop above first.</Text>
               )}
+
               <View style={styles.cardActions}>
                 {s.latitude != null && s.longitude != null ? (
                   <Pressable
@@ -321,18 +328,30 @@ const styles = StyleSheet.create({
   linkButton: { alignItems: "center", padding: 12 },
   linkButtonText: { color: "#64748b" },
   list: { gap: 12, paddingBottom: 12 },
-  card: { backgroundColor: "#fff", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#e2e8f0" },
-  cardActive: { borderColor: "#16a34a", borderWidth: 2, backgroundColor: "#f0fdf4" },
-  stopHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 8 },
+  card: { backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#e2e8f0" },
+  cardActive: { borderColor: "#16a34a", backgroundColor: "#f6fef9" },
+  stopHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8 },
   cardTitle: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
   seqPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   seqPillFirst: { backgroundColor: "#16a34a" },
-  seqPillLater: { backgroundColor: "#e2e8f0" },
-  seqPillFirstText: { color: "#fff", fontSize: 11, fontWeight: "800", letterSpacing: 0.4 },
-  seqPillLaterText: { color: "#64748b", fontSize: 11, fontWeight: "700", letterSpacing: 0.4 },
-  cardLine: { fontSize: 14, color: "#334155", marginTop: 2 },
-  phoneLink: { color: "#2563eb", fontWeight: "600" },
-  cardAmount: { fontSize: 15, color: "#0f172a", fontWeight: "700", marginTop: 6 },
-  cardHint: { fontSize: 12, color: "#94a3b8", marginTop: 6, fontStyle: "italic" },
-  cardActions: { flexDirection: "row", gap: 10 },
+  seqPillLater: { backgroundColor: "#eef2f6" },
+  seqPillFirstText: { color: "#fff", fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5 },
+  seqPillLaterText: { color: "#64748b", fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
+  custName: { fontSize: 15, fontWeight: "600", color: "#0f172a", marginBottom: 2 },
+  cardLine: { fontSize: 14, color: "#475569", marginTop: 2 },
+  callRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#eff6ff", borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginTop: 10,
+  },
+  callText: { color: "#1d4ed8", fontSize: 14, fontWeight: "600" },
+  callTag: { color: "#fff", backgroundColor: "#2563eb", fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
+  codChip: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#fffbeb", borderWidth: 1, borderColor: "#fde68a",
+    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginTop: 10,
+  },
+  codLabel: { fontSize: 13, color: "#92400e", fontWeight: "600" },
+  codAmount: { fontSize: 16, color: "#0f172a", fontWeight: "800" },
+  cardHint: { fontSize: 12, color: "#94a3b8", marginTop: 8, fontStyle: "italic" },
+  cardActions: { flexDirection: "row", gap: 10, marginTop: 12 },
 });
