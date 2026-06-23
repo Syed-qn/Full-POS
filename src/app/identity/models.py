@@ -38,7 +38,11 @@ DEFAULT_SETTINGS: dict = {
     # then visited in nearest-first order). 0 = corridor off (pure proximity).
     "batch_proximity_km": 1.0,
     "batch_window_minutes": 10,
-    "sla_buffer_per_order_minutes": 10,
+    # Per-extra-stop safety margin in the batching SLA gate. Kept at 0 so realistic
+    # mid-range orders actually batch (a higher value reserves time and blocks
+    # batching for orders more than a few km out); the 40-min customer SLA + the
+    # predictive-breach alert remain the real safety net. Not exposed in the UI.
+    "sla_buffer_per_order_minutes": 0,
     "batch_max_detour_km": 0,
     # Batching "hold window": seconds to defer a freshly-ready LONE order so a nearby
     # order can join its batch before a rider is committed. 0 = off (assign at once).

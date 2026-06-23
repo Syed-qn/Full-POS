@@ -83,13 +83,10 @@ export function SettingsScreen() {
 
   // Dispatch & Kitchen tab
   const [dispatchEngine, setDispatchEngine] = useState<"greedy" | "ortools">("greedy");
-  const [prepHandling, setPrepHandling] = useState(5);
-  const [batchSafety, setBatchSafety] = useState(5);
   const [defaultPrep, setDefaultPrep] = useState(15);
   const [expediteRadius, setExpediteRadius] = useState(1.5);
   // Greedy batching geometry
   const [batchProximity, setBatchProximity] = useState(1.0);
-  const [slaBuffer, setSlaBuffer] = useState(10);
   const [maxDetour, setMaxDetour] = useState(0); // 0 = corridor off
   const [holdSeconds, setHoldSeconds] = useState(0); // 0 = batch hold window off
 
@@ -111,12 +108,9 @@ export function SettingsScreen() {
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
       if (typeof sset.max_item_qty === "number") setMaxItemQty(sset.max_item_qty);
       if (sset.dispatch_engine === "ortools" || sset.dispatch_engine === "greedy") setDispatchEngine(sset.dispatch_engine);
-      if (typeof sset.prep_handling_minutes === "number") setPrepHandling(sset.prep_handling_minutes);
-      if (typeof sset.batch_safety_minutes === "number") setBatchSafety(sset.batch_safety_minutes);
       if (typeof sset.default_prep_minutes === "number") setDefaultPrep(sset.default_prep_minutes);
       if (typeof sset.batch_expedite_radius_km === "number") setExpediteRadius(sset.batch_expedite_radius_km);
       if (typeof sset.batch_proximity_km === "number") setBatchProximity(sset.batch_proximity_km);
-      if (typeof sset.sla_buffer_per_order_minutes === "number") setSlaBuffer(sset.sla_buffer_per_order_minutes);
       if (typeof sset.batch_max_detour_km === "number") setMaxDetour(sset.batch_max_detour_km);
       if (typeof sset.batch_hold_seconds === "number") setHoldSeconds(sset.batch_hold_seconds);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
@@ -186,12 +180,9 @@ export function SettingsScreen() {
     try {
       await apiClient.patch("/api/v1/settings", {
         dispatch_engine: dispatchEngine,
-        prep_handling_minutes: prepHandling,
-        batch_safety_minutes: batchSafety,
         default_prep_minutes: defaultPrep,
         batch_expedite_radius_km: expediteRadius,
         batch_proximity_km: batchProximity,
-        sla_buffer_per_order_minutes: slaBuffer,
         batch_max_detour_km: maxDetour,
         batch_hold_seconds: holdSeconds,
       });
@@ -555,26 +546,41 @@ export function SettingsScreen() {
               make the 40-min SLA (with a manager alert). Pilot per restaurant.
             </span>
           </label>
+          <h4 className={s.groupTitle}>Batching</h4>
           <div className={`${s.row2} ${s.row2Compact}`}>
             <label className={s.col}>
-              <span className={s.rowName}>Pickup handling (min)</span>
+              <span className={s.rowName}>Group orders within (km)</span>
               <input
-                aria-label="prep handling minutes" type="number" min={0} max={30}
-                value={prepHandling} onChange={(e) => setPrepHandling(Number(e.target.value))}
+                aria-label="batch proximity km" type="number" min={0.1} max={10} step={0.1}
+                value={batchProximity} onChange={(e) => setBatchProximity(Number(e.target.value))}
                 onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
               />
-              <span className={s.rowHint}>Slack reserved for the rider hand-off at pickup.</span>
+              <span className={s.rowHint}>Two orders this close together can share one rider trip.</span>
             </label>
             <label className={s.col}>
-              <span className={s.rowName}>Batch safety (min)</span>
+              <span className={s.rowName}>Wait to group (sec)</span>
               <input
-                aria-label="batch safety minutes" type="number" min={0} max={30}
-                value={batchSafety} onChange={(e) => setBatchSafety(Number(e.target.value))}
+                aria-label="batch hold seconds" type="number" min={0} max={600} step={10}
+                value={holdSeconds} onChange={(e) => setHoldSeconds(Number(e.target.value))}
                 onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
               />
-              <span className={s.rowHint}>Margin so an order that joins a batch still makes the SLA.</span>
+              <span className={s.rowHint}>Hold a ready order this long so a nearby one can join its trip. 0 = send each order right away.</span>
             </label>
           </div>
+          <label className={s.col}>
+            <span className={s.rowName}>On-the-way detour (km) — 0 = off</span>
+            <input
+              aria-label="batch max detour km" type="number" min={0} max={10} step={0.1}
+              value={maxDetour} onChange={(e) => setMaxDetour(Number(e.target.value))}
+              onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+            />
+            <span className={s.rowHint}>
+              Let a rider drop an order that's at most this far off the route to a farther
+              one. 0 keeps simple nearby-grouping. The 40-min SLA is always enforced.
+            </span>
+          </label>
+
+          <h4 className={s.groupTitle}>Kitchen</h4>
           <div className={`${s.row2} ${s.row2Compact}`}>
             <label className={s.col}>
               <span className={s.rowName}>Default cook time (min)</span>
@@ -586,7 +592,7 @@ export function SettingsScreen() {
               <span className={s.rowHint}>Used for a dish with no prep time set, for the "start by" estimate.</span>
             </label>
             <label className={s.col}>
-              <span className={s.rowName}>Batch expedite radius (km)</span>
+              <span className={s.rowName}>Expedite radius (km)</span>
               <input
                 aria-label="batch expedite radius km" type="number" min={0.1} max={10} step={0.1}
                 value={expediteRadius} onChange={(e) => setExpediteRadius(Number(e.target.value))}
@@ -595,52 +601,6 @@ export function SettingsScreen() {
               <span className={s.rowHint}>Nudge the kitchen to rush a cooking order within this distance of a run going out.</span>
             </label>
           </div>
-          <div className={`${s.row2} ${s.row2Compact}`}>
-            <label className={s.col}>
-              <span className={s.rowName}>Batch proximity (km)</span>
-              <input
-                aria-label="batch proximity km" type="number" min={0.1} max={10} step={0.1}
-                value={batchProximity} onChange={(e) => setBatchProximity(Number(e.target.value))}
-                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
-              />
-              <span className={s.rowHint}>How close two drop-offs must be to share one rider trip (greedy engine).</span>
-            </label>
-            <label className={s.col}>
-              <span className={s.rowName}>SLA buffer per stop (min)</span>
-              <input
-                aria-label="sla buffer per order minutes" type="number" min={0} max={30}
-                value={slaBuffer} onChange={(e) => setSlaBuffer(Number(e.target.value))}
-                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
-              />
-              <span className={s.rowHint}>Minutes added for each extra stop in a batch. Lower = more batching, less safety margin.</span>
-            </label>
-          </div>
-          <label className={s.col}>
-            <span className={s.rowName}>On-the-way detour (km) — 0 = off</span>
-            <input
-              aria-label="batch max detour km" type="number" min={0} max={10} step={0.1}
-              value={maxDetour} onChange={(e) => setMaxDetour(Number(e.target.value))}
-              onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
-            />
-            <span className={s.rowHint}>
-              Corridor batching: let a rider drop an order that's at most this far off the
-              route to a farther one (visited nearest-first). 0 keeps pure proximity. The
-              40-min SLA is still enforced, so very distant tail orders still ride alone.
-            </span>
-          </label>
-          <label className={s.col}>
-            <span className={s.rowName}>Batch hold window (sec) — 0 = off</span>
-            <input
-              aria-label="batch hold seconds" type="number" min={0} max={600} step={10}
-              value={holdSeconds} onChange={(e) => setHoldSeconds(Number(e.target.value))}
-              onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
-            />
-            <span className={s.rowHint}>
-              Wait this long before sending a lone ready order, so a nearby order can join
-              its trip (e.g. 90s). Orders that already have a batch-mate, are priority, or
-              are close to their SLA never wait. 0 dispatches each order immediately.
-            </span>
-          </label>
           <div className={s.actions}>
             <Button onClick={saveDispatch}>Save</Button>
           </div>

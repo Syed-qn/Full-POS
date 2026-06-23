@@ -132,6 +132,16 @@
 /* Compact two-up (e.g. batching): tighter row, fields fill their columns. */
 .row2Compact { max-width: 460px; }
 .row2Compact .col .inputNum { width: 100%; }
+/* Small section heading inside a settings tab (groups related controls). */
+.groupTitle {
+  margin: 18px 0 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.groupTitle:first-child { margin-top: 0; }
 @media (max-width: 560px) {
   .row2 { flex-direction: column; gap: 16px; }
 }
