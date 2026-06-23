@@ -99,22 +99,6 @@ async def test_list_riders_survives_missing_location_table(client, auth_headers,
     assert listing.json()[0]["last_lat"] is None
 
 
-def test_shift_window_start_is_8am_dubai():
-    from datetime import datetime, timezone
-
-    from app.identity.service import DUBAI, _shift_window_start
-
-    # 10:00 Dubai → window started at 08:00 Dubai the same day.
-    now = datetime(2026, 6, 18, 6, 0, tzinfo=timezone.utc)  # 10:00 Dubai (+4)
-    start = _shift_window_start(now).astimezone(DUBAI)
-    assert (start.hour, start.minute, start.day) == (8, 0, 18)
-
-    # 07:00 Dubai (before the 08:00 cutover) → window is yesterday's 08:00.
-    early = datetime(2026, 6, 18, 3, 0, tzinfo=timezone.utc)  # 07:00 Dubai
-    start_early = _shift_window_start(early).astimezone(DUBAI)
-    assert (start_early.hour, start_early.day) == (8, 17)
-
-
 async def test_geo_health_reports_provider_and_distance(client, auth_headers):
     # No params → provider config only.
     base = await client.get("/api/v1/geo/health", headers=auth_headers)

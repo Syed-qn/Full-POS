@@ -137,7 +137,7 @@ export function MarketingScreen() {
       await apiClient.patch("/api/v1/settings", { todays_special: special });
       toast(special.enabled ? "Today's Special is ON ✅" : "Today's Special turned off");
     } catch {
-      toast("Could not save — please try again.");
+      toast("Could not save. Please try again.");
     } finally {
       setSavingSpecial(false);
     }
@@ -150,7 +150,7 @@ export function MarketingScreen() {
       const d = await draftTemplate({ describe: describe.trim() });
       if (!name) setName(d.suggested_name);
       setBody(d.body);
-      toast("Draft ready — review and edit, then submit.", "success");
+      toast("Draft ready. Review and edit, then submit.", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Couldn't draft the message.", "error");
     } finally {
@@ -196,11 +196,11 @@ export function MarketingScreen() {
       });
       const submitted = await submitTemplate(created.id);
       if (submitted.status === "approved") {
-        toast("Template approved — ready to broadcast! 🎉", "success");
+        toast("Template approved. Ready to broadcast! 🎉", "success");
       } else if (submitted.status === "rejected") {
         toast(`Rejected: ${submitted.rejection_reason ?? "see Meta"}`, "error");
       } else {
-        toast("Submitted to Meta — awaiting approval (refresh to check).", "success");
+        toast("Submitted to Meta. Awaiting approval (refresh to check).", "success");
       }
       // Reset the form for the next template.
       setDescribe("");
@@ -242,7 +242,7 @@ export function MarketingScreen() {
       const extras = [
         res.suppressed_optout ? `${res.suppressed_optout} opted-out` : "",
         res.suppressed_cap ? `${res.suppressed_cap} over 24h cap` : "",
-        res.suppressed_window ? `${res.suppressed_window} outside 9am–6pm window` : "",
+        res.suppressed_window ? `${res.suppressed_window} outside 9am to 6pm window` : "",
       ].filter(Boolean);
       toast(
         `Sent to ${res.queued} customer${res.queued === 1 ? "" : "s"}.` +
@@ -261,7 +261,7 @@ export function MarketingScreen() {
       <div className={s.topbar}>
         <PageHeader
           title="Marketing"
-          subtitle="WhatsApp promotions — create a template, get it approved, broadcast"
+          subtitle="WhatsApp promotions. Create a template, get it approved, broadcast."
         />
         <Button onClick={() => setShowCreate(true)}>＋ New template</Button>
       </div>
@@ -274,8 +274,8 @@ export function MarketingScreen() {
         <div className={s.cardTitle}>Your templates</div>
         <p className={s.note}>
           Once a template is <strong>approved</strong>, tap <strong>Send</strong> to
-          broadcast it to all opted-in customers. Opted-out customers, anyone already
-          messaged twice in 24h, and (per UAE rules) sends outside 9am–6pm are skipped.
+          broadcast it to all opted in customers. We skip anyone who opted out, anyone
+          already messaged twice in 24h, and (per UAE rules) any send outside 9am to 6pm.
         </p>
         {!loaded ? (
           <div className={s.empty}>Loading…</div>
@@ -366,14 +366,18 @@ export function MarketingScreen() {
 
       {/* TODAY'S SPECIAL — auto-timed daily send, per-customer */}
       <div className={s.card}>
-        <div className={s.cardTitle}>Today's Special (auto-timed) 🕒</div>
-        <p className={s.note}>
-          Turn this on and pick an <strong>approved</strong> template. Each opted-in
-          customer is sent the special <strong>{special.lead_minutes} min before</strong>{" "}
-          their own usual ordering time — so a customer who tends to order around noon
-          gets it at about 11:45. Customers without a clear pattern get the default time.
-          The same opt-out, 24h-cap and 9am–6pm rules apply.
-        </p>
+        <div className={s.cardTitle}>Today's Special (auto timed) 🕒</div>
+        <p className={s.note}>Pick an <strong>approved</strong> template and turn it on:</p>
+        <ul className={s.noteList}>
+          <li>
+            🎯 Each customer gets it ~<strong>{special.lead_minutes} min</strong> before
+            their usual order time
+          </li>
+          <li>🕒 No clear pattern yet? They get the <strong>default time</strong> below</li>
+          <li>📈 Send times are learned from each customer's past orders</li>
+          <li>🔁 Runs every day automatically while the toggle stays on</li>
+          <li>✅ Opt out, the 24h cap and the 9am to 6pm window still apply</li>
+        </ul>
 
         <label className={s.checkRow}>
           <input
@@ -395,7 +399,7 @@ export function MarketingScreen() {
             }))
           }
         >
-          <option value="">— Select an approved template —</option>
+          <option value="">Select an approved template</option>
           {approvedTemplates.map((t) => (
             <option key={t.id} value={t.id}>
               {t.meta_template_name}
@@ -404,7 +408,7 @@ export function MarketingScreen() {
         </select>
         {approvedTemplates.length === 0 && (
           <span className={s.hint}>
-            No approved templates yet — create one above and wait for Meta approval.
+            No approved templates yet. Create one above and wait for Meta approval.
           </span>
         )}
 
@@ -435,7 +439,10 @@ export function MarketingScreen() {
           </div>
         </div>
 
-        <div className={s.actions}>
+        <div className={s.specialFooter}>
+          <span className={`${s.statusPill} ${special.enabled ? s.statusOn : s.statusOff}`}>
+            {special.enabled ? "● Active" : "○ Off"}
+          </span>
           <Button onClick={onSaveSpecial} disabled={savingSpecial}>
             {savingSpecial ? "Saving…" : "Save automation"}
           </Button>
@@ -459,7 +466,7 @@ export function MarketingScreen() {
               </button>
             </div>
             <p className={s.note}>
-              Describe your offer and we'll draft a Meta-compliant message. WhatsApp
+              Describe your offer and we'll draft a Meta compliant message. WhatsApp
               must approve every promotional template before it can be sent.
             </p>
 

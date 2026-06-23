@@ -39,6 +39,52 @@ async def test_create_template(client, auth_headers):
     assert resp.json()["meta_template_name"] == "promo_test"
 
 
+async def test_delete_template_removes_it_from_the_list(client, auth_headers):
+    created = await client.post(
+        "/api/v1/marketing/templates",
+        json={
+            "meta_template_name": "promo_to_delete",
+            "body": "Hi {{1}}, your exclusive deal awaits today!",
+            "language": "en",
+            "category": "MARKETING",
+        },
+        headers=auth_headers,
+    )
+    tid = created.json()["id"]
+    before = await client.get("/api/v1/marketing/templates", headers=auth_headers)
+    assert any(t["id"] == tid for t in before.json())
+
+    resp = await client.delete(f"/api/v1/marketing/templates/{tid}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    after = await client.get("/api/v1/marketing/templates", headers=auth_headers)
+    assert all(t["id"] != tid for t in after.json())
+
+
+async def test_list_templates_includes_content_for_preview(client, auth_headers):
+    body = "Hi {{1}}, today's grill mandhi special is ready — order now!"
+    await client.post(
+        "/api/v1/marketing/templates",
+        json={
+            "meta_template_name": "promo_preview_me",
+            "body": body,
+            "footer": "Reply STOP to opt out",
+            "language": "en",
+            "category": "MARKETING",
+        },
+        headers=auth_headers,
+    )
+    resp = await client.get("/api/v1/marketing/templates", headers=auth_headers)
+    row = next(t for t in resp.json() if t["meta_template_name"] == "promo_preview_me")
+    assert row["body"] == body
+    assert row["footer"] == "Reply STOP to opt out"
+
+
+async def test_delete_template_unknown_returns_404(client, auth_headers):
+    resp = await client.delete("/api/v1/marketing/templates/999999", headers=auth_headers)
+    assert resp.status_code == 404
+
+
 async def test_create_template_duplicate_name_auto_suffixes(client, auth_headers):
     """Re-drafting the same offer (same suggested name) must NOT 500 on the unique
     (restaurant, name, language) constraint — the draft name auto-suffixes instead."""

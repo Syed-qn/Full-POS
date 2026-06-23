@@ -15,12 +15,12 @@ function conv(overrides: Partial<ConversationOut> = {}): ConversationOut {
   } as ConversationOut;
 }
 
-describe("ConversationRow bot/human pill", () => {
-  it("shows a Bot pill when the bot is handling the chat", () => {
+describe("ConversationRow AI/human pill", () => {
+  it("shows an AI pill when the AI is handling the chat", () => {
     render(
       <ConversationRow conversation={conv({ manual_takeover: false })} selected={false} onClick={() => {}} />,
     );
-    expect(screen.getByText(/Bot/)).toBeInTheDocument();
+    expect(screen.getByText(/AI/)).toBeInTheDocument();
     expect(screen.queryByText(/Human/)).not.toBeInTheDocument();
   });
 
@@ -29,6 +29,6 @@ describe("ConversationRow bot/human pill", () => {
       <ConversationRow conversation={conv({ manual_takeover: true })} selected={false} onClick={() => {}} />,
     );
     expect(screen.getByText(/Human/)).toBeInTheDocument();
-    expect(screen.queryByText(/Bot/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/AI/)).not.toBeInTheDocument();
   });
 });

@@ -20,6 +20,7 @@ const mockProfile: CustomerProfileOut = {
   total_spend: "99.00",
   first_order_at: "2026-01-01T10:00:00Z",
   last_order_at: "2026-06-10T10:00:00Z",
+  usual_order_time: "Evenings (~8:00 PM)",
   marketing_opted_in: true,
   tags: {},
   addresses: [

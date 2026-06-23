@@ -1,4 +1,5 @@
 # tests/ordering/test_customer_profile.py
+from datetime import datetime
 from decimal import Decimal
 
 from app.ordering.models import Customer, CustomerAddress, Order
@@ -168,6 +169,47 @@ async def test_get_customer_profile(client, db_session, restaurant):
     assert data["addresses"][0]["building"] == "Palm Residences"
     assert "recent_orders" in data
     assert "marketing_opted_in" in data
+
+
+def test_format_usual_order_time_buckets():
+    """Circular mean keeps a tight evening cluster in the Evenings band and
+    averages times straddling midnight to late night, not noon."""
+    from app.ordering.service import _format_usual_order_time
+
+    assert _format_usual_order_time([]) is None
+    # 20:00 + 20:30 Dubai → Evenings, ~8:15 PM
+    evening = _format_usual_order_time([20.0, 20.5])
+    assert evening is not None and evening.startswith("Evenings")
+    # 23:30 and 00:30 must average to ~00:00 (Late night), not 12:00 (noon).
+    wrapped = _format_usual_order_time([23.5, 0.5])
+    assert wrapped is not None and wrapped.startswith("Late night")
+
+
+async def test_profile_reports_usual_order_time(client, db_session, restaurant):
+    """Orders placed around 20:00 Dubai (16:00 UTC) surface as an evening habit."""
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501112222",
+        name="Layla", total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    db_session.add_all([
+        Order(
+            restaurant_id=restaurant.id, customer_id=customer.id,
+            order_number=f"R-T{i}", status="delivered",
+            subtotal=Decimal("20.00"), delivery_fee_aed=Decimal("0.00"),
+            total=Decimal("20.00"), priority="normal", weather_delay_disclosed=False,
+            created_at=datetime(2026, 6, 20 + i, 16, 0),  # naive UTC → 20:00 Dubai
+        )
+        for i in range(2)
+    ])
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/v1/ordering/customers/{customer.id}", headers=_auth(restaurant.id)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["usual_order_time"].startswith("Evenings")
 
 
 async def test_get_customer_profile_wrong_tenant_404(client, db_session, restaurant):

@@ -30,11 +30,11 @@ describe("RiderCard", () => {
     expect(onStatusChange).toHaveBeenCalledWith(3, "deactivated");
   });
 
-  it("shows 24h-shift and lifetime delivery counts", () => {
+  it("shows last-24h and lifetime delivery counts", () => {
     render(<RiderCard rider={rider} onStatusChange={() => {}} onDelete={() => {}} />);
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("152")).toBeInTheDocument();
-    expect(screen.getByText(/8am to 8am/i)).toBeInTheDocument();
+    expect(screen.getByText(/last 24 hrs/i)).toBeInTheDocument();
   });
 
   it("shows 'no location' and hides the map button when never shared", () => {
