@@ -7,6 +7,7 @@ export type Stop = {
   orderNumber: string;
   sequence: number;
   customerName: string | null;
+  customerPhone: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
