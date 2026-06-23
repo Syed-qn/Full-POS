@@ -6,7 +6,11 @@ flag is set and the message still flows through the normal ordering path.
 """
 from sqlalchemy import select
 
-from app.conversation.engine import _mentions_do_not_call, handle_inbound
+from app.conversation.engine import (
+    _mentions_can_call,
+    _mentions_do_not_call,
+    handle_inbound,
+)
 from app.ordering.models import Customer
 from app.whatsapp.port import InboundMessage, MessageType
 
@@ -60,3 +64,26 @@ async def test_ordinary_message_does_not_set_preference(db_session, restaurant):
     cust = await _customer(db_session)
     # Either no customer yet, or one without the flag — but never set to True.
     assert not (cust and (cust.tags or {}).get("do_not_call"))
+
+
+def test_mentions_can_call_positive():
+    for t in ["you can call", "please call me", "calling is fine", "ok to call", "do call"]:
+        assert _mentions_can_call(t), t
+
+
+def test_mentions_can_call_negative():
+    for t in ["don't call", "one biryani", "", None]:
+        assert not _mentions_can_call(t), t
+
+
+async def test_can_call_clears_previous_preference(db_session, restaurant):
+    # First set it…
+    await handle_inbound(db_session, _msg("please don't call", "d3"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert (await _customer(db_session)).tags.get("do_not_call") is True
+    # …then the customer changes their mind.
+    await handle_inbound(db_session, _msg("actually you can call me", "d4"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert (await _customer(db_session)).tags.get("do_not_call") is False

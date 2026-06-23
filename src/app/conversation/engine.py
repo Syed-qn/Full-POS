@@ -167,6 +167,24 @@ def _mentions_do_not_call(text: str | None) -> bool:
     return any(p in t for p in _DO_NOT_CALL_PATTERNS)
 
 
+# Phrases that RE-ENABLE calling — clear a previously-set do_not_call preference.
+_CAN_CALL_PATTERNS = (
+    "you can call", "you may call", "u can call", "can call me", "please call",
+    "pls call", "do call", "feel free to call", "calling is fine", "call is fine",
+    "ok to call", "okay to call", "call me is fine", "you can phone", "call is ok",
+    "calls are fine", "you can ring",
+)
+
+
+def _mentions_can_call(text: str | None) -> bool:
+    """True if the customer said calling is OK (undo a prior 'don't call')."""
+    if not text:
+        return False
+    t = " ".join(text.lower().split())
+    t = t.replace("’", "'")
+    return any(p in t for p in _CAN_CALL_PATTERNS)
+
+
 _CATEGORY_EMOJI: tuple[tuple[tuple[str, ...], str], ...] = (
     (("biryani", "rice", "pulao"), "🍛"),
     (("bread", "naan", "roti", "paratha"), "🍞"),
@@ -3087,17 +3105,26 @@ async def handle_inbound(
     restaurant = await session.get(RestaurantModel, restaurant_id)
 
     # "Don't call me" — capture as a persistent contact preference on the customer so
-    # every rider stop shows a "do not call, message only" flag. Non-intercepting: we
-    # set the flag and let the message continue through the normal flow (it may also
-    # carry an order, e.g. "one biryani, please don't call").
-    if inbound.type == MessageType.TEXT and _mentions_do_not_call(inbound.payload.get("text")):
-        from app.ordering.service import get_or_create_customer
-        _cust = await get_or_create_customer(
-            session, restaurant_id=restaurant_id, phone=inbound.from_phone
-        )
-        if not (_cust.tags or {}).get("do_not_call"):
-            _cust.tags = {**(_cust.tags or {}), "do_not_call": True}
-            _logger.info("customer %s set do_not_call preference", _cust.id)
+    # every rider stop shows a "do not call, message only" flag. Saying calling is OK
+    # again clears it. Non-intercepting: we update the flag and let the message
+    # continue through the normal flow (it may also carry an order, e.g. "one biryani,
+    # please don't call"). "Don't call" wins if a message somehow says both.
+    if inbound.type == MessageType.TEXT:
+        _dnc_text = inbound.payload.get("text")
+        _set_dnc = _mentions_do_not_call(_dnc_text)
+        _clear_dnc = not _set_dnc and _mentions_can_call(_dnc_text)
+        if _set_dnc or _clear_dnc:
+            from app.ordering.service import get_or_create_customer
+            _cust = await get_or_create_customer(
+                session, restaurant_id=restaurant_id, phone=inbound.from_phone
+            )
+            _current = bool((_cust.tags or {}).get("do_not_call"))
+            if _set_dnc and not _current:
+                _cust.tags = {**(_cust.tags or {}), "do_not_call": True}
+                _logger.info("customer %s set do_not_call preference", _cust.id)
+            elif _clear_dnc and _current:
+                _cust.tags = {**(_cust.tags or {}), "do_not_call": False}
+                _logger.info("customer %s cleared do_not_call preference", _cust.id)
 
     # A pure greeting ("hi", "As salam walekum", "hello") means START FRESH — in
     # ANY state, not just on first contact. Drop any stale/abandoned draft so an
