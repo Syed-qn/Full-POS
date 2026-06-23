@@ -22,6 +22,10 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
 ];
 
+// "Max items per order" isn't enforced by the backend yet — hidden until it is.
+// Flip to true to re-expose the control (it's still loaded + saved underneath).
+const SHOW_MAX_ITEMS_PER_ORDER = false;
+
 interface FeeTier {
   max_km: number;
   fee_aed: number;
@@ -78,6 +82,8 @@ export function SettingsScreen() {
 
   // Batching tab
   const [ordersPerBatch, setOrdersPerBatch] = useState(3);
+  // Max items per order — kept wired (loaded + saved) but its UI card is hidden for
+  // now; flip SHOW_MAX_ITEMS_PER_ORDER back on to re-expose it.
   const [itemsPerOrder, setItemsPerOrder] = useState(20);
   const [maxItemQty, setMaxItemQty] = useState(10);
 
@@ -492,21 +498,23 @@ export function SettingsScreen() {
                 another takes 2.
               </span>
             </label>
-            <label className={s.settingCard}>
-              <span className={s.settingIcon}>🧾</span>
-              <span className={s.settingName}>Max items per order</span>
-              <input
-                aria-label="items per order"
-                type="number"
-                min={1}
-                max={100}
-                value={itemsPerOrder}
-                onChange={(e) => setItemsPerOrder(Number(e.target.value))}
-                onFocus={(e) => e.target.select()}
-                className={`${s.input} ${s.settingInput}`}
-              />
-              <span className={s.settingHint}>Upper limit a customer can add to one order.</span>
-            </label>
+            {SHOW_MAX_ITEMS_PER_ORDER && (
+              <label className={s.settingCard}>
+                <span className={s.settingIcon}>🧾</span>
+                <span className={s.settingName}>Max items per order</span>
+                <input
+                  aria-label="items per order"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={itemsPerOrder}
+                  onChange={(e) => setItemsPerOrder(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  className={`${s.input} ${s.settingInput}`}
+                />
+                <span className={s.settingHint}>Upper limit a customer can add to one order.</span>
+              </label>
+            )}
             <label className={`${s.settingCard} ${s.settingCardAccent}`}>
               <span className={s.settingIcon}>🙋</span>
               <span className={s.settingName}>Confirm large quantity above</span>
