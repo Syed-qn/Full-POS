@@ -70,3 +70,36 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect((screen.getByDisplayValue("Test Resto") as HTMLInputElement).value).toBe("Test Resto"));
   });
 });
+
+describe("SettingsScreen — partner API keys", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/api/v1/api-keys")) {
+        if (init?.method === "POST") {
+          return Promise.resolve(new Response(JSON.stringify({
+            id: 1, label: "Acme POS", key_prefix: "rk_live_ab12cd",
+            created_at: "2026-06-24T10:00:00Z", last_used_at: null, revoked_at: null,
+            api_key: "rk_live_ab12cd34ef567890abcdef",
+          }), { status: 201 }));
+        }
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(me), { status: 200 }));
+    }));
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("generates a key and reveals the secret once", async () => {
+    render(<SettingsScreen />);
+    await waitFor(() => screen.getByRole("button", { name: /api keys/i }));
+    await userEvent.click(screen.getByRole("button", { name: /api keys/i }));
+
+    await userEvent.type(screen.getByPlaceholderText(/key name/i), "Acme POS");
+    await userEvent.click(screen.getByRole("button", { name: /generate key/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/rk_live_ab12cd34ef567890abcdef/)).toBeInTheDocument(),
+    );
+  });
+});

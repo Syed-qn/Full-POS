@@ -2,12 +2,18 @@ import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
+import {
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+  type ApiKey,
+} from "../lib/partnerApi";
 import type { RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "hours" | "batching" | "dispatch";
+type Tab = "general" | "fees" | "hours" | "batching" | "dispatch" | "integrations";
 
 const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
   { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
@@ -20,6 +26,8 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Order Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
   { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
+  { key: "integrations", label: "API Keys", icon: "🔑", desc: "Partner access",
+    title: "Partner API Keys", blurb: "Issue keys so a partner system (e.g. a POS) can pull your data read-only." },
 ];
 
 // "Max items per order" isn't enforced by the backend yet — hidden until it is.
@@ -618,8 +626,139 @@ export function SettingsScreen() {
           </div>
         </div>
       )}
+
+          {tab === "integrations" && <ApiKeysSection />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Partner API keys: generate (shown once), list, and revoke. The full secret is
+// returned by the backend only at creation, so we surface it in a one-time
+// reveal box with a copy button and never store/show it again.
+function ApiKeysSection() {
+  const [keys, setKeys] = useState<ApiKey[] | null>(null);
+  const [label, setLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [revealed, setRevealed] = useState<string | null>(null);
+
+  function reload() {
+    listApiKeys().then(setKeys).catch(() => setKeys([]));
+  }
+  useEffect(() => { reload(); }, []);
+
+  async function onCreate() {
+    const name = label.trim();
+    if (!name) {
+      toast("Give the key a name first.", "error");
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await createApiKey(name);
+      setRevealed(created.api_key);
+      setLabel("");
+      reload();
+      toast("Key created. Copy it now — it won't be shown again.", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not create the key.", "error");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function onRevoke(k: ApiKey) {
+    if (!window.confirm(
+      `Revoke "${k.label}" (${k.key_prefix}…)? The partner using it loses access immediately.`,
+    )) {
+      return;
+    }
+    try {
+      await revokeApiKey(k.id);
+      reload();
+      toast("Key revoked.");
+    } catch {
+      toast("Could not revoke the key.", "error");
+    }
+  }
+
+  function copy(text: string) {
+    navigator.clipboard?.writeText(text).then(
+      () => toast("Copied to clipboard."),
+      () => {},
+    );
+  }
+
+  return (
+    <div className={s.section}>
+      <div className={s.apiCreateRow}>
+        <input
+          className={s.input}
+          placeholder="Key name (e.g. Acme POS)"
+          value={label}
+          maxLength={120}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <Button onClick={onCreate} disabled={creating}>
+          {creating ? "Generating…" : "Generate key"}
+        </Button>
+      </div>
+
+      {revealed && (
+        <div className={s.apiReveal} role="alert">
+          <div className={s.apiRevealHead}>
+            <span>🔑 Copy this key now — it won't be shown again.</span>
+            <button type="button" className={s.apiCopyBtn} onClick={() => copy(revealed)}>
+              Copy
+            </button>
+          </div>
+          <code className={s.apiKeyValue}>{revealed}</code>
+          <button type="button" className={s.apiDismiss} onClick={() => setRevealed(null)}>
+            Done
+          </button>
+        </div>
+      )}
+
+      <p className={s.rowHint}>
+        Partners send the header <code>X-API-Key: &lt;key&gt;</code> to pull read-only data
+        from <code>/api/v1/partner/customers</code>, scoped to your restaurant only.
+      </p>
+
+      {keys === null ? (
+        <p className={s.rowHint}>Loading keys…</p>
+      ) : keys.length === 0 ? (
+        <p className={s.rowHint}>No API keys yet. Generate one above to share with your partner.</p>
+      ) : (
+        <table className={s.apiTable}>
+          <thead>
+            <tr>
+              <th>Name</th><th>Key</th><th>Last used</th><th>Status</th><th aria-label="actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map((k) => (
+              <tr key={k.id} className={k.revoked_at ? s.apiRowRevoked : ""}>
+                <td>{k.label}</td>
+                <td><code>{k.key_prefix}…</code></td>
+                <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "—"}</td>
+                <td>
+                  {k.revoked_at
+                    ? <span className={s.apiBadgeRevoked}>Revoked</span>
+                    : <span className={s.apiBadgeActive}>Active</span>}
+                </td>
+                <td>
+                  {!k.revoked_at && (
+                    <button type="button" className={s.apiRevokeBtn} onClick={() => onRevoke(k)}>
+                      Revoke
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

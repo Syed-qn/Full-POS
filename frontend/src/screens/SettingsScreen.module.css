@@ -415,3 +415,101 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* ── Partner API keys ── */
+.apiCreateRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.apiCreateRow .input { flex: 1 1 260px; }
+.apiReveal {
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--accent-primary);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.apiRevealHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.apiKeyValue {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--accent-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.apiCopyBtn,
+.apiDismiss {
+  font-size: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 4px 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.apiCopyBtn:hover,
+.apiDismiss:hover { border-color: var(--accent-primary); }
+.apiDismiss { margin-top: 10px; }
+.apiTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.apiTable th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+}
+.apiTable td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+.apiRowRevoked td { opacity: 0.55; }
+.apiBadgeActive {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sla-safe);
+  border: 1px solid var(--sla-safe);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.apiBadgeRevoked {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.apiRevokeBtn {
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 4px 12px;
+  color: var(--sla-breach);
+  cursor: pointer;
+}
+.apiRevokeBtn:hover { border-color: var(--sla-breach); }
