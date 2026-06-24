@@ -34,3 +34,7 @@ google-services.json
 # Stray root npm artifacts (no root package.json — frontend has its own)
 /node_modules/
 /package-lock.json
+
+# Local demo / test helper scripts (not part of the app)
+scripts/demo_*.py
+frontend/understanding.txt
