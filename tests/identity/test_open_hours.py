@@ -96,5 +96,5 @@ def test_hours_info_recites_configured_schedule():
         "0": ["10:00", "23:00"], "1": ["10:00", "23:00"],
     }}}))
     # Monday window is recited; an unconfigured day reads as closed.
-    assert "Mon 10:00 AM–11:00 PM" in info
+    assert "Mon 10:00 AM to 11:00 PM" in info
     assert "Wed closed" in info

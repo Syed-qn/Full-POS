@@ -309,7 +309,7 @@ async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
             if current_category:
                 lines.append(f"\n{_category_emoji(current_category)} *{current_category}*")
         price = _aed(dish.price_aed)
-        lines.append(f"• {dish.name} — AED {price}")
+        lines.append(f"• {dish.name}: AED {price}")
 
     lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
     return "\n".join(lines)
@@ -590,7 +590,7 @@ async def _handle_collecting_items(
         await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ask-location",
-            body="Great! Please share your delivery location 📍 — tap the button below to send your pin.",
+            body="Great! Please share your delivery location 📍. Tap the button below to send your pin.",
         )
         return
 
@@ -730,7 +730,7 @@ def _hours_info(restaurant) -> str:
     for wd in range(7):
         window = _window_for(open_hours, wd)
         if window:
-            parts.append(f"{labels[wd]} {_fmt_time(window[0])}–{_fmt_time(window[1])}")
+            parts.append(f"{labels[wd]} {_fmt_time(window[0])} to {_fmt_time(window[1])}")
         else:
             parts.append(f"{labels[wd]} closed")
     schedule = "; ".join(parts)
@@ -741,7 +741,7 @@ def _hours_info(restaurant) -> str:
     else:
         nxt = next_opening_label(open_hours, now)
         status = f"currently CLOSED, next opening {nxt}" if nxt else "currently closed"
-    return f"Opening hours — {schedule}. We are {status}."
+    return f"Opening hours: {schedule}. We are {status}."
 
 
 async def _finalize_with_stored_address(
@@ -832,7 +832,7 @@ async def _handle_address_capture(
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ask-location",
-                body="Please share your delivery location 📍 — tap the button below to send your pin.",
+                body="Please share your delivery location 📍. Tap the button below to send your pin.",
             )
             return
 
@@ -992,7 +992,7 @@ async def _send_order_summary(
     ).all()
     item_lines = "\n".join(
         f"  {it.qty}x {it.dish_name}"
-        f"{f' ({it.variant_name})' if it.variant_name else ''} — "
+        f"{f' ({it.variant_name})' if it.variant_name else ''}: "
         f"AED {_aed(it.price_aed * it.qty)}"
         for it in items
     )
@@ -1073,7 +1073,7 @@ async def _handle_order_confirmation(
             body=(
                 f"Order confirmed! Order #{order.order_number}.\n"
                 f"Total: AED {_aed(order.total)} "
-                f"(COD — cash on delivery).\n"
+                f"(COD, cash on delivery).\n"
                 f"Your food will arrive within 40 minutes."
             ),
         )
@@ -1086,7 +1086,7 @@ async def _handle_order_confirmation(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="order-cancelled",
-            body="No problem — your order has been cancelled. Send 'hi' to start again.",
+            body="No problem, your order has been cancelled. Send 'hi' to start again.",
         )
         return
 
@@ -1292,13 +1292,13 @@ async def _send_modify_summary(
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all())
     curr_lines = "\n".join(
-        f"  {it.qty}x {it.dish_name} — "
+        f"  {it.qty}x {it.dish_name}: "
         f"AED {_aed(it.price_aed * it.qty)}"
         for it in current_items
     ) or "  (none)"
 
     prop_lines = "\n".join(
-        f"  {p['qty']}x {p.get('name', '?')} — "
+        f"  {p['qty']}x {p.get('name', '?')}: "
         f"AED {_aed(Decimal(str(p['price_aed'])) * p['qty'])}"
         for p in proposed
     ) or "  (none)"
@@ -1403,7 +1403,7 @@ async def _handle_modify_confirm(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="modify-cancelled",
-            body="Modification cancelled — original order unchanged. Send 'hi' if needed.",
+            body="Modification cancelled. Original order unchanged. Send 'hi' if needed.",
         )
         return
 
@@ -1461,7 +1461,7 @@ async def _handle_restaurant_location_request(
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="rest-loc-note",
-        body=f"📍 Here's *{name}* — tap the pin above for directions. See you soon! 🛵",
+        body=f"📍 Here's *{name}*. Tap the pin above for directions. See you soon! 🛵",
     )
 
 
@@ -1926,7 +1926,7 @@ async def _build_context(
                 select(OrderItem).where(OrderItem.order_id == order.id)
             )).all()
             item_lines = "\n".join(
-                f"  {it.qty}x {it.dish_number}. {it.dish_name} — "
+                f"  {it.qty}x {it.dish_number}. {it.dish_name}: "
                 f"AED {_aed(it.price_aed * it.qty)}"
                 for it in items
             )
@@ -2165,7 +2165,7 @@ async def _offer_size_choice(
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="size-offer",
-        body=f"Sure! What size for {qty_part} — {_variant_options_text(dish)}? 😊",
+        body=f"Sure! What size for {qty_part}: {_variant_options_text(dish)}? 😊",
     )
 
 
@@ -2197,7 +2197,7 @@ async def _handle_size_choice(
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="size-reask",
-                body=f"Sorry, which size — {_variant_options_text(dish)}? 😊",
+                body=f"Sorry, which size: {_variant_options_text(dish)}? 😊",
             )
             return True
         variant = dish.variants[0]  # give up asking → first size, never loop
@@ -2569,7 +2569,7 @@ async def _execute_confirm_order(
         prefix="order-confirmed",
         body=(
             f"Order confirmed! 🎉 Order #{order.order_number}\n"
-            f"Total: AED {_aed(order.total)} (COD — cash on delivery)\n"
+            f"Total: AED {_aed(order.total)} (COD, cash on delivery)\n"
             f"Your food will arrive within ~40 minutes. We'll keep you posted! 🛵"
         ),
     )
@@ -2598,7 +2598,7 @@ async def _execute_cancel_order(
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="order-cancelled",
-        body="No problem — your order has been cancelled. Send 'hi' whenever you're ready to order again 😊",
+        body="No problem, your order has been cancelled. Send 'hi' whenever you're ready to order again 😊",
     )
 
 
@@ -2637,7 +2637,7 @@ async def _escalate_large_qty(
         prefix="qty-anomaly",
         body=(
             f"That's a large quantity ({qty}x {item})! 🤔 I've flagged your order "
-            "for our team to confirm — someone will be with you shortly to finalise it. 😊"
+            "for our team to confirm. Someone will be with you shortly to finalise it. 😊"
         ),
     )
 
@@ -2714,9 +2714,9 @@ async def _dispatch_action(
         )
         cart = await _build_cart_summary(session, conv)
         if outcome == "removed":
-            body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
+            body = f"Done! Removed {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "reduced":
-            body = f"Done — removed {rm_qty}x {dish_name} ✅{_cart_tail(cart)}"
+            body = f"Done! Removed {rm_qty}x {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "not_in_cart":
             body = f"{dish_name} isn't in your cart.{_cart_tail(cart)}"
         else:  # no_match
@@ -2745,11 +2745,11 @@ async def _dispatch_action(
             return
         cart = await _build_cart_summary(session, conv)
         if outcome == "updated":
-            body = f"Updated — {qty}x {dish_name} ✅{_cart_tail(cart)}"
+            body = f"Updated! {qty}x {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "removed":
-            body = f"Done — removed {dish_name} ✅{_cart_tail(cart)}"
+            body = f"Done! Removed {dish_name} ✅{_cart_tail(cart)}"
         elif outcome == "not_in_cart":
-            body = f"{dish_name} isn't in your cart yet — want me to add {qty}? 😊"
+            body = f"{dish_name} isn't in your cart yet. Want me to add {qty}? 😊"
         else:  # no_match
             body = reply or (
                 f"I couldn't find '{dish_query}' in your cart to change. "
@@ -2765,7 +2765,7 @@ async def _dispatch_action(
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ai-empty-cart",
-                body="Your cart is empty — please add at least one dish first! 😊",
+                body="Your cart is empty. Please add at least one dish first! 😊",
             )
             return
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
@@ -2784,7 +2784,7 @@ async def _dispatch_action(
         await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ai-proceed-addr-loc",
-            body="Great! Please share your delivery location 📍 — tap the button below "
+            body="Great! Please share your delivery location 📍. Tap the button below "
                  "to send your pin so the rider reaches you exactly.",
         )
         return
@@ -2795,7 +2795,7 @@ async def _dispatch_action(
         await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="loc-request",
-            body=reply or "Please share your delivery location 📍 — tap the button below to send your pin.",
+            body=reply or "Please share your delivery location 📍. Tap the button below to send your pin.",
         )
         return
 
@@ -2828,7 +2828,7 @@ async def _dispatch_action(
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="need-location-pin",
-                body="Almost there! Please share your delivery location 📍 first — "
+                body="Almost there! Please share your delivery location 📍 first. "
                      "tap the button below to send your pin so the rider can reach you "
                      "exactly. Then I'll take your apartment/building and receiver name.",
             )
@@ -2943,9 +2943,9 @@ async def _handle_location_pin(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="location-confirmed",
         body=(
-            f"Got it — we deliver to your area! 🚚 {fee_line}\n\n"
+            f"Got it! We deliver to your area 🚚 {fee_line}\n\n"
             "To finish, reply with your *apartment/room*, *building*, and "
-            "*receiver name* — e.g. _101, Tower A, Ahmed_"
+            "*receiver name*, e.g. _101, Tower A, Ahmed_"
         ),
     )
 
@@ -3283,7 +3283,7 @@ async def handle_inbound(
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ask-new-address",
-                body="Please share your delivery location 📍 — tap the button below to send your pin.",
+                body="Please share your delivery location 📍. Tap the button below to send your pin.",
             )
             return
         if btn_id == "share_location":

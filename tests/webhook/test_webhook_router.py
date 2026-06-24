@@ -117,7 +117,9 @@ async def test_post_webhook_processes_message_and_queues_outbox(client, db_sessi
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     assert len(rows) == 1
-    assert "110. Chicken Biryani" in rows[0].payload["body"]
+    # Greeting renders the menu without internal dish numbers (not shown to
+    # customers per spec); name + price on one bullet line.
+    assert "Chicken Biryani: AED 22" in rows[0].payload["body"]
 
 
 async def test_post_webhook_duplicate_event_is_ignored(client, db_session):
