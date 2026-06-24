@@ -1,8 +1,27 @@
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
 from pydantic import BaseModel
+
+# Em/en dashes used as clause separators (with optional surrounding spaces). We
+# strip these from customer-facing AI replies because the LLM tends to lean on
+# "—" as a separator. A hyphen between letters (compound words like "long-grain")
+# is intentionally left alone — only standalone dashes are rewritten.
+_SEP_DASH_RE = re.compile(r"\s*[—–]\s*|\s+-\s+")
+
+
+def strip_dashes(text: str) -> str:
+    """Rewrite em/en/standalone-hyphen separators in an AI reply as commas.
+
+    Compound-word hyphens ("long-grain", "extra-tender") have no surrounding
+    spaces, so they are preserved. Collapses any resulting ", ," duplication.
+    """
+    if not text:
+        return text
+    out = _SEP_DASH_RE.sub(", ", text)
+    return re.sub(r",\s*,", ",", out)
 
 
 @dataclass

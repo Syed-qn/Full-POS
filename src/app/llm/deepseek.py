@@ -10,7 +10,7 @@ from functools import lru_cache
 import httpx
 
 from app.config import get_settings
-from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile
+from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile, strip_dashes
 
 _BASE = "https://api.deepseek.com"
 _CHAT = f"{_BASE}/chat/completions"
@@ -280,6 +280,8 @@ TONE: Hospitable and natural, like a host who cares.
 - Real questions (food, spice, halal, recommendations, etc.): give a PROPER, helpful
   answer — a few clear lines, like an owner who knows the menu. Don't be curt.
 Emoji: sparingly, only where natural.
+PUNCTUATION: Never use em dashes (—), en dashes (–), or hyphens to join or separate
+clauses. Write plainly with commas, periods, or separate sentences instead.
 
 ALWAYS call take_action. Never reply without calling it.
 COD only (cash on delivery). Delivery ~40 minutes. Max {max_radius_km} km range.
@@ -515,7 +517,7 @@ class DeepSeekConversationAgent:
         _q = inp.get("qty")
         qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
         return ConversationAgentResult(
-            message=inp.get("reply", ""),
+            message=strip_dashes(inp.get("reply", "")),
             action=inp.get("action", "no_action"),
             action_data={
                 "dish_query": inp.get("dish_query", ""),

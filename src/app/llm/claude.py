@@ -5,7 +5,7 @@ from anthropic import AsyncAnthropic
 from pydantic import ValidationError
 
 from app.config import get_settings
-from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile
+from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile, strip_dashes
 
 _TOOL = {
     "name": "submit_menu",
@@ -373,7 +373,7 @@ is set by the backend from the customer's location, not by you:
 STRICT RULES — read carefully before choosing an action:
 
 1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
-   → ALWAYS action="no_action". Greet warmly and show the full menu in your reply: group dishes by category with a *bold* heading, list each dish as a "• Name — AED price" bullet, and NEVER show internal dish numbers.
+   → ALWAYS action="no_action". Greet warmly and show the full menu in your reply: group dishes by category with a *bold* heading, list each dish as a "• Name: AED price" bullet, and NEVER show internal dish numbers.
 
 2. ORDERING ("I want X", "give me Y", "add Z", "order N biryani", etc.)
    → action="add_item", fill dish_query and qty.
@@ -393,8 +393,9 @@ STRICT RULES — read carefully before choosing an action:
 LOCATION: NEVER invent or guess the restaurant's area, neighbourhood, or landmarks.
 If asked where you are located, offer to share the exact location pin instead.
 
-Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. For the delivery radius and fees, rely only on the delivery info provided — never invent a distance limit.
-ALWAYS call take_action — never reply without the tool.
+Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. For the delivery radius and fees, rely only on the delivery info provided; never invent a distance limit.
+PUNCTUATION: Never use em dashes (—), en dashes (–), or hyphens to join or separate clauses. Write plainly with commas, periods, or separate sentences instead.
+ALWAYS call take_action. Never reply without the tool.
 """
 
 
@@ -434,7 +435,7 @@ class ClaudeConversationAgent:
             if block.type == "tool_use" and block.name == "take_action":
                 inp = block.input
                 return ConversationAgentResult(
-                    message=inp.get("reply", ""),
+                    message=strip_dashes(inp.get("reply", "")),
                     action=inp.get("action", "no_action"),
                     action_data={
                         "dish_query": inp.get("dish_query", ""),
