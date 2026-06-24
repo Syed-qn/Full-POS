@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 
@@ -15,7 +14,7 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.marketing.copywriter import draft_template
-from app.marketing.models import Campaign, Segment, WaTemplate
+from app.marketing.models import Campaign, MarketingMedia, Segment, WaTemplate
 from app.marketing.schemas import (
     BroadcastRequest,
     BroadcastResponse,
@@ -190,10 +189,16 @@ async def draft_wa_template(
 @router.post("/templates/image", response_model=ImageUploadResponse)
 async def upload_template_image(
     file: UploadFile,
+    session: AsyncSession = Depends(get_session),
     restaurant: Restaurant = Depends(current_restaurant),
 ) -> ImageUploadResponse:
     """Store a header image and return a public URL (used as the template's
-    IMAGE header — Meta uploads it on submit, and the dashboard previews it)."""
+    IMAGE header — Meta uploads it on submit, and the dashboard previews it).
+
+    The bytes are persisted in Postgres (``marketing_media``) rather than local
+    disk so the image survives redeploys on ephemeral-disk hosts (Render free
+    tier). The returned ``/media/<path>`` URL is served by the media route which
+    reads the row back."""
     if (file.content_type or "") not in _IMAGE_MIMES:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Header image must be JPG or PNG")
     content = await file.read()
@@ -202,10 +207,15 @@ async def upload_template_image(
     settings = get_settings()
     ext = "png" if (file.content_type == "image/png") else "jpg"
     rel = f"marketing/{restaurant.id}/{uuid.uuid4().hex}.{ext}"
-    dest = os.path.join(settings.upload_dir, rel)
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "wb") as fh:
-        fh.write(content)
+    session.add(
+        MarketingMedia(
+            restaurant_id=restaurant.id,
+            path=rel,
+            content_type=file.content_type or "image/jpeg",
+            data=content,
+        )
+    )
+    await session.commit()
     url = f"{settings.public_base_url.rstrip('/')}/media/{rel}"
     return ImageUploadResponse(url=url)
 

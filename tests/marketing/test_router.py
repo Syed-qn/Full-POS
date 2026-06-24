@@ -144,6 +144,31 @@ async def test_template_image_rejects_non_image(client, auth_headers):
     assert resp.status_code == 422
 
 
+async def test_template_image_persists_in_db_and_serves_via_media(client, auth_headers):
+    """Header image bytes are stored in Postgres and served back via /media, so
+    they survive redeploys instead of vanishing with the ephemeral local disk."""
+    png = b"\x89PNG\r\n\x1a\n" + b"fake-png-payload"
+    up = await client.post(
+        "/api/v1/marketing/templates/image",
+        files={"file": ("promo.png", png, "image/png")},
+        headers=auth_headers,
+    )
+    assert up.status_code == 200
+    url = up.json()["url"]
+    assert "/media/marketing/" in url
+    rel = url.split("/media/", 1)[1]
+    # Served back through the DB-backed media route (public, no auth needed).
+    got = await client.get(f"/media/{rel}")
+    assert got.status_code == 200
+    assert got.headers["content-type"].startswith("image/png")
+    assert got.content == png
+
+
+async def test_media_unknown_path_returns_404(client):
+    resp = await client.get("/media/marketing/1/nope-does-not-exist.png")
+    assert resp.status_code == 404
+
+
 async def test_submit_then_broadcast_flow(client, auth_headers):
     """Create → submit (mock provider approves a compliant template) → broadcast."""
     # A compliant body: greeting + single placeholder + STOP opt-out in footer.

@@ -5,9 +5,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -66,6 +68,28 @@ class WaTemplate(Base, TimestampMixin):
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class MarketingMedia(Base):
+    """Header-image bytes for marketing templates, stored in Postgres so they
+    survive redeploys on ephemeral-disk hosts (Render free tier wipes local
+    disk on every deploy). Keyed by the relative media path so the existing
+    ``/media/<path>`` URL scheme is unchanged. Write-once (no updated_at, so no
+    trigger needed); a re-upload writes a fresh row under a new uuid path.
+    """
+
+    __tablename__ = "marketing_media"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id"), index=True
+    )
+    path: Mapped[str] = mapped_column(String(256), unique=True)
+    content_type: Mapped[str] = mapped_column(String(64))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 

@@ -176,11 +176,12 @@ def create_app() -> FastAPI:
         return Response(content=body, media_type=content_type)
 
     # Serve uploaded media (marketing template header images) so Meta can fetch
-    # the image on submit and the dashboard can preview it. Mounted before the SPA
-    # catch-all so /media/* isn't shadowed.
-    media_dir = Path(settings.upload_dir)
-    media_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
+    # the image on submit and the dashboard can preview it. Backed by Postgres
+    # (marketing_media) so images survive redeploys on ephemeral-disk hosts;
+    # included before the SPA catch-all so /media/* isn't shadowed.
+    from app.marketing.media_router import router as media_router
+
+    app.include_router(media_router)
 
     # Serve the built React dashboard (single-service deploy): the Docker build
     # drops the compiled SPA at /app/static. Absent in local dev — there you run
