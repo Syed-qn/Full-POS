@@ -151,6 +151,12 @@ def create_app() -> FastAPI:
     app.include_router(predictions_router)
     app.include_router(marketing_router)
 
+    # Partner integration: manager-authed key management + API-key-authed pulls.
+    from app.partner.router import keys_router, partner_router
+
+    app.include_router(keys_router)
+    app.include_router(partner_router)
+
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok"}
