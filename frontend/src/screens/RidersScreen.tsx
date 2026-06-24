@@ -72,7 +72,7 @@ export function RidersScreen() {
     <div className={s.root}>
       <PageHeader
         title="Riders"
-        subtitle="Your own delivery fleet — shifts, status & live tracking"
+        subtitle="Your own delivery fleet: shifts, status & live tracking"
         right={<Button onClick={() => setShowAdd(true)}>+ Add Rider</Button>}
       />
 

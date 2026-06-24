@@ -76,9 +76,12 @@ export function OrdersScreen() {
   const [preset, setPreset] = useState<PresetKey>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchOrders().then(setOrders);
+    fetchOrders()
+      .then(setOrders)
+      .finally(() => setLoading(false));
   }, []);
 
   // Live updates: new orders + status/SLA changes appear without a refresh.
@@ -145,7 +148,7 @@ export function OrdersScreen() {
           {o.batch_size && o.batch_size > 1 ? (
             <span
               className={s.batchTag}
-              title={`Going out together on one trip: ${(o.batch_order_numbers ?? []).join(", ")}`}
+              title={`Batched on one rider trip. Prepare these together to protect the shared 40-min SLA: ${(o.batch_order_numbers ?? []).join(", ")}`}
             >
               🔗 {o.batch_size} together
             </span>
@@ -178,7 +181,7 @@ export function OrdersScreen() {
 
   return (
     <div className={s.screen}>
-      <PageHeader title="Orders" subtitle="All delivery orders — live and past" />
+      <PageHeader title="Orders" subtitle="All delivery orders, live and past" />
       <div className={s.filterBar}>
         <div className={s.presets} role="group" aria-label="Date range presets">
           {PRESETS.map((p) => (
@@ -250,6 +253,8 @@ export function OrdersScreen() {
           rowKey={(o) => o.id}
           onRowClick={(o) => setOpenId(o.id)}
           emptyText="No orders match these filters"
+          loading={loading}
+          rowClassName={(o) => (o.batch_size && o.batch_size > 1 ? s.batchRow : undefined)}
         />
       </div>
       {filtered.length > PAGE_SIZE && (

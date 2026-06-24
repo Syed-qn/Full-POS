@@ -32,3 +32,23 @@
   padding: 28px 14px;
   text-align: center;
 }
+/* Shimmer placeholder bar shown in each cell while rows load. */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg-surface-inset);
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: compactTableSkShimmer 1.4s infinite;
+}
+@keyframes compactTableSkShimmer {
+  100% { transform: translateX(100%); }
+}

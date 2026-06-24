@@ -44,10 +44,20 @@ describe("OrdersScreen", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it("shows the loading skeleton before the first fetch resolves", () => {
+    render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
+    // Still loading on first paint → skeleton, not data or the empty state.
+    expect(screen.getByLabelText("Loading rows")).toBeInTheDocument();
+    expect(screen.queryByText("Ali Hassan")).not.toBeInTheDocument();
+    expect(screen.queryByText(/no orders match/i)).not.toBeInTheDocument();
+  });
+
   it("lists orders from fixtures", async () => {
     render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
     expect(screen.getByText("Omar Farouq")).toBeInTheDocument();
+    // Skeleton is gone once data has loaded.
+    expect(screen.queryByLabelText("Loading rows")).not.toBeInTheDocument();
   });
 
   it("opens detail drawer on row click", async () => {

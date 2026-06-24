@@ -331,6 +331,29 @@
   flex-direction: column;
   gap: 8px;
 }
+/* Loading skeleton for the template list (mirrors a .tplRow). */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  height: 14px;
+  border-radius: 6px;
+  background: var(--bg-surface-inset);
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: marketingSkShimmer 1.4s infinite;
+}
+@keyframes marketingSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skName { flex: 1 1 auto; }
+.skBadge { width: 64px; height: 20px; border-radius: 12px; flex-shrink: 0; }
+.skBtn { width: 72px; height: 24px; flex-shrink: 0; }
 .tplRow {
   display: flex;
   align-items: center;

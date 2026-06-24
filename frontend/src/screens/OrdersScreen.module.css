@@ -198,6 +198,18 @@
   flex-wrap: wrap;
 }
 
+/* Batched orders share one rider trip and one 40-min SLA — tint the rows and add
+   a left accent so the kitchen sees they should be prepared together. */
+.batchRow td {
+  background: #eff6ff;
+}
+.batchRow td:first-child {
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+.batchRow:hover td {
+  background: #e0edff;
+}
+
 /* "Matched" badge: these orders go out together on one rider trip. */
 .batchTag {
   display: inline-flex;

@@ -278,7 +278,15 @@ export function MarketingScreen() {
           already messaged twice in 24h, and (per UAE rules) any send outside 9am to 6pm.
         </p>
         {!loaded ? (
-          <div className={s.empty}>Loading…</div>
+          <div className={s.tplList} aria-busy="true" aria-label="Loading templates">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className={s.tplRow}>
+                <span className={`${s.sk} ${s.skName}`} />
+                <span className={`${s.sk} ${s.skBadge}`} />
+                <span className={`${s.sk} ${s.skBtn}`} />
+              </div>
+            ))}
+          </div>
         ) : visibleTemplates.length === 0 ? (
           <div className={s.empty}>No submitted templates yet.</div>
         ) : (

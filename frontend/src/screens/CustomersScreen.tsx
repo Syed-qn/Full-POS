@@ -32,6 +32,7 @@ export function CustomersScreen() {
   const [activity, setActivity] = useState<Activity>("all");
   const [minSpend, setMinSpend] = useState("");
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   usePollingRefresh(() => {
@@ -39,7 +40,9 @@ export function CustomersScreen() {
   });
 
   useEffect(() => {
-    listCustomers().then((r) => setCustomers(r.items));
+    listCustomers()
+      .then((r) => setCustomers(r.items))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = useMemo(() => {
@@ -132,6 +135,7 @@ export function CustomersScreen() {
           rowKey={(c) => c.id}
           onRowClick={(c) => navigate(`/customers/${c.id}`)}
           emptyText="No customers found"
+          loading={loading}
         />
       </div>
       {filtered.length > PAGE_SIZE && (

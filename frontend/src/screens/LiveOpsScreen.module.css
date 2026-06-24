@@ -364,6 +364,14 @@
   flex-direction: column;
   gap: 6px;
 }
+/* Long item lists truncate to one line with an ellipsis (full text on hover). */
+.itemsCell {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .filters {
   display: flex;
   gap: 6px;

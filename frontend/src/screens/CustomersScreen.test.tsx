@@ -27,6 +27,14 @@ describe("CustomersScreen filters", () => {
     vi.mocked(customerApi.listCustomers).mockResolvedValue(LIST);
   });
 
+  it("shows the loading skeleton before the first fetch resolves", () => {
+    renderScreen();
+    // Still loading on first paint → skeleton, not data or the empty state.
+    expect(screen.getByLabelText("Loading rows")).toBeInTheDocument();
+    expect(screen.queryByText("Ali Hassan")).not.toBeInTheDocument();
+    expect(screen.queryByText(/no customers found/i)).not.toBeInTheDocument();
+  });
+
   it("filters by marketing opt-out", async () => {
     renderScreen();
     await waitFor(() => screen.getByText("Ali Hassan"));

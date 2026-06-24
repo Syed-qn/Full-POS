@@ -180,7 +180,15 @@ export function LiveOpsScreen() {
   const orderColumns: Column<OrderOut>[] = [
     { key: "id", header: "#", render: (o) => <span className="mono">#{o.id}</span> },
     { key: "cust", header: "Customer", render: (o) => o.customer_name },
-    { key: "items", header: "Items", render: (o) => o.items.map((i) => `${i.qty}× ${i.name}`).join(", ") },
+    {
+      key: "items",
+      header: "Items",
+      render: (o) => {
+        const text = o.items.map((i) => `${i.qty}× ${i.name}`).join(", ");
+        // Truncate long item lists to one line; full text on hover.
+        return <span className={s.itemsCell} title={text}>{text}</span>;
+      },
+    },
     { key: "total", header: "Total", render: (o) => <span className="mono">AED {o.total_aed}</span> },
     { key: "status", header: "Status", render: (o) => <StatusPill status={o.status} /> },
   ];

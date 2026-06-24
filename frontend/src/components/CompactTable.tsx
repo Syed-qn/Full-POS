@@ -13,13 +13,47 @@ export function CompactTable<T>({
   rowKey,
   onRowClick,
   emptyText = "No rows",
+  loading = false,
+  skeletonRows = 8,
+  rowClassName,
 }: {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
   emptyText?: string;
+  // While true, show shimmer placeholder rows instead of data/empty state.
+  loading?: boolean;
+  skeletonRows?: number;
+  // Optional extra class per row (e.g. to highlight batched orders).
+  rowClassName?: (row: T) => string | undefined;
 }) {
+  if (loading) {
+    return (
+      <table className={s.table} aria-busy="true" aria-label="Loading rows">
+        <thead>
+          <tr>
+            {columns.map((c) => (
+              <th key={c.key} className="label-upper">
+                {c.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: skeletonRows }).map((_, r) => (
+            <tr key={r}>
+              {columns.map((c) => (
+                <td key={c.key}>
+                  <span className={s.sk} style={{ width: `${SK_WIDTHS[r % SK_WIDTHS.length]}%` }} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
   if (rows.length === 0) {
     return <div className={s.empty}>{emptyText}</div>;
   }
@@ -36,7 +70,11 @@ export function CompactTable<T>({
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={rowKey(row)} onClick={() => onRowClick?.(row)} className={onRowClick ? s.clickable : ""}>
+          <tr
+            key={rowKey(row)}
+            onClick={() => onRowClick?.(row)}
+            className={`${onRowClick ? s.clickable : ""} ${rowClassName?.(row) ?? ""}`.trim()}
+          >
             {columns.map((c) => (
               <td key={c.key}>{c.render(row)}</td>
             ))}
@@ -46,3 +84,6 @@ export function CompactTable<T>({
     </table>
   );
 }
+
+// Varied bar widths so skeleton rows look organic rather than a rigid grid.
+const SK_WIDTHS = [70, 45, 85, 55, 60, 40, 75];
