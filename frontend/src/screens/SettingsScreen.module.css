@@ -98,6 +98,31 @@
   display: flex;
   flex-direction: column;
 }
+
+/* ---- Loading skeleton (GET /me) ---- */
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: settingsSkShimmer 1.4s infinite;
+}
+@keyframes settingsSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skLabel { height: 12px; width: 120px; margin-bottom: 9px; }
+.skInput { height: 40px; width: 100%; border-radius: 10px; }
+.skHint { height: 11px; width: 80%; margin-top: 9px; }
+.skBtn { height: 38px; width: 90px; border-radius: 10px; }
+.skCell { height: 13px; border-radius: 5px; }
 .row {
   display: flex;
   align-items: center;

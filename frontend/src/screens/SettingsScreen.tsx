@@ -336,6 +336,10 @@ export function SettingsScreen() {
             <p className={s.secBlurb}>{activeMeta.blurb}</p>
           </header>
 
+          {me === null ? (
+            <SettingsSkeleton />
+          ) : (
+          <>
           {tab === "general" && (
         <div className={s.section}>
           <div className={s.row2}>
@@ -652,7 +656,35 @@ export function SettingsScreen() {
       )}
 
           {tab === "integrations" && <ApiKeysSection />}
+          </>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Skeleton shown while GET /me loads — mirrors a settings form: a couple of
+// labelled fields and a save action, so the panel keeps its shape.
+function SettingsSkeleton() {
+  return (
+    <div className={s.section} aria-busy="true" aria-label="Loading settings">
+      <div className={s.row2}>
+        {[0, 1].map((i) => (
+          <div key={i} className={s.col}>
+            <span className={`${s.sk} ${s.skLabel}`} />
+            <span className={`${s.sk} ${s.skInput}`} />
+            <span className={`${s.sk} ${s.skHint}`} />
+          </div>
+        ))}
+      </div>
+      <div className={s.colField}>
+        <span className={`${s.sk} ${s.skLabel}`} />
+        <span className={`${s.sk} ${s.skInput}`} style={{ maxWidth: 320 }} />
+        <span className={`${s.sk} ${s.skHint}`} />
+      </div>
+      <div className={s.actions}>
+        <span className={`${s.sk} ${s.skBtn}`} />
       </div>
     </div>
   );
@@ -752,7 +784,24 @@ function ApiKeysSection() {
       </p>
 
       {keys === null ? (
-        <p className={s.rowHint}>Loading keys…</p>
+        <table className={s.apiTable} aria-busy="true" aria-label="Loading API keys">
+          <thead>
+            <tr>
+              <th>Name</th><th>Key</th><th>Last used</th><th>Status</th><th aria-label="actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {[0, 1, 2].map((i) => (
+              <tr key={i}>
+                <td><span className={`${s.sk} ${s.skCell}`} style={{ width: 120 }} /></td>
+                <td><span className={`${s.sk} ${s.skCell}`} style={{ width: 100 }} /></td>
+                <td><span className={`${s.sk} ${s.skCell}`} style={{ width: 140 }} /></td>
+                <td><span className={`${s.sk} ${s.skCell}`} style={{ width: 56 }} /></td>
+                <td><span className={`${s.sk} ${s.skCell}`} style={{ width: 56 }} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       ) : keys.length === 0 ? (
         <p className={s.rowHint}>No API keys yet. Generate one above to share with your partner.</p>
       ) : (
