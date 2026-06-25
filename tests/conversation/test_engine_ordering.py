@@ -332,9 +332,9 @@ async def test_returning_customer_offered_stored_address(db_session, restaurant)
     db_session.add(addr)
     await db_session.commit()
 
-    # Real flow: ordering then "done" offers the saved address on entry to
-    # address capture (deterministic _offer_saved_address_if_any) — before any
-    # pin is shared. (Sharing a NEW pin is now honoured as a new address.)
+    # Real flow: ordering then "done" auto-attaches the saved address on entry to
+    # address capture and shows the order summary directly — before any pin is
+    # shared. (Sharing a NEW pin is still honoured as a new address.)
     await handle_inbound(db_session, _msg("hi", "wamid.ret1"), restaurant_id=restaurant.id)
     await db_session.commit()
     await handle_inbound(db_session, _msg("chicken biryani", "wamid.retitem"), restaurant_id=restaurant.id)
@@ -427,10 +427,10 @@ async def _seed_returning_with_saved_address(db_session, restaurant):
     await db_session.commit()
 
 
-async def test_proactive_saved_address_offer_on_checkout(db_session, restaurant):
-    """Returning customer is offered their saved address with Use/New buttons UP
-    FRONT at checkout — before being asked to type (the double-entry fix on the
-    phase-aware engine)."""
+async def test_returning_customer_checkout_goes_straight_to_summary(db_session, restaurant):
+    """Returning customer's saved address is auto-attached at checkout and the order
+    summary is shown directly — no separate 'use saved address?' step. The summary
+    shows the address and offers Confirm / Use new address / Cancel (single-tap repeat)."""
     await _seed_menu(db_session, restaurant.id)
     await _seed_returning_with_saved_address(db_session, restaurant)
 
@@ -444,10 +444,42 @@ async def test_proactive_saved_address_offer_on_checkout(db_session, restaurant)
     )).scalars().all()
     last = rows[-1].payload
     assert last.get("type") == "buttons"
-    assert "Welcome back" in last.get("body", "")
+    # Summary, not the old "Welcome back?" prompt.
+    assert "Welcome back" not in last.get("body", "")
+    assert "Order summary" in last.get("body", "")
+    # Address shown back to the customer in the summary.
     assert "Marina" in last.get("body", "") or "5B" in last.get("body", "")
     btn_ids = {b["id"] for b in last.get("buttons", [])}
-    assert {"use_saved_address", "new_address"} <= btn_ids
+    assert btn_ids == {"confirm_order", "use_new_address", "cancel_order"}
+
+    # The draft order is now in confirmation with the saved address attached.
+    conv = await _conv(db_session)
+    assert conv.state["dialogue_state"] == "order_confirmation"
+
+
+async def test_use_new_address_button_switches_to_location_capture(db_session, restaurant):
+    """'Use new address' on the summary drops the saved address and re-requests a
+    location pin, keeping the cart and not re-offering the saved address."""
+    await _seed_menu(db_session, restaurant.id)
+    await _seed_returning_with_saved_address(db_session, restaurant)
+
+    for m in (_msg("hi", "wamid.un1"), _msg("chicken biryani", "wamid.un2"),
+              _msg("done", "wamid.un3")):
+        await handle_inbound(db_session, m, restaurant_id=restaurant.id)
+        await db_session.commit()
+    await handle_inbound(db_session, _btn("use_new_address", "wamid.un4"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    assert conv.state.get("saved_address_id") is None
+    assert conv.state["dialogue_state"] == "address_capture"
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload.get("body", "")
+    assert "location" in body.lower()
+    assert "Welcome back" not in body
 
 
 async def test_use_saved_button_attaches_address_and_confirms(db_session, restaurant):

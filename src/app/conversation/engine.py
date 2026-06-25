@@ -973,7 +973,9 @@ async def _handle_receiver_details(
     await session.flush()
 
     _set_state(conv, dialogue_state="order_confirmation", pending_order_id=order.id)
-    await _send_order_summary(session, conv, inbound, restaurant_id, order)
+    await _send_order_summary(
+        session, conv, inbound, restaurant_id, order, allow_new_address=True
+    )
 
 
 async def _send_order_summary(
@@ -982,8 +984,15 @@ async def _send_order_summary(
     inbound: InboundMessage,
     restaurant_id: int,
     order,
+    *,
+    allow_new_address: bool = False,
 ) -> None:
-    """Render order summary with totals + ETA and confirm/cancel buttons."""
+    """Render order summary with totals + ETA and confirm/cancel buttons.
+
+    When ``allow_new_address`` is True (returning customer whose saved address was
+    auto-attached), a "Use new address" button is added so they can switch the
+    drop-off without us having to ask "use saved address?" as a separate step.
+    """
     from app.ordering.models import CustomerAddress, OrderItem
     from app.weather.factory import get_weather_port
 
@@ -1030,13 +1039,15 @@ async def _send_order_summary(
         f"ETA: 40 minutes{weather_note}\n\n"
         f"Confirm your order?"
     )
+    buttons = [{"id": "confirm_order", "title": "Confirm order"}]
+    if allow_new_address:
+        # WhatsApp caps interactive replies at 3 buttons; this keeps us at exactly 3.
+        buttons.append({"id": "use_new_address", "title": "Use new address"})
+    buttons.append({"id": "cancel_order", "title": "Cancel"})
     await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="order-summary", body=summary,
-        buttons=[
-            {"id": "confirm_order", "title": "Confirm order"},
-            {"id": "cancel_order", "title": "Cancel"},
-        ],
+        buttons=buttons,
     )
 
 
@@ -2459,52 +2470,6 @@ async def _resolve_saved_address_id(
     return addr.id if addr else None
 
 
-async def _offer_saved_address_if_any(
-    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
-) -> bool:
-    """Returning customer → offer the saved address UP FRONT with Use/New buttons,
-    deterministically (the rule engine decides, the AI just talks). Returns True if
-    an offer was sent.
-
-    Offering before they type avoids the "type address → get offered saved → retype"
-    double entry. Sets address_offer_made so it's shown once and the AI won't
-    re-offer (saved_address is dropped from its context afterwards).
-    """
-    from app.ordering.models import Customer, CustomerAddress
-
-    customer = await session.scalar(
-        select(Customer).where(
-            Customer.restaurant_id == restaurant_id,
-            Customer.phone == conv.phone,
-        )
-    )
-    if customer is None:
-        return False
-    addr = await session.scalar(
-        select(CustomerAddress)
-        .where(CustomerAddress.customer_id == customer.id)
-        .order_by(CustomerAddress.last_used_at.desc())
-        .limit(1)
-    )
-    if addr is None:
-        return False
-
-    label = ", ".join(
-        p for p in (addr.room_apartment, addr.building) if p
-    ) or "your saved address"
-    _set_state(conv, address_offer_made=True, saved_address_id=addr.id)
-    await _send_buttons(
-        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix="offer-saved-addr",
-        body=f"Welcome back! Deliver to your saved address ({label})?",
-        buttons=[
-            {"id": "use_saved_address", "title": "Use saved address"},
-            {"id": "new_address", "title": "New address"},
-        ],
-    )
-    return True
-
-
 async def _attach_saved_address_to_order(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, address_id: int, restaurant,
@@ -2543,7 +2508,9 @@ async def _attach_saved_address_to_order(
     await session.flush()
     _set_state(conv, dialogue_phase="awaiting_confirmation",
                dialogue_state="order_confirmation", pending_order_id=order.id)
-    await _send_order_summary(session, conv, inbound, restaurant_id, order)
+    await _send_order_summary(
+        session, conv, inbound, restaurant_id, order, allow_new_address=True
+    )
 
 
 async def _execute_confirm_order(
@@ -2769,11 +2736,19 @@ async def _dispatch_action(
             )
             return
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
-        # Returning customer → offer their saved address up front (one tap to reuse,
-        # or "New address" to enter once). Prevents the type-then-offered-then-retype
-        # double entry. New customers fall through to the location-pin ask below.
+        # Returning customer → auto-attach their saved address and jump straight to the
+        # order summary (which shows the address) with a "Use new address" button. This
+        # removes the separate "Deliver to your saved address?" step: confirming a repeat
+        # order is now a single tap. New customers fall through to the location-pin ask.
         if not conv.state.get("address_offer_made"):
-            if await _offer_saved_address_if_any(session, conv, inbound, restaurant_id):
+            saved_id = await _resolve_saved_address_id(
+                session, restaurant_id, inbound.from_phone
+            )
+            if saved_id:
+                _set_state(conv, address_offer_made=True, saved_address_id=saved_id)
+                await _attach_saved_address_to_order(
+                    session, conv, inbound, restaurant_id, saved_id, restaurant
+                )
                 return
         # New customer, no saved address: DETERMINISTICALLY request the WhatsApp
         # location pin. We do NOT forward the LLM's reply here — the model tends to
@@ -3284,6 +3259,20 @@ async def handle_inbound(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="ask-new-address",
                 body="Please share your delivery location 📍. Tap the button below to send your pin.",
+            )
+            return
+        if btn_id == "use_new_address":
+            # "Use new address" on the order summary → drop the auto-attached saved
+            # address and capture a fresh one. The cart (draft order) is preserved;
+            # only the delivery location changes, so we re-request the location pin.
+            _set_state(conv, address_offer_made=True, saved_address_id=None,
+                       pending_address_id=None,
+                       dialogue_phase="address_capture", dialogue_state="address_capture")
+            await _send_location_request(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="use-new-address",
+                body="No problem! Please share your new delivery location 📍. "
+                     "Tap the button below to send your pin.",
             )
             return
         if btn_id == "share_location":
