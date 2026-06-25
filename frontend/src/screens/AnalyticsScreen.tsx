@@ -112,6 +112,43 @@ export function AnalyticsScreen() {
       <PageHeader title="Reports" subtitle="Performance and delivery insights" />
       {error != null && <SectionBanner tone="warning">Could not load data — retrying…</SectionBanner>}
 
+      {/* ── Marketing / campaigns ─── */}
+      <div className={s.card}>
+        <div className={s.cardHead}>
+          <span className={s.cardTitle}>Marketing Messages</span>
+          <span className={s.cardSub}>How well your promotions are working</span>
+        </div>
+
+        {campaigns === null ? (
+          <CampaignSkeleton />
+        ) : !campaignStats ? (
+          <div className={s.empty}>
+            <div className={s.emptyIcon}>📣</div>
+            <div className={s.emptyTitle}>No campaigns yet</div>
+            <div className={s.emptyDesc}>Send your first promotion to customers from the Marketing section.</div>
+          </div>
+        ) : (
+          <div className={s.statRow}>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{campaignStats.total}</div>
+              <div className={s.statLabel}>Campaigns sent</div>
+            </div>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{campaignStats.sent}</div>
+              <div className={s.statLabel}>Messages delivered</div>
+            </div>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{campaignStats.converted}</div>
+              <div className={s.statLabel}>Orders from campaigns</div>
+            </div>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{campaignStats.rate}%</div>
+              <div className={s.statLabel}>Success rate</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── Today's demand forecast ─── */}
       <div className={s.card}>
         <div className={s.cardHead}>
@@ -150,43 +187,6 @@ export function AnalyticsScreen() {
               </BarChart>
             </ResponsiveContainer>
           </>
-        )}
-      </div>
-
-      {/* ── Marketing / campaigns ─── */}
-      <div className={s.card}>
-        <div className={s.cardHead}>
-          <span className={s.cardTitle}>Marketing Messages</span>
-          <span className={s.cardSub}>How well your promotions are working</span>
-        </div>
-
-        {campaigns === null ? (
-          <CampaignSkeleton />
-        ) : !campaignStats ? (
-          <div className={s.empty}>
-            <div className={s.emptyIcon}>📣</div>
-            <div className={s.emptyTitle}>No campaigns yet</div>
-            <div className={s.emptyDesc}>Send your first promotion to customers from the Marketing section.</div>
-          </div>
-        ) : (
-          <div className={s.statRow}>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.total}</div>
-              <div className={s.statLabel}>Campaigns sent</div>
-            </div>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.sent}</div>
-              <div className={s.statLabel}>Messages delivered</div>
-            </div>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.converted}</div>
-              <div className={s.statLabel}>Orders from campaigns</div>
-            </div>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.rate}%</div>
-              <div className={s.statLabel}>Success rate</div>
-            </div>
-          </div>
         )}
       </div>
     </div>

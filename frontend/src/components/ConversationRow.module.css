@@ -6,7 +6,7 @@
   flex-direction: column;
   gap: 4px;
 }
-.row:hover {
+.row:not(.selected):hover {
   background: var(--bg-surface-raised);
 }
 .selected {
@@ -36,10 +36,23 @@
   padding: 2px 7px;
   border-radius: 10px;
   white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.12s, opacity 0.12s;
+}
+.pill:hover {
+  filter: brightness(0.95);
+  opacity: 0.9;
 }
 .pillBot {
   background: var(--bg-surface-inset);
   color: var(--text-muted);
+}
+/* On a selected row the grey AI pill clashes with the accent highlight, so it
+   adopts the accent colour to match the active background. */
+.selected .pillBot {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
 }
 .pillHuman {
   background: var(--sla-warn);

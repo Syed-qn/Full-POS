@@ -26,7 +26,7 @@ describe("ConversationsScreen", () => {
     await waitFor(() => screen.getByText("+971501234567"));
     await userEvent.click(screen.getByText("+971501234567"));
     await waitFor(() => expect(screen.getByText("I want to order biryani")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /take over/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /switch to human reply/i })).toBeInTheDocument();
   });
 
   it("separates customer and driver conversations into tabs", async () => {
@@ -45,7 +45,7 @@ describe("ConversationsScreen", () => {
     render(<ConversationsScreen />);
     await waitFor(() => screen.getByText("+971501234567"));
     await userEvent.click(screen.getByText("+971501234567"));
-    await userEvent.click(screen.getByRole("button", { name: /take over/i }));
+    await userEvent.click(screen.getByRole("button", { name: /switch to human reply/i }));
     await waitFor(() => expect(screen.getByText(/you are controlling this conversation/i)).toBeInTheDocument());
   });
 });

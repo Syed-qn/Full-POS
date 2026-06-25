@@ -6,6 +6,7 @@ import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { CustomerDetailOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import s from "./OrdersScreen.module.css";
+import f from "./CustomersScreen.module.css";
 
 const PAGE_SIZE = 20;
 
@@ -78,57 +79,74 @@ export function CustomersScreen() {
   return (
     <div className={s.screen}>
       <PageHeader title="Customers" subtitle="Your customer directory" />
-      <div className={s.filterBar}>
-        <div className={s.filterGroup}>
-          <span className={s.filterLabel}>Marketing</span>
-          <div className={s.presets} role="group" aria-label="Marketing filter">
-            {MARKETING_TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                className={`${s.chip} ${marketing === t.key ? s.chipActive : ""}`}
-                aria-pressed={marketing === t.key}
-                onClick={() => setMarketing(t.key)}
-              >
-                {t.label}
-              </button>
-            ))}
+      <div className={f.filterBar}>
+        <div className={f.topRow}>
+          <div className={`${f.filterGroup} ${f.grow}`}>
+            <span className={f.filterLabel}>Search</span>
+            <div className={f.searchWrap}>
+              <span className={f.searchIcon} aria-hidden="true">🔍</span>
+              <input
+                className={f.search}
+                placeholder="Search name or phone"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className={f.filterGroup}>
+            <span className={f.filterLabel}>Min spend (AED)</span>
+            <input
+              className={f.minSpend}
+              type="number"
+              min="0"
+              inputMode="decimal"
+              aria-label="Minimum spend in AED"
+              placeholder="0"
+              value={minSpend}
+              onChange={(e) => setMinSpend(e.target.value)}
+            />
           </div>
         </div>
-        <div className={s.filterGroup}>
-          <span className={s.filterLabel}>Orders</span>
-          <div className={s.presets} role="group" aria-label="Order activity filter">
-            {ACTIVITY_TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                className={`${s.chip} ${activity === t.key ? s.chipActive : ""}`}
-                aria-pressed={activity === t.key}
-                onClick={() => setActivity(t.key)}
-              >
-                {t.label}
-              </button>
-            ))}
+        <div className={f.groups}>
+          <div className={f.filterGroup}>
+            <span className={f.filterLabel}>Marketing</span>
+            <div className={f.segment} role="group" aria-label="Marketing filter">
+              {MARKETING_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={`${f.chip} ${marketing === t.key ? f.chipActive : ""}`}
+                  aria-pressed={marketing === t.key}
+                  onClick={() => setMarketing(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={f.filterGroup}>
+            <span className={f.filterLabel}>Orders</span>
+            <div className={f.segment} role="group" aria-label="Order activity filter">
+              {ACTIVITY_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={`${f.chip} ${activity === t.key ? f.chipActive : ""}`}
+                  aria-pressed={activity === t.key}
+                  onClick={() => setActivity(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <input
-          className={s.minSpend}
-          type="number"
-          min="0"
-          inputMode="decimal"
-          aria-label="Minimum spend in AED"
-          placeholder="Min spend (AED)"
-          value={minSpend}
-          onChange={(e) => setMinSpend(e.target.value)}
-        />
-        <input
-          className={s.search}
-          placeholder="Search name / phone"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
       </div>
       <div className={s.tableCard}>
+        <div className={s.tableHead}>
+          <span className={s.tableTitle}>Customer list</span>
+          <span className={s.tableCount}>{filtered.length} {filtered.length === 1 ? "customer" : "customers"}</span>
+        </div>
         <CompactTable<CustomerDetailOut>
           columns={columns}
           rows={pageRows}

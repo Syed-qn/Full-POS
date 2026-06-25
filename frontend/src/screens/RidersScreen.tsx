@@ -5,7 +5,7 @@ import { AppInviteModal } from "../components/AppInviteModal";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
 import { apiClient } from "../lib/apiClient";
-import { deleteRider, fetchRiderAppInfo, fetchRiders, setRiderStatus } from "../lib/ridersApi";
+import { deleteRider, fetchRiders, setRiderStatus } from "../lib/ridersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { RestaurantOut, RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
@@ -16,16 +16,12 @@ export function RidersScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<RiderOut | null>(null);
   const [inviteFor, setInviteFor] = useState<RiderOut | null>(null);
-  const [apkUrl, setApkUrl] = useState<string | null>(null);
   const [restaurantPhone, setRestaurantPhone] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRiders()
       .then(setRiders)
       .finally(() => setLoaded(true));
-    fetchRiderAppInfo()
-      .then((info) => setApkUrl(info.apkUrl))
-      .catch(() => {});
     apiClient
       .get<RestaurantOut>("/api/v1/me")
       .then((me) => setRestaurantPhone(me.phone))
@@ -75,22 +71,6 @@ export function RidersScreen() {
         subtitle="Your own delivery fleet: shifts, status & live tracking"
         right={<Button onClick={() => setShowAdd(true)}>+ Add Rider</Button>}
       />
-
-      <div className={s.appBanner}>
-        <span className={s.appBannerIcon}>📱</span>
-        <div className={s.appBannerText}>
-          <strong>Rider Tracker app</strong> — riders install it once to share
-          live location automatically (even with the screen off). Use{" "}
-          <em>Send app link</em> on a rider to text them a pairing code.
-        </div>
-        {apkUrl ? (
-          <a className={s.appBannerLink} href={apkUrl} target="_blank" rel="noreferrer">
-            Download APK
-          </a>
-        ) : (
-          <span className={s.appBannerMuted}>APK link not set up yet</span>
-        )}
-      </div>
 
       {riders.length > 0 && (
         <div className={s.stats}>

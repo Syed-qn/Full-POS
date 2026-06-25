@@ -268,41 +268,50 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           </div>
 
           <div className={s.filterBar}>
-            <input
-              className={s.search}
-              placeholder="Search dish name or #number"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className={s.segment}>
-              {(["all", "available", "hidden"] as const).map((a) => (
-                <button
-                  key={a}
-                  className={`${s.segBtn} ${availFilter === a ? s.segBtnActive : ""}`}
-                  onClick={() => setAvailFilter(a)}
-                >
-                  {a === "all" ? "All" : a === "available" ? "Available" : "Unavailable"}
-                </button>
-              ))}
+            <div className={`${s.filterGroup} ${s.grow}`}>
+              <span className={s.filterLabel}>Search</span>
+              <input
+                className={s.search}
+                placeholder="Search dish name or #number"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className={`${s.filterGroup} ${s.pushRight}`}>
+              <span className={s.filterLabel}>Availability</span>
+              <div className={s.segment}>
+                {(["all", "available", "hidden"] as const).map((a) => (
+                  <button
+                    key={a}
+                    className={`${s.segBtn} ${availFilter === a ? s.segBtnActive : ""}`}
+                    onClick={() => setAvailFilter(a)}
+                  >
+                    {a === "all" ? "All" : a === "available" ? "Available" : "Unavailable"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className={s.chips}>
-            <button
-              className={`${s.chip} ${catFilter === "all" ? s.chipActive : ""}`}
-              onClick={() => setCatFilter("all")}
-            >
-              All
-            </button>
-            {allCategories.map((c) => (
+          <div className={s.filterGroup}>
+            <span className={s.filterLabel}>Category</span>
+            <div className={s.chips}>
               <button
-                key={c}
-                className={`${s.chip} ${catFilter === c ? s.chipActive : ""}`}
-                onClick={() => setCatFilter(c)}
+                className={`${s.chip} ${catFilter === "all" ? s.chipActive : ""}`}
+                onClick={() => setCatFilter("all")}
               >
-                {c}
+                All
               </button>
-            ))}
+              {allCategories.map((c) => (
+                <button
+                  key={c}
+                  className={`${s.chip} ${catFilter === c ? s.chipActive : ""}`}
+                  onClick={() => setCatFilter(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
 
           {canReorder && grouped.length > 0 && (
@@ -367,8 +376,22 @@ function MenuSkeleton() {
         ))}
       </div>
       <div className={s.filterBar}>
-        <span className={`${s.sk} ${s.skSearch}`} />
-        <span className={`${s.sk} ${s.skSegment}`} />
+        <div className={`${s.filterGroup} ${s.grow}`}>
+          <span className={`${s.sk} ${s.skLabel}`} />
+          <span className={`${s.sk} ${s.skSearch}`} />
+        </div>
+        <div className={`${s.filterGroup} ${s.pushRight}`}>
+          <span className={`${s.sk} ${s.skLabel}`} />
+          <span className={`${s.sk} ${s.skSegment}`} />
+        </div>
+      </div>
+      <div className={s.filterGroup}>
+        <span className={`${s.sk} ${s.skLabel}`} />
+        <div className={s.chips}>
+          {[44, 68, 56, 80, 50, 64].map((w, i) => (
+            <span key={i} className={`${s.sk} ${s.skChip}`} style={{ width: w }} />
+          ))}
+        </div>
       </div>
       {Array.from({ length: 2 }).map((_, c) => (
         <section key={c} className={s.catSection}>

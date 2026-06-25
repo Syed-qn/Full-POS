@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { CompactTable, type Column } from "../components/CompactTable";
 import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
 import { PrepCountdown } from "../components/PrepCountdown";
@@ -103,6 +103,17 @@ export function OrdersScreen() {
     setPreset("custom");
   }
 
+  // Open the native date picker on a click anywhere in the field (not just the
+  // tiny calendar glyph). showPicker() is a no-op/throws on older browsers, so
+  // guard it — they keep the default click-the-icon behaviour.
+  function openPicker(e: MouseEvent<HTMLInputElement>) {
+    try {
+      e.currentTarget.showPicker?.();
+    } catch {
+      /* not supported / blocked — fall back to native behaviour */
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().replace(/^#/, "").toLowerCase();
     let base = [...orders].sort((a, b) => b.id - a.id); // newest first
@@ -183,70 +194,94 @@ export function OrdersScreen() {
     <div className={s.screen}>
       <PageHeader title="Orders" subtitle="All delivery orders, live and past" />
       <div className={s.filterBar}>
-        <div className={s.presets} role="group" aria-label="Date range presets">
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              className={`${s.chip} ${preset === p.key ? s.chipActive : ""}`}
-              aria-pressed={preset === p.key}
-              onClick={() => applyPreset(p.key)}
+        <div className={s.topRow}>
+          <div className={`${s.filterGroup} ${s.grow}`}>
+            <span className={s.filterLabel}>Search</span>
+            <div className={s.searchWrap}>
+              <span className={s.searchIcon} aria-hidden="true">🔍</span>
+              <input
+                className={s.search}
+                placeholder="Search #ID, name or phone"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className={s.filterGroup}>
+            <span className={s.filterLabel}>Status</span>
+            <select
+              className={s.statusSelect}
+              aria-label="Filter by status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "all" | OrderStatus)}
             >
-              {p.label}
-            </button>
-          ))}
+              <option value="all">All statuses</option>
+              {STATUS_OPTIONS.map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABELS[st] ?? st}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className={s.dateGroup}>
-          <input
-            type="date"
-            aria-label="From date"
-            className={s.date}
-            value={fromDate}
-            max={toDate || undefined}
-            onChange={(e) => setBound("from", e.target.value)}
-          />
-          <span className={s.arrow} aria-hidden="true">→</span>
-          <input
-            type="date"
-            aria-label="To date"
-            className={s.date}
-            value={toDate}
-            min={fromDate || undefined}
-            onChange={(e) => setBound("to", e.target.value)}
-          />
-          {(fromDate || toDate) && (
-            <button
-              type="button"
-              className={s.clearBtn}
-              aria-label="Clear dates"
-              title="Clear dates"
-              onClick={() => applyPreset("all")}
-            >
-              ✕
-            </button>
-          )}
+        <div className={s.groups}>
+          <div className={s.filterGroup}>
+            <span className={s.filterLabel}>Date range</span>
+            <div className={s.dateRow}>
+              <div className={s.presets} role="group" aria-label="Date range presets">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className={`${s.chip} ${preset === p.key ? s.chipActive : ""}`}
+                    aria-pressed={preset === p.key}
+                    onClick={() => applyPreset(p.key)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <div className={s.dateGroup}>
+                <input
+                  type="date"
+                  aria-label="From date"
+                  className={s.date}
+                  value={fromDate}
+                  max={toDate || undefined}
+                  onClick={openPicker}
+                  onChange={(e) => setBound("from", e.target.value)}
+                />
+                <span className={s.arrow} aria-hidden="true">→</span>
+                <input
+                  type="date"
+                  aria-label="To date"
+                  className={s.date}
+                  value={toDate}
+                  min={fromDate || undefined}
+                  onClick={openPicker}
+                  onChange={(e) => setBound("to", e.target.value)}
+                />
+                {(fromDate || toDate) && (
+                  <button
+                    type="button"
+                    className={s.clearBtn}
+                    aria-label="Clear dates"
+                    title="Clear dates"
+                    onClick={() => applyPreset("all")}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-        <select
-          className={s.statusSelect}
-          aria-label="Filter by status"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as "all" | OrderStatus)}
-        >
-          <option value="all">All statuses</option>
-          {STATUS_OPTIONS.map((st) => (
-            <option key={st} value={st}>
-              {STATUS_LABELS[st] ?? st}
-            </option>
-          ))}
-        </select>
-        <input
-          className={s.search}
-          placeholder="Search #ID / name / phone"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
       </div>
       <div className={s.tableCard}>
+        <div className={s.tableHead}>
+          <span className={s.tableTitle}>Order list</span>
+          <span className={s.tableCount}>{filtered.length} {filtered.length === 1 ? "order" : "orders"}</span>
+        </div>
         <CompactTable<OrderOut>
           columns={columns}
           rows={pageRows}

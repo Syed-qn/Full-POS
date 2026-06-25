@@ -85,7 +85,7 @@ export function MarketingScreen() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // Top tab: WhatsApp broadcast vs the one-day promotion (Today's Special) view.
-  const [tab, setTab] = useState<"whatsapp" | "promotion">("whatsapp");
+  const [tab, setTab] = useState<"whatsapp" | "promotion" | "automation">("whatsapp");
 
   // Audience — named RFM buckets with live counts; "all" targets everyone.
   const [audience, setAudience] = useState<AudienceSegment[]>([]);
@@ -358,6 +358,14 @@ export function MarketingScreen() {
             onClick={() => setTab("promotion")}
           >
             Today's Special
+          </button>
+          <button
+            type="button"
+            className={`${s.tab} ${tab === "automation" ? s.tabActive : ""}`}
+            onClick={() => setTab("automation")}
+          >
+            Automation
+            <span className={s.tabSoon}>Soon</span>
           </button>
         </div>
       </div>
@@ -735,6 +743,18 @@ export function MarketingScreen() {
                   : `💾 Save automation · ${special.enabled ? "On" : "Off"}`}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* AUTOMATION TAB — coming soon */}
+      {tab === "automation" && (
+        <div className={s.comingSoon}>
+          <div className={s.comingSoonTitle}>Automation is coming soon</div>
+          <p className={s.comingSoonText}>
+            Set up hands off campaigns that trigger on customer behaviour, win back
+            messages for lapsed customers, a welcome offer after the first order,
+            and reorder reminders. We're building it now.
+          </p>
         </div>
       )}
 

@@ -35,7 +35,7 @@ async function searchPlaces(q: string): Promise<Place[]> {
   return data.map((x) => ({ lat: parseFloat(x.lat), lng: parseFloat(x.lon), label: x.display_name }));
 }
 
-async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   const r = await fetch(
     `${NOMINATIM}/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
     { headers: { Accept: "application/json" } },

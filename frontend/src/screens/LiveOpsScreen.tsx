@@ -201,7 +201,7 @@ export function LiveOpsScreen() {
       <header className={s.pageHeader}>
         <div>
           <h1 className={s.h1}>Live Operations</h1>
-          <p className={s.sub}>Real-time order &amp; delivery command center</p>
+          <p className={s.sub}>Real time order &amp; delivery command center</p>
         </div>
         <div className={s.headerRight}>
           <span className={s.livePill}><span className={s.liveDot} />LIVE</span>

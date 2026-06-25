@@ -61,7 +61,66 @@
 }
 .tabActive,
 .tabActive:hover {
-  background: #25d366;
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+}
+/* "Soon" chip inside the Automation tab. */
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.tabSoon {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sla-warn);
+  color: #fff;
+}
+.tabActive .tabSoon {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Automation "coming soon" panel. */
+.comingSoon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 64px 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+}
+.comingSoonIcon {
+  font-size: 44px;
+  line-height: 1;
+}
+.comingSoonTitle {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.comingSoonText {
+  max-width: 460px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.comingSoonBadge {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--sla-warn);
   color: #fff;
 }
 
@@ -97,7 +156,7 @@
   transition: transform 0.18s ease;
 }
 .switch input:checked + .switchTrack {
-  background: #25d366;
+  background: var(--accent-primary);
 }
 .switch input:checked + .switchTrack .switchThumb {
   transform: translateX(20px);
@@ -229,8 +288,8 @@
   gap: 10px;
 }
 .pillActive {
-  background: #25d366;
-  border-color: #25d366;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
   color: #fff;
 }
 .pillName {
@@ -337,7 +396,7 @@
   padding: 15px 20px;
   border: none;
   border-radius: 12px;
-  background: #25d366;
+  background: var(--accent-primary);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
@@ -346,12 +405,12 @@
   transition: background 0.15s, opacity 0.15s;
 }
 .sendBar:hover:not(:disabled) {
-  background: #1fbe5b;
+  background: color-mix(in srgb, var(--accent-primary) 85%, #000);
 }
 .sendBar:disabled {
-  /* Faded green (not the near-white inset) so it stays recognisable as the
+  /* Faded accent (not the near-white inset) so it stays recognisable as the
      Send button and doesn't blend into the page background. */
-  background: #25d366;
+  background: var(--accent-primary);
   color: #ffffff;
   opacity: 0.45;
   cursor: not-allowed;
@@ -475,7 +534,7 @@
 .sendBtn {
   flex-shrink: 0;
   white-space: nowrap;
-  background: #25d366;
+  background: var(--accent-primary);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -637,6 +696,8 @@
 }
 .bubble {
   max-width: 320px;
+  /* WhatsApp-green tint: this is a faithful preview of the sent message as it
+     appears in WhatsApp, so it keeps the green even though the app theme is charcoal. */
   background: color-mix(in srgb, #25d366 16%, var(--bg-surface));
   border: 1px solid color-mix(in srgb, #25d366 30%, var(--border-subtle));
   border-radius: 10px 10px 10px 2px;

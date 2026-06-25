@@ -10,7 +10,8 @@ import {
 } from "../lib/partnerApi";
 import type { RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
-import { LocationPicker } from "../components/LocationPicker";
+import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
 
 type Tab = "general" | "fees" | "hours" | "batching" | "dispatch" | "integrations";
@@ -23,7 +24,7 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
   { key: "hours", label: "Opening Hours", icon: "🕒", desc: "When you're open",
     title: "Opening Hours", blurb: "Hours the bot tells customers. Times are Asia/Dubai." },
   { key: "batching", label: "Batching", icon: "📦", desc: "Order grouping",
-    title: "Order Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
+    title: "Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
   { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
   { key: "integrations", label: "API Keys", icon: "🔑", desc: "Partner access",
@@ -87,6 +88,8 @@ export function SettingsScreen() {
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [mapOpen, setMapOpen] = useState(false);
+  const [locAddress, setLocAddress] = useState<string | null>(null);
 
   // Batching tab
   const [ordersPerBatch, setOrdersPerBatch] = useState(3);
@@ -110,6 +113,22 @@ export function SettingsScreen() {
   // Hours tab
   const [noFixedHours, setNoFixedHours] = useState(true);
   const [hours, setHours] = useState<DayHours[]>(defaultHours);
+
+  // Reverse-geocode the saved coordinates so the summary shows a real address.
+  useEffect(() => {
+    const la = Number(lat), ln = Number(lng);
+    if (!Number.isFinite(la) || !Number.isFinite(ln) || (la === 0 && ln === 0) || lat === "" || lng === "") {
+      setLocAddress(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      reverseGeocode(la, ln)
+        .then((a) => { if (!cancelled) setLocAddress(a); })
+        .catch(() => { if (!cancelled) setLocAddress(null); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [lat, lng]);
 
   useEffect(() => {
     apiClient.get<RestaurantOut>("/api/v1/me").then((r) => {
@@ -339,19 +358,42 @@ export function SettingsScreen() {
                 className={s.input}
                 aria-label="Phone (WABA number)"
               />
-              <span className={s.rowHint}>🔒 WhatsApp Business number — locked.</span>
+              <span className={s.rowHint}>🔒 WhatsApp Business number, locked.</span>
             </label>
           </div>
           <div className={s.rowStacked}>
-            <div className={s.rowLabel}>
-              <span className={s.rowName}>Restaurant Location</span>
-              <span className={s.rowHint}>Used to measure delivery distance &amp; fees.</span>
+            <div className={s.locHead}>
+              <div className={s.rowLabel}>
+                <span className={s.rowName}>Restaurant Location</span>
+                <span className={s.rowHint}>Used to measure delivery distance &amp; fees.</span>
+              </div>
+              <button
+                type="button"
+                className={s.locToggle}
+                aria-expanded={mapOpen}
+                onClick={() => setMapOpen((o) => !o)}
+              >
+                {mapOpen ? "Close map" : "Set on map"}
+              </button>
             </div>
-            <LocationPicker
-              lat={Number(lat)}
-              lng={Number(lng)}
-              onChange={(la, ln) => { setLat(String(la)); setLng(String(ln)); }}
-            />
+            <div className={s.locCurrent}>
+              <span className={s.locPin} aria-hidden="true">📍</span>
+              {lat.trim() && lng.trim() ? (
+                <div className={s.locTextWrap}>
+                  <span className={s.locAddr}>{locAddress ?? "Resolving address…"}</span>
+                  <span className={s.locCoords}>Lat, Long: {Number(lat).toFixed(5)}, {Number(lng).toFixed(5)}</span>
+                </div>
+              ) : (
+                <span className={s.rowHint}>No location set yet. Open the map to set it.</span>
+              )}
+            </div>
+            {mapOpen && (
+              <LocationPicker
+                lat={Number(lat)}
+                lng={Number(lng)}
+                onChange={(la, ln) => { setLat(String(la)); setLng(String(ln)); }}
+              />
+            )}
           </div>
           <div className={s.actions}>
             <Button onClick={saveGeneral}>Save</Button>
@@ -364,7 +406,7 @@ export function SettingsScreen() {
           <div className={s.rowStacked}>
             <div className={s.rowLabel}>
               <span className={s.rowName}>Distance fee tiers</span>
-              <span className={s.rowHint}>Each row sets the fee up to that distance — the smallest row starts at 0 km. Set a fee to 0 for free delivery. The largest tier sets your delivery radius (max {MAX_TIER_KM} km).</span>
+              <span className={s.rowHint}>Each row sets the fee up to that distance. The smallest row starts at 0 km. Set a fee to 0 for free delivery. The largest tier sets your delivery radius (max {MAX_TIER_KM} km).</span>
             </div>
           <div className={s.tierTable}>
             <div className={s.tierHead}>
@@ -486,57 +528,39 @@ export function SettingsScreen() {
 
       {tab === "batching" && (
         <div className={s.section}>
-          <div className={s.cardGrid}>
-            <label className={s.settingCard}>
-              <span className={s.settingIcon}>🛵</span>
-              <span className={s.settingName}>Max orders per rider</span>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Max orders per rider</span>
               <input
-                aria-label="orders per batch"
-                type="number"
-                min={1}
-                max={6}
-                value={ordersPerBatch}
-                onChange={(e) => setOrdersPerBatch(Number(e.target.value))}
-                onFocus={(e) => e.target.select()}
-                className={`${s.input} ${s.settingInput}`}
+                aria-label="orders per batch" type="number" min={1} max={6}
+                value={ordersPerBatch} onChange={(e) => setOrdersPerBatch(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
               />
-              <span className={s.settingHint}>
+              <span className={s.rowHint}>
                 Most orders one rider carries in a single trip. Extra ready orders go to
-                the next rider — e.g. set 3, and if 5 are ready one rider takes 3 and
+                the next rider. For example, set 3, and if 5 are ready one rider takes 3 and
                 another takes 2.
               </span>
             </label>
             {SHOW_MAX_ITEMS_PER_ORDER && (
-              <label className={s.settingCard}>
-                <span className={s.settingIcon}>🧾</span>
-                <span className={s.settingName}>Max items per order</span>
+              <label className={s.col}>
+                <span className={s.rowName}>Max items per order</span>
                 <input
-                  aria-label="items per order"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={itemsPerOrder}
-                  onChange={(e) => setItemsPerOrder(Number(e.target.value))}
-                  onFocus={(e) => e.target.select()}
-                  className={`${s.input} ${s.settingInput}`}
+                  aria-label="items per order" type="number" min={1} max={100}
+                  value={itemsPerOrder} onChange={(e) => setItemsPerOrder(Number(e.target.value))}
+                  onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
                 />
-                <span className={s.settingHint}>Upper limit a customer can add to one order.</span>
+                <span className={s.rowHint}>Upper limit a customer can add to one order.</span>
               </label>
             )}
-            <label className={`${s.settingCard} ${s.settingCardAccent}`}>
-              <span className={s.settingIcon}>🙋</span>
-              <span className={s.settingName}>Confirm large quantity above</span>
+            <label className={s.col}>
+              <span className={s.rowName}>Confirm large quantity above</span>
               <input
-                aria-label="max item quantity"
-                type="number"
-                min={1}
-                max={100000}
-                value={maxItemQty}
-                onChange={(e) => setMaxItemQty(Number(e.target.value))}
-                onFocus={(e) => e.target.select()}
-                className={`${s.input} ${s.settingInput}`}
+                aria-label="max item quantity" type="number" min={1} max={100000}
+                value={maxItemQty} onChange={(e) => setMaxItemQty(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
               />
-              <span className={s.settingHint}>
+              <span className={s.rowHint}>
                 If a customer asks for more than this of one item, the bot pauses
                 and a human confirms before adding it.
               </span>
@@ -550,7 +574,7 @@ export function SettingsScreen() {
 
       {tab === "dispatch" && (
         <div className={s.section}>
-          <label className={s.col}>
+          <label className={`${s.col} ${s.colField}`}>
             <span className={s.rowName}>Dispatch engine</span>
             <select
               aria-label="dispatch engine"
@@ -558,12 +582,12 @@ export function SettingsScreen() {
               onChange={(e) => setDispatchEngine(e.target.value as "greedy" | "ortools")}
               className={s.input}
             >
-              <option value="greedy">Greedy (default) — proximity batching</option>
-              <option value="ortools">OR-Tools — SLA-first route optimizer</option>
+              <option value="greedy">Greedy (default), proximity batching</option>
+              <option value="ortools">OR Tools, SLA first route optimizer</option>
             </select>
             <span className={s.rowHint}>
-              OR-Tools optimizes routes + assignment jointly and drops orders that can't
-              make the 40-min SLA (with a manager alert). Pilot per restaurant.
+              OR Tools optimizes routes and assignment jointly and drops orders that can't
+              make the 40 min SLA (with a manager alert). Pilot per restaurant.
             </span>
           </label>
           <h4 className={s.groupTitle}>Batching</h4>
@@ -587,8 +611,8 @@ export function SettingsScreen() {
               <span className={s.rowHint}>Hold a ready order this long so a nearby one can join its trip. 0 = send each order right away.</span>
             </label>
           </div>
-          <label className={s.col}>
-            <span className={s.rowName}>On-the-way detour (km) — 0 = off</span>
+          <label className={`${s.col} ${s.colField}`}>
+            <span className={s.rowName}>On the way detour (km), 0 = off</span>
             <input
               aria-label="batch max detour km" type="number" min={0} max={10} step={0.1}
               value={maxDetour} onChange={(e) => setMaxDetour(Number(e.target.value))}
@@ -596,7 +620,7 @@ export function SettingsScreen() {
             />
             <span className={s.rowHint}>
               Let a rider drop an order that's at most this far off the route to a farther
-              one. 0 keeps simple nearby-grouping. The 40-min SLA is always enforced.
+              one. 0 keeps simple nearby grouping. The 40 min SLA is always enforced.
             </span>
           </label>
 
@@ -642,6 +666,8 @@ function ApiKeysSection() {
   const [label, setLabel] = useState("");
   const [creating, setCreating] = useState(false);
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [pendingRevoke, setPendingRevoke] = useState<ApiKey | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   function reload() {
     listApiKeys().then(setKeys).catch(() => setKeys([]));
@@ -660,7 +686,7 @@ function ApiKeysSection() {
       setRevealed(created.api_key);
       setLabel("");
       reload();
-      toast("Key created. Copy it now — it won't be shown again.", "success");
+      toast("Key created. Copy it now, it won't be shown again.", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not create the key.", "error");
     } finally {
@@ -668,18 +694,18 @@ function ApiKeysSection() {
     }
   }
 
-  async function onRevoke(k: ApiKey) {
-    if (!window.confirm(
-      `Revoke "${k.label}" (${k.key_prefix}…)? The partner using it loses access immediately.`,
-    )) {
-      return;
-    }
+  async function onRevoke() {
+    if (!pendingRevoke) return;
+    setRevoking(true);
     try {
-      await revokeApiKey(k.id);
+      await revokeApiKey(pendingRevoke.id);
       reload();
       toast("Key revoked.");
+      setPendingRevoke(null);
     } catch {
       toast("Could not revoke the key.", "error");
+    } finally {
+      setRevoking(false);
     }
   }
 
@@ -708,7 +734,7 @@ function ApiKeysSection() {
       {revealed && (
         <div className={s.apiReveal} role="alert">
           <div className={s.apiRevealHead}>
-            <span>🔑 Copy this key now — it won't be shown again.</span>
+            <span>🔑 Copy this key now, it won't be shown again.</span>
             <button type="button" className={s.apiCopyBtn} onClick={() => copy(revealed)}>
               Copy
             </button>
@@ -749,7 +775,7 @@ function ApiKeysSection() {
                 </td>
                 <td>
                   {!k.revoked_at && (
-                    <button type="button" className={s.apiRevokeBtn} onClick={() => onRevoke(k)}>
+                    <button type="button" className={s.apiRevokeBtn} onClick={() => setPendingRevoke(k)}>
                       Revoke
                     </button>
                   )}
@@ -758,6 +784,18 @@ function ApiKeysSection() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {pendingRevoke && (
+        <ConfirmDialog
+          title="Revoke API key?"
+          message={`Revoke "${pendingRevoke.label}" (${pendingRevoke.key_prefix}…)? The partner using it loses access immediately.`}
+          confirmLabel="Revoke key"
+          danger
+          busy={revoking}
+          onConfirm={onRevoke}
+          onCancel={() => !revoking && setPendingRevoke(null)}
+        />
       )}
     </div>
   );

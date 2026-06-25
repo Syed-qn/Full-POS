@@ -5,7 +5,7 @@
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  padding: 0 0 16px;
+  padding: 0;
   gap: 0;
 }
 .logo {
@@ -53,6 +53,7 @@
   border-top: 1px solid var(--border-subtle);
   cursor: pointer;
   width: 100%;
+  padding: 14px 16px;
   font-family: inherit;
   box-sizing: border-box;
 }

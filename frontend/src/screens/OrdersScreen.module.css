@@ -3,90 +3,129 @@
   flex-direction: column;
   gap: 16px;
 }
+/* Two-row filter card (shared design language with the Customers screen):
+   row 1 = search + status + date range; row 2 = labelled segmented presets. */
 .filterBar {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 10px 12px;
+  border-radius: 14px;
+  padding: 16px;
   box-shadow: var(--shadow-sm);
 }
-/* A labelled cluster of pills (used on the Customers filter bar). */
+.topRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.grow {
+  flex: 1 1 320px;
+  max-width: 560px;
+}
+.searchWrap {
+  position: relative;
+  width: 100%;
+  min-width: 200px;
+}
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
 .filterGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .filterLabel {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
 }
-.minSpend {
-  width: 140px;
+/* Presets + exact from→to range share the second row. */
+.dateRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+/* Segmented control: chips share one inset track. */
+.presets,
+.segment {
+  display: inline-flex;
+  flex-wrap: wrap;
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
-  padding: 7px 14px;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.minSpend:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-}
-/* Rounded preset pills. */
-.presets {
-  display: inline-flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
 }
 .chip {
-  font-size: 12px;
-  background: var(--bg-surface-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
   padding: 6px 14px;
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
 }
 .chip:hover {
-  border-color: var(--accent-primary);
   color: var(--text-primary);
 }
 .chipActive,
 .chipActive:hover {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
-/* From–To date inputs grouped as one pill. */
+/* From–To date inputs grouped as one input-sized pill. */
 .dateGroup {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
-  padding: 2px 4px 2px 8px;
+  border-radius: 10px;
+  padding: 4px 6px 4px 10px;
 }
 .date {
   background: transparent;
   border: none;
   padding: 5px 4px;
   color: var(--text-primary);
-  font-size: 12px;
-  color-scheme: dark;
+  font-size: 13px;
+  color-scheme: light;
+  cursor: pointer;
 }
 .date:focus {
   outline: none;
+}
+/* Recolour the native calendar glyph so it's visible on the light field and
+   reads as a button (the whole field is clickable via showPicker). */
+.date::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+.date::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
 }
 .arrow {
   color: var(--text-muted);
@@ -118,6 +157,25 @@
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+}
+/* Section header sitting above the table inside the card. */
+.tableHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tableTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.tableCount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 .pagination {
   display: flex;
@@ -162,30 +220,31 @@
 .statusSelect {
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
-  padding: 7px 14px;
+  border-radius: 10px;
+  padding: 10px 14px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
-  color-scheme: dark;
+  color-scheme: light;
 }
 .statusSelect:focus {
   outline: none;
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
 }
 .search {
-  flex: 0 1 220px;
-  min-width: 150px;
+  width: 100%;
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
-  padding: 7px 14px;
+  border-radius: 10px;
+  padding: 10px 14px 10px 36px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
 }
 .search:focus {
   outline: none;
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
 }
 .mono {
   font-family: var(--font-mono);

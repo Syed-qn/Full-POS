@@ -18,11 +18,16 @@ export function ConversationsScreen() {
   const [messages, setMessages] = useState<MessageOut[]>([]);
   const [takeover, setTakeoverState] = useState(false);
   const [draft, setDraft] = useState("");
+  const [query, setQuery] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
 
   const customerCount = convs.filter((c) => c.counterpart === "customer").length;
   const riderCount = convs.filter((c) => c.counterpart === "rider").length;
-  const visible = convs.filter((c) => c.counterpart === tab);
+  // Filter by number: compare digits only, so "+971 50" and "97150" both match.
+  const digits = query.replace(/\D/g, "");
+  const visible = convs.filter(
+    (c) => c.counterpart === tab && (digits === "" || c.phone.replace(/\D/g, "").includes(digits)),
+  );
 
   function selectTab(next: Tab) {
     if (next === tab) return;
@@ -40,6 +45,14 @@ export function ConversationsScreen() {
   usePollingRefresh(() => {
     fetchConversations().then(setConvs).catch(() => {});
   });
+
+  // Auto-select the first conversation in the visible list when nothing is
+  // selected (initial load, tab switch, or after filtering by number).
+  useEffect(() => {
+    if (activeId === null && visible.length > 0) {
+      setActiveId(visible[0].id);
+    }
+  }, [activeId, visible]);
 
   useEffect(() => {
     if (activeId === null) return;
@@ -70,6 +83,20 @@ export function ConversationsScreen() {
     const next = !takeover;
     setTakeoverState(next);
     await setTakeover(activeId, next);
+  }
+
+  // Toggle AI/Human directly from a conversation's pill in the list (works on
+  // any row, selected or not). Optimistic update + revert on failure.
+  async function toggleConvTakeover(c: ConversationOut) {
+    const next = !c.manual_takeover;
+    setConvs((prev) => prev.map((x) => (x.id === c.id ? { ...x, manual_takeover: next } : x)));
+    if (c.id === activeId) setTakeoverState(next);
+    try {
+      await setTakeover(c.id, next);
+    } catch {
+      setConvs((prev) => prev.map((x) => (x.id === c.id ? { ...x, manual_takeover: !next } : x)));
+      if (c.id === activeId) setTakeoverState(!next);
+    }
   }
 
   async function send() {
@@ -105,6 +132,18 @@ export function ConversationsScreen() {
             Drivers{riderCount > 0 ? ` (${riderCount})` : ""}
           </button>
         </div>
+        <div className={s.searchRow}>
+          <span className={s.searchIcon} aria-hidden="true">🔍</span>
+          <input
+            className={s.search}
+            type="search"
+            inputMode="tel"
+            placeholder="Filter by number"
+            aria-label="Filter conversations by phone number"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
         <div className={s.list}>
           {!loaded ? (
             <div aria-busy="true" aria-label="Loading conversations">
@@ -118,11 +157,19 @@ export function ConversationsScreen() {
           ) : (
             <>
               {visible.map((c) => (
-                <ConversationRow key={c.id} conversation={c} selected={c.id === activeId} onClick={() => setActiveId(c.id)} />
+                <ConversationRow
+                  key={c.id}
+                  conversation={c}
+                  selected={c.id === activeId}
+                  onClick={() => setActiveId(c.id)}
+                  onTogglePill={() => toggleConvTakeover(c)}
+                />
               ))}
               {visible.length === 0 && (
                 <div className={s.empty}>
-                  No {tab === "customer" ? "customer" : "driver"} conversations yet.
+                  {digits
+                    ? `No ${tab === "customer" ? "customer" : "driver"} matches that number.`
+                    : `No ${tab === "customer" ? "customer" : "driver"} conversations yet.`}
                 </div>
               )}
             </>
@@ -136,7 +183,7 @@ export function ConversationsScreen() {
           <>
             <div className={s.viewerHead}>
               <Button variant={takeover ? "danger" : "ghost"} onClick={toggleTakeover}>
-                {takeover ? "Return to AI" : "Take over"}
+                {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
               </Button>
             </div>
             {takeover && (

@@ -1,0 +1,114 @@
+/* Customers filter bar — a cleaner, two-row layout that replaces the cramped
+   single-line filter borrowed from the Orders screen. Row 1 = search + min
+   spend; row 2 = labelled segmented filters. Screen/table/pagination styles
+   still come from OrdersScreen.module.css. */
+
+.filterBar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Row 1 — labelled Search (grows) + Min spend groups sit side by side. */
+.topRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.grow {
+  flex: 1 1 320px;
+  max-width: 560px;
+}
+.searchWrap {
+  position: relative;
+  width: 100%;
+  min-width: 200px;
+}
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.search {
+  width: 100%;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 14px 10px 36px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.search:focus,
+.minSpend:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+.minSpend {
+  width: 150px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+/* Row 2 — labelled segmented controls. */
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.filterLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+/* Segmented control: chips share one inset track with hairline dividers. */
+.segment {
+  display: inline-flex;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+.chip {
+  font-size: 13px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.chip:hover {
+  color: var(--text-primary);
+}
+.chipActive,
+.chipActive:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
