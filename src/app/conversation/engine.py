@@ -1043,7 +1043,7 @@ async def _send_order_summary(
     if allow_new_address:
         # WhatsApp caps interactive replies at 3 buttons; this keeps us at exactly 3.
         buttons.append({"id": "use_new_address", "title": "Use new address"})
-    buttons.append({"id": "cancel_order", "title": "Cancel"})
+    buttons.append({"id": "cancel_order", "title": "Cancel order"})
     await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="order-summary", body=summary,
