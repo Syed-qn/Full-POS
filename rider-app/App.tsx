@@ -45,7 +45,7 @@ export default function App() {
   if (loading) {
     return (
       <View style={[styles.screen, styles.center]}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={C.green} />
       </View>
     );
   }
@@ -90,20 +90,29 @@ function PairingScreen({ onPaired }: { onPaired: (t: string) => void }) {
 
   return (
     <View style={[styles.screen, styles.center]}>
+      <View style={styles.logoBadge}>
+        <Text style={styles.logoEmoji}>🛵</Text>
+      </View>
       <Text style={styles.title}>Rider Tracker</Text>
       <Text style={styles.subtitle}>Enter the pairing code from your WhatsApp.</Text>
       <TextInput
         style={styles.input}
         value={code}
         onChangeText={setCode}
-        placeholder="e.g. AB3K9P"
+        placeholder="AB3K9P"
+        placeholderTextColor={C.dim}
         autoCapitalize="characters"
         autoCorrect={false}
         maxLength={12}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Pressable
-        style={[styles.button, (busy || code.length < 4) && styles.buttonDisabled]}
+        style={({ pressed }) => [
+          styles.button,
+          styles.buttonWide,
+          pressed && styles.buttonPressed,
+          (busy || code.length < 4) && styles.buttonDisabled,
+        ]}
         disabled={busy || code.length < 4}
         onPress={pair}
       >
@@ -204,24 +213,31 @@ function TrackingScreen({
   const pending = (run?.stops ?? []).filter((s) => !s.delivered);
   const hasRun = !!run?.batchId;
   const pickedUp = run?.status === "picked_up";
+  const live = status.startsWith("Live");
 
   return (
     <View style={styles.screen}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Deliveries</Text>
-        <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>{status}</Text>
+        <View style={[styles.statusPill, live ? styles.statusPillLive : styles.statusPillWarn]}>
+          <View style={[styles.statusDot, live ? styles.statusDotLive : styles.statusDotWarn]} />
+          <Text style={[styles.statusPillText, live ? styles.statusTextLive : styles.statusTextWarn]}>
+            {live ? "LIVE" : status}
+          </Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
         {!hasRun ? (
-          <Text style={styles.subtitle}>
-            No active delivery — keep the app running, you'll be notified when one
-            is assigned.
-          </Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>🕒</Text>
+            <Text style={styles.subtitle}>
+              No active delivery — keep the app running, you'll be notified when one
+              is assigned.
+            </Text>
+          </View>
         ) : !pickedUp ? (
-          <View style={styles.card}>
+          <View style={[styles.card, styles.cardActive]}>
             <Text style={styles.cardTitle}>
               {pending.length} {pending.length === 1 ? "order" : "orders"} ready to pick up
             </Text>
@@ -232,7 +248,12 @@ function TrackingScreen({
               </Text>
             ))}
             <Pressable
-              style={[styles.button, busy && styles.buttonDisabled]}
+              style={({ pressed }) => [
+                styles.button,
+                styles.buttonWide,
+                pressed && styles.buttonPressed,
+                busy && styles.buttonDisabled,
+              ]}
               disabled={busy}
               onPress={doPickup}
             >
@@ -240,10 +261,13 @@ function TrackingScreen({
             </Pressable>
           </View>
         ) : pending.length === 0 ? (
-          <Text style={styles.subtitle}>All delivered. Head back to the restaurant.</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>✅</Text>
+            <Text style={styles.subtitle}>All delivered. Head back to the restaurant.</Text>
+          </View>
         ) : (
           pending.map((s, i) => (
-            <View key={s.orderId} style={[styles.card, i === 0 && styles.cardActive]}>
+            <View key={s.orderId} style={[styles.card, i === 0 ? styles.cardActive : styles.cardDim]}>
               <View style={styles.stopHead}>
                 <Text style={styles.cardTitle}>{s.orderNumber}</Text>
                 <View style={[styles.seqPill, i === 0 ? styles.seqPillFirst : styles.seqPillLater]}>
@@ -285,7 +309,11 @@ function TrackingScreen({
               <View style={styles.cardActions}>
                 {s.latitude != null && s.longitude != null ? (
                   <Pressable
-                    style={[styles.button, styles.buttonAlt]}
+                    style={({ pressed }) => [
+                      styles.button,
+                      styles.buttonAlt,
+                      pressed && styles.buttonAltPressed,
+                    ]}
                     onPress={() => Linking.openURL(mapsLink(s.latitude!, s.longitude!))}
                   >
                     <Text style={styles.buttonAltText}>Navigate</Text>
@@ -293,11 +321,16 @@ function TrackingScreen({
                 ) : null}
                 {i === 0 ? (
                   <Pressable
-                    style={[styles.button, busy && styles.buttonDisabled]}
+                    style={({ pressed }) => [
+                      styles.button,
+                      styles.buttonFlex,
+                      pressed && styles.buttonPressed,
+                      busy && styles.buttonDisabled,
+                    ]}
                     disabled={busy}
                     onPress={() => doDelivered(s)}
                   >
-                    <Text style={styles.buttonText}>{busy ? "…" : "Collected & delivered"}</Text>
+                    <Text style={styles.buttonText}>{busy ? "…" : "Delivered"}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -313,59 +346,110 @@ function TrackingScreen({
   );
 }
 
+// Dark "cockpit" palette — high-contrast for outdoor / sunlight use.
+const C = {
+  bg: "#0a0e14",
+  card: "#161d29",
+  cardDim: "#10151e",
+  border: "#1f2937",
+  green: "#22c55e",
+  greenDark: "#16a34a",
+  greenTintBg: "#0f2018",
+  greenTintBorder: "#1f6f43",
+  text: "#f1f5f9",
+  sub: "#94a3b8",
+  dim: "#5b6675",
+};
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f8fafc", padding: 24, justifyContent: "space-between" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  title: { fontSize: 26, fontWeight: "700", color: "#0f172a" },
-  subtitle: { fontSize: 15, color: "#475569", textAlign: "center", marginTop: 24 },
-  note: { fontSize: 13, color: "#64748b", textAlign: "center", marginTop: 8, paddingHorizontal: 12 },
-  input: {
-    width: "100%", borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 12,
-    padding: 16, fontSize: 22, textAlign: "center", letterSpacing: 4, backgroundColor: "#fff",
+  screen: { flex: 1, backgroundColor: C.bg, paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16, justifyContent: "space-between" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 14 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  title: { fontSize: 30, fontWeight: "800", color: C.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 15, color: C.sub, textAlign: "center", lineHeight: 22 },
+
+  logoBadge: {
+    width: 84, height: 84, borderRadius: 24, backgroundColor: C.greenTintBg,
+    borderWidth: 1, borderColor: C.greenTintBorder, alignItems: "center", justifyContent: "center", marginBottom: 6,
   },
-  button: { flex: 1, backgroundColor: "#16a34a", borderRadius: 12, padding: 16, alignItems: "center", marginTop: 12 },
-  buttonAlt: { backgroundColor: "#e2e8f0" },
-  buttonAltText: { color: "#0f172a", fontSize: 16, fontWeight: "600" },
-  buttonDisabled: { backgroundColor: "#94a3b8" },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  error: { color: "#b91c1c" },
-  statusPill: { backgroundColor: "#dcfce7", paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
-  statusPillText: { color: "#166534", fontWeight: "600", fontSize: 12 },
-  linkButton: { alignItems: "center", padding: 12 },
-  linkButtonText: { color: "#64748b" },
-  list: { gap: 12, paddingBottom: 12 },
-  card: { backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#e2e8f0" },
-  cardActive: { borderColor: "#16a34a", backgroundColor: "#f6fef9" },
-  stopHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
-  seqPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  seqPillFirst: { backgroundColor: "#16a34a" },
-  seqPillLater: { backgroundColor: "#eef2f6" },
-  seqPillFirstText: { color: "#fff", fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5 },
-  seqPillLaterText: { color: "#64748b", fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
-  custName: { fontSize: 15, fontWeight: "600", color: "#0f172a", marginBottom: 2 },
-  cardLine: { fontSize: 14, color: "#475569", marginTop: 2 },
+  logoEmoji: { fontSize: 40 },
+
+  input: {
+    width: "100%", borderWidth: 1.5, borderColor: C.border, borderRadius: 14,
+    paddingVertical: 18, paddingHorizontal: 16, fontSize: 26, fontWeight: "700",
+    textAlign: "center", letterSpacing: 8, color: C.text, backgroundColor: C.card, marginTop: 8,
+  },
+
+  // No flex here — a flex:1 button stretches to full height in a column layout
+  // (esp. on react-native-web). Standalone buttons hug their content (buttonWide
+  // gives width); the two side-by-side action buttons opt into flex via buttonFlex.
+  button: { backgroundColor: C.green, borderRadius: 14, paddingVertical: 18, alignItems: "center", marginTop: 14 },
+  buttonWide: { width: "100%" },
+  buttonFlex: { flex: 1 },
+  buttonPressed: { backgroundColor: C.greenDark },
+  buttonAlt: { flex: 1, backgroundColor: "#1f2937" },
+  buttonAltPressed: { backgroundColor: "#2a3647" },
+  buttonAltText: { color: C.text, fontSize: 17, fontWeight: "700" },
+  buttonDisabled: { backgroundColor: "#33404f" },
+  buttonText: { color: "#04130a", fontSize: 17, fontWeight: "800" },
+  error: { color: "#f87171", fontWeight: "600" },
+
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
+  statusPillLive: { backgroundColor: C.greenTintBg, borderColor: C.greenTintBorder },
+  statusPillWarn: { backgroundColor: "#241a0c", borderColor: "#6b4f1d" },
+  statusDot: { width: 8, height: 8, borderRadius: 999 },
+  statusDotLive: { backgroundColor: C.green },
+  statusDotWarn: { backgroundColor: "#f59e0b" },
+  statusPillText: { fontWeight: "800", fontSize: 12, letterSpacing: 0.8 },
+  statusTextLive: { color: "#4ade80" },
+  statusTextWarn: { color: "#fbbf24" },
+
+  linkButton: { alignItems: "center", paddingVertical: 14 },
+  linkButtonText: { color: C.dim, fontSize: 14, fontWeight: "600" },
+
+  list: { gap: 14, paddingBottom: 12 },
+  emptyCard: { alignItems: "center", gap: 10, paddingVertical: 48, paddingHorizontal: 16 },
+  emptyEmoji: { fontSize: 44 },
+
+  card: { backgroundColor: C.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: C.border },
+  cardActive: { borderColor: C.greenTintBorder, backgroundColor: "#101b16" },
+  cardDim: { opacity: 0.7 },
+  stopHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 8 },
+  cardTitle: { fontSize: 19, fontWeight: "800", color: C.text },
+  cardLine: { fontSize: 15, color: C.sub, marginTop: 4, lineHeight: 21 },
+
+  seqPill: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 5 },
+  seqPillFirst: { backgroundColor: C.green },
+  seqPillLater: { backgroundColor: "#1f2937" },
+  seqPillFirstText: { color: "#04130a", fontSize: 11, fontWeight: "900", letterSpacing: 0.6 },
+  seqPillLaterText: { color: C.sub, fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+
+  custName: { fontSize: 17, fontWeight: "700", color: C.text, marginBottom: 2 },
+
   callRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#eff6ff", borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginTop: 10,
+    backgroundColor: "#11243f", borderWidth: 1, borderColor: "#1e3a5f",
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 12,
   },
-  callText: { color: "#1d4ed8", fontSize: 14, fontWeight: "600" },
-  callTag: { color: "#fff", backgroundColor: "#2563eb", fontSize: 10.5, fontWeight: "800", letterSpacing: 0.5, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
+  callText: { color: "#7dd3fc", fontSize: 15, fontWeight: "700" },
+  callTag: { color: "#04130a", backgroundColor: "#38bdf8", fontSize: 11, fontWeight: "900", letterSpacing: 0.6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, overflow: "hidden" },
+
   noCallRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#fef2f2", borderColor: "#fecaca", borderWidth: 1,
-    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginTop: 10,
+    backgroundColor: "#2a1414", borderColor: "#5b2121", borderWidth: 1,
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 12,
   },
-  noCallText: { color: "#b91c1c", fontSize: 14, fontWeight: "700" },
-  noCallPhone: { color: "#9ca3af", fontSize: 13, fontWeight: "600" },
+  noCallText: { color: "#fca5a5", fontSize: 14, fontWeight: "800" },
+  noCallPhone: { color: "#7f8896", fontSize: 13, fontWeight: "600" },
+
   codChip: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: "#fffbeb", borderWidth: 1, borderColor: "#fde68a",
-    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12, marginTop: 10,
+    backgroundColor: "#241d09", borderWidth: 1, borderColor: "#5b4a13",
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 12,
   },
-  codLabel: { fontSize: 13, color: "#92400e", fontWeight: "600" },
-  codAmount: { fontSize: 16, color: "#0f172a", fontWeight: "800" },
-  cardHint: { fontSize: 12, color: "#94a3b8", marginTop: 8, fontStyle: "italic" },
-  cardActions: { flexDirection: "row", gap: 10, marginTop: 12 },
+  codLabel: { fontSize: 14, color: "#fcd34d", fontWeight: "700" },
+  codAmount: { fontSize: 19, color: C.text, fontWeight: "900" },
+
+  cardHint: { fontSize: 13, color: C.dim, marginTop: 10, fontStyle: "italic" },
+  cardActions: { flexDirection: "row", gap: 12, marginTop: 14 },
 });

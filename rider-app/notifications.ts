@@ -6,13 +6,16 @@ import { Platform } from "react-native";
 import { registerPushToken } from "./api";
 
 // Show assignment pushes as a heads-up banner even with the app foregrounded.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Guarded for web (preview-only): expo-notifications native calls aren't available there.
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 /**
  * Register for push notifications and send the Expo token to the backend so the
@@ -22,6 +25,7 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPush(deviceToken: string): Promise<void> {
   try {
+    if (Platform.OS === "web") return; // no push on the web preview
     if (!Device.isDevice) return; // push tokens aren't issued on emulators
 
     if (Platform.OS === "android") {
@@ -53,6 +57,7 @@ export async function registerForPush(deviceToken: string): Promise<void> {
 
 /** Subscribe to notification taps. Returns an unsubscribe fn. */
 export function onNotificationTap(handler: () => void): () => void {
+  if (Platform.OS === "web") return () => {}; // no notification listener on web preview
   const sub = Notifications.addNotificationResponseReceivedListener(() => handler());
   return () => sub.remove();
 }

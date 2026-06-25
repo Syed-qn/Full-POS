@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { Platform } from "react-native";
 
 /**
  * Background location task. MUST be defined at module top level (registered
@@ -13,8 +14,11 @@ export const TOKEN_KEY = "deviceToken";
 
 const API_BASE = (Constants.expoConfig?.extra?.apiBase as string) ?? "";
 
-TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
-  if (error) return;
+// expo-task-manager isn't available on web — defining the task there throws at
+// import time and white-screens the bundle. Skip it; web is preview-only.
+if (Platform.OS !== "web") {
+  TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
+    if (error) return;
   const { locations } = (data ?? {}) as { locations?: Location.LocationObject[] };
   if (!locations?.length) return;
   const token = await AsyncStorage.getItem(TOKEN_KEY);
@@ -38,7 +42,8 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   } catch {
     // Best-effort: a failed post is dropped; the next fix retries shortly.
   }
-});
+  });
+}
 
 export async function startBackgroundTracking() {
   const fg = await Location.requestForegroundPermissionsAsync();
