@@ -44,6 +44,7 @@ from app.marketing.todays_special import (
     is_due,
     parse_hhmm,
 )
+from app.config import get_settings
 from app.marketing.window import is_within_uae_window
 from app.ordering.models import Customer, Order
 from app.ordering.service import predict_order_time
@@ -399,7 +400,9 @@ async def run_campaign_send(
             .all()
         )
 
-    within_window = is_within_uae_window(now_utc)
+    # Send window is opt-in (off by default → always "within window").
+    window_on = get_settings().marketing_send_window_enabled
+    within_window = (not window_on) or is_within_uae_window(now_utc)
     summary = {
         "queued": 0,
         "suppressed_cap": 0,
@@ -618,7 +621,8 @@ async def run_todays_special_tick(
     day_anchor_utc = local.replace(
         hour=0, minute=0, second=0, microsecond=0
     ).astimezone(timezone.utc)
-    within_window = is_within_uae_window(now_utc)
+    window_on = get_settings().marketing_send_window_enabled
+    within_window = (not window_on) or is_within_uae_window(now_utc)
 
     totals = {"queued": 0, "suppressed": 0, "restaurants": []}
     restaurants = (await session.scalars(select(Restaurant))).all()
@@ -633,9 +637,20 @@ async def run_todays_special_tick(
         if tpl is None or tpl.restaurant_id != restaurant.id or tpl.status != "approved":
             continue
         lead = int(cfg.get("lead_minutes", DEFAULT_LEAD_MINUTES))
-        default_minute = parse_hhmm(
-            cfg.get("default_time"), default=_DEFAULT_SPECIAL_MINUTE
-        )
+        # "Custom time" range → only send within [window_start, window_end] and
+        # fire new customers at the window start. Absent → "Until today" (no range).
+        ws, we = cfg.get("window_start"), cfg.get("window_end")
+        if ws and we:
+            custom_window = (
+                parse_hhmm(ws, default=_DEFAULT_SPECIAL_MINUTE),
+                parse_hhmm(we, default=_DEFAULT_SPECIAL_MINUTE),
+            )
+            default_minute = custom_window[0]
+        else:
+            custom_window = None
+            default_minute = parse_hhmm(
+                cfg.get("default_time"), default=_DEFAULT_SPECIAL_MINUTE
+            )
 
         campaign = await ensure_todays_special_campaign(
             session,
@@ -667,7 +682,11 @@ async def run_todays_special_tick(
                 continue
             pred = await predict_order_time(session, cust.id)
             desired = desired_send_minute(
-                pred, lead_minutes=lead, default_minute=default_minute
+                pred,
+                lead_minutes=lead,
+                default_minute=default_minute,
+                clamp_window=window_on,
+                window=custom_window,
             )
             if not is_due(desired, now_minute):
                 continue

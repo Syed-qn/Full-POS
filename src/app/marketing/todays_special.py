@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from app.ordering.service import OrderTimePrediction
 
-# UAE Cabinet Decision 56/2024 send window (09:00-18:00 Asia/Dubai). A predicted
-# send time is clamped into [WINDOW_START, WINDOW_END) so we never schedule
-# outside the legal window — mirrors marketing.window.is_within_uae_window.
+# Optional UAE Cabinet Decision 56/2024 send window (09:00-18:00 Asia/Dubai),
+# applied only when APP_MARKETING_SEND_WINDOW_ENABLED is on (off by default —
+# WhatsApp is treated as exempt). When enabled, a predicted send time is clamped
+# into [WINDOW_START, WINDOW_END); otherwise the real minute-of-day is kept.
 WINDOW_START_MIN = 9 * 60   # 09:00 -> 540
 WINDOW_END_MIN = 18 * 60    # 18:00 -> 1080 (exclusive; last sendable minute 1079)
 
@@ -72,17 +73,29 @@ def desired_send_minute(
     *,
     lead_minutes: int = DEFAULT_LEAD_MINUTES,
     default_minute: int,
+    clamp_window: bool = True,
+    window: tuple[int, int] | None = None,
 ) -> int:
-    """Dubai minute-of-day to send a customer's special, clamped to the window.
+    """Dubai minute-of-day to send a customer's special.
 
     Personalized (enough clustered orders) → ``predicted - lead_minutes``.
-    Otherwise → the restaurant ``default_minute``. Always clamped to [09:00,18:00).
+    Otherwise → the restaurant ``default_minute``.
+
+    ``window`` — a restaurant's own custom [start, end] minute-of-day range
+    (the "Custom time" send window, e.g. only 18:00-22:00) — takes precedence and
+    clamps the result into it. Otherwise the legacy UAE 09:00-18:00 window applies
+    only when ``clamp_window`` is set; with neither, the raw minute-of-day is kept.
     """
     if is_personalized(pred):
         base = pred.minute_of_day - lead_minutes  # type: ignore[union-attr]
     else:
         base = default_minute
-    return _clamp_to_window(base)
+    if window is not None:
+        lo, hi = window
+        return min(max(base, lo), hi)
+    if clamp_window:
+        return _clamp_to_window(base)
+    return base % 1440
 
 
 def is_due(

@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     outbox_sync_delivery: bool = False
 
     # Marketing
+    # Restrict marketing sends to the UAE 09:00-18:00 telemarketing window
+    # (Cabinet Decision 56/2024). OFF by default: WhatsApp template messaging is
+    # treated as exempt and restaurants peak in the evening, so sends run any time.
+    marketing_send_window_enabled: bool = False
     marketing_send_dry_run: bool = True  # safe default — no real Meta calls
     marketing_template_provider: str = "mock"  # mock | meta
     wa_app_id: str = ""  # Facebook App ID for resumable /uploads (template IMAGE header examples per research §5.1)

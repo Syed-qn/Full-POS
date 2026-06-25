@@ -239,7 +239,11 @@ async def test_run_campaign_send_compliance_gates(db_session, restaurant):
     assert camp.status == "sent"
 
 
-async def test_run_campaign_send_outside_window_suppresses_all(db_session, restaurant):
+async def test_run_campaign_send_outside_window_suppresses_all(db_session, restaurant, monkeypatch):
+    # The 09:00-18:00 send window is opt-in; enable it to exercise the suppression.
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "marketing_send_window_enabled", True)
     provider = MockTemplateProvider()
     camp = await _approved_campaign(db_session, restaurant, provider)
     await _customer(db_session, restaurant, "+971500000020")

@@ -51,6 +51,27 @@ def test_desired_send_minute_clamps_to_window():
     assert desired_send_minute(_pred(1380, 5, 0.99), lead_minutes=15, default_minute=600) == WINDOW_END_MIN - 1
 
 
+def test_desired_send_minute_custom_window_clamps():
+    win = (18 * 60, 22 * 60)  # restaurant "Custom time" range 18:00-22:00
+    # No prediction → new customers fire at the window start.
+    assert desired_send_minute(None, default_minute=18 * 60, window=win) == 18 * 60
+    # A noon habit clamps UP into the evening window.
+    assert (
+        desired_send_minute(_pred(720, 5, 0.99), lead_minutes=15, default_minute=18 * 60, window=win)
+        == 18 * 60
+    )
+    # A very-late habit clamps DOWN to the window end.
+    assert (
+        desired_send_minute(_pred(1400, 5, 0.99), lead_minutes=0, default_minute=18 * 60, window=win)
+        == 22 * 60
+    )
+    # Inside the window → unchanged.
+    assert (
+        desired_send_minute(_pred(1200, 5, 0.99), lead_minutes=0, default_minute=18 * 60, window=win)
+        == 1200
+    )
+
+
 def test_is_due_window():
     # Due from the target minute up to (but not including) target + max_late.
     assert is_due(705, 705, max_late_minutes=90) is True

@@ -25,6 +25,9 @@ type TodaysSpecial = {
   template_id: number | null;
   lead_minutes: number;
   default_time: string;
+  // Custom send-time range ("from"–"to", HH:MM). Null = "Until today" (no range).
+  window_start: string | null;
+  window_end: string | null;
 };
 
 /** Auto-generate a Meta-safe template name from the offer text (the backend
@@ -86,6 +89,7 @@ export function MarketingScreen() {
 
   // Audience — named RFM buckets with live counts; "all" targets everyone.
   const [audience, setAudience] = useState<AudienceSegment[]>([]);
+  const [audienceLoaded, setAudienceLoaded] = useState(false);
   const [segment, setSegment] = useState<string>("all");
 
   // Broadcast — armed via the bottom Send bar (two-tap confirm)
@@ -101,26 +105,45 @@ export function MarketingScreen() {
     template_id: null,
     lead_minutes: 15,
     default_time: "11:45",
+    window_start: null,
+    window_end: null,
   });
   const [savingSpecial, setSavingSpecial] = useState(false);
+  // Today's Special pill UI: reveal the custom time / custom lead-minutes inputs.
+  const [customTime, setCustomTime] = useState(false);
+  const [leadCustom, setLeadCustom] = useState(false);
 
   async function reload() {
     const rows = await fetchTemplates().catch(() => []);
     setTemplates(rows);
     setLoaded(true);
+    // Pre-select a template (prefer an approved one) so the preview + Send are
+    // ready on load. Keep the manager's current pick if it still exists.
+    setSelectedId((cur) => {
+      if (cur != null && rows.some((t) => t.id === cur)) return cur;
+      const pick =
+        rows.find((t) => t.status === "approved") ?? rows.find((t) => t.status !== "draft");
+      return pick ? pick.id : null;
+    });
     const aud = await fetchAudience().catch(() => []);
     setAudience(aud);
+    setAudienceLoaded(true);
     const me = await apiClient.get<RestaurantOut>("/api/v1/me").catch(() => null);
     const cfg = (me?.settings as Record<string, unknown> | undefined)?.todays_special as
       | Partial<TodaysSpecial>
       | undefined;
     if (cfg) {
+      const lead = cfg.lead_minutes ?? 15;
       setSpecial({
         enabled: !!cfg.enabled,
         template_id: cfg.template_id ?? null,
-        lead_minutes: cfg.lead_minutes ?? 15,
+        lead_minutes: lead,
         default_time: cfg.default_time ?? "11:45",
+        window_start: cfg.window_start ?? null,
+        window_end: cfg.window_end ?? null,
       });
+      setLeadCustom(![15, 30, 45].includes(lead));
+      setCustomTime(!!(cfg.window_start && cfg.window_end));
     }
   }
   useEffect(() => {
@@ -132,6 +155,11 @@ export function MarketingScreen() {
   const visibleTemplates = templates.filter((t) => t.status !== "draft");
   // Resolve from the live list so a status change (refresh) reflects instantly.
   const selectedTpl = templates.find((t) => t.id === selectedId) ?? null;
+  // The template chosen for the Today's Special automation (drives its preview).
+  const specialTpl = templates.find((t) => t.id === special.template_id) ?? null;
+  // Block Save when the chosen special template isn't approved yet.
+  const specialSaveBlocked =
+    special.enabled && specialTpl != null && specialTpl.status !== "approved";
 
   async function onDeleteTemplate(t: TemplateResponse) {
     setDeletingId(t.id);
@@ -154,6 +182,16 @@ export function MarketingScreen() {
     if (special.enabled && special.template_id === null) {
       toast("Select an approved template before turning this on.");
       return;
+    }
+    if (special.enabled && customTime) {
+      if (
+        !special.window_start ||
+        !special.window_end ||
+        special.window_start >= special.window_end
+      ) {
+        toast("Set a valid time range — the From time must be before the To time.");
+        return;
+      }
     }
     setSavingSpecial(true);
     try {
@@ -265,7 +303,7 @@ export function MarketingScreen() {
       const extras = [
         res.suppressed_optout ? `${res.suppressed_optout} opted-out` : "",
         res.suppressed_cap ? `${res.suppressed_cap} over 24h cap` : "",
-        res.suppressed_window ? `${res.suppressed_window} outside 9am to 6pm window` : "",
+        res.suppressed_window ? `${res.suppressed_window} outside the send window` : "",
       ].filter(Boolean);
       toast(
         `Sent to ${res.queued} customer${res.queued === 1 ? "" : "s"}.` +
@@ -319,10 +357,9 @@ export function MarketingScreen() {
             className={`${s.tab} ${tab === "promotion" ? s.tabActive : ""}`}
             onClick={() => setTab("promotion")}
           >
-            One day Promotion
+            Today's Special
           </button>
         </div>
-        <Button onClick={() => setShowCreate(true)}>＋ New template</Button>
       </div>
 
       {/* WHATSAPP TAB — LIVE PREVIEW (left) + options (right) */}
@@ -349,10 +386,11 @@ export function MarketingScreen() {
         <div className={s.rightCol}>
           {/* SEGMENT PICKER — named RFM buckets with live counts */}
           <div className={s.card}>
-            <div className={s.cardTitle}>
-              Segment <span className={s.cardCount}>(1 selected)</span>
-            </div>
-            {!loaded ? (
+            <div className={s.cardTitle}>Select Audience</div>
+            <p className={s.note}>
+              Choose who receives this broadcast. Customer counts update live.
+            </p>
+            {!audienceLoaded ? (
               <div className={s.pillRow} aria-busy="true" aria-label="Loading segments">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <span key={i} className={`${s.sk} ${s.skPill}`} />
@@ -378,28 +416,33 @@ export function MarketingScreen() {
           {/* TEMPLATE PICKER — pills */}
           <div className={s.card}>
             <div className={s.cardHead}>
-              <div className={s.cardTitle}>
-                Content Template{" "}
-                {visibleTemplates.length > 0 && (
-                  <span className={s.cardCount}>({visibleTemplates.length})</span>
-                )}
-              </div>
+              <div className={s.cardTitle}>Select Template</div>
               {selectedTpl && (
-                <span
-                  className={`${s.badge} ${s["badge_" + selectedTpl.status] ?? ""}`}
-                  title={
-                    selectedTpl.status === "pending_meta" ? "Awaiting Meta approval" : undefined
-                  }
-                >
-                  {STATUS_LABEL[selectedTpl.status] ?? selectedTpl.status}
-                </span>
+                <div className={s.tplHeadRight}>
+                  {selectedTpl.status === "pending_meta" && (
+                    <button
+                      type="button"
+                      className={s.refresh}
+                      onClick={() => onRefresh(selectedTpl.id)}
+                    >
+                      ↻ Refresh
+                    </button>
+                  )}
+                  <span
+                    className={`${s.badge} ${s["badge_" + selectedTpl.status] ?? ""}`}
+                    title={
+                      selectedTpl.status === "pending_meta" ? "Awaiting Meta approval" : undefined
+                    }
+                  >
+                    {STATUS_LABEL[selectedTpl.status] ?? selectedTpl.status}
+                  </span>
+                </div>
               )}
             </div>
             <p className={s.note}>
               Pick an <strong>approved</strong> template, preview it on the left, then{" "}
-              <strong>Send</strong> to all opted in customers. We skip anyone who opted out,
-              anyone already messaged twice in 24h, and (per UAE rules) any send outside 9am to
-              6pm.
+              <strong>Send</strong> to all opted in customers. We skip anyone who opted out and
+              anyone already messaged twice in the last 24h.
             </p>
 
             {!loaded ? (
@@ -426,11 +469,6 @@ export function MarketingScreen() {
                     title={t.meta_template_name}
                   >
                     <span className={s.pillName}>{prettyTemplateName(t.meta_template_name)}</span>
-                    {t.status !== "approved" && selectedId !== t.id && (
-                      <span className={`${s.pillTag} ${s["pillTag_" + t.status] ?? ""}`}>
-                        {STATUS_LABEL[t.status] ?? t.status}
-                      </span>
-                    )}
                     {selectedId === t.id && (
                       <button
                         type="button"
@@ -457,25 +495,12 @@ export function MarketingScreen() {
               <div className={s.empty}>No submitted templates yet.</div>
             )}
 
-            {/* Contextual actions for the selected template (delete is the × on the pill) */}
-            {selectedTpl &&
-              (selectedTpl.status === "pending_meta" ||
-                (selectedTpl.status === "rejected" && selectedTpl.rejection_reason)) && (
-                <div className={s.selActions}>
-                  {selectedTpl.status === "pending_meta" && (
-                    <button
-                      type="button"
-                      className={s.refresh}
-                      onClick={() => onRefresh(selectedTpl.id)}
-                    >
-                      ↻ Refresh status
-                    </button>
-                  )}
-                  {selectedTpl.status === "rejected" && selectedTpl.rejection_reason && (
-                    <span className={s.reject}>{selectedTpl.rejection_reason}</span>
-                  )}
-                </div>
-              )}
+            {/* Rejection reason for the selected template (Refresh lives in the header) */}
+            {selectedTpl && selectedTpl.status === "rejected" && selectedTpl.rejection_reason && (
+              <div className={s.selActions}>
+                <span className={s.reject}>{selectedTpl.rejection_reason}</span>
+              </div>
+            )}
           </div>
 
           {/* SEND BAR — full-width primary action, broadcast-composer style */}
@@ -491,61 +516,125 @@ export function MarketingScreen() {
       </div>
       )}
 
-      {/* ONE DAY PROMOTION TAB — Today's Special auto-timed daily send */}
+      {/* ONE DAY PROMOTION TAB — composer layout: preview (left) + setup (right) */}
       {tab === "promotion" && (
-        <div className={s.promoWrap}>
-          <div className={s.card}>
-            <div className={s.cardTitle}>Today's Special (auto timed) 🕒</div>
-            <p className={s.note}>
-              Pick an <strong>approved</strong> template and turn it on:
-            </p>
-            <ul className={s.noteList}>
-              <li>
-                🎯 Each customer gets it ~<strong>{special.lead_minutes} min</strong> before
-                their usual order time
-              </li>
-              <li>🕒 No clear pattern yet? They get the <strong>default time</strong> below</li>
-              <li>📈 Send times are learned from each customer's past orders</li>
-              <li>🔁 Runs every day automatically while the toggle stays on</li>
-              <li>✅ Opt out, the 24h cap and the 9am to 6pm window still apply</li>
-            </ul>
-
-            <label className={s.checkRow}>
-              <input
-                type="checkbox"
-                checked={special.enabled}
-                onChange={(e) => setSpecial((p) => ({ ...p, enabled: e.target.checked }))}
-              />
-              Enable Today's Special automation
-            </label>
-
-            <label className={s.label}>Template</label>
-            <select
-              className={s.input}
-              value={special.template_id ?? ""}
-              onChange={(e) =>
-                setSpecial((p) => ({
-                  ...p,
-                  template_id: e.target.value ? Number(e.target.value) : null,
-                }))
-              }
-            >
-              <option value="">Select an approved template</option>
-              {approvedTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {prettyTemplateName(t.meta_template_name)}
-                </option>
-              ))}
-            </select>
-            {approvedTemplates.length === 0 && (
-              <span className={s.hint}>
-                No approved templates yet. Create one above and wait for Meta approval.
-              </span>
+        <div className={s.mainGrid}>
+          {/* LEFT — preview of the chosen special template */}
+          <div className={s.previewPanel}>
+            <div className={s.previewPanelLabel}>Live preview</div>
+            {specialTpl ? (
+              <div className={s.previewPanelBody}>
+                <TemplatePreview
+                  imageUrl={specialTpl.header?.image_url ?? null}
+                  body={specialTpl.body ?? ""}
+                  withButton={(specialTpl.buttons?.length ?? 0) > 0}
+                  buttonLabel={specialTpl.buttons?.[0]?.label ?? ""}
+                />
+              </div>
+            ) : (
+              <div className={s.previewEmpty}>Select a template to preview</div>
             )}
+          </div>
 
-            <div className={s.row}>
-              <div>
-                <label className={s.label}>Send this many minutes early</label>
+          {/* RIGHT — template selection + settings + save */}
+          <div className={s.rightCol}>
+            {/* When to send */}
+            <div className={s.card}>
+              <div className={s.cardTitle}>When to send</div>
+              <p className={s.note}>
+                <strong>None</strong> (off), <strong>Until today</strong> (auto-timed to each
+                customer during the day), or a <strong>Custom time</strong> range (only send
+                between a start and end time, e.g. 6:00pm to 10:00pm).
+              </p>
+              <div className={s.pillRow}>
+                <button
+                  type="button"
+                  className={`${s.pill} ${!special.enabled ? s.pillActive : ""}`}
+                  onClick={() => setSpecial((p) => ({ ...p, enabled: false }))}
+                >
+                  None
+                </button>
+                <button
+                  type="button"
+                  className={`${s.pill} ${special.enabled && !customTime ? s.pillActive : ""}`}
+                  onClick={() => {
+                    setCustomTime(false);
+                    setSpecial((p) => ({ ...p, enabled: true, window_start: null, window_end: null }));
+                  }}
+                >
+                  Until today
+                </button>
+                <button
+                  type="button"
+                  className={`${s.pill} ${special.enabled && customTime ? s.pillActive : ""}`}
+                  onClick={() => {
+                    setCustomTime(true);
+                    setSpecial((p) => ({
+                      ...p,
+                      enabled: true,
+                      window_start: p.window_start ?? "18:00",
+                      window_end: p.window_end ?? "22:00",
+                    }));
+                  }}
+                >
+                  Custom time
+                </button>
+              </div>
+              {special.enabled && customTime && (
+                <div className={s.fieldGrid}>
+                  <div>
+                    <label className={s.label}>From</label>
+                    <input
+                      className={s.input}
+                      type="time"
+                      value={special.window_start ?? "18:00"}
+                      onChange={(e) => setSpecial((p) => ({ ...p, window_start: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className={s.label}>To</label>
+                    <input
+                      className={s.input}
+                      type="time"
+                      value={special.window_end ?? "22:00"}
+                      onChange={(e) => setSpecial((p) => ({ ...p, window_end: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* How early */}
+            <div className={s.card}>
+              <div className={s.cardTitle}>Send how early</div>
+              <p className={s.note}>
+                How long before each customer's usual order time the message goes out.
+              </p>
+              <div className={s.pillRow}>
+                {[15, 30, 45].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`${s.pill} ${
+                      !leadCustom && special.lead_minutes === n ? s.pillActive : ""
+                    }`}
+                    onClick={() => {
+                      setLeadCustom(false);
+                      setSpecial((p) => ({ ...p, lead_minutes: n }));
+                    }}
+                  >
+                    {n} min
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`${s.pill} ${leadCustom ? s.pillActive : ""}`}
+                  onClick={() => setLeadCustom(true)}
+                >
+                  Custom
+                </button>
+              </div>
+              {leadCustom && (
                 <input
                   className={s.input}
                   type="number"
@@ -556,30 +645,95 @@ export function MarketingScreen() {
                     setSpecial((p) => ({ ...p, lead_minutes: Number(e.target.value) }))
                   }
                 />
-              </div>
-              <div>
-                <label className={s.label}>Default time (new customers)</label>
-                <input
-                  className={s.input}
-                  type="time"
-                  value={special.default_time}
-                  onChange={(e) =>
-                    setSpecial((p) => ({ ...p, default_time: e.target.value }))
-                  }
-                />
-              </div>
+              )}
             </div>
 
-            <div className={s.specialFooter}>
-              <span
-                className={`${s.statusPill} ${special.enabled ? s.statusOn : s.statusOff}`}
-              >
-                {special.enabled ? "● Active" : "○ Off"}
-              </span>
-              <Button onClick={onSaveSpecial} disabled={savingSpecial}>
-                {savingSpecial ? "Saving…" : "Save automation"}
-              </Button>
+            {/* Template */}
+            <div className={s.card}>
+              <div className={s.cardHead}>
+                <div className={s.cardTitle}>Select Template</div>
+                {specialTpl && (
+                  <div className={s.tplHeadRight}>
+                    {specialTpl.status === "pending_meta" && (
+                      <button
+                        type="button"
+                        className={s.refresh}
+                        onClick={() => onRefresh(specialTpl.id)}
+                      >
+                        ↻ Refresh
+                      </button>
+                    )}
+                    <span
+                      className={`${s.badge} ${s["badge_" + specialTpl.status] ?? ""}`}
+                      title={
+                        specialTpl.status === "pending_meta" ? "Awaiting Meta approval" : undefined
+                      }
+                    >
+                      {STATUS_LABEL[specialTpl.status] ?? specialTpl.status}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className={s.note}>
+                The approved template that gets sent. Pending ones show here until approved.
+              </p>
+              <div className={s.pillRow}>
+                {visibleTemplates.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`${s.pill} ${special.template_id === t.id ? s.pillActive : ""}`}
+                    onClick={() => setSpecial((p) => ({ ...p, template_id: t.id }))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSpecial((p) => ({ ...p, template_id: t.id }));
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title={t.meta_template_name}
+                  >
+                    <span className={s.pillName}>{prettyTemplateName(t.meta_template_name)}</span>
+                    {special.template_id === t.id && (
+                      <button
+                        type="button"
+                        className={s.pillX}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDelete(t);
+                        }}
+                        title="Delete template"
+                        aria-label={`Delete ${prettyTemplateName(t.meta_template_name)}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" className={s.createPill} onClick={() => setShowCreate(true)}>
+                  ＋ New template
+                </button>
+              </div>
+              {approvedTemplates.length === 0 && (
+                <span className={s.hint}>
+                  No approved templates yet. Select one once Meta approves it (use Refresh to check).
+                </span>
+              )}
             </div>
+
+            {/* Full-width save bar (mirrors the WhatsApp tab's Send bar) */}
+            <button
+              type="button"
+              className={s.sendBar}
+              disabled={savingSpecial || specialSaveBlocked}
+              onClick={onSaveSpecial}
+            >
+              {savingSpecial
+                ? "Saving…"
+                : specialSaveBlocked
+                  ? "Template must be approved to save"
+                  : `💾 Save automation · ${special.enabled ? "On" : "Off"}`}
+            </button>
           </div>
         </div>
       )}

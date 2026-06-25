@@ -65,9 +65,57 @@
   color: #fff;
 }
 
-/* One-day-promotion tab wrapper — keep the form a readable width. */
-.promoWrap {
-  max-width: 640px;
+/* One-day-promotion tab — on/off toggle switch in the card header. */
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+.switchTrack {
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--border-default);
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.18s ease;
+}
+.switchThumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease;
+}
+.switch input:checked + .switchTrack {
+  background: #25d366;
+}
+.switch input:checked + .switchTrack .switchThumb {
+  transform: translateX(20px);
+}
+.switch input:focus-visible + .switchTrack {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.fieldGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+.promoSave {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 
 /* ===== Broadcast-composer layout: big title, preview left, options right ===== */
@@ -173,6 +221,13 @@
 .pill:hover {
   border-color: var(--border-strong);
 }
+
+/* Refresh + status badge cluster, top-right of the Template card header. */
+.tplHeadRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .pillActive {
   background: #25d366;
   border-color: #25d366;
@@ -219,16 +274,17 @@
   margin: -2px -4px -2px 0;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: #ffffff;
+  color: var(--sla-critical);
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  transition: background 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 .pillX:hover {
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--sla-critical);
+  color: #ffffff;
 }
 
 .createPill {
@@ -293,8 +349,11 @@
   background: #1fbe5b;
 }
 .sendBar:disabled {
-  background: var(--bg-surface-inset);
-  color: var(--text-muted);
+  /* Faded green (not the near-white inset) so it stays recognisable as the
+     Send button and doesn't blend into the page background. */
+  background: #25d366;
+  color: #ffffff;
+  opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
 }
