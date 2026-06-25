@@ -339,6 +339,7 @@ async def run_campaign_send(
     campaign: Campaign,
     provider: TemplatePort,
     now_utc: datetime,
+    audience_ids: list[int] | None = None,
 ) -> dict:
     """The core compliant send. Returns a summary of queued/suppressed counts.
 
@@ -355,8 +356,21 @@ async def run_campaign_send(
     if tpl is None or tpl.status != "approved":
         raise ValueError("campaign template is not approved")
 
-    # Audience: explicit segment, else all opted-in customers of the tenant.
-    if campaign.segment_id is not None:
+    # Audience: an explicit id list (e.g. a named RFM bucket computed by the
+    # caller) wins; else a saved segment's DSL; else all customers of the tenant.
+    if audience_ids is not None:
+        customers = (
+            (
+                await session.execute(
+                    select(Customer).where(Customer.id.in_(audience_ids))
+                )
+            )
+            .scalars()
+            .all()
+            if audience_ids
+            else []
+        )
+    elif campaign.segment_id is not None:
         seg = await session.get(Segment, campaign.segment_id)
         customer_ids = await evaluate_segment(
             session, restaurant_id=campaign.restaurant_id, dsl=seg.definition

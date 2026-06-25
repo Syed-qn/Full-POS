@@ -15,6 +15,13 @@ export interface SegmentResponse {
   last_preview_count: number | null;
 }
 
+/** One named RFM bucket + live customer count (GET /marketing/audience). */
+export interface AudienceSegment {
+  key: string;
+  label: string;
+  count: number;
+}
+
 export interface TemplateResponse {
   id: number;
   meta_template_name: string;
@@ -47,6 +54,11 @@ export async function fetchCampaigns(): Promise<CampaignResponse[]> {
 /** GET /api/v1/marketing/segments */
 export async function fetchSegments(): Promise<SegmentResponse[]> {
   return apiClient.get<SegmentResponse[]>("/api/v1/marketing/segments");
+}
+
+/** GET /api/v1/marketing/audience — named RFM buckets with live counts. */
+export async function fetchAudience(): Promise<AudienceSegment[]> {
+  return apiClient.get<AudienceSegment[]>("/api/v1/marketing/audience");
 }
 
 /** GET /api/v1/marketing/templates */
@@ -133,6 +145,7 @@ export async function deleteTemplate(id: number): Promise<void> {
 export async function broadcast(input: {
   template_id: number;
   segment_id?: number | null;
+  rfm_segment?: string | null;
   coupon_value?: string | null;
   type?: string;
 }): Promise<BroadcastResponse> {

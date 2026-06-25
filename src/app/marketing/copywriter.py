@@ -13,8 +13,31 @@ import logging
 import re
 
 from app.config import get_settings
+from app.llm.port import strip_dashes
 
 _logger = logging.getLogger(__name__)
+
+# One emoji "unit": a base emoji glyph + optional skin-tone + optional VS16,
+# plus any ZWJ-joined continuation so family/profession sequences stay intact.
+_EMOJI_CORE = (
+    r"[\U0001F300-\U0001FAFF"  # symbols & pictographs (+ supplemental/extended-A)
+    r"\U00002600-\U000027BF"  # misc symbols + dingbats
+    r"\U00002B00-\U00002BFF"  # stars, arrows
+    r"\U00002300-\U000023FF"  # ⌚⏰ etc.
+    r"\U0001F1E6-\U0001F1FF]"  # regional indicators (flags)
+)
+_EMOJI_UNIT = (
+    rf"{_EMOJI_CORE}[\U0001F3FB-\U0001F3FF]?️?"
+    rf"(?:‍{_EMOJI_CORE}[\U0001F3FB-\U0001F3FF]?️?)*"
+)
+_ADJACENT_EMOJI_RE = re.compile(rf"({_EMOJI_UNIT})(?:{_EMOJI_UNIT})+")
+
+
+def _dedupe_adjacent_emoji(text: str) -> str:
+    """Collapse runs of back-to-back emojis to a single emoji (no '🍽️🔥')."""
+    if not text:
+        return text
+    return _ADJACENT_EMOJI_RE.sub(lambda m: m.group(1), text)
 
 _PROMPT = (
     "You write WhatsApp marketing message templates for a restaurant called "
@@ -25,8 +48,11 @@ _PROMPT = (
     "e.g. 'Hi {{{{1}}}},'.\n"
     "- Use {{{{1}}}} EXACTLY once and no other placeholders.\n"
     "- Max ~400 characters. A few tasteful, relevant emojis are welcome (about "
-    "1-4, e.g. 🍽️🔥😋🎉) to make it pop — don't overdo it. No shortened links, "
-    "no ALL CAPS words.\n"
+    "1 to 3, e.g. 🍽️ 😋 🎉) to make it pop, but NEVER put two emojis next to "
+    "each other. Keep at most one emoji at a time, with words in between. Do not "
+    "overdo it. No shortened links, no ALL CAPS words.\n"
+    "- Do NOT use hyphens, en-dashes or em-dashes (- , – , —) as "
+    "separators. Use commas or short separate sentences instead.\n"
     "- End with a clear call to action (e.g. 'Reply to order').\n"
     'Reply with ONLY JSON: {{"body": "...", "footer": "Reply STOP to opt out"}}'
 )
@@ -80,6 +106,8 @@ async def draft_template(*, restaurant_name: str, describe: str) -> dict:
         drafted = _fallback(describe)
 
     body = str(drafted["body"]).strip()
+    # No hyphens/em/en-dashes, and never two emojis back-to-back (manager pref).
+    body = _dedupe_adjacent_emoji(strip_dashes(body))
     # Guarantee exactly one {{1}} placeholder (Meta rejects mismatched samples).
     if "{{1}}" not in body:
         body = "Hi {{1}}, " + body

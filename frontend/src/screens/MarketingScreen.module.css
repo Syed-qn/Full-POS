@@ -27,6 +27,290 @@
   align-items: stretch;
 }
 
+/* ===== Mode tab bar (broadcast "Channels"-style white pill bar) ===== */
+.tabBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+.tabGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+}
+.tabActive,
+.tabActive:hover {
+  background: #25d366;
+  color: #fff;
+}
+
+/* One-day-promotion tab wrapper — keep the form a readable width. */
+.promoWrap {
+  max-width: 640px;
+}
+
+/* ===== Broadcast-composer layout: big title, preview left, options right ===== */
+.pageTitle {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--text-primary);
+  margin: 0;
+}
+.pageSub {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Live preview (left) + options column (right). Stacks on narrow screens. */
+.mainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 16px;
+  align-items: stretch;
+}
+@media (max-width: 900px) {
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* LEFT — tall persistent preview panel. */
+.previewPanel {
+  background: var(--bg-surface);
+  border-radius: 16px;
+  padding: 24px;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+}
+.previewPanelLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.previewPanelBody {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: 16px;
+}
+.previewEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* RIGHT — stacked option cards + the Send bar. */
+.rightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cardCount {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Template picker pills (segment-style). */
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.pill:hover {
+  border-color: var(--border-strong);
+}
+.pillActive {
+  background: #25d366;
+  border-color: #25d366;
+  color: #fff;
+}
+.pillName {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pillTag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-surface-inset);
+  color: var(--text-muted);
+}
+.pillTag_approved {
+  color: var(--sla-safe);
+}
+.pillTag_pending_meta {
+  color: var(--sla-warn);
+}
+.pillTag_rejected {
+  color: var(--sla-critical);
+}
+/* Inside an active (green) pill, the inner tag inverts for contrast. */
+.pillActive .pillTag {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+/* Delete affordance — appears inside the selected (green) template pill. */
+.pillX {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: -2px -4px -2px 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s;
+}
+.pillX:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.createPill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed var(--accent-primary);
+  background: transparent;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.createPill:hover {
+  background: var(--accent-primary-dim);
+}
+
+/* Contextual actions for the selected template (refresh / delete / reject). */
+.selActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.deleteLink {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.12s;
+}
+.deleteLink:hover {
+  color: var(--sla-critical);
+}
+.deleteLink:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Full-width Send bar — the primary broadcast action. */
+.sendBar {
+  width: 100%;
+  margin-top: 2px;
+  padding: 15px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #25d366;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, opacity 0.15s;
+}
+.sendBar:hover:not(:disabled) {
+  background: #1fbe5b;
+}
+.sendBar:disabled {
+  background: var(--bg-surface-inset);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.sendBarArmed,
+.sendBarArmed:hover:not(:disabled) {
+  background: var(--sla-critical);
+}
+
+/* Pill-shaped loading skeleton for the template picker. */
+.skPill {
+  width: 132px;
+  height: 35px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
 /* ---- Create-template dialog ---- */
 .overlay {
   position: fixed;
@@ -42,7 +326,7 @@
 .modal {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.25));
   padding: 20px 24px 24px;
   width: min(880px, 100%);
@@ -60,7 +344,7 @@
 .previewModal {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.25));
   padding: 18px 20px 22px;
   width: min(420px, 100%);
@@ -86,20 +370,20 @@
   color: var(--text-primary);
 }
 
+/* Fidras broadcast-page card language: flat white, large radius, generous
+   padding (no border/shadow). Theme colours stay restaurant-native. */
 .card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-  padding: 18px 20px;
+  border-radius: 16px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .cardTitle {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 2px;
 }
@@ -169,14 +453,15 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: 8px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-primary);
   width: 100%;
   box-sizing: border-box;
 }
 .textarea {
+  border-radius: 10px;
   resize: vertical;
 }
 
@@ -222,6 +507,41 @@
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+/* Draft button sits on its own line, below the "Describe your offer" box. */
+.draftActions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* Header-image action buttons wrap (Upload + the coming-soon Generate buttons). */
+.imageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+/* "Soon" pill overlays the disabled button's top-right corner. It sits OUTSIDE
+   the button so the button's disabled opacity:0.5 doesn't fade it out. */
+.soonWrap {
+  position: relative;
+  display: inline-flex;
+}
+.soonBadge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--sla-warn);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
 }
 
 .empty {
@@ -374,10 +694,10 @@
 .badge {
   flex-shrink: 0;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  border-radius: 12px;
-  padding: 2px 10px;
+  border-radius: 999px;
+  padding: 4px 10px;
   border: 1px solid var(--border-default);
   color: var(--text-secondary);
 }

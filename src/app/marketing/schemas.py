@@ -80,8 +80,17 @@ class ImageUploadResponse(BaseModel):
 class BroadcastRequest(BaseModel):
     template_id: int
     segment_id: int | None = None          # None = all opted-in customers
+    rfm_segment: str | None = None         # named RFM bucket key, e.g. "champions"; None/"all" = everyone
     coupon_value: str | None = None        # Decimal string, optional promo coupon
     type: str = "promotional"
+
+
+class AudienceSegmentOut(BaseModel):
+    """One named RFM bucket with its live customer count (for the Segment pills)."""
+
+    key: str
+    label: str
+    count: int
 
 
 class BroadcastResponse(BaseModel):

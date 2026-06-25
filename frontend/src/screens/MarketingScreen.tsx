@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
 import type { RestaurantOut } from "../lib/types";
@@ -9,10 +9,12 @@ import {
   createTemplate,
   deleteTemplate,
   draftTemplate,
+  fetchAudience,
   fetchTemplates,
   refreshTemplate,
   submitTemplate,
   uploadTemplateImage,
+  type AudienceSegment,
   type TemplateResponse,
 } from "../lib/marketingApi";
 import s from "./MarketingScreen.module.css";
@@ -30,6 +32,20 @@ type TodaysSpecial = {
 function autoName(describe: string): string {
   const words = describe.toLowerCase().match(/[a-z0-9]+/g)?.slice(0, 4) ?? [];
   return ("promo_" + words.join("_")).slice(0, 60) || "promo_offer";
+}
+
+/** Humanise a raw Meta template name (e.g. "promo_20_off_biryani_20260625")
+ *  into a short, title-cased label ("20 Off Biryani") for the pills. The raw
+ *  name still shows on hover (title attr) and in the delete confirm. */
+function prettyTemplateName(raw: string): string {
+  let s = raw
+    .replace(/^promo[_-]/i, "") // drop the auto "promo_" prefix
+    .replace(/[_-]\d{6,8}(?:[_-]\d{1,3})?$/, "") // drop datestamp (+ dedup counter), keep "20_off"
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (!s) s = raw.replace(/[_-]+/g, " ").trim();
+  s = s.replace(/\b\w/g, (c) => c.toUpperCase()); // Title Case
+  return s.length > 26 ? s.slice(0, 25).trimEnd() + "…" : s;
 }
 
 // Always appended to every template (Meta requires an opt-out path). Hidden from
@@ -59,14 +75,25 @@ export function MarketingScreen() {
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [previewTpl, setPreviewTpl] = useState<TemplateResponse | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Broadcast — per-template, triggered from the list (after approval)
+  // Selected template — drives the left live-preview panel, the contextual
+  // actions and the bottom Send bar (broadcast-composer style layout).
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // Top tab: WhatsApp broadcast vs the one-day promotion (Today's Special) view.
+  const [tab, setTab] = useState<"whatsapp" | "promotion">("whatsapp");
+
+  // Audience — named RFM buckets with live counts; "all" targets everyone.
+  const [audience, setAudience] = useState<AudienceSegment[]>([]);
+  const [segment, setSegment] = useState<string>("all");
+
+  // Broadcast — armed via the bottom Send bar (two-tap confirm)
   const [armedId, setArmedId] = useState<number | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [tplPage, setTplPage] = useState(0);
+  // Template pending a delete confirmation (styled dialog, not window.confirm).
+  const [confirmDelete, setConfirmDelete] = useState<TemplateResponse | null>(null);
 
   // Today's Special automation (settings.todays_special)
   const [special, setSpecial] = useState<TodaysSpecial>({
@@ -81,6 +108,8 @@ export function MarketingScreen() {
     const rows = await fetchTemplates().catch(() => []);
     setTemplates(rows);
     setLoaded(true);
+    const aud = await fetchAudience().catch(() => []);
+    setAudience(aud);
     const me = await apiClient.get<RestaurantOut>("/api/v1/me").catch(() => null);
     const cfg = (me?.settings as Record<string, unknown> | undefined)?.todays_special as
       | Partial<TodaysSpecial>
@@ -101,24 +130,18 @@ export function MarketingScreen() {
   const approvedTemplates = templates.filter((t) => t.status === "approved");
   // The list shows only meaningful states — drafts (unsubmitted) are noise.
   const visibleTemplates = templates.filter((t) => t.status !== "draft");
-  const TPL_PER_PAGE = 5;
-  const tplPageCount = Math.max(1, Math.ceil(visibleTemplates.length / TPL_PER_PAGE));
-  const tplPageSafe = Math.min(tplPage, tplPageCount - 1);
-  const pagedTemplates = visibleTemplates.slice(
-    tplPageSafe * TPL_PER_PAGE,
-    tplPageSafe * TPL_PER_PAGE + TPL_PER_PAGE,
-  );
+  // Resolve from the live list so a status change (refresh) reflects instantly.
+  const selectedTpl = templates.find((t) => t.id === selectedId) ?? null;
 
   async function onDeleteTemplate(t: TemplateResponse) {
-    if (!window.confirm(`Delete template "${t.meta_template_name}"? This can't be undone.`)) {
-      return;
-    }
     setDeletingId(t.id);
     try {
       await deleteTemplate(t.id);
       setTemplates((prev) => prev.filter((x) => x.id !== t.id));
-      // If the deleted template was the auto-special one, clear that selection.
+      // Drop the deleted template from selection + the auto-special slot.
+      setSelectedId((cur) => (cur === t.id ? null : cur));
       setSpecial((p) => (p.template_id === t.id ? { ...p, template_id: null } : p));
+      setConfirmDelete(null);
       toast("Template deleted.");
     } catch {
       toast("Could not delete the template.", "error");
@@ -238,7 +261,7 @@ export function MarketingScreen() {
     setArmedId(null);
     setSendingId(id);
     try {
-      const res = await broadcast({ template_id: id, type: "promotional" });
+      const res = await broadcast({ template_id: id, rfm_segment: segment, type: "promotional" });
       const extras = [
         res.suppressed_optout ? `${res.suppressed_optout} opted-out` : "",
         res.suppressed_cap ? `${res.suppressed_cap} over 24h cap` : "",
@@ -256,208 +279,323 @@ export function MarketingScreen() {
     }
   }
 
+  const segLabel = audience.find((a) => a.key === segment)?.label ?? "All Customers";
+  const sendDisabled =
+    !selectedTpl || selectedTpl.status !== "approved" || sendingId === selectedId;
+  const sendLabel = !selectedTpl
+    ? "Select a template to send"
+    : selectedTpl.status !== "approved"
+      ? "Template must be approved to send"
+      : sendingId === selectedId
+        ? "Sending…"
+        : armedId === selectedId
+          ? "Tap again to confirm"
+          : `📣 Send via WhatsApp · ${segLabel}`;
+
   return (
     <div className={s.root}>
+      {/* Big composer-style header */}
       <div className={s.topbar}>
-        <PageHeader
-          title="Marketing"
-          subtitle="WhatsApp promotions. Create a template, get it approved, broadcast."
-        />
+        <div>
+          <h1 className={s.pageTitle}>Marketing</h1>
+          <p className={s.pageSub}>
+            WhatsApp promotions. Create a template, get it approved, broadcast.
+          </p>
+        </div>
+      </div>
+
+      {/* Mode tabs (broadcast "Channels"-style bar) + the New-template action */}
+      <div className={s.tabBar}>
+        <div className={s.tabGroup}>
+          <button
+            type="button"
+            className={`${s.tab} ${tab === "whatsapp" ? s.tabActive : ""}`}
+            onClick={() => setTab("whatsapp")}
+          >
+            WhatsApp
+          </button>
+          <button
+            type="button"
+            className={`${s.tab} ${tab === "promotion" ? s.tabActive : ""}`}
+            onClick={() => setTab("promotion")}
+          >
+            One day Promotion
+          </button>
+        </div>
         <Button onClick={() => setShowCreate(true)}>＋ New template</Button>
       </div>
 
-      {/* TEMPLATES (left) + TODAY'S SPECIAL (right), side by side */}
-      <div className={s.columns}>
+      {/* WHATSAPP TAB — LIVE PREVIEW (left) + options (right) */}
+      {tab === "whatsapp" && (
+      <div className={s.mainGrid}>
+        {/* LEFT — persistent live preview of the selected template */}
+        <div className={s.previewPanel}>
+          <div className={s.previewPanelLabel}>Live preview</div>
+          {selectedTpl ? (
+            <div className={s.previewPanelBody}>
+              <TemplatePreview
+                imageUrl={selectedTpl.header?.image_url ?? null}
+                body={selectedTpl.body ?? ""}
+                withButton={(selectedTpl.buttons?.length ?? 0) > 0}
+                buttonLabel={selectedTpl.buttons?.[0]?.label ?? ""}
+              />
+            </div>
+          ) : (
+            <div className={s.previewEmpty}>Select a template to preview</div>
+          )}
+        </div>
 
-      {/* TEMPLATE LIST — Send appears here once a template is approved */}
-      <div className={s.card}>
-        <div className={s.cardTitle}>Your templates</div>
-        <p className={s.note}>
-          Once a template is <strong>approved</strong>, tap <strong>Send</strong> to
-          broadcast it to all opted in customers. We skip anyone who opted out, anyone
-          already messaged twice in 24h, and (per UAE rules) any send outside 9am to 6pm.
-        </p>
-        {!loaded ? (
-          <div className={s.tplList} aria-busy="true" aria-label="Loading templates">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className={s.tplRow}>
-                <span className={`${s.sk} ${s.skName}`} />
-                <span className={`${s.sk} ${s.skBadge}`} />
-                <span className={`${s.sk} ${s.skBtn}`} />
+        {/* RIGHT — segment, template pills, and the Send bar */}
+        <div className={s.rightCol}>
+          {/* SEGMENT PICKER — named RFM buckets with live counts */}
+          <div className={s.card}>
+            <div className={s.cardTitle}>
+              Segment <span className={s.cardCount}>(1 selected)</span>
+            </div>
+            {!loaded ? (
+              <div className={s.pillRow} aria-busy="true" aria-label="Loading segments">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <span key={i} className={`${s.sk} ${s.skPill}`} />
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className={s.pillRow}>
+                {audience.map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    className={`${s.pill} ${segment === a.key ? s.pillActive : ""}`}
+                    onClick={() => setSegment(a.key)}
+                  >
+                    {a.label}
+                    <span className={s.pillTag}>{a.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        ) : visibleTemplates.length === 0 ? (
-          <div className={s.empty}>No submitted templates yet.</div>
-        ) : (
-          <div className={s.tplList}>
-            {pagedTemplates.map((t) => (
-              <div key={t.id} className={s.tplRow}>
-                <span className={s.tplName}>{t.meta_template_name}</span>
-                <span
-                  className={`${s.badge} ${s["badge_" + t.status] ?? ""}`}
-                  title={t.status === "pending_meta" ? "Awaiting Meta approval" : undefined}
-                >
-                  {STATUS_LABEL[t.status] ?? t.status}
-                </span>
-                {t.status === "rejected" && t.rejection_reason && (
-                  <span className={s.reject}>{t.rejection_reason}</span>
+
+          {/* TEMPLATE PICKER — pills */}
+          <div className={s.card}>
+            <div className={s.cardHead}>
+              <div className={s.cardTitle}>
+                Content Template{" "}
+                {visibleTemplates.length > 0 && (
+                  <span className={s.cardCount}>({visibleTemplates.length})</span>
                 )}
-                <div className={s.tplActions}>
-                  {t.status === "pending_meta" && (
-                    <button type="button" className={s.refresh} onClick={() => onRefresh(t.id)}>
-                      ↻ Refresh
-                    </button>
-                  )}
-                  {t.status === "approved" && (
+              </div>
+              {selectedTpl && (
+                <span
+                  className={`${s.badge} ${s["badge_" + selectedTpl.status] ?? ""}`}
+                  title={
+                    selectedTpl.status === "pending_meta" ? "Awaiting Meta approval" : undefined
+                  }
+                >
+                  {STATUS_LABEL[selectedTpl.status] ?? selectedTpl.status}
+                </span>
+              )}
+            </div>
+            <p className={s.note}>
+              Pick an <strong>approved</strong> template, preview it on the left, then{" "}
+              <strong>Send</strong> to all opted in customers. We skip anyone who opted out,
+              anyone already messaged twice in 24h, and (per UAE rules) any send outside 9am to
+              6pm.
+            </p>
+
+            {!loaded ? (
+              <div className={s.pillRow} aria-busy="true" aria-label="Loading templates">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <span key={i} className={`${s.sk} ${s.skPill}`} />
+                ))}
+              </div>
+            ) : (
+              <div className={s.pillRow}>
+                {visibleTemplates.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`${s.pill} ${selectedId === t.id ? s.pillActive : ""}`}
+                    onClick={() => setSelectedId(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedId(t.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title={t.meta_template_name}
+                  >
+                    <span className={s.pillName}>{prettyTemplateName(t.meta_template_name)}</span>
+                    {t.status !== "approved" && (
+                      <span className={`${s.pillTag} ${s["pillTag_" + t.status] ?? ""}`}>
+                        {STATUS_LABEL[t.status] ?? t.status}
+                      </span>
+                    )}
+                    {selectedId === t.id && (
+                      <button
+                        type="button"
+                        className={s.pillX}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDelete(t);
+                        }}
+                        title="Delete template"
+                        aria-label={`Delete ${prettyTemplateName(t.meta_template_name)}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" className={s.createPill} onClick={() => setShowCreate(true)}>
+                  ＋ New template
+                </button>
+              </div>
+            )}
+
+            {loaded && visibleTemplates.length === 0 && (
+              <div className={s.empty}>No submitted templates yet.</div>
+            )}
+
+            {/* Contextual actions for the selected template (delete is the × on the pill) */}
+            {selectedTpl &&
+              (selectedTpl.status === "pending_meta" ||
+                (selectedTpl.status === "rejected" && selectedTpl.rejection_reason)) && (
+                <div className={s.selActions}>
+                  {selectedTpl.status === "pending_meta" && (
                     <button
                       type="button"
-                      className={`${s.sendBtn} ${armedId === t.id ? s.sendBtnArmed : ""}`}
-                      onClick={() => onBroadcast(t.id)}
-                      disabled={sendingId === t.id}
+                      className={s.refresh}
+                      onClick={() => onRefresh(selectedTpl.id)}
                     >
-                      {sendingId === t.id
-                        ? "Sending…"
-                        : armedId === t.id
-                          ? "Tap to confirm"
-                          : "📣 Send"}
+                      ↻ Refresh status
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className={s.previewBtn}
-                    onClick={() => setPreviewTpl(t)}
-                    title="Preview message"
-                    aria-label={`Preview ${t.meta_template_name}`}
-                  >
-                    👁
-                  </button>
-                  <button
-                    type="button"
-                    className={s.deleteTpl}
-                    onClick={() => onDeleteTemplate(t)}
-                    disabled={deletingId === t.id}
-                    title="Delete template"
-                    aria-label={`Delete ${t.meta_template_name}`}
-                  >
-                    {deletingId === t.id ? "…" : "🗑"}
-                  </button>
+                  {selectedTpl.status === "rejected" && selectedTpl.rejection_reason && (
+                    <span className={s.reject}>{selectedTpl.rejection_reason}</span>
+                  )}
                 </div>
+              )}
+          </div>
+
+          {/* SEND BAR — full-width primary action, broadcast-composer style */}
+          <button
+            type="button"
+            className={`${s.sendBar} ${armedId === selectedId ? s.sendBarArmed : ""}`}
+            disabled={sendDisabled}
+            onClick={() => selectedId != null && onBroadcast(selectedId)}
+          >
+            {sendLabel}
+          </button>
+        </div>
+      </div>
+      )}
+
+      {/* ONE DAY PROMOTION TAB — Today's Special auto-timed daily send */}
+      {tab === "promotion" && (
+        <div className={s.promoWrap}>
+          <div className={s.card}>
+            <div className={s.cardTitle}>Today's Special (auto timed) 🕒</div>
+            <p className={s.note}>
+              Pick an <strong>approved</strong> template and turn it on:
+            </p>
+            <ul className={s.noteList}>
+              <li>
+                🎯 Each customer gets it ~<strong>{special.lead_minutes} min</strong> before
+                their usual order time
+              </li>
+              <li>🕒 No clear pattern yet? They get the <strong>default time</strong> below</li>
+              <li>📈 Send times are learned from each customer's past orders</li>
+              <li>🔁 Runs every day automatically while the toggle stays on</li>
+              <li>✅ Opt out, the 24h cap and the 9am to 6pm window still apply</li>
+            </ul>
+
+            <label className={s.checkRow}>
+              <input
+                type="checkbox"
+                checked={special.enabled}
+                onChange={(e) => setSpecial((p) => ({ ...p, enabled: e.target.checked }))}
+              />
+              Enable Today's Special automation
+            </label>
+
+            <label className={s.label}>Template</label>
+            <select
+              className={s.input}
+              value={special.template_id ?? ""}
+              onChange={(e) =>
+                setSpecial((p) => ({
+                  ...p,
+                  template_id: e.target.value ? Number(e.target.value) : null,
+                }))
+              }
+            >
+              <option value="">Select an approved template</option>
+              {approvedTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {prettyTemplateName(t.meta_template_name)}
+                </option>
+              ))}
+            </select>
+            {approvedTemplates.length === 0 && (
+              <span className={s.hint}>
+                No approved templates yet. Create one above and wait for Meta approval.
+              </span>
+            )}
+
+            <div className={s.row}>
+              <div>
+                <label className={s.label}>Send this many minutes early</label>
+                <input
+                  className={s.input}
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={special.lead_minutes}
+                  onChange={(e) =>
+                    setSpecial((p) => ({ ...p, lead_minutes: Number(e.target.value) }))
+                  }
+                />
               </div>
-            ))}
-          </div>
-        )}
-        {tplPageCount > 1 && (
-          <div className={s.tplPager}>
-            <button
-              type="button"
-              className={s.pagerBtn}
-              onClick={() => setTplPage((p) => Math.max(0, p - 1))}
-              disabled={tplPageSafe === 0}
-            >
-              ← Prev
-            </button>
-            <span className={s.pagerInfo}>
-              Page {tplPageSafe + 1} of {tplPageCount}
-            </span>
-            <button
-              type="button"
-              className={s.pagerBtn}
-              onClick={() => setTplPage((p) => Math.min(tplPageCount - 1, p + 1))}
-              disabled={tplPageSafe >= tplPageCount - 1}
-            >
-              Next →
-            </button>
-          </div>
-        )}
-      </div>
+              <div>
+                <label className={s.label}>Default time (new customers)</label>
+                <input
+                  className={s.input}
+                  type="time"
+                  value={special.default_time}
+                  onChange={(e) =>
+                    setSpecial((p) => ({ ...p, default_time: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
 
-      {/* TODAY'S SPECIAL — auto-timed daily send, per-customer */}
-      <div className={s.card}>
-        <div className={s.cardTitle}>Today's Special (auto timed) 🕒</div>
-        <p className={s.note}>Pick an <strong>approved</strong> template and turn it on:</p>
-        <ul className={s.noteList}>
-          <li>
-            🎯 Each customer gets it ~<strong>{special.lead_minutes} min</strong> before
-            their usual order time
-          </li>
-          <li>🕒 No clear pattern yet? They get the <strong>default time</strong> below</li>
-          <li>📈 Send times are learned from each customer's past orders</li>
-          <li>🔁 Runs every day automatically while the toggle stays on</li>
-          <li>✅ Opt out, the 24h cap and the 9am to 6pm window still apply</li>
-        </ul>
-
-        <label className={s.checkRow}>
-          <input
-            type="checkbox"
-            checked={special.enabled}
-            onChange={(e) => setSpecial((p) => ({ ...p, enabled: e.target.checked }))}
-          />
-          Enable Today's Special automation
-        </label>
-
-        <label className={s.label}>Template</label>
-        <select
-          className={s.input}
-          value={special.template_id ?? ""}
-          onChange={(e) =>
-            setSpecial((p) => ({
-              ...p,
-              template_id: e.target.value ? Number(e.target.value) : null,
-            }))
-          }
-        >
-          <option value="">Select an approved template</option>
-          {approvedTemplates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.meta_template_name}
-            </option>
-          ))}
-        </select>
-        {approvedTemplates.length === 0 && (
-          <span className={s.hint}>
-            No approved templates yet. Create one above and wait for Meta approval.
-          </span>
-        )}
-
-        <div className={s.row}>
-          <div>
-            <label className={s.label}>Send this many minutes early</label>
-            <input
-              className={s.input}
-              type="number"
-              min={0}
-              max={120}
-              value={special.lead_minutes}
-              onChange={(e) =>
-                setSpecial((p) => ({ ...p, lead_minutes: Number(e.target.value) }))
-              }
-            />
-          </div>
-          <div>
-            <label className={s.label}>Default time (new customers)</label>
-            <input
-              className={s.input}
-              type="time"
-              value={special.default_time}
-              onChange={(e) =>
-                setSpecial((p) => ({ ...p, default_time: e.target.value }))
-              }
-            />
+            <div className={s.specialFooter}>
+              <span
+                className={`${s.statusPill} ${special.enabled ? s.statusOn : s.statusOff}`}
+              >
+                {special.enabled ? "● Active" : "○ Off"}
+              </span>
+              <Button onClick={onSaveSpecial} disabled={savingSpecial}>
+                {savingSpecial ? "Saving…" : "Save automation"}
+              </Button>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className={s.specialFooter}>
-          <span className={`${s.statusPill} ${special.enabled ? s.statusOn : s.statusOff}`}>
-            {special.enabled ? "● Active" : "○ Off"}
-          </span>
-          <Button onClick={onSaveSpecial} disabled={savingSpecial}>
-            {savingSpecial ? "Saving…" : "Save automation"}
-          </Button>
-        </div>
-      </div>
-
-      </div>{/* /columns */}
+      {/* DELETE CONFIRM — styled dialog (replaces window.confirm) */}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete template"
+          message={`Delete "${prettyTemplateName(confirmDelete.meta_template_name)}"? This can't be undone.`}
+          confirmLabel="Delete"
+          danger
+          busy={deletingId === confirmDelete.id}
+          onConfirm={() => onDeleteTemplate(confirmDelete)}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
 
       {/* CREATE TEMPLATE — preview (left) + form (right), shown in a dialog */}
       {showCreate && (
@@ -493,17 +631,44 @@ export function MarketingScreen() {
               {/* RIGHT — form */}
               <div className={s.formCol}>
                 <label className={s.label}>Describe your offer</label>
-                <div className={s.row}>
-                  <textarea
-                    className={s.textarea}
-                    rows={2}
-                    value={describe}
-                    onChange={(e) => setDescribe(e.target.value)}
-                    placeholder="e.g. 20% off all biryani this weekend, free delivery over AED 50"
-                  />
+                <textarea
+                  className={s.textarea}
+                  rows={2}
+                  value={describe}
+                  onChange={(e) => setDescribe(e.target.value)}
+                  placeholder="e.g. 20% off all biryani this weekend, free delivery over AED 50"
+                />
+                <div className={s.draftActions}>
                   <Button variant="ghost" onClick={onDraft} disabled={drafting || describe.trim().length < 3}>
-                    {drafting ? "Drafting…" : "✨ Draft"}
+                    {drafting ? "Generating…" : "✨ Generate message"}
                   </Button>
+                </div>
+
+                <label className={s.label}>Header image (optional)</label>
+                <div className={s.imageActions}>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    hidden
+                    onChange={(e) => onPickImage(e.target.files?.[0])}
+                  />
+                  <Button variant="ghost" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                    {uploading ? "Uploading…" : imageUrl ? "Replace image" : "Upload image"}
+                  </Button>
+                  <span className={s.soonWrap}>
+                    <Button variant="ghost" disabled title="Coming soon">
+                      🖼️ Generate image
+                    </Button>
+                    <span className={s.soonBadge}>Soon</span>
+                  </span>
+                  <span className={s.soonWrap}>
+                    <Button variant="ghost" disabled title="Coming soon">
+                      🎬 Generate video
+                    </Button>
+                    <span className={s.soonBadge}>Soon</span>
+                  </span>
+                  {imageUrl && <img src={imageUrl} alt="header" className={s.thumb} />}
                 </div>
 
                 <label className={s.label}>Message body</label>
@@ -517,21 +682,6 @@ export function MarketingScreen() {
                 <span className={s.hint}>
                   Use <code>{"{{1}}"}</code> once for the customer's name. {body.length}/1024
                 </span>
-
-                <label className={s.label}>Header image (optional)</label>
-                <div className={s.row}>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    hidden
-                    onChange={(e) => onPickImage(e.target.files?.[0])}
-                  />
-                  <Button variant="ghost" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                    {uploading ? "Uploading…" : imageUrl ? "Replace image" : "Upload image"}
-                  </Button>
-                  {imageUrl && <img src={imageUrl} alt="header" className={s.thumb} />}
-                </div>
 
                 <label className={s.checkRow}>
                   <input
@@ -566,30 +716,6 @@ export function MarketingScreen() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* TEMPLATE PREVIEW — read-only WhatsApp-style render of a template */}
-      {previewTpl && (
-        <div className={s.overlay} onClick={() => setPreviewTpl(null)}>
-          <div className={s.previewModal} onClick={(e) => e.stopPropagation()}>
-            <div className={s.modalHead}>
-              <div className={s.cardTitle}>{previewTpl.meta_template_name}</div>
-              <button
-                className={s.modalClose}
-                onClick={() => setPreviewTpl(null)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <TemplatePreview
-              imageUrl={previewTpl.header?.image_url ?? null}
-              body={previewTpl.body ?? ""}
-              withButton={(previewTpl.buttons?.length ?? 0) > 0}
-              buttonLabel={previewTpl.buttons?.[0]?.label ?? ""}
-            />
           </div>
         </div>
       )}

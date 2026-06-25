@@ -15,7 +15,9 @@ from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.marketing.copywriter import draft_template
 from app.marketing.models import Campaign, MarketingMedia, Segment, WaTemplate
+from app.marketing.rfm import RFM_SEGMENTS, segment_counts, segment_customer_ids
 from app.marketing.schemas import (
+    AudienceSegmentOut,
     BroadcastRequest,
     BroadcastResponse,
     CampaignCreate,
@@ -328,6 +330,22 @@ async def list_campaigns(
     ]
 
 
+@router.get("/audience", response_model=list[AudienceSegmentOut])
+async def list_audience(
+    session: AsyncSession = Depends(get_session),
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> list[AudienceSegmentOut]:
+    """Named RFM buckets + live customer counts for the broadcast Segment pills.
+
+    Counts are mutually exclusive (each customer in exactly one bucket) and
+    ``all`` is the whole base, so the named buckets sum to ``all``."""
+    counts = await segment_counts(session, restaurant_id=restaurant.id)
+    return [
+        AudienceSegmentOut(key=key, label=label, count=counts.get(key, 0))
+        for key, label in RFM_SEGMENTS
+    ]
+
+
 @router.post("/broadcast", response_model=BroadcastResponse, status_code=201)
 async def broadcast_now(
     body: BroadcastRequest,
@@ -342,6 +360,13 @@ async def broadcast_now(
     from app.outbox.service import deliver_pending
 
     try:
+        # Named RFM bucket → resolve to an explicit audience id list. None/"all"
+        # leaves audience_ids None so the send falls back to the whole base.
+        audience_ids = None
+        if body.rfm_segment and body.rfm_segment != "all":
+            audience_ids = await segment_customer_ids(
+                session, restaurant_id=restaurant.id, key=body.rfm_segment
+            )
         camp = await create_campaign(
             session,
             restaurant_id=restaurant.id,
@@ -357,6 +382,7 @@ async def broadcast_now(
             campaign=camp,
             provider=get_template_provider(),
             now_utc=datetime.now(timezone.utc),
+            audience_ids=audience_ids,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
