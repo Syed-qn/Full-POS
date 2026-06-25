@@ -426,7 +426,7 @@ export function MarketingScreen() {
                     title={t.meta_template_name}
                   >
                     <span className={s.pillName}>{prettyTemplateName(t.meta_template_name)}</span>
-                    {t.status !== "approved" && (
+                    {t.status !== "approved" && selectedId !== t.id && (
                       <span className={`${s.pillTag} ${s["pillTag_" + t.status] ?? ""}`}>
                         {STATUS_LABEL[t.status] ?? t.status}
                       </span>
@@ -668,7 +668,6 @@ export function MarketingScreen() {
                     </Button>
                     <span className={s.soonBadge}>Soon</span>
                   </span>
-                  {imageUrl && <img src={imageUrl} alt="header" className={s.thumb} />}
                 </div>
 
                 <label className={s.label}>Message body</label>
