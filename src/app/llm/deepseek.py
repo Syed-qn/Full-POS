@@ -246,10 +246,11 @@ _DS_TOOL = {
                 "items": {
                     "type": "array",
                     "description": (
-                        "For add_item ONLY. When the customer names MORE THAN ONE dish in "
-                        "the SAME message, list EVERY dish here (one entry per dish) — do "
-                        "NOT collapse them into a single dish_query and do NOT silently drop "
-                        "any. For a single dish you may use dish_query/qty instead."
+                        "For add_item OR update_qty. When the customer names MORE THAN ONE "
+                        "dish in the SAME message — to add them, or to set their quantities — "
+                        "list EVERY dish here (one entry per dish, with its qty). Do NOT "
+                        "collapse them into a single dish_query and do NOT silently drop any. "
+                        "For a single dish you may use dish_query/qty instead."
                     ),
                     "items": {
                         "type": "object",
@@ -373,6 +374,10 @@ CHANGING QUANTITY — action="update_qty" (dish_query + qty = the NEW TOTAL, not
     "change biryani to 2"     → update_qty dish_query="biryani" qty=2
     "actually 3 biryanis"     → update_qty dish_query="biryani" qty=3
   "make it N" right after adding a dish refers to THAT dish.
+  MULTIPLE dishes in ONE message → action="update_qty" with the 'items' list, ONE entry per dish:
+    "make it 2 chicken biryani and 2 lemon mint"
+        → update_qty items=[{{dish_query:"chicken biryani",qty:2}},{{dish_query:"lemon mint",qty:2}}]
+  List EVERY dish whose quantity changes — NEVER drop one.
 
 REMOVING — action="remove_item" (dish_query = the dish to take off):
     "remove mutton biryani"   → remove_item dish_query="mutton biryani"  (no qty = remove it all)

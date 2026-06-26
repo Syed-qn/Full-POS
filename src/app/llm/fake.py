@@ -153,6 +153,21 @@ class FakeConversationAgent:
                     action="cancel_order",
                     action_data={},
                 )
+            # Multi-dish quantity change ("make it 2 X and 3 Y") → update_qty items.
+            # Checked BEFORE the multi-dish add split so a "make it" stays an update.
+            if any(p in last_user for p in ("make it", "change", "update", "set to")) and \
+                    re.search(r",|\band\b|\+", last_user):
+                clauses = re.split(r"\s*(?:,|\band\b|\+)\s*", last_user)
+                ups = []
+                for clause in clauses:
+                    clause = re.sub(r"\b(make it|change|update to|update|set to|set|to)\b", " ", clause).strip()
+                    m = re.match(r"^(\d+)\s*[xX]?\s+(.*)$", clause)
+                    if m and m.group(2).strip():
+                        ups.append({"dish_query": m.group(2).strip(), "qty": int(m.group(1))})
+                if len(ups) >= 2:
+                    return ConversationAgentResult(
+                        message="Updated!", action="update_qty", action_data={"items": ups},
+                    )
             # Parse quantity prefix: "2x biryani" or "2 biryani"
             qty = 1
             dish_query = last_user

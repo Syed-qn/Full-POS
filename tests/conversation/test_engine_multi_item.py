@@ -146,6 +146,35 @@ async def test_multi_dish_voice_note_adds_all_items(db_session, restaurant):
     assert by_num == {110: 2, 301: 1}
 
 
+async def test_multi_dish_quantity_update_sets_all(db_session, restaurant):
+    """"make it 2 chicken biryani and 2 lemon mint" must update BOTH quantities — a
+    single update_qty used to change one dish and silently drop the other."""
+    await _seed_menu(db_session, restaurant.id)
+
+    await handle_inbound(db_session, _msg("hi", "wamid.uq-greet"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _msg("1 chicken biryani and 1 lemon mint", "wamid.uq-add"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    await handle_inbound(
+        db_session,
+        _msg("make it 2 chicken biryani and 2 lemon mint", "wamid.uq-1"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    from app.ordering.models import OrderItem
+    items = (await db_session.execute(
+        select(OrderItem).order_by(OrderItem.dish_number)
+    )).scalars().all()
+    by_num = {it.dish_number: it.qty for it in items}
+    assert by_num.get(110) == 2, "chicken biryani must be 2"
+    assert by_num.get(301) == 2, "lemon mint must ALSO be 2 (was silently dropped before)"
+
+
 async def test_multi_dish_unknown_dish_is_reported_not_silently_dropped(db_session, restaurant):
     """A dish that isn't on the menu is surfaced ('couldn't find'), while the known
     dishes are still added — no silent loss."""

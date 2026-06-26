@@ -2388,7 +2388,7 @@ async def _execute_ai_remove_item(
 
 async def _execute_ai_update_qty(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
-    restaurant_id: int, dish_query: str, qty: int
+    restaurant_id: int, dish_query: str, qty: int, *, suppress_offers: bool = False,
 ) -> tuple[str, str | None]:
     """Set a cart dish to an exact quantity (``qty <= 0`` removes it).
 
@@ -2396,7 +2396,11 @@ async def _execute_ai_update_qty(
     ASK whether to use the bundle or keep the items separate (outcome
     "awaiting_bundle"); otherwise set it to single×qty. Returns
     ``(outcome, dish_name)`` where outcome is "updated", "removed", "awaiting_bundle",
-    "not_in_cart", or "no_match"."""
+    "not_in_cart", or "no_match".
+
+    ``suppress_offers`` skips the bundle question and sets the quantity directly —
+    used by the multi-dish path (several quantities changed in one message), where
+    pausing to ask about one dish's bundle would abandon the rest."""
     from app.ordering.models import Order
     from app.ordering.service import set_item_qty
 
@@ -2418,7 +2422,7 @@ async def _execute_ai_update_qty(
 
     # If the new quantity matches a bundle, ask before pricing it differently.
     bundle = bundle_variant_for_qty(dish, qty)
-    if bundle is not None:
+    if bundle is not None and not suppress_offers:
         await _offer_bundle_choice(
             session, conv, inbound, restaurant_id,
             dish=dish, qty=qty, notes=None, bundle=bundle,
@@ -2869,8 +2873,46 @@ async def _dispatch_action(
         return
 
     if action == "update_qty":
-        dish_query = data.get("dish_query", "")
-        qty = int(data.get("qty") or 1)
+        items = data.get("items") or []
+        # Multi-dish quantity change in one message ("make it 2 chicken and 2 lemon
+        # mint"): set EVERY named dish (suppressing the per-dish bundle prompt so the
+        # loop never abandons the rest), then echo the real cart. A single update_qty
+        # used to apply to one dish and silently drop the other quantities.
+        if len(items) >= 2:
+            updated: list[str] = []
+            not_found: list[str] = []
+            too_many: list[str] = []
+            for it in items:
+                iq = it.get("dish_query", "")
+                if not iq:
+                    continue
+                iqty = int(it.get("qty") or 1)
+                if iqty > _max_item_qty(restaurant):
+                    too_many.append(iq)
+                    continue
+                outcome, dish_name = await _execute_ai_update_qty(
+                    session, conv, inbound, restaurant_id, iq, iqty, suppress_offers=True
+                )
+                if outcome in ("updated", "removed"):
+                    updated.append(dish_name or iq)
+                elif outcome in ("no_match", "not_in_cart"):
+                    not_found.append(iq)
+            cart = await _build_cart_summary(session, conv)
+            body = (f"Updated! ✅{_cart_tail(cart)}" if updated
+                    else "I couldn't change those — tell me the dish and quantity 😊")
+            notes = []
+            if not_found:
+                notes.append("not in your cart: " + ", ".join(not_found))
+            if too_many:
+                notes.append("that's a large quantity for " + ", ".join(too_many))
+            if notes:
+                body = f"{body}\n\n({'; '.join(notes)})"
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-qty-multi", body=body)
+            return
+
+        dish_query = data.get("dish_query", "") or (items[0].get("dish_query", "") if items else "")
+        qty = int((data.get("qty") if data.get("qty") is not None else (items[0].get("qty") if items else None)) or 1)
         if dish_query and qty > _max_item_qty(restaurant):
             await _escalate_large_qty(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
