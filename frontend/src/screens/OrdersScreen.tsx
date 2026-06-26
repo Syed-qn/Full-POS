@@ -166,7 +166,17 @@ export function OrdersScreen() {
   const columns: Column<OrderOut>[] = [
     { key: "id", header: "#", render: (o) => <span className={s.mono}>#{o.id}</span> },
     { key: "cust", header: "Customer", render: (o) => o.customer_name },
-    { key: "items", header: "Items", render: (o) => o.items.map((i) => `${i.qty}× ${i.name}`).join(", ") },
+    {
+      key: "items",
+      header: "Items",
+      render: (o) => {
+        const lines = o.items.map((i) => `${i.qty}× ${i.name}`);
+        const full = lines.join(", ");
+        // Keep the row compact: first dish + "+N more", full list on hover.
+        const label = lines.length <= 1 ? full : `${lines[0]} +${lines.length - 1} more`;
+        return <span title={full}>{label}</span>;
+      },
+    },
     { key: "total", header: "Total", render: (o) => <span className={s.mono}>AED {o.total_aed}</span> },
     {
       key: "rider",
