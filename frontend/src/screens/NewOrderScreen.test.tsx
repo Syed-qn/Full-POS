@@ -3,6 +3,16 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NewOrderScreen } from "./NewOrderScreen";
 
+// Stub the leaflet map picker (heavy in jsdom) with a button that sets a pin, so
+// tests can satisfy the now-required delivery location deterministically.
+vi.mock("../components/LocationPicker", () => ({
+  LocationPicker: ({ onChange }: { onChange: (lat: number, lng: number) => void }) => (
+    <button type="button" onClick={() => onChange(25.2, 55.27)}>
+      drop-pin
+    </button>
+  ),
+}));
+
 const mockMenu = {
   id: 1,
   version: 1,
@@ -230,6 +240,7 @@ describe("NewOrderScreen", () => {
       screen.getByPlaceholderText("Who receives the order"),
       { target: { value: "Test User" } },
     );
+    fireEvent.click(screen.getByText("drop-pin")); // required delivery location
 
     fireEvent.click(screen.getByRole("button", { name: /Place Order/ }));
 

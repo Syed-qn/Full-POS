@@ -171,6 +171,11 @@ export function NewOrderScreen() {
     building.trim() &&
     receiverName.trim() &&
     fee !== "" &&
+    // A delivery pin is REQUIRED: without coordinates the dispatch engine can't
+    // place the order on the map, so it never batches/assigns to a rider (a typed
+    // building name often fails to geocode). Same location signal a WhatsApp order
+    // gets from the customer's shared GPS pin.
+    pin !== null &&
     !submitting;
 
   async function onSubmit() {
@@ -289,10 +294,10 @@ export function NewOrderScreen() {
             </div>
 
             <div className={s.field}>
-              <label className={s.label}>Delivery location {pin ? "✓" : "(recommended)"}</label>
+              <label className={s.label}>Delivery location {pin ? "✓" : "*"}</label>
               <span className={s.fieldHint}>
                 Search an address or drop the pin so the rider navigates to the exact spot.
-                {!pin && " If you skip this, we'll estimate it from the building name."}
+                {!pin && " Required — without a pin the order can't be assigned to a rider."}
               </span>
               <LocationPicker
                 lat={pin?.lat ?? NaN}
