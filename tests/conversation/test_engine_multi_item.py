@@ -92,6 +92,31 @@ async def test_multi_dish_reply_reflects_real_cart_not_llm_prose(db_session, res
     assert "Subtotal" in body
 
 
+async def test_multi_dish_reply_never_redumps_the_menu(db_session, restaurant):
+    """If the AI reply gets swapped to the full menu by the anti-hallucination guard,
+    the multi-add confirmation must NOT re-dump the menu — just a short lead + cart."""
+    await _seed_menu(db_session, restaurant.id)
+
+    await handle_inbound(db_session, _msg("hi", "wamid.mi-menu"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await handle_inbound(
+        db_session,
+        _msg("1 chicken biryani and 1 mutton karahi", "wamid.mi-menu2"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload["body"]
+    # The cart is shown, but the welcome/menu block is not re-rendered.
+    assert "Subtotal" in body
+    assert "Here's our menu" not in body
+    assert "Welcome" not in body
+
+
 async def test_multi_dish_voice_note_adds_all_items(db_session, restaurant):
     """A VOICE note naming several dishes is transcribed then flows through the SAME
     add_item path as text — so both input modes add every dish. (User: "both voice

@@ -2703,7 +2703,14 @@ async def _dispatch_action(
                     not_found.append(iq)
             cart = await _build_cart_summary(session, conv)
             if added:
-                body = f"{(reply.strip() or 'Got it!')}{_cart_tail(cart)}"
+                # The cart tail already lists every item, so the lead is just a short
+                # confirmation. Drop a reply that is empty or got swapped to the full
+                # menu by the anti-hallucination guard above — we never want the menu
+                # re-dumped on an add.
+                lead = reply.strip()
+                if not lead or _looks_like_menu(lead):
+                    lead = "Got it! 😊"
+                body = f"{lead}{_cart_tail(cart)}"
             else:
                 body = "Sorry, I couldn't add any of those — check the dish names against our menu."
             notes = []
@@ -2930,6 +2937,19 @@ async def _dispatch_action(
         return
 
     # ── no_action (all phases) ────────────────────────────────────────────
+    if phase == "awaiting_confirmation":
+        # At the confirm step the order is fixed unless the customer explicitly
+        # modifies/cancels. The model has narrated changes it never applied ("updated
+        # to 2x, total 97") while the DB stayed unchanged, so the customer confirmed a
+        # DIFFERENT order than the reply implied. Never let free-text stand in here:
+        # re-show the DETERMINISTIC summary from the DB so what they confirm is real.
+        from app.ordering.models import Order
+        oid = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+        order = await session.get(Order, oid) if oid else None
+        if order is not None:
+            await _send_order_summary(session, conv, inbound, restaurant_id, order)
+            return
+
     if reply:
         await _send_text(session, conv=conv, inbound=inbound,
                          restaurant_id=restaurant_id, prefix="ai-reply", body=reply)

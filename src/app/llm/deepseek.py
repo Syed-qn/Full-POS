@@ -452,7 +452,10 @@ YOUR JOB:
 - Show the summary clearly (already formatted above).
 - Ask: "Shall I place this order? ✅"
 - customer says yes / confirm / ok / haan / aiwa / да / oo / sige → confirm_order
-- customer wants changes → request_modification
+- customer wants ANY change — add/remove a dish, or change a quantity ("make it 2",
+  "two special", "add a coke", "remove the mint") → request_modification.
+  NEVER claim in your reply that you changed the order yourself — you cannot edit it
+  here; request_modification starts the real edit. Do not state new totals/quantities.
 - customer cancels → cancel_order
 - Anything unclear → re-show summary and ask again (no_action).
 """

@@ -67,6 +67,44 @@ async def test_find_dish_matches_single_strong_match(db_session, restaurant):
     assert results.candidates[0].dish_number == 110
 
 
+async def test_exact_name_wins_over_longer_named_sibling(db_session, restaurant):
+    """Regression: "chicken biryani" must match the dish named exactly that, NOT the
+    pricier "Chicken Biryani (special)" that also scores high on trigram similarity
+    (a real voice order added the special at AED 35 instead of the plain AED 20)."""
+    from app.ordering.matching import MatchConfidence
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2,
+        name="Chicken Biryani", price_aed=Decimal("20.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1,
+        name="Chicken Biryani (special)", price_aed=Decimal("35.00"), category="Rice",
+        is_available=True, name_normalized=normalize_name("Chicken Biryani (special)"),
+    ))
+    await db_session.commit()
+
+    results = await find_dish_matches(
+        db_session, restaurant_id=restaurant.id, query="chicken biryani"
+    )
+    assert results.confidence == MatchConfidence.DIRECT
+    assert len(results.candidates) == 1
+    assert results.candidates[0].name == "Chicken Biryani"
+    assert results.candidates[0].price_aed == Decimal("20.00")
+
+    # The special is still reachable by its own exact name.
+    special = await find_dish_matches(
+        db_session, restaurant_id=restaurant.id, query="chicken biryani special"
+    )
+    assert special.confidence == MatchConfidence.DIRECT
+    assert special.candidates[0].name == "Chicken Biryani (special)"
+
+
 async def test_find_dish_matches_by_exact_number(db_session, restaurant):
     from app.ordering.matching import MatchConfidence
     from app.menu.models import Dish, Menu

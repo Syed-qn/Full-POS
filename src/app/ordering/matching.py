@@ -147,11 +147,31 @@ async def find_dish_matches(
             return MatchResult(confidence=MatchConfidence.DIRECT, candidates=[dish])
         return MatchResult(confidence=MatchConfidence.NO_MATCH)
 
+    normalized_query = normalize_name(query)
+
+    # --- Exact name match wins outright ---
+    # A customer who says the EXACT dish name must get THAT dish, not a longer-named
+    # sibling that also scores high on trigram similarity. Without this, "chicken
+    # biryani" is trigram-ambiguous against "chicken biryani (special)" and the LLM
+    # arbiter can pick the wrong (pricier) one. Only short-circuit on a UNIQUE exact
+    # match; duplicate names fall through to the similarity ranking below.
+    if normalized_query:
+        exact = (
+            await session.scalars(
+                select(Dish).where(
+                    Dish.menu_id == menu_id,
+                    Dish.is_available == True,  # noqa: E712
+                    Dish.name_normalized == normalized_query,
+                )
+            )
+        ).all()
+        if len(exact) == 1:
+            return MatchResult(confidence=MatchConfidence.DIRECT, candidates=[exact[0]])
+
     # --- Trigram word-similarity ---
     # word_similarity(query, name) scores how well the query matches any
     # contiguous extent within the dish name — better for "biriyani" vs
     # "chicken biryani" than the full-string similarity() function.
-    normalized_query = normalize_name(query)
     rows = (
         await session.execute(
             text("""
