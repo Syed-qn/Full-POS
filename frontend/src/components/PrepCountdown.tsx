@@ -37,7 +37,7 @@ export function PrepCountdown({
       className={`${s.timer} ${compact ? s.compact : ""} ${urgent ? s.urgent : ""} ${late ? s.breach : ""}`}
       title="Kitchen deadline (distance-driven)"
     >
-      {late ? `🍳 ${label} now` : `🍳 ${label} in ${formatCountdown(rem)}`}
+      {late ? `${label} now` : `${label} in ${formatCountdown(rem)}`}
     </span>
   );
 }

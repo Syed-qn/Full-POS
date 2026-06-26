@@ -16,17 +16,17 @@ describe("PrepCountdown", () => {
 
   it("counts down to the plate-by deadline", () => {
     render(<PrepCountdown prepDeadline={inMin(12)} />); // 12 min to plate
-    expect(screen.getByText("🍳 Plate in 12:00")).toBeInTheDocument();
+    expect(screen.getByText("Plate in 12:00")).toBeInTheDocument();
   });
 
   it("shows 'Plate now' once past the deadline", () => {
     render(<PrepCountdown prepDeadline={inMin(-1)} />);
-    expect(screen.getByText("🍳 Plate now")).toBeInTheDocument();
+    expect(screen.getByText("Plate now")).toBeInTheDocument();
     expect(screen.getByTestId("prep-countdown").className).toContain("breach");
   });
 
   it("uses a custom label (e.g. Start)", () => {
     render(<PrepCountdown prepDeadline={inMin(8)} label="Start" />);
-    expect(screen.getByText("🍳 Start in 08:00")).toBeInTheDocument();
+    expect(screen.getByText("Start in 08:00")).toBeInTheDocument();
   });
 });
