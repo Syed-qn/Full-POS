@@ -65,7 +65,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD celery -A apps.workers.celery_app:celery_app inspect ping -d "celery@$(hostname)" || exit 1
 
 # Consume the outbox + default queues; concurrency tunable via env.
+# -B embeds Celery beat so the periodic schedule (abandoned-cart sweep, marketing
+# sends, outbox retry, template polling) fires from this one process. Run beat on
+# exactly ONE worker instance — scale this service to 1 replica or tasks double-fire.
 CMD celery -A apps.workers.celery_app:celery_app worker \
+    -B --schedule=/tmp/celerybeat-schedule \
     --queues "${APP_QUEUES}" \
     --concurrency "${APP_CONCURRENCY}" \
     --loglevel=info
