@@ -85,3 +85,63 @@ async def test_confirmation_no_action_reshows_real_summary(db_session, restauran
         select(OrderItem).where(OrderItem.order_id == order.id)
     )).scalars().all()
     assert len(items) == 1 and items[0].qty == 1
+
+
+async def test_confirmation_add_item_actually_applies_and_reshows(db_session, restaurant):
+    """At the confirm step, "add <dish>" must EDIT the order and re-show the updated
+    summary (was silently dropped by the phase guard)."""
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    # Two dishes so we can add a second at the confirm step.
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("20.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=301,
+        name="Lemon Mint", price_aed=Decimal("12.00"), category="Drinks",
+        is_available=True, name_normalized="lemon mint",
+    ))
+    await db_session.commit()
+
+    cust = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
+    chicken = (await db_session.execute(
+        select(Dish).where(Dish.dish_number == 110, Dish.restaurant_id == restaurant.id)
+    )).scalar_one()
+    await add_item(db_session, order=order, dish=chicken, qty=1)
+
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "awaiting_confirmation",
+               "pending_order_id": order.id, "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    await handle_inbound(
+        db_session, _msg("add lemon mint", "wamid.cf-add"), restaurant_id=restaurant.id
+    )
+    await db_session.commit()
+
+    # The lemon mint is now on the order, and the re-shown summary reflects it.
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert {it.dish_number for it in items} == {110, 301}
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload["body"]
+    assert "Order summary:" in body
+    assert "Lemon Mint" in body
+    assert "Subtotal: AED 32" in body  # 20 + 12

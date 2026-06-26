@@ -261,6 +261,19 @@ class FakeConversationAgent:
                     action="cancel_order",
                     action_data={},
                 )
+            # Confirm-step edits — add/remove a dish or change a quantity.
+            if "add" in last_user:
+                dish = last_user.split("add", 1)[1].strip()
+                return ConversationAgentResult(
+                    message="Sure, adding that.", action="add_item",
+                    action_data={"dish_query": dish, "qty": 1, "special_note": ""},
+                )
+            if "remove" in last_user:
+                dish = last_user.split("remove", 1)[1].strip()
+                return ConversationAgentResult(
+                    message="Sure, removing that.", action="remove_item",
+                    action_data={"dish_query": dish, "qty": None},
+                )
             return ConversationAgentResult(
                 message="Please confirm or cancel your order.",
                 action="no_action",

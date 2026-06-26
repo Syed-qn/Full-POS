@@ -2429,6 +2429,77 @@ async def _execute_ai_update_qty(
     return ("updated", dish.name)
 
 
+async def _apply_confirmation_edit(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage,
+    restaurant_id: int, restaurant, action: str, data: dict,
+) -> None:
+    """Apply an add/remove/quantity change to the order being confirmed, then re-show
+    the deterministic summary.
+
+    At the confirm step a dish edit used to be dropped by the phase guard (add/remove/
+    update aren't "confirmation" actions) — the customer's "add a special biryani also"
+    silently did nothing. Here we edit the still-draft pending order in place and
+    re-render the summary, so confirm-time edits just work without the modify sub-flow."""
+    from app.ordering.models import Order
+
+    oid = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+    order = await session.get(Order, oid) if oid else None
+    if order is None or str(order.status) != "draft":
+        # No editable order — re-show whatever summary we can rather than dropping it.
+        if order is not None:
+            await _send_order_summary(session, conv, inbound, restaurant_id, order)
+        return
+
+    # draft_order_id must name the order being confirmed so the edit helpers (which
+    # read draft_order_id) target it; at confirm time it normally already does.
+    if conv.state.get("draft_order_id") != order.id:
+        _set_state(conv, draft_order_id=order.id)
+
+    note: str | None = None
+    if action == "add_item":
+        items = data.get("items") or []
+        if not items and data.get("dish_query"):
+            items = [{"dish_query": data.get("dish_query", ""),
+                      "qty": data.get("qty"), "special_note": data.get("special_note", "")}]
+        not_found = []
+        for it in items:
+            dq = it.get("dish_query", "")
+            if not dq:
+                continue
+            iqty = int(it.get("qty") or 1)
+            if iqty > _max_item_qty(restaurant):
+                continue
+            status = await _execute_ai_add_item(
+                session, conv, inbound, restaurant_id, dq, iqty,
+                it.get("special_note", ""), suppress_offers=True,
+            )
+            if status == "no_match":
+                not_found.append(dq)
+        if not_found:
+            note = "couldn't find: " + ", ".join(not_found)
+    elif action == "remove_item":
+        raw_qty = data.get("qty")
+        await _execute_ai_remove_item(
+            session, conv, restaurant_id, data.get("dish_query", ""),
+            int(raw_qty) if raw_qty is not None else None,
+        )
+    elif action == "update_qty":
+        outcome, _name = await _execute_ai_update_qty(
+            session, conv, inbound, restaurant_id,
+            data.get("dish_query", ""), int(data.get("qty") or 1),
+        )
+        if outcome == "awaiting_bundle":
+            # A bundle question was sent; the answer re-enters the cart flow.
+            return
+
+    # Stay at the confirm step and re-show the now-updated, DB-backed summary.
+    _set_state(conv, dialogue_phase="awaiting_confirmation", dialogue_state="order_confirmation")
+    if note:
+        await _send_text(session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                         prefix="confirm-edit-note", body=f"({note})")
+    await _send_order_summary(session, conv, inbound, restaurant_id, order)
+
+
 async def _execute_save_address(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, apt_room: str, building: str, receiver_name: str, restaurant,
@@ -2654,6 +2725,16 @@ async def _dispatch_action(
     data = result.action_data or {}
     reply = result.message or ""
 
+    # Confirm-step edits: "add a special biryani also" / "make it 2" / "remove the
+    # mint" must EDIT the order being confirmed and re-show the summary — not be
+    # dropped by the phase guard (these aren't confirmation actions) nor narrated
+    # without applying. Handle them before the guard runs.
+    if phase == "awaiting_confirmation" and action in ("add_item", "remove_item", "update_qty"):
+        await _apply_confirmation_edit(
+            session, conv, inbound, restaurant_id, restaurant, action, data
+        )
+        return
+
     # Phase guard — wrong-phase action falls back to no_action
     if not _is_valid_action_for_phase(action, phase):
         action = "no_action"
@@ -2704,10 +2785,12 @@ async def _dispatch_action(
             cart = await _build_cart_summary(session, conv)
             if added:
                 # The cart tail already lists every item, so the lead is just a short
-                # confirmation. Drop a reply that is empty or got swapped to the full
-                # menu by the anti-hallucination guard above — we never want the menu
-                # re-dumped on an add.
-                lead = reply.strip()
+                # confirmation. Strip any 🛒 cart line the model added (else the cart
+                # shows twice), and drop a reply that is empty or got swapped to the
+                # full menu by the anti-hallucination guard above (never re-dump it).
+                lead = "\n".join(
+                    ln for ln in reply.splitlines() if not ln.strip().startswith("🛒")
+                ).strip()
                 if not lead or _looks_like_menu(lead):
                     lead = "Got it! 😊"
                 body = f"{lead}{_cart_tail(cart)}"
