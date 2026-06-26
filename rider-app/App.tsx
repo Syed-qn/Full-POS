@@ -146,7 +146,7 @@ function TrackingScreen({
     (async () => {
       try {
         await startBackgroundTracking();
-        if (alive) setStatus("Live — sharing location");
+        if (alive) setStatus("Live, sharing location");
       } catch {
         if (alive) {
           setStatus("Location permission needed");
@@ -232,8 +232,7 @@ function TrackingScreen({
           <View style={styles.emptyCard}>
             <Text style={styles.emptyEmoji}>🕒</Text>
             <Text style={styles.subtitle}>
-              No active delivery — keep the app running, you'll be notified when one
-              is assigned.
+              No deliveries right now. You'll be notified when one is assigned.
             </Text>
           </View>
         ) : !pickedUp ? (
@@ -257,7 +256,7 @@ function TrackingScreen({
               disabled={busy}
               onPress={doPickup}
             >
-              <Text style={styles.buttonText}>{busy ? "…" : "Picked up — start run"}</Text>
+              <Text style={styles.buttonText}>{busy ? "…" : "Picked up"}</Text>
             </Pressable>
           </View>
         ) : pending.length === 0 ? (
@@ -282,7 +281,7 @@ function TrackingScreen({
 
               {s.doNotCall ? (
                 <View style={styles.noCallRow}>
-                  <Text style={styles.noCallText}>🚫 Don't call — message only</Text>
+                  <Text style={styles.noCallText}>🚫 Don't call, message only</Text>
                   {s.customerPhone ? (
                     <Text style={styles.noCallPhone}>{s.customerPhone}</Text>
                   ) : null}
