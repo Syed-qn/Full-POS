@@ -153,6 +153,13 @@ class FakeConversationAgent:
                     action="cancel_order",
                     action_data={},
                 )
+            # Empty the whole cart: "clear the cart", "start over", "remove everything".
+            if ("clear" in last_user and "cart" in last_user) or \
+                    any(p in last_user for p in ("start over", "remove everything",
+                                                 "empty my cart", "empty cart", "delete all")):
+                return ConversationAgentResult(
+                    message="Cleared!", action="clear_cart", action_data={},
+                )
             # Multi-dish quantity change ("make it 2 X and 3 Y") → update_qty items.
             # Checked BEFORE the multi-dish add split so a "make it" stays an update.
             if any(p in last_user for p in ("make it", "change", "update", "set to")) and \

@@ -146,6 +146,36 @@ async def test_multi_dish_voice_note_adds_all_items(db_session, restaurant):
     assert by_num == {110: 2, 301: 1}
 
 
+async def test_clear_cart_empties_everything(db_session, restaurant):
+    """"clear the cart" must empty the WHOLE cart, not remove a single dish."""
+    await _seed_menu(db_session, restaurant.id)
+
+    await handle_inbound(db_session, _msg("hi", "wamid.cc-greet"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _msg("2 chicken biryani and 3 lemon mint", "wamid.cc-add"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    from app.ordering.models import OrderItem
+    assert (await db_session.execute(select(OrderItem))).scalars().all()  # cart not empty
+
+    await handle_inbound(
+        db_session, _msg("please clear the cart, I want to order new", "wamid.cc-1"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert items == [], "the whole cart must be emptied"
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    assert "clear" in rows[-1].payload["body"].lower()
+
+
 async def test_multi_dish_quantity_update_sets_all(db_session, restaurant):
     """"make it 2 chicken biryani and 2 lemon mint" must update BOTH quantities — a
     single update_qty used to change one dish and silently drop the other."""

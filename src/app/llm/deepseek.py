@@ -195,7 +195,8 @@ _DS_TOOL = {
                 "action": {
                     "type": "string",
                     "enum": [
-                        "add_item", "remove_item", "update_qty", "proceed_to_address",
+                        "add_item", "remove_item", "update_qty", "clear_cart",
+                        "proceed_to_address",
                         "send_location_request", "save_address_text", "use_saved_address",
                         "proceed_to_confirmation",
                         "confirm_order", "request_modification", "cancel_order",
@@ -209,6 +210,10 @@ _DS_TOOL = {
                         "('remove X', 'cancel the X', 'take off X', 'I don't want X'). "
                         "update_qty: change the quantity of a dish already in the cart "
                         "('make it 4', 'change to 2', 'actually 3') — qty is the new TOTAL. "
+                        "clear_cart: customer wants to EMPTY the whole cart and start over "
+                        "('clear the cart', 'remove everything', 'start over', 'empty my "
+                        "cart', 'delete all', 'scrap it, let's restart') — NOT a single "
+                        "remove_item. "
                         "proceed_to_address: cart ready, move to delivery address capture. "
                         "send_location_request: ask customer to share their WhatsApp location pin. "
                         "save_address_text: all 3 address fields collected (apt_room + building + receiver_name). "
@@ -385,6 +390,11 @@ REMOVING — action="remove_item" (dish_query = the dish to take off):
     "I don't want the biryani" → remove_item dish_query="..."  (no qty)
     "remove 2 biryani"        → remove_item dish_query="biryani" qty=2   (take off 2 units)
   Omit qty to remove the dish entirely; give qty only when the customer names a number.
+
+CLEARING THE WHOLE CART — action="clear_cart" (no dish):
+    "clear the cart" / "remove everything" / "empty my cart" / "delete all" /
+    "start over" / "scrap it, let's restart" → clear_cart
+  This empties EVERYTHING — never treat "clear the cart" as a single remove_item.
 
 FINISHING
 - Cart NOT empty + a done/closing signal — "done" / "that's all" / "checkout" /

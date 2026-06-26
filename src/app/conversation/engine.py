@@ -1840,7 +1840,7 @@ _VALID_PHASES = frozenset({"ordering", "address_capture", "awaiting_confirmation
 
 _PHASE_ACTIONS: dict[str, frozenset] = {
     "ordering": frozenset({
-        "add_item", "remove_item", "update_qty", "proceed_to_address",
+        "add_item", "remove_item", "update_qty", "clear_cart", "proceed_to_address",
         "cancel_order", "status_query", "show_menu", "no_action",
     }),
     "address_capture": frozenset({
@@ -2939,6 +2939,28 @@ async def _dispatch_action(
             )
         await _send_text(session, conv=conv, inbound=inbound,
                          restaurant_id=restaurant_id, prefix="ai-qty", body=body)
+        return
+
+    if action == "clear_cart":
+        # Empty the WHOLE draft cart (not a single remove) so the customer can start
+        # over. Keeps the same draft order, just drops every line + zeroes the totals.
+        from sqlalchemy import delete as sa_delete
+
+        from app.ordering.models import Order, OrderItem
+
+        draft_order_id = conv.state.get("draft_order_id")
+        order = await session.get(Order, draft_order_id) if draft_order_id else None
+        if order is not None and str(order.status) == "draft":
+            await session.execute(sa_delete(OrderItem).where(OrderItem.order_id == order.id))
+            order.subtotal = Decimal("0.00")
+            order.total = order.delivery_fee_aed
+            await session.flush()
+            _set_state(conv, dialogue_state="collecting_items", abandoned_nudged=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ai-clear-cart",
+            body="Cleared your cart 🧹 What would you like to order?",
+        )
         return
 
     if action == "proceed_to_address":
