@@ -647,3 +647,17 @@
 - An external cron (Render Cron Job / cron-job.org) hits this URL every ~5 min.
   Reliable on Render since the WEB service serves it (DB + sync outbox delivery).
 - 3 endpoint tests (503/403/200) + 4 sweep tests pass; ruff clean.
+
+[2026-06-27] fix(cart): better nudge wording/flow + re-engagement guard
+- Reported flow bug: nudge asked "would you like to complete your order?"; customer
+  said "Yes" -> bot replied "Sure, what else?" (dead-end — bot can't act on a bare
+  yes). Replaced nudge body to SHOW the cart (_build_cart_summary) + a concrete CTA
+  ("Say *done* to check out, or tell me what else to add"), matching the app's real
+  "say done to check out" flow. Fallback body kept for empty-cart edge.
+- Re-engagement guard: recompute quiet from the freshly-loaded conv before sending;
+  skip if < recovery_min. Closes the race where the bulk sweep query measured quiet
+  a moment before the customer re-engaged (their inbound bumps updated_at), which is
+  what made the test nudge cross with a live "Yes".
+- Bumped prod restaurant id=1 to Remind=15 / Clear=60 (5 min was too aggressive).
+- Tests: nudge-shows-cart assertions + new test_active_customer_is_not_nudged; 5
+  abandoned-cart tests pass, ruff clean.

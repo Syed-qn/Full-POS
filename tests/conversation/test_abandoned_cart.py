@@ -82,11 +82,32 @@ async def test_abandoned_cart_nudges_once(db_session, restaurant):
     )).all()
     bodies = [n.payload["body"] for n in nudges]
     assert any("still have items in your cart" in b for b in bodies)
+    # The nudge shows the actual cart + a concrete next step (not a dead-end yes/no),
+    # so a returning customer has something to act on.
+    assert any("Chicken Biryani" in b for b in bodies)
+    assert any("done" in b.lower() for b in bodies)
 
     conv = (await db_session.scalars(
         select(Conversation).where(Conversation.phone == "+971501110001")
     )).one()
     assert conv.state.get("abandoned_nudged") is True
+
+
+async def test_active_customer_is_not_nudged(db_session, restaurant):
+    """Re-engagement guard: a freshly-touched conversation (customer just messaged)
+    is never nudged, even if the bulk query thinks it crossed the threshold."""
+    from app.conversation import worker as cart_worker
+
+    await _build_abandoned_cart(db_session, restaurant.id)
+    # recovery far in the future relative to a just-built cart → fresh quiet < recovery.
+    await _set_cart_settings(db_session, restaurant, recovery=120, expiry=9999, reminder=True)
+
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
+        count = await cart_worker._run_sweep()
+
+    assert count == 0
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert items  # cart untouched — customer is mid-order
 
 
 async def test_no_nudge_without_cart(db_session, restaurant):

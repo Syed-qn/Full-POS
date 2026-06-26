@@ -33,10 +33,26 @@ logger = logging.getLogger(__name__)
 # Fallbacks when a restaurant row predates the cart settings.
 ABANDONED_AFTER_MIN = 15
 DEFAULT_EXPIRY_MIN = 60
+# Fallback nudge when the cart can't be rendered (no items resolved). The normal
+# nudge shows the cart contents + a concrete next step instead of a dead-end yes/no
+# — a bare "would you like to complete your order?" leaves the bot unable to act on
+# a "Yes", which dead-ends the flow.
 _NUDGE_BODY = (
     "Hi 👋 You still have items in your cart. "
-    "Would you like to complete your order?"
+    "Say *done* whenever you're ready to check out, or tell me what else to add 😊"
 )
+
+
+def _quiet_minutes(conv) -> float:
+    """Minutes since the conversation was last touched, from its own updated_at."""
+    from datetime import datetime, timezone
+
+    last = getattr(conv, "updated_at", None)
+    if last is None:
+        return 0.0
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - last).total_seconds() / 60.0
 
 
 @shared_task(name="conversation.abandoned_cart_sweep", bind=True,
@@ -108,12 +124,27 @@ async def _run_sweep() -> int:
 
             # 2) Quiet long enough → one-time nudge (if the restaurant enabled it).
             if reminder_on and quiet >= recovery_min and not state.get("abandoned_nudged"):
+                # Re-engagement guard: the bulk query measured "quiet" a moment ago.
+                # Recompute from the freshly-loaded row so a customer who just came
+                # back (their inbound bumps updated_at) is never nudged mid-order.
+                if _quiet_minutes(conv) < recovery_min:
+                    continue
+                # Show the actual cart + a concrete next step, not a dead-end yes/no.
+                from app.conversation.engine import _build_cart_summary
+
+                cart = await _build_cart_summary(session, conv)
+                body = (
+                    "Hi 👋 You still have items in your cart:\n\n"
+                    f"🛒 {cart}\n\n"
+                    "Say *done* whenever you're ready to check out, "
+                    "or tell me anything else you'd like to add 😊"
+                ) if cart else _NUDGE_BODY
                 row = await enqueue_message(
                     session,
                     restaurant_id=conv.restaurant_id,
                     to_phone=conv.phone,
                     msg_type=OutboundMessageType.TEXT,
-                    payload={"body": _NUDGE_BODY},
+                    payload={"body": body},
                     idempotency_key=f"abandoned-{conv.id}-{draft_id}",
                 )
                 await session.flush()  # assign row.id before we record it for delivery
