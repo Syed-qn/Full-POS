@@ -158,6 +158,20 @@ class CloudAPIProvider:
         resp.raise_for_status()
         return resp.json()["id"]
 
+    async def download_media(self, media_id: str) -> tuple[bytes, str]:
+        """Fetch inbound media bytes from the Graph API (two-step: resolve the
+        temporary URL by media id, then GET it — both require the bearer token).
+        Returns (bytes, mime_type)."""
+        headers = {"Authorization": f"Bearer {self._token}"}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            meta = await client.get(f"{_GRAPH_BASE}/{media_id}", headers=headers)
+            meta.raise_for_status()
+            info = meta.json()
+            mime = info.get("mime_type", "application/octet-stream")
+            blob = await client.get(info["url"], headers=headers)
+            blob.raise_for_status()
+        return blob.content, mime
+
     async def send(self, msg: OutboundMessage) -> str:
         # For file messages with raw base64 data, upload to Meta first to get media_id.
         if msg.type in (OutboundMessageType.IMAGE, OutboundMessageType.DOCUMENT):

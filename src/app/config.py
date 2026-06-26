@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # expo = call the Expo Push API.
     push_provider: str = "fake"  # fake | expo
 
+    # Speech-to-text for inbound WhatsApp voice notes. "fake" = deterministic stub
+    # (tests/dev, NO real transcription — do not use in production). "elevenlabs" =
+    # ElevenLabs Scribe API (needs a key + a paid plan for commercial use).
+    stt_provider: str = "fake"  # fake | elevenlabs
+    elevenlabs_api_key: SecretStr = SecretStr("")
+    elevenlabs_stt_model: str = "scribe_v1"
+
     # WhatsApp
     whatsapp_provider: str = "mock"  # mock | cloud
     wa_verify_token: str = "dev-verify-token"

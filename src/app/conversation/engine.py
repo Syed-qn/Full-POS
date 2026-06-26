@@ -1651,7 +1651,8 @@ async def _fetch_conversation_history(
     rows.reverse()
     raw: list[dict] = []
     for m in rows:
-        if m.type == "text":
+        if m.type in ("text", "audio"):
+            # Voice notes (type "audio") carry their transcript under "text".
             content = m.payload.get("text") or m.payload.get("body") or ""
         else:
             content = f"[{m.type}]"
@@ -1784,7 +1785,8 @@ async def _build_history(
         role = "user" if msg.direction == "inbound" else "assistant"
         payload = msg.payload or {}
 
-        if msg.type == "text":
+        if msg.type in ("text", "audio"):
+            # Voice notes (type "audio") carry their transcript under "text".
             content = payload.get("text") or payload.get("body") or ""
         elif msg.type == "location":
             lat = payload.get("latitude", "")
@@ -3105,6 +3107,26 @@ async def _handle_rider_inbound(
     # Other rider message types (e.g. free text) are ignored — flow is button-only.
 
 
+async def _transcribe_voice_note(inbound: InboundMessage) -> str | None:
+    """Download a WhatsApp voice note and transcribe it to text. Returns the
+    transcript, or None on any failure (missing id, download/transcription error,
+    empty result). STT is best-effort — it never raises into the dialogue flow."""
+    media_id = inbound.payload.get("audio_id")
+    if not media_id:
+        return None
+    try:
+        from app.speech.factory import get_transcriber
+        from app.whatsapp.factory import get_whatsapp_provider
+
+        provider = get_whatsapp_provider()
+        audio, mime = await provider.download_media(media_id)
+        transcript = await get_transcriber().transcribe(audio, mime=mime)
+        return (transcript or "").strip() or None
+    except Exception:
+        _logger.exception("voice transcription failed (%s)", inbound.wa_message_id)
+        return None
+
+
 async def handle_inbound(
     session: AsyncSession,
     inbound: InboundMessage,
@@ -3125,15 +3147,45 @@ async def handle_inbound(
     if conv.counterpart != counterpart:
         conv.counterpart = counterpart
 
+    # Voice note → transcribe BEFORE recording, so the audit row AND the AI history
+    # built from recorded messages both carry the transcript (history renders a
+    # non-text message as "[audio]" otherwise — the AI would "hear" the literal
+    # word "audio"). The row stays type "audio" for audit; downstream the in-memory
+    # inbound is swapped to TEXT so every handler runs unchanged.
+    _voice_transcript = (
+        await _transcribe_voice_note(inbound)
+        if inbound.type == MessageType.AUDIO
+        else None
+    )
+
     await record_message(
         session,
         conversation_id=conv.id,
         direction="inbound",
         wa_message_id=inbound.wa_message_id,
         msg_type=str(inbound.type),
-        payload=inbound.payload,
+        payload=(
+            {**inbound.payload, "text": _voice_transcript}
+            if _voice_transcript
+            else inbound.payload
+        ),
         ts=inbound.timestamp,
     )
+
+    if inbound.type == MessageType.AUDIO:
+        if not _voice_transcript:
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=inbound.from_phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={"body": "Sorry, I couldn't catch that 🎙️. Could you type it, "
+                                 "or send another voice note?"},
+                idempotency_key=f"stt-fail-{inbound.wa_message_id}",
+            )
+            return
+        inbound.type = MessageType.TEXT
+        inbound.payload = {"text": _voice_transcript}
 
     # Opt-out — exact STOP keywords + natural-language phrases.
     # Checked before any dialogue processing so AI never sees opt-out messages.

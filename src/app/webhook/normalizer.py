@@ -98,6 +98,25 @@ def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
             timestamp=timestamp,
         )
 
+    if msg_type == "audio":
+        # WhatsApp voice notes (and uploaded audio) arrive as type "audio" carrying
+        # a Meta media id; "voice": true marks a recorded voice note vs. an audio
+        # file. We capture the id + mime so the engine can download and transcribe
+        # it. The bytes are NOT in the webhook — they're fetched via the media id.
+        audio = msg.get("audio", {})
+        return InboundMessage(
+            wa_message_id=wa_id,
+            from_phone=from_phone,
+            type=MessageType.AUDIO,
+            payload={
+                "audio_id": audio.get("id"),
+                "mime": audio.get("mime_type"),
+                "voice": bool(audio.get("voice", False)),
+            },
+            restaurant_phone=restaurant_phone,
+            timestamp=timestamp,
+        )
+
     return InboundMessage(
         wa_message_id=wa_id,
         from_phone=from_phone,

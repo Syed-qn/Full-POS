@@ -15,6 +15,9 @@ os.environ.setdefault("APP_GEO_PROVIDER", "fake")
 # FakePushProvider.sent instead of hitting the real Expo push API (the runtime
 # .env may set APP_PUSH_PROVIDER=expo for live devices).
 os.environ.setdefault("APP_PUSH_PROVIDER", "fake")
+# Pin speech-to-text to the in-memory FakeTranscriber so voice-note tests never
+# call ElevenLabs (the runtime .env may set APP_STT_PROVIDER=elevenlabs + a key).
+os.environ.setdefault("APP_STT_PROVIDER", "fake")
 # Pin marketing to dry-run so template submit uses MockTemplateProvider (lint +
 # auto-approve) instead of calling the real Meta Graph API — the runtime .env may
 # enable live sending (APP_MARKETING_SEND_DRY_RUN=false / provider=meta).

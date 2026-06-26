@@ -21,6 +21,7 @@ class MessageType(StrEnum):
     LIST_REPLY = "list_reply"
     LOCATION = "location"
     IMAGE = "image"
+    AUDIO = "audio"
     UNKNOWN = "unknown"
 
 
@@ -47,4 +48,11 @@ class InboundMessage:
 class WhatsAppPort(Protocol):
     async def send(self, msg: OutboundMessage) -> str:
         """Send message; return wa_message_id."""
+        ...
+
+    async def download_media(self, media_id: str) -> tuple[bytes, str]:
+        """Download inbound media (e.g. a voice note) by its provider media id.
+
+        Returns ``(raw_bytes, mime_type)``. Used to fetch audio before transcription.
+        """
         ...

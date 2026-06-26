@@ -96,6 +96,32 @@ def test_parse_live_location_sets_is_live():
     assert msgs[0].payload["latitude"] == 25.2048
 
 
+_AUDIO_PAYLOAD = {
+    "object": "whatsapp_business_account",
+    "entry": [{"changes": [{"value": {
+        "metadata": {"display_phone_number": "+97141234567", "phone_number_id": "111"},
+        "messages": [{"id": "wamid.AUD1", "from": "971509876543", "timestamp": "1717661100",
+                      "type": "audio",
+                      "audio": {"id": "media-789", "mime_type": "audio/ogg; codecs=opus",
+                                "voice": True}}],
+    }, "field": "messages"}]}],
+}
+
+
+def test_parse_audio_voice_note():
+    # A WhatsApp voice note arrives as type "audio" carrying a media id — the
+    # normalizer must surface it as MessageType.AUDIO so the engine can download
+    # and transcribe it (the bytes are NOT in the webhook).
+    msgs = parse_cloud_payload(_AUDIO_PAYLOAD)
+    assert len(msgs) == 1
+    m = msgs[0]
+    assert m.type == MessageType.AUDIO
+    assert m.payload["audio_id"] == "media-789"
+    assert m.payload["mime"] == "audio/ogg; codecs=opus"
+    assert m.payload["voice"] is True
+    assert m.from_phone == "+971509876543"
+
+
 def test_parse_status_update_returns_empty():
     payload = {
         "object": "whatsapp_business_account",
