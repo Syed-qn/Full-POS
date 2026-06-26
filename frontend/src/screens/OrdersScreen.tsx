@@ -186,7 +186,7 @@ export function OrdersScreen() {
               className={s.batchPreviewTag}
               title={`Will likely batch together (group ${o.batch_preview}) — nearby drop-offs. Prepare them together so they ride out on one trip.`}
             >
-              🔗 will batch · {o.batch_preview}
+              Batch {o.batch_preview}
             </span>
           ) : null}
         </span>

@@ -254,7 +254,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 /* Batched orders share one rider trip and one 40-min SLA — tint the rows and add
