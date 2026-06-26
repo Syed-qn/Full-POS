@@ -25,7 +25,7 @@ from app.db import async_session_factory
 from app.identity.models import Restaurant
 from app.ordering.fsm import OrderStatus
 from app.ordering.models import Order, OrderItem
-from app.outbox.service import enqueue_message
+from app.outbox.service import deliver_outbox_now, enqueue_message
 from app.whatsapp.port import OutboundMessageType
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ async def _run_sweep() -> int:
     """Nudge and/or auto-clear stale draft carts. Returns the number of nudges sent."""
     nudged = 0
     cleared = 0
+    nudge_ids: list[int] = []
     async with async_session_factory() as session:
         # Let the DB compute "quiet minutes" from its own clock so we never trip on a
         # Python-vs-DB timezone mismatch on the naive ``updated_at`` column.
@@ -107,7 +108,7 @@ async def _run_sweep() -> int:
 
             # 2) Quiet long enough → one-time nudge (if the restaurant enabled it).
             if reminder_on and quiet >= recovery_min and not state.get("abandoned_nudged"):
-                await enqueue_message(
+                row = await enqueue_message(
                     session,
                     restaurant_id=conv.restaurant_id,
                     to_phone=conv.phone,
@@ -115,10 +116,17 @@ async def _run_sweep() -> int:
                     payload={"body": _NUDGE_BODY},
                     idempotency_key=f"abandoned-{conv.id}-{draft_id}",
                 )
+                await session.flush()  # assign row.id before we record it for delivery
+                nudge_ids.append(row.id)
                 conv.state = {**(conv.state or {}), "abandoned_nudged": True}
                 nudged += 1
 
         await session.commit()
+        # enqueue_message only writes a pending row. This is a background task (no
+        # request to flush it), so we must deliver explicitly — otherwise the nudge
+        # sits pending forever on Render (sync delivery) where no outbox queue runs.
+        if nudge_ids:
+            await deliver_outbox_now(session, nudge_ids)
     if nudged or cleared:
         logger.info("abandoned_cart_sweep nudged %d, cleared %d cart(s)", nudged, cleared)
     return nudged

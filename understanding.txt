@@ -627,3 +627,12 @@
 - Also reset prod restaurant id=1 cart settings to sane values: Remind=5, Clear=60,
   reminder enabled (were Remind=1/Clear=2, which is < sweep cadence so expiry always
   beat the reminder -> cart cleared, never nudged).
+
+[2026-06-26] fix(cart): abandoned-cart sweep now DELIVERS the nudge
+- Second root cause: enqueue_message only writes a PENDING outbox row; on Render
+  delivery is synchronous-in-request (APP_OUTBOX_SYNC_DELIVERY) and no outbox queue
+  consumer runs. The sweep enqueued but never called deliver_outbox_now, so even
+  once beat fires the nudge would sit pending forever (mirrors the dispatch-trigger
+  bug the deliver_outbox_now helper was built for).
+- Fix: worker._run_sweep collects enqueued row ids (flush to assign id), commits,
+  then calls deliver_outbox_now(session, nudge_ids). 4 abandoned-cart tests pass.
