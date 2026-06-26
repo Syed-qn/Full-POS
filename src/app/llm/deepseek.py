@@ -243,6 +243,33 @@ _DS_TOOL = {
                     "type": "string",
                     "description": "Kitchen note e.g. 'no onion', 'extra spicy' (for add_item).",
                 },
+                "items": {
+                    "type": "array",
+                    "description": (
+                        "For add_item ONLY. When the customer names MORE THAN ONE dish in "
+                        "the SAME message, list EVERY dish here (one entry per dish) — do "
+                        "NOT collapse them into a single dish_query and do NOT silently drop "
+                        "any. For a single dish you may use dish_query/qty instead."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "dish_query": {
+                                "type": "string",
+                                "description": "Dish name or number the customer named.",
+                            },
+                            "qty": {
+                                "type": "integer",
+                                "description": "How many of this dish to add (default 1).",
+                            },
+                            "special_note": {
+                                "type": "string",
+                                "description": "Kitchen note for this dish e.g. 'no onion'.",
+                            },
+                        },
+                        "required": ["dish_query"],
+                    },
+                },
                 "apt_room": {
                     "type": "string",
                     "description": "Apartment / room / door number (for save_address_text).",
@@ -331,9 +358,14 @@ MENU / BROWSING
 
 ADDING — action="add_item" (dish_query + qty, default qty 1). Understand shorthand in ANY language:
     "1 mutton biryani"        → add_item dish_query="mutton biryani" qty=1
-    "2 bry + karahi"          → add_item "biryani" qty=2, then add_item "karahi"
     "ek biryani dena bhai"    → add_item "biryani" qty=1
     "no onion" / "extra spicy"→ add_item with special_note
+  MULTIPLE dishes in ONE message → action="add_item" with the 'items' list, ONE entry per dish:
+    "2 bry + karahi"          → add_item items=[{{dish_query:"biryani",qty:2}},{{dish_query:"karahi",qty:1}}]
+    "1 chicken biryani, 1 mutton biryani and 2 lemon mint"
+                              → add_item items=[{{dish_query:"chicken biryani",qty:1}},
+                                 {{dish_query:"mutton biryani",qty:1}},{{dish_query:"lemon mint",qty:2}}]
+  List EVERY dish the customer named — NEVER drop any or merge several into one entry.
   Only add a dish the customer NAMED in THIS message. Never re-add something they didn't just name.
 
 CHANGING QUANTITY — action="update_qty" (dish_query + qty = the NEW TOTAL, not a delta):
@@ -364,7 +396,8 @@ QUESTIONS — answer like the owner who knows the food (action="no_action"):
 - Upsell at most ONCE, only if the cart has ≥1 item: a light "Want to add a drink? 😊".
 
 GOLDEN RULES
-- One action per message; ALWAYS include a natural 'reply'.
+- One action per message; ALWAYS include a natural 'reply'. (add_item MAY carry several
+  dishes via 'items' — that is still one action; include EVERY dish named in this message.)
 - Use add_item ONLY when the customer names a dish/quantity. A question, a removal,
   a quantity change, or chit-chat is NOT add_item.
 - If you're unsure what they mean, ask ONE short clarifying question with no_action.
@@ -516,6 +549,28 @@ class DeepSeekConversationAgent:
         # "remove the whole dish" vs a number as "remove that many units".
         _q = inp.get("qty")
         qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
+
+        # Multi-dish messages: the model lists every named dish in 'items' so a single
+        # message ordering several dishes adds ALL of them (one add_item per dish used
+        # to silently drop every dish but one). Each entry is normalised the same way
+        # as the single dish_query/qty path.
+        items: list[dict] = []
+        raw_items = inp.get("items")
+        if isinstance(raw_items, list):
+            for it in raw_items:
+                if not isinstance(it, dict):
+                    continue
+                dq = str(it.get("dish_query") or "").strip()
+                if not dq:
+                    continue
+                iq = it.get("qty")
+                iqty = int(iq) if isinstance(iq, (int, float)) and not isinstance(iq, bool) else None
+                items.append({
+                    "dish_query": dq,
+                    "qty": iqty,
+                    "special_note": str(it.get("special_note") or ""),
+                })
+
         return ConversationAgentResult(
             message=strip_dashes(inp.get("reply", "")),
             action=inp.get("action", "no_action"),
@@ -523,6 +578,7 @@ class DeepSeekConversationAgent:
                 "dish_query": inp.get("dish_query", ""),
                 "qty": qty,
                 "special_note": inp.get("special_note", ""),
+                "items": items,
                 "apt_room": inp.get("apt_room", ""),
                 "building": inp.get("building", ""),
                 "receiver_name": inp.get("receiver_name", ""),

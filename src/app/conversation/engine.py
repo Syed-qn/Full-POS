@@ -646,6 +646,10 @@ async def _handle_collecting_items(
     )
     draft_order_id = conv.state.get("draft_order_id")
     order = await session.get(Order, draft_order_id) if draft_order_id else None
+    # A pointer that survived a placed/cancelled order is not a live cart — start fresh
+    # rather than appending new items onto an already-finalised order.
+    if order is not None and str(order.status) != "draft":
+        order = None
     if order is None:
         order = await create_draft_order(
             session, restaurant_id=restaurant_id, customer_id=customer.id,
@@ -1077,7 +1081,10 @@ async def _handle_order_confirmation(
 
     if btn_id == "confirm_order":
         await finalize_confirmation(session, order=order, actor="customer")
-        _set_state(conv, dialogue_state="order_placed")
+        # Drop the cart pointers now the order is placed — a later order must start a
+        # fresh draft, not reuse this (now confirmed) order's id.
+        _set_state(conv, dialogue_state="order_placed",
+                   draft_order_id=None, pending_order_id=None)
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="order-confirmed",
@@ -1697,7 +1704,11 @@ async def _resolve_draft_order(
     draft_order_id = conv.state.get("draft_order_id")
     if draft_order_id:
         order = await session.get(Order, draft_order_id)
-        if order is not None and await _order_has_items(session, order.id):
+        if (
+            order is not None
+            and str(order.status) == "draft"
+            and await _order_has_items(session, order.id)
+        ):
             return order
 
     # Pointer is stale/missing — fall back to the customer's latest non-empty draft.
@@ -2002,6 +2013,7 @@ async def _ensure_draft_order(
     On creation, clears address/location state left over from a previous order so a
     returning customer is re-offered their saved address and the fee/distance is
     recomputed for THIS order rather than reused from the last one."""
+    from app.ordering.fsm import OrderStatus
     from app.ordering.models import Order
     from app.ordering.service import create_draft_order, get_or_create_customer
 
@@ -2010,6 +2022,12 @@ async def _ensure_draft_order(
     )
     draft_order_id = conv.state.get("draft_order_id")
     order = await session.get(Order, draft_order_id) if draft_order_id else None
+    # Only an order that is STILL a draft is this conversation's live cart. A pointer
+    # left over from a placed/cancelled order (we don't clear it everywhere) must NOT
+    # be reused — otherwise new items append to an already-confirmed order and the
+    # summary renders a stale cart. Treat a non-draft pointer as "no cart" → fresh draft.
+    if order is not None and str(order.status) != str(OrderStatus.DRAFT):
+        order = None
     if order is None:
         order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
         _set_state(
@@ -2236,13 +2254,21 @@ async def _execute_ai_add_item(
     dish_query: str,
     qty: int,
     special_note: str = "",
+    *,
+    suppress_offers: bool = False,
 ) -> str:
     """Find and add a dish. Returns "added" or "no_match".
 
     Serving-size variants are OPT-IN bigger portions on top of the base single
     serve. The customer is never interrogated: ordering a dish plainly adds the
     single serve at the base price. A bigger portion is applied only when the
-    customer NAMES it ("family biryani", "4 serve") — the matcher resolves it."""
+    customer NAMES it ("family biryani", "4 serve") — the matcher resolves it.
+
+    ``suppress_offers`` skips the interactive size/bundle sub-dialogs and adds the
+    base serve directly. It is used by the multi-dish path (several dishes named in
+    one message), where pausing to ask a size/bundle question for one dish would
+    abandon the remaining dishes — better to add them all and let the customer
+    adjust than to silently drop them."""
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH:
         return "no_match"
@@ -2266,7 +2292,7 @@ async def _execute_ai_add_item(
         variant = resolve_variant(dish, dish_query)
         if variant is None and special_note:
             variant = resolve_variant(dish, special_note)
-        if variant is None:
+        if variant is None and not suppress_offers:
             # Drinks: variants are SIZES — ask which one (there's no default "single
             # serve" like food). Food: a quantity that matches a serving-size bundle
             # gets the combo offer instead.
@@ -2532,7 +2558,10 @@ async def _execute_confirm_order(
         )
         return
     await finalize_confirmation(session, order=order, actor="customer")
-    _set_state(conv, dialogue_phase="post_order", dialogue_state="order_placed")
+    # Drop the cart pointers now the order is placed — a later order must start a
+    # fresh draft, not reuse this (now confirmed) order's id.
+    _set_state(conv, dialogue_phase="post_order", dialogue_state="order_placed",
+               draft_order_id=None, pending_order_id=None)
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="order-confirmed",
@@ -2645,9 +2674,61 @@ async def _dispatch_action(
         return
 
     if action == "add_item":
-        dish_query = data.get("dish_query", "")
-        qty = int(data.get("qty") or 1)
-        special_note = data.get("special_note", "")
+        items = data.get("items") or []
+        # Multi-dish message: add EVERY dish the customer named in one message. A
+        # single add_item used to add one dish and silently drop the rest, while the
+        # LLM's reply narrated a full cart that the DB never held. We add each dish
+        # (suppressing per-dish size/bundle prompts so the loop never abandons the
+        # remaining dishes) and then echo the REAL cart from the DB — so the reply
+        # can never again claim items that were not actually saved.
+        if len(items) >= 2:
+            added: list[str] = []
+            not_found: list[str] = []
+            too_many: list[str] = []
+            for it in items:
+                iq = it.get("dish_query", "")
+                if not iq:
+                    continue
+                iqty = int(it.get("qty") or 1)
+                if iqty > _max_item_qty(restaurant):
+                    too_many.append(iq)
+                    continue
+                status = await _execute_ai_add_item(
+                    session, conv, inbound, restaurant_id, iq, iqty,
+                    it.get("special_note", ""), suppress_offers=True,
+                )
+                if status == "added":
+                    added.append(iq)
+                elif status == "no_match":
+                    not_found.append(iq)
+            cart = await _build_cart_summary(session, conv)
+            if added:
+                body = f"{(reply.strip() or 'Got it!')}{_cart_tail(cart)}"
+            else:
+                body = "Sorry, I couldn't add any of those — check the dish names against our menu."
+            notes = []
+            if not_found:
+                notes.append("couldn't find: " + ", ".join(not_found))
+            if too_many:
+                notes.append(
+                    "that's a large quantity for " + ", ".join(too_many)
+                    + " — please call us to arrange a big order"
+                )
+            if notes:
+                body = f"{body}\n\n({'; '.join(notes)})"
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-add-multi", body=body)
+            return
+
+        # Single dish — named via the items list (length 1) or the flat dish_query.
+        if len(items) == 1 and not data.get("dish_query"):
+            dish_query = items[0].get("dish_query", "")
+            qty = int(items[0].get("qty") or 1)
+            special_note = items[0].get("special_note", "")
+        else:
+            dish_query = data.get("dish_query", "")
+            qty = int(data.get("qty") or 1)
+            special_note = data.get("special_note", "")
         if dish_query and qty > _max_item_qty(restaurant):
             await _escalate_large_qty(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,

@@ -28,6 +28,21 @@ describe("MessageBubble", () => {
     expect(txt).not.toContain("11. Chicken");
   });
 
+  it("tags a voice note (type audio) with a mic marker and shows its transcript", () => {
+    const msg: MessageOut = {
+      id: 5, direction: "inbound", type: "audio",
+      payload: { text: "two chicken biryani please", voice: true }, ts: 1717660830,
+    };
+    const { container } = render(<MessageBubble message={msg} />);
+    expect(container.textContent).toContain("Voice");
+    expect(container.textContent).toContain("two chicken biryani please");
+  });
+
+  it("does NOT tag a normal typed message with the voice marker", () => {
+    const { container } = render(<MessageBubble message={inbound} />);
+    expect(container.textContent).not.toContain("Voice");
+  });
+
   it("renders WhatsApp *bold* and **bold** as bold, without the asterisks", () => {
     const msg: MessageOut = {
       id: 3, direction: "outbound", type: "text",

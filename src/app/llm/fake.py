@@ -175,6 +175,28 @@ class FakeConversationAgent:
                     action="status_query",
                     action_data={},
                 )
+            # Multi-dish message: split on commas / "and" / "+" and emit one item per
+            # clause so the engine adds them ALL (mirrors the real agent's 'items').
+            if re.search(r",|\band\b|\+", last_user):
+                clauses = re.split(r"\s*(?:,|\band\b|\+)\s*", last_user)
+                parsed = []
+                for clause in clauses:
+                    clause = clause.strip()
+                    if not clause:
+                        continue
+                    cqty = 1
+                    m = re.match(r'^(\d+)\s*[xX]?\s+(.*)$', clause)
+                    if m:
+                        cqty = int(m.group(1))
+                        clause = m.group(2).strip()
+                    if clause:
+                        parsed.append({"dish_query": clause, "qty": cqty, "special_note": ""})
+                if len(parsed) >= 2:
+                    return ConversationAgentResult(
+                        message="Got it! Added everything to your cart 🛒",
+                        action="add_item",
+                        action_data={"items": parsed},
+                    )
             # Any non-empty text → try add_item; engine will send no-match if dish not found
             if last_user:
                 return ConversationAgentResult(

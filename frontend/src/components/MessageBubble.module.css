@@ -21,6 +21,20 @@
 .text {
   display: block;
 }
+.voiceTag {
+  display: inline-block;
+  margin: 0 6px 2px 0;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  background: rgba(0, 0, 0, 0.08);
+}
+.outbound .voiceTag {
+  background: rgba(255, 255, 255, 0.22);
+}
 .time {
   display: block;
   text-align: right;

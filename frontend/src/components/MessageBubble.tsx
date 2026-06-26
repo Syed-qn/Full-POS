@@ -39,10 +39,21 @@ export function MessageBubble({ message }: { message: MessageOut }) {
   const time = message.ts
     ? new Date(message.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "";
+  // A voice note arrives as type "audio" with the transcript in payload.text. Tag it
+  // with a mic so ops can tell a spoken order apart from a typed one — the text shown
+  // is the transcription the bot acted on.
+  const isVoice = message.type === "audio";
   return (
     <div className={`${s.row} ${s[message.direction]}`}>
       <div className={s.bubble}>
-        <span className={s.text}>{formatWhatsApp(text)}</span>
+        <span className={s.text}>
+          {isVoice && (
+            <span className={s.voiceTag} title="Voice note (transcribed)">
+              🎙️ Voice
+            </span>
+          )}
+          {formatWhatsApp(text)}
+        </span>
         {time && <span className={s.time}>{time}</span>}
       </div>
     </div>
