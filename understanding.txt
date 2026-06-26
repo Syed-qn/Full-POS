@@ -636,3 +636,14 @@
   bug the deliver_outbox_now helper was built for).
 - Fix: worker._run_sweep collects enqueued row ids (flush to assign id), commits,
   then calls deliver_outbox_now(session, nudge_ids). 4 abandoned-cart tests pass.
+
+[2026-06-26] feat(cart): cron-driven HTTP trigger for the abandoned-cart sweep
+- Render worker never starts Celery beat (confirmed: no "celery beat starting" in
+  log, cart eligible 5+ min with zero sweep activity). Same gap marketing already
+  solved with POST /api/v1/marketing/tick + external cron.
+- Added POST /api/v1/conversations/cart-tick guarded by X-Tick-Secret (reuses
+  APP_MARKETING_TICK_SECRET so one cron credential covers both). Runs _run_sweep()
+  across all tenants; nudge delivered synchronously inside the sweep.
+- An external cron (Render Cron Job / cron-job.org) hits this URL every ~5 min.
+  Reliable on Render since the WEB service serves it (DB + sync outbox delivery).
+- 3 endpoint tests (503/403/200) + 4 sweep tests pass; ruff clean.

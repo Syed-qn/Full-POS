@@ -5,7 +5,7 @@ list conversations, fetch one conversation's messages, toggle manual takeover,
 and send a manager-authored message to the customer. Tenant-scoped to the
 logged-in restaurant.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -48,6 +48,30 @@ async def _dispatch_outbox(session: AsyncSession, outbox_ids: list[int]) -> None
 
         for oid in outbox_ids:
             deliver_outbox_message.apply_async(args=[oid], queue="outbox")
+
+
+@router.post("/cart-tick")
+async def abandoned_cart_tick(
+    x_tick_secret: str | None = Header(default=None),
+) -> dict:
+    """Heartbeat for the abandoned-cart sweep — called by an external cron job
+    (Render has no working Celery beat), NOT a manager.
+
+    Guarded by the ``X-Tick-Secret`` header matching ``APP_MARKETING_TICK_SECRET``
+    (same secret as the marketing tick, so one cron credential covers both).
+    Runs across ALL tenants: each enabled restaurant's stale draft carts are
+    nudged (once) or auto-cleared, with the nudge delivered synchronously inside
+    ``_run_sweep``. The cron hits one URL for the whole platform."""
+    secret = get_settings().marketing_tick_secret.get_secret_value()
+    if not secret:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "tick not configured")
+    if x_tick_secret != secret:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "invalid tick secret")
+
+    from app.conversation.worker import _run_sweep
+
+    nudged = await _run_sweep()
+    return {"nudged": nudged}
 
 
 @router.get("", response_model=list[DashboardConversationOut])
