@@ -12,3 +12,15 @@
 .breach {
   animation: pulse-critical 1s infinite;
 }
+
+/* Compact variant for inline/table use (e.g. the orders-list Kitchen column) —
+   the 24/26px hero size overwhelms a table cell. Higher-specificity selectors so
+   it also overrides the .urgent bump. */
+.compact.timer {
+  font-size: 13px;
+  font-weight: 700;
+}
+.compact.urgent {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}

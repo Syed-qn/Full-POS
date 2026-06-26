@@ -11,10 +11,13 @@ import s from "./CountdownTimer.module.css";
 export function PrepCountdown({
   prepDeadline,
   label = "Plate",
+  compact = false,
 }: {
   prepDeadline: string | null;
   /** Verb shown in the badge — "Plate" (cooking) or "Start" (not started yet). */
   label?: string;
+  /** Smaller type for inline use (e.g. an orders-table cell) vs the hero timer. */
+  compact?: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -31,7 +34,7 @@ export function PrepCountdown({
   return (
     <span
       data-testid="prep-countdown"
-      className={`${s.timer} ${urgent ? s.urgent : ""} ${late ? s.breach : ""}`}
+      className={`${s.timer} ${compact ? s.compact : ""} ${urgent ? s.urgent : ""} ${late ? s.breach : ""}`}
       title="Kitchen deadline (distance-driven)"
     >
       {late ? `🍳 ${label} now` : `🍳 ${label} in ${formatCountdown(rem)}`}

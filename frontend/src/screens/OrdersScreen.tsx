@@ -198,7 +198,7 @@ export function OrdersScreen() {
       header: "Kitchen",
       render: (o) => {
         if (o.status === "preparing") {
-          return <PrepCountdown prepDeadline={o.prep_deadline} label="Plate" />;
+          return <PrepCountdown prepDeadline={o.prep_deadline} label="Plate" compact />;
         }
         if (o.status === "confirmed") {
           // Not started yet → show "start cooking by" = plate-by − cook estimate.
@@ -208,7 +208,7 @@ export function OrdersScreen() {
                   Date.parse(o.prep_deadline) - o.cook_estimate_minutes * 60_000
                 ).toISOString()
               : o.prep_deadline;
-          return <PrepCountdown prepDeadline={startBy} label="Start" />;
+          return <PrepCountdown prepDeadline={startBy} label="Start" compact />;
         }
         return <span className={s.mono}>—</span>;
       },
