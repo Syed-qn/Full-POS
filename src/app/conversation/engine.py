@@ -1773,6 +1773,42 @@ def _cart_tail(cart: str) -> str:
     return f"\n\n🛒 {cart}" if cart else "\n\n🛒 Your cart is now empty."
 
 
+def _cart_expired(order, restaurant) -> bool:
+    """True if a draft cart has been quiet past the restaurant's cart_expiry_minutes —
+    used so a returning customer's stale cart is started fresh rather than resumed."""
+    from datetime import datetime, timezone
+
+    settings = (getattr(restaurant, "settings", None) or {}) if restaurant else {}
+    expiry_min = int(settings.get("cart_expiry_minutes", 60))
+    last = getattr(order, "updated_at", None)
+    if last is None:
+        return False
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - last).total_seconds() / 60.0 >= expiry_min
+
+
+async def _offer_resume_cart(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> None:
+    """Returning customer still has an in-progress cart → show it and ask whether to
+    continue it or start a new order, instead of silently wiping or appending."""
+    cart = await _build_cart_summary(session, conv)
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="resume_offer")
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="resume-cart",
+        body=(
+            "Welcome back! 👋 You still have an order in progress:\n\n"
+            f"🛒 {cart}\n\nContinue this order, or start a new one?"
+        ),
+        buttons=[
+            {"id": "resume_cart", "title": "Continue order"},
+            {"id": "new_cart", "title": "Start new"},
+        ],
+    )
+
+
 async def _build_history(
     session: AsyncSession,
     conv: Conversation,
@@ -3500,7 +3536,22 @@ async def handle_inbound(
     # that mixes a greeting with an order ("hi, one biryani") is NOT a pure
     # greeting and falls through to the ordering flow so the dish still lands.
     if inbound.type == MessageType.TEXT and _is_pure_greeting(inbound.payload.get("text")):
-        if conv.state.get("draft_order_id") is not None:
+        # A returning customer with a non-empty, not-yet-expired draft is ASKED whether
+        # to continue or start fresh (instead of silently wiping the cart). An expired
+        # or empty cart just starts fresh.
+        from app.ordering.models import Order as _Order
+
+        _draft_id = conv.state.get("draft_order_id")
+        _draft = await session.get(_Order, _draft_id) if _draft_id else None
+        if (
+            _draft is not None
+            and str(_draft.status) == "draft"
+            and await _order_has_items(session, _draft.id)
+            and not _cart_expired(_draft, restaurant)
+        ):
+            await _offer_resume_cart(session, conv, inbound, restaurant_id)
+            return
+        if _draft_id is not None:
             _logger.info("greeting reset abandoned draft for conv=%s", conv.id)
         _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
                    draft_order_id=None, pending_order_id=None, awaiting_bundle=None,
@@ -3574,6 +3625,34 @@ async def handle_inbound(
                 body="No problem! Please share your new delivery location 📍. "
                      "Tap the button below to send your pin.",
             )
+            return
+        if btn_id == "resume_cart":
+            # Continue the in-progress cart from the resume prompt.
+            cart = await _build_cart_summary(session, conv)
+            _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="resume-continue",
+                body=(
+                    "Great, picking up where you left off 😊"
+                    f"{_cart_tail(cart)}\n\nAdd more items, or say 'done' to check out."
+                ),
+            )
+            return
+        if btn_id == "new_cart":
+            # Start fresh from the resume prompt: empty the old cart (so it can't be
+            # resurrected) and drop the pointer, then greet.
+            from sqlalchemy import delete as sa_delete
+
+            from app.ordering.models import OrderItem as _OrderItem
+
+            _did = conv.state.get("draft_order_id")
+            if _did:
+                await session.execute(sa_delete(_OrderItem).where(_OrderItem.order_id == _did))
+            _set_state(conv, dialogue_state="greeting", dialogue_phase="ordering",
+                       draft_order_id=None, pending_order_id=None, awaiting_bundle=None,
+                       awaiting_size=None, abandoned_nudged=None)
+            await _handle_greeting(session, conv, inbound, restaurant_id)
             return
         if btn_id == "share_location":
             # Native location-request buttons no longer produce a button reply, but

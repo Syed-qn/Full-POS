@@ -96,6 +96,11 @@ class SettingsPatch(BaseModel):
     # Batching hold window: seconds to defer a lone fresh order so a neighbour can
     # join its batch. 0 = off. Capped at 600s (10 min) to stay well under the SLA.
     batch_hold_seconds: int | None = Field(default=None, ge=0, le=600)
+    # Abandoned-cart recovery. reminder toggles the nudge; recovery = minutes quiet
+    # before the nudge; expiry = minutes quiet before the draft cart is auto-cleared.
+    cart_reminder_enabled: bool | None = None
+    cart_recovery_minutes: int | None = Field(default=None, ge=1, le=1440)
+    cart_expiry_minutes: int | None = Field(default=None, ge=1, le=1440)
     # Today's Special automation (marketing). Sent as a whole object by the UI.
     todays_special: dict | None = None
 

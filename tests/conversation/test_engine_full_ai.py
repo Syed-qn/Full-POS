@@ -423,13 +423,10 @@ async def test_address_step_recovers_stale_draft_pointer(db_session, restaurant)
     assert not any("cart is empty" in (m.payload or {}).get("body", "") for m in msgs)
 
 
-async def test_greeting_starts_fresh_and_drops_abandoned_cart(db_session, restaurant):
-    """A pure greeting ("As salam walekum") means start fresh.
-
-    Live bug: a customer who added a dish, never bought it, then greeted again
-    was shown the OLD cart ("You've got 1x ... in your cart") instead of a fresh
-    start. A pure-greeting message must clear the stale draft pointer so the
-    abandoned cart cannot carry into the new order — in ANY state.
+async def test_greeting_offers_to_resume_or_start_fresh(db_session, restaurant):
+    """A pure greeting with a non-empty, non-expired cart offers Continue vs Start new
+    (instead of silently carrying OR silently wiping the cart). Tapping "Start new"
+    drops the cart so it can't leak into the next order.
     """
     from unittest.mock import AsyncMock, patch
 
@@ -461,7 +458,7 @@ async def test_greeting_starts_fresh_and_drops_abandoned_cart(db_session, restau
     )
     assert conv.state.get("draft_order_id") is not None  # cart exists
 
-    # Customer greets again instead of buying — must start fresh.
+    # Customer greets again instead of buying → offered Continue vs Start new.
     greet_inbound = InboundMessage(
         wa_message_id="wamid.greet-hi", from_phone=phone, type=MessageType.TEXT,
         payload={"text": "As salam walekum"}, restaurant_phone=restaurant.phone,
@@ -471,8 +468,79 @@ async def test_greeting_starts_fresh_and_drops_abandoned_cart(db_session, restau
     await db_session.commit()
 
     await db_session.refresh(conv)
-    assert conv.state.get("draft_order_id") is None        # abandoned cart dropped
+    assert conv.state.get("dialogue_state") == "resume_offer"   # asked, not wiped
+    assert conv.state.get("draft_order_id") is not None         # cart still there
+    from app.outbox.models import OutboxMessage
+    last = (await db_session.scalars(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).all()[-1]
+    btn_ids = {b["id"] for b in last.payload.get("buttons", [])}
+    assert btn_ids == {"resume_cart", "new_cart"}
+
+    # Tapping "Start new" drops the abandoned cart.
+    new_inbound = InboundMessage(
+        wa_message_id="wamid.greet-new", from_phone=phone, type=MessageType.BUTTON_REPLY,
+        payload={"id": "new_cart", "title": "Start new"}, restaurant_phone=restaurant.phone,
+        timestamp=1717662100,
+    )
+    await handle_inbound(db_session, new_inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(conv)
+    assert conv.state.get("draft_order_id") is None         # abandoned cart dropped
     assert await _build_cart_summary(db_session, conv) == ""  # fresh, empty cart
+
+
+async def test_resume_cart_continues_the_existing_order(db_session, restaurant):
+    """Tapping "Continue order" on the resume prompt keeps the cart and returns to
+    item collection."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+    from app.ordering.models import OrderItem
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507999000"
+
+    add_result = ConversationAgentResult(
+        message="Added!", action="add_item",
+        action_data={"dish_query": "biryani", "qty": 1, "special_note": ""},
+    )
+    add_inbound = InboundMessage(
+        wa_message_id="wamid.rc-add", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "one biryani"}, restaurant_phone=restaurant.phone, timestamp=1717663000,
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=add_result)):
+        await handle_inbound(db_session, add_inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    draft_id = conv.state.get("draft_order_id")
+
+    # Greet → resume offer, then tap Continue.
+    await handle_inbound(db_session, InboundMessage(
+        wa_message_id="wamid.rc-hi", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "hi"}, restaurant_phone=restaurant.phone, timestamp=1717663050,
+    ), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, InboundMessage(
+        wa_message_id="wamid.rc-cont", from_phone=phone, type=MessageType.BUTTON_REPLY,
+        payload={"id": "resume_cart", "title": "Continue order"},
+        restaurant_phone=restaurant.phone, timestamp=1717663100,
+    ), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(conv)
+    assert conv.state.get("draft_order_id") == draft_id           # same cart kept
+    assert conv.state.get("dialogue_state") == "collecting_items"
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == draft_id)
+    )).all()
+    assert len(items) == 1                                        # cart intact
 
 
 async def test_new_order_clears_previous_address_state(db_session, restaurant):

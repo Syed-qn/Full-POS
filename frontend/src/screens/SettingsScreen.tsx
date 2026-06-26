@@ -14,7 +14,7 @@ import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "hours" | "batching" | "dispatch" | "integrations";
+type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "dispatch" | "integrations";
 
 const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
   { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
@@ -25,6 +25,8 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Opening Hours", blurb: "Hours the bot tells customers. Times are Asia/Dubai." },
   { key: "batching", label: "Batching", icon: "📦", desc: "Order grouping",
     title: "Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
+  { key: "cart", label: "Cart recovery", icon: "🛒", desc: "Abandoned carts",
+    title: "Cart recovery", blurb: "Remind customers who left items in their cart, and auto-clear stale carts." },
   { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
   { key: "integrations", label: "API Keys", icon: "🔑", desc: "Partner access",
@@ -107,6 +109,11 @@ export function SettingsScreen() {
   const [maxDetour, setMaxDetour] = useState(0); // 0 = corridor off
   const [holdSeconds, setHoldSeconds] = useState(0); // 0 = batch hold window off
 
+  // Cart recovery tab
+  const [cartReminder, setCartReminder] = useState(true);
+  const [cartRecoveryMin, setCartRecoveryMin] = useState(15);
+  const [cartExpiryMin, setCartExpiryMin] = useState(60);
+
   // Fees tab
   const [tiers, setTiers] = useState<FeeTier[]>(DEFAULT_TIERS);
 
@@ -146,6 +153,9 @@ export function SettingsScreen() {
       if (typeof sset.batch_proximity_km === "number") setBatchProximity(sset.batch_proximity_km);
       if (typeof sset.batch_max_detour_km === "number") setMaxDetour(sset.batch_max_detour_km);
       if (typeof sset.batch_hold_seconds === "number") setHoldSeconds(sset.batch_hold_seconds);
+      if (typeof sset.cart_reminder_enabled === "boolean") setCartReminder(sset.cart_reminder_enabled);
+      if (typeof sset.cart_recovery_minutes === "number") setCartRecoveryMin(sset.cart_recovery_minutes);
+      if (typeof sset.cart_expiry_minutes === "number") setCartExpiryMin(sset.cart_expiry_minutes);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
       // Opening hours: settings.open_hours.days maps "0".."6" -> ["HH:MM","HH:MM"].
       const oh = sset.open_hours as { days?: Record<string, [string, string]> } | undefined;
@@ -202,6 +212,19 @@ export function SettingsScreen() {
         max_orders_per_batch: ordersPerBatch,
         max_items_per_order: itemsPerOrder,
         max_item_qty: maxItemQty,
+      });
+      flash();
+    } catch {
+      flash("Failed to save.");
+    }
+  }
+
+  async function saveCart() {
+    try {
+      await apiClient.patch("/api/v1/settings", {
+        cart_reminder_enabled: cartReminder,
+        cart_recovery_minutes: cartRecoveryMin,
+        cart_expiry_minutes: cartExpiryMin,
       });
       flash();
     } catch {
@@ -572,6 +595,55 @@ export function SettingsScreen() {
           </div>
           <div className={s.actions}>
             <Button onClick={saveBatching}>Save</Button>
+          </div>
+        </div>
+      )}
+
+      {tab === "cart" && (
+        <div className={s.section}>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Cart reminder</span>
+              <span className={s.rowHint}>
+                Send one WhatsApp nudge ("you still have items in your cart") to customers
+                who add items but don't check out. Turn off if you'd rather not message them.
+              </span>
+            </div>
+            <label className={s.hoursToggle}>
+              <input
+                type="checkbox"
+                checked={cartReminder}
+                onChange={(e) => setCartReminder(e.target.checked)}
+              />
+              <span>Send cart reminder</span>
+            </label>
+          </div>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Remind after (minutes)</span>
+              <input
+                aria-label="remind after minutes" type="number" min={1} max={1440}
+                value={cartRecoveryMin} onChange={(e) => setCartRecoveryMin(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+                disabled={!cartReminder}
+              />
+              <span className={s.rowHint}>How long a cart can sit quiet before the reminder is sent.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Clear cart after (minutes)</span>
+              <input
+                aria-label="clear cart after minutes" type="number" min={1} max={1440}
+                value={cartExpiryMin} onChange={(e) => setCartExpiryMin(Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>
+                After this much quiet time an abandoned cart is emptied automatically.
+                A customer who returns before then is asked to continue it or start fresh.
+              </span>
+            </label>
+          </div>
+          <div className={s.actions}>
+            <Button onClick={saveCart}>Save</Button>
           </div>
         </div>
       )}

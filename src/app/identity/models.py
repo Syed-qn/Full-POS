@@ -63,6 +63,14 @@ DEFAULT_SETTINGS: dict = {
         "lead_minutes": 15,
         "default_time": "11:45",
     },
+    # Abandoned-cart recovery (per-restaurant; read via .get() with these defaults).
+    # cart_reminder_enabled toggles the one-time "you still have items" WhatsApp nudge.
+    # cart_recovery_minutes = minutes of silence before that nudge fires. After
+    # cart_expiry_minutes of silence the draft cart is auto-cleared. A customer who
+    # returns while the cart still exists is asked Continue vs Start new (always on).
+    "cart_reminder_enabled": True,
+    "cart_recovery_minutes": 15,
+    "cart_expiry_minutes": 60,
 }
 
 

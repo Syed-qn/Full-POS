@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.conversation.engine import handle_inbound
 from app.conversation.models import Conversation
 from app.menu.models import Dish, Menu
+from app.ordering.models import OrderItem
 from app.outbox.models import OutboxMessage
 from app.whatsapp.port import InboundMessage, MessageType
 
@@ -52,13 +53,24 @@ async def _build_abandoned_cart(db_session, restaurant_id):
     await db_session.commit()
 
 
+async def _set_cart_settings(db_session, restaurant, *, recovery, expiry, reminder):
+    restaurant.settings = {
+        **restaurant.settings,
+        "cart_recovery_minutes": recovery,
+        "cart_expiry_minutes": expiry,
+        "cart_reminder_enabled": reminder,
+    }
+    await db_session.commit()
+
+
 async def test_abandoned_cart_nudges_once(db_session, restaurant):
     from app.conversation import worker as cart_worker
 
     await _build_abandoned_cart(db_session, restaurant.id)
+    # recovery=0 → a just-quiet cart qualifies; expiry high so it isn't cleared.
+    await _set_cart_settings(db_session, restaurant, recovery=0, expiry=9999, reminder=True)
 
-    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)), \
-         patch.object(cart_worker, "ABANDONED_AFTER_MIN", -1000):
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
         first = await cart_worker._run_sweep()
         second = await cart_worker._run_sweep()  # once-only
 
@@ -84,9 +96,42 @@ async def test_no_nudge_without_cart(db_session, restaurant):
     await _seed_menu(db_session, restaurant.id)
     await handle_inbound(db_session, _msg("hi", "wamid.n1"), restaurant_id=restaurant.id)
     await db_session.commit()
+    await _set_cart_settings(db_session, restaurant, recovery=0, expiry=9999, reminder=True)
 
-    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)), \
-         patch.object(cart_worker, "ABANDONED_AFTER_MIN", -1000):
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
         count = await cart_worker._run_sweep()
 
     assert count == 0
+
+
+async def test_reminder_disabled_sends_no_nudge(db_session, restaurant):
+    """With the reminder toggle OFF, no nudge is sent and the cart is left intact."""
+    from app.conversation import worker as cart_worker
+
+    await _build_abandoned_cart(db_session, restaurant.id)
+    await _set_cart_settings(db_session, restaurant, recovery=0, expiry=9999, reminder=False)
+
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
+        count = await cart_worker._run_sweep()
+
+    assert count == 0
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert items  # cart untouched
+
+
+async def test_expired_cart_is_auto_cleared(db_session, restaurant):
+    """Past cart_expiry_minutes, the draft cart is emptied and the pointer dropped."""
+    from app.conversation import worker as cart_worker
+
+    await _build_abandoned_cart(db_session, restaurant.id)
+    await _set_cart_settings(db_session, restaurant, recovery=0, expiry=0, reminder=True)
+
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
+        await cart_worker._run_sweep()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert items == []  # cleared
+    conv = (await db_session.scalars(
+        select(Conversation).where(Conversation.phone == "+971501110001")
+    )).one()
+    assert conv.state.get("draft_order_id") is None

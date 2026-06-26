@@ -1,21 +1,28 @@
 """Abandoned-cart recovery Celery task.
 
-Every few minutes, find customer conversations that still hold a DRAFT order
-with items but have gone quiet for ABANDONED_AFTER_MIN minutes, and send ONE
-gentle nudge. The ``abandoned_nudged`` flag in conversation state makes it
-once-only; it is re-armed (cleared) whenever the customer adds another item.
+Every few minutes, look at customer conversations that still hold a DRAFT order
+with items and have gone quiet. Behaviour is per-restaurant (Settings page):
+
+* ``cart_reminder_enabled`` — send ONE gentle nudge after ``cart_recovery_minutes``
+  of silence. The ``abandoned_nudged`` state flag keeps it once-only; it is re-armed
+  whenever the customer touches the cart again.
+* ``cart_expiry_minutes`` — once a cart has been quiet this long, auto-CLEAR it
+  (drop its items, zero the totals, drop the draft pointer) so stale carts don't
+  pile up or silently resurface in a later order.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
+from decimal import Decimal
 
 from celery import shared_task
-from sqlalchemy import func, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select, text
 
 from app.conversation.models import Conversation
 from app.db import async_session_factory
+from app.identity.models import Restaurant
 from app.ordering.fsm import OrderStatus
 from app.ordering.models import Order, OrderItem
 from app.outbox.service import enqueue_message
@@ -23,7 +30,9 @@ from app.whatsapp.port import OutboundMessageType
 
 logger = logging.getLogger(__name__)
 
+# Fallbacks when a restaurant row predates the cart settings.
 ABANDONED_AFTER_MIN = 15
+DEFAULT_EXPIRY_MIN = 60
 _NUDGE_BODY = (
     "Hi 👋 You still have items in your cart. "
     "Would you like to complete your order?"
@@ -37,26 +46,25 @@ def abandoned_cart_sweep(self) -> int:  # type: ignore[override]
 
 
 async def _run_sweep() -> int:
-    """Send nudges for stale draft carts. Returns the number of nudges enqueued."""
+    """Nudge and/or auto-clear stale draft carts. Returns the number of nudges sent."""
     nudged = 0
+    cleared = 0
     async with async_session_factory() as session:
-        # Server-side cutoff: compare the naive ``updated_at`` against the DB's
-        # own clock minus the window. Doing the subtraction in SQL avoids any
-        # Python-vs-DB timezone mismatch on the timezone-naive column.
-        cutoff = func.now() - timedelta(minutes=ABANDONED_AFTER_MIN)
-        convs = (
-            await session.scalars(
-                select(Conversation).where(
-                    Conversation.counterpart == "customer",
-                    Conversation.updated_at < cutoff,
+        # Let the DB compute "quiet minutes" from its own clock so we never trip on a
+        # Python-vs-DB timezone mismatch on the naive ``updated_at`` column.
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT id, restaurant_id, state, "
+                    "EXTRACT(EPOCH FROM (now() - updated_at)) / 60.0 AS quiet_min "
+                    "FROM conversations WHERE counterpart = 'customer'"
                 )
             )
         ).all()
 
-        for conv in convs:
-            state = conv.state or {}
-            if state.get("abandoned_nudged"):
-                continue
+        settings_cache: dict[int, dict] = {}
+        for row in rows:
+            state = row.state or {}
             draft_id = state.get("draft_order_id")
             if not draft_id:
                 continue
@@ -69,18 +77,48 @@ async def _run_sweep() -> int:
             if not has_items:
                 continue
 
-            await enqueue_message(
-                session,
-                restaurant_id=conv.restaurant_id,
-                to_phone=conv.phone,
-                msg_type=OutboundMessageType.TEXT,
-                payload={"body": _NUDGE_BODY},
-                idempotency_key=f"abandoned-{conv.id}-{draft_id}",
-            )
-            conv.state = {**state, "abandoned_nudged": True}
-            nudged += 1
+            settings = settings_cache.get(row.restaurant_id)
+            if settings is None:
+                rest = await session.get(Restaurant, row.restaurant_id)
+                settings = (rest.settings or {}) if rest is not None else {}
+                settings_cache[row.restaurant_id] = settings
+            recovery_min = int(settings.get("cart_recovery_minutes", ABANDONED_AFTER_MIN))
+            expiry_min = int(settings.get("cart_expiry_minutes", DEFAULT_EXPIRY_MIN))
+            reminder_on = bool(settings.get("cart_reminder_enabled", True))
+            quiet = float(row.quiet_min or 0.0)
+
+            conv = await session.get(Conversation, row.id)
+            if conv is None:
+                continue
+
+            # 1) Expired → clear the cart (drop items, zero totals, drop the pointer).
+            if quiet >= expiry_min:
+                await session.execute(
+                    sa_delete(OrderItem).where(OrderItem.order_id == order.id)
+                )
+                order.subtotal = Decimal("0.00")
+                order.total = order.delivery_fee_aed
+                st = dict(conv.state or {})
+                for key in ("draft_order_id", "pending_order_id", "abandoned_nudged"):
+                    st.pop(key, None)
+                conv.state = st
+                cleared += 1
+                continue
+
+            # 2) Quiet long enough → one-time nudge (if the restaurant enabled it).
+            if reminder_on and quiet >= recovery_min and not state.get("abandoned_nudged"):
+                await enqueue_message(
+                    session,
+                    restaurant_id=conv.restaurant_id,
+                    to_phone=conv.phone,
+                    msg_type=OutboundMessageType.TEXT,
+                    payload={"body": _NUDGE_BODY},
+                    idempotency_key=f"abandoned-{conv.id}-{draft_id}",
+                )
+                conv.state = {**(conv.state or {}), "abandoned_nudged": True}
+                nudged += 1
 
         await session.commit()
-    if nudged:
-        logger.info("abandoned_cart_sweep nudged %d cart(s)", nudged)
+    if nudged or cleared:
+        logger.info("abandoned_cart_sweep nudged %d, cleared %d cart(s)", nudged, cleared)
     return nudged
