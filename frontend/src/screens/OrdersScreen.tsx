@@ -71,6 +71,7 @@ export function OrdersScreen() {
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
+  const [batchOnly, setBatchOnly] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [preset, setPreset] = useState<PresetKey>("all");
@@ -120,6 +121,10 @@ export function OrdersScreen() {
     if (statusFilter !== "all") {
       base = base.filter((o) => o.status === statusFilter);
     }
+    if (batchOnly) {
+      // Only orders riding together: already batched on a trip, or forecast to batch.
+      base = base.filter((o) => (o.batch_size != null && o.batch_size > 1) || !!o.batch_preview);
+    }
     if (fromDate || toDate) {
       base = base.filter((o) => {
         const day = o.created_at ? toYMD(new Date(o.created_at)) : "";
@@ -136,10 +141,10 @@ export function OrdersScreen() {
         o.customer_name.toLowerCase().includes(q) ||
         o.customer_phone.includes(q),
     );
-  }, [orders, search, statusFilter, fromDate, toDate]);
+  }, [orders, search, statusFilter, batchOnly, fromDate, toDate]);
 
   // Reset to the first page whenever any filter changes.
-  useEffect(() => { setPage(1); }, [search, statusFilter, fromDate, toDate]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, batchOnly, fromDate, toDate]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -229,6 +234,17 @@ export function OrdersScreen() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className={s.filterGroup}>
+            <span className={s.filterLabel}>Batching</span>
+            <label className={s.batchToggle} title="Show only orders that are batched or forecast to batch together">
+              <input
+                type="checkbox"
+                checked={batchOnly}
+                onChange={(e) => setBatchOnly(e.target.checked)}
+              />
+              <span>🔗 Batched only</span>
+            </label>
           </div>
         </div>
         <div className={s.groups}>
