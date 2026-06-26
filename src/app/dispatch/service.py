@@ -117,6 +117,63 @@ async def run_dispatch_engine(
 run_dispatch = run_dispatch_engine
 
 
+async def preview_batch_groups(
+    session: AsyncSession, *, restaurant_id: int
+) -> dict[int, str]:
+    """Map order_id -> a batch-preview label ("A", "B", …) for active UNASSIGNED
+    orders whose drop-offs are close enough to ride together, so the order list can
+    show the upcoming batching BEFORE dispatch assigns a rider.
+
+    Uses the SAME proximity rule and cap the real engine uses (batch_proximity_km /
+    max_orders_per_batch), greedily seeding a group and pulling in nearby orders.
+    Only groups of 2+ get a label; a lone order returns nothing. This is a forecast,
+    not a commitment — the actual batch forms when orders are marked ready."""
+    from app.identity.models import Restaurant
+    from app.ordering.models import CustomerAddress, Order
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    rs = (restaurant.settings or {}) if restaurant is not None else {}
+    proximity_km = float(rs.get("batch_proximity_km", 1.0))
+    max_per = int(rs.get("max_orders_per_batch", 3))
+
+    rows = (
+        await session.execute(
+            select(Order.id, CustomerAddress.latitude, CustomerAddress.longitude)
+            .join(CustomerAddress, CustomerAddress.id == Order.address_id)
+            .where(
+                Order.restaurant_id == restaurant_id,
+                Order.status.in_(("confirmed", "preparing", "ready")),
+                Order.rider_id.is_(None),
+                CustomerAddress.latitude.is_not(None),
+                CustomerAddress.longitude.is_not(None),
+            )
+            .order_by(Order.id)
+        )
+    ).all()
+    items = [(int(r[0]), float(r[1]), float(r[2])) for r in rows]
+
+    labels: dict[int, str] = {}
+    used: set[int] = set()
+    group_index = 0
+    for i, (oid, lat, lon) in enumerate(items):
+        if oid in used:
+            continue
+        group = [oid]
+        used.add(oid)
+        for oid2, lat2, lon2 in items[i + 1:]:
+            if oid2 in used or len(group) >= max_per:
+                continue
+            if distance_km(lat, lon, lat2, lon2) <= proximity_km:
+                group.append(oid2)
+                used.add(oid2)
+        if len(group) >= 2:
+            label = chr(ord("A") + group_index)
+            group_index += 1
+            for member in group:
+                labels[member] = label
+    return labels
+
+
 async def sweep_ready_once() -> int:
     """Re-run dispatch for every restaurant that has ready + unassigned orders.
 

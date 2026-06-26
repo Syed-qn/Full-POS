@@ -34,7 +34,9 @@ from app.ordering.service import (
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
 
-async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
+async def _enrich(
+    session: AsyncSession, order: Order, *, batch_preview: str | None = None
+) -> OrderOut:
     """Join customer, address, items, and rider to produce the full OrderOut."""
     customer = await session.get(Customer, order.customer_id)
     customer_name = getattr(customer, "name", None)
@@ -138,6 +140,7 @@ async def _enrich(session: AsyncSession, order: Order) -> OrderOut:
         batch_id=batch_id,
         batch_size=(len(batch_order_numbers) or None),
         batch_order_numbers=batch_order_numbers,
+        batch_preview=batch_preview,
     )
 
 
@@ -327,6 +330,11 @@ async def list_orders(
     orders = await list_orders_for_tenant(
         session, restaurant_id=restaurant.id, status=status, limit=limit
     )
-    return [await _enrich(session, o) for o in orders]
+    # Forecast which still-unassigned orders will batch together, so the list can
+    # flag it before a rider is assigned.
+    from app.dispatch.service import preview_batch_groups
+
+    preview = await preview_batch_groups(session, restaurant_id=restaurant.id)
+    return [await _enrich(session, o, batch_preview=preview.get(o.id)) for o in orders]
 
 

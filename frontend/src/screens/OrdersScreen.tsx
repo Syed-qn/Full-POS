@@ -163,6 +163,13 @@ export function OrdersScreen() {
             >
               🔗 {o.batch_size} together
             </span>
+          ) : o.batch_preview ? (
+            <span
+              className={s.batchPreviewTag}
+              title={`Will likely batch together (group ${o.batch_preview}) — nearby drop-offs. Prepare them together so they ride out on one trip.`}
+            >
+              🔗 will batch · {o.batch_preview}
+            </span>
           ) : null}
         </span>
       ),

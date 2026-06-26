@@ -285,3 +285,21 @@
   white-space: nowrap;
   cursor: default;
 }
+
+/* Pre-assignment forecast — amber + dashed so it reads as "upcoming", distinct
+   from the solid blue chip used for an order already batched on a rider trip. */
+.batchPreviewTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px dashed #fcd34d;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  cursor: default;
+}

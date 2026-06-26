@@ -39,6 +39,10 @@ class OrderOut(BaseModel):
     batch_id: Optional[int] = None
     batch_size: Optional[int] = None
     batch_order_numbers: list[str] = Field(default_factory=list)
+    # Forecast (pre-assignment): a label ("A", "B", …) shared by still-unassigned
+    # orders whose drop-offs are close enough to ride together, so the list can flag
+    # an upcoming batch BEFORE a rider is assigned. Null when the order would ride alone.
+    batch_preview: Optional[str] = None
 
 
 class CustomerOut(BaseModel):
