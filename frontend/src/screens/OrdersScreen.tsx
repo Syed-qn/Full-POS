@@ -71,7 +71,8 @@ export function OrdersScreen() {
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
-  const [batchOnly, setBatchOnly] = useState(false);
+  // "all" | "single" | a batch label ("A", "B", …) present in the current orders.
+  const [batchFilter, setBatchFilter] = useState<string>("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [preset, setPreset] = useState<PresetKey>("all");
@@ -121,9 +122,12 @@ export function OrdersScreen() {
     if (statusFilter !== "all") {
       base = base.filter((o) => o.status === statusFilter);
     }
-    if (batchOnly) {
-      // Only orders riding together: already batched on a trip, or forecast to batch.
-      base = base.filter((o) => (o.batch_size != null && o.batch_size > 1) || !!o.batch_preview);
+    if (batchFilter === "single") {
+      // Orders that ride alone — neither forecast to batch nor already batched.
+      base = base.filter((o) => !o.batch_preview && !(o.batch_size != null && o.batch_size > 1));
+    } else if (batchFilter !== "all") {
+      // A specific forecast batch group (A, B, …).
+      base = base.filter((o) => o.batch_preview === batchFilter);
     }
     if (fromDate || toDate) {
       base = base.filter((o) => {
@@ -141,10 +145,19 @@ export function OrdersScreen() {
         o.customer_name.toLowerCase().includes(q) ||
         o.customer_phone.includes(q),
     );
-  }, [orders, search, statusFilter, batchOnly, fromDate, toDate]);
+  }, [orders, search, statusFilter, batchFilter, fromDate, toDate]);
+
+  // Distinct forecast batch labels present, so the dropdown only offers real groups.
+  const batchLabels = useMemo(
+    () =>
+      Array.from(
+        new Set(orders.map((o) => o.batch_preview).filter((b): b is string => !!b)),
+      ).sort(),
+    [orders],
+  );
 
   // Reset to the first page whenever any filter changes.
-  useEffect(() => { setPage(1); }, [search, statusFilter, batchOnly, fromDate, toDate]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, batchFilter, fromDate, toDate]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -237,14 +250,18 @@ export function OrdersScreen() {
           </div>
           <div className={s.filterGroup}>
             <span className={s.filterLabel}>Batching</span>
-            <label className={s.batchToggle} title="Show only orders that are batched or forecast to batch together">
-              <input
-                type="checkbox"
-                checked={batchOnly}
-                onChange={(e) => setBatchOnly(e.target.checked)}
-              />
-              <span>🔗 Batched only</span>
-            </label>
+            <select
+              className={s.statusSelect}
+              aria-label="Filter by batch"
+              value={batchFilter}
+              onChange={(e) => setBatchFilter(e.target.value)}
+            >
+              <option value="all">All orders</option>
+              <option value="single">Single orders</option>
+              {batchLabels.map((b) => (
+                <option key={b} value={b}>🔗 Batch {b}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div className={s.groups}>
