@@ -181,7 +181,7 @@ export function OrderDetailDrawer({
               <div
                 style={{
                   display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
-                  padding: "6px 0",
+                  padding: "6px 16px",
                 }}
               >
                 {detail.status === "confirmed" && detail.cook_estimate_minutes != null ? (
