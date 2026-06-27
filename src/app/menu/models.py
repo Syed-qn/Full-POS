@@ -49,6 +49,10 @@ class Dish(Base, TimestampMixin):
     # Prices are stored as strings (JSONB has no Decimal); the schema layer coerces.
     variants: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     name_normalized: Mapped[str | None] = mapped_column(String(256))
+    # WhatsApp catalog product "Content ID" (retailer id) this dish maps to, so a cart
+    # sent from the catalog can be matched back to the dish. Null = not linked to the
+    # catalog. Used only by the SEPARATE catalog flow; the conversation engine ignores it.
+    catalog_retailer_id: Mapped[str | None] = mapped_column(String(128), index=True)
     # Estimated cook time for one portion (minutes). Null = unknown -> the order's cook
     # estimate falls back to the restaurant's default_prep_minutes setting.
     prep_minutes: Mapped[int | None] = mapped_column(Integer)

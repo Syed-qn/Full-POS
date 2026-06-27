@@ -677,3 +677,22 @@
   DB clock every sweep, which already excludes a just-returned customer.
 - Cleaned prod conv 1: dropped dangling draft pointer to already-cleared order 60.
 - 9 cart tests pass (abandoned + tick endpoint); ruff clean.
+
+[2026-06-27] feat(catalog): WhatsApp catalog ordering — SEPARATE module (engine untouched)
+- New flow for Meta Commerce catalog carts. A sent cart arrives as a WhatsApp
+  `order` message; webhook routes it to app.catalog.service.handle_catalog_order,
+  NEVER to conversation.engine (one branch in webhook/router.py on MessageType.ORDER).
+- Plumbing: MessageType.ORDER (whatsapp/port.py); normalizer parses `order` ->
+  {catalog_id, text, product_items}; Dish.catalog_retailer_id (Content/retailer id)
+  + migration d1a2c3e4f5b6 + index; settings keys catalog_id / catalog_ordering_enabled
+  (DEFAULT_SETTINGS + SettingsPatch).
+- Handler: maps each product_retailer_id -> Dish (by catalog_retailer_id), reuses
+  ordering.service (get_or_create_customer/create_draft_order/add_item), builds a draft
+  order at the dish's own price, replies with the cart + asks for delivery location.
+  Unmapped items are listed, never silently dropped; an all-unmapped cart sends a
+  fallback asking the customer to type the order. _aed copied (not imported) from engine.
+- Tests: tests/catalog (normalizer parse, full cart -> order + confirm, all-unmapped,
+  partial mapping). 4 pass; 112 pass across catalog/webhook/menu/identity/abandoned_cart.
+- NEXT (stage 2, not built): on the location reply, attach address + confirm + dispatch
+  for catalog orders; optional outbound product/multi-product message; Settings UI field
+  for catalog_id; map prod dishes to their catalog Content IDs after deploy.

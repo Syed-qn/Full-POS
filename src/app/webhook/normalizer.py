@@ -117,6 +117,25 @@ def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
             timestamp=timestamp,
         )
 
+    if msg_type == "order":
+        # A WhatsApp catalog cart. Meta sends the connected catalog_id plus the
+        # product_items the customer added (each with its retailer/content id, qty,
+        # unit price and currency). Handled by the SEPARATE catalog flow, not the
+        # conversation engine.
+        order = msg.get("order", {})
+        return InboundMessage(
+            wa_message_id=wa_id,
+            from_phone=from_phone,
+            type=MessageType.ORDER,
+            payload={
+                "catalog_id": order.get("catalog_id"),
+                "text": order.get("text"),
+                "product_items": order.get("product_items", []),
+            },
+            restaurant_phone=restaurant_phone,
+            timestamp=timestamp,
+        )
+
     return InboundMessage(
         wa_message_id=wa_id,
         from_phone=from_phone,

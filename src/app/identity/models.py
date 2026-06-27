@@ -71,6 +71,11 @@ DEFAULT_SETTINGS: dict = {
     "cart_reminder_enabled": True,
     "cart_recovery_minutes": 15,
     "cart_expiry_minutes": 60,
+    # WhatsApp catalog ordering (SEPARATE flow). catalog_id is the Meta Commerce
+    # catalog connected to this restaurant's WhatsApp number; when a customer sends a
+    # cart from it, the catalog flow turns it into an order. Empty = not configured.
+    "catalog_id": "",
+    "catalog_ordering_enabled": False,
 }
 
 

@@ -101,6 +101,9 @@ class SettingsPatch(BaseModel):
     cart_reminder_enabled: bool | None = None
     cart_recovery_minutes: int | None = Field(default=None, ge=1, le=1440)
     cart_expiry_minutes: int | None = Field(default=None, ge=1, le=1440)
+    # WhatsApp catalog ordering (separate flow).
+    catalog_id: str | None = Field(default=None, max_length=64)
+    catalog_ordering_enabled: bool | None = None
     # Today's Special automation (marketing). Sent as a whole object by the UI.
     todays_special: dict | None = None
 

@@ -22,6 +22,7 @@ class MessageType(StrEnum):
     LOCATION = "location"
     IMAGE = "image"
     AUDIO = "audio"
+    ORDER = "order"  # WhatsApp catalog cart sent by the customer (separate catalog flow)
     UNKNOWN = "unknown"
 
 

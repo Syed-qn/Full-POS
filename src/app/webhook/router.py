@@ -14,6 +14,7 @@ from app.outbox.worker import claim_pending_outbox_ids, deliver_outbox_message
 from app.ratelimit.deps import rate_limit_webhook
 from app.webhook.models import WebhookEvent
 from app.webhook.normalizer import parse_cloud_payload
+from app.whatsapp.port import MessageType
 
 # Importing the configured Celery app sets it as the default, binding @shared_task
 # tasks (e.g. deliver_outbox_message) to the redis broker instead of the amqp default.
@@ -91,7 +92,15 @@ async def receive_webhook(
             continue
 
         try:
-            await handle_inbound(session, inbound, restaurant_id=restaurant.id)
+            # WhatsApp catalog carts go to the SEPARATE catalog flow, never the
+            # conversation engine. Everything else (text, voice, buttons, location)
+            # is handled by the engine exactly as before.
+            if inbound.type == MessageType.ORDER:
+                from app.catalog.service import handle_catalog_order
+
+                await handle_catalog_order(session, inbound, restaurant_id=restaurant.id)
+            else:
+                await handle_inbound(session, inbound, restaurant_id=restaurant.id)
 
             # Atomically claim the restaurant's pending outbox rows
             # (pending -> dispatching) BEFORE committing so concurrent webhooks
