@@ -661,3 +661,19 @@
 - Bumped prod restaurant id=1 to Remind=15 / Clear=60 (5 min was too aggressive).
 - Tests: nudge-shows-cart assertions + new test_active_customer_is_not_nudged; 5
   abandoned-cart tests pass, ruff clean.
+
+[2026-06-27] fix(cart): per-nudge idempotency key (root cause of "no reminder")
+- THE bug behind "cron calls but no reminder": outbox.idempotency_key is unique,
+  and the key was "abandoned-{conv}-{draft}" — so a cart could be nudged only ONCE
+  ever. After the first nudge (incl. my manual test on cart 60), every later sweep
+  on the same draft collided on the unique key -> insert blocked -> no nudge. A
+  re-armed cart (customer returns, goes quiet again) could never be re-nudged.
+- Fix: key = "abandoned-{conv}-{draft}-{seq}" where seq is a monotonic
+  abandoned_nudge_count in conv.state. Fresh key per nudge; the abandoned_nudged
+  flag still blocks double-sends within one quiet cycle. New test
+  test_rearmed_cart_can_be_nudged_again (2 distinct keys, 2 nudges).
+- Removed the _quiet_minutes recompute "guard": it did lazy ORM IO in a sync fn
+  (MissingGreenlet) and was redundant — the bulk SELECT recomputes quiet from the
+  DB clock every sweep, which already excludes a just-returned customer.
+- Cleaned prod conv 1: dropped dangling draft pointer to already-cleared order 60.
+- 9 cart tests pass (abandoned + tick endpoint); ruff clean.

@@ -110,6 +110,40 @@ async def test_active_customer_is_not_nudged(db_session, restaurant):
     assert items  # cart untouched — customer is mid-order
 
 
+async def test_rearmed_cart_can_be_nudged_again(db_session, restaurant):
+    """A cart nudged once, then re-engaged (flag cleared) and gone quiet again, must
+    be nudgeable a second time — the per-cycle idempotency key must not collide with
+    the first nudge's row (outbox.idempotency_key is unique)."""
+    from app.conversation import worker as cart_worker
+
+    await _build_abandoned_cart(db_session, restaurant.id)
+    await _set_cart_settings(db_session, restaurant, recovery=0, expiry=9999, reminder=True)
+
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
+        first = await cart_worker._run_sweep()
+
+    # Simulate re-engagement: clear the once-only flag (the engine does this when the
+    # customer touches the cart). The monotonic abandoned_nudge_count stays, so the
+    # next nudge gets a fresh idempotency key.
+    conv = (await db_session.scalars(
+        select(Conversation).where(Conversation.phone == "+971501110001")
+    )).one()
+    st = dict(conv.state); st.pop("abandoned_nudged", None); conv.state = st
+    await db_session.commit()
+
+    with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):
+        second = await cart_worker._run_sweep()
+
+    assert first == 1
+    assert second == 1  # nudged again, no idempotency collision
+
+    nudges = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    keys = {n.idempotency_key for n in nudges if n.idempotency_key.startswith("abandoned-")}
+    assert len(keys) == 2  # two distinct per-cycle keys
+
+
 async def test_no_nudge_without_cart(db_session, restaurant):
     """A conversation with no draft order is not nudged."""
     from app.conversation import worker as cart_worker

@@ -43,18 +43,6 @@ _NUDGE_BODY = (
 )
 
 
-def _quiet_minutes(conv) -> float:
-    """Minutes since the conversation was last touched, from its own updated_at."""
-    from datetime import datetime, timezone
-
-    last = getattr(conv, "updated_at", None)
-    if last is None:
-        return 0.0
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - last).total_seconds() / 60.0
-
-
 @shared_task(name="conversation.abandoned_cart_sweep", bind=True,
              max_retries=3, default_retry_delay=30)
 def abandoned_cart_sweep(self) -> int:  # type: ignore[override]
@@ -123,12 +111,10 @@ async def _run_sweep() -> int:
                 continue
 
             # 2) Quiet long enough → one-time nudge (if the restaurant enabled it).
+            # ``quiet`` is recomputed by the DB at the top of every sweep, so a
+            # customer who came back since the last sweep already shows a small quiet
+            # value and won't qualify — that's the re-engagement guard.
             if reminder_on and quiet >= recovery_min and not state.get("abandoned_nudged"):
-                # Re-engagement guard: the bulk query measured "quiet" a moment ago.
-                # Recompute from the freshly-loaded row so a customer who just came
-                # back (their inbound bumps updated_at) is never nudged mid-order.
-                if _quiet_minutes(conv) < recovery_min:
-                    continue
                 # Show the actual cart + a concrete next step, not a dead-end yes/no.
                 from app.conversation.engine import _build_cart_summary
 
@@ -139,17 +125,28 @@ async def _run_sweep() -> int:
                     "Say *done* whenever you're ready to check out, "
                     "or tell me anything else you'd like to add 😊"
                 ) if cart else _NUDGE_BODY
+                # Key per NUDGE, not just per cart: outbox.idempotency_key is unique,
+                # so a bare "abandoned-{conv}-{draft}" can be sent only once ever — a
+                # re-armed cart (customer came back, then went quiet again) would
+                # collide and silently fail. A monotonic per-cart counter gives each
+                # nudge a fresh key; the once-only "abandoned_nudged" flag still
+                # prevents double-sends within a single quiet cycle.
+                seq = int((conv.state or {}).get("abandoned_nudge_count", 0)) + 1
                 row = await enqueue_message(
                     session,
                     restaurant_id=conv.restaurant_id,
                     to_phone=conv.phone,
                     msg_type=OutboundMessageType.TEXT,
                     payload={"body": body},
-                    idempotency_key=f"abandoned-{conv.id}-{draft_id}",
+                    idempotency_key=f"abandoned-{conv.id}-{draft_id}-{seq}",
                 )
                 await session.flush()  # assign row.id before we record it for delivery
                 nudge_ids.append(row.id)
-                conv.state = {**(conv.state or {}), "abandoned_nudged": True}
+                conv.state = {
+                    **(conv.state or {}),
+                    "abandoned_nudged": True,
+                    "abandoned_nudge_count": seq,
+                }
                 nudged += 1
 
         await session.commit()
