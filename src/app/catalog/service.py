@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal, InvalidOperation
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +48,79 @@ async def _find_dish(session: AsyncSession, *, restaurant_id: int, retailer_id: 
         .where(Dish.restaurant_id == restaurant_id, Dish.catalog_retailer_id == retailer_id)
         .limit(1)
     )
+
+
+async def send_catalog(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    to_phone: str,
+    header: str = "Our Menu",
+    body: str = "Tap an item to add it to your basket, then send the basket to order 😊",
+    idempotency_key: str | None = None,
+) -> bool:
+    """Send the catalog as a multi-product message (tappable cards with Add to basket).
+
+    This is THE way to show a catalog on the Cloud API (there is no reliable chat-header
+    icon for API numbers). Builds sections from the restaurant's dishes that are linked
+    to catalog products (``catalog_retailer_id``), grouped by category. Returns False if
+    the restaurant has no catalog id or no linked, available products. Caller commits.
+    """
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    settings = (rest.settings or {}) if rest is not None else {}
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    if not catalog_id:
+        logger.info("send_catalog skipped: no catalog_id for restaurant %s", restaurant_id)
+        return False
+
+    dishes = (
+        await session.scalars(
+            select(Dish).where(
+                Dish.restaurant_id == restaurant_id,
+                Dish.catalog_retailer_id.isnot(None),
+                Dish.is_available.is_(True),
+            )
+        )
+    ).all()
+    if not dishes:
+        logger.info("send_catalog skipped: no linked products for restaurant %s", restaurant_id)
+        return False
+
+    # Group into sections by category (WhatsApp limits: <=10 sections, <=30 products
+    # total, section title <=24 chars). Preserve a stable, readable order.
+    sections: dict[str, list[dict]] = {}
+    total = 0
+    for d in dishes:
+        if total >= 30:
+            break
+        cat = (d.category or "Menu")[:24]
+        sections.setdefault(cat, []).append({"product_retailer_id": d.catalog_retailer_id})
+        total += 1
+
+    payload_sections = [
+        {"title": title, "product_items": items}
+        for title, items in list(sections.items())[:10]
+    ]
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=to_phone,
+        msg_type=OutboundMessageType.PRODUCT_LIST,
+        payload={
+            "header": header[:60],
+            "body": body[:1024],
+            "catalog_id": catalog_id,
+            "sections": payload_sections,
+        },
+        idempotency_key=idempotency_key or f"catalog-send-{restaurant_id}-{to_phone}-{uuid4().hex}",
+    )
+    logger.info(
+        "sent catalog to %s for restaurant %s: %d product(s) in %d section(s)",
+        to_phone, restaurant_id, total, len(payload_sections),
+    )
+    return True
 
 
 async def handle_catalog_order(

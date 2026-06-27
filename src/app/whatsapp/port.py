@@ -13,6 +13,7 @@ class OutboundMessageType(StrEnum):
     IMAGE = "image"
     DOCUMENT = "document"
     TEMPLATE = "template"
+    PRODUCT_LIST = "product_list"  # WhatsApp catalog products as tappable cards (catalog flow)
 
 
 class MessageType(StrEnum):

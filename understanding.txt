@@ -696,3 +696,18 @@
 - NEXT (stage 2, not built): on the location reply, attach address + confirm + dispatch
   for catalog orders; optional outbound product/multi-product message; Settings UI field
   for catalog_id; map prod dishes to their catalog Content IDs after deploy.
+
+[2026-06-27] feat(catalog): SEND catalog as multi-product message (the Cloud API way)
+- Cloud API numbers have no reliable chat-header catalog icon; the way to show a
+  catalog is to SEND an interactive product_list message. Built that:
+  OutboundMessageType.PRODUCT_LIST + cloud_provider payload (interactive/product_list
+  with catalog_id + sections); catalog.service.send_catalog() builds sections from
+  dishes linked via catalog_retailer_id, grouped by category (<=10 sections, <=30
+  products), gated on settings.catalog_id.
+- Triggers (engine still untouched): (1) manager endpoint POST /api/v1/catalog/send
+  {phone} for testing; (2) webhook keyword branch — when catalog_ordering_enabled and
+  the customer texts menu/catalog/order/items/list, send product cards instead of the
+  text bot. Basket comes back via the existing handle_catalog_order.
+- Tests: provider payload, send grouping, no-catalog-id noop. 19 pass (catalog+webhook).
+- Still TODO for a live test: set settings.catalog_id=1528685515412822 + catalog_ordering_enabled,
+  link dishes to Content IDs, and ensure the app sends from the catalog's WhatsApp number.

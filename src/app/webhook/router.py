@@ -23,6 +23,21 @@ import apps.workers.celery_app  # noqa: E402,F401
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webhook"])
 
+# Customer text that should surface the WhatsApp catalog (when the restaurant has
+# catalog ordering enabled). Kept here (webhook layer) so the conversation engine
+# is never touched.
+_CATALOG_KEYWORDS = {"menu", "catalog", "catalogue", "order", "items", "list"}
+
+
+def _wants_catalog(inbound, restaurant) -> bool:
+    if inbound.type != MessageType.TEXT:
+        return False
+    settings = getattr(restaurant, "settings", None) or {}
+    if not settings.get("catalog_ordering_enabled"):
+        return False
+    text = (inbound.payload or {}).get("text", "")
+    return text.strip().lower() in _CATALOG_KEYWORDS
+
 
 @router.get("/webhooks/whatsapp")
 async def verify_webhook(request: Request) -> Response:
@@ -99,6 +114,17 @@ async def receive_webhook(
                 from app.catalog.service import handle_catalog_order
 
                 await handle_catalog_order(session, inbound, restaurant_id=restaurant.id)
+            elif _wants_catalog(inbound, restaurant):
+                # Customer asked for the catalog/menu and this restaurant has catalog
+                # ordering on → send tappable product cards instead of the text bot.
+                from app.catalog.service import send_catalog
+
+                await send_catalog(
+                    session,
+                    restaurant_id=restaurant.id,
+                    to_phone=inbound.from_phone,
+                    idempotency_key=f"catalog-kw-{inbound.wa_message_id}",
+                )
             else:
                 await handle_inbound(session, inbound, restaurant_id=restaurant.id)
 
