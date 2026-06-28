@@ -170,5 +170,16 @@ async def receive_webhook(
                 "integrity error processing event %s — idempotency collision",
                 inbound.wa_message_id,
             )
+        except Exception:
+            # SAFETY NET: any unexpected error while processing one message must not
+            # silently 500 the whole webhook batch (which strands every other message
+            # and triggers WhatsApp retry storms). Roll back this message, log loudly
+            # with a traceback so the drop is never silent, and carry on with the rest.
+            await session.rollback()
+            logger.error(
+                "unexpected error processing event %s for restaurant phone %s — "
+                "message dropped, continuing batch",
+                inbound.wa_message_id, inbound.restaurant_phone, exc_info=True,
+            )
 
     return {"status": "ok"}

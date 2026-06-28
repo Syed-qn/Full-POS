@@ -744,3 +744,28 @@
 - Test: test_greeting_sends_catalog_when_mode_on. 32 pass (catalog + full_ai + abandoned
   cart); only the pre-existing unrelated test_address_step_recovers_stale_draft_pointer
   fails (fails on clean main too).
+
+[2026-06-28] fix(orders): safety gates against silent order dropping
+- Two parallel Explore agents mapped drop vectors (engine/ordering + sweep/webhook).
+  Implemented gates for the concrete, real ones:
+  A. Sweep (worker.py): when an expired cart is auto-cleared, also drop checkout/modify
+     state keys and reset dialogue to menu_sent/ordering, so a customer whose cart
+     expired mid-checkout (address_capture/order_confirmation) isn't stranded with an
+     empty cart on return.
+  B. Empty-order confirm blocked: _execute_confirm_order + _handle_order_confirmation
+     (engine) now check _order_has_items before finalize_confirmation; create_manual_order
+     (service) rejects an empty items list. Prevents placing AED-0 orders the kitchen
+     can't fulfil. (No hard raise inside finalize_confirmation — a unit test finalises an
+     itemless order; gated at the callers instead.)
+  C. Checkout 'done' gate (engine): verifies the draft exists, is still 'draft', and has
+     items before advancing to address; else "cart is empty" + stay collecting_items.
+  D. Modify-confirm (engine): if every proposed dish vanished (removed from menu), no
+     longer claims "updated" — tells the customer items are unavailable, order unchanged.
+  E. Webhook safety net (router): added a broad `except Exception` after IntegrityError —
+     rollback + log ERROR with traceback + continue the batch, so an unexpected error in
+     one message no longer silently 500s the whole webhook (stranding other messages).
+- Tests: tests/conversation/test_order_safety_gates.py (empty 'done', control proceeds,
+  manual empty rejected). 59 pass across safety/abandoned/ordering/confirmation/multi-
+  item/draft-lifecycle/catalog/webhook; only 2 pre-existing isolation failures
+  (test_address_step_recovers_stale_draft_pointer, test_confirmation_no_action_reshows_
+  real_summary) which fail on clean main too.

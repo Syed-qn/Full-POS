@@ -104,8 +104,16 @@ async def _run_sweep() -> int:
                 order.subtotal = Decimal("0.00")
                 order.total = order.delivery_fee_aed
                 st = dict(conv.state or {})
-                for key in ("draft_order_id", "pending_order_id", "abandoned_nudged"):
+                # Drop the cart AND any in-progress checkout state, then reset to a clean
+                # browsing state. Without this, a customer whose cart expired while they
+                # were mid-checkout (address_capture / order_confirmation) would return to
+                # a stranded conversation pointing at an empty cart. Resetting lets them
+                # start fresh cleanly.
+                for key in ("draft_order_id", "pending_order_id", "abandoned_nudged",
+                            "modify_order_id", "modify_proposed"):
                     st.pop(key, None)
+                st["dialogue_phase"] = "ordering"
+                st["dialogue_state"] = "menu_sent"
                 conv.state = st
                 cleared += 1
                 continue

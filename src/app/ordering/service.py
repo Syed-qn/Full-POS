@@ -1055,6 +1055,12 @@ async def create_manual_order(
     if not menu:
         raise ValueError("No active menu for this restaurant")
 
+    # SAFETY GATE: never place an order with no items (an empty order the kitchen
+    # cannot fulfil). The customer-facing flow gates this too; this guards the manual
+    # manager path.
+    if not items:
+        raise ValueError("Cannot place an order with no items")
+
     # 2. Validate all dishes upfront
     validated: list[tuple] = []
     for item in items:

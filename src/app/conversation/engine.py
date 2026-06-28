@@ -598,8 +598,15 @@ async def _handle_collecting_items(
 
     # "done" → proceed to delivery details (only if at least one item exists).
     if dish_query.lower() in ("done", "checkout", "that's all", "thats all"):
+        # SAFETY GATE: never proceed to checkout on a missing, finalised, or empty cart
+        # — doing so silently drops the order (kitchen gets nothing). Verify the draft
+        # still exists, is still a draft, and actually has items.
         draft_order_id = conv.state.get("draft_order_id")
-        if not draft_order_id:
+        order = await session.get(Order, draft_order_id) if draft_order_id else None
+        if order is None or str(order.status) != "draft" or not await _order_has_items(
+            session, order.id
+        ):
+            _set_state(conv, dialogue_state="collecting_items")
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="empty-cart",
@@ -1100,6 +1107,15 @@ async def _handle_order_confirmation(
     btn_id = inbound.payload.get("id", "") if inbound.type == MessageType.BUTTON_REPLY else ""
 
     if btn_id == "confirm_order":
+        # SAFETY GATE: never confirm an empty order (kitchen can't fulfil it).
+        if not await _order_has_items(session, order.id):
+            _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="confirm-empty",
+                body="Your cart is empty, so there's nothing to confirm. Please add a dish to order 😊",
+            )
+            return
         await finalize_confirmation(session, order=order, actor="customer")
         # Drop the cart pointers now the order is placed — a later order must start a
         # fresh draft, not reuse this (now confirmed) order's id.
@@ -1415,9 +1431,21 @@ async def _handle_modify_confirm(
             if dish is not None:
                 new_items.append({"dish": dish, "qty": p.get("qty", 1), "notes": None})
 
-        if new_items:
-            await modify_order(session, order=order, new_items=new_items, actor="customer")
-            # commit by caller (webhook/router)
+        # SAFETY GATE: if every proposed dish has since vanished (e.g. removed from the
+        # menu), the modify cannot run. Don't claim the order was "updated" — that's a
+        # silent no-op that misleads the customer. Keep the original order and say so.
+        if not new_items:
+            _set_state(conv, dialogue_state="order_placed", modify_order_id=None, modify_proposed=None)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="modify-unavailable",
+                body=("Those items are no longer available, so your order was not changed. "
+                      f"Your original Order #{order.order_number} still stands."),
+            )
+            return
+
+        await modify_order(session, order=order, new_items=new_items, actor="customer")
+        # commit by caller (webhook/router)
 
         _set_state(
             conv,
@@ -2686,6 +2714,16 @@ async def _execute_confirm_order(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="no-order-confirm",
             body="No order to confirm. Send 'hi' to start again.",
+        )
+        return
+    # SAFETY GATE: never confirm an order with no items — that places an empty order
+    # the kitchen can't fulfil. Send the customer back to adding items instead.
+    if not await _order_has_items(session, order.id):
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="confirm-empty",
+            body="Your cart is empty, so there's nothing to confirm. Please add a dish to order 😊",
         )
         return
     await finalize_confirmation(session, order=order, actor="customer")
