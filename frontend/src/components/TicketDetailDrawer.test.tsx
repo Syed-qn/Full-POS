@@ -22,9 +22,15 @@ const ticket: Ticket = {
 
 describe("TicketDetailDrawer", () => {
   beforeEach(() => {
+    // Fresh Response per call — a Response body can only be read once, and the
+    // drawer fetches the wallet on mount before the resolve POST.
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...ticket, status: "resolved" }), { status: 200 })),
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ...ticket, status: "resolved" }), { status: 200 }),
+        ),
+      ),
     );
   });
   afterEach(() => vi.restoreAllMocks());
@@ -59,6 +65,27 @@ describe("TicketDetailDrawer", () => {
 
     await waitFor(() => expect(onResolved).toHaveBeenCalled());
     const fetchMock = vi.mocked(fetch);
-    expect(fetchMock.mock.calls[0][0]).toContain("/api/v1/tickets/7/resolve");
+    // A wallet GET fires on mount for context; assert the resolve POST happened too.
+    const resolveCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/api/v1/tickets/7/resolve"),
+    );
+    expect(resolveCall).toBeTruthy();
+  });
+
+  it("requires a replacement order id before sending a replacement", () => {
+    render(<TicketDetailDrawer ticket={ticket} onResolved={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/resolution note/i), { target: { value: "remaking" } });
+    expect(screen.getByRole("button", { name: /send replacement/i })).toBeDisabled();
+  });
+
+  it("hides action buttons for a resolved ticket", () => {
+    render(
+      <TicketDetailDrawer
+        ticket={{ ...ticket, status: "resolved", resolution_action: "wallet_refund", resolution_amount_aed: "20.00" }}
+        onResolved={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /refund to wallet/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/wallet refund/i)).toBeInTheDocument();
   });
 });

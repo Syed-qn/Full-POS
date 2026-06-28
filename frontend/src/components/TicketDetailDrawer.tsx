@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { SideDrawer } from "./SideDrawer";
 import { resolveTicket } from "../lib/ticketsApi";
-import type { ResolveTicketIn, Ticket } from "../lib/types";
+import { getWallet } from "../lib/walletApi";
+import type { ResolveTicketIn, Ticket, WalletBalance } from "../lib/types";
 import s from "./TicketDetailDrawer.module.css";
 
 export function TicketDetailDrawer({
@@ -17,9 +18,24 @@ export function TicketDetailDrawer({
   const [replacementOrderId, setReplacementOrderId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wallet, setWallet] = useState<WalletBalance | null>(null);
 
+  const isResolved = ticket.status === "resolved";
   const noteOk = note.trim().length > 0;
   const amountOk = Number(amount) > 0;
+  const replacementOk = Number(replacementOrderId) > 0;
+
+  // Show the customer's current wallet credit so the manager has context when
+  // deciding a refund. Best-effort — hidden if unavailable.
+  useEffect(() => {
+    let cancelled = false;
+    getWallet(ticket.customer_id)
+      .then((w) => !cancelled && setWallet(w))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [ticket.customer_id]);
 
   async function submit(body: ResolveTicketIn) {
     setSubmitting(true);
@@ -34,6 +50,8 @@ export function TicketDetailDrawer({
     }
   }
 
+  const evidenceItems = Array.isArray(ticket.evidence) ? ticket.evidence : [];
+
   return (
     <SideDrawer open title={`Complaint #${ticket.id}`} onClose={onResolved}>
       <div className={s.section}>
@@ -41,7 +59,13 @@ export function TicketDetailDrawer({
           <Field label="Customer" value={`#${ticket.customer_id}`} />
           <Field label="Order" value={ticket.order_id ? `#${ticket.order_id}` : "—"} />
           {ticket.category && <Field label="Category" value={ticket.category} />}
-          <Field label="Status" value={ticket.status} />
+          <Field label="Status" value={ticket.status.replace("_", " ")} />
+          {wallet && (
+            <Field
+              label="Wallet credit"
+              value={`AED ${wallet.available_aed}${wallet.status === "frozen" ? " (frozen)" : ""}`}
+            />
+          )}
         </div>
       </div>
 
@@ -52,87 +76,103 @@ export function TicketDetailDrawer({
         </div>
       )}
 
-      {ticket.evidence && (
+      {evidenceItems.length > 0 && (
         <div className={s.section}>
           <span className={s.label}>Evidence</span>
-          <p className={s.message}>{ticket.evidence}</p>
+          <p className={s.message}>{evidenceItems.length} attachment(s)</p>
         </div>
       )}
 
-      <div className={s.section}>
-        <label className={s.label} htmlFor="ticket-note">
-          Resolution note (required)
-        </label>
-        <textarea
-          id="ticket-note"
-          className={s.textarea}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="What was decided / communicated to the customer"
-        />
-      </div>
+      {isResolved ? (
+        <div className={s.section}>
+          <span className={s.label}>Resolution</span>
+          <p className={s.message}>
+            {(ticket.resolution_action ?? "resolved").replace(/_/g, " ")}
+            {ticket.resolution_amount_aed
+              ? ` · AED ${ticket.resolution_amount_aed}`
+              : ""}
+            {ticket.replacement_order_id
+              ? ` · replacement order #${ticket.replacement_order_id}`
+              : ""}
+          </p>
+          {ticket.resolution_note && (
+            <p className={s.message}>“{ticket.resolution_note}”</p>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className={s.section}>
+            <label className={s.label} htmlFor="ticket-note">
+              Resolution note (required)
+            </label>
+            <textarea
+              id="ticket-note"
+              className={s.textarea}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="What was decided / communicated to the customer"
+            />
+          </div>
 
-      <div className={s.action}>
-        <label className={s.label} htmlFor="ticket-amount">
-          Refund amount (AED)
-        </label>
-        <input
-          id="ticket-amount"
-          className={s.input}
-          type="number"
-          min="0"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <Button
-          disabled={submitting || !noteOk || !amountOk}
-          onClick={() =>
-            submit({ action: "wallet_refund", note, amount })
-          }
-        >
-          Refund to Wallet
-        </Button>
-      </div>
+          <div className={s.action}>
+            <label className={s.label} htmlFor="ticket-amount">
+              Refund amount (AED)
+            </label>
+            <input
+              id="ticket-amount"
+              className={s.input}
+              type="number"
+              min="0"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <Button
+              disabled={submitting || !noteOk || !amountOk}
+              onClick={() => submit({ action: "wallet_refund", note, amount })}
+            >
+              Refund to Wallet
+            </Button>
+          </div>
 
-      <div className={s.action}>
-        <label className={s.label} htmlFor="ticket-replacement">
-          Replacement order id
-        </label>
-        <input
-          id="ticket-replacement"
-          className={s.input}
-          type="number"
-          min="0"
-          value={replacementOrderId}
-          onChange={(e) => setReplacementOrderId(e.target.value)}
-        />
-        <Button
-          variant="ghost"
-          disabled={submitting || !noteOk}
-          onClick={() =>
-            submit({
-              action: "replacement",
-              note,
-              ...(replacementOrderId
-                ? { replacement_order_id: Number(replacementOrderId) }
-                : {}),
-            })
-          }
-        >
-          Send Replacement
-        </Button>
-      </div>
+          <div className={s.action}>
+            <label className={s.label} htmlFor="ticket-replacement">
+              Replacement order id
+            </label>
+            <input
+              id="ticket-replacement"
+              className={s.input}
+              type="number"
+              min="0"
+              value={replacementOrderId}
+              onChange={(e) => setReplacementOrderId(e.target.value)}
+            />
+            <Button
+              variant="ghost"
+              disabled={submitting || !noteOk || !replacementOk}
+              onClick={() =>
+                submit({
+                  action: "replacement",
+                  note,
+                  replacement_order_id: Number(replacementOrderId),
+                })
+              }
+            >
+              Send Replacement
+            </Button>
+          </div>
 
-      <div className={s.action}>
-        <Button
-          variant="ghost"
-          disabled={submitting || !noteOk}
-          onClick={() => submit({ action: "resolved_no_action", note })}
-        >
-          Mark Resolved
-        </Button>
-      </div>
+          <div className={s.action}>
+            <Button
+              variant="ghost"
+              disabled={submitting || !noteOk}
+              onClick={() => submit({ action: "resolved_no_action", note })}
+            >
+              Mark Resolved
+            </Button>
+          </div>
+        </>
+      )}
 
       {error && <p className={s.error}>{error}</p>}
     </SideDrawer>

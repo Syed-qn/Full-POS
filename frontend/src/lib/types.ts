@@ -272,7 +272,7 @@ export interface Ticket {
   customer_id: number;
   order_id: number | null;
   source_message: string | null;
-  evidence: string | null;
+  evidence: unknown[] | null;
   category: string | null;
   status: TicketStatus;
   assigned_to: string | null;
