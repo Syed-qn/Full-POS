@@ -233,36 +233,43 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
       <PageHeader
         title="Menu"
-        subtitle="Manage your dishes and availability"
+        subtitle={
+          catalogMode
+            ? "Catalogue mode — customers order from your Meta catalogue"
+            : "Manage your dishes and availability"
+        }
         right={
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => onUpload(e.target.files)}
-              data-testid="menu-upload"
-            />
-            {dishes.length > 0 && activeMenuId !== null && (
-              <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
-            )}
-            <Button onClick={() => fileRef.current?.click()}>
-              {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
-            </Button>
-          </>
+          catalogMode ? null : (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => onUpload(e.target.files)}
+                data-testid="menu-upload"
+              />
+              {dishes.length > 0 && activeMenuId !== null && (
+                <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
+              )}
+              <Button onClick={() => fileRef.current?.click()}>
+                {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
+              </Button>
+            </>
+          )
         }
       />
-      {catalogMode && <CatalogPanel />}
-      {loading ? (
+      {/* Catalogue mode shows ONLY the Meta catalogue — the text-menu (dishes) list is
+          hidden so the two menus never appear together. */}
+      {catalogMode ? (
+        <CatalogPanel />
+      ) : loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
-        catalogMode ? null : (
-          <div className={s.empty}>
-            <p>Upload your first menu (PDF, image, or text) to get started.</p>
-            <Button onClick={() => fileRef.current?.click()}>Upload menu</Button>
-          </div>
-        )
+        <div className={s.empty}>
+          <p>Upload your first menu (PDF, image, or text) to get started.</p>
+          <Button onClick={() => fileRef.current?.click()}>Upload menu</Button>
+        </div>
       ) : (
         <>
           <div className={s.stats}>
