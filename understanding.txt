@@ -1056,3 +1056,16 @@
     clean on all changed files.
   Operational note for the user: in catalogue mode the manager MUST press "Sync from Meta"
     — strict mode now refuses to serve an unsynced catalogue (correct, no leak).
+
+- 2026-06-29 04:05 Asia/Dubai — FIX: saved address skipped before location ask.
+  Symptom (live): returning customer (saved addr "123, Tower B / asfer") said "confirm"
+  and the bot asked them to share a location pin instead of reusing the saved address.
+  Root cause: proceed_to_address auto-attach was gated on address_offer_made, which
+  conflates "already offered" with "customer declined" AND went stale across orders (the
+  catalogue-basket path handle_catalog_order never reset it). Fix: introduce a dedicated
+  saved_address_declined flag (set only when the customer taps "new address"/"use new
+  address"); proceed_to_address now ALWAYS checks the saved address unless that flag is
+  set. Reset the flag on every fresh draft (engine _get_or_create_draft_order AND
+  catalog/service handle_catalog_order new-order branch). Test added:
+  test_proceed_to_address_checks_saved_address_despite_stale_flag. conversation+catalog
+  167 pass (only the pre-existing confirmation-totals test fails on clean main too).

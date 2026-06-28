@@ -181,7 +181,14 @@ async def handle_catalog_order(
         order = await create_draft_order(
             session, restaurant_id=restaurant_id, customer_id=customer.id
         )
-        _set_state(conv, draft_order_id=order.id)
+        # A NEW order: clear any address/location state left over from a previous order
+        # so a returning customer is re-offered their saved address (and the fee/distance
+        # is recomputed for THIS order), exactly like the engine's text path does.
+        _set_state(
+            conv, draft_order_id=order.id, address_offer_made=None,
+            saved_address_declined=None, saved_address_id=None,
+            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
+        )
 
     added = 0
     unmapped: list[str] = []

@@ -2302,8 +2302,8 @@ async def _ensure_draft_order(
         order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
         _set_state(
             conv, draft_order_id=order.id, address_offer_made=None,
-            saved_address_id=None, pin_lat=None, pin_lon=None,
-            distance_km=None, delivery_fee=None,
+            saved_address_declined=None, saved_address_id=None,
+            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
         )
     return order
 
@@ -3271,11 +3271,15 @@ async def _dispatch_action(
             )
             return
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
-        # Returning customer → auto-attach their saved address and jump straight to the
-        # order summary (which shows the address) with a "Use new address" button. This
-        # removes the separate "Deliver to your saved address?" step: confirming a repeat
-        # order is now a single tap. New customers fall through to the location-pin ask.
-        if not conv.state.get("address_offer_made"):
+        # ALWAYS check for a saved address BEFORE asking for a location pin: a returning
+        # customer auto-attaches their saved address and jumps straight to the order
+        # summary (which shows the address) with a "Use new address" button — a repeat
+        # order is one tap, never a re-shared pin. We gate ONLY on whether the customer
+        # explicitly chose a NEW address for THIS order (saved_address_declined), NOT on
+        # the broader address_offer_made flag, which can go stale across orders (e.g. a
+        # catalogue basket) and would wrongly skip the check. New customers / declined /
+        # no saved address fall through to the location-pin ask below.
+        if not conv.state.get("saved_address_declined"):
             saved_id = await _resolve_saved_address_id(
                 session, restaurant_id, inbound.from_phone
             )
@@ -3876,7 +3880,7 @@ async def handle_inbound(
                 )
                 return
         if btn_id == "new_address":
-            _set_state(conv, address_offer_made=True,
+            _set_state(conv, address_offer_made=True, saved_address_declined=True,
                        dialogue_phase="address_capture", dialogue_state="address_capture")
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -3888,8 +3892,8 @@ async def handle_inbound(
             # "Use new address" on the order summary → drop the auto-attached saved
             # address and capture a fresh one. The cart (draft order) is preserved;
             # only the delivery location changes, so we re-request the location pin.
-            _set_state(conv, address_offer_made=True, saved_address_id=None,
-                       pending_address_id=None,
+            _set_state(conv, address_offer_made=True, saved_address_declined=True,
+                       saved_address_id=None, pending_address_id=None,
                        dialogue_phase="address_capture", dialogue_state="address_capture")
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,

@@ -593,6 +593,71 @@ async def test_new_order_clears_previous_address_state(db_session, restaurant):
     assert conv.state.get("distance_km") is None               # stale distance cleared
 
 
+async def test_proceed_to_address_checks_saved_address_despite_stale_flag(db_session, restaurant):
+    """Reported bug: a returning customer with a saved address was asked to share a
+    location pin instead of reusing the saved address, because a STALE address_offer_made
+    flag (left over from a prior order / catalogue basket) skipped the saved-address
+    check. proceed_to_address must ALWAYS check the saved address first, unless the
+    customer explicitly chose a NEW one this order (saved_address_declined)."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+    from app.menu.models import Dish
+    from app.ordering.models import CustomerAddress
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.outbox.models import OutboxMessage
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507555666"
+
+    customer = await get_or_create_customer(db_session, restaurant_id=restaurant.id, phone=phone)
+    addr = CustomerAddress(  # confirmed saved address within the delivery radius
+        customer_id=customer.id, latitude=25.2050, longitude=55.2710,
+        room_apartment="123", building="Tower B", receiver_name="asfer", confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
+    dish = await db_session.scalar(select(Dish))
+    await add_item(db_session, order=order, dish=dish, qty=1, notes=None)
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    conv.state = {
+        **conv.state,
+        "dialogue_phase": "ordering", "dialogue_state": "collecting_items",
+        "draft_order_id": order.id,
+        "address_offer_made": True,   # STALE flag from a prior order — must NOT block the check
+        # saved_address_declined intentionally NOT set (customer never chose a new address)
+    }
+    await db_session.commit()
+
+    proceed = ConversationAgentResult(
+        message="Confirming", action="proceed_to_address", action_data={}
+    )
+    inbound = InboundMessage(
+        wa_message_id="wamid.confirm-saved", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "confirm the order please"}, restaurant_phone=restaurant.phone,
+        timestamp=1717663500,
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=proceed)):
+        await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(conv)
+    await db_session.refresh(order)
+    # Saved address auto-attached → straight to confirmation, NOT a location-pin ask.
+    assert order.address_id == addr.id
+    assert conv.state.get("dialogue_phase") == "awaiting_confirmation"
+    bodies = [o.payload.get("body", "") for o in (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == phone)
+    )).all()]
+    assert not any("share your delivery location" in b.lower() for b in bodies)
+
+
 def test_is_tracking_query_detection():
     """'live location' / 'where is my order' style messages are tracking queries."""
     from app.conversation.engine import _is_tracking_query
