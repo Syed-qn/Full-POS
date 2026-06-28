@@ -957,3 +957,25 @@
   applied_aed to the model too); Phase 5 reconcile/expiry/abuse-velocity-freeze (Celery
   beat); Phase 6 React dashboard (TicketsScreen + drawer + nav badge + wallet on customer
   profile); Phase 7 hardening gate + graphify update.
+
+[2026-06-29] feat: ordering integration + complaint detection + wallet maintenance (phases 4b,5)
+- Task 15 ordering integration (src/app/ordering/payments.py): apply_at_confirm (coupon
+  cuts total via validate_and_redeem, then wallet hold covers the rest), capture_on_deliver
+  (settles hold in dispatch/delivery.advance_delivery delivered branch), release_on_cancel
+  (in ordering.cancel_order). All guarded no-ops when no coupon/wallet -> existing flows
+  unchanged. COD due = total - wallet_applied_aed. Order.wallet_applied_aed model field added.
+- Task 13b complaint detection (conversation/engine.py): _is_complaint + _handle_complaint;
+  intercept in handle_inbound is post_order-only and runs AFTER the tracking-query check so
+  "where is my order" stays a status reply. On a complaint: opens a Ticket, acks the customer,
+  alerts the manager via outbox. AI NEVER issues a coupon/refund (asserted in tests).
+- Phase 5 (wallet/reconcile.py, abuse.py, worker.py): expire_credits (idempotent TTL expiry
+  debit), reconcile_tenant (independent re-sum -> drift), refund_velocity + check_and_flag
+  (auto-freeze over per-customer caps, wired into ticket resolve_wallet_refund). Celery beat:
+  wallet.expire_credits_all_tenants (3am) + wallet.reconcile_all_tenants (3:30am), maintenance
+  queue, autodiscovered. Config: wallet_credit_ttl_days + refund velocity caps.
+- IMPORTANT: TimestampMixin created_at is timezone-NAIVE; velocity/expiry window comparisons
+  strip tzinfo (datetime.now(utc).replace(tzinfo=None)) to avoid asyncpg naive/aware errors.
+- Tests added: ordering wallet/coupon apply (6), complaint detection (3), reconcile (4),
+  abuse (3). All green; 257 ordering+dispatch + 141 conversation pass (1 pre-existing failure).
+- NEXT: Phase 6 React dashboard (TicketsScreen + drawer + nav badge + wallet on profile) —
+  in progress; then Phase 7 hardening gate + graphify update.
