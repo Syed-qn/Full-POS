@@ -769,3 +769,18 @@
   item/draft-lifecycle/catalog/webhook; only 2 pre-existing isolation failures
   (test_address_step_recovers_stale_draft_pointer, test_confirmation_no_action_reshows_
   real_summary) which fail on clean main too.
+
+[2026-06-28] feat(rider-app): in-app native map (no Google Maps redirect)
+- Replaced the "Navigate" button (which opened external Google Maps via Linking) with
+  a native in-app map on the active (DELIVER FIRST) stop.
+- New rider-app/MapPanel.tsx: react-native-maps MapView (PROVIDER_GOOGLE), drop-off
+  Marker, rider's live position (showsUserLocation blue dot), dashed Polyline from rider
+  to the stop, auto fitToCoordinates as the rider moves.
+- App.tsx: added foreground Location.watchPositionAsync -> riderPos state; renders
+  <MapPanel> for stop i===0 with coords; removed the mapsLink Navigate button (kept the
+  phone-call Linking). package.json += react-native-maps 1.14.0 (Expo SDK 51).
+  app.json += android.config.googleMaps.apiKey (PLACEHOLDER — must be an Android-restricted
+  Maps SDK key, NOT the server geocoding key).
+- REQUIRES (native module): cd rider-app && npm install; set the Android Maps key in
+  app.json; EAS rebuild (eas build -p android --profile preview) -> new APK (cannot OTA).
+- Straight direction line for now; real road routing (Directions API) is a later add.

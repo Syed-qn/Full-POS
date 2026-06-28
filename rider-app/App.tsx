@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as Location from "expo-location";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,12 +16,12 @@ import {
 
 import {
   getOrders,
-  mapsLink,
   markDelivered,
   pickup,
   type Run,
   type Stop,
 } from "./api";
+import MapPanel from "./MapPanel";
 import { onNotificationTap, registerForPush } from "./notifications";
 import {
   sendCurrentLocation,
@@ -132,6 +133,26 @@ function TrackingScreen({
   const [status, setStatus] = useState("Starting…");
   const [run, setRun] = useState<Run | null>(null);
   const [busy, setBusy] = useState(false);
+  const [riderPos, setRiderPos] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Watch the rider's own position (foreground) so the in-app map can draw the line
+  // to the drop-off and keep both in view. Permission is already granted for tracking.
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    (async () => {
+      try {
+        const { status: perm } = await Location.getForegroundPermissionsAsync();
+        if (perm !== "granted") return;
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 25, timeInterval: 5000 },
+          (loc) => setRiderPos({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
+        );
+      } catch {
+        /* map just shows the drop-off without the live line */
+      }
+    })();
+    return () => sub?.remove();
+  }, []);
 
   const loadRun = useCallback(async () => {
     try {
@@ -279,6 +300,16 @@ function TrackingScreen({
               {s.customerName ? <Text style={styles.custName}>{s.customerName}</Text> : null}
               {s.address ? <Text style={styles.cardLine}>📍 {s.address}</Text> : null}
 
+              {i === 0 && s.latitude != null && s.longitude != null ? (
+                <MapPanel
+                  destLat={s.latitude}
+                  destLng={s.longitude}
+                  riderLat={riderPos?.lat}
+                  riderLng={riderPos?.lng}
+                  label={s.customerName ?? s.orderNumber}
+                />
+              ) : null}
+
               {s.doNotCall ? (
                 <View style={styles.noCallRow}>
                   <Text style={styles.noCallText}>🚫 Don't call, message only</Text>
@@ -306,18 +337,6 @@ function TrackingScreen({
               )}
 
               <View style={styles.cardActions}>
-                {s.latitude != null && s.longitude != null ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.button,
-                      styles.buttonAlt,
-                      pressed && styles.buttonAltPressed,
-                    ]}
-                    onPress={() => Linking.openURL(mapsLink(s.latitude!, s.longitude!))}
-                  >
-                    <Text style={styles.buttonAltText}>Navigate</Text>
-                  </Pressable>
-                ) : null}
                 {i === 0 ? (
                   <Pressable
                     style={({ pressed }) => [
