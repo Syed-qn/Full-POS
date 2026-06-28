@@ -1089,6 +1089,8 @@ async def reassign_order(
         raise ValueError("Rider not found")
     if new_rider.status == "deactivated":
         raise ValueError("Cannot reassign to a deactivated rider.")
+    if not new_rider.on_duty:
+        raise ValueError("Cannot reassign to an off-duty rider — they must go on duty first.")
     old_rider_id = order.rider_id
     if old_rider_id == new_rider_id:
         raise ValueError("Order is already assigned to this rider.")

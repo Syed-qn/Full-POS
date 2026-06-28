@@ -345,6 +345,37 @@ async def test_reassign_to_same_rider_rejected(db_session):
         )
 
 
+async def test_reassign_to_off_duty_rider_rejected(db_session):
+    """A manager cannot force-assign a stuck order to a rider who ended their shift."""
+    from app.dispatch.service import reassign_order
+
+    r = await _seed_restaurant(db_session)
+    rider_a = Rider(
+        restaurant_id=r.id, name="A", phone="+971500000051", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    off = Rider(
+        restaurant_id=r.id, name="Off", phone="+971500000052",
+        status="available", on_duty=False,
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add_all([rider_a, off])
+    await db_session.flush()
+    await _ping(db_session, rider_a, r.id, 25.2050, 55.2710)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 51)
+    await db_session.commit()
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(order)
+    assert order.rider_id == rider_a.id
+
+    import pytest
+    with pytest.raises(ValueError, match="off-duty"):
+        await reassign_order(
+            db_session, restaurant_id=r.id, order_id=order.id, new_rider_id=off.id
+        )
+
+
 async def test_no_available_riders_alerts_manager_and_leaves_unassigned(db_session):
     r = await _seed_restaurant(db_session)
     order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 2)
