@@ -70,6 +70,3 @@ export const registerPushToken = (token: string, pushToken: string) =>
     method: "POST",
     body: JSON.stringify({ push_token: pushToken }),
   });
-
-export const mapsLink = (lat: number, lon: number) =>
-  `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
