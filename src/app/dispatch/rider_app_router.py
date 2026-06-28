@@ -42,6 +42,16 @@ class RiderAppMeOut(BaseModel):
     activeOrderNumber: str | None = None
     customerName: str | None = None
     tracking: bool = False
+    onDuty: bool = True
+
+
+class DutyIn(BaseModel):
+    onDuty: bool
+
+
+class DutyOut(BaseModel):
+    success: bool = True
+    onDuty: bool
 
 
 class PushTokenIn(BaseModel):
@@ -78,6 +88,7 @@ class RunOut(BaseModel):
     batchId: int | None = None
     status: str | None = None  # planned | picked_up | None (no active run)
     stops: list[StopOut] = []
+    onDuty: bool = True
 
 
 class DeliveredOut(BaseModel):
@@ -152,7 +163,25 @@ async def rider_app_me(
         activeOrderNumber=order.order_number if order else None,
         customerName=customer.name if customer else None,
         tracking=order is not None,
+        onDuty=bool(rider.on_duty),
     )
+
+
+@router.post("/api/v1/rider-app/duty", response_model=DutyOut)
+async def rider_app_duty(
+    body: DutyIn,
+    rider: Rider = Depends(_current_rider),
+    session: AsyncSession = Depends(get_session),
+):
+    """Flip the rider's On duty / Off duty switch.
+
+    Off duty only stops NEW assignments (the dispatch eligible set requires
+    on_duty=True). It never strips a rider off an active run — they finish the
+    stops they already have, then receive nothing further until back on duty.
+    """
+    rider.on_duty = bool(body.onDuty)
+    await session.commit()
+    return DutyOut(onDuty=bool(rider.on_duty))
 
 
 @router.post("/api/v1/rider-app/push-token", response_model=AckOut)
@@ -235,10 +264,11 @@ async def get_active_run_response(session: AsyncSession, rider: Rider) -> RunOut
 
     run = await get_active_run(session, rider=rider)
     if run is None:
-        return RunOut()
+        return RunOut(onDuty=bool(rider.on_duty))
     return RunOut(
         batchId=run.batch_id,
         status=run.status,
+        onDuty=bool(rider.on_duty),
         stops=[
             StopOut(
                 orderId=s.order_id,

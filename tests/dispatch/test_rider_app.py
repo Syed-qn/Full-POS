@@ -124,6 +124,44 @@ async def test_me_endpoint_returns_active_order(client, db_session):
     assert body["tracking"] is True
 
 
+async def test_duty_toggle_endpoint(client, db_session):
+    r, rider, c, o = await _seed(db_session)
+    code = await create_pairing_code(db_session, rider=rider)
+    await db_session.commit()
+    token = (await client.post("/api/v1/rider-app/pair", json={"code": code})).json()["device_token"]
+    h = {"Authorization": f"Bearer {token}"}
+
+    # Riders default on duty (server_default true).
+    me = await client.get("/api/v1/rider-app/me", headers=h)
+    assert me.json()["onDuty"] is True
+
+    # Flip OFF.
+    off = await client.post("/api/v1/rider-app/duty", headers=h, json={"onDuty": False})
+    assert off.status_code == 200
+    assert off.json()["onDuty"] is False
+    await db_session.refresh(rider)
+    assert rider.on_duty is False
+    # Reflected in /me and /orders.
+    assert (await client.get("/api/v1/rider-app/me", headers=h)).json()["onDuty"] is False
+    assert (await client.get("/api/v1/rider-app/orders", headers=h)).json()["onDuty"] is False
+
+    # Flip back ON.
+    on = await client.post("/api/v1/rider-app/duty", headers=h, json={"onDuty": True})
+    assert on.json()["onDuty"] is True
+    await db_session.refresh(rider)
+    assert rider.on_duty is True
+
+
+async def test_duty_requires_valid_token(client, db_session):
+    await _seed(db_session)
+    resp = await client.post(
+        "/api/v1/rider-app/duty",
+        headers={"Authorization": "Bearer nope"},
+        json={"onDuty": False},
+    )
+    assert resp.status_code == 401
+
+
 async def test_invalid_pairing_code_rejected(client, db_session):
     await _seed(db_session)
     resp = await client.post("/api/v1/rider-app/pair", json={"code": "ZZZZZZ"})

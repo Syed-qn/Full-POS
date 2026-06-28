@@ -20,6 +20,7 @@ export type Run = {
   batchId: number | null;
   status: string | null; // "planned" | "picked_up" | null
   stops: Stop[];
+  onDuty: boolean;
 };
 
 export type Delivered = {
@@ -57,6 +58,12 @@ export const pickup = (token: string) =>
 
 export const markDelivered = (token: string, orderId: number) =>
   req<Delivered>(`/api/v1/rider-app/orders/${orderId}/delivered`, token, { method: "POST" });
+
+export const setDuty = (token: string, onDuty: boolean) =>
+  req<{ success: boolean; onDuty: boolean }>("/api/v1/rider-app/duty", token, {
+    method: "POST",
+    body: JSON.stringify({ onDuty }),
+  });
 
 export const registerPushToken = (token: string, pushToken: string) =>
   req<{ success: boolean }>("/api/v1/rider-app/push-token", token, {

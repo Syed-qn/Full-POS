@@ -1,7 +1,16 @@
 import copy
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -103,6 +112,11 @@ class Rider(Base, TimestampMixin):
     phone: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="available")
     # available | on_delivery | off_shift | deactivated
+    # Rider-controlled duty flag (the in-app On duty / Off duty switch). Independent
+    # of the operational `status` above: a rider can flip OFF mid-delivery and will
+    # simply receive no NEW assignments once their current run completes (the dispatch
+    # eligible set requires on_duty=True). True so every existing/new rider starts on.
+    on_duty: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     # Native rider app (Android) auth: the rider pairs ONCE with a short code sent
     # via WhatsApp; the app then stores `device_token` (long-lived bearer) and
     # streams background GPS. pairing_code is the one-time, expiring pairing code.

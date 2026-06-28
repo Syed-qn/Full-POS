@@ -119,6 +119,63 @@ async def test_assigns_nearest_available_rider(db_session):
     assert "composite" in assignment.algorithm_score
 
 
+async def test_off_duty_rider_is_not_assigned(db_session):
+    """A rider who flipped the in-app switch OFF (on_duty=False) is excluded from
+    dispatch even though their operational status is still 'available'."""
+    r = await _seed_restaurant(db_session)
+    off = Rider(
+        restaurant_id=r.id,
+        name="Off",
+        phone="+971500000201",
+        status="available",
+        on_duty=False,
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add(off)
+    await db_session.flush()
+    await _ping(db_session, off, r.id, 25.2048, 55.2708)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 201)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.status == "ready"
+    assert order.rider_id is None
+    assert result.assigned_count == 0
+    assert result.needs_retry is True
+
+
+async def test_on_duty_rider_assigned_over_off_duty(db_session):
+    """When one rider is off duty and one is on duty, only the on-duty rider gets it."""
+    r = await _seed_restaurant(db_session)
+    off = Rider(
+        restaurant_id=r.id, name="Off", phone="+971500000202",
+        status="available", on_duty=False,
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    on = Rider(
+        restaurant_id=r.id, name="On", phone="+971500000203",
+        status="available", on_duty=True,
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 5},
+    )
+    db_session.add_all([off, on])
+    await db_session.flush()
+    # Put the OFF rider closer so distance can't explain the choice — duty does.
+    await _ping(db_session, off, r.id, 25.2048, 55.2708)
+    await _ping(db_session, on, r.id, 25.3500, 55.4500)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 202)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert result.assigned_count == 1
+    assert order.rider_id == on.id
+
+
 async def test_dispatch_survives_missing_rider_locations(db_session, monkeypatch):
     r = await _seed_restaurant(db_session)
     rider = Rider(

@@ -784,3 +784,28 @@
 - REQUIRES (native module): cd rider-app && npm install; set the Android Maps key in
   app.json; EAS rebuild (eas build -p android --profile preview) -> new APK (cannot OTA).
 - Straight direction line for now; real road routing (Directions API) is a later add.
+
+[2026-06-28] feat(rider-app): On duty / Off duty switch
+- New rider-controlled duty flag, independent of operational Rider.status.
+- DB: riders.on_duty BOOL NOT NULL DEFAULT true (model app/identity/models.py +
+  migration e2b3d4f5a6c7, down_revision d1a2c3e4f5b6). Existing riders stay dispatchable.
+- Dispatch (app/dispatch/service.py): eligible set now requires on_duty=True in BOTH
+  rider queries — the greedy per-batch select (status=='available' AND on_duty) and the
+  optimizer vehicle pool ((available & on_duty) | busy-with-movable-orders). Off-duty
+  idle riders take no new/movable work; riders mid-run keep their in-flight stops and
+  simply get nothing further after completing (status->available on batch complete, but
+  on_duty gate still blocks new assignments). No accept/reject — duty is the rider's only
+  lever.
+- API (app/dispatch/rider_app_router.py): POST /api/v1/rider-app/duty {onDuty:bool} ->
+  {success,onDuty}; onDuty also exposed on GET /me and GET /orders. Never strips an
+  active run.
+- Rider app (App.tsx): duty toggle pill below the header (ON DUTY green / OFF DUTY amber),
+  optimistic flip with revert-on-failure, synced from /orders poll (won't clobber an
+  in-flight press). Off-duty empty state + amber hint ("you won't get new deliveries,
+  finish active stops"). api.ts += setDuty + Run.onDuty.
+- Tests (35 pass): test_dispatch_engine.py (off-duty excluded -> needs_retry; on-duty
+  chosen over a CLOSER off-duty rider) + test_rider_app.py (duty toggle reflected in
+  /me & /orders, requires valid token). ruff clean.
+- This is an OTA-safe JS change for the app UI, BUT the toggle calls a new endpoint —
+  deploy the web service (migration auto-applies via Dockerfile alembic upgrade) before
+  the updated app build relies on it.

@@ -18,6 +18,7 @@ import {
   getOrders,
   markDelivered,
   pickup,
+  setDuty,
   type Run,
   type Stop,
 } from "./api";
@@ -133,6 +134,8 @@ function TrackingScreen({
   const [status, setStatus] = useState("Starting…");
   const [run, setRun] = useState<Run | null>(null);
   const [busy, setBusy] = useState(false);
+  const [onDuty, setOnDuty] = useState(true);
+  const [dutyBusy, setDutyBusy] = useState(false);
   const [riderPos, setRiderPos] = useState<{ lat: number; lng: number } | null>(null);
 
   // Watch the rider's own position (foreground) so the in-app map can draw the line
@@ -156,11 +159,30 @@ function TrackingScreen({
 
   const loadRun = useCallback(async () => {
     try {
-      setRun(await getOrders(token));
+      const r = await getOrders(token);
+      setRun(r);
+      // Keep the switch in sync with the server (e.g. another device / a manager),
+      // but never clobber an in-flight toggle the rider is mid-press on.
+      if (!dutyBusy) setOnDuty(r.onDuty);
     } catch {
       /* keep last */
     }
-  }, [token]);
+  }, [token, dutyBusy]);
+
+  const toggleDuty = async () => {
+    const next = !onDuty;
+    setDutyBusy(true);
+    setOnDuty(next); // optimistic
+    try {
+      const res = await setDuty(token, next);
+      setOnDuty(res.onDuty);
+    } catch (e) {
+      setOnDuty(!next); // revert on failure
+      Alert.alert("Couldn't update", e instanceof Error ? e.message : "Try again");
+    } finally {
+      setDutyBusy(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -248,12 +270,35 @@ function TrackingScreen({
         </View>
       </View>
 
+      <Pressable
+        style={[styles.dutyBar, onDuty ? styles.dutyBarOn : styles.dutyBarOff]}
+        onPress={toggleDuty}
+        disabled={dutyBusy}
+      >
+        <View style={styles.dutyLabelWrap}>
+          <View style={[styles.dutyDot, onDuty ? styles.dutyDotOn : styles.dutyDotOff]} />
+          <Text style={[styles.dutyLabel, onDuty ? styles.dutyLabelOn : styles.dutyLabelOff]}>
+            {onDuty ? "ON DUTY" : "OFF DUTY"}
+          </Text>
+        </View>
+        <View style={[styles.dutyTrack, onDuty ? styles.dutyTrackOn : styles.dutyTrackOff]}>
+          <View style={[styles.dutyKnob, onDuty ? styles.dutyKnobOn : styles.dutyKnobOff]} />
+        </View>
+      </Pressable>
+      {!onDuty ? (
+        <Text style={styles.dutyHint}>
+          You won't get new deliveries. Finish any active stops below.
+        </Text>
+      ) : null}
+
       <ScrollView contentContainerStyle={styles.list}>
         {!hasRun ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>🕒</Text>
+            <Text style={styles.emptyEmoji}>{onDuty ? "🕒" : "🌙"}</Text>
             <Text style={styles.subtitle}>
-              No deliveries right now. You'll be notified when one is assigned.
+              {onDuty
+                ? "No deliveries right now. You'll be notified when one is assigned."
+                : "You're off duty. Turn on duty above to start receiving deliveries."}
             </Text>
           </View>
         ) : !pickedUp ? (
@@ -421,6 +466,27 @@ const styles = StyleSheet.create({
   statusPillText: { fontWeight: "800", fontSize: 12, letterSpacing: 0.8 },
   statusTextLive: { color: "#4ade80" },
   statusTextWarn: { color: "#fbbf24" },
+
+  dutyBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderRadius: 14, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 16, marginBottom: 4,
+  },
+  dutyBarOn: { backgroundColor: C.greenTintBg, borderColor: C.greenTintBorder },
+  dutyBarOff: { backgroundColor: "#241a0c", borderColor: "#6b4f1d" },
+  dutyLabelWrap: { flexDirection: "row", alignItems: "center", gap: 9 },
+  dutyDot: { width: 9, height: 9, borderRadius: 999 },
+  dutyDotOn: { backgroundColor: C.green },
+  dutyDotOff: { backgroundColor: "#f59e0b" },
+  dutyLabel: { fontSize: 14, fontWeight: "900", letterSpacing: 1 },
+  dutyLabelOn: { color: "#4ade80" },
+  dutyLabelOff: { color: "#fbbf24" },
+  dutyTrack: { width: 50, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
+  dutyTrackOn: { backgroundColor: C.greenDark, alignItems: "flex-end" },
+  dutyTrackOff: { backgroundColor: "#3a2f17", alignItems: "flex-start" },
+  dutyKnob: { width: 22, height: 22, borderRadius: 999 },
+  dutyKnobOn: { backgroundColor: "#eafff2" },
+  dutyKnobOff: { backgroundColor: "#fbbf24" },
+  dutyHint: { fontSize: 13, color: "#fbbf24", marginBottom: 10, marginTop: 2, fontWeight: "600" },
 
   linkButton: { alignItems: "center", paddingVertical: 14 },
   linkButtonText: { color: C.dim, fontSize: 14, fontWeight: "600" },

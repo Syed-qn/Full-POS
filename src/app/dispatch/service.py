@@ -455,7 +455,10 @@ async def _dispatch_ortools(
         await session.scalars(
             select(Rider).where(
                 Rider.restaurant_id == restaurant_id,
-                (Rider.status == "available") | (Rider.id.in_(busy_rider_ids)),
+                # Off-duty idle riders take no new/movable orders; riders already
+                # holding movable orders stay in the pool to keep their in-flight work.
+                ((Rider.status == "available") & (Rider.on_duty.is_(True)))
+                | (Rider.id.in_(busy_rider_ids)),
             )
         )
     ).all()
@@ -894,6 +897,7 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
                 select(Rider).where(
                     Rider.restaurant_id == restaurant_id,
                     Rider.status == "available",
+                    Rider.on_duty.is_(True),
                 )
             )
         ).all()
