@@ -875,3 +875,14 @@
   customer.tags["do_not_call"], set when their chat message matches don't-call phrases
   (engine.py ~153 list, set ~3594), cleared when they say calling is OK. Flows to the
   rider stop via rider_actions/_stop_details -> StopOut.doNotCall.
+
+[2026-06-28] chore(rider-app): Android Maps SDK key sourced from env (not committed)
+- Key lives in APP_MAPS_SDK_ANDROID (root .env) and rider-app/.env (git-ignored); also
+  pushed to EAS env (preview+production, visibility sensitive) for cloud builds.
+- rider-app/app.config.js extended: injects android.config.googleMaps.apiKey from
+  process.env.APP_MAPS_SDK_ANDROID (falls back to app.json then ""). app.json placeholder
+  cleared to "" so the key is unambiguously env-sourced. Verified resolves (len 39, AIza..,
+  from env) and NOT present in any tracked file.
+- Tiles are native → still requires an EAS rebuild for the map to show streets; after that
+  the map works without exposing the key in source. Map UI changes are OTA-deliverable but
+  the KEY only takes effect in a fresh build.

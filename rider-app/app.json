@@ -10,7 +10,7 @@
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
-          "apiKey": "REPLACE_WITH_ANDROID_RESTRICTED_MAPS_SDK_KEY"
+          "apiKey": ""
         }
       },
       "permissions": [
