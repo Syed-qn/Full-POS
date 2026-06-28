@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { logout } from "../lib/auth";
+import { listTickets } from "../lib/ticketsApi";
 import s from "./NavSidebar.module.css";
 
 const ITEMS: Array<{ to: string; label: string; icon: string }> = [
@@ -18,6 +20,18 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
 
 export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const navigate = useNavigate();
+  const [openTickets, setOpenTickets] = useState(0);
+
+  // Best-effort open-complaint count for the nav badge. Hidden if unavailable.
+  useEffect(() => {
+    let cancelled = false;
+    listTickets("open")
+      .then((t) => !cancelled && setOpenTickets(t.length))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleLogout() {
     logout();
@@ -38,6 +52,9 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
           {it.label}
           {it.to === "/conversations" && unread > 0 && (
             <span className={s.badge}>{unread}</span>
+          )}
+          {it.to === "/tickets" && openTickets > 0 && (
+            <span className={s.badge}>{openTickets}</span>
           )}
         </NavLink>
       ))}
