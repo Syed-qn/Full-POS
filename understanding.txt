@@ -979,3 +979,20 @@
   abuse (3). All green; 257 ordering+dispatch + 141 conversation pass (1 pre-existing failure).
 - NEXT: Phase 6 React dashboard (TicketsScreen + drawer + nav badge + wallet on profile) —
   in progress; then Phase 7 hardening gate + graphify update.
+
+[2026-06-29] feat: Phase 6 dashboard + Phase 7 hardening gate (wallet/coupon/tickets COMPLETE)
+- Phase 6 React dashboard (frontend/src): ticketsApi + walletApi clients; Ticket/WalletBalance/
+  WalletEntry types; TicketDetailDrawer (3 manager actions + required note + refund-amount guard,
+  reuses SideDrawer); TicketsScreen (open-first list, drawer, skeleton, empty state); /tickets
+  route + "Complaints" nav item; CustomerProfileScreen gains a defensive Wallet section. 172
+  frontend tests pass, tsc clean.
+- Phase 7 gate: full backend suite 969 passed / 1 pre-existing failure (test_engine_ordering::
+  test_order_confirmation_message_includes_totals_and_eta — fails identically at pre-wallet commit
+  31157c3). New-code ruff clean (5 remaining ruff errors are all in pre-existing untouched test
+  files: test_abandoned_cart, test_dispatch_engine, test_service). App boots; wallet/coupons/
+  tickets routers mounted. ~90 new tests across the feature, zero regressions.
+- FEATURE COMPLETE: financial-grade customer wallet (ledger, hold/capture/release, freeze,
+  reversal, expiry, reconciliation, abuse auto-freeze), generalized dup-proof coupons, human-only
+  complaint tickets (3 actions), ordering integration (coupon+wallet at confirm, FSM capture/
+  release), AI complaint detection (open-only), and the manager dashboard. Migration
+  f1a2b3c4d5e6 deploys it. Plan: docs/superpowers/plans/2026-06-29-wallet-coupon-tickets.md.
