@@ -7,7 +7,11 @@ descriptions, and type-ordering must all be restricted to the synced catalogue.
 from decimal import Decimal
 
 from app.catalog.models import CatalogProduct
-from app.conversation.engine import _catalog_excludes_dish, _render_menu
+from app.conversation.engine import (
+    _catalog_excludes_dish,
+    _catalog_filter_candidates,
+    _render_menu,
+)
 from app.menu.models import Dish, Menu
 
 
@@ -70,3 +74,16 @@ async def test_catalog_excludes_nothing_in_text_mode(db_session, restaurant):
     # Text mode: no restriction — every dish is orderable.
     assert await _catalog_excludes_dish(db_session, restaurant.id, biryani) is False
     assert await _catalog_excludes_dish(db_session, restaurant.id, mint) is False
+
+
+async def test_ambiguous_candidates_filtered_to_catalogue(db_session, restaurant):
+    """A 'did you mean ...' prompt must only list catalogue items, never a text-menu dish."""
+    biryani, mint = await _seed(db_session, restaurant, catalog_mode=True)
+    kept = await _catalog_filter_candidates(db_session, restaurant.id, [biryani, mint])
+    assert biryani in kept and mint not in kept  # Lemon Mint dropped from the options
+
+
+async def test_ambiguous_candidates_unfiltered_in_text_mode(db_session, restaurant):
+    biryani, mint = await _seed(db_session, restaurant, catalog_mode=False)
+    kept = await _catalog_filter_candidates(db_session, restaurant.id, [biryani, mint])
+    assert kept == [biryani, mint]  # text mode: keep all candidates

@@ -342,6 +342,16 @@ async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish
     return found is None
 
 
+async def _catalog_filter_candidates(session: AsyncSession, restaurant_id: int, candidates):
+    """In CATALOGUE mode, drop candidates that aren't in the catalogue so a 'did you mean'
+    prompt never shows a non-catalogue (text-menu) dish. No-op in text mode."""
+    kept = []
+    for d in candidates:
+        if not await _catalog_excludes_dish(session, restaurant_id, d):
+            kept.append(d)
+    return kept
+
+
 async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
     """Render the active menu as categorized text.
 
@@ -781,9 +791,17 @@ async def _handle_collecting_items(
         except Exception:
             dish = None
         if dish is None:
+            # Catalogue mode: only offer candidates that are actually in the catalogue.
+            cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+            if not cands:
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="not-in-catalog",
+                    body="That isn't on our catalogue 🛍️ Please tap the catalogue to add items.",
+                )
+                return
             options = " or ".join(
-                f"{d.name} (AED {_aed(d.price_aed)})"
-                for d in result.candidates[:3]
+                f"{d.name} (AED {_aed(d.price_aed)})" for d in cands[:3]
             )
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -1425,9 +1443,17 @@ async def _handle_modify_items(
         return
 
     if result.confidence == MatchConfidence.AMBIGUOUS:
+        # Catalogue mode: only offer candidates that are actually in the catalogue.
+        cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+        if not cands:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="not-in-catalog-mod",
+                body="That isn't on our catalogue 🛍️ Please tap the catalogue to choose items.",
+            )
+            return
         options = " or ".join(
-            f"{d.name} (AED {_aed(d.price_aed)})"
-            for d in result.candidates[:3]
+            f"{d.name} (AED {_aed(d.price_aed)})" for d in cands[:3]
         )
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -1438,6 +1464,14 @@ async def _handle_modify_items(
 
     # Direct match: accumulate in proposed (replaces cart-add in collecting_items)
     dish = result.candidates[0]
+    # Catalogue mode: can't modify an order to add a non-catalogue (text-menu) item.
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="not-in-catalog-mod",
+            body="That isn't on our catalogue 🛍️ Please tap the catalogue to choose items.",
+        )
+        return
     proposed = list(conv.state.get("modify_proposed", []) or [])
     proposed.append({
         "dish_id": dish.id,

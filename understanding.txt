@@ -975,3 +975,20 @@
   (Lemon Mint absent, AED 30 catalogue price not AED 20 dish price); text mode still lists
   dishes; exclude logic true for unlisted dish / false for catalogue dish / false in text
   mode. 27 pass across catalog+safety+confirmation suites.
+
+[2026-06-29] fix(convo): full catalogue-mode leak audit — closed all remaining leaks
+- Multi-agent audit of the entire conversation engine for text-menu leaks in catalogue
+  mode. Found + fixed the last 3 (on top of menu-knowledge/dish-info/typed-add/AI-add
+  from the prior pass):
+  * Modify-order add (engine.py ~1442): a post-order "add X" could add a non-catalogue
+    dish to the proposed modification -> now guarded by _catalog_excludes_dish.
+  * "Did you mean ...?" AMBIGUOUS prompt in collecting_items (~768) and modify_items
+    (~1430): listed ALL matched candidates incl. non-catalogue dishes. New
+    _catalog_filter_candidates drops non-catalogue candidates; if none remain -> "not on
+    our catalogue" message.
+- Audit-verified SAFE (no change needed): remove_item/update_qty (operate only on cart
+  items, which are catalogue items in catalogue mode); handle_catalog_order (_find_dish
+  by retailer_id only); greeting/show_menu/order-again (route via send_catalog); order &
+  cart summaries (print cart items only).
+- Tests: tests/catalog/test_catalog_mode_isolation.py now 6 (added ambiguous-filter
+  catalogue-only + text-mode-unfiltered). 33 pass across catalog + engine suites. ruff clean.
