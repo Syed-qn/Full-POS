@@ -1204,13 +1204,23 @@ async def _handle_order_confirmation(
         # fresh draft, not reuse this (now confirmed) order's id.
         _set_state(conv, dialogue_state="order_placed",
                    draft_order_id=None, pending_order_id=None)
+        from app.ordering.payments import cod_due_aed
+
+        due = cod_due_aed(order)
+        if order.wallet_applied_aed and order.wallet_applied_aed > 0:
+            payment_line = (
+                f"Total: AED {_aed(order.total)}\n"
+                f"Wallet credit applied: AED {_aed(order.wallet_applied_aed)}\n"
+                f"Pay on delivery: AED {_aed(due)} (COD)\n"
+            )
+        else:
+            payment_line = f"Total: AED {_aed(order.total)} (COD, cash on delivery).\n"
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="order-confirmed",
             body=(
                 f"Order confirmed! Order #{order.order_number}.\n"
-                f"Total: AED {_aed(order.total)} "
-                f"(COD, cash on delivery).\n"
+                f"{payment_line}"
                 f"Your food will arrive within 40 minutes."
             ),
         )

@@ -664,6 +664,11 @@ async def finalize_confirmation(
     order.promised_eta = order.sla_deadline
     order.prep_deadline = await compute_prep_deadline(session, order, now)
     order.cook_estimate_minutes = await compute_cook_estimate(session, order)
+    # Auto-apply any available wallet store credit: holds it against this order so
+    # COD due = total - wallet_applied (settled on delivery, released on cancel).
+    from app.ordering.payments import apply_at_confirm
+
+    await apply_at_confirm(session, order=order, use_wallet=True, created_by=actor)
     await session.flush()
 
 

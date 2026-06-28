@@ -29,6 +29,16 @@ _ZERO = Decimal("0.00")
 _CENT = Decimal("0.01")
 
 
+def cod_due_aed(order: "Order") -> Decimal:
+    """Cash the rider collects at the door = order total minus wallet credit applied.
+
+    The wallet portion is settled separately (capture on delivery), so collecting
+    only the remainder in cash prevents double-charging the customer.
+    """
+    due = (Decimal(order.total) - Decimal(order.wallet_applied_aed or _ZERO)).quantize(_CENT)
+    return max(due, _ZERO)
+
+
 async def apply_at_confirm(
     session: "AsyncSession",
     *,

@@ -26,6 +26,7 @@ from app.dispatch.delivery import advance_delivery
 from app.dispatch.models import Batch, BatchOrder
 from app.identity.models import Rider
 from app.ordering.models import Order
+from app.ordering.payments import cod_due_aed
 
 _logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ async def get_active_run(session: AsyncSession, *, rider: Rider) -> RunView | No
                 address=address,
                 latitude=coords[0] if coords else None,
                 longitude=coords[1] if coords else None,
-                cod_amount=float(order.total or 0),
+                cod_amount=float(cod_due_aed(order)),
                 delivered=bo.delivered_at is not None,
                 customer_phone=phone,
                 do_not_call=do_not_call,
@@ -227,7 +228,7 @@ async def mark_order_delivered(
         restaurant_id=restaurant_id,
         order_id=order.id,
         rider_id=rider.id,
-        amount=order.total if cod_amount is None else cod_amount,
+        amount=cod_due_aed(order) if cod_amount is None else cod_amount,
     )
 
     bo = await session.scalar(select(BatchOrder).where(BatchOrder.order_id == order.id))
