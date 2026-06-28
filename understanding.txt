@@ -992,3 +992,32 @@
   cart summaries (print cart items only).
 - Tests: tests/catalog/test_catalog_mode_isolation.py now 6 (added ambiguous-filter
   catalogue-only + text-mode-unfiltered). 33 pass across catalog + engine suites. ruff clean.
+
+[2026-06-29] audit: serious line-by-line catalogue-mode leak audit (manual, agents rate-limited)
+- Workflow audit agents hit the session limit, so did a full manual line-by-line read of
+  every dish/menu/output path in engine.py + catalog/service.py + ordering/service.py +
+  llm/deepseek.py + llm/claude.py.
+- Found + fixed 1 residual SOFT leak: "what is <X>" describer fallback (engine.py ~771 and
+  ~1428) called get_describer().describe(name) for ANY typed name when _answer_dish_info
+  returned None — in catalogue mode that invents a description for a non-catalogue item.
+  Now: new _catalog_mode_on() helper; in catalogue mode the fallback returns a catalogue
+  redirect instead of describing. (The main-flow dish-info interceptor at ~3548 already
+  falls through safely when _answer_dish_info returns None.)
+- VERIFIED SAFE line-by-line (no change needed):
+  * Deterministic collecting_items add (~840): guarded at 818, adds base serve, no offers.
+  * Size/bundle OFFERS (_offer_size_choice/_offer_bundle_choice): only reachable AFTER the
+    _catalog_excludes_dish guard in _execute_ai_add_item (2542) or for a cart dish in
+    update_qty — never for a non-catalogue dish.
+  * remove_item/update_qty: act only on cart items via _resolve_cart_dish (cart = catalogue
+    items in catalogue mode); not_in_cart echoes the customer's own typed name (benign).
+  * modify summary session.get(Dish, p["dish_id"]): p comes from modify_proposed which is
+    guarded at add (1468).
+  * LLM layer: ctx["menu_text"] = catalogue in catalogue mode (engine 2161); BOTH prod
+    LLMs are told never to invent dishes/prices (deepseek.py "never invent any" + {menu_text};
+    claude.py "Do not invent dishes, numbers, or prices" + {menu_text}) -> cannot name a
+    non-catalogue item like the original "Lemon Mint AED 12" bug.
+  * catalog/service.py handle_catalog_order: maps by retailer_id only; send_catalog builds
+    from active CatalogProduct.
+- Tests: test_catalog_mode_isolation.py now 7 (added: 'what is' non-catalogue item never
+  returns its stored description/price + not added to cart). 49 pass across catalog +
+  engine + safety + webhook. ruff clean.

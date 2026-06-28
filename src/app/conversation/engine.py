@@ -316,6 +316,14 @@ async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str
     return "\n".join(lines)
 
 
+async def _catalog_mode_on(session: AsyncSession, restaurant_id: int) -> bool:
+    """True if this restaurant is in catalogue ordering mode."""
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    return bool(rest is not None and (rest.settings or {}).get("catalog_ordering_enabled"))
+
+
 async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish) -> bool:
     """In CATALOGUE mode, True when ``dish`` is NOT part of the synced Meta catalogue —
     so the bot won't describe, recommend, or let a customer type-order a text-menu item
@@ -764,8 +772,13 @@ async def _handle_collecting_items(
         item_name = dish_query[8:].strip().rstrip("?")
         desc = await _answer_dish_info(session, restaurant_id, item_name)
         if desc is None:
-            from app.llm.factory import get_describer
-            desc = get_describer().describe(item_name, "")
+            # Catalogue mode: never invent a description for an item we can't confirm is
+            # in the catalogue — redirect instead of describing a non-catalogue dish.
+            if await _catalog_mode_on(session, restaurant_id):
+                desc = "I can only help with items on our catalogue 🛍️ Tap the catalogue to see what's available."
+            else:
+                from app.llm.factory import get_describer
+                desc = get_describer().describe(item_name, "")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc", body=desc,
@@ -1424,8 +1437,11 @@ async def _handle_modify_items(
         item_name = dish_query[8:].strip().rstrip("?")
         desc = await _answer_dish_info(session, restaurant_id, item_name)
         if desc is None:
-            from app.llm.factory import get_describer
-            desc = get_describer().describe(item_name, "")
+            if await _catalog_mode_on(session, restaurant_id):
+                desc = "I can only help with items on our catalogue 🛍️ Tap the catalogue to see what's available."
+            else:
+                from app.llm.factory import get_describer
+                desc = get_describer().describe(item_name, "")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc-mod", body=desc,
