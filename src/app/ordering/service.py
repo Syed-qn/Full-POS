@@ -778,6 +778,11 @@ async def cancel_order(
     order.cancellation_reason = reason
     order.cancelled_at = datetime.now(timezone.utc)
 
+    # Return any wallet credit held against this order (no-op if none).
+    from app.ordering.payments import release_on_cancel
+
+    await release_on_cancel(session, order=order)
+
     if order.status == OrderStatus.PREPARING:
         await fsm_transition(
             session, order, OrderStatus.ON_RESALE, actor=actor,

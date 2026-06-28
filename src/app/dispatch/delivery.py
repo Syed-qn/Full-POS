@@ -59,6 +59,11 @@ async def advance_delivery(
 
         await stop_tracking_session(session, order_id=order.id, reason=TRACKING_EXPIRED)
 
+        # Settle any wallet credit held against this order (no-op if none).
+        from app.ordering.payments import capture_on_deliver
+
+        await capture_on_deliver(session, order=order)
+
     await record_audit(
         session,
         actor="rider",

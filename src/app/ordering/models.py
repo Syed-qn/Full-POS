@@ -91,6 +91,9 @@ class Order(Base, TimestampMixin):
     late: Mapped[bool | None] = mapped_column(Boolean)
 
     coupon_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Wallet store-credit applied to this order (held at confirm, captured on
+    # delivery, released on cancel). COD due = total - wallet_applied_aed.
+    wallet_applied_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
 
     # Resale fields
     resale_of_order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"))
