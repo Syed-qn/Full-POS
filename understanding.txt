@@ -914,3 +914,46 @@
   api". Sync feature deferred until the token/app has catalog read scope (System User
   token w/ catalog access, or Catalog Management API approval). Chat catalogue SEND does
   NOT need this scope (works via product_retailer_id + connected catalog).
+
+[2026-06-29] feat: wallet + coupon v2 + complaint tickets (financial-grade money engine)
+- Design docs first: docs/research/{loyalty-program-analysis, post-delivery-complaints-
+  analysis, complaint-ticket-system-design, wallet-coupon-financial-design}.md. Plan:
+  docs/superpowers/plans/2026-06-29-wallet-coupon-tickets.md (23 tasks / 7 phases, TDD).
+- PHASE 1 — Wallet ledger (src/app/wallet/): WalletAccount + WalletEntry append-only
+  ledger; balance/available DERIVED (no mutable column). credit/hold/capture/release/
+  freeze/unfreeze/reverse — every op idempotent on idempotency_key + audited. hold uses
+  SELECT..FOR UPDATE on the account row → concurrent double-spend impossible. capture
+  flips the single hold entry to order_debit (one entry, no double-count); release flips
+  + adds a netting hold_release. Manager read endpoints GET /api/v1/wallet/{cid}[/entries],
+  tenant-scoped (cross-tenant 404). 21 tests.
+- PHASE 2 — Coupons generalized (src/app/coupons/): Coupon gains campaign fields (kind,
+  discount_type fixed|percent, percent, max_discount_aed, min_order_aed, applies_to,
+  per_customer_limit, total_redemption_limit, valid_from); code now UNIQUE PER TENANT
+  (uq_coupons_restaurant_code) not global. New CouponRedemption append-only ledger =
+  source of truth for limits (UNIQUE idempotency_key). validate_and_redeem: FOR UPDATE +
+  count checks + idempotency → dup-proof; percent capped at max_discount_aed, never >
+  subtotal. generate_code: ~50-bit unambiguous codes (was 24-bit token_hex, flagged weak).
+  Endpoints create/list/pause (kill-switch). Apology issue_coupon/redeem_coupon UNCHANGED.
+  21 tests. NOTE: validate_and_redeem no longer sets legacy redeemed_on_order_id (ledger
+  is truth) to avoid an orders FK dependency.
+- PHASE 3 — Complaint tickets (src/app/tickets/): Ticket FSM open->in_progress->resolved.
+  HUMAN-ONLY resolution — AI never resolves. Three manager actions: resolve_wallet_refund
+  (credits wallet ledger, idempotency_key ticket:{id}:refund), resolve_replacement (links
+  order), resolve_no_action (note required). All resolutions idempotent, audited, notify
+  customer via outbox (ticket:{id}:notify). Endpoints GET /api/v1/tickets[/{id}],
+  POST /{id}/resolve, tenant-scoped. 11 tests.
+- PHASE 4 — Migration f1a2b3c4d5e6 (down_revision e2b3d4f5a6c7): creates wallet_accounts,
+  wallet_entries, tickets, coupon_redemptions (+ trg_*_updated_at triggers + indexes);
+  adds coupons campaign columns; swaps coupons code unique global->per-tenant; adds
+  orders.wallet_applied_aed. Upgrade+downgrade+re-upgrade verified on a fresh DB.
+- Money convention: Numeric(10,2)/Decimal AED (house convention), NOT the design doc's
+  integer-fils suggestion — balance still derived, idempotency unchanged.
+- Full suite: 953 passed, 1 pre-existing failure (test_engine_ordering::test_order_
+  confirmation_message_includes_totals_and_eta — fails identically at pre-wallet commit
+  31157c3, unrelated to this work). 60+ new tests, zero regressions. ruff clean.
+- NEXT (not yet built): Task 13b engine complaint-detection (AI opens ticket on a
+  post-delivery complaint, never compensates); Task 15 ordering integration (apply coupon
+  + wallet hold at confirm, capture on delivered, release on cancel — add Order.wallet_
+  applied_aed to the model too); Phase 5 reconcile/expiry/abuse-velocity-freeze (Celery
+  beat); Phase 6 React dashboard (TicketsScreen + drawer + nav badge + wallet on customer
+  profile); Phase 7 hardening gate + graphify update.
