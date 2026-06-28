@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.catalog.models import CatalogProduct
 from app.catalog.service import handle_catalog_order
 from app.menu.models import Dish, Menu
 from app.ordering.models import Order, OrderItem
@@ -38,6 +39,18 @@ async def _seed_catalog_menu(db_session, restaurant_id):
         name="Lemon Mint", price_aed=Decimal("12.00"), category="Drinks",
         is_available=True, name_normalized="lemon mint",
         catalog_retailer_id="lemonmint01",
+    ))
+    # STRICT model: a catalogue basket only adds items backed by an ACTIVE synced
+    # CatalogProduct. Seed the rows the "Sync from Meta" step would have created.
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant_id, retailer_id="nwb4pa5fbn", name="Chicken Biryani",
+        price_aed=Decimal("20.00"), currency="AED", availability="in stock",
+        category="Biryani", is_active=True, raw={},
+    ))
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant_id, retailer_id="lemonmint01", name="Lemon Mint",
+        price_aed=Decimal("12.00"), currency="AED", availability="in stock",
+        category="Drinks", is_active=True, raw={},
     ))
     await db_session.commit()
 
@@ -117,6 +130,33 @@ async def test_unmapped_items_do_not_create_empty_order(db_session, restaurant):
         select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
     )).one()
     assert "couldn't match" in msg.payload["body"]
+
+
+async def test_basket_rejects_dish_without_active_catalog_product(db_session, restaurant):
+    """STRICT: a basket item whose retailer_id maps to a LINKED Dish but has NO active
+    CatalogProduct (never synced, or gone inactive) must NOT be added to the cart."""
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    # Dish is linked, but there is NO CatalogProduct row for this retailer_id.
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1,
+        name="Chicken Biryani", price_aed=Decimal("20.00"), category="Biryani",
+        is_available=True, name_normalized="chicken biryani",
+        catalog_retailer_id="unsynced01",
+    ))
+    await db_session.commit()
+
+    inbound = _order_inbound([
+        {"product_retailer_id": "unsynced01", "quantity": "1", "item_price": "20", "currency": "AED"},
+    ])
+    await handle_catalog_order(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert items == []  # not in the synced catalogue → never added
+    body = (await db_session.scalars(select(OutboxMessage))).one().payload["body"]
+    assert "couldn't match" in body.lower()
 
 
 async def test_partial_mapping_adds_known_and_lists_unknown(db_session, restaurant):

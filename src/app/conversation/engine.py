@@ -2640,9 +2640,14 @@ async def _execute_ai_remove_item(
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
         return ("no_match", None)
-    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
+    # Catalogue mode: never name or act on a non-catalogue (text-menu) dish — drop
+    # excluded candidates so a "not in cart" reply can't leak a text-menu item.
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return ("no_match", None)
+    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
     if dish is None:
-        return ("not_in_cart", result.candidates[0].name)
+        return ("not_in_cart", cands[0].name)
     # Units of this dish currently in the cart (so "remove" with no number — or a
     # number ≥ what's there — clears the whole line).
     in_cart_units = sum(
@@ -2688,9 +2693,14 @@ async def _execute_ai_update_qty(
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
         return ("no_match", None)
-    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
+    # Catalogue mode: never name or offer a non-catalogue (text-menu) dish — drop
+    # excluded candidates so "isn't in your cart yet, want me to add?" can't leak one.
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return ("no_match", None)
+    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
     if dish is None:
-        return ("not_in_cart", result.candidates[0].name)
+        return ("not_in_cart", cands[0].name)
     if qty <= 0:
         await set_item_qty(session, order=order, dish_id=dish.id, qty=0)
         return ("removed", dish.name)
@@ -3029,8 +3039,12 @@ async def _dispatch_action(
         action = "no_action"
 
     # Anti-hallucination safety net: if the AI dumped a (fabricated) menu into its
-    # reply during ordering, swap in the REAL DB menu before it goes out.
-    if phase == "ordering" and _looks_like_menu(reply):
+    # reply, swap in the REAL menu before it goes out. Runs in EVERY phase — the model
+    # can be asked "show me the menu" mid-confirmation, where it would otherwise echo a
+    # menu from history (in catalogue mode that history may hold the old text menu).
+    # _render_menu is catalogue-bounded when catalogue mode is on, so this can never
+    # leak a text-menu item.
+    if _looks_like_menu(reply):
         reply = await _render_menu(session, restaurant_id)
 
     # ── ordering actions ──────────────────────────────────────────────────

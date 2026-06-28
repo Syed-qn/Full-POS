@@ -15,6 +15,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.catalog.models import CatalogProduct
 from app.menu.models import Dish
 from app.ordering.models import Order
 from app.ordering.service import add_item, create_draft_order, get_or_create_customer
@@ -76,11 +77,10 @@ async def send_catalog(
         logger.info("send_catalog skipped: no catalog_id for restaurant %s", restaurant_id)
         return False
 
-    # Prefer the catalogue SYNCED from Meta (the OPS "Sync from Meta" mirror) — that's
-    # the catalogue source of truth in catalog mode. Fall back to dishes manually
-    # linked via catalog_retailer_id when nothing has been synced yet.
-    from app.catalog.models import CatalogProduct
-
+    # The catalogue SYNCED from Meta (the OPS "Sync from Meta" mirror) is the ONLY
+    # source of truth in catalogue mode. STRICT, no fallback: if nothing has been
+    # synced we send nothing rather than leak unsynced text-menu dishes as tappable
+    # cards. The manager must press "Sync from Meta" first.
     synced = (
         await session.scalars(
             select(CatalogProduct).where(
@@ -89,37 +89,23 @@ async def send_catalog(
             ).order_by(CatalogProduct.category, CatalogProduct.name)
         )
     ).all()
+    if not synced:
+        logger.info(
+            "send_catalog skipped: catalogue not synced for restaurant %s "
+            "(refusing to fall back to text-menu dishes)", restaurant_id
+        )
+        return False
 
+    # Group into sections by category (WhatsApp limits: <=10 sections, <=30
+    # products total, section title <=24 chars). Stable, readable order.
     sections: dict[str, list[dict]] = {}
     total = 0
-    if synced:
-        for p in synced:
-            if total >= 30:
-                break
-            cat = (p.category or "Menu")[:24]
-            sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
-            total += 1
-    else:
-        dishes = (
-            await session.scalars(
-                select(Dish).where(
-                    Dish.restaurant_id == restaurant_id,
-                    Dish.catalog_retailer_id.isnot(None),
-                    Dish.is_available.is_(True),
-                )
-            )
-        ).all()
-        if not dishes:
-            logger.info("send_catalog skipped: no linked products for restaurant %s", restaurant_id)
-            return False
-        # Group into sections by category (WhatsApp limits: <=10 sections, <=30
-        # products total, section title <=24 chars). Stable, readable order.
-        for d in dishes:
-            if total >= 30:
-                break
-            cat = (d.category or "Menu")[:24]
-            sections.setdefault(cat, []).append({"product_retailer_id": d.catalog_retailer_id})
-            total += 1
+    for p in synced:
+        if total >= 30:
+            break
+        cat = (p.category or "Menu")[:24]
+        sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
+        total += 1
 
     payload_sections = [
         {"title": title, "product_items": items}
@@ -206,7 +192,17 @@ async def handle_catalog_order(
         except (TypeError, ValueError):
             qty = 1
         dish = await _find_dish(session, restaurant_id=restaurant_id, retailer_id=retailer_id)
-        if dish is None or dish.price_aed is None:
+        # STRICT catalogue membership: only add an item that is backed by an ACTIVE
+        # synced CatalogProduct. A dish linked to a retailer_id that was never synced
+        # (or has since gone inactive/out of stock) must never sneak into the cart.
+        in_catalogue = await session.scalar(
+            select(CatalogProduct.id).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.retailer_id == retailer_id,
+                CatalogProduct.is_active.is_(True),
+            ).limit(1)
+        )
+        if dish is None or dish.price_aed is None or in_catalogue is None:
             price = _to_decimal(item.get("item_price"))
             unmapped.append(
                 f"{qty}x item {retailer_id}" + (f" (AED {_aed(price)})" if price else "")

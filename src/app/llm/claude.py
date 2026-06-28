@@ -390,6 +390,11 @@ STRICT RULES — read carefully before choosing an action:
 5. EVERYTHING ELSE (questions, "are you AI?", unclear messages, status queries)
    → action="no_action"
 
+AVAILABILITY ("do you have X?", "any drinks?"): the MENU above is the ONLY truth.
+If a matching item IS in the MENU, say YES and name it exactly as written, NEVER deny
+an item that is in the MENU. If nothing matches, say we don't have it, and NEVER name
+or price an item that is not in the MENU. Any upsell may ONLY name an item in the MENU.
+
 LOCATION: NEVER invent or guess the restaurant's area, neighbourhood, or landmarks.
 If asked where you are located, offer to share the exact location pin instead.
 
@@ -411,16 +416,18 @@ class ClaudeConversationAgent:
         self,
         *,
         restaurant_name: str,
-        menu_text: str,
+        dialogue_phase: str,
         history: list[dict],
-        cart_summary: str,
-        delivery_info: str = "",
+        context: dict,
     ) -> ConversationAgentResult:
+        # Matches ConversationAgentPort. The system prompt is grounded ONLY on the
+        # menu_text the engine passes in (catalogue-bounded in catalogue mode), so the
+        # model can never talk about an item that isn't on the active menu.
         system = _CONVERSATION_SYSTEM.format(
             restaurant_name=restaurant_name,
-            menu_text=menu_text,
-            cart_summary=cart_summary or "empty",
-            delivery_info=delivery_info or "Delivery fees vary by distance.",
+            menu_text=context.get("menu_text", "Menu unavailable."),
+            cart_summary=context.get("cart_summary") or "empty",
+            delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
         )
         messages = history if history else [{"role": "user", "content": "hi"}]
         response = await self._client.messages.create(
@@ -434,12 +441,19 @@ class ClaudeConversationAgent:
         for block in response.content:
             if block.type == "tool_use" and block.name == "take_action":
                 inp = block.input
+                _q = inp.get("qty")
+                qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
                 return ConversationAgentResult(
                     message=strip_dashes(inp.get("reply", "")),
                     action=inp.get("action", "no_action"),
                     action_data={
                         "dish_query": inp.get("dish_query", ""),
-                        "qty": int(inp.get("qty") or 1),
+                        "qty": qty,
+                        "special_note": inp.get("special_note", ""),
+                        "items": [],
+                        "apt_room": inp.get("apt_room", ""),
+                        "building": inp.get("building", ""),
+                        "receiver_name": inp.get("receiver_name", ""),
                     },
                 )
         raise RuntimeError("ClaudeConversationAgent: no take_action block in response")

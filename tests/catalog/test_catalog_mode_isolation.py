@@ -89,6 +89,85 @@ async def test_ambiguous_candidates_unfiltered_in_text_mode(db_session, restaura
     assert kept == [biryani, mint]  # text mode: keep all candidates
 
 
+async def test_remove_nonctalog_item_never_named(db_session, restaurant):
+    """In catalogue mode, 'remove lemon mint' (a text-menu item) must NOT echo the
+    dish name back ('Lemon Mint isn't in your cart') — it leaks a non-catalogue item.
+    The guard returns no_match instead."""
+    from app.conversation.engine import _execute_ai_remove_item
+    from app.conversation.models import Conversation
+    from app.ordering.models import Customer, Order
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501110001", name="Ali",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-9001",
+        status="draft", priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("0.00"), total=Decimal("0.00"),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "collecting_items",
+               "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    outcome, name = await _execute_ai_remove_item(
+        db_session, conv, restaurant.id, "lemon mint", None
+    )
+    assert outcome == "no_match"   # never "not_in_cart"
+    assert name is None            # never the leaked "Lemon Mint"
+
+
+async def test_update_qty_nonctalog_item_never_named(db_session, restaurant):
+    """In catalogue mode, 'make it 2 lemon mint' must NOT offer to add a text-menu item
+    ('Lemon Mint isn't in your cart yet, want me to add 2?'). Guard returns no_match."""
+    from app.conversation.engine import _execute_ai_update_qty
+    from app.conversation.models import Conversation
+    from app.ordering.models import Customer, Order
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501110001", name="Ali",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-9002",
+        status="draft", priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("0.00"), total=Decimal("0.00"),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "collecting_items",
+               "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    inbound = InboundMessage(
+        wa_message_id="wamid.mq", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "make it 2 lemon mint"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    outcome, name = await _execute_ai_update_qty(
+        db_session, conv, inbound, restaurant.id, "lemon mint", 2
+    )
+    assert outcome == "no_match"   # never "not_in_cart"
+    assert name is None            # never the leaked "Lemon Mint"
+
+
 async def test_what_is_nonctalog_item_never_describes_it(db_session, restaurant):
     """'what is <text-menu item>' in catalogue mode must NEVER return the dish's stored
     description/price — the catalogue dish-info guard returns None, so the bot can't talk
