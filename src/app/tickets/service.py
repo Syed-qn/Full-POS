@@ -144,6 +144,13 @@ async def resolve_wallet_refund(
     ticket.resolution_note = note
     ticket.assigned_to = created_by
     ticket.resolved_at = datetime.now(timezone.utc)
+    # Refund-velocity guard: auto-freeze the wallet if the customer is over caps.
+    from app.wallet.abuse import check_and_flag
+
+    await check_and_flag(
+        session, restaurant_id=restaurant_id, customer_id=ticket.customer_id,
+        created_by=created_by,
+    )
     await record_audit(
         session,
         actor=created_by,

@@ -41,6 +41,7 @@ celery_app.conf.update(
         "dispatch.*": {"queue": "dispatch"},
         "ml.*": {"queue": "ml"},
         "marketing.*": {"queue": "marketing"},
+        "wallet.*": {"queue": "maintenance"},
     },
     beat_schedule={
         "sla-monitor-tick": {
@@ -90,10 +91,18 @@ celery_app.conf.update(
                 minute=settings.marketing_ephemeral_delete_minute,
             ),
         },
+        "wallet-expire-credits": {
+            "task": "wallet.expire_credits_all_tenants",
+            "schedule": crontab(hour=3, minute=0),  # 3am Asia/Dubai
+        },
+        "wallet-reconcile": {
+            "task": "wallet.reconcile_all_tenants",
+            "schedule": crontab(hour=3, minute=30),  # 3:30am Asia/Dubai
+        },
     },
 )
 celery_app.autodiscover_tasks(
     ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation",
-     "app.dispatch"],
+     "app.dispatch", "app.wallet"],
     related_name="worker",
 )

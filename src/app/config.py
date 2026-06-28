@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     # Disabled in tests. Safe to leave on alongside Celery (dispatch is idempotent).
     dispatch_inprocess_sweep: bool = True
 
+    # Wallet store credit + complaint-refund abuse controls.
+    # Credit older than this with unspent balance is expired by the sweep. 0 = never.
+    wallet_credit_ttl_days: int = 0
+    # Per-customer refund velocity caps over a rolling window; breach auto-freezes
+    # the wallet for manager review. 0 = disabled.
+    wallet_refund_window_days: int = 30
+    wallet_refund_max_count: int = 5
+    wallet_refund_max_aed: float = 200.0
+
     # Rate limiting (redis token bucket)
     rate_limit_enabled: bool = True
     auth_rate_limit: str = "5/minute"
