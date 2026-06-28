@@ -321,12 +321,32 @@ async def _handle_greeting(
     inbound: InboundMessage,
     restaurant_id: int,
 ) -> None:
-    """Send uploaded menu files (image/PDF) then a short prompt; fall back to text menu."""
+    """Send uploaded menu files (image/PDF) then a short prompt; fall back to text menu.
+
+    Catalogue mode (code-level ``catalog_ordering_enabled`` setting): replace the menu
+    list with the WhatsApp catalogue product cards. The customer taps the catalogue and
+    sends a basket, which joins this same conversation's cart (app.catalog.service), so
+    the rest of the flow is identical. If the catalogue can't be sent (not configured /
+    no linked products), we fall through to the normal text/image menu.
+    """
     import base64
 
     from app.config import get_settings
+    from app.identity.models import Restaurant
     from app.menu.models import Menu, MenuFile
     from app.menu.storage import FileBlobStore
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    if restaurant is not None and (restaurant.settings or {}).get("catalog_ordering_enabled"):
+        from app.catalog.service import send_catalog
+
+        sent = await send_catalog(
+            session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+            idempotency_key=f"greeting-catalog-{conv.id}-{inbound.wa_message_id}",
+        )
+        if sent:
+            _set_state(conv, dialogue_state="menu_sent")
+            return
 
     menu = await session.scalar(
         select(Menu).where(

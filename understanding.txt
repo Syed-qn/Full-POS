@@ -732,3 +732,15 @@
   delay (product-not-found), config all correct.
 - Tests: catalog suite updated (basket fills engine cart, collecting_items, 'done'
   prompt). 37 pass (catalog+webhook+engine full_ai); only pre-existing unrelated failure.
+
+[2026-06-28] feat(catalog): greeting shows catalogue when mode on
+- Per user request, "hi" now leads straight to the catalogue when
+  catalog_ordering_enabled. Surgical branch at the top of engine._handle_greeting:
+  if the restaurant has catalogue mode on, call send_catalog (product cards) + set
+  dialogue_state=menu_sent and return; otherwise fall through to the normal text/image
+  menu unchanged. Resume-cart offer (returning customer with a live cart) still runs
+  before greeting, so it is unaffected. Falls back to text menu if send_catalog can't
+  send (not configured / no linked products).
+- Test: test_greeting_sends_catalog_when_mode_on. 32 pass (catalog + full_ai + abandoned
+  cart); only the pre-existing unrelated test_address_step_recovers_stale_draft_pointer
+  fails (fails on clean main too).

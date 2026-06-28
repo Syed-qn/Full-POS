@@ -62,6 +62,27 @@ async def test_send_catalog_groups_by_category(db_session, restaurant):
     assert msg.payload["catalog_id"] == "1528685515412822"
 
 
+async def test_greeting_sends_catalog_when_mode_on(db_session, restaurant):
+    """With catalogue mode on, a greeting sends the product cards instead of the text menu."""
+    from app.conversation.engine import handle_inbound
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    await _seed_linked_menu(db_session, restaurant)
+
+    msg = InboundMessage(
+        wa_message_id="wamid.hi", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "hi"}, restaurant_phone="+97141234567", timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    types = [o.payload.get("type") for o in outs]
+    assert "product_list" in types  # catalogue cards, not the text menu
+
+
 async def test_send_catalog_noop_without_catalog_id(db_session, restaurant):
     # linked dishes but no catalog_id configured → nothing sent
     menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
