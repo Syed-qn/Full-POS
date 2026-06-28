@@ -90,7 +90,17 @@ async def test_catalog_cart_creates_order_and_confirms(db_session, restaurant):
     )).one()
     body = msg.payload["body"]
     assert "Chicken Biryani" in body
-    assert "share your delivery location" in body
+    # After the basket the customer is in the SAME flow as the text bot: send 'done'
+    # to continue to delivery (not a separate catalogue-only path).
+    assert "done" in body.lower()
+
+    # The basket filled the engine's conversation cart and left normal state.
+    from app.conversation.models import Conversation
+    conv = (await db_session.scalars(
+        select(Conversation).where(Conversation.phone == "+971501110001")
+    )).one()
+    assert conv.state.get("draft_order_id") == order.id
+    assert conv.state.get("dialogue_state") == "collecting_items"
 
 
 async def test_unmapped_items_do_not_create_empty_order(db_session, restaurant):

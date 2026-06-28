@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.menu.models import Dish
+from app.ordering.models import Order
 from app.ordering.service import add_item, create_draft_order, get_or_create_customer
 from app.outbox.service import enqueue_message
 from app.whatsapp.port import InboundMessage, OutboundMessageType
@@ -135,19 +136,47 @@ async def handle_catalog_order(
     price. Unmapped items are listed back to the customer so nothing is silently lost.
     The caller (webhook) commits and flushes the outbox.
     """
+    import time
+
     payload = inbound.payload or {}
     product_items: list[dict] = payload.get("product_items") or []
     if not product_items:
         return
 
+    # The catalogue basket fills the SAME conversation + cart the text bot uses, then
+    # leaves the customer in the normal "collecting_items" state. So after the basket
+    # everything is identical to the text flow: the customer sends 'done' and the
+    # conversation engine drives delivery, confirmation, kitchen and dispatch. We reuse
+    # the engine's helpers (lazy import) so behaviour cannot drift from the text path.
+    from app.conversation.engine import _build_cart_summary, _send_text, _set_state
+    from app.conversation.service import get_or_create_conversation, record_message
+
+    conv = await get_or_create_conversation(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone, counterpart="customer",
+    )
+    await record_message(
+        session, conversation_id=conv.id, direction="inbound",
+        wa_message_id=inbound.wa_message_id, msg_type="order",
+        payload={"product_items": product_items},
+        ts=inbound.timestamp or int(time.time()),
+    )
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone
     )
-    order = await create_draft_order(
-        session, restaurant_id=restaurant_id, customer_id=customer.id
-    )
 
-    added_lines: list[str] = []
+    # Reuse the engine's draft order (the live cart pointed to by conv.state), exactly
+    # like _execute_ai_add_item does — never start a parallel order.
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is not None and str(order.status) != "draft":
+        order = None
+    if order is None:
+        order = await create_draft_order(
+            session, restaurant_id=restaurant_id, customer_id=customer.id
+        )
+        _set_state(conv, draft_order_id=order.id)
+
+    added = 0
     unmapped: list[str] = []
     for item in product_items:
         retailer_id = str(item.get("product_retailer_id") or "")
@@ -157,48 +186,35 @@ async def handle_catalog_order(
             qty = 1
         dish = await _find_dish(session, restaurant_id=restaurant_id, retailer_id=retailer_id)
         if dish is None or dish.price_aed is None:
-            # Keep the customer informed; record the raw price from the cart for context.
             price = _to_decimal(item.get("item_price"))
-            label = f"{qty}x item {retailer_id}" + (f" (AED {_aed(price)})" if price else "")
-            unmapped.append(label)
+            unmapped.append(
+                f"{qty}x item {retailer_id}" + (f" (AED {_aed(price)})" if price else "")
+            )
             continue
         await add_item(session, order=order, dish=dish, qty=qty)
-        added_lines.append(f"• {qty}x {dish.name} (AED {_aed(dish.price_aed * qty)})")
+        added += 1
 
-    if not added_lines:
-        # Nothing we could match — tell the customer instead of leaving an empty order.
-        body = (
-            "Thanks for your order 🙏 We couldn't match those items to our menu yet. "
-            "Please send your order as a message and we'll help you right away 😊"
+    if not added:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="catalog-empty",
+            body=("Thanks 🙏 We couldn't match those items to our menu yet. "
+                  "Please type your order and we'll help you right away 😊"),
         )
-        await enqueue_message(
-            session,
-            restaurant_id=restaurant_id,
-            to_phone=inbound.from_phone,
-            msg_type=OutboundMessageType.TEXT,
-            payload={"body": body},
-            idempotency_key=f"catalog-empty-{inbound.wa_message_id}",
-        )
-        logger.info("catalog order with no mappable items for restaurant %s", restaurant_id)
+        logger.info("catalog basket with no mappable items for restaurant %s", restaurant_id)
         return
 
-    lines = "\n".join(added_lines)
-    extra = ("\n\nWe couldn't add: " + "; ".join(unmapped)) if unmapped else ""
-    body = (
-        f"Got your order 🎉\n\n"
-        f"🛒 Your cart:\n{lines}\n"
-        f"Subtotal: AED {_aed(order.subtotal)}{extra}\n\n"
-        f"To finish, please share your delivery location 📍 and we'll get it on its way 😊"
-    )
-    await enqueue_message(
-        session,
-        restaurant_id=restaurant_id,
-        to_phone=inbound.from_phone,
-        msg_type=OutboundMessageType.TEXT,
-        payload={"body": body},
-        idempotency_key=f"catalog-order-{inbound.wa_message_id}",
+    # Hand control to the normal flow: same state the text bot is in after adding items.
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+    cart = await _build_cart_summary(session, conv)
+    extra = ("\nWe couldn't add: " + "; ".join(unmapped)) if unmapped else ""
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="catalog-cart",
+        body=(f"Got your basket 🎉\n\n🛒 {cart}{extra}\n\n"
+              f"Reply with more items, or send 'done' to proceed to delivery details."),
     )
     logger.info(
-        "catalog order %s for restaurant %s: %d line(s), subtotal %s",
-        order.order_number, restaurant_id, len(added_lines), order.subtotal,
+        "catalog basket -> order %s for restaurant %s: %d line(s), subtotal %s",
+        order.order_number, restaurant_id, added, order.subtotal,
     )

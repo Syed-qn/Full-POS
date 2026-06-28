@@ -711,3 +711,24 @@
 - Tests: provider payload, send grouping, no-catalog-id noop. 19 pass (catalog+webhook).
 - Still TODO for a live test: set settings.catalog_id=1528685515412822 + catalog_ordering_enabled,
   link dishes to Content IDs, and ensure the app sends from the catalog's WhatsApp number.
+
+[2026-06-28] feat(catalog): basket now joins the SAME conversation flow as the text bot
+- Per user: keep BOTH text + catalogue ordering; catalogue only replaces the menu LIST;
+  after the cart everything is identical (same prompts, address, confirm, dispatch).
+  Switch is code-level via settings.catalog_ordering_enabled (no dashboard toggle).
+- Reworked handle_catalog_order: instead of a separate draft + "share location", it now
+  reuses the engine's conversation + draft cart (get_or_create_conversation, the
+  conv.state.draft_order_id draft, add_item), records the inbound basket, sets
+  dialogue_state="collecting_items", and replies "send 'done' to proceed to delivery
+  details" via the engine's _send_text. So the customer's next "done" flows through
+  handle_inbound -> engine -> address/confirm/dispatch, exactly like the text path.
+  Engine code itself still NOT modified; catalogue just leaves the conversation in the
+  state the engine already understands.
+- Menu replacement: webhook keyword (menu/catalog/order/items/list) sends the catalogue
+  product cards when catalog_ordering_enabled (built earlier). Greeting "hi" still shows
+  text welcome (engine) — replacing that too would need an engine touch; deferred.
+- Prod: restaurant 1 catalog_id=1528685515412822, catalog_ordering_enabled=true, dish 1
+  linked to Content ID ju9f8jfy90. Catalogue SEND still blocked by Meta catalog sync
+  delay (product-not-found), config all correct.
+- Tests: catalog suite updated (basket fills engine cart, collecting_items, 'done'
+  prompt). 37 pass (catalog+webhook+engine full_ai); only pre-existing unrelated failure.
