@@ -83,6 +83,90 @@ async def test_greeting_sends_catalog_when_mode_on(db_session, restaurant):
     assert "product_list" in types  # catalogue cards, not the text menu
 
 
+async def test_show_menu_sends_catalog_when_mode_on(db_session, restaurant):
+    """Asking to see the menu mid-chat sends the catalogue cards, not the text list."""
+    from app.conversation.engine import handle_inbound
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    await _seed_linked_menu(db_session, restaurant)
+
+    msg = InboundMessage(
+        wa_message_id="wamid.menu", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "show me the menu"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    types = [o.payload.get("type") for o in outs]
+    assert "product_list" in types  # catalogue cards, not the text menu
+
+
+async def test_order_again_after_completed_order_sends_catalog(db_session, restaurant):
+    """A 'menu' request after a finished order (post_order) re-opens ordering with the
+    CATALOGUE, not the text list."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    await _seed_linked_menu(db_session, restaurant)
+    # Customer is in post_order (just completed an order).
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "post_order", "dialogue_state": "post_order"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.again", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "menu"}, restaurant_phone="+97141234567", timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    types = [o.payload.get("type") for o in outs]
+    assert "product_list" in types
+
+
+async def test_show_menu_falls_back_to_text_when_catalog_off(db_session, restaurant):
+    """Catalogue OFF (default): the menu surface still sends the text list as before."""
+    from app.conversation.engine import handle_inbound
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    # Linked dishes but catalogue mode OFF.
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Chicken Biryani",
+        price_aed=Decimal("20.00"), category="Biryani", is_available=True,
+        name_normalized="chicken biryani",
+    ))
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.txt", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "show me the menu"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    types = [o.payload.get("type") for o in outs]
+    assert "product_list" not in types
+    assert "text" in types  # the deterministic text menu
+
+
 async def test_send_catalog_noop_without_catalog_id(db_session, restaurant):
     # linked dishes but no catalog_id configured → nothing sent
     menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])

@@ -315,6 +315,45 @@ async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
     return "\n".join(lines)
 
 
+async def _send_menu_or_catalog(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    prefix: str,
+) -> bool:
+    """Show the menu, preferring the WhatsApp catalogue.
+
+    When the restaurant has catalog ordering on, EVERY 'show the menu' surface
+    (greeting, the show_menu action, an 'order again' request) sends the tappable
+    catalogue product cards — NOT the text list — so the customer always orders from
+    the catalogue first. Falls back to the deterministic text menu only when the
+    catalogue is off or can't be sent (not configured / no linked products). Returns
+    True if the catalogue was sent, False if the text menu was sent.
+    """
+    from app.identity.models import Restaurant
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    if restaurant is not None and (restaurant.settings or {}).get("catalog_ordering_enabled"):
+        from app.catalog.service import send_catalog
+
+        sent = await send_catalog(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=inbound.from_phone,
+            idempotency_key=f"{prefix}-catalog-{conv.id}-{inbound.wa_message_id}",
+        )
+        if sent:
+            _set_state(conv, dialogue_state="menu_sent")
+            return True
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=prefix, body=await _render_menu(session, restaurant_id),
+    )
+    return False
+
+
 async def _handle_greeting(
     session: AsyncSession,
     conv: Conversation,
@@ -2844,11 +2883,10 @@ async def _dispatch_action(
 
     # ── ordering actions ──────────────────────────────────────────────────
     if action == "show_menu":
-        # Render the REAL menu from the DB — never let the LLM reproduce it
-        # (it hallucinated entire fake menus). Ignore result.message.
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="show-menu", body=await _render_menu(session, restaurant_id),
+        # Catalogue first (when enabled), else the REAL text menu from the DB — never
+        # let the LLM reproduce it (it hallucinated entire fake menus). Ignore message.
+        await _send_menu_or_catalog(
+            session, conv, inbound, restaurant_id, prefix="show-menu",
         )
         return
 
@@ -3751,9 +3789,9 @@ async def handle_inbound(
                     draft_order_id=None,
                     pending_order_id=None,
                 )
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="menu-request", body=await _render_menu(session, restaurant_id),
+            # Catalogue first (when enabled), text menu otherwise.
+            await _send_menu_or_catalog(
+                session, conv, inbound, restaurant_id, prefix="menu-request",
             )
             return
         # "Where is my order / can I see the live location" → answer with the

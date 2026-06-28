@@ -886,3 +886,15 @@
 - Tiles are native → still requires an EAS rebuild for the map to show streets; after that
   the map works without exposing the key in source. Map UI changes are OTA-deliverable but
   the KEY only takes effect in a fresh build.
+
+[2026-06-28] fix(convo): catalogue first on ALL menu surfaces (not just greeting)
+- Symptom: with catalogue mode on, asking for the menu / re-ordering still showed the
+  TEXT menu list (only the greeting used the catalogue). Customer looped on the text list.
+- Fix: new _send_menu_or_catalog() helper (engine.py) — sends the WhatsApp catalogue cards
+  when catalog_ordering_enabled (else the deterministic text menu). Routed BOTH customer
+  menu surfaces through it: the show_menu action (~2846) and the post_order 'order again'
+  menu-request (~3739). Greeting already preferred the catalogue (unchanged).
+- Fallback intact: catalogue off / not configured / no linked products -> text menu exactly
+  as before. Text add_item ordering still works in parallel (dual mode kept).
+- Tests (tests/catalog/test_catalog_send.py, 7 pass): show_menu->product_list,
+  order-again(post_order)->product_list, catalogue-off->text menu (no product_list).
