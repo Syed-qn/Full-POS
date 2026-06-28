@@ -864,3 +864,14 @@
   cloud forcing 403 signature; not a regression), catalog + safety gates pass. 2 known
   pre-existing isolation failures remain on clean main (address stale-pointer, confirm
   no_action reshow) — unrelated.
+
+[2026-06-28] feat(rider-app): improved in-app map UI + answered do-not-call source
+- MapPanel.tsx redesign: top overlay pill (📍 drop-off label) + live distance badge
+  (haversine rider→dest, "x.x km"/"NNN m"), custom recenter/fit button, green route
+  line + red drop-off pin, dark rounded frame matching the cockpit theme, mapPadding so
+  overlay doesn't cover the pin. JS-only -> OTA-deliverable (map TILES still need the
+  real Android Maps key in app.json + rebuild; placeholder = blank grey tiles).
+- "Don't call, message only" is driven by the CUSTOMER's do_not_call preference:
+  customer.tags["do_not_call"], set when their chat message matches don't-call phrases
+  (engine.py ~153 list, set ~3594), cleared when they say calling is OK. Flows to the
+  rider stop via rider_actions/_stop_details -> StopOut.doNotCall.
