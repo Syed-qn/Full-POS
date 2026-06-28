@@ -8,6 +8,9 @@ import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvail
 import { toast } from "../components/Toaster";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
+import { CatalogPanel } from "../components/CatalogPanel";
+import { apiClient } from "../lib/apiClient";
+import type { RestaurantOut } from "../lib/types";
 import s from "./MenuManagerScreen.module.css";
 
 export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number }) {
@@ -19,7 +22,17 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   const [editing, setEditing] = useState<DishOut | "new" | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
+  const [catalogMode, setCatalogMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Catalogue mode (set in Settings): when on, the Meta catalogue is the menu source,
+  // so we surface the Sync-from-Meta panel here.
+  useEffect(() => {
+    apiClient
+      .get<RestaurantOut>("/api/v1/me")
+      .then((r) => setCatalogMode(!!(r.settings as Record<string, unknown>)?.catalog_ordering_enabled))
+      .catch(() => {});
+  }, []);
 
   function reloadDishes() {
     if (activeMenuId !== null) {
@@ -240,13 +253,16 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           </>
         }
       />
+      {catalogMode && <CatalogPanel />}
       {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
-        <div className={s.empty}>
-          <p>Upload your first menu (PDF, image, or text) to get started.</p>
-          <Button onClick={() => fileRef.current?.click()}>Upload menu</Button>
-        </div>
+        catalogMode ? null : (
+          <div className={s.empty}>
+            <p>Upload your first menu (PDF, image, or text) to get started.</p>
+            <Button onClick={() => fileRef.current?.click()}>Upload menu</Button>
+          </div>
+        )
       ) : (
         <>
           <div className={s.stats}>

@@ -914,3 +914,31 @@
   api". Sync feature deferred until the token/app has catalog read scope (System User
   token w/ catalog access, or Catalog Management API approval). Chat catalogue SEND does
   NOT need this scope (works via product_retailer_id + connected catalog).
+
+[2026-06-29] feat(catalog): Sync from Meta — pull catalogue + show in OPS (Path A unblocked)
+- Unblocked: created a Business system user (ID 61590515380192, Employee) with Feasto
+  catalog + Festo app + WhatsApp full access; added "Manage products with Catalog API"
+  use case to the Festo app so catalog_management permission was grantable; generated a
+  system-user token -> APP_WA_CATALOG_TOKEN in .env (NOT committed). Verified live:
+  GET /{catalog_id}/products returns chicken_biryani AED30 in stock (id 27758254223768981).
+- Backend (committed cbc270b): config.wa_catalog_token; app/catalog/models.py
+  CatalogProduct (catalog_products table, migration f3c4d5e6a7b8, registered in alembic
+  env + conftest); app/catalog/meta_client.py fetch_catalog_products (Graph paging, price
+  parse "AED30.00"->Decimal, CatalogReadError); app/catalog/sync_service.py
+  sync_catalog_from_meta (upsert by (restaurant,retailer_id); vanished->is_active=False,
+  not deleted) + list_catalog_products; router POST /api/v1/catalog/sync + GET
+  /api/v1/catalog/products (manager auth). send_catalog now builds the chat product_list
+  from ACTIVE synced products when present, else falls back to dish<->retailer_id.
+- Frontend: lib/catalogApi.ts; components/CatalogPanel(.module.css) — "Sync from Meta"
+  button + product grid (image/name/price/retailer_id, OOS + removed counts). Rendered in
+  MenuManagerScreen ONLY when settings.catalog_ordering_enabled (fetched via /me); in
+  catalogue mode the dish-empty "upload menu" prompt is suppressed.
+- Tests: tests/catalog 16 pass (sync upsert/deactivate, requires catalog_id, send-from-
+  synced active-only, POST sync + GET list endpoints; Meta mocked). Frontend tsc clean,
+  MenuManager 4 tests pass.
+- Local dev DB note: `alembic upgrade head` on the dev `restaurant` DB fails on the older
+  dishes.catalog_retailer_id migration (column pre-exists outside alembic tracking) — dev
+  DB drift, NOT a migration bug. Render applies migrations cleanly from a tracked state;
+  test DB uses create_all so catalog_products exists there.
+- Two modes now fully realized: catalogue mode = Meta source (Sync in OPS, catalogue in
+  chat, no text menu); text mode = OPS dishes (text menu in chat). [[conversation-architecture-decisions]]
