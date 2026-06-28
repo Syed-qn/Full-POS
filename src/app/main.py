@@ -169,6 +169,10 @@ def create_app() -> FastAPI:
 
     app.include_router(coupons_router)
 
+    from app.tickets.router import router as tickets_router
+
+    app.include_router(tickets_router)
+
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok"}
