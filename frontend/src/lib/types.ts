@@ -19,6 +19,9 @@ export interface RiderOut {
   name: string;
   phone: string;
   status: RiderStatus;
+  /** Rider's own On duty / Off duty switch (native app). False = off duty: no new
+   * assignments (keeps any active run). Defaults true on older backends. */
+  on_duty?: boolean;
   /** Deliveries completed in the current 08:00→08:00 shift window. */
   delivered_24h: number;
   /** Deliveries completed all-time. */

@@ -829,3 +829,19 @@
 - Separate observation (NOT changed): the catalog cart arrived itemprice=30 but the order
   charged AED 20 (system uses the MENU price, not the WhatsApp catalogue price). Catalogue
   and menu prices disagree for that dish — align them in Commerce Manager / menu.
+
+[2026-06-28] feat(ops): show rider On/Off duty in the dashboard rider list
+- Gap: rider's in-app duty switch (riders.on_duty) was NOT surfaced to OPS, so a
+  manager couldn't see when a rider turned off duty.
+- Backend: RiderOut schema (identity/schemas.py) += on_duty: bool = True (auto-
+  populated from the Rider ORM via from_attributes; list_riders unchanged).
+- Frontend: types.ts RiderOut += on_duty?: boolean; RiderCard.tsx shows an On duty
+  (green) / Off duty (amber) badge under the status pill (hidden for deactivated).
+  New .statusStack/.dutyBadge CSS. Undefined on_duty treats as on duty (older backend).
+- Note: this is the rider's OWN switch, independent of the manager's shift status
+  (Available/On Delivery/Off Shift/Deactivated). Off duty = no new assignments, keeps
+  active run (see dispatch on_duty gate).
+- Tests: RiderCard.test.tsx 6 pass; frontend tsc clean; backend schema field verified +
+  ruff clean.
+- Deploy: needs backend redeploy (RiderOut now returns on_duty) AND the frontend
+  dashboard rebuilt/redeployed for the badge to appear.

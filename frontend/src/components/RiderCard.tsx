@@ -59,6 +59,10 @@ export function RiderCard({
   const color = STATUS_COLOR[rider.status];
   const [showMap, setShowMap] = useState(false);
 
+  // Rider's in-app On/Off duty switch (independent of the manager's shift status).
+  // `on_duty` may be undefined on an older backend — treat that as on duty.
+  const offDuty = rider.on_duty === false;
+
   // Loose `!= null` so a backend that hasn't shipped these fields yet (value is
   // `undefined`, not `null`) reads as "no location" instead of rendering NaN.
   const hasLocation = rider.last_lat != null && rider.last_lng != null;
@@ -82,10 +86,23 @@ export function RiderCard({
             <span className={s.phone}>{rider.phone}</span>
           </div>
         </div>
-        <span className={s.status} style={{ color, borderColor: color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
-          <span className={s.dot} style={{ background: color }} />
-          {STATUS_LABEL[rider.status]}
-        </span>
+        <div className={s.statusStack}>
+          <span className={s.status} style={{ color, borderColor: color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+            <span className={s.dot} style={{ background: color }} />
+            {STATUS_LABEL[rider.status]}
+          </span>
+          {!deactivated && (
+            <span
+              className={s.dutyBadge}
+              style={offDuty
+                ? { color: "var(--sla-warn, #d97706)", borderColor: "var(--sla-warn, #d97706)", background: "color-mix(in srgb, var(--sla-warn, #d97706) 10%, transparent)" }
+                : { color: "var(--sla-safe)", borderColor: "var(--sla-safe)", background: "color-mix(in srgb, var(--sla-safe) 10%, transparent)" }}
+              title={offDuty ? "Rider turned off duty in the app — no new orders" : "Rider is on duty in the app"}
+            >
+              {offDuty ? "Off duty" : "On duty"}
+            </span>
+          )}
+        </div>
       </div>
 
       {stale && <span className={s.staleBadge}>Location stale</span>}

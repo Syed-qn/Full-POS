@@ -53,6 +53,9 @@ class RiderOut(BaseModel):
     name: str
     phone: str
     status: str
+    # Rider's own On duty / Off duty switch (native app). Off duty = receives no new
+    # assignments (keeps any active run). Surfaced here so the OPS rider list shows it.
+    on_duty: bool = True
     # Delivery tallies (default 0 so create/update responses, which don't compute
     # them, stay valid). Populated by list_riders: 08:00→08:00 shift + lifetime.
     delivered_24h: int = 0
