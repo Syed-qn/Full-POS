@@ -128,6 +128,34 @@ def _is_restaurant_location_request(text: str | None) -> bool:
     return any(p in t for p in phrases)
 
 
+def _is_complaint(text: str | None) -> bool:
+    """True for a post-delivery complaint about an order that already arrived.
+
+    Conservative on purpose: only fires on clear dissatisfaction keywords so it
+    never hijacks a normal status query or a new order. A match opens a human
+    ticket — the AI never compensates (per the ticket design).
+    """
+    if not text:
+        return False
+    t = text.strip().lower()
+    if not t or len(t) > 280:
+        return False
+    phrases = (
+        "complaint", "complain", "refund", "money back", "i want my money",
+        "cold food", "was cold", "is cold", "stale", "undercooked", "overcooked",
+        "raw", "burnt", "burned", "spoiled", "rotten", "smell bad", "smells bad",
+        "hair in", "insect", "plastic in", "foreign object", "food poisoning",
+        "made me sick", "got sick", "wrong order", "wrong item", "wrong dish",
+        "missing item", "item missing", "is missing", "didn't get", "did not get",
+        "never arrived", "never received", "didn't receive", "did not receive",
+        "not delivered", "rider was rude", "very rude", "so rude", "disgusting",
+        "terrible", "horrible", "worst", "spilled", "leaked", "damaged",
+        "bad quality", "poor quality", "not fresh", "i am not happy",
+        "i'm not happy", "not satisfied", "very disappointed", "disappointed with",
+    )
+    return any(p in t for p in phrases)
+
+
 def _is_pure_greeting(text: str | None) -> bool:
     """True if the message is ONLY a greeting, with no ordering content.
 
@@ -1584,6 +1612,70 @@ async def _handle_restaurant_location_request(
         prefix="rest-loc-note",
         body=f"📍 Here's *{name}*. Tap the pin above for directions. See you soon! 🛵",
     )
+
+
+async def _handle_complaint(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> None:
+    """Open a HUMAN complaint ticket and acknowledge — the AI never resolves it.
+
+    Resolves the customer + their latest order, creates a Ticket, replies with a
+    fixed acknowledgement, and notifies the manager. Compensation (refund /
+    replacement / mark-resolved) is a manager action via the dashboard.
+    """
+    from app.ordering.models import Customer, Order
+    from app.tickets.service import create_ticket
+    from app.whatsapp.port import OutboundMessageType
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id,
+            Customer.phone == inbound.from_phone,
+        )
+    )
+    if customer is None:
+        # No record — let the AI handle it (it will hand out the contact number).
+        await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
+        return
+
+    latest_order = await session.scalar(
+        select(Order)
+        .where(Order.customer_id == customer.id, Order.restaurant_id == restaurant_id)
+        .order_by(Order.id.desc())
+        .limit(1)
+    )
+    text = (inbound.payload.get("text") or "").strip()
+    ticket = await create_ticket(
+        session,
+        restaurant_id=restaurant_id,
+        customer_id=customer.id,
+        order_id=latest_order.id if latest_order else None,
+        source_message=text or None,
+    )
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=f"complaint-ack-{ticket.id}",
+        body="I'm really sorry to hear that 🙏 I've logged this and our team will "
+             "look into it and get back to you shortly.",
+    )
+    # Notify the manager (best-effort; idempotent on the ticket).
+    if restaurant is not None and getattr(restaurant, "phone", None):
+        order_ref = latest_order.order_number if latest_order else "—"
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=restaurant.phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": f"⚠️ New complaint ticket #{ticket.id} (order {order_ref}) "
+                        f"from {customer.phone}: \"{text[:160]}\". Open the dashboard to resolve."
+            },
+            idempotency_key=f"ticket:{ticket.id}:mgr-alert",
+        )
 
 
 async def _handle_status_query(
@@ -3814,6 +3906,12 @@ async def handle_inbound(
         # current status + ETA + the live tracking link, deterministically.
         if _is_tracking_query(text):
             await _handle_status_query(session, conv, inbound, restaurant_id)
+            return
+        # Post-delivery complaint → open a HUMAN ticket (AI never compensates).
+        # Only in post_order so it never hijacks ordering / status. Checked after
+        # the tracking query so "where is my order" stays a status reply.
+        if _resolve_phase(conv) == "post_order" and _is_complaint(text):
+            await _handle_complaint(session, conv, inbound, restaurant_id, restaurant)
             return
         # "What's your location / I'll come direct" → send the restaurant's pin
         # deterministically (the LLM has no pin and would ask the CUSTOMER for
