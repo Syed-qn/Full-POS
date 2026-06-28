@@ -76,29 +76,50 @@ async def send_catalog(
         logger.info("send_catalog skipped: no catalog_id for restaurant %s", restaurant_id)
         return False
 
-    dishes = (
+    # Prefer the catalogue SYNCED from Meta (the OPS "Sync from Meta" mirror) — that's
+    # the catalogue source of truth in catalog mode. Fall back to dishes manually
+    # linked via catalog_retailer_id when nothing has been synced yet.
+    from app.catalog.models import CatalogProduct
+
+    synced = (
         await session.scalars(
-            select(Dish).where(
-                Dish.restaurant_id == restaurant_id,
-                Dish.catalog_retailer_id.isnot(None),
-                Dish.is_available.is_(True),
-            )
+            select(CatalogProduct).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.is_active.is_(True),
+            ).order_by(CatalogProduct.category, CatalogProduct.name)
         )
     ).all()
-    if not dishes:
-        logger.info("send_catalog skipped: no linked products for restaurant %s", restaurant_id)
-        return False
 
-    # Group into sections by category (WhatsApp limits: <=10 sections, <=30 products
-    # total, section title <=24 chars). Preserve a stable, readable order.
     sections: dict[str, list[dict]] = {}
     total = 0
-    for d in dishes:
-        if total >= 30:
-            break
-        cat = (d.category or "Menu")[:24]
-        sections.setdefault(cat, []).append({"product_retailer_id": d.catalog_retailer_id})
-        total += 1
+    if synced:
+        for p in synced:
+            if total >= 30:
+                break
+            cat = (p.category or "Menu")[:24]
+            sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
+            total += 1
+    else:
+        dishes = (
+            await session.scalars(
+                select(Dish).where(
+                    Dish.restaurant_id == restaurant_id,
+                    Dish.catalog_retailer_id.isnot(None),
+                    Dish.is_available.is_(True),
+                )
+            )
+        ).all()
+        if not dishes:
+            logger.info("send_catalog skipped: no linked products for restaurant %s", restaurant_id)
+            return False
+        # Group into sections by category (WhatsApp limits: <=10 sections, <=30
+        # products total, section title <=24 chars). Stable, readable order.
+        for d in dishes:
+            if total >= 30:
+                break
+            cat = (d.category or "Menu")[:24]
+            sections.setdefault(cat, []).append({"product_retailer_id": d.catalog_retailer_id})
+            total += 1
 
     payload_sections = [
         {"title": title, "product_items": items}
