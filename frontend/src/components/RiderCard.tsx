@@ -108,10 +108,15 @@ export function RiderCard({
           </div>
         </div>
         <div className={s.statusStack}>
-          <span className={s.status} style={{ color, borderColor: color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
-            <span className={s.dot} style={{ background: color }} />
-            {STATUS_LABEL[rider.status]}
-          </span>
+          {/* "Available" is redundant with the "Receiving orders" dispatch banner +
+              the On/Off duty toggle, so it's hidden. Other statuses (On Delivery,
+              Off Shift, Deactivated) still show their pill since they add info. */}
+          {rider.status !== "available" && (
+            <span className={s.status} style={{ color, borderColor: color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+              <span className={s.dot} style={{ background: color }} />
+              {STATUS_LABEL[rider.status]}
+            </span>
+          )}
           {!deactivated && (
             <button
               type="button"
