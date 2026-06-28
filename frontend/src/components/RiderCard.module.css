@@ -107,22 +107,94 @@
   border-radius: 12px;
   padding: 3px 10px;
 }
-.dutyBadge {
+.dutyToggle {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
   border: 1px solid;
-  border-radius: 10px;
-  padding: 2px 8px;
+  border-radius: 999px;
+  padding: 3px 10px 3px 4px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s;
+}
+.dutyToggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.dutyToggleOn {
+  color: var(--sla-safe, #16a34a);
+  border-color: color-mix(in srgb, var(--sla-safe, #16a34a) 45%, transparent);
+  background: color-mix(in srgb, var(--sla-safe, #16a34a) 10%, transparent);
+}
+.dutyToggleOff {
+  color: var(--sla-warn, #d97706);
+  border-color: color-mix(in srgb, var(--sla-warn, #d97706) 45%, transparent);
+  background: color-mix(in srgb, var(--sla-warn, #d97706) 10%, transparent);
+}
+.dutyTrack {
+  width: 26px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  transition: background 0.12s;
+}
+.dutyTrackOn {
+  background: var(--sla-safe, #16a34a);
+  justify-content: flex-end;
+}
+.dutyTrackOff {
+  background: color-mix(in srgb, var(--sla-warn, #d97706) 55%, #cbd5e1);
+  justify-content: flex-start;
+}
+.dutyKnob {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fff;
 }
 .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
 }
+.dispatchBanner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid;
+}
+.dispatchIcon {
+  font-size: 12px;
+  font-weight: 900;
+}
+.dispatchGo {
+  color: var(--sla-safe, #16a34a);
+  border-color: color-mix(in srgb, var(--sla-safe, #16a34a) 40%, transparent);
+  background: color-mix(in srgb, var(--sla-safe, #16a34a) 10%, transparent);
+}
+.dispatchBusy {
+  color: var(--accent-rider, #2563eb);
+  border-color: color-mix(in srgb, var(--accent-rider, #2563eb) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-rider, #2563eb) 10%, transparent);
+}
+.dispatchStop {
+  color: var(--text-muted, #64748b);
+  border-color: var(--border, #e2e8f0);
+  background: color-mix(in srgb, var(--text-muted, #64748b) 8%, transparent);
+}
+
 .staleBadge {
   align-self: flex-start;
   font-size: 10px;

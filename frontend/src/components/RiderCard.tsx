@@ -42,6 +42,7 @@ function initials(name: string): string {
 export function RiderCard({
   rider,
   onStatusChange,
+  onDutyChange,
   onDelete,
   onEdit,
   onInviteApp,
@@ -49,6 +50,7 @@ export function RiderCard({
 }: {
   rider: RiderOut;
   onStatusChange: (id: number, status: RiderStatus) => void;
+  onDutyChange?: (id: number, on_duty: boolean) => void;
   onDelete: (id: number) => void;
   onEdit?: (rider: RiderOut) => void;
   onInviteApp?: (id: number) => void;
@@ -62,6 +64,25 @@ export function RiderCard({
   // Rider's in-app On/Off duty switch (independent of the manager's shift status).
   // `on_duty` may be undefined on an older backend — treat that as on duty.
   const offDuty = rider.on_duty === false;
+  const onDelivery = rider.status === "on_delivery";
+
+  // The ACTUAL dispatch outcome, combining BOTH switches so the manager doesn't have
+  // to decode two badges. A rider receives new orders ONLY if the manager has them
+  // Available AND the rider is On duty in the app.
+  const dispatch: { label: string; tone: "go" | "busy" | "stop" } = deactivated
+    ? { label: "Not receiving · Deactivated", tone: "stop" }
+    : onDelivery
+      ? { label: "On a delivery", tone: "busy" }
+      : rider.status === "available" && !offDuty
+        ? { label: "Receiving orders", tone: "go" }
+        : {
+            label:
+              "Not receiving · " +
+              [offShift ? "off shift" : null, offDuty ? "off duty" : null]
+                .filter(Boolean)
+                .join(" & ") || "Not receiving",
+            tone: "stop",
+          };
 
   // Loose `!= null` so a backend that hasn't shipped these fields yet (value is
   // `undefined`, not `null`) reads as "no location" instead of rendering NaN.
@@ -92,17 +113,32 @@ export function RiderCard({
             {STATUS_LABEL[rider.status]}
           </span>
           {!deactivated && (
-            <span
-              className={s.dutyBadge}
-              style={offDuty
-                ? { color: "var(--sla-warn, #d97706)", borderColor: "var(--sla-warn, #d97706)", background: "color-mix(in srgb, var(--sla-warn, #d97706) 10%, transparent)" }
-                : { color: "var(--sla-safe)", borderColor: "var(--sla-safe)", background: "color-mix(in srgb, var(--sla-safe) 10%, transparent)" }}
-              title={offDuty ? "Rider turned off duty in the app — no new orders" : "Rider is on duty in the app"}
+            <button
+              type="button"
+              className={`${s.dutyToggle} ${offDuty ? s.dutyToggleOff : s.dutyToggleOn}`}
+              onClick={() => onDutyChange?.(rider.id, offDuty)}
+              disabled={!onDutyChange}
+              title="On / Off duty — the same switch the rider has in their app. Off = no new orders."
             >
+              <span className={`${s.dutyTrack} ${offDuty ? s.dutyTrackOff : s.dutyTrackOn}`}>
+                <span className={s.dutyKnob} />
+              </span>
               {offDuty ? "Off duty" : "On duty"}
-            </span>
+            </button>
           )}
         </div>
+      </div>
+
+      <div
+        className={`${s.dispatchBanner} ${
+          dispatch.tone === "go" ? s.dispatchGo : dispatch.tone === "busy" ? s.dispatchBusy : s.dispatchStop
+        }`}
+        title="Whether dispatch will send this rider new orders (combines your shift status + the rider's in-app duty switch)"
+      >
+        <span className={s.dispatchIcon}>
+          {dispatch.tone === "go" ? "✓" : dispatch.tone === "busy" ? "🛵" : "✕"}
+        </span>
+        {dispatch.label}
       </div>
 
       {stale && <span className={s.staleBadge}>Location stale</span>}
@@ -149,9 +185,8 @@ export function RiderCard({
           </Button>
         ) : (
           <>
-            <Button variant="ghost" onClick={() => onStatusChange(rider.id, offShift ? "available" : "off_shift")}>
-              {offShift ? "Start shift" : "End shift"}
-            </Button>
+            {/* On/Off duty is the single shared switch (toggle in the header). The old
+                Start/End shift button is gone — duty replaces it. */}
             <Button variant="ghost" onClick={() => onStatusChange(rider.id, "deactivated")}>
               Deactivate
             </Button>

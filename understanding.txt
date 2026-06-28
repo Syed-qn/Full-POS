@@ -942,3 +942,20 @@
   test DB uses create_all so catalog_products exists there.
 - Two modes now fully realized: catalogue mode = Meta source (Sync in OPS, catalogue in
   chat, no text menu); text mode = OPS dishes (text menu in chat). [[conversation-architecture-decisions]]
+
+[2026-06-29] feat(rider/ops): unified single On/Off duty switch (manager + rider share it)
+- Per user: ONE shared duty control, not two separate (manager off_shift vs rider on_duty).
+  Manager and rider both set the SAME riders.on_duty flag; either side's change reflects
+  on the other (rider app reads onDuty from /rider-app/orders + /me).
+- Backend: identity/service.set_rider_on_duty (audit duty_changed; turning ON clears a
+  legacy off_shift status -> available; no-op for deactivated). RiderPatch += on_duty;
+  PATCH /api/v1/riders/{id} {on_duty} branch. Rider-app POST /rider-app/duty unchanged.
+  Dispatch gate unchanged (status==available AND on_duty==True).
+- Frontend: RiderCard duty is now an INTERACTIVE toggle (manager clicks) wired to
+  setRiderDuty -> PATCH on_duty; removed the old "Start shift/End shift" status button.
+  Added a single "Receiving orders / On a delivery / Not receiving (off shift & off duty)"
+  outcome banner so the manager sees the real dispatch result at a glance. RidersScreen
+  onDutyChange handler + prop.
+- Tests: identity 18 pass (manager sets duty off/on; on-duty clears off_shift -> available);
+  RiderCard 6 + RidersScreen 3 pass; frontend tsc clean; ruff clean.
+- Note: "off_shift" status now only legacy/operational; the duty toggle is the one control.

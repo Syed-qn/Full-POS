@@ -39,9 +39,12 @@ class RiderIn(BaseModel):
 
 
 class RiderPatch(BaseModel):
-    """Partial rider update — change status, or edit name/phone profile fields."""
+    """Partial rider update — change status/duty, or edit name/phone profile fields."""
 
     status: Literal["available", "on_delivery", "off_shift", "deactivated"] | None = None
+    # Shared On duty / Off duty flag (manager side of the same switch the rider has
+    # in their app). One control, both sides.
+    on_duty: bool | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
     phone: str | None = Field(default=None, min_length=7, max_length=32)
 

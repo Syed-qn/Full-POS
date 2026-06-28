@@ -5,7 +5,7 @@ import { AppInviteModal } from "../components/AppInviteModal";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
 import { apiClient } from "../lib/apiClient";
-import { deleteRider, fetchRiders, setRiderStatus } from "../lib/ridersApi";
+import { deleteRider, fetchRiders, setRiderDuty, setRiderStatus } from "../lib/ridersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { RestaurantOut, RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
@@ -41,6 +41,11 @@ export function RidersScreen() {
 
   async function onStatusChange(id: number, status: RiderStatus) {
     const updated = await setRiderStatus(id, status);
+    setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
+  }
+
+  async function onDutyChange(id: number, on_duty: boolean) {
+    const updated = await setRiderDuty(id, on_duty);
     setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
   }
 
@@ -107,6 +112,7 @@ export function RidersScreen() {
             key={r.id}
             rider={r}
             onStatusChange={onStatusChange}
+            onDutyChange={onDutyChange}
             onDelete={onDelete}
             onEdit={setEditing}
             onInviteApp={onInviteApp}
