@@ -845,3 +845,22 @@
   ruff clean.
 - Deploy: needs backend redeploy (RiderOut now returns on_duty) AND the frontend
   dashboard rebuilt/redeployed for the badge to appear.
+
+[2026-06-28] audit: 3-feature end-to-end verification (multi-agent + tests)
+- Ran 3 parallel Explore audits + test suites for: silent-order-dropping safety gates,
+  WhatsApp catalogue ordering, rider in-app map.
+- Safety gates: NO GAPS. 6 gates confirmed (checkout engine.py:606, button-confirm 1111,
+  AI-confirm 2721, modify 1437, manual-order ordering/service.py:1061, catalogue
+  catalog/service.py:197). All exceptions log+rollback (webhook router safety net), no
+  silent drops; customer always messaged.
+- Catalogue: NO CRITICAL GAPS. catalogue/text mutually exclusive (webhook router), same
+  draft order reused, unmatched retailer_ids disclosed, empty basket handled, settings +
+  migration d1a2c3e4f5b6 present. Uses DB dish price (not catalogue item_price) = canonical.
+- Rider map: wired (MapPanel react-native-maps, live rider dot, polyline, fitToCoordinates);
+  removed last dead mapsLink helper from rider-app/api.ts -> ZERO external-maps redirects in
+  app code (Linking now phone-only). OPEN: app.json googleMaps.apiKey still placeholder ->
+  map blank until a real Android-restricted key is set + rebuild.
+- Tests: webhook 12 pass (the 4 "failures" earlier were my env sourcing WHATSAPP_PROVIDER=
+  cloud forcing 403 signature; not a regression), catalog + safety gates pass. 2 known
+  pre-existing isolation failures remain on clean main (address stale-pointer, confirm
+  no_action reshow) — unrelated.
