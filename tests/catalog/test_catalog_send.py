@@ -167,6 +167,45 @@ async def test_show_menu_falls_back_to_text_when_catalog_off(db_session, restaur
     assert "text" in types  # the deterministic text menu
 
 
+async def test_catalog_mode_never_shows_text_menu(db_session, restaurant):
+    """STRICT: catalogue mode ON but the catalogue can't be sent (no catalog_id) → the
+    customer is asked to TYPE their order; the text menu list is NEVER shown."""
+    from app.conversation.engine import handle_inbound
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    # Catalogue mode ON, dishes linked, but NO catalog_id → send_catalog returns False.
+    restaurant.settings = {**restaurant.settings, "catalog_ordering_enabled": True}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Chicken Biryani",
+        price_aed=Decimal("20.00"), category="Biryani", is_available=True,
+        name_normalized="chicken biryani", catalog_retailer_id="abc",
+    ))
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.strict", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "show me the menu"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    bodies = [o.payload.get("body", "") for o in outs]
+    types = [o.payload.get("type") for o in outs]
+    assert "product_list" not in types  # catalogue couldn't send
+    # And NO text menu list was shown (strict): no "Welcome! Here's our menu" / dish lines.
+    assert not any("Here's our menu" in b for b in bodies)
+    assert not any("Chicken Biryani: AED" in b for b in bodies)
+    # Instead the customer is asked to type.
+    assert any("type what you'd like" in b.lower() for b in bodies)
+
+
 async def test_send_catalog_noop_without_catalog_id(db_session, restaurant):
     # linked dishes but no catalog_id configured → nothing sent
     menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])

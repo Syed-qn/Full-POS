@@ -898,3 +898,19 @@
   as before. Text add_item ordering still works in parallel (dual mode kept).
 - Tests (tests/catalog/test_catalog_send.py, 7 pass): show_menu->product_list,
   order-again(post_order)->product_list, catalogue-off->text menu (no product_list).
+
+[2026-06-28] feat(convo): STRICT two-mode menu (catalogue vs text, no fallback)
+- Per user: two separate modes, no mixing. Catalogue mode = catalogue ONLY (never the
+  text menu); text mode = OPS-managed text menu.
+- engine.py: _handle_greeting + _send_menu_or_catalog now strict — in catalogue mode, if
+  the catalogue can't be sent, ask the customer to TYPE their order (engine still parses
+  typed items); NO text menu / menu files shown. Text mode unchanged (OPS menu).
+- Tests (tests/catalog/test_catalog_send.py, 8 pass): catalogue ON + can't send -> no
+  product_list, no "Here's our menu" text, asks to type. Plus show_menu/order-again ->
+  catalogue; catalogue OFF -> text menu.
+- BLOCKED (Meta-side): "pull catalogue from Meta + show in OPS via a Sync button" needs
+  catalog_management permission on the WhatsApp token. Verified live 2026-06-28: GET
+  {catalog_id}/products returns OAuth #100 "application has not been approved to use this
+  api". Sync feature deferred until the token/app has catalog read scope (System User
+  token w/ catalog access, or Catalog Management API approval). Chat catalogue SEND does
+  NOT need this scope (works via product_retailer_id + connected catalog).

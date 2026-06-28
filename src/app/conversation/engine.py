@@ -323,14 +323,14 @@ async def _send_menu_or_catalog(
     *,
     prefix: str,
 ) -> bool:
-    """Show the menu, preferring the WhatsApp catalogue.
+    """Show the menu under the restaurant's STRICT mode (catalogue OR text, no mixing).
 
-    When the restaurant has catalog ordering on, EVERY 'show the menu' surface
-    (greeting, the show_menu action, an 'order again' request) sends the tappable
-    catalogue product cards — NOT the text list — so the customer always orders from
-    the catalogue first. Falls back to the deterministic text menu only when the
-    catalogue is off or can't be sent (not configured / no linked products). Returns
-    True if the catalogue was sent, False if the text menu was sent.
+    * Catalogue mode (``catalog_ordering_enabled``): send the WhatsApp catalogue cards.
+      NEVER the text list. If the cards can't be sent, ask the customer to type their
+      order instead (the engine still parses typed items).
+    * Text mode (default): send the OPS-managed text menu.
+
+    Returns True if the catalogue was sent, False otherwise.
     """
     from app.identity.models import Restaurant
 
@@ -347,6 +347,14 @@ async def _send_menu_or_catalog(
         if sent:
             _set_state(conv, dialogue_state="menu_sent")
             return True
+        # Catalogue mode is strict — no text-menu fallback.
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix=f"{prefix}-nocat",
+            body="Our catalogue is just loading 🙏 Please type what you'd like and I'll add it right away 😊",
+        )
+        _set_state(conv, dialogue_state="menu_sent")
+        return False
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix=prefix, body=await _render_menu(session, restaurant_id),
@@ -362,11 +370,12 @@ async def _handle_greeting(
 ) -> None:
     """Send uploaded menu files (image/PDF) then a short prompt; fall back to text menu.
 
-    Catalogue mode (code-level ``catalog_ordering_enabled`` setting): replace the menu
-    list with the WhatsApp catalogue product cards. The customer taps the catalogue and
-    sends a basket, which joins this same conversation's cart (app.catalog.service), so
-    the rest of the flow is identical. If the catalogue can't be sent (not configured /
-    no linked products), we fall through to the normal text/image menu.
+    Two STRICT, mutually exclusive modes (no mixing):
+      * Catalogue mode (``catalog_ordering_enabled``): send the WhatsApp catalogue product
+        cards and nothing else. The customer taps the catalogue and sends a basket, which
+        joins this same conversation's cart. NEVER falls back to the text/image menu — if
+        the catalogue can't be sent, we ask the customer to type their order instead.
+      * Text mode (default): send the OPS-managed menu (image/PDF files + text list).
     """
     import base64
 
@@ -377,15 +386,22 @@ async def _handle_greeting(
 
     restaurant = await session.get(Restaurant, restaurant_id)
     if restaurant is not None and (restaurant.settings or {}).get("catalog_ordering_enabled"):
+        # Catalogue mode — strict. Send the cards; if they can't be sent, ask the
+        # customer to type (the engine still parses typed items) but show NO text menu.
         from app.catalog.service import send_catalog
 
         sent = await send_catalog(
             session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
             idempotency_key=f"greeting-catalog-{conv.id}-{inbound.wa_message_id}",
         )
-        if sent:
-            _set_state(conv, dialogue_state="menu_sent")
-            return
+        if not sent:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="greeting-nocat",
+                body="Our catalogue is just loading 🙏 Please type what you'd like and I'll add it right away 😊",
+            )
+        _set_state(conv, dialogue_state="menu_sent")
+        return
 
     menu = await session.scalar(
         select(Menu).where(
