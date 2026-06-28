@@ -87,6 +87,61 @@ async def test_confirmation_no_action_reshows_real_summary(db_session, restauran
     assert len(items) == 1 and items[0].qty == 1
 
 
+async def test_confirmation_question_gets_answer_then_summary(db_session, restaurant):
+    """A genuine question at the confirm step ("where is your restaurant?") must get a
+    reply AND then the deterministic summary as the final word — not a silent re-loop.
+    The order stays unchanged and the LAST message is the real summary."""
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    cust = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
+    from app.menu.models import Dish
+    chicken = (await db_session.execute(
+        select(Dish).where(Dish.dish_number == 110, Dish.restaurant_id == restaurant.id)
+    )).scalar_one()
+    await add_item(db_session, order=order, dish=chicken, qty=1)
+
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "awaiting_confirmation",
+               "pending_order_id": order.id, "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    before = (await db_session.execute(
+        select(OutboxMessage.id).order_by(OutboxMessage.id)
+    )).scalars().all()
+
+    await handle_inbound(
+        db_session, _msg("is the food fresh", "wamid.q-1"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    new_rows = (await db_session.execute(
+        select(OutboxMessage).where(OutboxMessage.id.notin_(before or [0])).order_by(OutboxMessage.id)
+    )).scalars().all()
+    bodies = [r.payload.get("body", "") for r in new_rows]
+    # Two messages went out: an informational reply, then the real summary.
+    assert len(bodies) >= 2
+    # The LAST message is the deterministic, DB-backed summary (with the real dish).
+    assert "Order summary:" in bodies[-1]
+    assert "1x Chicken Biryani" in bodies[-1]
+    # An informational reply preceded it (not just the summary on a loop).
+    assert any(b and "Order summary:" not in b for b in bodies[:-1])
+
+    # The order itself is untouched.
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1 and items[0].qty == 1
+
+
 async def test_confirmation_add_item_actually_applies_and_reshows(db_session, restaurant):
     """At the confirm step, "add <dish>" must EDIT the order and re-show the updated
     summary (was silently dropped by the phase guard)."""

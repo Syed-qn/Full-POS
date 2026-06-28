@@ -809,3 +809,23 @@
 - This is an OTA-safe JS change for the app UI, BUT the toggle calls a new endpoint —
   deploy the web service (migration auto-applies via Dockerfile alembic upgrade) before
   the updated app build relies on it.
+
+[2026-06-28] fix(convo): answer questions at the confirm step (no silent summary loop)
+- Symptom (prod): at "Confirm your order?", a customer question ("where is your
+  restaurant", "why delivery fee high") just re-showed the order summary on a loop.
+- Cause: engine.py awaiting_confirmation + no_action DISCARDED the AI reply and only
+  re-showed the deterministic DB summary (anti-hallucination guard from the "narrated a
+  2x change it never applied" bug).
+- Fix (engine.py ~3181): at confirm + no_action, now send the AI's informational reply
+  FIRST, then ALWAYS re-show the deterministic DB summary (with Confirm button) as the
+  LAST message. Guard intact: the true summary is always the final word, so the customer
+  can only ever confirm what is really in the order.
+- Test: tests/conversation/test_engine_confirmation.py::test_confirmation_question_gets_
+  answer_then_summary (reply emitted + summary last + order unchanged). 5 pass in the
+  file; the 1 remaining failure (test_confirmation_no_action_reshows_real_summary) is
+  PRE-EXISTING — fails identically on clean HEAD in isolation, not caused by this change.
+- Note: "where is your restaurant" already has a dedicated location-pin interceptor; this
+  fix covers the general question case the LLM classifies as no_action.
+- Separate observation (NOT changed): the catalog cart arrived itemprice=30 but the order
+  charged AED 20 (system uses the MENU price, not the WhatsApp catalogue price). Catalogue
+  and menu prices disagree for that dish — align them in Commerce Manager / menu.

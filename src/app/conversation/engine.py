@@ -3179,17 +3179,27 @@ async def _dispatch_action(
 
     # ── no_action (all phases) ────────────────────────────────────────────
     if phase == "awaiting_confirmation":
-        # At the confirm step the order is fixed unless the customer explicitly
-        # modifies/cancels. The model has narrated changes it never applied ("updated
-        # to 2x, total 97") while the DB stayed unchanged, so the customer confirmed a
-        # DIFFERENT order than the reply implied. Never let free-text stand in here:
-        # re-show the DETERMINISTIC summary from the DB so what they confirm is real.
+        # The order is fixed unless the customer explicitly modifies/cancels — but an
+        # honest question at the confirm step ("where are you?", "why is the fee AED 5?")
+        # deserves a real answer, not a silent summary re-loop. So: send the AI's
+        # informational reply FIRST, then ALWAYS re-show the DETERMINISTIC DB summary as
+        # the final word.
+        #
+        # This preserves the anti-hallucination guarantee: the model used to narrate
+        # changes it never applied ("updated to 2x, total 97") while the DB stayed put,
+        # so the customer confirmed a DIFFERENT order than the reply implied. Because the
+        # true, DB-backed summary (with the Confirm button) is always the LAST message
+        # the customer sees, they can only ever confirm what is really in the order — the
+        # reply can inform, but it can never be the thing they act on.
         from app.ordering.models import Order
         oid = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
         order = await session.get(Order, oid) if oid else None
+        if reply:
+            await _send_text(session, conv=conv, inbound=inbound,
+                             restaurant_id=restaurant_id, prefix="ai-reply", body=reply)
         if order is not None:
             await _send_order_summary(session, conv, inbound, restaurant_id, order)
-            return
+        return
 
     if reply:
         await _send_text(session, conv=conv, inbound=inbound,
