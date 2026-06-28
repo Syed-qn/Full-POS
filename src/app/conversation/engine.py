@@ -239,6 +239,9 @@ async def _answer_dish_info(
     if result.confidence != MatchConfidence.DIRECT or not result.candidates:
         return None
     dish = result.candidates[0]
+    # Catalogue mode: never describe a text-menu dish that isn't in the catalogue.
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        return None
     desc = (getattr(dish, "description", None) or "").strip()
     if desc:
         return _trim_description(desc)
@@ -279,9 +282,78 @@ def _category_emoji(category: str) -> str:
     return "🍽️"
 
 
+async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str:
+    """Render the SYNCED Meta catalogue as categorized text.
+
+    In catalogue mode this is the bot's menu knowledge — so it only ever talks about /
+    recommends products that are actually in the catalogue (never a text-menu dish the
+    customer can't order)."""
+    from app.catalog.models import CatalogProduct
+
+    products = (
+        await session.scalars(
+            select(CatalogProduct)
+            .where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.is_active.is_(True),
+            )
+            .order_by(CatalogProduct.category, CatalogProduct.name)
+        )
+    ).all()
+    if not products:
+        return "Our catalogue is currently empty. Please try again later."
+
+    lines: list[str] = ["👋 *Welcome! Here's our menu*"]
+    current_category: str | None = None
+    for p in products:
+        if p.category != current_category:
+            current_category = p.category
+            if current_category:
+                lines.append(f"\n{_category_emoji(current_category)} *{current_category}*")
+        price = _aed(p.price_aed) if p.price_aed is not None else "?"
+        lines.append(f"• {p.name}: AED {price}")
+    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
+    return "\n".join(lines)
+
+
+async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish) -> bool:
+    """In CATALOGUE mode, True when ``dish`` is NOT part of the synced Meta catalogue —
+    so the bot won't describe, recommend, or let a customer type-order a text-menu item
+    that isn't actually orderable. Always False in text mode (no restriction)."""
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    if rest is None or not (rest.settings or {}).get("catalog_ordering_enabled"):
+        return False
+    rid = getattr(dish, "catalog_retailer_id", None)
+    if not rid:
+        return True  # no catalogue link → not in the catalogue
+    from app.catalog.models import CatalogProduct
+
+    found = await session.scalar(
+        select(CatalogProduct.id)
+        .where(
+            CatalogProduct.restaurant_id == restaurant_id,
+            CatalogProduct.retailer_id == rid,
+            CatalogProduct.is_active.is_(True),
+        )
+        .limit(1)
+    )
+    return found is None
+
+
 async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
-    """Render the active menu as categorized text."""
+    """Render the active menu as categorized text.
+
+    Catalogue mode: the menu knowledge is the synced Meta catalogue, NOT the text-menu
+    dishes — so the bot never offers items the customer can't order from the catalogue.
+    """
+    from app.identity.models import Restaurant
     from app.menu.models import Dish, Menu
+
+    _rest = await session.get(Restaurant, restaurant_id)
+    if _rest is not None and (_rest.settings or {}).get("catalog_ordering_enabled"):
+        return await _render_catalog_menu(session, restaurant_id)
 
     menu = await session.scalar(
         select(Menu).where(
@@ -723,6 +795,15 @@ async def _handle_collecting_items(
 
     # DIRECT match or arbiter-resolved → add to draft order.
     dish = dish if result.confidence == MatchConfidence.AMBIGUOUS else result.candidates[0]
+    # Catalogue mode: only catalogue items are orderable. A typed text-menu dish that
+    # isn't in the catalogue is treated as not found (no text-menu leak).
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="not-in-catalog",
+            body="That isn't on our catalogue 🛍️ Please tap the catalogue to add items.",
+        )
+        return
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone,
     )
@@ -2421,6 +2502,11 @@ async def _execute_ai_add_item(
             dish = result.candidates[0]
     else:
         dish = result.candidates[0]
+
+    # Catalogue mode: a typed item not in the catalogue is not orderable → no match
+    # (the caller reports "couldn't find", with no text-menu leak).
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        return "no_match"
 
     # Pick a serving size: an explicitly-named one wins ("family biryani") and is
     # added straight away. Otherwise, if the ordered quantity matches a bundle

@@ -959,3 +959,19 @@
 - Tests: identity 18 pass (manager sets duty off/on; on-duty clears off_shift -> available);
   RiderCard 6 + RidersScreen 3 pass; frontend tsc clean; ruff clean.
 - Note: "off_shift" status now only legacy/operational; the duty toggle is the one control.
+
+[2026-06-29] fix(convo): catalogue mode no longer leaks text-menu items
+- Bug: in catalogue mode the bot answered "any drinks?" by recommending Lemon Mint — a
+  TEXT-MENU dish not in the Meta catalogue (so unorderable). Full-convo audit + fix.
+- engine.py: _render_menu is now catalogue-aware — in catalogue mode it renders from
+  active CatalogProduct rows (new _render_catalog_menu), so the AI's menu knowledge
+  (ctx["menu_text"], no_action reply) is ONLY catalogue items. New _catalog_excludes_dish
+  helper: in catalogue mode a dish is "excluded" unless it has an active CatalogProduct
+  with matching retailer_id. Applied as a guard at: the deterministic typed-add path
+  (-> "That isn't on our catalogue, tap the catalogue"), _execute_ai_add_item (-> no_match
+  so the caller says "couldn't find"), and _answer_dish_info (-> None, never describe a
+  non-catalogue dish). Text mode unchanged (helper always returns False).
+- Tests (tests/catalog/test_catalog_mode_isolation.py, 4): menu knowledge catalogue-only
+  (Lemon Mint absent, AED 30 catalogue price not AED 20 dish price); text mode still lists
+  dishes; exclude logic true for unlisted dish / false for catalogue dish / false in text
+  mode. 27 pass across catalog+safety+confirmation suites.
