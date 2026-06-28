@@ -1085,3 +1085,14 @@
   single dish + cart-summary line NOT caught). conversation+catalog 167 pass; lint clean.
   NOTE: all fixes are pushed to main but the LIVE (Render) bot keeps showing old behaviour
   until the backend is REDEPLOYED — likely why the same bugs recur in live tests.
+
+- 2026-06-29 05:00 Asia/Dubai — LLM hard-constrained to "never invent, defer to phone".
+  Per user: the LLM must never create dishes/prices/details; if it lacks the fact, don't
+  guess, give the restaurant contact number. Made the anti-invention rule the ABSOLUTE #1
+  rule at the top of BOTH system prompts (deepseek.py + claude.py): never list/name/suggest/
+  describe/upsell a dish not in the MENU; for any unknown fact -> "I'm not 100% sure, please
+  call us on {restaurant_phone}". restaurant_phone is wired via ctx (engine.py 2188 =
+  restaurant.phone). Two-layer guarantee now: (1) prompt forbids invention + defers to phone,
+  (2) deterministic net _looks_like_menu replaces any fabricated priced list (>=2 prices) with
+  the real mode-correct menu. Honest limit: a single UN-priced invented name can still slip
+  the regex net; the prompt is the defense there. llm + full-ai 54 pass; lint clean.
