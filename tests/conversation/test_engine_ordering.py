@@ -802,3 +802,23 @@ def test_looks_like_menu_detects_fabricated_list():
     assert _looks_like_menu(fake) is True
     assert _looks_like_menu("Added Chicken Biryani! Want a drink for AED 12? 😊") is False
     assert _looks_like_menu("Your total is AED 33. Confirm?") is False
+
+    # Emoji-bulleted menu (the live hallucination) — older bullet-only detection MISSED
+    # this and let an invented menu through. Must be caught now.
+    emoji_menu = (
+        "We have a few dishes actually! Here's what's on our menu:\n"
+        "🍗 Chicken Biryani, AED 20\n🍗 Special Chicken Biryani, AED 25\n"
+        "🍗 Chicken 65, AED 15\n🫓 Parotta, AED 5\n🥤 Mandi Drink, AED 5"
+    )
+    assert _looks_like_menu(emoji_menu) is True
+
+    # "1x ..." multi-item narration the model claimed on a multi-add (one of which did
+    # NOT actually add) — also a fabricated priced list, must be caught.
+    narration = "1x Chicken Biryani, AED 20\n1x Mutton Biryani, AED 25\nTotal: AED 45"
+    assert _looks_like_menu(narration) is True
+
+    # A single real dish mention + a deterministic cart/summary line must NOT trip it.
+    assert _looks_like_menu("Chicken Biryani is AED 20 😊") is False
+    assert _looks_like_menu(
+        "Added! 🛒 1x Chicken Biryani (AED 20) | Subtotal: AED 20"
+    ) is False

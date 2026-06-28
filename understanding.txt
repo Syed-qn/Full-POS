@@ -1069,3 +1069,19 @@
   catalog/service handle_catalog_order new-order branch). Test added:
   test_proceed_to_address_checks_saved_address_despite_stale_flag. conversation+catalog
   167 pass (only the pre-existing confirmation-totals test fails on clean main too).
+
+- 2026-06-29 04:40 Asia/Dubai — FIX: AI fabricated a whole menu (emoji-bullet) that
+  evaded the anti-hallucination net. Live: bot invented "Special Chicken Biryani AED 25",
+  "Mandi Drink AED 5" etc. (dishes the restaurant does NOT have) when asked "you only have
+  chicken biryani right?", and narrated "1x Mutton Biryani AED 25 added" when mutton isn't
+  on the menu / wasn't added. Root cause: _looks_like_menu only matched bullet/numbered
+  lines (• - * 1.) so emoji bullets ("🍗 X, AED 20") and "1x X AED 20" narration slipped
+  through. Fix: _looks_like_menu now counts ANY price token (AED/Rs/₹/$ + digit) outside
+  order/cart-summary lines; ≥2 priced items => treated as a fabricated list and REPLACED
+  with the real mode-correct _render_menu (catalogue render in catalogue mode, text menu in
+  text mode). This guard runs in EVERY phase (set earlier) and also rewrites the multi-add
+  "lead" so an optimistic "added X, Y" narration can't contradict the real cart. Test
+  extended: test_looks_like_menu_detects_fabricated_list (emoji menu + 1x narration caught;
+  single dish + cart-summary line NOT caught). conversation+catalog 167 pass; lint clean.
+  NOTE: all fixes are pushed to main but the LIVE (Render) bot keeps showing old behaviour
+  until the backend is REDEPLOYED — likely why the same bugs recur in live tests.

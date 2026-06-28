@@ -33,21 +33,35 @@ def _aed(value) -> str:
     return f"{Decimal(value).normalize():f}"
 
 
-# A menu line looks like "• Chicken Biryani — AED 28" or "5. Chicken Biryani — AED 28"
-# (leading bullet or number, any dash/colon, any currency).
-_MENU_LINE = _re.compile(
-    r"^\s*(?:\d+[\.\)]|[•\-\*])\s+.+?(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.MULTILINE
+# A price mention: any currency token followed by a number (e.g. "AED 28", "Rs.5", "$3").
+# Bullet style is IGNORED on purpose — the LLM dumps menus with emoji bullets ("🍗 X,
+# AED 20"), plain "1x X AED 20", or "• X — AED 28"; all must be caught.
+_PRICE_TOKEN = _re.compile(r"(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.IGNORECASE)
+# Lines that legitimately carry a price but are NOT a menu (order/cart summary lines).
+# Excluded so a reply that mentions ONE dish plus a total isn't mistaken for a menu.
+_SUMMARY_LINE = _re.compile(
+    r"\b(total|subtotal|delivery|fee|eta|payment|deliver to|cod|cash on delivery)\b",
+    _re.IGNORECASE,
 )
 
 
 def _looks_like_menu(text: str) -> bool:
-    """True if an AI reply appears to list dishes+prices (≥2 menu-ish lines).
+    """True if an AI reply appears to list dishes+prices (≥2 priced items).
 
-    Safety net: the LLM sometimes fabricates an entire menu in free text. Any
-    such reply in the ordering phase is replaced with the real DB menu before it
-    reaches the customer.
+    Safety net: the LLM sometimes fabricates a menu / a multi-item cart in free text
+    (often with emoji bullets that older bullet-only detection missed). Any such reply
+    is replaced with the REAL, mode-correct menu before it reaches the customer. We
+    count price mentions OUTSIDE order/cart-summary lines, so a single dish answer or a
+    legit total line is never mistaken for a menu, but two or more priced dishes are.
     """
-    return len(_MENU_LINE.findall(text or "")) >= 2
+    count = 0
+    for line in (text or "").splitlines():
+        if _SUMMARY_LINE.search(line):
+            continue
+        count += len(_PRICE_TOKEN.findall(line))
+        if count >= 2:
+            return True
+    return False
 
 
 def _is_menu_request(text: str) -> bool:
