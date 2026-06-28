@@ -9,7 +9,14 @@ import {
   patchCustomerAddress,
   patchCustomerProfile,
 } from "../lib/customerApi";
-import type { AddressDetailOut, AddressPatchIn, CustomerProfileOut } from "../lib/types";
+import { getWallet, getWalletEntries } from "../lib/walletApi";
+import type {
+  AddressDetailOut,
+  AddressPatchIn,
+  CustomerProfileOut,
+  WalletBalance,
+  WalletEntry,
+} from "../lib/types";
 import s from "./CustomerProfileScreen.module.css";
 
 export function CustomerProfileScreen() {
@@ -23,6 +30,9 @@ export function CustomerProfileScreen() {
   const [phone, setPhone] = useState("");
   const [optIn, setOptIn] = useState(false);
 
+  const [wallet, setWallet] = useState<WalletBalance | null>(null);
+  const [walletEntries, setWalletEntries] = useState<WalletEntry[]>([]);
+
   useEffect(() => {
     if (!id) return;
     getCustomerProfile(Number(id))
@@ -33,6 +43,30 @@ export function CustomerProfileScreen() {
         setOptIn(p.marketing_opted_in);
       })
       .finally(() => setLoading(false));
+  }, [id]);
+
+  // Wallet is optional/best-effort: if the endpoint is unavailable we simply
+  // skip rendering the section rather than failing the whole profile page.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [balance, entries] = await Promise.all([
+          getWallet(Number(id)),
+          getWalletEntries(Number(id)),
+        ]);
+        if (!cancelled) {
+          setWallet(balance);
+          setWalletEntries(entries);
+        }
+      } catch {
+        /* wallet feature unavailable for this customer/backend — hide section */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) return <Spinner />;
@@ -128,6 +162,37 @@ export function CustomerProfileScreen() {
               <Stat label="Usually Orders" value={profile.usual_order_time ?? "—"} />
             </div>
           </section>
+
+          {wallet && (
+            <section className={s.card}>
+              <h3 className={s.cardTitle}>Wallet</h3>
+              <div className={s.stats}>
+                <Stat label="Balance" value={`AED ${wallet.balance_aed}`} />
+                <Stat label="Available" value={`AED ${wallet.available_aed}`} />
+                <Stat label="Status" value={wallet.status} />
+              </div>
+              {walletEntries.length > 0 && (
+                <table className={s.table}>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Amount</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {walletEntries.slice(0, 5).map((e) => (
+                      <tr key={e.id}>
+                        <td>{e.type}</td>
+                        <td className={s.mono}>AED {e.amount_aed}</td>
+                        <td>{new Date(e.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          )}
         </div>
 
         <div className={s.right}>

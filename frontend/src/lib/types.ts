@@ -257,3 +257,55 @@ export interface CustomerListOut {
   limit: number;
   offset: number;
 }
+
+// ── Complaint tickets & customer wallet ──────────────────────────────────────
+
+export type TicketStatus = "open" | "in_progress" | "resolved";
+
+export type TicketResolutionAction =
+  | "wallet_refund"
+  | "replacement"
+  | "resolved_no_action";
+
+export interface Ticket {
+  id: number;
+  customer_id: number;
+  order_id: number | null;
+  source_message: string | null;
+  evidence: string | null;
+  category: string | null;
+  status: TicketStatus;
+  assigned_to: string | null;
+  resolution_action: TicketResolutionAction | null;
+  resolution_amount_aed: string | null;
+  replacement_order_id: number | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface ResolveTicketIn {
+  action: TicketResolutionAction;
+  note: string;
+  amount?: string;
+  replacement_order_id?: number;
+}
+
+export interface WalletBalance {
+  customer_id: number;
+  balance_aed: string;
+  available_aed: string;
+  status: string;
+}
+
+export interface WalletEntry {
+  id: number;
+  amount_aed: string;
+  type: string;
+  status: string;
+  order_id: number | null;
+  ticket_id: number | null;
+  reason_note: string | null;
+  created_by: string | null;
+  created_at: string;
+}

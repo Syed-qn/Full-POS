@@ -1,0 +1,106 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  padding: 12px 16px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+}
+.row:hover {
+  border-color: var(--border-default);
+}
+
+.id {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.status {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.open {
+  background: color-mix(in srgb, var(--sla-critical) 14%, var(--bg-surface));
+  color: var(--sla-critical);
+}
+.in_progress {
+  background: color-mix(in srgb, var(--accent-rider) 14%, var(--bg-surface));
+  color: var(--accent-rider);
+}
+.resolved {
+  background: color-mix(in srgb, var(--sla-safe) 14%, var(--bg-surface));
+  color: var(--sla-safe);
+}
+
+/* ---- Loading skeleton ---- */
+.skRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+}
+.sk {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: ticketSkShimmer 1.4s infinite;
+}
+@keyframes ticketSkShimmer {
+  100% { transform: translateX(100%); }
+}
+.skLine { height: 14px; }
