@@ -23,6 +23,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   const [dragId, setDragId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
   const [catalogMode, setCatalogMode] = useState(false);
+  const [togglingMode, setTogglingMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Catalogue mode (set in Settings): when on, the Meta catalogue is the menu source,
@@ -33,6 +34,22 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       .then((r) => setCatalogMode(!!(r.settings as Record<string, unknown>)?.catalog_ordering_enabled))
       .catch(() => {});
   }, []);
+
+  // Quick mode switch from the Menu page (for testing). Persists to settings so the
+  // WhatsApp chat behaviour switches too (catalogue cards vs the text menu).
+  async function toggleMode() {
+    const next = !catalogMode;
+    setTogglingMode(true);
+    try {
+      await apiClient.patch("/api/v1/settings", { catalog_ordering_enabled: next });
+      setCatalogMode(next);
+      toast(next ? "Switched to Catalogue mode" : "Switched to Text menu mode");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't switch mode", "error");
+    } finally {
+      setTogglingMode(false);
+    }
+  }
 
   function reloadDishes() {
     if (activeMenuId !== null) {
@@ -239,24 +256,38 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
             : "Manage your dishes and availability"
         }
         right={
-          catalogMode ? null : (
-            <>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                hidden
-                onChange={(e) => onUpload(e.target.files)}
-                data-testid="menu-upload"
-              />
-              {dishes.length > 0 && activeMenuId !== null && (
-                <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
-              )}
-              <Button onClick={() => fileRef.current?.click()}>
-                {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
-              </Button>
-            </>
-          )
+          <>
+            <Button
+              variant="ghost"
+              onClick={toggleMode}
+              disabled={togglingMode}
+              title="Testing: switch ordering mode (saves to settings, affects the WhatsApp chat too)"
+            >
+              {togglingMode
+                ? "Switching…"
+                : catalogMode
+                  ? "Mode: Catalogue ⇄ Text"
+                  : "Mode: Text ⇄ Catalogue"}
+            </Button>
+            {!catalogMode && (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => onUpload(e.target.files)}
+                  data-testid="menu-upload"
+                />
+                {dishes.length > 0 && activeMenuId !== null && (
+                  <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
+                )}
+                <Button onClick={() => fileRef.current?.click()}>
+                  {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
+                </Button>
+              </>
+            )}
+          </>
         }
       />
       {/* Catalogue mode shows ONLY the Meta catalogue — the text-menu (dishes) list is
