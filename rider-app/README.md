@@ -29,6 +29,36 @@ as before, now driven by the app.
    (default `https://restaurant-whatsapp-service.onrender.com`).
 4. `eas login`, then `eas init` (fills `expo.extra.eas.projectId`).
 
+## In-app map (not WhatsApp redirect)
+
+The rider app shows a **built-in map** on the active stop (`MapPanel` — drop-off pin,
+your live blue dot, distance badge, dashed line). You should **not** need to leave the
+app for basic navigation.
+
+**Why some riders still saw Google Maps:** (1) an old APK built before the in-app map,
+(2) the Android **Maps SDK key** was missing at build time (blank/gray map), or (3) they
+were still on the legacy **WhatsApp** rider flow (stop messages embed a Google Maps link).
+
+### Maps SDK key (required for map tiles)
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), enable **Maps SDK for
+   Android** on the same API key you use for the backend (or create a dedicated key).
+2. For **EAS cloud builds**, set a project secret (do not commit the key):
+
+   ```bash
+   cd rider-app
+   eas secret:create --scope project --name APP_MAPS_SDK_ANDROID --value "YOUR_KEY"
+   ```
+
+3. For **local builds**, copy `.env.example` → `.env` and set `APP_MAPS_SDK_ANDROID`.
+
+`app.config.js` also accepts `APP_GOOGLE_MAPS_API_KEY` as a fallback env name.
+
+After setting the key, **rebuild the APK** — OTA updates cannot inject native map keys.
+
+Optional: **Turn-by-turn in Google Maps ↗** under the in-app map opens Google Maps for
+voice navigation only; the primary view stays in-app.
+
 ## Build the APK
 
 ```bash

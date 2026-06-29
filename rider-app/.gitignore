@@ -8,3 +8,4 @@ npm-debug.*
 
 # Firebase secrets — never commit
 google-services.json
+.env

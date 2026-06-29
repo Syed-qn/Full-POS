@@ -1514,6 +1514,15 @@
 - graphify update . — 574 files re-extracted; 5679 nodes, 15336 edges, 1196 communities;
   graph.json + GRAPH_REPORT.md refreshed in graphify-out/ (479 extraction warnings, no new AMBIGUOUS).
 
+[2026-06-29 21:00 +04] feat(rider-app): in-app map wiring + UX (user: why redirect to 3rd party map)
+- MapPanel already existed (react-native-maps) but APK had empty googleMaps.apiKey → blank tiles.
+- app.config.js: APP_MAPS_SDK_ANDROID / APP_GOOGLE_MAPS_API_KEY → android.config.googleMaps +
+  react-native-maps Expo plugin; extra.mapsConfigured for runtime banner.
+- MapPanel: taller default (280), compass, missing-key warning bar, recenter a11y label.
+- App.tsx: in-app map always on first stop when lat/lng; no-pin fallback card; optional
+  secondary "Turn-by-turn in Google Maps" link (not primary UX). Version 1.0.1.
+- rider-app/.env.example + README Maps SDK section (eas secret:create). Rebuild APK required.
+
 [2026-06-29 20:15 +04] feat(dispatch+ordering): proactive customer order updates on WhatsApp
 - PREPARING: advance_kitchen_status (confirmed→preparing) now calls _notify_customer_status
   (idempotent cust-preparing-{order_id}); body from tracking._HUMAN_STATUS.

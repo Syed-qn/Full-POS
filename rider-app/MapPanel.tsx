@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import { useEffect, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
@@ -29,15 +30,18 @@ function fmtKm(km: number): string {
   return `${km.toFixed(1)} km`;
 }
 
-// Native in-app map (react-native-maps) — no redirect to Google Maps. Shows the
-// drop-off pin, the rider's live position (native blue dot), and a line to the stop.
+const mapsConfigured =
+  (Constants.expoConfig?.extra?.mapsConfigured as boolean | undefined) ?? false;
+
+// Native in-app map (react-native-maps) — riders see drop-off + live position here.
+// Turn-by-turn stays optional in App.tsx; this panel is the primary navigation view.
 export default function MapPanel({
   destLat,
   destLng,
   riderLat,
   riderLng,
   label,
-  height = 240,
+  height = 280,
 }: Props) {
   const ref = useRef<MapView>(null);
   const hasRider = riderLat != null && riderLng != null;
@@ -69,7 +73,7 @@ export default function MapPanel({
     <View style={[styles.wrap, { height }]}>
       <MapView
         ref={ref}
-        provider={PROVIDER_GOOGLE}
+        provider={mapsConfigured ? PROVIDER_GOOGLE : undefined}
         style={styles.map}
         initialRegion={{
           latitude: destLat,
@@ -79,7 +83,7 @@ export default function MapPanel({
         }}
         showsUserLocation
         showsMyLocationButton={false}
-        showsCompass={false}
+        showsCompass
         toolbarEnabled={false}
         mapPadding={{ top: 44, right: 0, bottom: 0, left: 0 }}
       >
@@ -102,6 +106,14 @@ export default function MapPanel({
         ) : null}
       </MapView>
 
+      {!mapsConfigured ? (
+        <View style={styles.warnBar} pointerEvents="none">
+          <Text style={styles.warnText}>
+            Map tiles need APP_MAPS_SDK_ANDROID on the APK build — rebuild with a Maps SDK key.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Top overlay: where we're going + how far. */}
       <View style={styles.topBar} pointerEvents="none">
         <View style={styles.destPill}>
@@ -118,7 +130,7 @@ export default function MapPanel({
       </View>
 
       {/* Recenter / fit-to-route button. */}
-      <Pressable style={styles.recenter} onPress={fit} hitSlop={8}>
+      <Pressable style={styles.recenter} onPress={fit} hitSlop={8} accessibilityLabel="Recenter map">
         <Text style={styles.recenterIcon}>◎</Text>
       </Pressable>
     </View>
@@ -135,6 +147,18 @@ const styles = StyleSheet.create({
     borderColor: "#1f6f43",
   },
   map: { flex: 1 },
+
+  warnBar: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 10,
+    backgroundColor: "rgba(120,53,15,0.92)",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  warnText: { color: "#fde68a", fontSize: 11, fontWeight: "700", textAlign: "center" },
 
   topBar: {
     position: "absolute",

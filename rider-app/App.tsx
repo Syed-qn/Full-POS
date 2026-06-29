@@ -24,6 +24,7 @@ import {
   type Stop,
 } from "./api";
 import MapPanel from "./MapPanel";
+import { mapsNavigationUrl } from "./maps";
 import { onNotificationTap, registerForPush } from "./notifications";
 import {
   sendCurrentLocation,
@@ -407,14 +408,34 @@ function TrackingScreen({
               {s.customerName ? <Text style={styles.custName}>{s.customerName}</Text> : null}
               {s.address ? <Text style={styles.cardLine}>📍 {s.address}</Text> : null}
 
-              {i === 0 && s.latitude != null && s.longitude != null ? (
-                <MapPanel
-                  destLat={s.latitude}
-                  destLng={s.longitude}
-                  riderLat={riderPos?.lat}
-                  riderLng={riderPos?.lng}
-                  label={s.customerName ?? s.orderNumber}
-                />
+              {i === 0 ? (
+                s.latitude != null && s.longitude != null ? (
+                  <>
+                    <MapPanel
+                      destLat={s.latitude}
+                      destLng={s.longitude}
+                      riderLat={riderPos?.lat}
+                      riderLng={riderPos?.lng}
+                      label={s.customerName ?? s.orderNumber}
+                    />
+                    <Pressable
+                      style={styles.navLink}
+                      onPress={() =>
+                        Linking.openURL(mapsNavigationUrl(s.latitude!, s.longitude!))
+                      }
+                    >
+                      <Text style={styles.navLinkText}>Turn-by-turn in Google Maps ↗</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <View style={styles.noMapCard}>
+                    <Text style={styles.noMapTitle}>No map pin for this address</Text>
+                    <Text style={styles.noMapHint}>
+                      Follow the address above. Ask the customer to re-send their WhatsApp location
+                      pin if you need a map.
+                    </Text>
+                  </View>
+                )
               ) : null}
 
               {s.doNotCall ? (
@@ -614,4 +635,23 @@ const styles = StyleSheet.create({
 
   cardHint: { fontSize: 13, color: C.dim, marginTop: 10, fontStyle: "italic" },
   cardActions: { flexDirection: "row", gap: 12, marginTop: 14 },
+
+  navLink: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  navLinkText: { color: C.dim, fontSize: 13, fontWeight: "600" },
+
+  noMapCard: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#1a1510",
+    borderWidth: 1,
+    borderColor: "#5b4a13",
+  },
+  noMapTitle: { color: "#fcd34d", fontSize: 14, fontWeight: "800", marginBottom: 4 },
+  noMapHint: { color: C.sub, fontSize: 13, lineHeight: 19 },
 });
