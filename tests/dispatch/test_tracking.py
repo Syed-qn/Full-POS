@@ -150,3 +150,19 @@ async def test_tracking_reply_delivered(db_session):
     reply = await build_tracking_reply(db_session, order=order, geo=geo)
 
     assert "deliver" in reply.lower()
+
+
+async def test_tracking_reply_bogus_rider_position_no_eta(db_session):
+    """A stale/never-set rider ping (0,0) is far from the Dubai drop-off; the
+    absurd distance must NOT produce a giant ETA — degrade to no ETA."""
+    r = await _seed_restaurant(db_session)
+    rider = await _seed_rider(db_session, r.id)
+    order = await _seed_order(db_session, r.id, status="picked_up", rider_id=rider.id)
+    # Rider ping at (0,0) — ~3000 km from Dubai.
+    db_session.add(RiderLocation(rider_id=rider.id, restaurant_id=r.id,
+                                 latitude=0.0, longitude=0.0,
+                                 ts=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)))
+    await db_session.flush()
+    reply = await build_tracking_reply(db_session, order=order, geo=FakeGeoProvider())
+    assert "picked up" in reply.lower()
+    assert "min" not in reply  # no bogus ETA

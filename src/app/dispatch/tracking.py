@@ -93,6 +93,13 @@ async def build_tracking_reply(
 
     dist = geo.distance_km(rider_lat, rider_lon, drop_lat, drop_lon)
 
+    # Sanity guard: a stale / never-set rider ping (e.g. 0,0) yields a distance far
+    # beyond any real delivery (the whole service is <=10 km radius), which produced
+    # absurd ETAs like "~7319 min". Treat an implausible distance as no usable
+    # position and degrade gracefully — show the status with no ETA.
+    if dist > 50:
+        return base
+
     # Batch buffer: add 10 min per preceding stop so the customer at stop 2
     # isn't told "3 min" when the rider still has another delivery first.
     buffer = 0
