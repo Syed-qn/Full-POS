@@ -83,8 +83,9 @@ def grounding_block(docs: list[OkfDoc]) -> str:
     if not docs:
         return ""
     parts = [
-        "GROUNDED KNOWLEDGE (authoritative — answer ONLY from this; if the answer "
-        "isn't here, say you'll check with the team, NEVER invent):",
+        "GROUNDED KNOWLEDGE (authoritative — answer ONLY from these facts; if the "
+        "answer isn't here, say you'll check with the team, NEVER invent). These "
+        "facts are in English; REPLY IN THE CUSTOMER'S LANGUAGE:",
     ]
     for d in docs:
         parts.append(f"\n[{d.kind}] {d.title}\n{d.body}")

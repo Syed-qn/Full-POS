@@ -4251,8 +4251,23 @@ async def _okf_grounding(
         await producer.refresh_menu_and_policy(session, restaurant_id=restaurant_id)
     customer = await get_or_create_customer(session, restaurant_id=restaurant_id, phone=inbound.from_phone)
     await producer.refresh_customer(session, restaurant_id=restaurant_id, customer_id=customer.id)
+
+    # Language-agnostic entity pins: dishes in the customer's current cart + their
+    # pending/draft order. These ground non-English questions (Telugu/Arabic/Urdu)
+    # that pg_trgm can't lexically match against English docs.
+    from app.ordering.models import OrderItem
+
+    dish_ids: list[int] = []
+    order_ref = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+    if order_ref:
+        rows = await session.scalars(
+            select(OrderItem.dish_id).where(OrderItem.order_id == int(order_ref))
+        )
+        dish_ids = list(rows)
+
     docs = await retrieval.retrieve(
         session, restaurant_id=restaurant_id, query=text, customer_id=customer.id,
+        dish_ids=dish_ids or None, order_id=int(order_ref) if order_ref else None,
     )
     return retrieval.grounding_block(docs)
 

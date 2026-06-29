@@ -88,3 +88,39 @@ async def test_order_doc(db_session):
     assert n == 1
     doc = await db_session.scalar(select(OkfDoc).where(OkfDoc.kind == "order", OkfDoc.entity_id == o.id))
     assert "preparing" in doc.body.lower()
+
+
+async def test_retrieval_multilingual_pins_dish_by_entity(db_session):
+    """A non-English (Telugu) question can't lexically match English docs, but the
+    cart's dish is pinned by entity_id → still grounded."""
+    r = await _resto(db_session)
+    await producer.refresh_menu_and_policy(db_session, restaurant_id=r.id)
+    dish = (await db_session.scalars(select(OkfDoc).where(OkfDoc.restaurant_id == r.id, OkfDoc.kind == "dish"))).first()
+    # Telugu text, zero English trigram overlap.
+    docs = await retrieval.retrieve(
+        db_session, restaurant_id=r.id, query="ఇది హలాల్ నా?",
+        dish_ids=[dish.entity_id],
+    )
+    assert any(d.kind == "dish" for d in docs)  # pinned despite no lexical match
+    assert any(d.kind == "policy" for d in docs)
+
+
+async def test_retrieval_is_tenant_isolated(db_session):
+    """Restaurant A never retrieves Restaurant B's OKF docs."""
+    ra = await _resto(db_session)
+    await producer.refresh_menu_and_policy(db_session, restaurant_id=ra.id)
+    rb = Restaurant(name="Other Resto", phone="+97140000599", password_hash="x", lat=25.0, lng=55.0)
+    db_session.add(rb)
+    await db_session.flush()
+    from app.menu.models import Dish, Menu
+    mb = Menu(restaurant_id=rb.id, version=1, status="active", source_files=[])
+    db_session.add(mb)
+    await db_session.flush()
+    db_session.add(Dish(menu_id=mb.id, restaurant_id=rb.id, dish_number=1, name="Secret Dish",
+                        price_aed=Decimal("99"), category="X", is_available=True, name_normalized="secret dish"))
+    await db_session.flush()
+    await producer.refresh_menu_and_policy(db_session, restaurant_id=rb.id)
+
+    docs = await retrieval.retrieve(db_session, restaurant_id=ra.id, query="secret dish")
+    assert all(d.restaurant_id == ra.id for d in docs)
+    assert not any("secret" in d.body.lower() for d in docs)
