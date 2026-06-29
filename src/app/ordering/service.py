@@ -844,6 +844,22 @@ async def cancel_order(
         )
         session.add(resale)
         await session.flush()
+
+        # Clone the cooked line items onto the resale copy so the resold order and
+        # the kitchen/rider know exactly what the food is (the copy carried totals
+        # but not items, leaving resold orders empty).
+        orig_items = (
+            await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+        ).all()
+        for it in orig_items:
+            session.add(
+                OrderItem(
+                    order_id=resale.id, dish_id=it.dish_id, dish_number=it.dish_number,
+                    dish_name=it.dish_name, variant_name=it.variant_name,
+                    price_aed=it.price_aed, qty=it.qty, notes=it.notes,
+                )
+            )
+        await session.flush()
         return resale
 
     await fsm_transition(

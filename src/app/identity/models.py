@@ -85,6 +85,15 @@ DEFAULT_SETTINGS: dict = {
     # cart from it, the catalog flow turns it into an order. Empty = not configured.
     "catalog_id": "",
     "catalog_ordering_enabled": False,
+    # Resale of cancelled-after-cooking orders (spec §3). When the kitchen has
+    # already started an order that then gets cancelled, the food is offered to the
+    # NEXT customer as a fast, discounted delivery. All values manager-editable.
+    "resale": {
+        "enabled": True,
+        "discount_type": "percent",   # percent | fixed
+        "discount_value": 30,          # 30% off (or AED off if fixed)
+        "max_age_minutes": 30,         # don't offer resale food older than this
+    },
     # Loyalty program (per-restaurant, fully manager-editable; read via .get()).
     # Tiers (Phase 1) map RFM+Monetary cohorts to reward coupons; earning (Phase 2)
     # credits a % of food subtotal to the customer's wallet on delivery. NOTHING is

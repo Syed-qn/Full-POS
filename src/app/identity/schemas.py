@@ -115,6 +115,27 @@ class SettingsPatch(BaseModel):
     # Loyalty program config — sent as a whole object by the Loyalty settings tab.
     # Every value here is restaurant-editable; defaults live in DEFAULT_SETTINGS.
     loyalty: dict | None = None
+    # Resale config (cancelled-after-cooking → fast discounted offer to next customer).
+    resale: dict | None = None
+
+    @field_validator("resale")
+    @classmethod
+    def _validate_resale(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return v
+        if not isinstance(v, dict):
+            raise ValueError("resale must be an object")
+        if "enabled" in v and not isinstance(v["enabled"], bool):
+            raise ValueError("resale.enabled must be a boolean")
+        if "discount_type" in v and v["discount_type"] not in ("percent", "fixed"):
+            raise ValueError("resale.discount_type must be 'percent' or 'fixed'")
+        for k in ("discount_value", "max_age_minutes"):
+            if k in v and v[k] is not None:
+                if not isinstance(v[k], (int, float)) or v[k] < 0:
+                    raise ValueError(f"resale.{k} must be >= 0")
+        if v.get("discount_type") == "percent" and v.get("discount_value", 0) > 100:
+            raise ValueError("resale percent discount cannot exceed 100")
+        return v
 
     @field_validator("loyalty")
     @classmethod
