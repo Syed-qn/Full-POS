@@ -14,8 +14,8 @@
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.08em;
-  height: 44px;
-  min-height: 44px;
+  height: 56px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -75,11 +75,6 @@
 @media (max-height: 620px) {
   .nav {
     overflow-y: auto;
-  }
-
-  .logo {
-    height: 40px;
-    min-height: 40px;
   }
 
   .item {
