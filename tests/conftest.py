@@ -51,6 +51,22 @@ import app.tickets.models  # noqa: F401
 import app.catalog.models  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def _reset_settings_cache():
+    """Clear the get_settings() lru_cache before AND after every test.
+
+    Many tests monkeypatch APP_* env vars + cache_clear(); if one forgets to
+    reset, the cached Settings (built with that env) leaks into later tests in
+    the full run. Clearing around each test makes settings deterministic and
+    eliminates cross-file test-isolation cascades.
+    """
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture(scope="session")
 async def engine():
     eng = create_async_engine(os.environ["APP_DATABASE_URL"])
