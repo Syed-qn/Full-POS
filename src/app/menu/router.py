@@ -25,15 +25,23 @@ from app.menu.schemas import (
 )
 from app.menu.service import MenuIncompleteError
 from app.menu.unified import UnifiedMenuOut, build_unified_menu
+from app.catalog.sync_service import auto_publish_to_meta
 from app.okf.producer import refresh_okf_for_restaurant
 
 
 async def _refresh_grounding(session: AsyncSession, restaurant_id: int) -> None:
-    """Rebuild OKF menu/policy docs after a dish mutation so the bot grounds on the
-    live menu (these inline dish endpoints bypass activate_menu's refresh). Best-effort:
-    never let a grounding refresh fail the manager's edit."""
+    """Run after a dish mutation on these inline endpoints (which bypass activate_menu):
+      1. rebuild OKF menu/policy docs so the bot grounds on the live menu;
+      2. auto-publish the menu to the Meta catalogue so the dish edit shows on WhatsApp.
+    Both are best-effort — neither a grounding refresh nor a Meta push may fail the
+    manager's edit. Each is committed independently so one failing can't undo the other."""
     try:
         await refresh_okf_for_restaurant(session, restaurant_id=restaurant_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
+    try:
+        await auto_publish_to_meta(session, restaurant_id=restaurant_id)
         await session.commit()
     except Exception:  # noqa: BLE001
         await session.rollback()

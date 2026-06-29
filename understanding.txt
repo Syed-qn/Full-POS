@@ -1593,3 +1593,9 @@
   - 20-vs-30 root cause: UnifiedMenuPanel only loaded on mount/own-sync, never after an edit → stale Meta-mirror price.
     build_unified_menu already uses dish price as truth (unified.py:91); fix was the missing refetch.
   - 82 backend pass (catalog+menu+okf); frontend tsc clean; MenuManagerScreen 4 tests pass.
+
+[2026-06-29 20:34 +04] feat(menu): auto-publish to Meta on dish edits too (not just activation).
+  Extended menu/router._refresh_grounding (called by create/patch/delete/availability endpoints) to also run
+  auto_publish_to_meta after the OKF refresh — separate try/commit so a Meta push failure can't undo the OKF
+  refresh or fail the edit. No catalog_id/token still no-ops. 82 backend pass; boot+lint clean.
+  Note: deleting a dish doesn't yet remove it from the Meta catalogue (push only CREATE/UPDATE) — minor, deferred.
