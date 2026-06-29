@@ -1708,3 +1708,9 @@
   endpoint, which sends cancellation/resale pings). Mirrors the existing reassign endpoint pattern.
   Test: test_api_advance_delivers_preparing_ping_immediately (asserts preparing outbox row is 'sent' after the
   endpoint, with outbox_sync_delivery on). 164 ordering pass; boot+lint clean.
+
+[2026-06-30 01:23 +04] fix(order): scope kitchen conversation summary to THIS order's session.
+  Bug: summary dumped the entire per-phone chat history (lines from past/other orders: "100000 lemon mints",
+  "Mutton", old greetings). The conversation is per-phone across all orders. Added _chat_for_this_order(chat, order)
+  filtering chat by ts window [created_at-2min, (delivered/cancelled_at or now)+2min] before summarizing.
+  Test: test_chat_for_this_order_excludes_other_sessions. 25 detail tests pass.

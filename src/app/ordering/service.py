@@ -1224,6 +1224,27 @@ _SUMMARY_SKIP = {
 }
 
 
+def _chat_for_this_order(chat: list, order) -> list:
+    """Restrict the chat to THIS order's session window. The conversation is per-phone
+    and spans every past order, so the summary must not bleed in lines from other
+    orders. Window = [order.created_at, delivered/cancelled_at or now], with a small
+    lead-in so the greeting that kicked off this order is still included."""
+    from datetime import datetime, timezone
+
+    created = getattr(order, "created_at", None)
+    if created is None:
+        return chat  # no anchor → don't filter (better to show all than nothing)
+    c = created if created.tzinfo else created.replace(tzinfo=timezone.utc)
+    lo = c.timestamp() - 120  # 2-min lead-in for the opening greeting
+    end = getattr(order, "delivered_at", None) or getattr(order, "cancelled_at", None)
+    if end is not None:
+        e = end if end.tzinfo else end.replace(tzinfo=timezone.utc)
+        hi = e.timestamp() + 120
+    else:
+        hi = datetime.now(timezone.utc).timestamp()
+    return [m for m in chat if lo <= getattr(m, "ts", 0) <= hi]
+
+
 def _kitchen_convo_summary(chat: list, items_rows: list) -> str | None:
     """A short kitchen-facing digest: every item's special request (note) plus the
     customer's own substantive lines from the chat — in WHATEVER language they wrote.
@@ -1465,7 +1486,9 @@ async def get_order_detail(
         cook_estimate_minutes=order.cook_estimate_minutes,
         timeline=timeline,
         chat=chat,
-        convo_summary=_kitchen_convo_summary(chat, items_rows),
+        convo_summary=_kitchen_convo_summary(
+            _chat_for_this_order(chat, order), items_rows
+        ),
         route=route,
     )
 

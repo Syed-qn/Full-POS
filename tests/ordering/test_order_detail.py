@@ -558,3 +558,27 @@ async def test_api_advance_delivers_preparing_ping_immediately(client, db_sessio
     prep = [m for m in msgs if "preparing" in (m.payload.get("body", "") or "").lower()]
     assert prep, "preparing ping was not enqueued"
     assert all(m.status == "sent" for m in prep), "preparing ping left pending, not delivered"
+
+
+def test_chat_for_this_order_excludes_other_sessions():
+    """The conversation is per-phone across all orders; the summary window must keep
+    only THIS order's session lines, not earlier/later orders'."""
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace as N
+
+    from app.ordering.service import _chat_for_this_order
+
+    now = datetime.now(timezone.utc)
+    base = now - timedelta(minutes=20)
+    order = N(created_at=base, delivered_at=None, cancelled_at=None)
+
+    def ts(dt):
+        return int(dt.timestamp())
+
+    chat = [
+        N(direction="inbound", text="yesterday's order", ts=ts(now - timedelta(hours=10))),
+        N(direction="inbound", text="this order line", ts=ts(base + timedelta(minutes=2))),
+        N(direction="inbound", text="future order", ts=ts(now + timedelta(hours=5))),
+    ]
+    kept = [m.text for m in _chat_for_this_order(chat, order)]
+    assert kept == ["this order line"]
