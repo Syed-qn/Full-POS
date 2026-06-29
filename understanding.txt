@@ -1722,3 +1722,12 @@
   handle_inbound (before typed-order + AI), idempotent via resale_offer_id, non-returning so the real message still
   processes. Test: test_resale_offered_on_direct_typed_order. 19 resale tests + new one pass. (4 failing conv tests
   are PRE-EXISTING: abandoned_cart x3, totals_and_eta — fail on clean tree.)
+
+[2026-06-30 01:40 +04] fix: two pre-existing test failures (cart sweep skew + confirm test seeding).
+  (1) Abandoned-cart sweep: a just-touched cart had slightly NEGATIVE quiet_min (app-written updated_at a few ms
+      ahead of DB now()), so `quiet >= recovery_min(0)` was False and the nudge was skipped a cycle. Clamped
+      quiet = max(0.0, ...) in worker._run_sweep. Fixes 3 abandoned_cart tests.
+  (2) test_order_confirmation_message_includes_totals_and_eta: TEST bug — seeded an Order with totals but NO
+      OrderItem, so the confirm safety-gate correctly said "cart is empty". Product behavior is right; fixed the
+      test to seed the backing OrderItem (1x Chicken Biryani @22).
+  All conversation+ordering (339) + catalog/dispatch/menu/okf (205) pass; lint clean.

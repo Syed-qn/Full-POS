@@ -90,7 +90,10 @@ async def _run_sweep() -> int:
             recovery_min = int(settings.get("cart_recovery_minutes", ABANDONED_AFTER_MIN))
             expiry_min = int(settings.get("cart_expiry_minutes", DEFAULT_EXPIRY_MIN))
             reminder_on = bool(settings.get("cart_reminder_enabled", True))
-            quiet = float(row.quiet_min or 0.0)
+            # Clamp tiny negative skew (app-written updated_at can be a few ms ahead of
+            # the DB clock), so a just-quiet cart with recovery_minutes=0 still qualifies
+            # instead of being skipped a cycle on `quiet >= recovery_min`.
+            quiet = max(0.0, float(row.quiet_min or 0.0))
 
             conv = await session.get(Conversation, row.id)
             if conv is None:

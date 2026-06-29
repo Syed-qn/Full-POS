@@ -288,6 +288,18 @@ async def test_order_confirmation_message_includes_totals_and_eta(db_session, re
     )
     db_session.add(order)
     await db_session.flush()
+    # The confirm safety-gate refuses an order with no items, so seed the line that
+    # backs the 22.00 subtotal (1x Chicken Biryani @ 22).
+    from app.menu.models import Dish
+    from app.ordering.models import OrderItem
+    dish = (await db_session.scalars(
+        select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.dish_number == 110)
+    )).first()
+    db_session.add(OrderItem(
+        order_id=order.id, dish_id=dish.id, dish_number=110, dish_name="Chicken Biryani",
+        price_aed=Decimal("22.00"), qty=1,
+    ))
+    await db_session.flush()
     await db_session.commit()
 
     await handle_inbound(db_session, _msg("hi", "wamid.greet5"), restaurant_id=restaurant.id)
