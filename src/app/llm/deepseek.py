@@ -573,7 +573,12 @@ class DeepSeekConversationAgent:
         else:
             phase_block = ""
 
-        return identity + phase_block
+        # OKF/RAG grounding: authoritative retrieved facts (menu/policy/customer/
+        # order). Appended last so it overrides the model's priors — answer from
+        # these facts, never invent.
+        grounding = context.get("grounding") or ""
+        suffix = f"\n\n{grounding}" if grounding else ""
+        return identity + phase_block + suffix
 
     async def respond(
         self,

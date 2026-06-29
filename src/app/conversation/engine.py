@@ -3955,6 +3955,33 @@ def _normalise_closing(text: str | None) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+async def _okf_grounding(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> str:
+    """Retrieve authoritative OKF facts for this message + customer and render a
+    grounding block for the prompt. Lazily ensures the menu/policy bundle exists
+    (first use per restaurant) and refreshes this customer's profile doc."""
+    from app.okf import producer, retrieval
+    from app.okf.models import OkfDoc
+    from app.ordering.service import get_or_create_customer
+
+    text = (inbound.payload.get("text") or "").strip() if inbound.type == MessageType.TEXT else ""
+    if not text:
+        return ""
+    # Lazily build the menu/policy bundle once (cheap upsert; skip if present).
+    has_any = await session.scalar(
+        select(OkfDoc.id).where(OkfDoc.restaurant_id == restaurant_id).limit(1)
+    )
+    if has_any is None:
+        await producer.refresh_menu_and_policy(session, restaurant_id=restaurant_id)
+    customer = await get_or_create_customer(session, restaurant_id=restaurant_id, phone=inbound.from_phone)
+    await producer.refresh_customer(session, restaurant_id=restaurant_id, customer_id=customer.id)
+    docs = await retrieval.retrieve(
+        session, restaurant_id=restaurant_id, query=text, customer_id=customer.id,
+    )
+    return retrieval.grounding_block(docs)
+
+
 async def _handle_customer_ai(
     session: AsyncSession,
     conv: Conversation,
@@ -4016,6 +4043,14 @@ async def _handle_customer_ai(
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:
         _set_state(conv, saved_address_id=context["saved_address_id"])
+
+    # OKF grounding (RAG): retrieve authoritative facts for this message + customer
+    # so the bot answers from real data (menu/policy/customer/order), not invention.
+    # Best-effort — grounding must never break a reply.
+    try:
+        context["grounding"] = await _okf_grounding(session, conv, inbound, restaurant_id)
+    except Exception:  # noqa: BLE001
+        context["grounding"] = ""
 
     agent = get_conversation_agent()
     try:
