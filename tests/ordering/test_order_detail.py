@@ -494,3 +494,28 @@ async def test_api_delete_order_returns_204_then_404(client, db_session, restaur
     assert resp.status_code == 204
     again = await client.delete(f"/api/v1/orders/{order.id}", headers=_auth(restaurant.id))
     assert again.status_code == 404
+
+
+def test_kitchen_convo_summary_is_multilingual_and_drops_greetings():
+    """The kitchen conversation digest must keep substantive customer lines in ANY
+    language (multi-language SaaS) and item notes, while dropping greetings/confirms."""
+    from types import SimpleNamespace as N
+
+    from app.ordering.service import _kitchen_convo_summary
+
+    items = [N(qty=1, dish_name="Chicken Biryani", notes="double masala")]
+    chat = [
+        N(direction="inbound", text="Hi"),                          # greeting → skip
+        N(direction="outbound", text="Added ✅"),                    # outbound → skip
+        N(direction="inbound", text="please call before arriving"), # EN instruction → keep
+        N(direction="inbound", text="गेट बंद है, फोन करना"),          # Hindi instruction → keep
+        N(direction="inbound", text="हाँ"),                          # Hindi 'yes' → skip
+    ]
+    out = _kitchen_convo_summary(chat, items)
+    assert "double masala" in out                 # item note shown
+    assert "call before arriving" in out          # English instruction kept
+    assert "गेट बंद है" in out                      # Hindi instruction kept (not dropped)
+    assert "हाँ" not in out                         # Hindi greeting/confirm dropped
+
+    # No notes + only greetings → nothing to show.
+    assert _kitchen_convo_summary([N(direction="inbound", text="hello")], []) is None

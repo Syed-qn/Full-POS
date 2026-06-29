@@ -224,6 +224,7 @@ export interface OrderDetailOut {
   timeline: TimelineEventOut[];
   chat: ChatMessageOut[];
   route: GpsPingOut[];
+  convo_summary?: string | null;
 }
 
 export interface CustomerPatchIn {

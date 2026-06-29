@@ -1679,3 +1679,14 @@
       renders "📝 <note>" badge (sla-warn styling) so kitchen sees it.
   Tests: test_catalog_typed_order_with_special_note_adds_dish_and_note. 207 backend ordering/catalog pass;
   frontend tsc clean, OrderDetailDrawer 10 tests pass.
+
+[2026-06-30 00:22 +04] feat: kitchen conversation summary on order detail (multilingual).
+  Kitchen/manager now sees a "📋 Conversation summary" card in the order detail Overview: every item's special
+  request (note) + the customer's substantive inbound chat lines. MULTI-LANGUAGE SaaS: language-agnostic by design
+  — no English keyword keep-list (would drop Hindi/Arabic/Telugu). Instead include every substantive customer line,
+  drop only short greeting/confirm tokens (_SUMMARY_SKIP, multilingual: EN/Hindi-Urdu/Arabic/Telugu). Derived
+  on-the-fly from the chat already loaded for the detail — NO new column, NO migration.
+  - _kitchen_convo_summary(chat, items_rows) in ordering/service.py; convo_summary field on OrderDetailOut (+builder).
+  - Frontend: OrderDetailOut.convo_summary type; OrderDetailDrawer Overview summary card (sla-warn styling,
+    unicode-bidi: plaintext so Arabic/Urdu render RTL correctly).
+  - Tests: test_kitchen_convo_summary_is_multilingual_and_drops_greetings. 162 ordering pass; tsc clean; drawer 10 pass.

@@ -1203,6 +1203,53 @@ async def create_manual_order(
     return order
 
 
+# Greetings / control words / button taps that carry no kitchen info — kept
+# MULTILINGUAL because this is a multi-language SaaS (the bot is used in English,
+# Hindi/Urdu, Arabic, Telugu, etc.). We can't keyword-match instructions across every
+# language, so instead of an English keep-list we INCLUDE every substantive customer
+# line and only skip these short greeting/confirmation tokens.
+_SUMMARY_SKIP = {
+    # English
+    "hi", "hello", "hey", "yo", "hii", "hlo", "start", "menu", "done", "yes", "no",
+    "ok", "okay", "okey", "confirm", "confirm order", "start new", "new", "continue",
+    "that's all", "thats all", "checkout", "nothing", "thanks", "thank you", "yep", "nope",
+    # Hindi / Urdu (roman + script)
+    "namaste", "namaskar", "salam", "assalam", "assalam o alaikum", "haan", " haan",
+    "nahi", "theek", "theek hai", "accha", "ji", "shukriya", "bas", "हाँ", "नहीं", "ठीक",
+    "नमस्ते", "हाय", "हेलो",
+    # Arabic
+    "مرحبا", "السلام عليكم", "نعم", "لا", "شكرا", "تمام", "اهلا",
+    # Telugu
+    "నమస్తే", "అవును", "కాదు", "సరే",
+}
+
+
+def _kitchen_convo_summary(chat: list, items_rows: list) -> str | None:
+    """A short kitchen-facing digest: every item's special request (note) plus the
+    customer's own substantive lines from the chat — in WHATEVER language they wrote.
+    Only short greeting/confirm tokens are dropped (language-agnostic by design); we
+    never keyword-filter, so a Hindi/Arabic/Telugu instruction is never lost."""
+    lines: list[str] = []
+    for it in items_rows:
+        note = (getattr(it, "notes", None) or "").strip()
+        if note:
+            lines.append(f"• {it.qty}x {it.dish_name}: {note}")
+    seen: set[str] = set()
+    for m in chat:
+        if getattr(m, "direction", None) != "inbound":
+            continue
+        t = (getattr(m, "text", None) or "").strip()
+        low = t.lower()
+        # Skip empties, very short tokens, greetings/confirms, and exact duplicates.
+        if len(t) < 2 or len(t) > 200 or low in _SUMMARY_SKIP or low in seen:
+            continue
+        seen.add(low)
+        lines.append(f"• “{t}”")
+    if not lines:
+        return None
+    return "\n".join(lines[:10])
+
+
 async def get_order_detail(
     session: "AsyncSession",
     *,
@@ -1418,6 +1465,7 @@ async def get_order_detail(
         cook_estimate_minutes=order.cook_estimate_minutes,
         timeline=timeline,
         chat=chat,
+        convo_summary=_kitchen_convo_summary(chat, items_rows),
         route=route,
     )
 

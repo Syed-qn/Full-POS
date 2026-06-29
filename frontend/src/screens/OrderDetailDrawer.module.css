@@ -125,6 +125,18 @@
   margin: 0 0 12px;
   text-transform: uppercase;
 }
+.summaryCard {
+  background: var(--sla-warn-dim);
+  border-color: var(--sla-warn);
+}
+.summaryBody { display: flex; flex-direction: column; gap: 6px; }
+.summaryLine {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+  /* respect the customer's language direction (Arabic/Urdu render RTL) */
+  unicode-bidi: plaintext;
+}
 .items { display: flex; flex-direction: column; gap: 8px; }
 .itemRow {
   align-items: center;

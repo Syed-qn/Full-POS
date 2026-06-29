@@ -348,6 +348,16 @@ function DrawerSkeleton() {
 function OverviewTab({ detail }: { detail: OrderDetailOut }) {
   return (
     <div className={s.overview}>
+      {detail.convo_summary ? (
+        <section className={`${s.card} ${s.summaryCard}`}>
+          <h4 className={s.cardTitle}>📋 Conversation summary</h4>
+          <div className={s.summaryBody}>
+            {detail.convo_summary.split("\n").map((line, i) => (
+              <div key={i} className={s.summaryLine}>{line}</div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section className={s.card}>
         <h4 className={s.cardTitle}>Items</h4>
         <div className={s.items}>
