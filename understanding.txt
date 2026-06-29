@@ -1700,3 +1700,11 @@
   both branches (text status + picked_up CTA_URL). Best-effort (try/except) so chat mirroring never blocks the ping.
   Covers preparing / on-the-way / near_door / delivered. Test: test_status_ping_is_recorded_in_conversation_chat.
   117 dispatch tests pass; boot+lint clean.
+
+[2026-06-30 00:36 +04] fix(order): deliver kitchen status ping in-request (was minutes late).
+  Bug: "started preparing" reached the customer ~17 min after the kitchen tapped Start Preparing. The /advance
+  endpoint enqueued the ping but never called deliver_pending — so it sat in the outbox until the slow background
+  poll (no Celery beat on Render). Added deliver_pending after advance_kitchen_status (and the same to the cancel
+  endpoint, which sends cancellation/resale pings). Mirrors the existing reassign endpoint pattern.
+  Test: test_api_advance_delivers_preparing_ping_immediately (asserts preparing outbox row is 'sent' after the
+  endpoint, with outbox_sync_delivery on). 164 ordering pass; boot+lint clean.

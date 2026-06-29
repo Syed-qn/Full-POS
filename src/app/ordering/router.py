@@ -279,6 +279,12 @@ async def advance_order(
         order = await advance_kitchen_status(session, order=order)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    # Deliver the customer status ping ("started preparing" / "ready") NOW, in this
+    # request — otherwise it sits in the outbox until the slow background poll, which
+    # made the customer get "preparing" many minutes after the kitchen tapped it.
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, restaurant.id)
     return await _enrich(session, order)
 
 
@@ -310,6 +316,10 @@ async def cancel_order_endpoint(
             detail=f"Order in status '{order.status}' can no longer be cancelled.",
         )
     await session.commit()
+    # Flush cancellation/resale pings now, not on the slow background poll.
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, restaurant.id)
     await session.refresh(order)
     return await _enrich(session, order)
 

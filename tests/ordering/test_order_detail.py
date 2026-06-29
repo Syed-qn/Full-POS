@@ -519,3 +519,42 @@ def test_kitchen_convo_summary_is_multilingual_and_drops_greetings():
 
     # No notes + only greetings → nothing to show.
     assert _kitchen_convo_summary([N(direction="inbound", text="hello")], []) is None
+
+
+async def test_api_advance_delivers_preparing_ping_immediately(client, db_session, restaurant, monkeypatch):
+    """Tapping 'Start Preparing' must deliver the customer 'started preparing' ping in
+    the same request — not leave it pending for the slow background poll (which made the
+    customer get it minutes late)."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.config import get_settings
+    from app.ordering.models import Customer, Order
+    from app.outbox.models import OutboxMessage
+
+    monkeypatch.setattr(get_settings(), "outbox_sync_delivery", True)
+
+    cust = Customer(
+        restaurant_id=restaurant.id, phone="+971509998877", name="P",
+        total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(cust)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=cust.id, order_number="R1-ADV1",
+        status="confirmed", subtotal=Decimal("22.00"), delivery_fee_aed=Decimal("0.00"),
+        total=Decimal("22.00"), sla_confirmed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(order)
+    await db_session.commit()
+
+    resp = await client.post(f"/api/v1/orders/{order.id}/advance", headers=_auth(restaurant.id))
+    assert resp.status_code == 200
+
+    msgs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == cust.phone)
+    )).all()
+    prep = [m for m in msgs if "preparing" in (m.payload.get("body", "") or "").lower()]
+    assert prep, "preparing ping was not enqueued"
+    assert all(m.status == "sent" for m in prep), "preparing ping left pending, not delivered"
