@@ -68,14 +68,30 @@ async def create_ticket(
 
 
 async def list_tickets(
-    session: AsyncSession, *, restaurant_id: int, status: str | None = None
-) -> list[Ticket]:
-    stmt = select(Ticket).where(Ticket.restaurant_id == restaurant_id)
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    status: str | None = None,
+    phone: str | None = None,
+) -> list[tuple[Ticket, str | None, str | None]]:
+    """Return (ticket, customer_phone, customer_name) rows, open first then newest.
+
+    ``phone`` filters to tickets whose customer's phone contains the query.
+    """
+    from app.ordering.models import Customer
+
+    stmt = (
+        select(Ticket, Customer.phone, Customer.name)
+        .join(Customer, Ticket.customer_id == Customer.id)
+        .where(Ticket.restaurant_id == restaurant_id)
+    )
     if status is not None:
         stmt = stmt.where(Ticket.status == status)
-    # Open first, then newest.
+    if phone:
+        stmt = stmt.where(Customer.phone.ilike(f"%{phone.strip()}%"))
     stmt = stmt.order_by(Ticket.status != "open", Ticket.id.desc())
-    return list(await session.scalars(stmt))
+    rows = await session.execute(stmt)
+    return [(t, ph, nm) for t, ph, nm in rows.all()]
 
 
 async def get_ticket(

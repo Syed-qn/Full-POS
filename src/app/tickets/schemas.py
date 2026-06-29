@@ -9,6 +9,8 @@ class TicketOut(BaseModel):
 
     id: int
     customer_id: int
+    customer_phone: str | None = None
+    customer_name: str | None = None
     order_id: int | None
     source_message: str | None
     evidence: list

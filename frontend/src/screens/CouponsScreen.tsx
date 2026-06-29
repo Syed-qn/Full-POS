@@ -19,9 +19,10 @@ export function CouponsScreen() {
   const [perCustomer, setPerCustomer] = useState("");
   const [totalLimit, setTotalLimit] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [phone, setPhone] = useState("");
 
   function reload() {
-    listCoupons()
+    listCoupons(phone.trim() || undefined)
       .then(setCoupons)
       .catch(() => setCoupons([]))
       .finally(() => setLoaded(true));
@@ -79,6 +80,24 @@ export function CouponsScreen() {
   return (
     <div className={s.root}>
       <PageHeader title="Coupons" subtitle="Create and manage discount coupons" />
+
+      <form
+        className={s.search}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setLoaded(false);
+          reload();
+        }}
+      >
+        <input
+          type="search"
+          placeholder="Search coupons by customer phone"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          aria-label="search coupons by phone"
+        />
+        <button type="submit">Search</button>
+      </form>
 
       <section className={s.card}>
         <h3 className={s.cardTitle}>New coupon</h3>

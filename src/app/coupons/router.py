@@ -76,14 +76,37 @@ async def issue_coupon_to_customer(
 
 @router.get("", response_model=list[CouponOut])
 async def list_coupons(
+    phone: str | None = None,
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[CouponOut]:
-    rows = await session.scalars(
-        select(Coupon)
-        .where(Coupon.restaurant_id == restaurant.id, Coupon.kind == "multi_use")
-        .order_by(Coupon.id.desc())
-    )
+    """List coupons. No phone → campaign (multi-use) coupons. With phone → coupons
+    issued to the customer(s) matching that phone (e.g. apology/targeted)."""
+    if phone:
+        cust_ids = (
+            await session.scalars(
+                select(Customer.id).where(
+                    Customer.restaurant_id == restaurant.id,
+                    Customer.phone.ilike(f"%{phone.strip()}%"),
+                )
+            )
+        ).all()
+        if not cust_ids:
+            return []
+        rows = await session.scalars(
+            select(Coupon)
+            .where(
+                Coupon.restaurant_id == restaurant.id,
+                Coupon.customer_id.in_(cust_ids),
+            )
+            .order_by(Coupon.id.desc())
+        )
+    else:
+        rows = await session.scalars(
+            select(Coupon)
+            .where(Coupon.restaurant_id == restaurant.id, Coupon.kind == "multi_use")
+            .order_by(Coupon.id.desc())
+        )
     return [CouponOut.model_validate(r) for r in rows]
 
 

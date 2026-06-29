@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TicketsScreen } from "./TicketsScreen";
 
@@ -60,5 +60,23 @@ describe("TicketsScreen", () => {
     const { container } = render(<TicketsScreen />);
     expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
     expect(screen.queryByText(/no open complaints/i)).not.toBeInTheDocument();
+  });
+});
+
+
+describe("TicketsScreen phone search", () => {
+  it("passes the phone query to the API on search", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response("[]", { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TicketsScreen />);
+    await waitFor(() => screen.getByLabelText(/search complaints by phone/i));
+    fireEvent.change(screen.getByLabelText(/search complaints by phone/i), { target: { value: "777001" } });
+    fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("phone=777001"))).toBe(true),
+    );
+    vi.restoreAllMocks();
   });
 });

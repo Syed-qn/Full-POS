@@ -15,9 +15,10 @@ export function TicketsScreen() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<Ticket | null>(null);
+  const [phone, setPhone] = useState("");
 
   function reload() {
-    listTickets()
+    listTickets(undefined, phone.trim() || undefined)
       .then(setTickets)
       .catch(() => setTickets([]))
       .finally(() => setLoaded(true));
@@ -25,6 +26,7 @@ export function TicketsScreen() {
 
   useEffect(() => {
     reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const ordered = useMemo(
@@ -49,6 +51,24 @@ export function TicketsScreen() {
         subtitle="Customer complaint tickets, wallet refunds & replacements"
       />
 
+      <form
+        className={s.search}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setLoaded(false);
+          reload();
+        }}
+      >
+        <input
+          type="search"
+          placeholder="Search by phone number"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          aria-label="search complaints by phone"
+        />
+        <button type="submit">Search</button>
+      </form>
+
       {!loaded && <TicketsSkeleton />}
 
       {loaded && ordered.length === 0 && (
@@ -67,7 +87,9 @@ export function TicketsScreen() {
               <span className={s.id}>#{t.id}</span>
               <span className={s.msg}>{t.source_message ?? "(no message)"}</span>
               <span className={s.meta}>
-                {t.category ?? "general"} · order {t.order_id ? `#${t.order_id}` : "—"}
+                {t.customer_name ?? t.customer_phone ?? "customer"}
+                {t.customer_phone ? ` · ${t.customer_phone}` : ""}
+                {" · "}order {t.order_id ? `#${t.order_id}` : "—"}
               </span>
               <span className={`${s.status} ${s[t.status]}`}>{t.status.replace("_", " ")}</span>
             </button>

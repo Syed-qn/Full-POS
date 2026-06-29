@@ -270,6 +270,8 @@ export type TicketResolutionAction =
 export interface Ticket {
   id: number;
   customer_id: number;
+  customer_phone?: string | null;
+  customer_name?: string | null;
   order_id: number | null;
   source_message: string | null;
   evidence: unknown[] | null;

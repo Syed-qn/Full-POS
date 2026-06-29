@@ -1,8 +1,9 @@
 import { apiClient } from "./apiClient";
 import type { Coupon, CouponCreateIn } from "./types";
 
-export async function listCoupons(): Promise<Coupon[]> {
-  return apiClient.get<Coupon[]>("/api/v1/coupons");
+export async function listCoupons(phone?: string): Promise<Coupon[]> {
+  const qs = phone ? `?phone=${encodeURIComponent(phone)}` : "";
+  return apiClient.get<Coupon[]>(`/api/v1/coupons${qs}`);
 }
 
 export async function createCoupon(body: CouponCreateIn): Promise<Coupon> {

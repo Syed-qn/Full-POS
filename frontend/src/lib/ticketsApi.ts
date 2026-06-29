@@ -1,9 +1,15 @@
 import { apiClient } from "./apiClient";
 import type { ResolveTicketIn, Ticket, TicketStatus } from "./types";
 
-export async function listTickets(status?: TicketStatus): Promise<Ticket[]> {
-  const query = status ? `?status=${status}` : "";
-  return apiClient.get<Ticket[]>(`/api/v1/tickets${query}`);
+export async function listTickets(
+  status?: TicketStatus,
+  phone?: string,
+): Promise<Ticket[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (phone) params.set("phone", phone);
+  const qs = params.toString();
+  return apiClient.get<Ticket[]>(`/api/v1/tickets${qs ? `?${qs}` : ""}`);
 }
 
 export async function getTicket(id: number): Promise<Ticket> {

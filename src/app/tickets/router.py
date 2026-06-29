@@ -21,13 +21,20 @@ router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 @router.get("", response_model=list[TicketOut])
 async def list_tickets(
     status: str | None = Query(default=None),
+    phone: str | None = Query(default=None),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[TicketOut]:
     rows = await ticket_service.list_tickets(
-        session, restaurant_id=restaurant.id, status=status
+        session, restaurant_id=restaurant.id, status=status, phone=phone
     )
-    return [TicketOut.model_validate(r) for r in rows]
+    out = []
+    for ticket, cust_phone, cust_name in rows:
+        item = TicketOut.model_validate(ticket)
+        item.customer_phone = cust_phone
+        item.customer_name = cust_name
+        out.append(item)
+    return out
 
 
 @router.get("/{ticket_id}", response_model=TicketOut)
