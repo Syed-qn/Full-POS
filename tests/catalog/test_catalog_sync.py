@@ -60,6 +60,53 @@ async def test_sync_upserts_and_deactivates(db_session, restaurant, monkeypatch)
     assert r2.is_active is False  # vanished from Meta → deactivated, not deleted
 
 
+async def test_sync_links_and_creates_orderable_dishes(db_session, restaurant, monkeypatch):
+    """Sync must make every product ORDERABLE: link a same-named unlinked dish, and
+    auto-create a dish for a product that has none. Fixes 'Lemon Mint is in the catalogue
+    but the bot says we don't have it' (the dish wasn't linked to the product)."""
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
+                           "catalog_ordering_enabled": True}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    # An existing text dish "Lemon Mint" that is NOT linked to any catalogue product.
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2, name="Lemon Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="lemon mint", catalog_retailer_id=None,
+    ))
+    await db_session.commit()
+
+    # Meta has Lemon Mint (matches the dish) + a brand-new product with no dish.
+    _patch_meta(monkeypatch, [
+        _mp("lm1", "Lemon Mint", 12, "Drinks"),
+        _mp("ns9", "New Soup", 10, "Soups"),
+    ])
+    res = await sync_catalog_from_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    assert res.linked == 1 and res.created == 1
+    # The existing Lemon Mint dish is now linked to the catalogue product.
+    mint = await db_session.scalar(
+        select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.name == "Lemon Mint")
+    )
+    assert mint.catalog_retailer_id == "lm1"
+    # A dish was auto-created for the product that had none, linked + orderable.
+    soup = await db_session.scalar(
+        select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.catalog_retailer_id == "ns9")
+    )
+    assert soup is not None and soup.name == "New Soup" and soup.is_available is True
+    assert soup.price_aed == Decimal("10.00")
+
+    # Re-sync is idempotent: already linked → no new links/creates.
+    _patch_meta(monkeypatch, [_mp("lm1", "Lemon Mint", 12, "Drinks"), _mp("ns9", "New Soup", 10, "Soups")])
+    res2 = await sync_catalog_from_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert res2.linked == 0 and res2.created == 0
+
+
 async def test_sync_requires_catalog_id(db_session, restaurant, monkeypatch):
     _patch_meta(monkeypatch, [])
     with pytest.raises(CatalogReadError, match="Catalog ID"):

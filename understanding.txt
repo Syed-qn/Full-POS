@@ -1265,3 +1265,18 @@
   show_menu ONLY for explicit menu requests, never for an add/order or an unavailable item.
   Tests updated: not-in-catalogue typed item (with filler) answered here (no product_list);
   questions/control/menu still fall through. llm+catalog 66 pass; lint clean.
+
+- 2026-06-29 08:25 Asia/Dubai — FIX: catalogue item said "we don't have it" (Lemon Mint).
+  Root cause: in catalogue mode the cart adds Dishes, and a typed item counts as "in the
+  catalogue" only when its Dish is linked to the CatalogProduct via catalog_retailer_id.
+  The Lemon Mint catalogue product existed but the Lemon Mint dish wasn't linked, so
+  _catalog_excludes_dish returned True -> "we don't have it" (and tapping the card would
+  fail too). Fix: sync now calls _ensure_orderable_dishes(): for every synced product,
+  link a same-named unlinked Dish, else AUTO-CREATE a lightweight orderable Dish from the
+  product (name/price/category/catalog_retailer_id). So adding a product in Meta + syncing
+  makes it orderable (typed AND tapped) with no manual wiring. SyncResult gains linked/
+  created counts (logged). Driven entirely by Commerce Manager: products NOT in Meta are
+  never created. Test: test_sync_links_and_creates_orderable_dishes (link existing +
+  create missing + idempotent re-sync). catalog 33 pass; lint clean. (Pre-existing
+  confirmation-totals failure unrelated; a location-radius test is flaky in full-suite
+  ordering but passes in isolation.)

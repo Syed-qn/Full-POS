@@ -26,6 +26,61 @@ class SyncResult:
     updated: int = 0
     deactivated: int = 0
     total_active: int = 0
+    linked: int = 0    # existing dishes linked to a catalogue product by name
+    created: int = 0   # orderable dishes auto-created for catalogue products w/o a dish
+
+
+async def _ensure_orderable_dishes(session: AsyncSession, *, restaurant_id: int, products) -> tuple[int, int]:
+    """Every catalogue product must map to an orderable Dish (the cart adds Dishes, and
+    the conversation engine treats a typed item as 'in the catalogue' only when its Dish
+    is linked via ``catalog_retailer_id``). For each synced product: if a dish is already
+    linked → leave it; else link a same-named unlinked dish; else AUTO-CREATE a dish from
+    the product. So adding a product in Meta + syncing makes it orderable (typed AND
+    tapped) with no manual wiring. Returns (linked, created)."""
+    from app.menu.models import Dish, Menu
+    from app.ordering.matching import normalize_name
+
+    menu = await session.scalar(
+        select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
+    ) or await session.scalar(
+        select(Menu).where(Menu.restaurant_id == restaurant_id).order_by(Menu.version.desc())
+    )
+    linked = created = 0
+    for p in products:
+        rid = (p.retailer_id or "").strip()
+        if not rid:
+            continue
+        already = await session.scalar(
+            select(Dish.id).where(
+                Dish.restaurant_id == restaurant_id, Dish.catalog_retailer_id == rid
+            ).limit(1)
+        )
+        if already:
+            continue
+        norm = normalize_name(p.name)
+        dish = await session.scalar(
+            select(Dish).where(
+                Dish.restaurant_id == restaurant_id,
+                Dish.name_normalized == norm,
+                Dish.catalog_retailer_id.is_(None),
+            ).limit(1)
+        )
+        if dish is not None:
+            dish.catalog_retailer_id = rid
+            linked += 1
+            continue
+        # No matching dish → create a lightweight orderable one from the product.
+        if menu is None:
+            menu = Menu(restaurant_id=restaurant_id, version=1, status="active", source_files=[])
+            session.add(menu)
+            await session.flush()
+        session.add(Dish(
+            menu_id=menu.id, restaurant_id=restaurant_id, name=p.name,
+            price_aed=p.price_aed, category=p.category, is_available=True,
+            name_normalized=norm, catalog_retailer_id=rid,
+        ))
+        created += 1
+    return linked, created
 
 
 async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -> SyncResult:
@@ -82,9 +137,15 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
             result.deactivated += 1
 
     result.total_active = len(seen)
+    # Make every synced product orderable (link/create its Dish) so a customer can type
+    # or tap it without manual wiring.
+    result.linked, result.created = await _ensure_orderable_dishes(
+        session, restaurant_id=restaurant_id, products=products
+    )
     logger.info(
-        "catalog sync restaurant %s: +%d ~%d -%d (%d active)",
-        restaurant_id, result.added, result.updated, result.deactivated, result.total_active,
+        "catalog sync restaurant %s: +%d ~%d -%d (%d active); dishes linked %d created %d",
+        restaurant_id, result.added, result.updated, result.deactivated,
+        result.total_active, result.linked, result.created,
     )
     return result
 
