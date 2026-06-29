@@ -482,6 +482,13 @@ RULES:
 - Collect ONLY: apt/room, building, receiver name. Nothing else is mandatory.
 - If customer volunteers extra info (landmark, floor), include it in apt_room field.
 - If location pin is outside {max_radius_km} km radius → tell customer politely, end conversation.
+- NEVER volunteer or repeat the RESTAURANT's own location/area/address here. You are
+  collecting the CUSTOMER's delivery location, not telling them where the restaurant is.
+- If the customer hasn't shared a pin after you asked once, DON'T keep repeating the same
+  request. Offer the alternative: "You can also just type your address — apartment/room
+  and building (e.g. 101, Tower A)." Then accept it as typed text.
+- If the message is off-topic, gibberish, or rude, DO NOT engage with it. Calmly restate
+  the single thing you need next (the location pin or the typed address) in one short line.
 """
 
 _CONFIRMATION_BLOCK = """
