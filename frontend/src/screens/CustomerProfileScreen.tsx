@@ -9,7 +9,7 @@ import {
   patchCustomerAddress,
   patchCustomerProfile,
 } from "../lib/customerApi";
-import { getWallet, getWalletEntries } from "../lib/walletApi";
+import { creditWallet, getWallet, getWalletEntries } from "../lib/walletApi";
 import type {
   AddressDetailOut,
   AddressPatchIn,
@@ -32,6 +32,41 @@ export function CustomerProfileScreen() {
 
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [walletEntries, setWalletEntries] = useState<WalletEntry[]>([]);
+  const [creditAmt, setCreditAmt] = useState("");
+  const [creditReason, setCreditReason] = useState("");
+  const [creditBusy, setCreditBusy] = useState(false);
+  const [creditMsg, setCreditMsg] = useState<string | null>(null);
+
+  async function reloadWallet() {
+    if (!id) return;
+    try {
+      const [balance, entries] = await Promise.all([
+        getWallet(Number(id)),
+        getWalletEntries(Number(id)),
+      ]);
+      setWallet(balance);
+      setWalletEntries(entries);
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  async function addCredit() {
+    if (!id) return;
+    setCreditBusy(true);
+    setCreditMsg(null);
+    try {
+      await creditWallet(Number(id), creditAmt, creditReason || "manager adjustment");
+      setCreditAmt("");
+      setCreditReason("");
+      setCreditMsg("Credit added.");
+      await reloadWallet();
+    } catch (e) {
+      setCreditMsg(e instanceof Error ? e.message : "Could not add credit.");
+    } finally {
+      setCreditBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -191,6 +226,25 @@ export function CustomerProfileScreen() {
                   </tbody>
                 </table>
               )}
+              <div className={s.walletForm}>
+                <input
+                  type="number" min="0" step="0.01" placeholder="Amount (AED)"
+                  value={creditAmt} onChange={(e) => setCreditAmt(e.target.value)}
+                  aria-label="credit amount"
+                />
+                <input
+                  type="text" placeholder="Reason"
+                  value={creditReason} onChange={(e) => setCreditReason(e.target.value)}
+                  aria-label="credit reason"
+                />
+                <Button
+                  disabled={creditBusy || !(Number(creditAmt) > 0)}
+                  onClick={addCredit}
+                >
+                  Add credit
+                </Button>
+              </div>
+              {creditMsg && <p className={s.walletMsg}>{creditMsg}</p>}
             </section>
           )}
         </div>

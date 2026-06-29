@@ -76,3 +76,25 @@
 .mono { font-family: monospace; }
 .empty { color: var(--text-secondary); font-size: 0.85rem; font-style: italic; }
 .error { color: #ef4444; padding: 24px; }
+
+.walletForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.walletForm input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.walletMsg {
+  font-size: 13px;
+  color: var(--accent, #166534);
+  margin: 6px 0 0;
+}
