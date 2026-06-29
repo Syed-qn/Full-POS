@@ -37,6 +37,26 @@ async def test_login_returns_token_and_me_works(client):
     assert me.json()["name"] == "Biryani House"
 
 
+async def test_login_still_returns_token_when_template_bootstrap_fails(
+    client, monkeypatch
+):
+    async def fail_template_bootstrap(*args, **kwargs):
+        raise RuntimeError("template provider unavailable")
+
+    monkeypatch.setattr(
+        "app.whatsapp.templates.ensure_utility_templates", fail_template_bootstrap
+    )
+
+    await client.post("/api/v1/auth/signup", json=SIGNUP)
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"phone": "+971501234567", "password": "hunter2!"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
+
+
 async def test_login_wrong_password_401(client):
     await client.post("/api/v1/auth/signup", json=SIGNUP)
     resp = await client.post(

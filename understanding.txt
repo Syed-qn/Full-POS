@@ -1300,3 +1300,14 @@
   sticky manual override. EVERYTHING per-restaurant editable from a Loyalty SettingsScreen tab.
 - Tests: 19 loyalty (tiers, earn, on-delivery, tier-query). Migration verified on fresh DB.
 - NEXT: frontend Loyalty settings tab + tier card on profile (in progress via subagent).
+- 2026-06-29 09:00 Asia/Dubai — CRITICAL FIX: login (and intermittent API calls) 500ing on
+  Render with `sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called`. Root
+  cause: db.py get_engine() used a pooled async engine with pool_pre_ping=True. Render's
+  managed Postgres drops idle connections, and the SAME lru_cached async engine is shared by
+  the web app AND Celery workers (each task runs in its own loop via asyncio.run). A pooled
+  connection bound to one event loop, pre-pinged from another, raises MissingGreenlet and
+  500s the request (e.g. /auth/login -> "unable to sign in"). Fix: switch get_engine() to
+  poolclass=NullPool (fresh connection per checkout, closed on release) -> never stale,
+  never cross-loop. Tests unaffected (conftest uses its own engine). identity/webhook/catalog
+  109 pass; engine pool confirmed NullPool; lint clean. NOTE: needs Render redeploy to take
+  effect. Login is by PHONE + password (POST /api/v1/auth/login {phone,password}), not email.
