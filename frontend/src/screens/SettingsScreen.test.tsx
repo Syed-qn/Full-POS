@@ -69,6 +69,23 @@ describe("SettingsScreen", () => {
     render(<SettingsScreen />);
     await waitFor(() => expect((screen.getByDisplayValue("Test Resto") as HTMLInputElement).value).toBe("Test Resto"));
   });
+
+  it("saves loyalty config with a loyalty object", async () => {
+    const spy = vi.mocked(fetch);
+    render(<SettingsScreen />);
+    await waitFor(() => screen.getByRole("button", { name: /loyalty/i }));
+    await userEvent.click(screen.getByRole("button", { name: /loyalty/i }));
+    await waitFor(() => screen.getByLabelText(/earn rate percent/i));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() =>
+      expect(
+        spy.mock.calls.some(([u, i]) => {
+          if (!String(u).includes("/settings") || i?.method !== "PATCH") return false;
+          try { return "loyalty" in JSON.parse(String(i?.body)); } catch { return false; }
+        }),
+      ).toBe(true),
+    );
+  });
 });
 
 describe("SettingsScreen — partner API keys", () => {

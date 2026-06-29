@@ -250,6 +250,45 @@ export interface CustomerProfileOut extends CustomerDetailOut {
   tags: Record<string, unknown>;
   addresses: AddressDetailOut[];
   recent_orders: OrderSummaryOut[];
+  /** Loyalty tier ("gold"|"silver"|"bronze") or null when none/auto-empty. */
+  loyalty_tier?: string | null;
+  /** True when a manager has pinned the tier (auto-recompute paused). */
+  loyalty_tier_locked?: boolean;
+}
+
+// ── Loyalty (settings) ───────────────────────────────────────────────────────
+
+/** Threshold a customer must meet to qualify for a tier. */
+export interface LoyaltyTierThreshold {
+  min_orders: number;
+  min_spend_aed: number;
+  max_recency_days: number;
+}
+
+/** Reward granted to a tier; null means the tier earns no recurring reward. */
+export interface LoyaltyTierReward {
+  discount_aed: number;
+  every_n_orders: number;
+}
+
+export interface LoyaltyConfig {
+  enabled: boolean;
+  /** Fraction of order value earned as credit, 0..1 (UI shows it as a percent). */
+  earn_rate: number;
+  earn_max_per_order_aed: number;
+  credit_ttl_days: number;
+  tiers: {
+    gold: LoyaltyTierThreshold;
+    silver: LoyaltyTierThreshold;
+    bronze: LoyaltyTierThreshold;
+  };
+  tier_rewards: {
+    gold: LoyaltyTierReward | null;
+    silver: LoyaltyTierReward | null;
+    bronze: LoyaltyTierReward | null;
+  };
+  demotion_grace_days: number;
+  scope_includes_catalog: boolean;
 }
 
 export interface CustomerListOut {

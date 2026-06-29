@@ -8,13 +8,13 @@ import {
   revokeApiKey,
   type ApiKey,
 } from "../lib/partnerApi";
-import type { RestaurantOut } from "../lib/types";
+import type { LoyaltyConfig, LoyaltyTierThreshold, RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "dispatch" | "integrations";
+type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "loyalty" | "dispatch" | "integrations";
 
 const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
   { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
@@ -27,6 +27,8 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
   { key: "cart", label: "Cart recovery", icon: "🛒", desc: "Abandoned carts",
     title: "Cart recovery", blurb: "Remind customers who left items in their cart, and auto-clear stale carts." },
+  { key: "loyalty", label: "Loyalty", icon: "🎁", desc: "Tiers & rewards",
+    title: "Loyalty", blurb: "Reward repeat customers with earned credit and tier-based perks. Everything here is yours to tune." },
   { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
   { key: "integrations", label: "API Keys", icon: "🔑", desc: "Partner access",
@@ -78,6 +80,35 @@ const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Sat
 
 const DEFAULT_DAY: DayHours = { open: true, from: "10:00", to: "23:00" };
 
+// Sensible defaults for older restaurant rows that predate the loyalty config.
+// Everything stays editable in the UI — these are only the starting values.
+const DEFAULT_LOYALTY: LoyaltyConfig = {
+  enabled: false,
+  earn_rate: 0.05,
+  earn_max_per_order_aed: 20,
+  credit_ttl_days: 90,
+  tiers: {
+    gold: { min_orders: 5, min_spend_aed: 300, max_recency_days: 30 },
+    silver: { min_orders: 3, min_spend_aed: 120, max_recency_days: 60 },
+    bronze: { min_orders: 2, min_spend_aed: 0, max_recency_days: 90 },
+  },
+  tier_rewards: {
+    gold: { discount_aed: 25, every_n_orders: 5 },
+    silver: { discount_aed: 10, every_n_orders: 6 },
+    bronze: null,
+  },
+  demotion_grace_days: 30,
+  scope_includes_catalog: true,
+};
+
+const LOYALTY_TIERS = ["gold", "silver", "bronze"] as const;
+type LoyaltyTierKey = (typeof LOYALTY_TIERS)[number];
+const TIER_LABELS: Record<LoyaltyTierKey, string> = {
+  gold: "🥇 Gold",
+  silver: "🥈 Silver",
+  bronze: "🥉 Bronze",
+};
+
 function defaultHours(): DayHours[] {
   return DAY_LABELS.map(() => ({ ...DEFAULT_DAY }));
 }
@@ -113,6 +144,9 @@ export function SettingsScreen() {
   const [cartReminder, setCartReminder] = useState(true);
   const [cartRecoveryMin, setCartRecoveryMin] = useState(15);
   const [cartExpiryMin, setCartExpiryMin] = useState(60);
+
+  // Loyalty tab — full config object (everything editable per restaurant)
+  const [loyalty, setLoyalty] = useState<LoyaltyConfig>(DEFAULT_LOYALTY);
 
   // Fees tab
   const [tiers, setTiers] = useState<FeeTier[]>(DEFAULT_TIERS);
@@ -157,6 +191,17 @@ export function SettingsScreen() {
       if (typeof sset.cart_recovery_minutes === "number") setCartRecoveryMin(sset.cart_recovery_minutes);
       if (typeof sset.cart_expiry_minutes === "number") setCartExpiryMin(sset.cart_expiry_minutes);
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
+      // Loyalty: deep-merge stored config over defaults so older rows / partial
+      // configs still render every editable field.
+      const lset = sset.loyalty as Partial<LoyaltyConfig> | undefined;
+      if (lset && typeof lset === "object") {
+        setLoyalty({
+          ...DEFAULT_LOYALTY,
+          ...lset,
+          tiers: { ...DEFAULT_LOYALTY.tiers, ...(lset.tiers ?? {}) },
+          tier_rewards: { ...DEFAULT_LOYALTY.tier_rewards, ...(lset.tier_rewards ?? {}) },
+        });
+      }
       // Opening hours: settings.open_hours.days maps "0".."6" -> ["HH:MM","HH:MM"].
       const oh = sset.open_hours as { days?: Record<string, [string, string]> } | undefined;
       const days = oh?.days;
@@ -230,6 +275,29 @@ export function SettingsScreen() {
     } catch {
       flash("Failed to save.");
     }
+  }
+
+  async function saveLoyalty() {
+    try {
+      await apiClient.patch("/api/v1/settings", { loyalty });
+      flash();
+    } catch {
+      flash("Failed to save.");
+    }
+  }
+
+  // Helpers to update nested loyalty config immutably.
+  function setLoyaltyField<K extends keyof LoyaltyConfig>(key: K, value: LoyaltyConfig[K]) {
+    setLoyalty((l) => ({ ...l, [key]: value }));
+  }
+  function setTierField(tier: LoyaltyTierKey, field: keyof LoyaltyTierThreshold, value: number) {
+    setLoyalty((l) => ({ ...l, tiers: { ...l.tiers, [tier]: { ...l.tiers[tier], [field]: value } } }));
+  }
+  function setRewardField(tier: LoyaltyTierKey, field: "discount_aed" | "every_n_orders", value: number) {
+    setLoyalty((l) => {
+      const cur = l.tier_rewards[tier] ?? { discount_aed: 0, every_n_orders: 0 };
+      return { ...l, tier_rewards: { ...l.tier_rewards, [tier]: { ...cur, [field]: value } } };
+    });
   }
 
   async function saveDispatch() {
@@ -595,6 +663,130 @@ export function SettingsScreen() {
           </div>
           <div className={s.actions}>
             <Button onClick={saveBatching}>Save</Button>
+          </div>
+        </div>
+      )}
+
+      {tab === "loyalty" && (
+        <div className={s.section}>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Enable loyalty program</span>
+              <span className={s.rowHint}>
+                Reward repeat customers with member tiers and earned wallet credit.
+                Everything below is yours to tune — no fixed values.
+              </span>
+            </div>
+            <label className={s.hoursToggle}>
+              <input
+                type="checkbox"
+                checked={loyalty.enabled}
+                onChange={(e) => setLoyaltyField("enabled", e.target.checked)}
+              />
+              <span>Enable loyalty</span>
+            </label>
+          </div>
+
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Earn rate (%)</span>
+              <input
+                aria-label="earn rate percent" type="number" min={0} max={100} step={0.5}
+                value={Math.round(loyalty.earn_rate * 1000) / 10}
+                onChange={(e) => setLoyaltyField("earn_rate", Number(e.target.value) / 100)}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>% of food subtotal credited to the customer's wallet on delivery.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Max credit per order (AED)</span>
+              <input
+                aria-label="earn max per order" type="number" min={0}
+                value={loyalty.earn_max_per_order_aed}
+                onChange={(e) => setLoyaltyField("earn_max_per_order_aed", Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Credit expires (days)</span>
+              <input
+                aria-label="credit ttl days" type="number" min={0}
+                value={loyalty.credit_ttl_days}
+                onChange={(e) => setLoyaltyField("credit_ttl_days", Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>0 = never expires.</span>
+            </label>
+          </div>
+
+          {LOYALTY_TIERS.map((tier) => (
+            <div key={tier} className={s.rowStacked}>
+              <div className={s.rowLabel}>
+                <span className={s.rowName}>{TIER_LABELS[tier]}</span>
+              </div>
+              <div className={`${s.row2} ${s.row2Compact}`}>
+                <label className={s.col}>
+                  <span className={s.rowName}>Min orders</span>
+                  <input aria-label={`${tier} min orders`} type="number" min={0}
+                    value={loyalty.tiers[tier].min_orders}
+                    onChange={(e) => setTierField(tier, "min_orders", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`} />
+                </label>
+                <label className={s.col}>
+                  <span className={s.rowName}>Min spend (AED)</span>
+                  <input aria-label={`${tier} min spend`} type="number" min={0}
+                    value={loyalty.tiers[tier].min_spend_aed}
+                    onChange={(e) => setTierField(tier, "min_spend_aed", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`} />
+                </label>
+                <label className={s.col}>
+                  <span className={s.rowName}>Max recency (days)</span>
+                  <input aria-label={`${tier} max recency`} type="number" min={0}
+                    value={loyalty.tiers[tier].max_recency_days}
+                    onChange={(e) => setTierField(tier, "max_recency_days", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`} />
+                </label>
+                <label className={s.col}>
+                  <span className={s.rowName}>Reward AED</span>
+                  <input aria-label={`${tier} reward aed`} type="number" min={0}
+                    value={loyalty.tier_rewards[tier]?.discount_aed ?? 0}
+                    onChange={(e) => setRewardField(tier, "discount_aed", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`} />
+                </label>
+                <label className={s.col}>
+                  <span className={s.rowName}>Reward every N orders</span>
+                  <input aria-label={`${tier} reward every n`} type="number" min={0}
+                    value={loyalty.tier_rewards[tier]?.every_n_orders ?? 0}
+                    onChange={(e) => setRewardField(tier, "every_n_orders", Number(e.target.value))}
+                    onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`} />
+                </label>
+              </div>
+            </div>
+          ))}
+
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Demotion grace (days)</span>
+              <input aria-label="demotion grace days" type="number" min={0}
+                value={loyalty.demotion_grace_days}
+                onChange={(e) => setLoyaltyField("demotion_grace_days", Number(e.target.value))}
+                onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`} />
+              <span className={s.rowHint}>Quiet days allowed before a tier is lost.</span>
+            </label>
+          </div>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Apply to catalog orders</span>
+            </div>
+            <label className={s.hoursToggle}>
+              <input type="checkbox" checked={loyalty.scope_includes_catalog}
+                onChange={(e) => setLoyaltyField("scope_includes_catalog", e.target.checked)} />
+              <span>Include catalog orders</span>
+            </label>
+          </div>
+
+          <div className={s.actions}>
+            <Button onClick={saveLoyalty}>Save</Button>
           </div>
         </div>
       )}

@@ -52,3 +52,18 @@ export async function deleteCustomerAddress(
 ): Promise<void> {
   await apiClient.delete(`/api/v1/ordering/customers/${customerId}/addresses/${addressId}`);
 }
+
+/**
+ * Manager loyalty-tier override. Pass `{ tier }` (gold/silver/bronze or null) to
+ * set + lock the tier, or `{ unlock: true }` to resume auto-recompute. Returns
+ * the refreshed profile.
+ */
+export async function setCustomerLoyaltyTier(
+  customerId: number,
+  body: { tier: "gold" | "silver" | "bronze" | null } | { unlock: true },
+): Promise<CustomerProfileOut> {
+  return apiClient.post<CustomerProfileOut>(
+    `/api/v1/ordering/customers/${customerId}/loyalty-tier`,
+    body,
+  );
+}

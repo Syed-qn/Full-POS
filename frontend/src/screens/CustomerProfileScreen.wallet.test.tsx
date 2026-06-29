@@ -38,6 +38,18 @@ describe("CustomerProfileScreen wallet editing", () => {
     vi.mocked(walletApi.debitWallet).mockResolvedValue({
       customer_id: 5, balance_aed: "0.00", available_aed: "0.00", status: "active",
     });
+    vi.mocked(customerApi.setCustomerLoyaltyTier).mockResolvedValue(
+      { ...profile, loyalty_tier: "gold", loyalty_tier_locked: true } as never,
+    );
+  });
+
+  it("sets a loyalty tier via the override control", async () => {
+    renderScreen();
+    await waitFor(() => screen.getByLabelText("set loyalty tier"));
+    fireEvent.change(screen.getByLabelText("set loyalty tier"), { target: { value: "gold" } });
+    await waitFor(() =>
+      expect(vi.mocked(customerApi.setCustomerLoyaltyTier)).toHaveBeenCalledWith(5, { tier: "gold" }),
+    );
   });
 
   it("shows an Add credit control and disables it until an amount is entered", async () => {

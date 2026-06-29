@@ -8,6 +8,7 @@ import {
   getCustomerProfile,
   patchCustomerAddress,
   patchCustomerProfile,
+  setCustomerLoyaltyTier,
 } from "../lib/customerApi";
 import { creditWallet, debitWallet, getWallet, getWalletEntries } from "../lib/walletApi";
 import { listCoupons } from "../lib/couponsApi";
@@ -271,6 +272,49 @@ export function CustomerProfileScreen() {
               {creditMsg && <p className={s.walletMsg}>{creditMsg}</p>}
             </section>
           )}
+
+          <section className={s.card}>
+            <h3 className={s.cardTitle}>Loyalty</h3>
+            <div className={s.stats}>
+              <Stat
+                label="Tier"
+                value={
+                  profile.loyalty_tier
+                    ? `${{ gold: "🥇", silver: "🥈", bronze: "🥉" }[profile.loyalty_tier] ?? ""} ${profile.loyalty_tier}`
+                    : "—"
+                }
+              />
+              <Stat label="Set by" value={profile.loyalty_tier_locked ? "Manager (locked)" : "Auto"} />
+            </div>
+            <div className={s.walletForm}>
+              <select
+                aria-label="set loyalty tier"
+                value={profile.loyalty_tier ?? ""}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  const tier = (v === "" ? null : v) as "gold" | "silver" | "bronze" | null;
+                  const updated = await setCustomerLoyaltyTier(Number(id), { tier });
+                  setProfile(updated);
+                }}
+              >
+                <option value="">None</option>
+                <option value="bronze">🥉 Bronze</option>
+                <option value="silver">🥈 Silver</option>
+                <option value="gold">🥇 Gold</option>
+              </select>
+              {profile.loyalty_tier_locked && (
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    const updated = await setCustomerLoyaltyTier(Number(id), { unlock: true });
+                    setProfile(updated);
+                  }}
+                >
+                  Unlock (auto)
+                </Button>
+              )}
+            </div>
+          </section>
 
           {coupons.length > 0 && (
             <section className={s.card}>
