@@ -104,9 +104,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS "http://localhost:${PORT:-$APP_PORT}/health" || exit 1
 
-# On boot: apply DB migrations, then serve. Best-effort migrate (|| echo) so a
-# transient/misconfigured DB logs loudly but still starts the API and keeps
-# /health green — the next deploy re-runs `alembic upgrade head` (idempotent).
+# On boot: apply DB migrations, then serve. The migration MUST succeed — if
+# `alembic upgrade head` fails the container exits non-zero so the platform marks
+# the deploy FAILED (red), instead of silently serving an API against an
+# un/partially-migrated DB (which 500s every endpoint that needs the new tables —
+# tickets/wallet/coupons-v2/loyalty — and looks like "the page is just dummy").
+# A failed deploy is loud and safe; a silently-broken live app is neither.
 #
 # Port: bind the platform-assigned ${PORT} (Render/Heroku/Cloud Run inject it);
 # fall back to ${APP_PORT} for local/docker-compose. Binding the wrong port is
@@ -116,4 +119,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 # back to ${APP_WORKERS}. On the 512 MB free tier, 4 uvicorn workers each load the
 # full app and OOM-thrash ("Child process died" loop), so the deploy never goes
 # live — one worker fits the memory budget.
-CMD sh -c 'alembic upgrade head || echo "[startup] alembic upgrade head FAILED — check APP_DATABASE_URL"; exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-$APP_PORT}" --workers "${WEB_CONCURRENCY:-$APP_WORKERS}"'
+CMD sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-$APP_PORT}" --workers "${WEB_CONCURRENCY:-$APP_WORKERS}"'
