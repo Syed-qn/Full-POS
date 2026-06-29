@@ -17,6 +17,7 @@ import { RidersScreen } from "./screens/RidersScreen";
 import { MarketingScreen } from "./screens/MarketingScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { TicketsScreen } from "./screens/TicketsScreen";
+import { CouponsScreen } from "./screens/CouponsScreen";
 
 function Guarded({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
       <Route path="/tickets" element={<Guarded><TicketsScreen /></Guarded>} />
+      <Route path="/coupons" element={<Guarded><CouponsScreen /></Guarded>} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />
       <Route path="/analytics" element={<Guarded><AnalyticsScreen /></Guarded>} />
       <Route path="/settings" element={<Guarded><SettingsScreen /></Guarded>} />

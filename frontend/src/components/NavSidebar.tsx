@@ -13,6 +13,7 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
   { to: "/riders", label: "Riders", icon: "🛵" },
   { to: "/conversations", label: "Chats", icon: "💬" },
   { to: "/tickets", label: "Complaints", icon: "🎫" },
+  { to: "/coupons", label: "Coupons", icon: "🏷️" },
   { to: "/marketing", label: "Marketing", icon: "📣" },
   { to: "/analytics", label: "Reports", icon: "📊" },
   { to: "/settings", label: "Settings", icon: "⚙️" },

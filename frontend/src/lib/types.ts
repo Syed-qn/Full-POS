@@ -309,3 +309,36 @@ export interface WalletEntry {
   created_by: string | null;
   created_at: string;
 }
+
+export type CouponDiscountType = "fixed" | "percent";
+export type CouponKind = "single_use" | "multi_use";
+
+export interface Coupon {
+  id: number;
+  code: string;
+  kind: CouponKind;
+  discount_type: CouponDiscountType;
+  discount_aed: string | null;
+  percent: string | null;
+  max_discount_aed: string | null;
+  min_order_aed: string;
+  applies_to: string;
+  per_customer_limit: number | null;
+  total_redemption_limit: number | null;
+  status: string;
+  valid_from: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface CouponCreateIn {
+  discount_type: CouponDiscountType;
+  discount_value: string;
+  kind?: CouponKind;
+  min_order_aed?: string;
+  max_discount_aed?: string;
+  per_customer_limit?: number;
+  total_redemption_limit?: number;
+  expires_at?: string;
+  code?: string;
+}
