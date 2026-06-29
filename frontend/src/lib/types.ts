@@ -284,8 +284,14 @@ export interface Ticket {
   created_at: string;
 }
 
+export type TicketResolveAction =
+  | "wallet_refund"
+  | "replacement"
+  | "create_replacement"
+  | "resolved_no_action";
+
 export interface ResolveTicketIn {
-  action: TicketResolutionAction;
+  action: TicketResolveAction;
   note: string;
   amount?: string;
   replacement_order_id?: number;

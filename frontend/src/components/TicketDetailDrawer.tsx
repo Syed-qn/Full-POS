@@ -15,7 +15,6 @@ export function TicketDetailDrawer({
 }) {
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
-  const [replacementOrderId, setReplacementOrderId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
@@ -23,7 +22,6 @@ export function TicketDetailDrawer({
   const isResolved = ticket.status === "resolved";
   const noteOk = note.trim().length > 0;
   const amountOk = Number(amount) > 0;
-  const replacementOk = Number(replacementOrderId) > 0;
 
   // Show the customer's current wallet credit so the manager has context when
   // deciding a refund. Best-effort — hidden if unavailable.
@@ -136,29 +134,17 @@ export function TicketDetailDrawer({
           </div>
 
           <div className={s.action}>
-            <label className={s.label} htmlFor="ticket-replacement">
-              Replacement order id
-            </label>
-            <input
-              id="ticket-replacement"
-              className={s.input}
-              type="number"
-              min="0"
-              value={replacementOrderId}
-              onChange={(e) => setReplacementOrderId(e.target.value)}
-            />
+            <span className={s.hint}>
+              {ticket.order_id
+                ? "Creates a free replacement of the original order — sent to the kitchen, assigned a rider, and trackable like any order."
+                : "This complaint isn't linked to an order, so a replacement can't be auto-created. Issue a refund or place a manual order instead."}
+            </span>
             <Button
               variant="ghost"
-              disabled={submitting || !noteOk || !replacementOk}
-              onClick={() =>
-                submit({
-                  action: "replacement",
-                  note,
-                  replacement_order_id: Number(replacementOrderId),
-                })
-              }
+              disabled={submitting || !noteOk || !ticket.order_id}
+              onClick={() => submit({ action: "create_replacement", note })}
             >
-              Send Replacement
+              Create replacement order
             </Button>
           </div>
 

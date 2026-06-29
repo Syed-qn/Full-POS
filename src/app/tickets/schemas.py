@@ -24,7 +24,9 @@ class TicketOut(BaseModel):
 
 
 class TicketResolveIn(BaseModel):
-    action: str = Field(pattern="^(wallet_refund|replacement|resolved_no_action)$")
+    action: str = Field(
+        pattern="^(wallet_refund|replacement|create_replacement|resolved_no_action)$"
+    )
     note: str = Field(min_length=1)
     amount: Decimal | None = None
     replacement_order_id: int | None = None

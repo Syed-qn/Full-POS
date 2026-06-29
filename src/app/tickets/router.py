@@ -61,6 +61,11 @@ async def resolve_ticket(
                 session, restaurant_id=restaurant.id, ticket_id=ticket_id,
                 amount=Decimal(body.amount), note=body.note, created_by=actor,
             )
+        elif body.action == "create_replacement":
+            ticket = await ticket_service.create_replacement_order(
+                session, restaurant_id=restaurant.id, ticket_id=ticket_id,
+                note=body.note, created_by=actor,
+            )
         elif body.action == "replacement":
             if body.replacement_order_id is None:
                 raise HTTPException(status_code=400, detail="replacement_order_id required")

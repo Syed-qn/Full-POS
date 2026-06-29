@@ -72,10 +72,18 @@ describe("TicketDetailDrawer", () => {
     expect(resolveCall).toBeTruthy();
   });
 
-  it("requires a replacement order id before sending a replacement", () => {
+  it("enables Create replacement order once a note is entered (order-linked ticket)", () => {
     render(<TicketDetailDrawer ticket={ticket} onResolved={() => {}} />);
+    const btn = screen.getByRole("button", { name: /create replacement order/i });
+    expect(btn).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/resolution note/i), { target: { value: "remaking" } });
-    expect(screen.getByRole("button", { name: /send replacement/i })).toBeDisabled();
+    expect(btn).not.toBeDisabled();
+  });
+
+  it("disables Create replacement when the complaint has no linked order", () => {
+    render(<TicketDetailDrawer ticket={{ ...ticket, order_id: null }} onResolved={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/resolution note/i), { target: { value: "remaking" } });
+    expect(screen.getByRole("button", { name: /create replacement order/i })).toBeDisabled();
   });
 
   it("hides action buttons for a resolved ticket", () => {

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
@@ -203,6 +203,109 @@ async def resolve_replacement(
     await _notify(
         session, ticket,
         "We're sorry about your experience. A replacement for your order is on the way. 🛵",
+    )
+    return ticket
+
+
+async def create_replacement_order(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ticket_id: int,
+    note: str,
+    created_by: str,
+) -> Ticket:
+    """Create a REAL free replacement order from the complained-about order, then
+    resolve the ticket. The new order is a normal order — it goes to the kitchen,
+    is dispatchable to a rider, and is trackable — but is free to the customer
+    (total 0, COD due 0). Idempotent on the ticket.
+    """
+    from decimal import Decimal
+
+    from app.ordering.models import Order, OrderItem
+    from app.ordering.service import finalize_confirmation
+
+    ticket = await get_ticket(session, restaurant_id=restaurant_id, ticket_id=ticket_id)
+    if ticket.status == "resolved":
+        return ticket
+    if not note or not note.strip():
+        raise TicketError("resolution note is required")
+    if ticket.order_id is None:
+        raise TicketError(
+            "this complaint isn't linked to an order — issue a refund or place a "
+            "manual order instead"
+        )
+    original = await session.get(Order, ticket.order_id)
+    if original is None:
+        raise TicketError("original order not found")
+
+    # New free order cloned from the original.
+    count = await session.scalar(
+        select(func.count())
+        .select_from(Order)
+        .where(Order.restaurant_id == restaurant_id)
+    ) or 0
+    replacement = Order(
+        restaurant_id=restaurant_id,
+        customer_id=original.customer_id,
+        order_number=f"{original.order_number}-R{count + 1:04d}",
+        status="pending_confirmation",
+        priority="normal",
+        address_id=original.address_id,
+        distance_km=original.distance_km,
+        subtotal=original.subtotal,
+        delivery_fee_aed=Decimal("0.00"),
+        total=Decimal("0.00"),  # free replacement — customer pays nothing
+        additional_details=f"Free replacement for {original.order_number} (ticket #{ticket.id})",
+    )
+    session.add(replacement)
+    await session.flush()
+
+    # Clone the line items so the kitchen knows what to make.
+    items = (
+        await session.scalars(
+            select(OrderItem).where(OrderItem.order_id == original.id)
+        )
+    ).all()
+    for it in items:
+        session.add(
+            OrderItem(
+                order_id=replacement.id,
+                dish_id=it.dish_id,
+                dish_number=it.dish_number,
+                dish_name=it.dish_name,
+                variant_name=it.variant_name,
+                price_aed=it.price_aed,
+                qty=it.qty,
+                notes=it.notes,
+            )
+        )
+    await session.flush()
+
+    # Run it through confirmation → starts the SLA clock, computes the prep
+    # deadline, and enters the kitchen/dispatch/tracking pipeline like any order.
+    await finalize_confirmation(session, order=replacement, actor=created_by)
+
+    ticket.status = "resolved"
+    ticket.resolution_action = "replacement"
+    ticket.replacement_order_id = replacement.id
+    ticket.resolution_note = note
+    ticket.assigned_to = created_by
+    ticket.resolved_at = datetime.now(timezone.utc)
+    await record_audit(
+        session,
+        actor=created_by,
+        restaurant_id=restaurant_id,
+        entity="ticket",
+        entity_id=str(ticket_id),
+        action="resolved_replacement_created",
+        before={"status": "open"},
+        after={"replacement_order_id": replacement.id, "note": note},
+    )
+    await _notify(
+        session, ticket,
+        f"We're sorry about your experience. A free replacement (order "
+        f"{replacement.order_number}) is being prepared and is on its way. 🛵",
     )
     return ticket
 
