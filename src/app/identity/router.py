@@ -21,6 +21,7 @@ from app.identity.schemas import (
     RiderLocationOut,
     RiderOut,
     RiderPatch,
+    OnboardingStatusOut,
     SettingsPatch,
     SignupIn,
     TokenOut,
@@ -80,6 +81,25 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
 @router.get("/me", response_model=RestaurantOut)
 async def me(restaurant: Restaurant = Depends(current_restaurant)):
     return restaurant
+
+
+@router.get("/onboarding/status", response_model=OnboardingStatusOut)
+async def onboarding_status(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await service.get_onboarding_status(session, restaurant=restaurant)
+
+
+@router.post("/onboarding/complete", response_model=RestaurantOut)
+async def onboarding_complete(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await service.complete_onboarding(session, restaurant=restaurant)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
 @router.get("/geo/health")

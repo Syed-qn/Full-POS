@@ -36,12 +36,15 @@ async def create_restaurant(
     existing = await session.scalar(select(Restaurant).where(Restaurant.phone == phone))
     if existing:
         raise DuplicatePhoneError("phone already registered")
+    from app.identity.models import DEFAULT_SETTINGS
+
     restaurant = Restaurant(
         name=name,
         phone=phone,
         password_hash=hash_password(password),
         lat=lat,
         lng=lng,
+        settings={**DEFAULT_SETTINGS, "onboarding_complete": False},
     )
     session.add(restaurant)
     await session.flush()
@@ -383,6 +386,78 @@ async def update_profile(
     await session.commit()
     await session.refresh(restaurant)
     return restaurant
+
+
+async def get_onboarding_status(
+    session: AsyncSession, *, restaurant: Restaurant
+) -> dict:
+    """Steps left after signup: location, menu, Meta catalogue sync."""
+    from app.menu.models import Menu
+
+    settings = restaurant.settings or {}
+    if settings.get("onboarding_complete") is True:
+        return {
+            "complete": True,
+            "has_location": True,
+            "has_menu": True,
+            "has_catalog_id": bool((settings.get("catalog_id") or "").strip()),
+            "catalog_synced": True,
+        }
+    has_menu = await session.scalar(
+        select(Menu.id).where(
+            Menu.restaurant_id == restaurant.id, Menu.status == "active"
+        ).limit(1)
+    ) is not None
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    catalog_synced = False
+    if catalog_id:
+        from app.catalog.models import CatalogProduct
+
+        catalog_synced = await session.scalar(
+            select(CatalogProduct.id).where(
+                CatalogProduct.restaurant_id == restaurant.id,
+                CatalogProduct.is_active.is_(True),
+            ).limit(1)
+        ) is not None
+    has_location = restaurant.lat != 0.0 or restaurant.lng != 0.0
+    # Legacy tenants (pre-onboarding flag): skip wizard if they already have a menu.
+    if "onboarding_complete" not in settings and has_menu:
+        return {
+            "complete": True,
+            "has_location": has_location,
+            "has_menu": True,
+            "has_catalog_id": bool(catalog_id),
+            "catalog_synced": catalog_synced,
+        }
+    complete = has_menu and bool(catalog_id) and catalog_synced
+    return {
+        "complete": complete,
+        "has_location": has_location,
+        "has_menu": has_menu,
+        "has_catalog_id": bool(catalog_id),
+        "catalog_synced": catalog_synced,
+    }
+
+
+async def complete_onboarding(
+    session: AsyncSession, *, restaurant: Restaurant
+) -> Restaurant:
+    """Mark onboarding done; enable catalogue ordering for customer menu requests."""
+    status = await get_onboarding_status(session, restaurant=restaurant)
+    if not status["has_menu"]:
+        raise ValueError("Upload and activate a menu before finishing onboarding.")
+    if not status["has_catalog_id"]:
+        raise ValueError("Set your Meta Catalog ID before finishing onboarding.")
+    if not status["catalog_synced"]:
+        raise ValueError("Sync from Meta before finishing onboarding.")
+    return await update_settings(
+        session,
+        restaurant=restaurant,
+        changes={
+            "onboarding_complete": True,
+            "catalog_ordering_enabled": True,
+        },
+    )
 
 
 async def update_settings(

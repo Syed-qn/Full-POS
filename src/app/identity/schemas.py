@@ -33,6 +33,14 @@ class RestaurantOut(BaseModel):
     settings: dict
 
 
+class OnboardingStatusOut(BaseModel):
+    complete: bool
+    has_location: bool
+    has_menu: bool
+    has_catalog_id: bool
+    catalog_synced: bool
+
+
 class RiderIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(min_length=7, max_length=32)

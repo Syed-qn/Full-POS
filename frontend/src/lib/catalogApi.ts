@@ -18,6 +18,10 @@ export interface CatalogSyncResult {
   updated: number;
   deactivated: number;
   total_active: number;
+  linked?: number;
+  created?: number;
+  pushed?: number;
+  push_updated?: number;
   products: CatalogProductOut[];
 }
 

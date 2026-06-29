@@ -1,7 +1,9 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/Toaster";
 import { isAuthenticated } from "./lib/auth";
+import { fetchOnboardingStatus } from "./lib/onboardingApi";
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
 import { CustomerProfileScreen } from "./screens/CustomerProfileScreen";
@@ -9,6 +11,7 @@ import { CustomersScreen } from "./screens/CustomersScreen";
 import { LiveOpsScreen } from "./screens/LiveOpsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { MenuManagerScreen } from "./screens/MenuManagerScreen";
+import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { NewOrderScreen } from "./screens/NewOrderScreen";
 import { OrdersScreen } from "./screens/OrdersScreen";
 import { PublicTrackingScreen } from "./screens/PublicTrackingScreen";
@@ -20,8 +23,27 @@ import { TicketsScreen } from "./screens/TicketsScreen";
 import { CouponsScreen } from "./screens/CouponsScreen";
 
 function Guarded({ children }: { children: React.ReactNode }) {
+  const loc = useLocation();
+  const [onboardingOk, setOnboardingOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    fetchOnboardingStatus()
+      .then((s) => setOnboardingOk(s.complete))
+      .catch(() => setOnboardingOk(true));
+  }, [loc.pathname]);
+
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
+  if (onboardingOk === false && loc.pathname !== "/onboarding") {
+    return <Navigate to="/onboarding" replace />;
+  }
+  if (onboardingOk === null) return null;
   return <AppShell>{children}</AppShell>;
+}
+
+function OnboardingRoute() {
+  if (!isAuthenticated()) return <Navigate to="/login" replace />;
+  return <OnboardingScreen />;
 }
 
 export default function App() {
@@ -29,6 +51,7 @@ export default function App() {
     <>
     <Routes>
       <Route path="/login" element={<LoginScreen />} />
+      <Route path="/onboarding" element={<OnboardingRoute />} />
       <Route path="/track/:trackingToken" element={<PublicTrackingScreen />} />
       <Route path="/rider-track/:riderToken" element={<RiderTrackingScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />

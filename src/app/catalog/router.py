@@ -10,9 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.catalog.meta_client import CatalogReadError
+from app.catalog.meta_client import CatalogReadError, CatalogWriteError
 from app.catalog.service import send_catalog
-from app.catalog.sync_service import list_catalog_products, sync_catalog_from_meta
+from app.catalog.sync_service import (
+    list_catalog_products,
+    push_dishes_to_meta,
+    sync_catalog_from_meta,
+    sync_full_bidirectional,
+)
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
@@ -45,6 +50,10 @@ class SyncResultOut(BaseModel):
     updated: int
     deactivated: int
     total_active: int
+    linked: int = 0
+    created: int = 0
+    pushed: int = 0
+    push_updated: int = 0
     products: list[CatalogProductOut]
 
 
@@ -99,5 +108,58 @@ async def sync_catalog(
         updated=result.updated,
         deactivated=result.deactivated,
         total_active=result.total_active,
+        linked=result.linked,
+        created=result.created,
+        products=[CatalogProductOut.model_validate(p) for p in products],
+    )
+
+
+@router.post("/push", response_model=SyncResultOut)
+async def push_catalog(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Push local dishes to Meta, then re-pull the catalogue mirror."""
+    try:
+        await push_dishes_to_meta(session, restaurant_id=restaurant.id)
+        result = await sync_catalog_from_meta(session, restaurant_id=restaurant.id)
+    except (CatalogReadError, CatalogWriteError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    await session.commit()
+    products = await list_catalog_products(session, restaurant_id=restaurant.id)
+    return SyncResultOut(
+        added=result.added,
+        updated=result.updated,
+        deactivated=result.deactivated,
+        total_active=result.total_active,
+        linked=result.linked,
+        created=result.created,
+        pushed=result.pushed,
+        push_updated=result.push_updated,
+        products=[CatalogProductOut.model_validate(p) for p in products],
+    )
+
+
+@router.post("/sync-full", response_model=SyncResultOut)
+async def sync_catalog_full(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Bidirectional sync: pull Meta → link dishes → push dish-only → pull again."""
+    try:
+        result = await sync_full_bidirectional(session, restaurant_id=restaurant.id)
+    except (CatalogReadError, CatalogWriteError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    await session.commit()
+    products = await list_catalog_products(session, restaurant_id=restaurant.id)
+    return SyncResultOut(
+        added=result.added,
+        updated=result.updated,
+        deactivated=result.deactivated,
+        total_active=result.total_active,
+        linked=result.linked,
+        created=result.created,
+        pushed=result.pushed,
+        push_updated=result.push_updated,
         products=[CatalogProductOut.model_validate(p) for p in products],
     )

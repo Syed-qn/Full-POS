@@ -468,17 +468,24 @@ async def _catalog_filter_candidates(session: AsyncSession, restaurant_id: int, 
     return kept
 
 
-async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
+async def _render_menu(
+    session: AsyncSession, restaurant_id: int, *, force_text: bool = False
+) -> str:
     """Render the active menu as categorized text.
 
     Catalogue mode: the menu knowledge is the synced Meta catalogue, NOT the text-menu
     dishes — so the bot never offers items the customer can't order from the catalogue.
+    ``force_text`` bypasses that bound (used when catalogue cards could not be sent).
     """
     from app.identity.models import Restaurant
     from app.menu.models import Dish, Menu
 
     _rest = await session.get(Restaurant, restaurant_id)
-    if _rest is not None and (_rest.settings or {}).get("catalog_ordering_enabled"):
+    if (
+        not force_text
+        and _rest is not None
+        and (_rest.settings or {}).get("catalog_ordering_enabled")
+    ):
         return await _render_catalog_menu(session, restaurant_id)
 
     menu = await session.scalar(
@@ -521,19 +528,17 @@ async def _send_menu_or_catalog(
     *,
     prefix: str,
 ) -> bool:
-    """Show the menu under the restaurant's STRICT mode (catalogue OR text, no mixing).
+    """Unified menu: send WhatsApp catalogue cards when synced; else text menu.
 
-    * Catalogue mode (``catalog_ordering_enabled``): send the WhatsApp catalogue cards.
-      NEVER the text list. If the cards can't be sent, ask the customer to type their
-      order instead (the engine still parses typed items).
-    * Text mode (default): send the OPS-managed text menu.
-
-    Returns True if the catalogue was sent, False otherwise.
+    Customers always get one menu surface. Catalogue is preferred when a
+    ``catalog_id`` is configured and products have been synced from Meta.
     """
     from app.identity.models import Restaurant
 
     restaurant = await session.get(Restaurant, restaurant_id)
-    if restaurant is not None and (restaurant.settings or {}).get("catalog_ordering_enabled"):
+    settings = (restaurant.settings or {}) if restaurant is not None else {}
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    if catalog_id:
         from app.catalog.service import send_catalog
 
         sent = await send_catalog(
@@ -545,18 +550,11 @@ async def _send_menu_or_catalog(
         if sent:
             _set_state(conv, dialogue_state="menu_sent")
             return True
-        # Catalogue mode is strict — no text-menu fallback.
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix=f"{prefix}-nocat",
-            body="Our catalogue is just loading 🙏 Please type what you'd like and I'll add it right away 😊",
-        )
-        _set_state(conv, dialogue_state="menu_sent")
-        return False
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix=prefix, body=await _render_menu(session, restaurant_id),
+        prefix=prefix, body=await _render_menu(session, restaurant_id, force_text=True),
     )
+    _set_state(conv, dialogue_state="menu_sent")
     return False
 
 

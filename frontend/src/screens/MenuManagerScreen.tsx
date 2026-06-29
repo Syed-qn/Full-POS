@@ -8,9 +8,7 @@ import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvail
 import { toast } from "../components/Toaster";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
-import { CatalogPanel } from "../components/CatalogPanel";
-import { apiClient } from "../lib/apiClient";
-import type { RestaurantOut } from "../lib/types";
+import { UnifiedMenuPanel } from "../components/UnifiedMenuPanel";
 import s from "./MenuManagerScreen.module.css";
 
 export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number }) {
@@ -22,44 +20,17 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   const [editing, setEditing] = useState<DishOut | "new" | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
-  const [catalogMode, setCatalogMode] = useState(false);
-  const [togglingMode, setTogglingMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Catalogue mode (set in Settings): when on, the Meta catalogue is the menu source,
-  // so we surface the Sync-from-Meta panel here.
-  useEffect(() => {
-    apiClient
-      .get<RestaurantOut>("/api/v1/me")
-      .then((r) => setCatalogMode(!!(r.settings as Record<string, unknown>)?.catalog_ordering_enabled))
-      .catch(() => {});
-  }, []);
-
-  // Quick mode switch from the Menu page (for testing). Persists to settings so the
-  // WhatsApp chat behaviour switches too (catalogue cards vs the text menu).
-  async function toggleMode() {
-    const next = !catalogMode;
-    setTogglingMode(true);
-    try {
-      await apiClient.patch("/api/v1/settings", { catalog_ordering_enabled: next });
-      setCatalogMode(next);
-      toast(next ? "Switched to Catalogue mode" : "Switched to Text menu mode");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Couldn't switch mode", "error");
-    } finally {
-      setTogglingMode(false);
-    }
-  }
 
   function reloadDishes() {
     if (activeMenuId !== null) {
-      getMenu(activeMenuId).then((m) => setDishes(m.dishes)).catch(() => {});
+      getMenu(activeMenuId).then((m) => setDishes(m.dishes ?? [])).catch(() => {});
     } else {
       fetchActiveMenu()
         .then((m) => {
           if (m) {
             setActiveMenuId(m.id);
-            setDishes(m.dishes);
+            setDishes(m.dishes ?? []);
           }
         })
         .catch(() => {});
@@ -70,7 +41,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     if (pending !== null) return;
     if (activeMenuId !== null) {
       // Known menu id (after an upload+activate, or passed in): load its dishes.
-      getMenu(activeMenuId).then((m) => setDishes(m.dishes)).catch(() => {}).finally(() => setLoading(false));
+      getMenu(activeMenuId).then((m) => setDishes(m.dishes ?? [])).catch(() => {}).finally(() => setLoading(false));
     } else {
       // First mount with no id: discover the restaurant's active menu so the
       // current dishes show up instead of the empty "upload your first menu"
@@ -79,7 +50,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
         .then((m) => {
           if (m) {
             setActiveMenuId(m.id);
-            setDishes(m.dishes);
+            setDishes(m.dishes ?? []);
           }
         })
         .catch(() => {})
@@ -250,51 +221,28 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
       <PageHeader
         title="Menu"
-        subtitle={
-          catalogMode
-            ? "Catalogue mode — customers order from your Meta catalogue"
-            : "Manage your dishes and availability"
-        }
+        subtitle="One menu — text dishes linked to Meta catalogue; customers get catalogue cards on WhatsApp"
         right={
           <>
-            <Button
-              variant="ghost"
-              onClick={toggleMode}
-              disabled={togglingMode}
-              title="Testing: switch ordering mode (saves to settings, affects the WhatsApp chat too)"
-            >
-              {togglingMode
-                ? "Switching…"
-                : catalogMode
-                  ? "Mode: Catalogue ⇄ Text"
-                  : "Mode: Text ⇄ Catalogue"}
-            </Button>
-            {!catalogMode && (
-              <>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(e) => onUpload(e.target.files)}
-                  data-testid="menu-upload"
-                />
-                {dishes.length > 0 && activeMenuId !== null && (
-                  <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
-                )}
-                <Button onClick={() => fileRef.current?.click()}>
-                  {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
-                </Button>
-              </>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => onUpload(e.target.files)}
+              data-testid="menu-upload"
+            />
+            {dishes.length > 0 && activeMenuId !== null && (
+              <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
             )}
+            <Button onClick={() => fileRef.current?.click()}>
+              {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
+            </Button>
           </>
         }
       />
-      {/* Catalogue mode shows ONLY the Meta catalogue — the text-menu (dishes) list is
-          hidden so the two menus never appear together. */}
-      {catalogMode ? (
-        <CatalogPanel />
-      ) : loading ? (
+      <UnifiedMenuPanel />
+      {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
         <div className={s.empty}>

@@ -1534,3 +1534,19 @@
   (via check_and_send_near_dual_if_applicable). Rider 100 m dual Delivered buttons unchanged.
 - TESTS: test_preparing_notifies_customer, test_near_door_notifies_customer_at_50m,
   test_near_door_is_idempotent; 10/10 test_customer_notifications pass; ruff clean.
+
+[2026-06-29 18:30 +04] feat(menu+catalog): unified single menu — ops UI + customer catalogue cards
+- menu/unified.py: build_unified_menu() merges active dishes + synced CatalogProduct rows;
+  link_status linked | dish_only | catalog_only; GET /api/v1/menu/unified.
+- catalog/sync_service.py: push_dishes_to_meta() (items_batch), sync_full_bidirectional()
+  pull→link→push dish-only→re-pull; POST /catalog/push + /catalog/sync-full.
+- catalog/meta_client.py: push_products_batch(), CatalogWriteError, _dish_retailer_id().
+- conversation/engine.py: _send_menu_or_catalog() — catalogue cards when catalog_id + synced
+  products; else force_text dish list fallback (menu requests no longer strict-type-only).
+- identity: onboarding_complete in settings; signup sets false; GET /onboarding/status,
+  POST /onboarding/complete (enables catalog_ordering_enabled); legacy tenants with active
+  menu skip wizard.
+- FE: UnifiedMenuPanel (link badges, catalog ID, Pull / Sync both ways); OnboardingScreen
+  3-step wizard; MenuManagerScreen drops text/catalog toggle; App Guarded → /onboarding.
+- TESTS: test_unified_menu.py, test_onboarding.py, catalog send fallback updated;
+  MenuManagerScreen + App.test.tsx mocks fixed; 34 catalog + 195 FE pass.

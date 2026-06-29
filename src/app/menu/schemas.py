@@ -62,6 +62,7 @@ class DishOut(BaseModel):
     category: str | None
     description: str | None
     is_available: bool
+    catalog_retailer_id: str | None = None
     variants: list[VariantOut] = []
 
 

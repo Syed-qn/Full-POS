@@ -24,6 +24,7 @@ from app.menu.schemas import (
     serialize_variants,
 )
 from app.menu.service import MenuIncompleteError
+from app.menu.unified import UnifiedMenuOut, build_unified_menu
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
 
@@ -86,6 +87,19 @@ async def upload_menu(
             conflicts=report.conflicts,
         )
     return out
+
+
+@router.get("/menu/unified", response_model=UnifiedMenuOut)
+async def get_unified_menu(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Single menu view: dishes + Meta catalogue products with link status."""
+    settings = restaurant.settings or {}
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    return await build_unified_menu(
+        session, restaurant_id=restaurant.id, catalog_id=catalog_id
+    )
 
 
 @router.get("/menus/active", response_model=MenuOut)

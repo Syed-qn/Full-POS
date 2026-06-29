@@ -1,0 +1,39 @@
+.screen {
+  min-height: 100vh;
+  padding: 48px 24px 32px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.title { font-size: 28px; font-weight: 800; margin: 0 0 8px; }
+.sub { color: var(--text-secondary); margin: 0 0 24px; line-height: 1.5; }
+.steps { display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+.step {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.stepActive { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
+.stepDone { border-color: #22c55e; color: #166534; background: #f0fdf4; }
+.card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--surface-1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface-0);
+}
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.hint { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }

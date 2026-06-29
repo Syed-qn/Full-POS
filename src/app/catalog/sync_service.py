@@ -13,7 +13,13 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.catalog.meta_client import CatalogReadError, fetch_catalog_products
+from app.catalog.meta_client import (
+    CatalogReadError,
+    CatalogWriteError,
+    _dish_retailer_id,
+    fetch_catalog_products,
+    push_products_batch,
+)
 from app.catalog.models import CatalogProduct
 from app.identity.models import Restaurant
 
@@ -28,6 +34,8 @@ class SyncResult:
     total_active: int = 0
     linked: int = 0    # existing dishes linked to a catalogue product by name
     created: int = 0   # orderable dishes auto-created for catalogue products w/o a dish
+    pushed: int = 0    # dishes pushed to Meta on outbound sync
+    push_updated: int = 0
 
 
 async def _ensure_orderable_dishes(session: AsyncSession, *, restaurant_id: int, products) -> tuple[int, int]:
@@ -148,6 +156,92 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
         result.total_active, result.linked, result.created,
     )
     return result
+
+
+async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> SyncResult:
+    """Push local dishes (without Meta link) to the restaurant's Meta catalogue."""
+    from app.menu.models import Dish, Menu
+
+    rest = await session.get(Restaurant, restaurant_id)
+    settings = (rest.settings or {}) if rest is not None else {}
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    if not catalog_id:
+        raise CatalogWriteError("Set a Catalog ID before pushing to Meta.")
+
+    menu = await session.scalar(
+        select(Menu)
+        .where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
+        .order_by(Menu.version.desc())
+        .limit(1)
+    )
+    if menu is None:
+        return SyncResult()
+
+    dishes = list(
+        (
+            await session.scalars(
+                select(Dish).where(
+                    Dish.menu_id == menu.id,
+                    Dish.is_available.is_(True),
+                    Dish.price_aed.is_not(None),
+                )
+            )
+        ).all()
+    )
+
+    requests: list[dict] = []
+    for dish in dishes:
+        if not dish.name or dish.price_aed is None:
+            continue
+        rid = (dish.catalog_retailer_id or "").strip() or _dish_retailer_id(
+            dish.id, dish.dish_number
+        )
+        method = "UPDATE" if dish.catalog_retailer_id else "CREATE"
+        price_str = f"{dish.price_aed:.2f} AED"
+        requests.append(
+            {
+                "method": method,
+                "retailer_id": rid,
+                "data": {
+                    "name": dish.name[:100],
+                    "price": price_str,
+                    "currency": "AED",
+                    "availability": "in stock",
+                    "category": (dish.category or "Menu")[:100],
+                    "description": (dish.description or dish.name)[:5000],
+                },
+            }
+        )
+        if not dish.catalog_retailer_id:
+            dish.catalog_retailer_id = rid
+
+    if not requests:
+        return SyncResult()
+
+    await push_products_batch(catalog_id, requests)
+    result = SyncResult()
+    result.pushed = sum(1 for r in requests if r["method"] == "CREATE")
+    result.push_updated = sum(1 for r in requests if r["method"] == "UPDATE")
+    logger.info(
+        "catalog push restaurant %s: +%d ~%d",
+        restaurant_id,
+        result.pushed,
+        result.push_updated,
+    )
+    return result
+
+
+async def sync_full_bidirectional(
+    session: AsyncSession, *, restaurant_id: int
+) -> SyncResult:
+    """Pull from Meta, link dishes, then push any dish-only items to Meta."""
+    await sync_catalog_from_meta(session, restaurant_id=restaurant_id)
+    push = await push_dishes_to_meta(session, restaurant_id=restaurant_id)
+    # Re-pull so local mirror matches Meta after push.
+    final = await sync_catalog_from_meta(session, restaurant_id=restaurant_id)
+    final.pushed = push.pushed
+    final.push_updated = push.push_updated
+    return final
 
 
 async def list_catalog_products(

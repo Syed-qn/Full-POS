@@ -105,3 +105,47 @@ async def fetch_catalog_products(catalog_id: str) -> list[MetaProduct]:
             url = (data.get("paging") or {}).get("next")
             pages += 1
     return products
+
+
+class CatalogWriteError(RuntimeError):
+    """Raised when pushing products to Meta fails."""
+
+
+def _dish_retailer_id(dish_id: int, dish_number: int | None) -> str:
+    """Stable Content ID for a dish pushed to Meta."""
+    num = dish_number if dish_number is not None else dish_id
+    return f"dish-{dish_id}-{num}"
+
+
+async def push_products_batch(
+    catalog_id: str,
+    requests: list[dict],
+) -> dict:
+    """Push CREATE/UPDATE/DELETE batch to Meta ``/{catalog_id}/items_batch``.
+
+    Each request: ``{"method": "CREATE"|"UPDATE"|"DELETE", "retailer_id": "...", "data": {...}}``
+    """
+    if not requests:
+        return {"handles": [], "validation_status": []}
+    settings = get_settings()
+    token = settings.wa_catalog_token.get_secret_value()
+    if not token:
+        raise CatalogWriteError(
+            "Catalogue push is not configured (APP_WA_CATALOG_TOKEN is empty)."
+        )
+    if not catalog_id:
+        raise CatalogWriteError("This restaurant has no catalog_id set.")
+
+    base = f"https://graph.facebook.com/{settings.graph_api_version}"
+    url = f"{base}/{catalog_id}/items_batch"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            url,
+            params={"access_token": token},
+            json={"allow_upsert": True, "item_type": "PRODUCT_ITEM", "requests": requests},
+        )
+        data = resp.json()
+        if resp.status_code >= 400 or "error" in data:
+            err = (data.get("error") or {}).get("message", f"HTTP {resp.status_code}")
+            raise CatalogWriteError(f"Meta catalogue push failed: {err}")
+        return data

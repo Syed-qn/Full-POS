@@ -85,6 +85,8 @@ DEFAULT_SETTINGS: dict = {
     # cart from it, the catalog flow turns it into an order. Empty = not configured.
     "catalog_id": "",
     "catalog_ordering_enabled": False,
+    # False until signup onboarding (menu upload + Meta sync) is finished.
+    "onboarding_complete": False,
     # Resale of cancelled-after-cooking orders (spec §3). When the kitchen has
     # already started an order that then gets cancelled, the food is offered to the
     # NEXT customer as a fast, discounted delivery. All values manager-editable.

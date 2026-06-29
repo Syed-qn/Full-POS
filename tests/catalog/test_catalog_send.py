@@ -180,9 +180,9 @@ async def test_show_menu_falls_back_to_text_when_catalog_off(db_session, restaur
     assert "text" in types  # the deterministic text menu
 
 
-async def test_catalog_mode_never_shows_text_menu(db_session, restaurant):
-    """STRICT: catalogue mode ON but the catalogue can't be sent (no catalog_id) → the
-    customer is asked to TYPE their order; the text menu list is NEVER shown."""
+async def test_menu_request_falls_back_to_text_when_catalog_unavailable(db_session, restaurant):
+    """Unified menu: menu requests prefer catalogue cards, but fall back to the real
+    text menu when the catalogue can't be sent (e.g. no catalog_id configured)."""
     from app.conversation.engine import handle_inbound
     from app.whatsapp.port import InboundMessage, MessageType
 
@@ -212,11 +212,8 @@ async def test_catalog_mode_never_shows_text_menu(db_session, restaurant):
     bodies = [o.payload.get("body", "") for o in outs]
     types = [o.payload.get("type") for o in outs]
     assert "product_list" not in types  # catalogue couldn't send
-    # And NO text menu list was shown (strict): no "Welcome! Here's our menu" / dish lines.
-    assert not any("Here's our menu" in b for b in bodies)
-    assert not any("Chicken Biryani: AED" in b for b in bodies)
-    # Instead the customer is asked to type.
-    assert any("type what you'd like" in b.lower() for b in bodies)
+    assert "text" in types
+    assert any("Chicken Biryani" in b for b in bodies)
 
 
 async def test_send_catalog_refuses_unsynced_fallback(db_session, restaurant):

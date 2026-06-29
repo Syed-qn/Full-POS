@@ -34,7 +34,7 @@ export function LoginScreen() {
       } else {
         await login(phone, password);
       }
-      nav("/", { replace: true });
+      nav(mode === "signup" ? "/onboarding" : "/", { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : mode === "signup" ? "Signup failed" : "Login failed");
     } finally {
