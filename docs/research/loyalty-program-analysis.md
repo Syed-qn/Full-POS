@@ -544,4 +544,113 @@ Each step ships independently; Phase 1 needs **zero** new money code.
 
 ---
 
+## 14. Diagrams (flow & wiring)
+
+### 14a. Tier lifecycle (Phase 1) — nightly recompute, grace, reward issuance
+
+```
+                       ┌─────────────────────────────────────┐
+   order delivered ───▶│  Customer aggregates update          │
+   (existing stats)    │  total_orders, total_spend, last_at  │
+                       └──────────────────┬───────────────────┘
+                                          │
+              nightly Celery beat ────────▼────────  loyalty.recompute_tiers()
+                                          │  reads settings.loyalty.tiers (per-restaurant)
+                                          ▼
+                       ┌──────────────────────────────────────┐
+                       │  RFM + Monetary _classify()           │
+                       │  → candidate tier (gold/silver/bronze)│
+                       └──────────────────┬───────────────────┘
+                                          ▼
+                      ┌───────────────────────────────────────┐
+              ┌───────│  tier changed vs Customer.loyalty_tier?│───────┐
+           no │       └───────────────────────────────────────┘       │ yes
+              ▼                                                        ▼
+        (no-op)                                       ┌────────────────────────────┐
+                                                      │ UPGRADE → set tier + since  │
+                                                      │   notify "You're Gold 🥇"   │
+                                                      │ DOWNGRADE → only if past    │
+                                                      │   demotion_grace_days       │
+                                                      │   (hysteresis = no thrash)  │
+                                                      └──────────────┬─────────────┘
+                                                                     ▼
+                                            tier_rewards[tier].every_n_orders reached?
+                                                                     │ yes
+                                                                     ▼
+                                       coupons.issue_coupon(discount_aed)  ──▶ outbox
+                                       (window-aware: coupon_issued template / session text)
+```
+
+### 14b. Earn loop (Phase 2) — points = wallet credit, idempotent, FSM-coupled
+
+```
+ORDER FSM:  draft → pending → confirmed → preparing → ready → assigned → … → DELIVERED
+                                                                               │
+                                          dispatch/delivery.advance_delivery   │ (delivered branch —
+                                           already: capture wallet, recompute   │  the ONE settle point)
+                                          stats, stop tracking                 ▼
+                                                              loyalty.earn(order)
+                                                              credit = min(subtotal*earn_rate,
+                                                                            earn_max_per_order_aed)
+                                                              wallet.credit(
+                                                                type="promo_credit",
+                                                                idempotency_key=
+                                                                  f"loyalty:earn:{order_id}")  ◀── no double-earn
+                                                                               │
+                       ┌───────────────────────────────────────────────────────┤
+                       ▼ (later)                                                ▼ (later)
+         order REFUNDED / cancelled-after-deliver               90 days pass (wallet expiry sweep)
+         wallet.reverse(earn_entry)  ◀── clean clawback         wallet expiry debit  ◀── breakage
+```
+
+Spend side needs **no new code**: `ordering/payments.apply_at_confirm` already auto-applies wallet
+credit at checkout (`cod_due = total − wallet`), capture on delivery, release on cancel.
+
+### 14c. Where it plugs into existing code (all hook points already exist)
+
+```
+  settings.loyalty (JSONB) ──── read by ────┬─ rfm._classify (tier thresholds)
+   edited via SettingsScreen                ├─ loyalty.recompute_tiers (nightly beat)
+   → SettingsPatch → identity               └─ loyalty.earn (rate + cap)
+
+  dispatch/delivery.advance_delivery ─(delivered)─▶ loyalty.earn()         [Phase 2]
+  apps/workers/celery_app beat       ─(nightly)──▶ loyalty.recompute_tiers [Phase 1]
+  coupons.issue_coupon + whatsapp/templates ────▶ tier reward + notify    [Phase 1]
+  wallet.credit / reverse / expire_credits ─────▶ earn / clawback / expiry[Phase 2]
+  conversation/engine._send_order_summary ──────▶ tier line + "reach Gold?"[Phase 1]
+  CustomerProfileScreen / SettingsScreen ───────▶ tier display + config UI [Phase 1]
+```
+
+### 14d. Loyalty SettingsScreen tab (wireframe — everything editable, nothing hardcoded)
+
+```
+┌─ Settings ▸ Loyalty ───────────────────────────────────────────────┐
+│  [✔] Enable loyalty program                                         │
+│                                                                     │
+│  EARNING (Phase 2)                                                  │
+│   Earn rate      [ 5  ] %   of food subtotal                        │
+│   Max per order  [ 20 ] AED                                          │
+│   Credit expires [ 90 ] days   (0 = never)                          │
+│                                                                     │
+│  TIERS                          min orders   min spend   recency(d) │
+│   🥇 Gold     [ 5 ]   [ 300 ]   [ 30 ]                               │
+│   🥈 Silver   [ 3 ]   [ 120 ]   [ 60 ]                               │
+│   🥉 Bronze   [ 2 ]   [ 0   ]   [ 90 ]                               │
+│   Demotion grace [ 30 ] days                                        │
+│                                                                     │
+│  TIER REWARDS (coupon issued every N orders held in tier)          │
+│   🥇 Gold     AED [ 25 ] every [ 5 ] orders                         │
+│   🥈 Silver   AED [ 10 ] every [ 6 ] orders                         │
+│   🥉 Bronze   (none)                                                 │
+│                                                                     │
+│  [✔] Apply to catalog orders too                                    │
+│                                          [ Save ]                    │
+└─────────────────────────────────────────────────────────────────────┘
+        │  PATCH /api/v1/settings { loyalty: {...} }  → SettingsPatch validates
+        ▼
+   Restaurant.settings.loyalty   (read live by recompute + earn — no deploy needed)
+```
+
+---
+
 *End of analysis. No code was changed by this document.*

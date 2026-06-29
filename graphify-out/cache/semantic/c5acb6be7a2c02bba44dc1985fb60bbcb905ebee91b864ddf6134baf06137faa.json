@@ -1,0 +1,1 @@
+{"nodes": [{"id": "payments_module", "label": "Payment Processing Module", "file_type": "code", "source_file": "src/app/ordering/payments.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}
