@@ -15,10 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
-from app.outbox.service import enqueue_message
 from app.tickets.models import Ticket
 from app.wallet import service as wallet_service
-from app.whatsapp.port import OutboundMessageType
 
 
 class TicketError(Exception):
@@ -112,16 +110,24 @@ def _ensure_open(ticket: Ticket) -> None:
         raise TicketError(f"ticket {ticket.id} already resolved")
 
 
-async def _notify(session: AsyncSession, ticket: Ticket, body: str) -> None:
+async def _notify(session: AsyncSession, ticket: Ticket, body: str, summary: str) -> None:
+    """Window-aware customer notification: session text inside 24h, else the
+    approved ``ticket_resolution`` utility template."""
+    from app.identity.models import Restaurant
+    from app.whatsapp.templates import notify_customer
+
     phone = await _customer_phone(session, ticket.customer_id)
     if not phone:
         return
-    await enqueue_message(
+    restaurant = await session.get(Restaurant, ticket.restaurant_id)
+    rname = restaurant.name if restaurant else "the restaurant"
+    await notify_customer(
         session,
         restaurant_id=ticket.restaurant_id,
-        to_phone=phone,
-        msg_type=OutboundMessageType.TEXT,
-        payload={"body": body},
+        phone=phone,
+        session_text=body,
+        template_key="ticket_resolution",
+        variables=[rname, summary],
         idempotency_key=f"ticket:{ticket.id}:notify",
     )
 
@@ -181,6 +187,7 @@ async def resolve_wallet_refund(
         session, ticket,
         f"We're sorry about your experience. AED {amount} has been added to your "
         f"wallet as credit for your next order. 🙏",
+        f"AED {amount} wallet credit added as an apology.",
     )
     return ticket
 
@@ -219,6 +226,7 @@ async def resolve_replacement(
     await _notify(
         session, ticket,
         "We're sorry about your experience. A replacement for your order is on the way. 🛵",
+        "A replacement for your order is on the way.",
     )
     return ticket
 
@@ -322,6 +330,7 @@ async def create_replacement_order(
         session, ticket,
         f"We're sorry about your experience. A free replacement (order "
         f"{replacement.order_number}) is being prepared and is on its way. 🛵",
+        f"A free replacement (order {replacement.order_number}) is on its way.",
     )
     return ticket
 
@@ -355,5 +364,5 @@ async def resolve_no_action(
         before={"status": "open"},
         after={"note": note},
     )
-    await _notify(session, ticket, note)
+    await _notify(session, ticket, note, note)
     return ticket

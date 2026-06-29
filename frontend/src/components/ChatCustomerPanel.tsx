@@ -13,10 +13,8 @@ import s from "./ChatCustomerPanel.module.css";
  */
 export function ChatCustomerPanel({
   conversationId,
-  onSendToCustomer,
 }: {
   conversationId: number;
-  onSendToCustomer?: (text: string) => void;
 }) {
   const [ctx, setCtx] = useState<ChatCustomerContext | null>(null);
   const [open, setOpen] = useState(false);
@@ -50,8 +48,9 @@ export function ChatCustomerPanel({
     try {
       const c = await issueCouponToCustomer(cid, couponAmt);
       setCouponAmt("");
-      setMsg(`Coupon ${c.code} (AED ${c.discount_aed}) issued.`);
-      onSendToCustomer?.(`Here's a coupon for you: ${c.code} — AED ${c.discount_aed} off your next order. 🎁`);
+      // Backend already notifies the customer (window-aware text/template) — no
+      // duplicate chat send here.
+      setMsg(`Coupon ${c.code} (AED ${c.discount_aed}) issued & sent to the customer.`);
       reload();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not issue coupon.");

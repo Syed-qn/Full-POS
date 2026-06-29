@@ -25,7 +25,7 @@ async def test_list_open_first(db_session, seed_restaurant_customer):
     b = await t.create_ticket(db_session, restaurant_id=rid, customer_id=cid, order_id=None, source_message="b")
     await t.resolve_no_action(db_session, restaurant_id=rid, ticket_id=a.id, note="ok", created_by="mgr:1")
     rows = await t.list_tickets(db_session, restaurant_id=rid)
-    assert rows[0].id == b.id  # open before resolved
+    assert rows[0][0].id == b.id  # (ticket, phone, name) tuples; open before resolved
 
 
 async def test_get_ticket_cross_tenant(db_session, seed_restaurant_customer):

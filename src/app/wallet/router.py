@@ -110,6 +110,22 @@ async def debit_wallet(
         )
     except WalletError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    # Notify the customer their credit was added (window-aware text/template).
+    from app.whatsapp.templates import notify_customer
+
+    cust = await _tenant_customer(session, restaurant.id, customer_id)
+    await notify_customer(
+        session,
+        restaurant_id=restaurant.id,
+        phone=cust.phone,
+        session_text=(
+            f"AED {body.amount_aed} has been added to your wallet — it'll be "
+            f"applied automatically on your next order. 🙏"
+        ),
+        template_key="wallet_credit_added",
+        variables=[str(body.amount_aed), restaurant.name],
+        idempotency_key=f"walletcredit:{restaurant.id}:{customer_id}:{uuid.uuid4().hex}",
+    )
     await session.commit()
     acc = await wallet_service.get_or_create_account(
         session, restaurant_id=restaurant.id, customer_id=customer_id

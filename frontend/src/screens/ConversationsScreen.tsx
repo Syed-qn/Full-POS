@@ -187,16 +187,7 @@ export function ConversationsScreen() {
                 {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
               </Button>
             </div>
-            {tab === "customer" && (
-              <ChatCustomerPanel
-                conversationId={activeId}
-                onSendToCustomer={(text) => {
-                  if (activeId !== null) sendMessage(activeId, text).then(() => {
-                    fetchMessages(activeId).then(setMessages);
-                  });
-                }}
-              />
-            )}
+            {tab === "customer" && <ChatCustomerPanel conversationId={activeId} />}
             {takeover && (
               <SectionBanner tone="warning">You are controlling this conversation.</SectionBanner>
             )}

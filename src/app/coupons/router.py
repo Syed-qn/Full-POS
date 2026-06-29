@@ -70,6 +70,21 @@ async def issue_coupon_to_customer(
         discount_aed=body.discount_aed,
         validity_days=body.validity_days,
     )
+    # Notify the customer (window-aware: session text inside 24h, else template).
+    from app.whatsapp.templates import notify_customer
+
+    await notify_customer(
+        session,
+        restaurant_id=restaurant.id,
+        phone=cust.phone,
+        session_text=(
+            f"Here's a coupon for you: {coupon.code} — AED {body.discount_aed} "
+            f"off your next order. 🎁"
+        ),
+        template_key="coupon_issued",
+        variables=[restaurant.name, coupon.code, str(body.discount_aed)],
+        idempotency_key=f"coupon:{coupon.id}:issued",
+    )
     await session.commit()
     return CouponOut.model_validate(coupon)
 

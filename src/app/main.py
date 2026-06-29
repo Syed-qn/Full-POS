@@ -173,6 +173,10 @@ def create_app() -> FastAPI:
 
     app.include_router(tickets_router)
 
+    from app.whatsapp.template_router import router as wa_template_router
+
+    app.include_router(wa_template_router)
+
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok"}
