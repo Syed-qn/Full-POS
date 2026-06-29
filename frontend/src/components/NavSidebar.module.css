@@ -12,10 +12,10 @@
 .logo {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.12em;
-  height: 48px;
-  min-height: 48px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  height: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -78,8 +78,8 @@
   }
 
   .logo {
-    height: 44px;
-    min-height: 44px;
+    height: 40px;
+    min-height: 40px;
   }
 
   .item {
