@@ -18,6 +18,11 @@ export async function setRiderStatus(id: number, status: RiderStatus): Promise<R
   return apiClient.patch<RiderOut>(`/api/v1/riders/${id}`, { status });
 }
 
+/** Manager side of the shared On/Off duty switch (same flag the rider toggles in-app). */
+export async function setRiderDuty(id: number, on_duty: boolean): Promise<RiderOut> {
+  return apiClient.patch<RiderOut>(`/api/v1/riders/${id}`, { on_duty });
+}
+
 export async function updateRider(id: number, data: Partial<RiderIn>): Promise<RiderOut> {
   return apiClient.patch<RiderOut>(`/api/v1/riders/${id}`, data);
 }

@@ -209,6 +209,13 @@ async def patch_rider(
             )
         except DuplicatePhoneError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    elif body.on_duty is not None:
+        rider = await service.set_rider_on_duty(
+            session,
+            restaurant_id=restaurant.id,
+            rider_id=rider_id,
+            on_duty=body.on_duty,
+        )
     elif body.status is not None:
         rider = await service.set_rider_status(
             session,

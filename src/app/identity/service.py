@@ -205,6 +205,43 @@ async def set_rider_status(
     return rider
 
 
+async def set_rider_on_duty(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider_id: int,
+    on_duty: bool,
+) -> Rider | None:
+    """Manager-side write of the SHARED duty flag (the same ``on_duty`` the rider sets
+    in their app). One control for both sides: a rider gets new orders only while
+    on_duty is True. Turning a rider ON also clears a legacy ``off_shift`` status so
+    they're immediately dispatchable; turning OFF leaves the operational status alone
+    (dispatch is blocked by on_duty)."""
+    rider = await session.get(Rider, rider_id)
+    if rider is None or rider.restaurant_id != restaurant_id:
+        return None
+    if rider.status == "deactivated":
+        # Duty is meaningless for a removed rider — reactivate via status first.
+        return rider
+    before = {"on_duty": rider.on_duty, "status": rider.status}
+    rider.on_duty = on_duty
+    if on_duty and rider.status == "off_shift":
+        rider.status = "available"
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="rider",
+        entity_id=str(rider.id),
+        action="duty_changed",
+        before=before,
+        after={"on_duty": rider.on_duty, "status": rider.status},
+    )
+    await session.commit()
+    await session.refresh(rider)
+    return rider
+
+
 async def update_rider_profile(
     session: AsyncSession,
     *,

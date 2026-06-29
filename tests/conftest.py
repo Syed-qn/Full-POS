@@ -48,6 +48,7 @@ import app.predictions.models  # noqa: F401
 import app.partner.models  # noqa: F401
 import app.wallet.models  # noqa: F401
 import app.tickets.models  # noqa: F401
+import app.catalog.models  # noqa: F401
 
 
 @pytest.fixture(scope="session")

@@ -1013,3 +1013,207 @@
   refund-to-wallet, wallet balance/history on profile, wallet spend at checkout (safe),
   coupon admin, expiry/reconcile/abuse beat. Backend 404 ordering/dispatch/conversation/cod
   pass (1 pre-existing unrelated failure: test_engine_ordering totals test).
+[2026-06-29] feat(catalog): Sync from Meta — pull catalogue + show in OPS (Path A unblocked)
+- Unblocked: created a Business system user (ID 61590515380192, Employee) with Feasto
+  catalog + Festo app + WhatsApp full access; added "Manage products with Catalog API"
+  use case to the Festo app so catalog_management permission was grantable; generated a
+  system-user token -> APP_WA_CATALOG_TOKEN in .env (NOT committed). Verified live:
+  GET /{catalog_id}/products returns chicken_biryani AED30 in stock (id 27758254223768981).
+- Backend (committed cbc270b): config.wa_catalog_token; app/catalog/models.py
+  CatalogProduct (catalog_products table, migration f3c4d5e6a7b8, registered in alembic
+  env + conftest); app/catalog/meta_client.py fetch_catalog_products (Graph paging, price
+  parse "AED30.00"->Decimal, CatalogReadError); app/catalog/sync_service.py
+  sync_catalog_from_meta (upsert by (restaurant,retailer_id); vanished->is_active=False,
+  not deleted) + list_catalog_products; router POST /api/v1/catalog/sync + GET
+  /api/v1/catalog/products (manager auth). send_catalog now builds the chat product_list
+  from ACTIVE synced products when present, else falls back to dish<->retailer_id.
+- Frontend: lib/catalogApi.ts; components/CatalogPanel(.module.css) — "Sync from Meta"
+  button + product grid (image/name/price/retailer_id, OOS + removed counts). Rendered in
+  MenuManagerScreen ONLY when settings.catalog_ordering_enabled (fetched via /me); in
+  catalogue mode the dish-empty "upload menu" prompt is suppressed.
+- Tests: tests/catalog 16 pass (sync upsert/deactivate, requires catalog_id, send-from-
+  synced active-only, POST sync + GET list endpoints; Meta mocked). Frontend tsc clean,
+  MenuManager 4 tests pass.
+- Local dev DB note: `alembic upgrade head` on the dev `restaurant` DB fails on the older
+  dishes.catalog_retailer_id migration (column pre-exists outside alembic tracking) — dev
+  DB drift, NOT a migration bug. Render applies migrations cleanly from a tracked state;
+  test DB uses create_all so catalog_products exists there.
+- Two modes now fully realized: catalogue mode = Meta source (Sync in OPS, catalogue in
+  chat, no text menu); text mode = OPS dishes (text menu in chat). [[conversation-architecture-decisions]]
+
+[2026-06-29] feat(rider/ops): unified single On/Off duty switch (manager + rider share it)
+- Per user: ONE shared duty control, not two separate (manager off_shift vs rider on_duty).
+  Manager and rider both set the SAME riders.on_duty flag; either side's change reflects
+  on the other (rider app reads onDuty from /rider-app/orders + /me).
+- Backend: identity/service.set_rider_on_duty (audit duty_changed; turning ON clears a
+  legacy off_shift status -> available; no-op for deactivated). RiderPatch += on_duty;
+  PATCH /api/v1/riders/{id} {on_duty} branch. Rider-app POST /rider-app/duty unchanged.
+  Dispatch gate unchanged (status==available AND on_duty==True).
+- Frontend: RiderCard duty is now an INTERACTIVE toggle (manager clicks) wired to
+  setRiderDuty -> PATCH on_duty; removed the old "Start shift/End shift" status button.
+  Added a single "Receiving orders / On a delivery / Not receiving (off shift & off duty)"
+  outcome banner so the manager sees the real dispatch result at a glance. RidersScreen
+  onDutyChange handler + prop.
+- Tests: identity 18 pass (manager sets duty off/on; on-duty clears off_shift -> available);
+  RiderCard 6 + RidersScreen 3 pass; frontend tsc clean; ruff clean.
+- Note: "off_shift" status now only legacy/operational; the duty toggle is the one control.
+
+[2026-06-29] fix(convo): catalogue mode no longer leaks text-menu items
+- Bug: in catalogue mode the bot answered "any drinks?" by recommending Lemon Mint — a
+  TEXT-MENU dish not in the Meta catalogue (so unorderable). Full-convo audit + fix.
+- engine.py: _render_menu is now catalogue-aware — in catalogue mode it renders from
+  active CatalogProduct rows (new _render_catalog_menu), so the AI's menu knowledge
+  (ctx["menu_text"], no_action reply) is ONLY catalogue items. New _catalog_excludes_dish
+  helper: in catalogue mode a dish is "excluded" unless it has an active CatalogProduct
+  with matching retailer_id. Applied as a guard at: the deterministic typed-add path
+  (-> "That isn't on our catalogue, tap the catalogue"), _execute_ai_add_item (-> no_match
+  so the caller says "couldn't find"), and _answer_dish_info (-> None, never describe a
+  non-catalogue dish). Text mode unchanged (helper always returns False).
+- Tests (tests/catalog/test_catalog_mode_isolation.py, 4): menu knowledge catalogue-only
+  (Lemon Mint absent, AED 30 catalogue price not AED 20 dish price); text mode still lists
+  dishes; exclude logic true for unlisted dish / false for catalogue dish / false in text
+  mode. 27 pass across catalog+safety+confirmation suites.
+
+[2026-06-29] fix(convo): full catalogue-mode leak audit — closed all remaining leaks
+- Multi-agent audit of the entire conversation engine for text-menu leaks in catalogue
+  mode. Found + fixed the last 3 (on top of menu-knowledge/dish-info/typed-add/AI-add
+  from the prior pass):
+  * Modify-order add (engine.py ~1442): a post-order "add X" could add a non-catalogue
+    dish to the proposed modification -> now guarded by _catalog_excludes_dish.
+  * "Did you mean ...?" AMBIGUOUS prompt in collecting_items (~768) and modify_items
+    (~1430): listed ALL matched candidates incl. non-catalogue dishes. New
+    _catalog_filter_candidates drops non-catalogue candidates; if none remain -> "not on
+    our catalogue" message.
+- Audit-verified SAFE (no change needed): remove_item/update_qty (operate only on cart
+  items, which are catalogue items in catalogue mode); handle_catalog_order (_find_dish
+  by retailer_id only); greeting/show_menu/order-again (route via send_catalog); order &
+  cart summaries (print cart items only).
+- Tests: tests/catalog/test_catalog_mode_isolation.py now 6 (added ambiguous-filter
+  catalogue-only + text-mode-unfiltered). 33 pass across catalog + engine suites. ruff clean.
+
+[2026-06-29] audit: serious line-by-line catalogue-mode leak audit (manual, agents rate-limited)
+- Workflow audit agents hit the session limit, so did a full manual line-by-line read of
+  every dish/menu/output path in engine.py + catalog/service.py + ordering/service.py +
+  llm/deepseek.py + llm/claude.py.
+- Found + fixed 1 residual SOFT leak: "what is <X>" describer fallback (engine.py ~771 and
+  ~1428) called get_describer().describe(name) for ANY typed name when _answer_dish_info
+  returned None — in catalogue mode that invents a description for a non-catalogue item.
+  Now: new _catalog_mode_on() helper; in catalogue mode the fallback returns a catalogue
+  redirect instead of describing. (The main-flow dish-info interceptor at ~3548 already
+  falls through safely when _answer_dish_info returns None.)
+- VERIFIED SAFE line-by-line (no change needed):
+  * Deterministic collecting_items add (~840): guarded at 818, adds base serve, no offers.
+  * Size/bundle OFFERS (_offer_size_choice/_offer_bundle_choice): only reachable AFTER the
+    _catalog_excludes_dish guard in _execute_ai_add_item (2542) or for a cart dish in
+    update_qty — never for a non-catalogue dish.
+  * remove_item/update_qty: act only on cart items via _resolve_cart_dish (cart = catalogue
+    items in catalogue mode); not_in_cart echoes the customer's own typed name (benign).
+  * modify summary session.get(Dish, p["dish_id"]): p comes from modify_proposed which is
+    guarded at add (1468).
+  * LLM layer: ctx["menu_text"] = catalogue in catalogue mode (engine 2161); BOTH prod
+    LLMs are told never to invent dishes/prices (deepseek.py "never invent any" + {menu_text};
+    claude.py "Do not invent dishes, numbers, or prices" + {menu_text}) -> cannot name a
+    non-catalogue item like the original "Lemon Mint AED 12" bug.
+  * catalog/service.py handle_catalog_order: maps by retailer_id only; send_catalog builds
+    from active CatalogProduct.
+- Tests: test_catalog_mode_isolation.py now 7 (added: 'what is' non-catalogue item never
+  returns its stored description/price + not added to cart). 49 pass across catalog +
+  engine + safety + webhook. ruff clean.
+
+- 2026-06-29 03:10 Asia/Dubai — CATALOGUE/TEXT LEAK HARDENING (multi-agent adversarial audit + fixes)
+  Trigger: live catalogue-mode conversation leaked the full TEXT menu (30 dishes, real
+  AED prices) and contradicted itself ("we don't have drinks" then listed "Cold Drinks
+  AED 3"). Ran an 8-lens adversarial Workflow (verify-each-finding); confirmed real holes
+  and closed every one. Live root cause separately: at runtime the WhatsApp-serving
+  backend read catalog_ordering_enabled as falsy (text mode) AND the catalogue was likely
+  never synced — so the strict fixes below now FAIL CLOSED instead of leaking.
+  Fixes:
+  * engine.py _execute_ai_remove_item / _execute_ai_update_qty: filter candidates via
+    _catalog_filter_candidates BEFORE naming them; non-catalogue match -> ("no_match",None)
+    so "Lemon Mint isn't in your cart / want me to add 2?" can never leak a text item.
+  * engine.py anti-hallucination menu guard (_looks_like_menu -> _render_menu) now runs in
+    EVERY phase (was ordering-only); the live leak happened at the confirmation step where
+    the model echoed a menu from history. _render_menu is catalogue-bounded so it can't leak.
+  * catalog/service.py send_catalog: REMOVED the text-Dish fallback. If nothing is synced
+    (no active CatalogProduct) it returns False — never sends unsynced dishes as cards.
+  * catalog/service.py handle_catalog_order: a basket item is added ONLY if an ACTIVE
+    CatalogProduct exists for its retailer_id (strict membership; matches engine guard).
+  * llm/deepseek.py + llm/claude.py: added AVAILABILITY rule (the MENU is the only truth;
+    never deny an item that IS on the menu, never name/price one that isn't); tightened the
+    UPSELL rule (only name items on the MENU; no drink offer if MENU has no drinks); renamed
+    the "lemon mint" parsing example to "parotta" + note that examples are NOT a menu.
+  * llm/claude.py ClaudeConversationAgent.respond: fixed signature to match the port
+    (restaurant_name, dialogue_phase, history, context) — was crashing every message on the
+    claude provider and falling back to "having a moment". (Live provider is deepseek.)
+  * webhook/router.py: on any unexpected error the customer now gets a human apology
+    (idempotent, fresh session) instead of silence — no raw error, no wrong-mode menu.
+  Tests: +6 new (send_catalog refuses unsynced fallback; basket rejects dish w/o active
+    CatalogProduct; remove/update_qty never name a non-catalogue item; updated 2 seed
+    helpers to the synced model). tests/catalog 28 pass; webhook+llm+catalog+conversation
+    212 pass (only the 1 pre-existing confirmation failure, fails on clean main too). ruff
+    clean on all changed files.
+  Operational note for the user: in catalogue mode the manager MUST press "Sync from Meta"
+    — strict mode now refuses to serve an unsynced catalogue (correct, no leak).
+
+- 2026-06-29 04:05 Asia/Dubai — FIX: saved address skipped before location ask.
+  Symptom (live): returning customer (saved addr "123, Tower B / asfer") said "confirm"
+  and the bot asked them to share a location pin instead of reusing the saved address.
+  Root cause: proceed_to_address auto-attach was gated on address_offer_made, which
+  conflates "already offered" with "customer declined" AND went stale across orders (the
+  catalogue-basket path handle_catalog_order never reset it). Fix: introduce a dedicated
+  saved_address_declined flag (set only when the customer taps "new address"/"use new
+  address"); proceed_to_address now ALWAYS checks the saved address unless that flag is
+  set. Reset the flag on every fresh draft (engine _get_or_create_draft_order AND
+  catalog/service handle_catalog_order new-order branch). Test added:
+  test_proceed_to_address_checks_saved_address_despite_stale_flag. conversation+catalog
+  167 pass (only the pre-existing confirmation-totals test fails on clean main too).
+
+- 2026-06-29 04:40 Asia/Dubai — FIX: AI fabricated a whole menu (emoji-bullet) that
+  evaded the anti-hallucination net. Live: bot invented "Special Chicken Biryani AED 25",
+  "Mandi Drink AED 5" etc. (dishes the restaurant does NOT have) when asked "you only have
+  chicken biryani right?", and narrated "1x Mutton Biryani AED 25 added" when mutton isn't
+  on the menu / wasn't added. Root cause: _looks_like_menu only matched bullet/numbered
+  lines (• - * 1.) so emoji bullets ("🍗 X, AED 20") and "1x X AED 20" narration slipped
+  through. Fix: _looks_like_menu now counts ANY price token (AED/Rs/₹/$ + digit) outside
+  order/cart-summary lines; ≥2 priced items => treated as a fabricated list and REPLACED
+  with the real mode-correct _render_menu (catalogue render in catalogue mode, text menu in
+  text mode). This guard runs in EVERY phase (set earlier) and also rewrites the multi-add
+  "lead" so an optimistic "added X, Y" narration can't contradict the real cart. Test
+  extended: test_looks_like_menu_detects_fabricated_list (emoji menu + 1x narration caught;
+  single dish + cart-summary line NOT caught). conversation+catalog 167 pass; lint clean.
+  NOTE: all fixes are pushed to main but the LIVE (Render) bot keeps showing old behaviour
+  until the backend is REDEPLOYED — likely why the same bugs recur in live tests.
+
+- 2026-06-29 05:00 Asia/Dubai — LLM hard-constrained to "never invent, defer to phone".
+  Per user: the LLM must never create dishes/prices/details; if it lacks the fact, don't
+  guess, give the restaurant contact number. Made the anti-invention rule the ABSOLUTE #1
+  rule at the top of BOTH system prompts (deepseek.py + claude.py): never list/name/suggest/
+  describe/upsell a dish not in the MENU; for any unknown fact -> "I'm not 100% sure, please
+  call us on {restaurant_phone}". restaurant_phone is wired via ctx (engine.py 2188 =
+  restaurant.phone). Two-layer guarantee now: (1) prompt forbids invention + defers to phone,
+  (2) deterministic net _looks_like_menu replaces any fabricated priced list (>=2 prices) with
+  the real mode-correct menu. Honest limit: a single UN-priced invented name can still slip
+  the regex net; the prompt is the defense there. llm + full-ai 54 pass; lint clean.
+
+- 2026-06-29 05:25 Asia/Dubai — Warm, grounded "we don't have that" replies for unknown
+  dishes (replacing robotic "(couldn't find: X)"). Per user: when a customer asks/adds an
+  item not on the menu, reply like a human, honestly, no invention. Changed in engine.py:
+  * confirm-step edit (_apply_confirmation_edit): unmatched add now sends
+    "Sorry, we don't have <X> on our menu 🙏 Want to add something else, or say 'menu'...".
+    Echoes only the customer's own term (never an invented dish); summary still re-shown.
+  * single-add no_match: "Sorry, we don't have <X> on our menu 🙏 Want to try another dish,
+    or say 'menu'...". multi-add all-fail + per-item note reworded the same way; removed an
+    em dash (house rule: no em/en dashes customer-side).
+  Tests: new test_confirm_edit_unknown_dish_gives_warm_grounded_reply; updated two wording
+  assertions (ordering polite-retry, multi-item unknown-dish). conversation+catalog 168 pass
+  (only the pre-existing confirmation-totals test fails on clean main too). lint clean on
+  changed files.
+
+- 2026-06-29 06:05 Asia/Dubai — FIX: bot called itself "You ARE Biryani Restaurant".
+  Root cause was the PROMPT, not the LLM: deepseek _IDENTITY began literally with
+  "You ARE {restaurant_name} — ..." so with name "Biryani Restaurant" it read "You ARE
+  Biryani Restaurant" and the model echoed the whole phrase as the name. Reworded to
+  "You are the friendly owner and host of {restaurant_name}, ..." + added an explicit
+  rule (both deepseek.py and claude.py): always use the EXACT restaurant name, never
+  alter/expand/abbreviate/restyle. Also removed two em dashes from the identity block
+  (house rule). llm 34 pass; prompt .format verified; lint clean.

@@ -33,21 +33,35 @@ def _aed(value) -> str:
     return f"{Decimal(value).normalize():f}"
 
 
-# A menu line looks like "• Chicken Biryani — AED 28" or "5. Chicken Biryani — AED 28"
-# (leading bullet or number, any dash/colon, any currency).
-_MENU_LINE = _re.compile(
-    r"^\s*(?:\d+[\.\)]|[•\-\*])\s+.+?(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.MULTILINE
+# A price mention: any currency token followed by a number (e.g. "AED 28", "Rs.5", "$3").
+# Bullet style is IGNORED on purpose — the LLM dumps menus with emoji bullets ("🍗 X,
+# AED 20"), plain "1x X AED 20", or "• X — AED 28"; all must be caught.
+_PRICE_TOKEN = _re.compile(r"(?:AED|aed|Rs\.?|₹|\$)\s*\d", _re.IGNORECASE)
+# Lines that legitimately carry a price but are NOT a menu (order/cart summary lines).
+# Excluded so a reply that mentions ONE dish plus a total isn't mistaken for a menu.
+_SUMMARY_LINE = _re.compile(
+    r"\b(total|subtotal|delivery|fee|eta|payment|deliver to|cod|cash on delivery)\b",
+    _re.IGNORECASE,
 )
 
 
 def _looks_like_menu(text: str) -> bool:
-    """True if an AI reply appears to list dishes+prices (≥2 menu-ish lines).
+    """True if an AI reply appears to list dishes+prices (≥2 priced items).
 
-    Safety net: the LLM sometimes fabricates an entire menu in free text. Any
-    such reply in the ordering phase is replaced with the real DB menu before it
-    reaches the customer.
+    Safety net: the LLM sometimes fabricates a menu / a multi-item cart in free text
+    (often with emoji bullets that older bullet-only detection missed). Any such reply
+    is replaced with the REAL, mode-correct menu before it reaches the customer. We
+    count price mentions OUTSIDE order/cart-summary lines, so a single dish answer or a
+    legit total line is never mistaken for a menu, but two or more priced dishes are.
     """
-    return len(_MENU_LINE.findall(text or "")) >= 2
+    count = 0
+    for line in (text or "").splitlines():
+        if _SUMMARY_LINE.search(line):
+            continue
+        count += len(_PRICE_TOKEN.findall(line))
+        if count >= 2:
+            return True
+    return False
 
 
 def _is_menu_request(text: str) -> bool:
@@ -287,6 +301,9 @@ async def _answer_dish_info(
     if result.confidence != MatchConfidence.DIRECT or not result.candidates:
         return None
     dish = result.candidates[0]
+    # Catalogue mode: never describe a text-menu dish that isn't in the catalogue.
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        return None
     desc = (getattr(dish, "description", None) or "").strip()
     if desc:
         return _trim_description(desc)
@@ -327,9 +344,96 @@ def _category_emoji(category: str) -> str:
     return "🍽️"
 
 
+async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str:
+    """Render the SYNCED Meta catalogue as categorized text.
+
+    In catalogue mode this is the bot's menu knowledge — so it only ever talks about /
+    recommends products that are actually in the catalogue (never a text-menu dish the
+    customer can't order)."""
+    from app.catalog.models import CatalogProduct
+
+    products = (
+        await session.scalars(
+            select(CatalogProduct)
+            .where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.is_active.is_(True),
+            )
+            .order_by(CatalogProduct.category, CatalogProduct.name)
+        )
+    ).all()
+    if not products:
+        return "Our catalogue is currently empty. Please try again later."
+
+    lines: list[str] = ["👋 *Welcome! Here's our menu*"]
+    current_category: str | None = None
+    for p in products:
+        if p.category != current_category:
+            current_category = p.category
+            if current_category:
+                lines.append(f"\n{_category_emoji(current_category)} *{current_category}*")
+        price = _aed(p.price_aed) if p.price_aed is not None else "?"
+        lines.append(f"• {p.name}: AED {price}")
+    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
+    return "\n".join(lines)
+
+
+async def _catalog_mode_on(session: AsyncSession, restaurant_id: int) -> bool:
+    """True if this restaurant is in catalogue ordering mode."""
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    return bool(rest is not None and (rest.settings or {}).get("catalog_ordering_enabled"))
+
+
+async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish) -> bool:
+    """In CATALOGUE mode, True when ``dish`` is NOT part of the synced Meta catalogue —
+    so the bot won't describe, recommend, or let a customer type-order a text-menu item
+    that isn't actually orderable. Always False in text mode (no restriction)."""
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    if rest is None or not (rest.settings or {}).get("catalog_ordering_enabled"):
+        return False
+    rid = getattr(dish, "catalog_retailer_id", None)
+    if not rid:
+        return True  # no catalogue link → not in the catalogue
+    from app.catalog.models import CatalogProduct
+
+    found = await session.scalar(
+        select(CatalogProduct.id)
+        .where(
+            CatalogProduct.restaurant_id == restaurant_id,
+            CatalogProduct.retailer_id == rid,
+            CatalogProduct.is_active.is_(True),
+        )
+        .limit(1)
+    )
+    return found is None
+
+
+async def _catalog_filter_candidates(session: AsyncSession, restaurant_id: int, candidates):
+    """In CATALOGUE mode, drop candidates that aren't in the catalogue so a 'did you mean'
+    prompt never shows a non-catalogue (text-menu) dish. No-op in text mode."""
+    kept = []
+    for d in candidates:
+        if not await _catalog_excludes_dish(session, restaurant_id, d):
+            kept.append(d)
+    return kept
+
+
 async def _render_menu(session: AsyncSession, restaurant_id: int) -> str:
-    """Render the active menu as categorized text."""
+    """Render the active menu as categorized text.
+
+    Catalogue mode: the menu knowledge is the synced Meta catalogue, NOT the text-menu
+    dishes — so the bot never offers items the customer can't order from the catalogue.
+    """
+    from app.identity.models import Restaurant
     from app.menu.models import Dish, Menu
+
+    _rest = await session.get(Restaurant, restaurant_id)
+    if _rest is not None and (_rest.settings or {}).get("catalog_ordering_enabled"):
+        return await _render_catalog_menu(session, restaurant_id)
 
     menu = await session.scalar(
         select(Menu).where(
@@ -730,8 +834,13 @@ async def _handle_collecting_items(
         item_name = dish_query[8:].strip().rstrip("?")
         desc = await _answer_dish_info(session, restaurant_id, item_name)
         if desc is None:
-            from app.llm.factory import get_describer
-            desc = get_describer().describe(item_name, "")
+            # Catalogue mode: never invent a description for an item we can't confirm is
+            # in the catalogue — redirect instead of describing a non-catalogue dish.
+            if await _catalog_mode_on(session, restaurant_id):
+                desc = "I can only help with items on our catalogue 🛍️ Tap the catalogue to see what's available."
+            else:
+                from app.llm.factory import get_describer
+                desc = get_describer().describe(item_name, "")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc", body=desc,
@@ -757,9 +866,17 @@ async def _handle_collecting_items(
         except Exception:
             dish = None
         if dish is None:
+            # Catalogue mode: only offer candidates that are actually in the catalogue.
+            cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+            if not cands:
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="not-in-catalog",
+                    body="That isn't on our catalogue 🛍️ Please tap the catalogue to add items.",
+                )
+                return
             options = " or ".join(
-                f"{d.name} (AED {_aed(d.price_aed)})"
-                for d in result.candidates[:3]
+                f"{d.name} (AED {_aed(d.price_aed)})" for d in cands[:3]
             )
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -771,6 +888,15 @@ async def _handle_collecting_items(
 
     # DIRECT match or arbiter-resolved → add to draft order.
     dish = dish if result.confidence == MatchConfidence.AMBIGUOUS else result.candidates[0]
+    # Catalogue mode: only catalogue items are orderable. A typed text-menu dish that
+    # isn't in the catalogue is treated as not found (no text-menu leak).
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="not-in-catalog",
+            body="That isn't on our catalogue 🛍️ Please tap the catalogue to add items.",
+        )
+        return
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone,
     )
@@ -1487,8 +1613,11 @@ async def _handle_modify_items(
         item_name = dish_query[8:].strip().rstrip("?")
         desc = await _answer_dish_info(session, restaurant_id, item_name)
         if desc is None:
-            from app.llm.factory import get_describer
-            desc = get_describer().describe(item_name, "")
+            if await _catalog_mode_on(session, restaurant_id):
+                desc = "I can only help with items on our catalogue 🛍️ Tap the catalogue to see what's available."
+            else:
+                from app.llm.factory import get_describer
+                desc = get_describer().describe(item_name, "")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc-mod", body=desc,
@@ -1506,9 +1635,17 @@ async def _handle_modify_items(
         return
 
     if result.confidence == MatchConfidence.AMBIGUOUS:
+        # Catalogue mode: only offer candidates that are actually in the catalogue.
+        cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+        if not cands:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="not-in-catalog-mod",
+                body="That isn't on our catalogue 🛍️ Please tap the catalogue to choose items.",
+            )
+            return
         options = " or ".join(
-            f"{d.name} (AED {_aed(d.price_aed)})"
-            for d in result.candidates[:3]
+            f"{d.name} (AED {_aed(d.price_aed)})" for d in cands[:3]
         )
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -1519,6 +1656,14 @@ async def _handle_modify_items(
 
     # Direct match: accumulate in proposed (replaces cart-add in collecting_items)
     dish = result.candidates[0]
+    # Catalogue mode: can't modify an order to add a non-catalogue (text-menu) item.
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="not-in-catalog-mod",
+            body="That isn't on our catalogue 🛍️ Please tap the catalogue to choose items.",
+        )
+        return
     proposed = list(conv.state.get("modify_proposed", []) or [])
     proposed.append({
         "dish_id": dish.id,
@@ -2397,8 +2542,8 @@ async def _ensure_draft_order(
         order = await create_draft_order(session, restaurant_id=restaurant_id, customer_id=customer.id)
         _set_state(
             conv, draft_order_id=order.id, address_offer_made=None,
-            saved_address_id=None, pin_lat=None, pin_lon=None,
-            distance_km=None, delivery_fee=None,
+            saved_address_declined=None, saved_address_id=None,
+            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
         )
     return order
 
@@ -2648,6 +2793,11 @@ async def _execute_ai_add_item(
     else:
         dish = result.candidates[0]
 
+    # Catalogue mode: a typed item not in the catalogue is not orderable → no match
+    # (the caller reports "couldn't find", with no text-menu leak).
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        return "no_match"
+
     # Pick a serving size: an explicitly-named one wins ("family biryani") and is
     # added straight away. Otherwise, if the ordered quantity matches a bundle
     # ("2" → the 2-serve size), ASK whether to use the bundle or keep the items
@@ -2730,9 +2880,14 @@ async def _execute_ai_remove_item(
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
         return ("no_match", None)
-    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
+    # Catalogue mode: never name or act on a non-catalogue (text-menu) dish — drop
+    # excluded candidates so a "not in cart" reply can't leak a text-menu item.
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return ("no_match", None)
+    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
     if dish is None:
-        return ("not_in_cart", result.candidates[0].name)
+        return ("not_in_cart", cands[0].name)
     # Units of this dish currently in the cart (so "remove" with no number — or a
     # number ≥ what's there — clears the whole line).
     in_cart_units = sum(
@@ -2778,9 +2933,14 @@ async def _execute_ai_update_qty(
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
         return ("no_match", None)
-    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=result.candidates[:5])
+    # Catalogue mode: never name or offer a non-catalogue (text-menu) dish — drop
+    # excluded candidates so "isn't in your cart yet, want me to add?" can't leak one.
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return ("no_match", None)
+    dish = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
     if dish is None:
-        return ("not_in_cart", result.candidates[0].name)
+        return ("not_in_cart", cands[0].name)
     if qty <= 0:
         await set_item_qty(session, order=order, dish_id=dish.id, qty=0)
         return ("removed", dish.name)
@@ -2845,7 +3005,13 @@ async def _apply_confirmation_edit(
             if status == "no_match":
                 not_found.append(dq)
         if not_found:
-            note = "couldn't find: " + ", ".join(not_found)
+            # Warm, honest, grounded: name only what the customer asked for (never an
+            # invented dish), say we don't have it, and point them back to the real menu.
+            names = ", ".join(not_found)
+            note = (
+                f"Sorry, we don't have {names} on our menu 🙏 "
+                "Want to add something else, or say 'menu' to see what we have? 😊"
+            )
     elif action == "remove_item":
         raw_qty = data.get("qty")
         await _execute_ai_remove_item(
@@ -2865,7 +3031,7 @@ async def _apply_confirmation_edit(
     _set_state(conv, dialogue_phase="awaiting_confirmation", dialogue_state="order_confirmation")
     if note:
         await _send_text(session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                         prefix="confirm-edit-note", body=f"({note})")
+                         prefix="confirm-edit-note", body=note)
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
@@ -3119,8 +3285,12 @@ async def _dispatch_action(
         action = "no_action"
 
     # Anti-hallucination safety net: if the AI dumped a (fabricated) menu into its
-    # reply during ordering, swap in the REAL DB menu before it goes out.
-    if phase == "ordering" and _looks_like_menu(reply):
+    # reply, swap in the REAL menu before it goes out. Runs in EVERY phase — the model
+    # can be asked "show me the menu" mid-confirmation, where it would otherwise echo a
+    # menu from history (in catalogue mode that history may hold the old text menu).
+    # _render_menu is catalogue-bounded when catalogue mode is on, so this can never
+    # leak a text-menu item.
+    if _looks_like_menu(reply):
         reply = await _render_menu(session, restaurant_id)
 
     # ── ordering actions ──────────────────────────────────────────────────
@@ -3173,14 +3343,15 @@ async def _dispatch_action(
                     lead = "Got it! 😊"
                 body = f"{lead}{_cart_tail(cart)}"
             else:
-                body = "Sorry, I couldn't add any of those — check the dish names against our menu."
+                body = ("Sorry, none of those are on our menu 🙏 "
+                        "Say 'menu' to see what we have, or tell me another dish 😊")
             notes = []
             if not_found:
-                notes.append("couldn't find: " + ", ".join(not_found))
+                notes.append("we don't have " + ", ".join(not_found) + " on our menu")
             if too_many:
                 notes.append(
                     "that's a large quantity for " + ", ".join(too_many)
-                    + " — please call us to arrange a big order"
+                    + ", please call us to arrange a big order"
                 )
             if notes:
                 body = f"{body}\n\n({'; '.join(notes)})"
@@ -3214,8 +3385,8 @@ async def _dispatch_action(
                 await _send_text(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                     prefix="ai-no-match",
-                    body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
-                         "Try the exact dish name or check the menu spelling.",
+                    body=f"Sorry, we don't have {dish_query} on our menu 🙏 "
+                         "Want to try another dish, or say 'menu' to see everything we have? 😊",
                 )
         else:
             if reply:
@@ -3347,11 +3518,15 @@ async def _dispatch_action(
             )
             return
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
-        # Returning customer → auto-attach their saved address and jump straight to the
-        # order summary (which shows the address) with a "Use new address" button. This
-        # removes the separate "Deliver to your saved address?" step: confirming a repeat
-        # order is now a single tap. New customers fall through to the location-pin ask.
-        if not conv.state.get("address_offer_made"):
+        # ALWAYS check for a saved address BEFORE asking for a location pin: a returning
+        # customer auto-attaches their saved address and jumps straight to the order
+        # summary (which shows the address) with a "Use new address" button — a repeat
+        # order is one tap, never a re-shared pin. We gate ONLY on whether the customer
+        # explicitly chose a NEW address for THIS order (saved_address_declined), NOT on
+        # the broader address_offer_made flag, which can go stale across orders (e.g. a
+        # catalogue basket) and would wrongly skip the check. New customers / declined /
+        # no saved address fall through to the location-pin ask below.
+        if not conv.state.get("saved_address_declined"):
             saved_id = await _resolve_saved_address_id(
                 session, restaurant_id, inbound.from_phone
             )
@@ -3952,7 +4127,7 @@ async def handle_inbound(
                 )
                 return
         if btn_id == "new_address":
-            _set_state(conv, address_offer_made=True,
+            _set_state(conv, address_offer_made=True, saved_address_declined=True,
                        dialogue_phase="address_capture", dialogue_state="address_capture")
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -3964,8 +4139,8 @@ async def handle_inbound(
             # "Use new address" on the order summary → drop the auto-attached saved
             # address and capture a fresh one. The cart (draft order) is preserved;
             # only the delivery location changes, so we re-request the location pin.
-            _set_state(conv, address_offer_made=True, saved_address_id=None,
-                       pending_address_id=None,
+            _set_state(conv, address_offer_made=True, saved_address_declined=True,
+                       saved_address_id=None, pending_address_id=None,
                        dialogue_phase="address_capture", dialogue_state="address_capture")
             await _send_location_request(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,

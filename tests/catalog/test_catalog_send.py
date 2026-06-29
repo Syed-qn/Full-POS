@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.catalog.models import CatalogProduct
 from app.catalog.service import send_catalog
 from app.menu.models import Dish, Menu
 from app.outbox.models import OutboxMessage
@@ -25,6 +26,18 @@ async def _seed_linked_menu(db_session, restaurant):
         menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2, name="Lemon Mint",
         price_aed=Decimal("12.00"), category="Drinks", is_available=True,
         name_normalized="lemon mint", catalog_retailer_id="lemonmint01",
+    ))
+    # STRICT model: catalogue cards come ONLY from the synced Meta catalogue mirror.
+    # Seed the CatalogProduct rows the "Sync from Meta" step would have created.
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="nwb4pa5fbn", name="Chicken Biryani",
+        price_aed=Decimal("20.00"), currency="AED", availability="in stock",
+        category="Biryani", is_active=True, raw={},
+    ))
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="lemonmint01", name="Lemon Mint",
+        price_aed=Decimal("12.00"), currency="AED", availability="in stock",
+        category="Drinks", is_active=True, raw={},
     ))
     await db_session.commit()
 
@@ -204,6 +217,31 @@ async def test_catalog_mode_never_shows_text_menu(db_session, restaurant):
     assert not any("Chicken Biryani: AED" in b for b in bodies)
     # Instead the customer is asked to type.
     assert any("type what you'd like" in b.lower() for b in bodies)
+
+
+async def test_send_catalog_refuses_unsynced_fallback(db_session, restaurant):
+    """STRICT no-fallback: catalogue mode ON with a catalog_id and dishes LINKED via
+    catalog_retailer_id, but the catalogue was never synced (no CatalogProduct rows).
+    send_catalog must refuse rather than leak the unsynced text-menu dishes as cards."""
+    restaurant.settings = {**restaurant.settings, "catalog_id": "1528685515412822",
+                           "catalog_ordering_enabled": True}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Chicken Biryani",
+        price_aed=Decimal("20.00"), category="Biryani", is_available=True,
+        name_normalized="chicken biryani", catalog_retailer_id="nwb4pa5fbn",
+    ))
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone="+971501110001")
+    await db_session.commit()
+    assert sent is False  # refused — never falls back to text-menu dishes
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    assert outs == []  # nothing sent at all
 
 
 async def test_send_catalog_noop_without_catalog_id(db_session, restaurant):

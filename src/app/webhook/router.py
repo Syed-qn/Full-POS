@@ -181,5 +181,43 @@ async def receive_webhook(
                 "message dropped, continuing batch",
                 inbound.wa_message_id, inbound.restaurant_phone, exc_info=True,
             )
+            # Respond like a human instead of going silent — the customer gets a brief
+            # apology, never a raw error and never the wrong menu. Best-effort on a
+            # FRESH session (the request one is rolled back); never let this raise.
+            try:
+                await _send_error_apology(
+                    restaurant_phone=inbound.restaurant_phone,
+                    to_phone=inbound.from_phone,
+                    wa_message_id=inbound.wa_message_id,
+                )
+            except Exception:
+                logger.error("failed to send error apology for %s",
+                             inbound.wa_message_id, exc_info=True)
 
     return {"status": "ok"}
+
+
+async def _send_error_apology(*, restaurant_phone: str, to_phone: str, wa_message_id: str) -> None:
+    """Send a one-line human apology after an unexpected processing error, on a fresh
+    session so it is independent of the rolled-back request transaction. Idempotent per
+    inbound message id, so WhatsApp retries can't spam the customer."""
+    from app.db import async_session_factory
+    from app.outbox.service import deliver_outbox_now, enqueue_message
+    from app.whatsapp.port import OutboundMessageType
+
+    async with async_session_factory() as s:
+        rest = await s.scalar(select(Restaurant).where(Restaurant.phone == restaurant_phone))
+        if rest is None:
+            return
+        row = await enqueue_message(
+            s,
+            restaurant_id=rest.id,
+            to_phone=to_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={"body": "Sorry, something went wrong on our end 🙏 Please send that "
+                             "again in a moment and we'll take care of it."},
+            idempotency_key=f"err-apology-{wa_message_id}",
+        )
+        await s.flush()
+        await s.commit()
+        await deliver_outbox_now(s, [row.id])

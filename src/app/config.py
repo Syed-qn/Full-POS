@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     wa_phone_number_id: str = ""
     wa_app_secret: SecretStr = SecretStr("")
     wa_business_account_id: str = ""  # WABA id for message-template management
+    # System-user token with `catalog_management` permission, used ONLY to READ the
+    # Meta Commerce catalog (GET /{catalog_id}/products) for the OPS "Sync from Meta"
+    # feature. Separate from wa_access_token (the messaging token, which can't read
+    # catalogs). Empty = catalog sync disabled.
+    wa_catalog_token: SecretStr = SecretStr("")
     # Rider assignment is a business-INITIATED message; outside WhatsApp's 24h
     # window only an approved template delivers. Set this to the approved template
     # name (e.g. "rider_assignment") to send assignments as a template; leave empty

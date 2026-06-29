@@ -145,6 +145,53 @@ async def test_deactivate_rider(client, auth_headers):
     assert resp.json()["status"] == "deactivated"
 
 
+async def test_manager_sets_rider_duty(client, auth_headers):
+    """The manager side of the shared On/Off duty switch (PATCH on_duty)."""
+    rider = (
+        await client.post(
+            "/api/v1/riders",
+            json={"name": "Ahmed", "phone": "+971509990001"},
+            headers=auth_headers,
+        )
+    ).json()
+    assert rider["on_duty"] is True  # default
+
+    # Manager turns the rider OFF duty.
+    off = await client.patch(
+        f"/api/v1/riders/{rider['id']}", json={"on_duty": False}, headers=auth_headers
+    )
+    assert off.status_code == 200
+    assert off.json()["on_duty"] is False
+
+    # Manager turns them back ON.
+    on = await client.patch(
+        f"/api/v1/riders/{rider['id']}", json={"on_duty": True}, headers=auth_headers
+    )
+    assert on.status_code == 200
+    assert on.json()["on_duty"] is True
+
+
+async def test_manager_on_duty_clears_off_shift(client, auth_headers):
+    """Turning a rider ON duty also clears a legacy off_shift status → dispatchable."""
+    rider = (
+        await client.post(
+            "/api/v1/riders",
+            json={"name": "Sara", "phone": "+971509990002"},
+            headers=auth_headers,
+        )
+    ).json()
+    # Put them off_shift (legacy status path).
+    await client.patch(
+        f"/api/v1/riders/{rider['id']}", json={"status": "off_shift"}, headers=auth_headers
+    )
+    # Now flip ON duty → status normalizes to available.
+    on = await client.patch(
+        f"/api/v1/riders/{rider['id']}", json={"on_duty": True}, headers=auth_headers
+    )
+    assert on.json()["on_duty"] is True
+    assert on.json()["status"] == "available"
+
+
 async def test_update_delivery_settings(client, auth_headers):
     resp = await client.patch(
         "/api/v1/settings",
