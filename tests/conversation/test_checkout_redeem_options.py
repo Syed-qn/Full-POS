@@ -100,6 +100,45 @@ async def test_typing_coupon_code_applies_it(db_session, restaurant):
     assert refreshed.coupon_id == coupon.id
 
 
+async def test_claim_my_coupon_intent_applies_single(db_session, restaurant):
+    from app.conversation.engine import handle_inbound
+    r = restaurant
+    c = Customer(restaurant_id=r.id, phone="+971500000032", name="Claimer")
+    db_session.add(c)
+    await db_session.flush()
+    coupon = await coupons.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id,
+                                        order_id=None, discount_aed=Decimal("10.00"))
+    o = await _order(db_session, r, c)
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=c.phone, counterpart="customer")
+    conv.state = {"dialogue_phase": "awaiting_confirmation", "pending_order_id": o.id}
+    await db_session.commit()
+
+    await handle_inbound(db_session, _inb(r, c.phone, "claim my coupon"), restaurant_id=r.id)
+    await db_session.commit()
+
+    refreshed = await db_session.get(Order, o.id)
+    assert refreshed.total == Decimal("50.00")  # 60 - 10
+    assert refreshed.coupon_id == coupon.id
+
+
+async def test_claim_coupon_with_none_tells_customer(db_session, restaurant):
+    from app.conversation.engine import handle_inbound
+    r = restaurant
+    c = Customer(restaurant_id=r.id, phone="+971500000033", name="NoCoupon")
+    db_session.add(c)
+    await db_session.flush()
+    o = await _order(db_session, r, c)
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=c.phone, counterpart="customer")
+    conv.state = {"dialogue_phase": "awaiting_confirmation", "pending_order_id": o.id}
+    await db_session.commit()
+
+    await handle_inbound(db_session, _inb(r, c.phone, "use my coupon"), restaurant_id=r.id)
+    await db_session.commit()
+
+    refreshed = await db_session.get(Order, o.id)
+    assert refreshed.total == Decimal("60.00")  # unchanged
+
+
 async def test_issued_coupon_shows_option(db_session):
     r, c = await _seed(db_session)
     await coupons.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id,

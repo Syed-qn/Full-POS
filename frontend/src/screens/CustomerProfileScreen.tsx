@@ -10,9 +10,11 @@ import {
   patchCustomerProfile,
 } from "../lib/customerApi";
 import { creditWallet, debitWallet, getWallet, getWalletEntries } from "../lib/walletApi";
+import { listCoupons } from "../lib/couponsApi";
 import type {
   AddressDetailOut,
   AddressPatchIn,
+  Coupon,
   CustomerProfileOut,
   WalletBalance,
   WalletEntry,
@@ -32,6 +34,7 @@ export function CustomerProfileScreen() {
 
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [walletEntries, setWalletEntries] = useState<WalletEntry[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [creditAmt, setCreditAmt] = useState("");
   const [creditReason, setCreditReason] = useState("");
   const [creditBusy, setCreditBusy] = useState(false);
@@ -105,6 +108,18 @@ export function CustomerProfileScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  // Coupons issued to this customer (best-effort; hidden if unavailable).
+  useEffect(() => {
+    if (!profile?.phone) return;
+    let cancelled = false;
+    listCoupons(profile.phone)
+      .then((cs) => !cancelled && setCoupons(cs))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.phone]);
 
   if (loading) return <Spinner />;
   if (!profile) return <p className={s.error}>Customer not found</p>;
@@ -254,6 +269,36 @@ export function CustomerProfileScreen() {
                 </Button>
               </div>
               {creditMsg && <p className={s.walletMsg}>{creditMsg}</p>}
+            </section>
+          )}
+
+          {coupons.length > 0 && (
+            <section className={s.card}>
+              <h3 className={s.cardTitle}>Coupons</h3>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Discount</th>
+                    <th>Status</th>
+                    <th>Expires</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coupons.map((c) => (
+                    <tr key={c.id}>
+                      <td className={s.mono}>{c.code}</td>
+                      <td>
+                        {c.discount_type === "percent"
+                          ? `${c.percent}%`
+                          : `AED ${c.discount_aed}`}
+                      </td>
+                      <td>{c.status}</td>
+                      <td>{c.expires_at ? new Date(c.expires_at).toLocaleDateString() : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </section>
           )}
         </div>

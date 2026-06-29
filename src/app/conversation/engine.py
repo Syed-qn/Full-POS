@@ -156,6 +156,26 @@ def _is_complaint(text: str | None) -> bool:
     return any(p in t for p in phrases)
 
 
+def _is_claim_coupon(text: str | None) -> bool:
+    """True when the customer asks to use/claim a coupon by intent (not the code).
+
+    e.g. "claim my coupon", "use my coupon", "apply my discount". Only acted on at
+    the order-summary step, and only if the customer actually has a coupon.
+    """
+    if not text:
+        return False
+    t = text.strip().lower()
+    if not t or len(t) > 60:
+        return False
+    phrases = (
+        "claim my coupon", "claim coupon", "use my coupon", "use coupon",
+        "apply my coupon", "apply coupon", "redeem my coupon", "redeem coupon",
+        "use my discount", "apply my discount", "use my voucher", "claim my voucher",
+        "i have a coupon", "i have a voucher", "my coupon",
+    )
+    return any(p in t for p in phrases)
+
+
 def _is_pure_greeting(text: str | None) -> bool:
     """True if the message is ONLY a greeting, with no ordering content.
 
@@ -4058,6 +4078,26 @@ async def handle_inbound(
                     await _redeem_coupon_at_checkout(
                         session, conv, inbound, restaurant_id, match.code
                     )
+                    return
+                # "claim my coupon" by intent: apply the only one, or ask which.
+                if _is_claim_coupon(text):
+                    if not active_coupons:
+                        await _send_text(
+                            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                            prefix="coupon-none",
+                            body="You don't have any coupons to claim right now 😊",
+                        )
+                    elif len(active_coupons) == 1:
+                        await _redeem_coupon_at_checkout(
+                            session, conv, inbound, restaurant_id, active_coupons[0].code
+                        )
+                    else:
+                        codes = ", ".join(c.code for c in active_coupons)
+                        await _send_text(
+                            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                            prefix="coupon-pick",
+                            body=f"You have a few coupons: {codes}. Send the code you'd like to use.",
+                        )
                     return
 
     # All remaining text + button_reply → AI
