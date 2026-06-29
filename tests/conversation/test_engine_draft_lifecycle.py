@@ -123,3 +123,31 @@ async def test_resolver_refuses_a_confirmed_order_as_cart(db_session, restaurant
     )
     # No live draft exists (only a placed order) → None, never the confirmed order.
     assert resolved is None
+
+
+async def test_cart_summary_shows_special_note_to_distinguish_duplicate_lines(db_session, restaurant):
+    """Same dish with a DIFFERENT special note is a separate prep line — the summary must
+    show the note so it doesn't look like an accidental duplicate ('2x Chicken Biryani' twice).
+    Regression: notes were stored but hidden, so two lines looked identical on WhatsApp."""
+    from app.conversation.engine import _build_cart_summary
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    cust = await get_or_create_customer(db_session, restaurant_id=restaurant.id, phone="+971501110001")
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
+    chicken = await _chicken(db_session, restaurant.id)
+    await add_item(db_session, order=order, dish=chicken, qty=2)  # plain
+    await add_item(db_session, order=order, dish=chicken, qty=2, notes="double masala")  # different prep
+    await db_session.commit()
+
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"draft_order_id": order.id, "dialogue_phase": "ordering"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    summary = await _build_cart_summary(db_session, conv)
+    assert "double masala" in summary  # the note is visible
+    # Two distinct lines (plain + double masala), not silently merged into one.
+    assert summary.count("Chicken Biryani") == 2

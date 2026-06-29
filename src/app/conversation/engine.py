@@ -33,6 +33,14 @@ def _aed(value) -> str:
     return f"{Decimal(value).normalize():f}"
 
 
+def _note_suffix(it) -> str:
+    """Render an order item's special note (e.g. 'double masala', 'no onion') so two
+    lines of the SAME dish with DIFFERENT prep are distinguishable in the cart/summary.
+    Without this they look like an accidental duplicate ('2x Chicken Biryani' twice)."""
+    note = (getattr(it, "notes", None) or "").strip()
+    return f" — {note}" if note else ""
+
+
 # A price mention: any currency token followed by a number (e.g. "AED 28", "Rs.5", "$3").
 # Bullet style is IGNORED on purpose — the LLM dumps menus with emoji bullets ("🍗 X,
 # AED 20"), plain "1x X AED 20", or "• X — AED 28"; all must be caught.
@@ -1621,7 +1629,8 @@ async def _send_order_summary(
     ).all()
     item_lines = "\n".join(
         f"  {it.qty}x {it.dish_name}"
-        f"{f' ({it.variant_name})' if it.variant_name else ''}: "
+        f"{f' ({it.variant_name})' if it.variant_name else ''}"
+        f"{_note_suffix(it)}: "
         f"AED {_aed(it.price_aed * it.qty)}"
         for it in items
     )
@@ -2045,7 +2054,7 @@ async def _send_modify_summary(
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all())
     curr_lines = "\n".join(
-        f"  {it.qty}x {it.dish_name}: "
+        f"  {it.qty}x {it.dish_name}{_note_suffix(it)}: "
         f"AED {_aed(it.price_aed * it.qty)}"
         for it in current_items
     ) or "  (none)"
@@ -2611,7 +2620,8 @@ async def _build_cart_summary(session: AsyncSession, conv) -> str:
         return ""
     lines = [
         f"{it.qty}x {it.dish_name}"
-        f"{f' ({it.variant_name})' if it.variant_name else ''} "
+        f"{f' ({it.variant_name})' if it.variant_name else ''}"
+        f"{_note_suffix(it)} "
         f"(AED {_aed(it.price_aed * it.qty)})"
         for it in items
     ]
@@ -2837,7 +2847,7 @@ async def _build_context(
                 select(OrderItem).where(OrderItem.order_id == order.id)
             )).all()
             item_lines = "\n".join(
-                f"  {it.qty}x {it.dish_number}. {it.dish_name}: "
+                f"  {it.qty}x {it.dish_number}. {it.dish_name}{_note_suffix(it)}: "
                 f"AED {_aed(it.price_aed * it.qty)}"
                 for it in items
             )

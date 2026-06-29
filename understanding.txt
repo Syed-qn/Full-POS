@@ -1658,3 +1658,10 @@
     showed the stale CatalogProduct mirror price; resolves once dish→Meta auto-publish runs.
   Tests: test_catalog_typed_order_adds_on_first_message_not_in_ordering_phase (new regression). 377 pass; the one
     failing test (test_order_confirmation_message_includes_totals_and_eta) is PRE-EXISTING (fails on clean tree).
+
+[2026-06-29 23:58 +04] fix(conversation): show special note in cart so "duplicate" lines are distinguishable.
+  Bug: customer added "double masala" → cart showed two identical "2x Chicken Biryani: AED 40" lines (looked like
+  a duplicate). They ARE separate prep lines (add_item splits by notes — correct), but the note was hidden.
+  Added _note_suffix(it) helper (" — <note>") and applied to all 4 cart/summary renderers in engine.py (confirm
+  summary, modify current-items, _build_cart_summary, dish-number summary). Test:
+  test_cart_summary_shows_special_note_to_distinguish_duplicate_lines. 377 pass (same pre-existing totals+ETA fail).
