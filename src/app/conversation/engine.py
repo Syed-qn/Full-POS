@@ -1788,7 +1788,7 @@ async def _handle_order_confirmation(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="order-cancelled",
-            body="No problem, your order has been cancelled. Send 'hi' to start again.",
+            body=_cancel_confirmation_body(order.order_number),
         )
         return
 
@@ -3597,6 +3597,14 @@ async def _resolve_order_for_cancel(
     )
 
 
+def _cancel_confirmation_body(order_number: str) -> str:
+    """Customer-facing cancel ack — never mention internal resale/discount ops."""
+    return (
+        f"No problem, order #{order_number} is cancelled. "
+        "Send 'hi' whenever you're ready to order again 😊"
+    )
+
+
 async def _execute_cancel_order(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
 ) -> None:
@@ -3649,20 +3657,10 @@ async def _execute_cancel_order(
 
     _set_state(conv, dialogue_phase="ordering", dialogue_state="greeting",
                draft_order_id=None, pending_order_id=None)
-    if str(order.status) == str(OrderStatus.ON_RESALE):
-        body = (
-            f"No problem, order #{order.order_number} is cancelled. "
-            "If the kitchen had already started cooking, the food may be offered "
-            "to another customer at a discount. Send 'hi' whenever you're ready to order again 😊"
-        )
-    else:
-        body = (
-            "No problem, your order has been cancelled. "
-            "Send 'hi' whenever you're ready to order again 😊"
-        )
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix="order-cancelled", body=body,
+        prefix="order-cancelled",
+        body=_cancel_confirmation_body(order.order_number),
     )
 
 

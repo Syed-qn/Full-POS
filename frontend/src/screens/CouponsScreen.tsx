@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { PageHeader } from "../components/PageHeader";
+import { toast } from "../components/Toaster";
 import { createCoupon, listCoupons, pauseCoupon } from "../lib/couponsApi";
 import type { Coupon, CouponCreateIn, CouponDiscountType, CouponKind } from "../lib/types";
 import s from "./CouponsScreen.module.css";
@@ -8,7 +9,7 @@ import s from "./CouponsScreen.module.css";
 export function CouponsScreen() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // create form
   const [discountType, setDiscountType] = useState<CouponDiscountType>("fixed");
@@ -21,22 +22,34 @@ export function CouponsScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState("");
 
-  function reload() {
-    listCoupons(phone.trim() || undefined)
-      .then(setCoupons)
-      .catch(() => setCoupons([]))
-      .finally(() => setLoaded(true));
+  async function reload(phoneFilter?: string) {
+    setLoadError(null);
+    const q = (phoneFilter ?? phone).trim();
+    try {
+      const rows = await listCoupons(q || undefined);
+      setCoupons(rows);
+    } catch (e) {
+      setCoupons([]);
+      setLoadError(e instanceof Error ? e.message : "Could not load coupons.");
+    } finally {
+      setLoaded(true);
+    }
   }
 
   useEffect(() => {
-    reload();
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
 
   const valueOk = Number(value) > 0;
 
   async function submit() {
+    if (!valueOk) {
+      toast("Enter a discount amount greater than zero.", "error");
+      return;
+    }
     setSubmitting(true);
-    setError(null);
+    setLoadError(null);
     const body: CouponCreateIn = {
       discount_type: discountType,
       discount_value: value,
@@ -47,15 +60,21 @@ export function CouponsScreen() {
       ...(totalLimit ? { total_redemption_limit: Number(totalLimit) } : {}),
     };
     try {
-      await createCoupon(body);
+      const created = await createCoupon(body);
       setValue("");
       setMinOrder("");
       setMaxDiscount("");
       setPerCustomer("");
       setTotalLimit("");
-      reload();
+      setCoupons((prev) => {
+        const without = prev.filter((c) => c.id !== created.id);
+        return [created, ...without];
+      });
+      toast(`Coupon created: ${created.code}`);
+      await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create coupon.");
+      const msg = e instanceof Error ? e.message : "Could not create coupon.";
+      toast(msg, "error");
     } finally {
       setSubmitting(false);
     }
@@ -64,9 +83,10 @@ export function CouponsScreen() {
   async function onPause(code: string) {
     try {
       await pauseCoupon(code);
-      reload();
+      toast(`Coupon ${code} paused.`);
+      await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not pause coupon.");
+      toast(e instanceof Error ? e.message : "Could not pause coupon.", "error");
     }
   }
 
@@ -86,7 +106,7 @@ export function CouponsScreen() {
         onSubmit={(e) => {
           e.preventDefault();
           setLoaded(false);
-          reload();
+          void reload(phone);
         }}
       >
         <input
@@ -111,7 +131,14 @@ export function CouponsScreen() {
           </label>
           <label className={s.field}>
             <span>{discountType === "percent" ? "Percent" : "Amount (AED)"}</span>
-            <input type="number" min="0" step="0.01" value={value} onChange={(e) => setValue(e.target.value)} />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              aria-label={discountType === "percent" ? "Percent" : "Amount (AED)"}
+            />
           </label>
           <label className={s.field}>
             <span>Kind</span>
@@ -139,16 +166,23 @@ export function CouponsScreen() {
             <input type="number" min="1" value={totalLimit} onChange={(e) => setTotalLimit(e.target.value)} />
           </label>
         </div>
-        <Button disabled={submitting || !valueOk} onClick={submit}>
-          Create coupon
+        <Button type="button" disabled={submitting || !valueOk} onClick={() => void submit()}>
+          {submitting ? "Creating…" : "Create coupon"}
         </Button>
-        {error && <p className={s.error}>{error}</p>}
+        {!valueOk && value !== "" && (
+          <p className={s.hint}>Discount must be greater than zero.</p>
+        )}
       </section>
 
-      {!loaded && <div className={s.list} aria-busy="true" aria-label="Loading coupons" />}
+      {!loaded && <p className={s.loading}>Loading coupons…</p>}
+      {loadError && <p className={s.error} role="alert">{loadError}</p>}
 
-      {loaded && coupons.length === 0 && (
-        <div className={s.empty}>No coupons yet — create one above.</div>
+      {loaded && !loadError && coupons.length === 0 && (
+        <div className={s.empty}>
+          {phone.trim()
+            ? "No coupons found for that phone."
+            : "No coupons yet — create one above."}
+        </div>
       )}
 
       {loaded && coupons.length > 0 && (
@@ -180,7 +214,7 @@ export function CouponsScreen() {
                 </td>
                 <td>
                   {c.status === "active" && (
-                    <Button variant="ghost" onClick={() => onPause(c.code)}>
+                    <Button type="button" variant="ghost" onClick={() => void onPause(c.code)}>
                       Pause
                     </Button>
                   )}

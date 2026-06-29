@@ -43,6 +43,8 @@ class OrderOut(BaseModel):
     # orders whose drop-offs are close enough to ride together, so the list can flag
     # an upcoming batch BEFORE a rider is assigned. Null when the order would ride alone.
     batch_preview: Optional[str] = None
+    # Set on resale copies (…-RS rows). Null on the cancelled original.
+    resale_of_order_id: Optional[int] = None
 
 
 class CustomerOut(BaseModel):

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import s from "./SideDrawer.module.css";
 
 export function SideDrawer({
@@ -15,18 +16,25 @@ export function SideDrawer({
   wide?: boolean;
 }) {
   if (!open) return null;
-  return (
+  return createPortal(
     <div className={s.root}>
       <div className={s.scrim} data-testid="drawer-scrim" onClick={onClose} />
-      <aside className={`${s.panel} ${wide ? s.wide : ""}`} role="dialog" aria-label={title}>
+      <aside
+        className={`${s.panel} ${wide ? s.wide : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
         <header className={s.head}>
           <span className={s.title}>{title}</span>
-          <button className={s.x} onClick={onClose} aria-label="Close">
+          <button type="button" className={s.x} onClick={onClose} aria-label="Close">
             ✕
           </button>
         </header>
         <div className={s.body}>{children}</div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

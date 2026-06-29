@@ -117,9 +117,14 @@ async def list_coupons(
             .order_by(Coupon.id.desc())
         )
     else:
+        # Manager-created campaign coupons (no customer_id). Includes both multi_use
+        # and single_use promos — kind alone wrongly hid single-use campaigns.
         rows = await session.scalars(
             select(Coupon)
-            .where(Coupon.restaurant_id == restaurant.id, Coupon.kind == "multi_use")
+            .where(
+                Coupon.restaurant_id == restaurant.id,
+                Coupon.customer_id.is_(None),
+            )
             .order_by(Coupon.id.desc())
         )
     return [CouponOut.model_validate(r) for r in rows]

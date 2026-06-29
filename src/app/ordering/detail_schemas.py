@@ -112,6 +112,7 @@ class OrderSummaryOut(BaseModel):
     status: str
     total: Decimal
     created_at: datetime
+    resale_of_order_id: int | None = None
 
     model_config = {"from_attributes": True}
 

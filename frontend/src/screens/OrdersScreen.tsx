@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { CompactTable, type Column } from "../components/CompactTable";
 import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
 import { PrepCountdown } from "../components/PrepCountdown";
+import { orderStatusLabel } from "../lib/orderDisplay";
 import { fetchOrders } from "../lib/ordersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { OrderOut, OrderStatus } from "../lib/types";
@@ -164,7 +165,15 @@ export function OrdersScreen() {
   const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const columns: Column<OrderOut>[] = [
-    { key: "id", header: "#", render: (o) => <span className={s.mono}>#{o.id}</span> },
+    {
+      key: "id",
+      header: "#",
+      render: (o) => (
+        <span className={s.mono} title={o.order_number}>
+          #{o.id}
+        </span>
+      ),
+    },
     { key: "cust", header: "Customer", render: (o) => o.customer_name },
     {
       key: "items",
@@ -202,7 +211,19 @@ export function OrdersScreen() {
         </span>
       ),
     },
-    { key: "status", header: "Status", render: (o) => <StatusPill status={o.status} /> },
+    {
+      key: "status",
+      header: "Status",
+      render: (o) => (
+        <StatusPill
+          status={o.status}
+          label={orderStatusLabel(o.status, {
+            resaleOfOrderId: o.resale_of_order_id,
+            orderNumber: o.order_number,
+          })}
+        />
+      ),
+    },
     {
       key: "kitchen",
       header: "Kitchen",

@@ -15,9 +15,14 @@ describe("CouponsScreen", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation(() =>
-        Promise.resolve(new Response(JSON.stringify(coupons), { status: 200 })),
-      ),
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          return Promise.resolve(
+            new Response(JSON.stringify(coupons[0]), { status: 201 }),
+          );
+        }
+        return Promise.resolve(new Response(JSON.stringify(coupons), { status: 200 }));
+      }),
     );
   });
   afterEach(() => vi.restoreAllMocks());
@@ -29,17 +34,31 @@ describe("CouponsScreen", () => {
   });
 
   it("shows empty state when no coupons", async () => {
-    vi.mocked(fetch).mockImplementation(() =>
-      Promise.resolve(new Response("[]", { status: 200 })),
-    );
+    vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify(coupons[0]), { status: 201 }));
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
     render(<CouponsScreen />);
     await waitFor(() => expect(screen.getByText(/create one above/i)).toBeInTheDocument());
   });
 
-  it("disables create until a positive value is entered", async () => {
+  it("shows load error when list fails", async () => {
     vi.mocked(fetch).mockImplementation(() =>
-      Promise.resolve(new Response("[]", { status: 200 })),
+      Promise.resolve(new Response(JSON.stringify({ detail: "missing token" }), { status: 401 })),
     );
+    render(<CouponsScreen />);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("missing token"));
+  });
+
+  it("disables create until a positive value is entered", async () => {
+    vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify(coupons[0]), { status: 201 }));
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
     render(<CouponsScreen />);
     const createBtn = await screen.findByRole("button", { name: /create coupon/i });
     expect(createBtn).toBeDisabled();
@@ -48,9 +67,6 @@ describe("CouponsScreen", () => {
   });
 
   it("posts a new coupon on create", async () => {
-    vi.mocked(fetch).mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify(coupons[0]), { status: 201 })),
-    );
     render(<CouponsScreen />);
     fireEvent.change(await screen.findByLabelText(/amount \(aed\)/i), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: /create coupon/i }));

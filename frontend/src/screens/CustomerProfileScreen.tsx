@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/Button";
 import { StatusPill } from "../components/StatusPill";
+import { orderStatusLabel } from "../lib/orderDisplay";
 import { Spinner } from "../components/Spinner";
 import {
   deleteCustomerAddress,
@@ -382,7 +383,15 @@ export function CustomerProfileScreen() {
                   {profile.recent_orders.map((o) => (
                     <tr key={o.id} className={s.orderRow} onClick={() => navigate(`/orders?open=${o.id}`)}>
                       <td className={s.mono}>{o.order_number}</td>
-                      <td><StatusPill status={o.status} /></td>
+                      <td>
+                        <StatusPill
+                          status={o.status}
+                          label={orderStatusLabel(o.status, {
+                            resaleOfOrderId: o.resale_of_order_id,
+                            orderNumber: o.order_number,
+                          })}
+                        />
+                      </td>
                       <td className={s.mono}>AED {o.total}</td>
                       <td>{new Date(o.created_at).toLocaleDateString()}</td>
                     </tr>

@@ -126,6 +126,7 @@ export interface OrderOut {
   /** Pre-assignment forecast: a label ("A","B",…) shared by still-unassigned
    *  orders that will batch together by proximity. Null when it would ride alone. */
   batch_preview?: string | null;
+  resale_of_order_id?: number | null;
 }
 
 export interface ConversationOut {
@@ -243,6 +244,7 @@ export interface OrderSummaryOut {
   status: OrderStatus;
   total: string;
   created_at: string;
+  resale_of_order_id?: number | null;
 }
 
 export interface CustomerProfileOut extends CustomerDetailOut {

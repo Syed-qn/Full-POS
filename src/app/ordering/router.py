@@ -121,6 +121,7 @@ async def _enrich(
     return OrderOut(
         id=order.id,
         order_number=order.order_number,
+        resale_of_order_id=order.resale_of_order_id,
         status=str(order.status),
         customer_name=customer_name,
         customer_phone=customer_phone,

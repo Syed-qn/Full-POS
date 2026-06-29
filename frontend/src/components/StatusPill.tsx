@@ -33,8 +33,14 @@ const COLOR: Record<string, string> = {
   resold: "var(--status-resale)",
 };
 
-export function StatusPill({ status }: { status: OrderStatus }) {
-  const label = STATUS_LABELS[status] ?? status;
+export function StatusPill({
+  status,
+  label: labelOverride,
+}: {
+  status: OrderStatus;
+  label?: string;
+}) {
+  const label = labelOverride ?? STATUS_LABELS[status] ?? status;
   const color = COLOR[status] ?? "var(--text-muted)";
   return (
     <span className={s.pill} style={{ ["--pill" as string]: color }}>

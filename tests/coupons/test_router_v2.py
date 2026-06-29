@@ -13,6 +13,21 @@ async def test_create_and_list_coupon(client, auth_headers):
     assert any(c["code"] == code for c in listed.json())
 
 
+async def test_list_includes_single_use_campaign_coupon(client, auth_headers):
+    """Manager single-use promos must appear in the default list (not only multi_use)."""
+    resp = await client.post(
+        "/api/v1/coupons",
+        headers=auth_headers,
+        json={"discount_type": "fixed", "discount_value": "5.00", "kind": "single_use"},
+    )
+    assert resp.status_code == 201, resp.text
+    code = resp.json()["code"]
+
+    listed = await client.get("/api/v1/coupons", headers=auth_headers)
+    assert listed.status_code == 200
+    assert any(c["code"] == code for c in listed.json())
+
+
 async def test_pause_coupon(client, auth_headers):
     created = await client.post(
         "/api/v1/coupons",

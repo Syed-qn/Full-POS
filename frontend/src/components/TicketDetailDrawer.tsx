@@ -99,6 +99,12 @@ export function TicketDetailDrawer({
         </div>
       ) : (
         <>
+          {error && (
+            <div className={s.errorBanner} role="alert">
+              {error}
+            </div>
+          )}
+
           <div className={s.section}>
             <label className={s.label} htmlFor="ticket-note">
               Resolution note (required)
@@ -109,7 +115,13 @@ export function TicketDetailDrawer({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="What was decided / communicated to the customer"
+              disabled={submitting}
             />
+            {!noteOk && (
+              <p className={s.hint}>
+                Type a resolution note first — the action buttons below stay disabled until you do.
+              </p>
+            )}
           </div>
 
           <div className={s.action}>
@@ -124,13 +136,18 @@ export function TicketDetailDrawer({
               step="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              disabled={submitting}
             />
             <Button
+              type="button"
               disabled={submitting || !noteOk || !amountOk}
-              onClick={() => submit({ action: "wallet_refund", note, amount })}
+              onClick={() => submit({ action: "wallet_refund", note: note.trim(), amount })}
             >
-              Refund to Wallet
+              {submitting ? "Saving…" : "Refund to Wallet"}
             </Button>
+            {noteOk && !amountOk && (
+              <p className={s.hint}>Enter a refund amount above AED 0 to enable wallet credit.</p>
+            )}
           </div>
 
           <div className={s.action}>
@@ -140,27 +157,27 @@ export function TicketDetailDrawer({
                 : "This complaint isn't linked to an order, so a replacement can't be auto-created. Issue a refund or place a manual order instead."}
             </span>
             <Button
+              type="button"
               variant="ghost"
               disabled={submitting || !noteOk || !ticket.order_id}
-              onClick={() => submit({ action: "create_replacement", note })}
+              onClick={() => submit({ action: "create_replacement", note: note.trim() })}
             >
-              Create replacement order
+              {submitting ? "Saving…" : "Create replacement order"}
             </Button>
           </div>
 
           <div className={s.action}>
             <Button
+              type="button"
               variant="ghost"
               disabled={submitting || !noteOk}
-              onClick={() => submit({ action: "resolved_no_action", note })}
+              onClick={() => submit({ action: "resolved_no_action", note: note.trim() })}
             >
-              Mark Resolved
+              {submitting ? "Saving…" : "Mark Resolved"}
             </Button>
           </div>
         </>
       )}
-
-      {error && <p className={s.error}>{error}</p>}
     </SideDrawer>
   );
 }

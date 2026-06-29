@@ -120,7 +120,14 @@ async def get_customer_profile(
     recent_orders_rows = list(
         (await session.scalars(
             select(Order)
-            .where(Order.customer_id == customer.id, Order.restaurant_id == restaurant.id)
+            .where(
+                Order.customer_id == customer.id,
+                Order.restaurant_id == restaurant.id,
+                # Resale copies (…-RS) are internal inventory rows for the next
+                # buyer — hide them on the customer's profile so one cancel does
+                # not look like two identical orders.
+                Order.resale_of_order_id.is_(None),
+            )
             .order_by(Order.created_at.desc())
             .limit(10)
         )).all()
@@ -169,6 +176,7 @@ async def get_customer_profile(
                 status=o.status,
                 total=o.total,
                 created_at=o.created_at,
+                resale_of_order_id=o.resale_of_order_id,
             )
             for o in recent_orders_rows
         ],

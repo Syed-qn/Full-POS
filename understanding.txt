@@ -1419,3 +1419,38 @@
   api.ts: markNotDelivered().
 - TESTS: test_app_not_delivered_marks_undeliverable_and_advances_run,
   test_app_not_delivered_blocked_before_pickup. 9 rider-app action tests pass.
+
+[2026-06-29 17:00 +04] fix(tickets): complaint drawer UX — inspected production + Playwright evidence
+- User report on Render /tickets: Complaint #1 drawer fields/buttons "not editable / not working".
+- INSPECTION (no assumptions): downloaded prod bundles (index-BFKw1V2L.js, index-D9SL3Awj.css);
+  backend tests/tickets 14 pass; Playwright e2e on production build — desktop drawer typing + resolve
+  POST work; mobile 390px drawer inputs work once open; API 400 surfaces error text. Prod API
+  returns 401 without JWT (can't repro resolve on live DB without manager creds).
+- ROOT CAUSE (UX): action buttons are intentionally disabled until resolution note (+ amount for
+  refund) — looked broken when greyed out; errors were easy to miss at drawer bottom; white
+  scrim overlay (--bg-overlay 92% white) + drawer inside scroll container risked click confusion.
+- FIX frontend: SideDrawer portals to document.body, panel z-index above scrim, darker overlay;
+  viewport meta device-width; TicketDetailDrawer inline hints for disabled actions, sticky error
+  banner, type=button + trim note on submit. e2e/tickets-drawer.spec.ts added (5 cases).
+
+[2026-06-29 18:30 +04] fix(conversation): remove resale disclaimer from customer cancel message
+- User report: cancel ack leaked internal ops ("kitchen started… offered to another customer at
+  a discount") — not spec/UAT copy; confusing after 1-min cancel (R1-0077 → on_resale + -RS copy).
+- FIX engine.py: _cancel_confirmation_body() single message for all cancel paths (text cancel via
+  _execute_cancel_order + confirm-step Cancel button). Resale still runs in cancel_order() when
+  status=preparing; customer only sees "No problem, order #X is cancelled… Send 'hi'…".
+- TEST: test_cancel_during_preparing_uses_simple_message_no_resale_disclaimer (3 cancel tests pass).
+
+[2026-06-29 18:45 +04] fix(coupons): /coupons page create/list felt broken on Render
+- User report: https://restaurant-whatsapp-service.onrender.com/coupons — create coupon "nothing
+  working", page felt dummy.
+- ROOT CAUSES (evidence): (1) list GET errors swallowed → empty state looked like no data;
+  (2) default list filtered kind=multi_use only → single-use campaigns created but invisible;
+  (3) no success toast after create; (4) Create disabled with no hint when amount empty.
+- FIX BE router.py: default list → customer_id IS NULL (all manager campaign coupons).
+- FIX FE CouponsScreen: load errors surfaced, toast on create/pause, optimistic row insert,
+  loading text, type=button, validation hint. e2e/coupons.spec.ts + test_list_includes_single_use.
+
+[2026-06-29 18:35 +04] chore(graphify): incremental update after cancel-message fix
+- graphify update . — 574 files re-extracted; 5679 nodes, 15336 edges, 1196 communities;
+  graph.json + GRAPH_REPORT.md refreshed in graphify-out/ (479 extraction warnings, no new AMBIGUOUS).
