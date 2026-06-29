@@ -127,11 +127,14 @@ async def get_available_resale_orders(
     Enforces post-cook cancel exclusion (same phone/person/address hash) per spec §1/§4.3.7.
     Used by dispatch engine / conversation when suggesting resale fast orders.
     """
+    # Only the resale *copy* rows are sellable (they carry exclusion_hash + items).
+    # The cancelled original also transitions to on_resale but must not be offered.
     resales = (
         await session.scalars(
             select(Order).where(
                 Order.restaurant_id == restaurant_id,
                 Order.status == OrderStatus.ON_RESALE,
+                Order.resale_of_order_id.isnot(None),
             )
         )
     ).all()
@@ -841,6 +844,7 @@ async def cancel_order(
             additional_details=order.additional_details,
             resale_of_order_id=order.id,
             exclusion_hash=exclusion_hash,
+            cancelled_at=order.cancelled_at,
         )
         session.add(resale)
         await session.flush()

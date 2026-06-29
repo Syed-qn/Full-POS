@@ -304,6 +304,12 @@ class FakeConversationAgent:
 
         # post_order phase
         if dialogue_phase == "post_order":
+            if any(w in last_user for w in ("cancel",)):
+                return ConversationAgentResult(
+                    message="Order cancelled.",
+                    action="cancel_order",
+                    action_data={},
+                )
             if any(w in last_user for w in ("modify", "change", "update", "edit")):
                 return ConversationAgentResult(
                     message="Sure! Let me help you modify your order.",

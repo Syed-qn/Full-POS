@@ -81,6 +81,7 @@ class StopOut(BaseModel):
     longitude: float | None = None
     codAmount: float = 0.0
     delivered: bool = False
+    outcome: str = "pending"  # pending | delivered | not_delivered
     doNotCall: bool = False
 
 
@@ -95,6 +96,7 @@ class DeliveredOut(BaseModel):
     success: bool = True
     batchComplete: bool = False
     nextOrderId: int | None = None
+    bringBackToRestaurant: bool = False
 
 
 async def _current_rider(
@@ -258,6 +260,38 @@ async def rider_app_delivered(
     )
 
 
+@router.post(
+    "/api/v1/rider-app/orders/{order_id}/not-delivered", response_model=DeliveredOut
+)
+async def rider_app_not_delivered(
+    order_id: int,
+    rider: Rider = Depends(_current_rider),
+    session: AsyncSession = Depends(get_session),
+):
+    """Customer unreachable: mark undeliverable, no COD, close the stop, advance run."""
+    from app.dispatch.rider_actions import NotDeliveredOutcome, mark_order_not_delivered
+
+    result = await mark_order_not_delivered(
+        session, restaurant_id=rider.restaurant_id, rider=rider, order_id=order_id
+    )
+    if result.outcome is NotDeliveredOutcome.IGNORED:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "order not found")
+    if result.outcome is NotDeliveredOutcome.INVALID_STATUS:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "this stop can't be marked not delivered yet",
+        )
+    await session.commit()
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, rider.restaurant_id)
+    return DeliveredOut(
+        batchComplete=result.batch_complete,
+        nextOrderId=result.next_order.id if result.next_order else None,
+        bringBackToRestaurant=True,
+    )
+
+
 async def get_active_run_response(session: AsyncSession, rider: Rider) -> RunOut:
     """Build the RunOut payload for ``rider`` (shared by GET /orders and pickup)."""
     from app.dispatch.rider_actions import get_active_run
@@ -281,6 +315,7 @@ async def get_active_run_response(session: AsyncSession, rider: Rider) -> RunOut
                 longitude=s.longitude,
                 codAmount=s.cod_amount,
                 delivered=s.delivered,
+                outcome=s.outcome,
                 doNotCall=s.do_not_call,
             )
             for s in run.stops

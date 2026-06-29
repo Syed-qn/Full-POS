@@ -1367,3 +1367,55 @@
   confirm path, address-capture prompt guardrails (no restaurant-location over-share/loop),
   cancel releases rider from dispatch, resale offer/accept (cancelled-cooked food ->
   discounted fast re-sell + re-dispatch + batch), loyalty (tiers+earn, all editable).
+
+[2026-06-29 17:15 +04] feat(resale): full cancelled-after-cooking resale loop wired end-to-end
+- Spec flow (kitchen started → cancel → offer next customer fast discounted delivery →
+  rider re-routed → batch with fresh dishes) now complete in chat + settings.
+- BACKEND: get_available_resale_orders only returns resale *copies* (resale_of_order_id
+  set) — parent on_resale row no longer offered (exclusion/max-age bugs fixed).
+  cancel_order stamps cancelled_at on resale copy. accept_resale companion_order batches
+  fresh CONFIRMED/PREPARING cart into same dispatch trip; run_dispatch_engine assigns rider
+  to NEW buyer address.
+- CHAT: _maybe_offer_resale on hi + checkout; Grab-it / text accept; GPS pin completes
+  sale when no saved address; companion cart cleared on accept. Settings → Resale tab:
+  enable, percent/fixed discount, max_age_minutes (manager-editable).
+- TESTS: fixed+percent discount, exclusion, max_age, companion batch, location-pin accept,
+  greeting offer. 11 resale tests pass.
+
+[2026-06-29 16:45 +04] fix(cancel): post-confirm "Cancel order" must cancel DB order + release rider
+- User report: confirmed R1-0076, text "Cancel order" 2 min later → bot said cancelled but
+  rider still picked up/delivered. ROOT CAUSE: _execute_cancel_order only looked at
+  conv.state pending_order_id/draft_order_id — both cleared on confirm — so it sent the
+  cancellation reply WITHOUT calling ordering.cancel_order (no FSM change, no
+  release_order_from_dispatch, rider kept the batch stop).
+- FIX conversation/engine.py: _resolve_order_for_cancel() falls back to customer's latest
+  non-terminal placed order; _execute_cancel_order + confirm-button cancel path now call
+  cancel_order() (wallet release, resale path, dispatch detach + rider push). IllegalTransition
+  → honest "already with the rider" / "ready" messages instead of fake cancel. fake.py:
+  post_order "cancel" → cancel_order action (tests). TESTS:
+  test_cancel_after_confirm_cancels_order_and_releases_rider,
+  test_cancel_after_confirm_blocked_when_picked_up. 5 cancel tests pass.
+
+[2026-06-29 16:30 +04] fix(riders): blocked Remove → offer Deactivate when rider has COD history
+- User hit "This rider has payment records on file — deactivate them instead of removing."
+  on Riders screen Remove — backend 409 was correct (CodCollection / RiderShiftReconciliation
+  must be preserved) but UX dead-ended on alert().
+- FRONTEND RidersScreen: ConfirmDialog for remove; on ApiError 409 → second dialog offers
+  one-click Deactivate (setRiderStatus deactivated); toasts replace alert(). Test:
+  offers deactivation when remove is blocked by payment records.
+- BACKEND unchanged (identity/service.delete_rider still raises RiderHasHistoryError→409).
+  API test: DELETE /riders/{id} with COD row → 409 + payment-records detail.
+
+[2026-06-29 17:15 +04] feat(rider-app): "Not delivered, bring back to restaurant" stop action
+- User request: rider app must offer undeliverable flow when customer unreachable at door.
+- BACKEND rider_actions.mark_order_not_delivered(): FSM → undeliverable from picked_up/arriving,
+  release wallet hold, stop live tracking, notify customer, stamp batch stop via
+  delivery.stamp_batch_stop_handled(), advance to next stop or batch-complete + re-dispatch.
+  No COD recorded. StopView/StopOut gain outcome: pending|delivered|not_delivered.
+- API POST /api/v1/rider-app/orders/{order_id}/not-delivered → DeliveredOut with
+  bringBackToRestaurant=true. 409 if stop not yet picked up.
+- RIDER APP (rider-app/App.tsx): secondary button "Not delivered, bring back" on active stop
+  with confirm dialog; empty-run copy distinguishes bring-back vs all-delivered.
+  api.ts: markNotDelivered().
+- TESTS: test_app_not_delivered_marks_undeliverable_and_advances_run,
+  test_app_not_delivered_blocked_before_pickup. 9 rider-app action tests pass.

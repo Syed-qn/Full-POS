@@ -17,6 +17,7 @@ import {
 import {
   getOrders,
   markDelivered,
+  markNotDelivered,
   pickup,
   setDuty,
   type Run,
@@ -238,7 +239,14 @@ function TrackingScreen({
       // with the server (handles batch-complete / a newly assigned next run).
       setRun((r) =>
         r
-          ? { ...r, stops: r.stops.map((s) => (s.orderId === stop.orderId ? { ...s, delivered: true } : s)) }
+          ? {
+              ...r,
+              stops: r.stops.map((s) =>
+                s.orderId === stop.orderId
+                  ? { ...s, delivered: true, outcome: "delivered" as const }
+                  : s,
+              ),
+            }
           : r,
       );
       await loadRun();
@@ -253,7 +261,57 @@ function TrackingScreen({
     }
   };
 
-  const pending = (run?.stops ?? []).filter((s) => !s.delivered);
+  const doNotDelivered = (stop: Stop) => {
+    Alert.alert(
+      "Not delivered?",
+      "Mark this order as undeliverable and bring the food back to the restaurant. No cash will be collected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Bring back",
+          style: "destructive",
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const res = await markNotDelivered(token, stop.orderId);
+              setRun((r) =>
+                r
+                  ? {
+                      ...r,
+                      stops: r.stops.map((s) =>
+                        s.orderId === stop.orderId
+                          ? { ...s, delivered: true, outcome: "not_delivered" as const }
+                          : s,
+                      ),
+                    }
+                  : r,
+              );
+              await loadRun();
+              if (res.batchComplete) {
+                Alert.alert(
+                  "Run complete",
+                  "Bring undelivered food back to the restaurant.",
+                );
+              } else {
+                Alert.alert(
+                  "Marked not delivered",
+                  "Bring this order back to the restaurant, then continue to the next stop.",
+                );
+              }
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Try again";
+              Alert.alert("Couldn't update", msg);
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const pending = (run?.stops ?? []).filter((s) => s.outcome === "pending");
+  const bringBackCount = (run?.stops ?? []).filter((s) => s.outcome === "not_delivered").length;
   const hasRun = !!run?.batchId;
   const pickedUp = run?.status === "picked_up";
   const live = status.startsWith("Live");
@@ -327,8 +385,12 @@ function TrackingScreen({
           </View>
         ) : pending.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>✅</Text>
-            <Text style={styles.subtitle}>All delivered. Head back to the restaurant.</Text>
+            <Text style={styles.emptyEmoji}>{bringBackCount > 0 ? "↩️" : "✅"}</Text>
+            <Text style={styles.subtitle}>
+              {bringBackCount > 0
+                ? `Bring ${bringBackCount} undelivered ${bringBackCount === 1 ? "order" : "orders"} back to the restaurant.`
+                : "All delivered. Head back to the restaurant."}
+            </Text>
           </View>
         ) : (
           pending.map((s, i) => (
@@ -383,18 +445,34 @@ function TrackingScreen({
 
               <View style={styles.cardActions}>
                 {i === 0 ? (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.button,
-                      styles.buttonFlex,
-                      pressed && styles.buttonPressed,
-                      busy && styles.buttonDisabled,
-                    ]}
-                    disabled={busy}
-                    onPress={() => doDelivered(s)}
-                  >
-                    <Text style={styles.buttonText}>{busy ? "…" : "Delivered"}</Text>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.button,
+                        styles.buttonFlex,
+                        pressed && styles.buttonPressed,
+                        busy && styles.buttonDisabled,
+                      ]}
+                      disabled={busy}
+                      onPress={() => doDelivered(s)}
+                    >
+                      <Text style={styles.buttonText}>{busy ? "…" : "Delivered"}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.buttonAlt,
+                        styles.buttonFlex,
+                        pressed && styles.buttonAltPressed,
+                        busy && styles.buttonDisabled,
+                      ]}
+                      disabled={busy}
+                      onPress={() => doNotDelivered(s)}
+                    >
+                      <Text style={styles.buttonAltText}>
+                        {busy ? "…" : "Not delivered, bring back"}
+                      </Text>
+                    </Pressable>
+                  </>
                 ) : null}
               </View>
             </View>

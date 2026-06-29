@@ -146,6 +146,47 @@ async def test_app_delivered_records_cod_and_reports_next(client, db_session):
     assert last.json()["batchComplete"] is True
 
 
+async def test_app_not_delivered_marks_undeliverable_and_advances_run(client, db_session):
+    r, rider, batch, orders = await _seed(
+        db_session, n_orders=2, batch_status="picked_up", order_status="picked_up")
+    token = await _pair(client, db_session, rider)
+
+    resp = await client.post(
+        f"/api/v1/rider-app/orders/{orders[0].id}/not-delivered",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["bringBackToRestaurant"] is True
+    assert body["batchComplete"] is False
+    assert body["nextOrderId"] == orders[1].id
+
+    await db_session.refresh(orders[0])
+    assert orders[0].status == "undeliverable"
+    cod = await db_session.scalar(
+        select(CodCollection).where(CodCollection.order_id == orders[0].id))
+    assert cod is None
+
+    run = (await client.get("/api/v1/rider-app/orders",
+                            headers={"Authorization": f"Bearer {token}"})).json()
+    assert run["stops"][0]["outcome"] == "not_delivered"
+    assert run["stops"][1]["outcome"] == "pending"
+
+
+async def test_app_not_delivered_blocked_before_pickup(client, db_session):
+    r, rider, batch, orders = await _seed(
+        db_session, n_orders=1, batch_status="planned", order_status="assigned")
+    token = await _pair(client, db_session, rider)
+
+    resp = await client.post(
+        f"/api/v1/rider-app/orders/{orders[0].id}/not-delivered",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 409
+    await db_session.refresh(orders[0])
+    assert orders[0].status == "assigned"
+
+
 async def test_app_delivered_blocked_without_live_gps(client, db_session):
     r, rider, batch, orders = await _seed(
         db_session, n_orders=1, batch_status="picked_up", order_status="picked_up")

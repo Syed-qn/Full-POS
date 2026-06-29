@@ -68,6 +68,33 @@ async def test_resale_offered_on_greeting(db_session):
     assert conv.state.get("resale_offer_id") is not None
 
 
+async def test_resale_accept_with_location_pin_sells_it(db_session):
+    r, dish = await _resto_with_resale(db_session)
+    phone = "+971500400777"
+    buyer = Customer(restaurant_id=r.id, phone=phone, name="Pin Buyer")
+    db_session.add(buyer)
+    await db_session.commit()
+
+    await handle_inbound(db_session, _inb(r, phone, "hi"), restaurant_id=r.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session,
+        InboundMessage(
+            wa_message_id="w-loc", from_phone=phone, type=MessageType.LOCATION,
+            payload={"latitude": 25.21, "longitude": 55.21},
+            restaurant_phone=r.phone, timestamp=1717660901,
+        ),
+        restaurant_id=r.id,
+    )
+    await db_session.commit()
+
+    sold = (await db_session.scalars(
+        select(Order).where(Order.customer_id == buyer.id)
+    )).all()
+    assert len(sold) == 1
+    assert sold[0].subtotal == Decimal("28.00")
+
+
 async def test_resale_accept_with_saved_address_sells_it(db_session):
     r, dish = await _resto_with_resale(db_session)
     phone = "+971500400888"
@@ -75,7 +102,7 @@ async def test_resale_accept_with_saved_address_sells_it(db_session):
     buyer = Customer(restaurant_id=r.id, phone=phone, name="Buyer")
     db_session.add(buyer)
     await db_session.flush()
-    db_session.add(CustomerAddress(customer_id=buyer.id, latitude=25.3, longitude=55.3,
+    db_session.add(CustomerAddress(customer_id=buyer.id, latitude=25.21, longitude=55.21,
                                    room_apartment="9", building="Z", receiver_name="Buyer", confirmed=True))
     await db_session.commit()
 

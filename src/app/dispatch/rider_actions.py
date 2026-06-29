@@ -61,6 +61,21 @@ class DeliverResult:
     batch_complete: bool = False     # DELIVERED: last stop in the batch
 
 
+class NotDeliveredOutcome(str, Enum):
+    NOT_DELIVERED = "not_delivered"
+    INVALID_STATUS = "invalid_status"  # not picked_up / arriving
+    IGNORED = "ignored"                # unknown / foreign order
+
+
+@dataclass
+class NotDeliveredResult:
+    outcome: NotDeliveredOutcome
+    order: Order | None = None
+    next_order: Order | None = None
+    batch_id: int | None = None
+    batch_complete: bool = False
+
+
 @dataclass
 class StopView:
     order_id: int
@@ -72,6 +87,7 @@ class StopView:
     longitude: float | None
     cod_amount: float
     delivered: bool
+    outcome: str  # pending | delivered | not_delivered
     customer_phone: str = ""
     do_not_call: bool = False
 
@@ -110,6 +126,12 @@ async def get_active_run(session: AsyncSession, *, rider: Rider) -> RunView | No
         if order is None:
             continue
         name, address, coords, phone, do_not_call = await _stop_details(session, order)
+        if order.status == "delivered":
+            outcome = "delivered"
+        elif order.status == "undeliverable":
+            outcome = "not_delivered"
+        else:
+            outcome = "pending"
         stops.append(
             StopView(
                 order_id=order.id,
@@ -121,6 +143,7 @@ async def get_active_run(session: AsyncSession, *, rider: Rider) -> RunView | No
                 longitude=coords[1] if coords else None,
                 cod_amount=float(cod_due_aed(order)),
                 delivered=bo.delivered_at is not None,
+                outcome=outcome,
                 customer_phone=phone,
                 do_not_call=do_not_call,
             )
@@ -267,4 +290,88 @@ async def mark_order_delivered(
         )
     return DeliverResult(
         DeliverOutcome.DELIVERED, order=order, batch_id=bo.batch_id, batch_complete=True
+    )
+
+
+async def mark_order_not_delivered(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider: Rider,
+    order_id: int,
+) -> NotDeliveredResult:
+    """Mark a stop as undeliverable (customer unreachable): transition the order,
+    release any wallet hold, stop live tracking, notify the customer, close the
+    batch stop, and resolve the next stop / batch completion. No COD is recorded.
+    Rider-facing messaging is the caller's job."""
+    from datetime import datetime, timezone
+
+    from app.dispatch.delivery import stamp_batch_stop_handled
+    from app.dispatch.rider_flow import _notify_customer_status
+    from app.dispatch.tracking_live import TRACKING_STOPPED, stop_tracking_session
+    from app.ordering.fsm import OrderStatus, transition as fsm_transition
+    from app.ordering.payments import release_on_cancel
+
+    order = await session.get(Order, order_id)
+    if order is None or order.rider_id != rider.id:
+        return NotDeliveredResult(NotDeliveredOutcome.IGNORED)
+    if order.status not in ("picked_up", "arriving"):
+        return NotDeliveredResult(
+            NotDeliveredOutcome.INVALID_STATUS, order=order
+        )
+
+    await fsm_transition(
+        session, order, OrderStatus.UNDELIVERABLE, actor="rider"
+    )
+    await release_on_cancel(session, order=order)
+    await stop_tracking_session(session, order_id=order.id, reason=TRACKING_STOPPED)
+    await _notify_customer_status(
+        session,
+        restaurant_id=restaurant_id,
+        order=order,
+        status_key="undeliverable",
+    )
+
+    now = datetime.now(timezone.utc)
+    batch_id = await stamp_batch_stop_handled(session, order, now)
+
+    bo = await session.scalar(select(BatchOrder).where(BatchOrder.order_id == order.id))
+    if bo is None:
+        return NotDeliveredResult(
+            NotDeliveredOutcome.NOT_DELIVERED, order=order, batch_id=batch_id
+        )
+    remaining = (
+        await session.scalars(
+            select(BatchOrder)
+            .where(
+                BatchOrder.batch_id == bo.batch_id,
+                BatchOrder.delivered_at.is_(None),
+            )
+            .order_by(BatchOrder.sequence)
+        )
+    ).all()
+    if remaining:
+        nxt = await session.get(Order, remaining[0].order_id)
+        return NotDeliveredResult(
+            NotDeliveredOutcome.NOT_DELIVERED,
+            order=order,
+            next_order=nxt,
+            batch_id=bo.batch_id,
+        )
+
+    from app.dispatch.service import run_dispatch_engine
+
+    try:
+        await run_dispatch_engine(session, restaurant_id=restaurant_id)
+    except Exception:  # noqa: BLE001 - re-dispatch must not break the flow
+        _logger.exception(
+            "re-dispatch after not-delivered on rider %s failed (restaurant_id=%s)",
+            rider.id,
+            restaurant_id,
+        )
+    return NotDeliveredResult(
+        NotDeliveredOutcome.NOT_DELIVERED,
+        order=order,
+        batch_id=bo.batch_id,
+        batch_complete=True,
     )

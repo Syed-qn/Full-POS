@@ -24,6 +24,9 @@ _HUMAN_STATUS: dict[str, str] = {
     "arriving": "Your rider is on the way!",
     "delivered": "Your order has been delivered. Enjoy!",
     "cancelled": "This order was cancelled.",
+    "undeliverable": (
+        "Sorry, we couldn't deliver your order. Please contact the restaurant for help."
+    ),
 }
 
 _EN_ROUTE = frozenset({"assigned", "picked_up", "arriving"})

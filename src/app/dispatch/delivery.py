@@ -101,15 +101,17 @@ async def advance_delivery(
     return order
 
 
-async def _complete_batch_order(
+async def stamp_batch_stop_handled(
     session: AsyncSession, order: Order, now: datetime
-) -> None:
-    """Stamp BatchOrder.delivered_at; if the batch is fully delivered, free the rider."""
+) -> int | None:
+    """Mark a batch stop handled (delivered or not-delivered) and free the rider when
+    every stop in the batch is closed. Returns the batch_id when the stop belonged to
+    a batch, else None."""
     bo = await session.scalar(
         select(BatchOrder).where(BatchOrder.order_id == order.id)
     )
     if bo is None:
-        return
+        return None
     bo.delivered_at = now
     siblings = (
         await session.scalars(
@@ -123,3 +125,11 @@ async def _complete_batch_order(
             rider = await session.get(Rider, batch.rider_id)
             if rider is not None:
                 rider.status = "available"
+    return bo.batch_id
+
+
+async def _complete_batch_order(
+    session: AsyncSession, order: Order, now: datetime
+) -> None:
+    """Stamp BatchOrder.delivered_at; if the batch is fully delivered, free the rider."""
+    await stamp_batch_stop_handled(session, order, now)

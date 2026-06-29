@@ -326,3 +326,64 @@ async def test_invalid_rider_status_422(client, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 422
+
+
+async def test_delete_rider_blocked_by_cod_records_409(client, auth_headers, db_session):
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from app.cod.models import CodCollection
+    from app.identity.models import Restaurant, Rider
+    from app.ordering.models import Customer, Order
+
+    restaurant = await db_session.scalar(
+        select(Restaurant).where(Restaurant.phone == "+971501234567")
+    )
+    assert restaurant is not None
+
+    rider = Rider(
+        restaurant_id=restaurant.id,
+        name="COD Rider",
+        phone="+971501234567",
+        status="available",
+        performance={},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    customer = Customer(
+        restaurant_id=restaurant.id,
+        phone="+971509998877",
+        name="C",
+        total_orders=0,
+        total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id,
+        customer_id=customer.id,
+        order_number="R1-0099",
+        status="delivered",
+        rider_id=rider.id,
+        subtotal=Decimal("10.00"),
+        delivery_fee_aed=Decimal("0.00"),
+        total=Decimal("10.00"),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add(
+        CodCollection(
+            order_id=order.id,
+            rider_id=rider.id,
+            restaurant_id=restaurant.id,
+            amount_aed=Decimal("10.00"),
+            collected_at=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/v1/riders/{rider.id}", headers=auth_headers)
+    assert resp.status_code == 409
+    assert "payment records" in resp.json()["detail"].lower()

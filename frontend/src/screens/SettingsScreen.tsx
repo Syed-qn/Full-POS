@@ -14,7 +14,21 @@ import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "loyalty" | "dispatch" | "integrations";
+type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "resale" | "loyalty" | "dispatch" | "integrations";
+
+interface ResaleConfig {
+  enabled: boolean;
+  discount_type: "percent" | "fixed";
+  discount_value: number;
+  max_age_minutes: number;
+}
+
+const DEFAULT_RESALE: ResaleConfig = {
+  enabled: true,
+  discount_type: "percent",
+  discount_value: 30,
+  max_age_minutes: 30,
+};
 
 const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
   { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
@@ -27,6 +41,8 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Batching", blurb: "Limits for grouping orders under the 40-minute SLA." },
   { key: "cart", label: "Cart recovery", icon: "🛒", desc: "Abandoned carts",
     title: "Cart recovery", blurb: "Remind customers who left items in their cart, and auto-clear stale carts." },
+  { key: "resale", label: "Resale", icon: "⚡", desc: "Cancelled food",
+    title: "Cancelled-order resale", blurb: "When the kitchen has already started an order that gets cancelled, offer the cooked food to the next customer at a discount — fast delivery, batched with anything else they order." },
   { key: "loyalty", label: "Loyalty", icon: "🎁", desc: "Tiers & rewards",
     title: "Loyalty", blurb: "Reward repeat customers with earned credit and tier-based perks. Everything here is yours to tune." },
   { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
@@ -145,6 +161,9 @@ export function SettingsScreen() {
   const [cartRecoveryMin, setCartRecoveryMin] = useState(15);
   const [cartExpiryMin, setCartExpiryMin] = useState(60);
 
+  // Resale tab — cancelled-after-cooking fast offers
+  const [resale, setResale] = useState<ResaleConfig>(DEFAULT_RESALE);
+
   // Loyalty tab — full config object (everything editable per restaurant)
   const [loyalty, setLoyalty] = useState<LoyaltyConfig>(DEFAULT_LOYALTY);
 
@@ -190,6 +209,10 @@ export function SettingsScreen() {
       if (typeof sset.cart_reminder_enabled === "boolean") setCartReminder(sset.cart_reminder_enabled);
       if (typeof sset.cart_recovery_minutes === "number") setCartRecoveryMin(sset.cart_recovery_minutes);
       if (typeof sset.cart_expiry_minutes === "number") setCartExpiryMin(sset.cart_expiry_minutes);
+      const rset = sset.resale as Partial<ResaleConfig> | undefined;
+      if (rset && typeof rset === "object") {
+        setResale({ ...DEFAULT_RESALE, ...rset });
+      }
       if (Array.isArray(sset.delivery_fee_tiers)) setTiers(sset.delivery_fee_tiers as FeeTier[]);
       // Loyalty: deep-merge stored config over defaults so older rows / partial
       // configs still render every editable field.
@@ -271,6 +294,15 @@ export function SettingsScreen() {
         cart_recovery_minutes: cartRecoveryMin,
         cart_expiry_minutes: cartExpiryMin,
       });
+      flash();
+    } catch {
+      flash("Failed to save.");
+    }
+  }
+
+  async function saveResale() {
+    try {
+      await apiClient.patch("/api/v1/settings", { resale });
       flash();
     } catch {
       flash("Failed to save.");
@@ -663,6 +695,85 @@ export function SettingsScreen() {
           </div>
           <div className={s.actions}>
             <Button onClick={saveBatching}>Save</Button>
+          </div>
+        </div>
+      )}
+
+      {tab === "resale" && (
+        <div className={s.section}>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Offer cancelled-but-cooked food</span>
+              <span className={s.rowHint}>
+                When a customer cancels after the kitchen has started cooking, the food is
+                pitched to the next customer in chat as a fast, discounted delivery. The
+                rider is re-routed to the new address; extra dishes the buyer orders are
+                batched into the same trip.
+              </span>
+            </div>
+            <label className={s.hoursToggle}>
+              <input
+                type="checkbox"
+                checked={resale.enabled}
+                onChange={(e) => setResale((r) => ({ ...r, enabled: e.target.checked }))}
+              />
+              <span>Enable resale offers</span>
+            </label>
+          </div>
+          <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Discount type</span>
+              <select
+                aria-label="resale discount type"
+                className={s.input}
+                value={resale.discount_type}
+                onChange={(e) =>
+                  setResale((r) => ({
+                    ...r,
+                    discount_type: e.target.value as "percent" | "fixed",
+                  }))
+                }
+              >
+                <option value="percent">Percent (%)</option>
+                <option value="fixed">Fixed amount (AED)</option>
+              </select>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>
+                {resale.discount_type === "percent" ? "Discount (%)" : "Discount (AED)"}
+              </span>
+              <input
+                aria-label="resale discount value"
+                type="number"
+                min={0}
+                max={resale.discount_type === "percent" ? 100 : undefined}
+                value={resale.discount_value}
+                onChange={(e) =>
+                  setResale((r) => ({ ...r, discount_value: Number(e.target.value) }))
+                }
+                onFocus={(e) => e.target.select()}
+                className={`${s.input} ${s.inputNum}`}
+              />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Max age (minutes)</span>
+              <input
+                aria-label="resale max age minutes"
+                type="number"
+                min={1}
+                max={240}
+                value={resale.max_age_minutes}
+                onChange={(e) =>
+                  setResale((r) => ({ ...r, max_age_minutes: Number(e.target.value) }))
+                }
+                onFocus={(e) => e.target.select()}
+                className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>Don't offer food cancelled longer ago than this.</span>
+            </label>
+          </div>
+          <div className={s.actions}>
+            <Button onClick={saveResale}>Save</Button>
           </div>
         </div>
       )}

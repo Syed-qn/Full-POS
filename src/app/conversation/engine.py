@@ -693,7 +693,10 @@ async def _maybe_offer_resale(
     Returns True if an offer was sent."""
     from app.identity.models import Restaurant
     from app.ordering.models import OrderItem
-    from app.ordering.resale import resale_offer_for_customer
+    from app.ordering.resale import _resale_cfg, resale_offer_for_customer
+
+    if conv.state.get("resale_offer_id"):
+        return False
 
     restaurant = await session.get(Restaurant, restaurant_id)
     settings = (restaurant.settings or {}) if restaurant else {}
@@ -707,6 +710,11 @@ async def _maybe_offer_resale(
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all()
     dish_line = ", ".join(f"{i.qty}x {i.dish_name}" for i in items) or "a freshly-made meal"
+    cfg = _resale_cfg(settings)
+    if cfg.get("discount_type") == "fixed":
+        save_line = f"save AED {_aed(offer['discount_aed'])}"
+    else:
+        save_line = f"{cfg.get('discount_value', 0)}% off (save AED {_aed(offer['discount_aed'])})"
     _set_state(conv, resale_offer_id=order.id)
     await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -714,12 +722,152 @@ async def _maybe_offer_resale(
         body=(
             f"⚡ Ready *right now* — skip the wait!\n"
             f"{dish_line}\n"
-            f"Just AED {_aed(offer['discounted_subtotal'])} "
-            f"(save AED {_aed(offer['discount_aed'])}) — already cooked, delivered fast. 🛵"
+            f"Just AED {_aed(offer['discounted_subtotal'])} ({save_line}) — "
+            "already cooked, delivered fast. 🛵"
         ),
         buttons=[{"id": f"resale_accept:{order.id}", "title": "Grab it ⚡"}],
     )
     return True
+
+
+async def _companion_order_for_resale(
+    session: AsyncSession, conv: Conversation,
+):
+    """Return the customer's in-progress cart order to batch with a resale accept."""
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Order
+
+    for key in ("draft_order_id", "pending_order_id"):
+        oid = conv.state.get(key)
+        if not oid:
+            continue
+        order = await session.get(Order, oid)
+        if order and str(order.status) in (
+            str(OrderStatus.DRAFT),
+            str(OrderStatus.PENDING_CONFIRMATION),
+            str(OrderStatus.CONFIRMED),
+            str(OrderStatus.PREPARING),
+        ):
+            return order
+    return None
+
+
+async def _finalize_resale_accept(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    resale_order,
+    customer,
+    addr,
+    distance_km: float | None,
+    delivery_fee_aed: Decimal,
+    settings: dict,
+) -> None:
+    """Mark resale sold, spawn the discounted READY order, dispatch (+ batch companion)."""
+    from app.ordering.resale import accept_resale
+
+    companion = await _companion_order_for_resale(session, conv)
+    new_order = await accept_resale(
+        session,
+        resale_order=resale_order,
+        customer_id=customer.id,
+        address_id=addr.id,
+        settings=settings,
+        distance_km=distance_km,
+        delivery_fee_aed=delivery_fee_aed,
+        companion_order=companion,
+    )
+    _set_state(
+        conv,
+        resale_offer_id=None,
+        dialogue_phase="post_order",
+        dialogue_state="order_placed",
+        draft_order_id=None if companion is not None else conv.state.get("draft_order_id"),
+        pending_order_id=None if companion is not None else conv.state.get("pending_order_id"),
+    )
+    extra = ""
+    if companion is not None:
+        extra = " Your other dishes will ride along in the same delivery. 🛵"
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=f"resale-accepted-{new_order.id}",
+        body=(
+            f"Yours! 🎉 Order #{new_order.order_number} — AED {_aed(new_order.total)} (COD).\n"
+            f"It's already cooked and on its way fast.{extra}"
+        ),
+    )
+
+
+async def _handle_resale_location_pin(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> None:
+    """Complete a pending resale accept from a shared GPS pin (no saved address yet)."""
+    from app.ordering.fees import UndeliverableError, calculate_fee
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Order
+    from app.ordering.service import get_or_create_customer, upsert_address
+
+    order_id = conv.state.get("resale_offer_id")
+    if not order_id:
+        return
+    resale_order = await session.get(Order, order_id)
+    if resale_order is None or str(resale_order.status) != str(OrderStatus.ON_RESALE):
+        _set_state(conv, resale_offer_id=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="resale-gone",
+            body="Sorry, that deal was just taken 😕 Reply with a dish to order fresh.",
+        )
+        return
+
+    from app.ordering.fees import radius_km
+
+    lat = float(inbound.payload["latitude"])
+    lon = float(inbound.payload["longitude"])
+    rest_lat = restaurant.lat if restaurant else 25.2048
+    rest_lng = restaurant.lng if restaurant else 55.2708
+    dist = await _road_distance_km(rest_lat, rest_lng, lat, lon)
+    fee_settings = await _fee_settings_for(session, restaurant_id)
+    try:
+        fee = calculate_fee(dist, fee_settings)
+    except UndeliverableError:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="resale-undeliverable",
+            body="Sorry, that location is outside our delivery area. "
+                 f"Share a pin within {radius_km(fee_settings):g} km, or order fresh dishes instead.",
+        )
+        return
+
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone,
+    )
+    addr = await upsert_address(
+        session,
+        customer_id=customer.id,
+        latitude=lat,
+        longitude=lon,
+        room_apartment="",
+        building="WhatsApp pin",
+        receiver_name=customer.name or "Customer",
+        confirmed=True,
+    )
+    settings = (restaurant.settings or {}) if restaurant else {}
+    await _finalize_resale_accept(
+        session, conv, inbound, restaurant_id,
+        resale_order=resale_order,
+        customer=customer,
+        addr=addr,
+        distance_km=dist,
+        delivery_fee_aed=fee,
+        settings=settings,
+    )
 
 
 async def _handle_resale_accept(
@@ -730,9 +878,9 @@ async def _handle_resale_accept(
     (mark RESOLD, spawn discounted ready order, dispatch to their address). Else ask
     them to share their location to claim it."""
     from app.identity.models import Restaurant
+    from app.ordering.fees import UndeliverableError, calculate_fee, radius_km
     from app.ordering.fsm import OrderStatus
     from app.ordering.models import Order
-    from app.ordering.resale import accept_resale
     from app.ordering.service import get_last_address, get_or_create_customer
 
     resale_order = await session.get(Order, order_id)
@@ -747,26 +895,40 @@ async def _handle_resale_accept(
     customer = await get_or_create_customer(session, restaurant_id=restaurant_id, phone=inbound.from_phone)
     addr = await get_last_address(session, customer.id)
     if addr is None:
-        await _send_text(
+        await _send_location_request(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="resale-need-loc",
-            body="Great choice! 📍 Share your delivery location and I'll send it right over.",
+            body="Great choice! 📍 Tap below to share your delivery location — "
+                 "I'll send the ready meal right over.",
         )
         return
     restaurant = await session.get(Restaurant, restaurant_id)
     settings = (restaurant.settings or {}) if restaurant else {}
-    new_order = await accept_resale(
-        session, resale_order=resale_order, customer_id=customer.id, address_id=addr.id,
-        settings=settings, distance_km=resale_order.distance_km,
-    )
-    _set_state(conv, resale_offer_id=None, dialogue_phase="post_order", dialogue_state="order_placed")
-    await _send_text(
-        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix=f"resale-accepted-{new_order.id}",
-        body=(
-            f"Yours! 🎉 Order #{new_order.order_number} — AED {_aed(new_order.total)} (COD).\n"
-            f"It's already cooked and on its way fast. 🛵"
-        ),
+    dist = None
+    fee = Decimal("0.00")
+    if addr.latitude is not None and addr.longitude is not None:
+        rest_lat = restaurant.lat if restaurant else 25.2048
+        rest_lng = restaurant.lng if restaurant else 55.2708
+        dist = await _road_distance_km(rest_lat, rest_lng, addr.latitude, addr.longitude)
+        fee_settings = await _fee_settings_for(session, restaurant_id)
+        try:
+            fee = calculate_fee(dist, fee_settings)
+        except UndeliverableError:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="resale-undeliverable",
+                body="Sorry, your saved address is outside our delivery area. "
+                     f"Share a new pin within {radius_km(fee_settings):g} km to claim the deal.",
+            )
+            return
+    await _finalize_resale_accept(
+        session, conv, inbound, restaurant_id,
+        resale_order=resale_order,
+        customer=customer,
+        addr=addr,
+        distance_km=dist,
+        delivery_fee_aed=fee,
+        settings=settings,
     )
 
 
@@ -1556,8 +1718,6 @@ async def _handle_order_confirmation(
     restaurant_id: int,
 ) -> None:
     """Handle confirm/cancel buttons on the order summary."""
-    from app.ordering.fsm import OrderStatus
-    from app.ordering.fsm import transition as fsm_transition
     from app.ordering.models import Order
     from app.ordering.service import finalize_confirmation
 
@@ -1611,8 +1771,19 @@ async def _handle_order_confirmation(
         return
 
     if btn_id == "cancel_order":
-        if order.status in (OrderStatus.DRAFT, OrderStatus.PENDING_CONFIRMATION):
-            await fsm_transition(session, order, OrderStatus.CANCELLED, actor="customer")
+        from app.ordering.fsm import IllegalTransitionError
+        from app.ordering.service import cancel_order
+
+        try:
+            await cancel_order(session, order=order, actor="customer", reason="customer_cancel")
+        except IllegalTransitionError:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="order-cancel-blocked",
+                body=f"Sorry, order #{order.order_number} can't be cancelled right now. "
+                     "Please call the restaurant for help.",
+            )
+            return
         _set_state(conv, dialogue_state="cancelled", draft_order_id=None, pending_order_id=None)
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -3374,30 +3545,124 @@ async def _execute_confirm_order(
     )
 
 
-async def _execute_cancel_order(
-    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
-) -> None:
-    """Cancel the current draft/pending order."""
+async def _resolve_order_for_cancel(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+):
+    """Find the order a customer is trying to cancel.
+
+    Pre-confirm flows keep ``draft_order_id`` / ``pending_order_id`` in conv.state.
+    After confirm those pointers are cleared, so we fall back to the customer's
+    latest non-terminal placed order (same resolution as status queries).
+    """
     from app.ordering.fsm import OrderStatus
-    from app.ordering.fsm import transition as fsm_transition
-    from app.ordering.models import Order
+    from app.ordering.models import Customer, Order
 
     for key in ("pending_order_id", "draft_order_id"):
         order_id = conv.state.get(key)
         if order_id:
             order = await session.get(Order, order_id)
-            if order and str(order.status) in (
-                str(OrderStatus.DRAFT), str(OrderStatus.PENDING_CONFIRMATION),
-                str(OrderStatus.CONFIRMED),
-            ):
-                await fsm_transition(session, order, OrderStatus.CANCELLED, actor="customer")
-            break
+            if order is not None:
+                return order
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id,
+            Customer.phone == inbound.from_phone,
+        )
+    )
+    if customer is None:
+        return None
+
+    _terminal = {
+        str(OrderStatus.CANCELLED),
+        str(OrderStatus.DELIVERED),
+        str(OrderStatus.UNDELIVERABLE),
+        str(OrderStatus.RESOLD),
+        str(OrderStatus.WRITTEN_OFF),
+        str(OrderStatus.ON_RESALE),
+    }
+    return await session.scalar(
+        select(Order)
+        .where(
+            Order.restaurant_id == restaurant_id,
+            Order.customer_id == customer.id,
+            Order.status != str(OrderStatus.DRAFT),
+            Order.status.notin_(_terminal),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+
+
+async def _execute_cancel_order(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> None:
+    """Cancel the customer's current order (draft through confirmed/preparing).
+
+    Uses ``cancel_order`` so wallet release, resale path, and dispatch/rider
+    detachment all run — a bare FSM transition left assigned riders delivering
+    food the customer had already cancelled.
+    """
+    from app.ordering.fsm import IllegalTransitionError, OrderStatus
+    from app.ordering.service import cancel_order
+
+    order = await _resolve_order_for_cancel(session, conv, inbound, restaurant_id)
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="order-cancel-none",
+            body="You don't have an active order to cancel. Send 'hi' to place a new order.",
+        )
+        return
+
+    try:
+        await cancel_order(session, order=order, actor="customer", reason="customer_cancel")
+    except IllegalTransitionError:
+        _with_rider = {
+            str(OrderStatus.ASSIGNED),
+            str(OrderStatus.PICKED_UP),
+            str(OrderStatus.ARRIVING),
+        }
+        if str(order.status) in _with_rider:
+            body = (
+                f"Sorry, order #{order.order_number} is already with the rider — "
+                "we can't cancel it now. Please call the restaurant if you need help."
+            )
+        elif str(order.status) == str(OrderStatus.READY):
+            body = (
+                f"Your order #{order.order_number} is ready and a rider is being assigned — "
+                "please call the restaurant if you need to change anything."
+            )
+        else:
+            body = (
+                f"Sorry, order #{order.order_number} can't be cancelled in its current state. "
+                "Please call the restaurant for help."
+            )
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="order-cancel-blocked", body=body,
+        )
+        return
+
     _set_state(conv, dialogue_phase="ordering", dialogue_state="greeting",
                draft_order_id=None, pending_order_id=None)
+    if str(order.status) == str(OrderStatus.ON_RESALE):
+        body = (
+            f"No problem, order #{order.order_number} is cancelled. "
+            "If the kitchen had already started cooking, the food may be offered "
+            "to another customer at a discount. Send 'hi' whenever you're ready to order again 😊"
+        )
+    else:
+        body = (
+            "No problem, your order has been cancelled. "
+            "Send 'hi' whenever you're ready to order again 😊"
+        )
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix="order-cancelled",
-        body="No problem, your order has been cancelled. Send 'hi' whenever you're ready to order again 😊",
+        prefix="order-cancelled", body=body,
     )
 
 
@@ -3712,6 +3977,9 @@ async def _dispatch_action(
                 body="Your cart is empty. Please add at least one dish first! 😊",
             )
             return
+        # Pitch any cancelled-but-cooked food before address capture — the customer
+        # may grab the fast deal and batch it with the cart they're checking out.
+        await _maybe_offer_resale(session, conv, inbound, restaurant_id)
         _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
         # ALWAYS check for a saved address BEFORE asking for a location pin: a returning
         # customer auto-attaches their saved address and jumps straight to the order
@@ -4433,10 +4701,15 @@ async def handle_inbound(
         if await _handle_size_choice(session, conv, inbound, restaurant_id):
             return
 
-    # Location pin → address capture handler (needs geo validation before AI).
-    # Pings outside address_capture (e.g. repeated live-location updates after
+    # Location pin → resale claim (pending fast-deal) or address capture.
+    # Pings outside those flows (e.g. repeated live-location updates after
     # address is confirmed) are silently dropped — no AI call, no reply.
     if inbound.type == MessageType.LOCATION:
+        if conv.state.get("resale_offer_id"):
+            await _handle_resale_location_pin(
+                session, conv, inbound, restaurant_id, restaurant,
+            )
+            return
         phase = _resolve_phase(conv)
         if phase == "address_capture":
             await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)

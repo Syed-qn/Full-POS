@@ -21,23 +21,36 @@ async def retrieve(
     restaurant_id: int,
     query: str,
     customer_id: int | None = None,
-    limit: int = 4,
+    dish_ids: list[int] | None = None,
+    order_id: int | None = None,
+    limit: int = 6,
 ) -> list[OkfDoc]:
-    """Top OKF docs for ``query``. Always includes the restaurant policy + (if given)
-    this customer's profile doc, then fills the rest by lexical similarity."""
+    """Top OKF docs for ``query``.
+
+    MULTILINGUAL: lexical (pg_trgm) similarity only matches English query terms, so a
+    Telugu/Arabic/Urdu question wouldn't retrieve anything. To stay language-agnostic
+    we PIN the highest-value grounding by ENTITY id (not text): restaurant + policy +
+    this customer + their order + the dishes in their cart — these answer the common
+    questions regardless of the message's language. Lexical matches are added on top
+    as an English bonus. (Grounding facts are English markdown; the LLM reads them and
+    replies in the customer's language.)
+    MULTI-TENANT: every branch is scoped by restaurant_id.
+    """
     q = (query or "").strip().lower()
     picked: dict[int, OkfDoc] = {}
     order: list[int] = []
 
-    # Pinned grounding: policy + this customer's own profile are always relevant.
+    # Language-agnostic pins: policy + restaurant + this customer + their order +
+    # cart dishes — matched by kind/entity_id, NOT by the query's language.
+    pin_conds = [OkfDoc.kind == "policy", OkfDoc.kind == "restaurant"]
+    if customer_id is not None:
+        pin_conds.append((OkfDoc.kind == "customer") & (OkfDoc.entity_id == customer_id))
+    if order_id is not None:
+        pin_conds.append((OkfDoc.kind == "order") & (OkfDoc.entity_id == order_id))
+    if dish_ids:
+        pin_conds.append((OkfDoc.kind == "dish") & (OkfDoc.entity_id.in_(dish_ids)))
     pins = await session.scalars(
-        select(OkfDoc).where(
-            OkfDoc.restaurant_id == restaurant_id,
-            or_(
-                OkfDoc.kind == "policy",
-                (OkfDoc.kind == "customer") & (OkfDoc.entity_id == (customer_id or -1)),
-            ),
-        )
+        select(OkfDoc).where(OkfDoc.restaurant_id == restaurant_id, or_(*pin_conds))
     )
     for d in pins:
         if d.id not in picked:

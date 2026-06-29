@@ -2,13 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { RiderCard } from "../components/RiderCard";
 import { RiderAddModal } from "../components/RiderAddModal";
 import { AppInviteModal } from "../components/AppInviteModal";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
-import { apiClient } from "../lib/apiClient";
+import { toast } from "../components/Toaster";
+import { ApiError, apiClient } from "../lib/apiClient";
 import { deleteRider, fetchRiders, setRiderDuty, setRiderStatus } from "../lib/ridersApi";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { RestaurantOut, RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
+
+type RemoveFlow =
+  | { step: "confirm"; id: number; name: string }
+  | { step: "deactivate-instead"; id: number; name: string };
 
 export function RidersScreen() {
   const [riders, setRiders] = useState<RiderOut[]>([]);
@@ -17,6 +23,8 @@ export function RidersScreen() {
   const [editing, setEditing] = useState<RiderOut | null>(null);
   const [inviteFor, setInviteFor] = useState<RiderOut | null>(null);
   const [restaurantPhone, setRestaurantPhone] = useState<string | null>(null);
+  const [removeFlow, setRemoveFlow] = useState<RemoveFlow | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   useEffect(() => {
     fetchRiders()
@@ -56,16 +64,49 @@ export function RidersScreen() {
     if (rider) setInviteFor(rider);
   }
 
-  async function onDelete(id: number) {
-    if (!confirm("Remove this rider? This cannot be undone.")) return;
+  function onDelete(id: number) {
+    const rider = riders.find((r) => r.id === id);
+    if (!rider) return;
+    setRemoveFlow({ step: "confirm", id, name: rider.name });
+  }
+
+  async function confirmRemove() {
+    if (!removeFlow || removeFlow.step !== "confirm") return;
+    const { id, name } = removeFlow;
+    setRemoveBusy(true);
     try {
       await deleteRider(id);
       setRiders((rs) => rs.filter((r) => r.id !== id));
+      toast(`${name} removed.`);
+      setRemoveFlow(null);
     } catch (e) {
-      // Surface the reason (e.g. 409: rider has payment records → deactivate
-      // instead) rather than silently failing.
-      const msg = e instanceof Error ? e.message : "Could not remove this rider.";
-      alert(msg);
+      if (e instanceof ApiError && e.status === 409) {
+        // COD / shift records must stay on file — offer deactivation instead of
+        // leaving the manager stuck after a blocked hard-delete.
+        setRemoveFlow({ step: "deactivate-instead", id, name });
+      } else {
+        toast(e instanceof Error ? e.message : "Could not remove this rider.", "error");
+        setRemoveFlow(null);
+      }
+    } finally {
+      setRemoveBusy(false);
+    }
+  }
+
+  async function confirmDeactivateInstead() {
+    if (!removeFlow || removeFlow.step !== "deactivate-instead") return;
+    const { id, name } = removeFlow;
+    setRemoveBusy(true);
+    try {
+      const updated = await setRiderStatus(id, "deactivated");
+      setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
+      toast(`${name} deactivated. Payment records stay on file.`);
+      setRemoveFlow(null);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not deactivate this rider.", "error");
+      setRemoveFlow(null);
+    } finally {
+      setRemoveBusy(false);
     }
   }
 
@@ -142,6 +183,31 @@ export function RidersScreen() {
           rider={inviteFor}
           restaurantPhone={restaurantPhone}
           onClose={() => setInviteFor(null)}
+        />
+      )}
+
+      {removeFlow?.step === "confirm" && (
+        <ConfirmDialog
+          title={`Remove ${removeFlow.name}?`}
+          message="This permanently deletes the rider account. It cannot be undone."
+          confirmLabel="Remove rider"
+          cancelLabel="Keep rider"
+          danger
+          busy={removeBusy}
+          onConfirm={confirmRemove}
+          onCancel={() => !removeBusy && setRemoveFlow(null)}
+        />
+      )}
+
+      {removeFlow?.step === "deactivate-instead" && (
+        <ConfirmDialog
+          title={`Can't remove ${removeFlow.name}`}
+          message="This rider has payment records on file (COD collections or shift reconciliations). Deactivate them instead? They'll stay in your list but won't receive new orders."
+          confirmLabel="Deactivate rider"
+          cancelLabel="Cancel"
+          busy={removeBusy}
+          onConfirm={confirmDeactivateInstead}
+          onCancel={() => !removeBusy && setRemoveFlow(null)}
         />
       )}
     </div>

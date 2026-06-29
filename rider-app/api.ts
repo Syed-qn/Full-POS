@@ -13,6 +13,7 @@ export type Stop = {
   longitude: number | null;
   codAmount: number;
   delivered: boolean;
+  outcome: "pending" | "delivered" | "not_delivered";
   doNotCall: boolean;
 };
 
@@ -27,6 +28,7 @@ export type Delivered = {
   success: boolean;
   batchComplete: boolean;
   nextOrderId: number | null;
+  bringBackToRestaurant?: boolean;
 };
 
 async function req<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -58,6 +60,11 @@ export const pickup = (token: string) =>
 
 export const markDelivered = (token: string, orderId: number) =>
   req<Delivered>(`/api/v1/rider-app/orders/${orderId}/delivered`, token, { method: "POST" });
+
+export const markNotDelivered = (token: string, orderId: number) =>
+  req<Delivered>(`/api/v1/rider-app/orders/${orderId}/not-delivered`, token, {
+    method: "POST",
+  });
 
 export const setDuty = (token: string, onDuty: boolean) =>
   req<{ success: boolean; onDuty: boolean }>("/api/v1/rider-app/duty", token, {
