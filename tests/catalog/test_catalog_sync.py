@@ -427,3 +427,33 @@ async def test_push_dedupes_duplicate_retailer_id(db_session, restaurant, monkey
     # The duplicate dish was unlinked so it gets its own id next push.
     await db_session.refresh(d2)
     assert d2.catalog_retailer_id is None
+
+
+async def test_push_uses_upsert_update_for_unlinked_dish(db_session, restaurant, monkeypatch):
+    """A dish with no Meta link must be pushed as UPDATE (upsert), never CREATE — CREATE on
+    a generated id that already exists in Meta triggers 'Duplicate retailer_id in batch api
+    call'. The internal _was_linked flag must not be sent to Meta."""
+    from app.catalog.sync_service import push_dishes_to_meta
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=7, name="New Dish",
+        price_aed=Decimal("12.00"), category="X", is_available=True,
+        name_normalized="new dish",  # no catalog_retailer_id → would have been CREATE
+    ))
+    await db_session.commit()
+
+    captured: list[dict] = []
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        captured.extend(requests)
+        return {"handles": [], "validation_status": []}
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+
+    res = await push_dishes_to_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert all(r["method"] == "UPDATE" for r in captured)  # upsert, never CREATE
+    assert res.pushed == 1  # counted as new via _was_linked, not the wire method

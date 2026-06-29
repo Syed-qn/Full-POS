@@ -1731,3 +1731,14 @@
       OrderItem, so the confirm safety-gate correctly said "cart is empty". Product behavior is right; fixed the
       test to seed the backing OrderItem (1x Chicken Biryani @22).
   All conversation+ordering (339) + catalog/dispatch/menu/okf (205) pass; lint clean.
+
+[2026-06-30 01:52 +04] fix(catalog): REAL "Duplicate retailer_id" cause — CREATE on an id that exists in Meta.
+  Verified prod (31f069c) HAD both prior dedups (b95c3d2/5ec6946) yet error persisted → dedup wasn't the cause.
+  Root cause: push_dishes_to_meta used method=CREATE for any dish without a stored catalog_retailer_id. If that
+  generated id (dish-{id}-{num}) ALREADY exists in Meta — e.g. a dish previously unlinked locally by the dedup
+  self-heal but whose Meta product still exists — CREATE collides → Meta rejects the whole batch with "Duplicate
+  retailer_id in batch api call". (Cross-call collision with Meta's existing catalog; in-batch dedup can't catch it.)
+  Fix: always method=UPDATE (batch sent with allow_upsert=True, so UPDATE creates-or-updates, never collides).
+  Kept new-vs-updated UI counts via internal "_was_linked" flag on the request; push_products_batch now strips
+  "_"-prefixed keys before POST so Meta never sees them. Tests: test_push_uses_upsert_update_for_unlinked_dish.
+  46 catalog tests pass; boot+lint clean.

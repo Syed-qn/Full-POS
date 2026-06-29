@@ -253,11 +253,16 @@ async def push_products_batch(
 
     base = f"https://graph.facebook.com/{settings.graph_api_version}"
     url = f"{base}/{catalog_id}/items_batch"
+    # Send only Meta's expected keys — callers may attach internal "_"-prefixed metadata
+    # (e.g. "_was_linked" for UI counting) that Meta must not receive.
+    wire = [
+        {k: v for k, v in r.items() if not k.startswith("_")} for r in requests
+    ]
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             url,
             params={"access_token": token},
-            json={"allow_upsert": True, "item_type": "PRODUCT_ITEM", "requests": requests},
+            json={"allow_upsert": True, "item_type": "PRODUCT_ITEM", "requests": wire},
         )
         data = resp.json()
         if resp.status_code >= 400 or "error" in data:

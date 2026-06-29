@@ -266,7 +266,12 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
         had_rid = bool((dish.catalog_retailer_id or "").strip())
         if not had_rid:
             dish.catalog_retailer_id = rid
-        method = "UPDATE" if had_rid else "CREATE"
+        # Always UPDATE (the batch is sent with allow_upsert=True, so UPDATE creates the
+        # item if missing and updates it if present). Using CREATE for a generated id that
+        # ALREADY exists in Meta — e.g. a dish that was previously unlinked locally but
+        # whose Meta product still exists — makes Meta reject the whole batch with
+        # "Duplicate retailer_id in batch api call". UPDATE/upsert never collides.
+        method = "UPDATE"
         product_link = f"{base_url}/r/{restaurant_id}/menu#{rid}"
         data = build_catalog_item_data(
             name=dish.name,
@@ -278,7 +283,10 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
             product_link=product_link,
             image_link=image_link,
         )
-        requests.append({"method": method, "retailer_id": rid, "data": data})
+        # _was_linked: did this dish already have a Meta link before this push? Used only
+        # for the UI toast (new vs updated); the wire method is always UPDATE/upsert.
+        requests.append({"method": method, "retailer_id": rid, "data": data,
+                         "_was_linked": had_rid})
         pushed_dishes.append(dish)
 
     if not requests:
@@ -295,8 +303,8 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
         session, restaurant_id=restaurant_id, dishes=pushed_dishes
     )
     result = SyncResult()
-    result.pushed = sum(1 for r in requests if r["method"] == "CREATE")
-    result.push_updated = sum(1 for r in requests if r["method"] == "UPDATE")
+    result.pushed = sum(1 for r in requests if not r.get("_was_linked"))
+    result.push_updated = sum(1 for r in requests if r.get("_was_linked"))
     result.added = mirror_added
     result.updated = mirror_updated
     result.total_active = mirror_added + mirror_updated
