@@ -94,3 +94,24 @@ async def test_register_utility_templates(db_session, restaurant):
         select(WaTemplate).where(WaTemplate.restaurant_id == restaurant.id)
     )).all()
     assert len(rows2) == len(UTILITY_TEMPLATES)  # no duplicates
+
+
+async def test_login_registers_utility_templates_once(db_session, client):
+    signup = {"name": "Onboard Co", "phone": "+971502223344",
+              "password": "pw1234!!", "lat": 25.2, "lng": 55.3}
+    await client.post("/api/v1/auth/signup", json=signup)
+    creds = {"phone": "+971502223344", "password": "pw1234!!"}
+
+    await client.post("/api/v1/auth/login", json=creds)
+    r = await db_session.scalar(select(Restaurant).where(Restaurant.phone == "+971502223344"))
+    rows1 = (await db_session.scalars(
+        select(WaTemplate).where(WaTemplate.restaurant_id == r.id, WaTemplate.category == "utility")
+    )).all()
+    assert {x.meta_template_name for x in rows1} == set(UTILITY_TEMPLATES.keys())
+
+    # Second login must NOT create duplicates.
+    await client.post("/api/v1/auth/login", json=creds)
+    rows2 = (await db_session.scalars(
+        select(WaTemplate).where(WaTemplate.restaurant_id == r.id, WaTemplate.category == "utility")
+    )).all()
+    assert len(rows2) == len(UTILITY_TEMPLATES)

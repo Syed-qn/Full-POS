@@ -136,6 +136,29 @@ async def notify_customer(
     )
 
 
+async def ensure_utility_templates(
+    session: AsyncSession, *, restaurant_id: int
+) -> bool:
+    """Register utility templates the FIRST time only. Cheap guard: skip if any
+    utility template already exists for this restaurant. Returns True if it
+    registered now. Best-effort callers should swallow exceptions. Caller commits.
+    """
+    from app.marketing.models import WaTemplate
+
+    exists = await session.scalar(
+        select(WaTemplate.id)
+        .where(
+            WaTemplate.restaurant_id == restaurant_id,
+            WaTemplate.category == "utility",
+        )
+        .limit(1)
+    )
+    if exists is not None:
+        return False
+    await register_utility_templates(session, restaurant_id=restaurant_id)
+    return True
+
+
 async def register_utility_templates(
     session: AsyncSession, *, restaurant_id: int
 ) -> list[str]:
