@@ -788,6 +788,16 @@ async def cancel_order(
 
     await release_on_cancel(session, order=order)
 
+    # Claw back any loyalty credit earned on this order (no-op if none / not earned).
+    # Covers cancelling a delivered order that already triggered earn. Best-effort —
+    # never block the cancel.
+    try:
+        from app.loyalty.service import reverse_earn
+
+        await reverse_earn(session, order=order)
+    except Exception:  # noqa: BLE001
+        pass
+
     if order.status == OrderStatus.PREPARING:
         await fsm_transition(
             session, order, OrderStatus.ON_RESALE, actor=actor,
