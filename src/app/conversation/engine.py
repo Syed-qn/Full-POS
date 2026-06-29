@@ -1092,6 +1092,38 @@ async def _handle_receiver_details(
     )
 
 
+async def _redeem_context(
+    session: AsyncSession, *, restaurant_id: int, customer_id: int
+) -> tuple[Decimal, list]:
+    """Return (wallet_available, redeemable_coupons-for-this-customer).
+
+    Used to decide whether to show the redeem option at checkout — only customers
+    who actually have wallet credit or a coupon issued to them ever see it.
+    """
+    from datetime import datetime, timezone
+
+    from app.coupons.models import Coupon
+    from app.wallet import service as wallet_service
+
+    acc = await wallet_service.get_or_create_account(
+        session, restaurant_id=restaurant_id, customer_id=customer_id
+    )
+    wallet_available = await wallet_service.available(session, account_id=acc.id)
+
+    now = datetime.now(timezone.utc)
+    coupons = (
+        await session.scalars(
+            select(Coupon).where(
+                Coupon.restaurant_id == restaurant_id,
+                Coupon.customer_id == customer_id,
+                Coupon.status.in_(("issued", "active")),
+            )
+        )
+    ).all()
+    active = [c for c in coupons if c.expires_at is None or c.expires_at > now]
+    return wallet_available, active
+
+
 async def _send_order_summary(
     session: AsyncSession,
     conv: Conversation,
@@ -1143,6 +1175,23 @@ async def _send_order_summary(
         )
         await session.flush()
 
+    # Redeem options — shown ONLY when the customer actually has wallet credit or a
+    # coupon issued to them. No credit + no coupon → no redeem line at all.
+    redeem_block = ""
+    wallet_available, active_coupons = await _redeem_context(
+        session, restaurant_id=restaurant_id, customer_id=order.customer_id
+    )
+    redeem_lines = []
+    if wallet_available > Decimal("0.00"):
+        redeem_lines.append(
+            f"💳 You have AED {_aed(wallet_available)} wallet credit — "
+            f"it'll be applied automatically."
+        )
+    if active_coupons:
+        redeem_lines.append("🏷️ Have a coupon? Send the code to apply it.")
+    if redeem_lines:
+        redeem_block = "\n" + "\n".join(redeem_lines) + "\n"
+
     summary = (
         f"Order summary:\n{item_lines}\n\n"
         f"Subtotal: AED {_aed(order.subtotal)}\n"
@@ -1150,7 +1199,8 @@ async def _send_order_summary(
         f"Total: AED {_aed(order.total)}\n"
         f"Payment: COD (cash on delivery)\n"
         f"{address_block}"
-        f"ETA: 40 minutes{weather_note}\n\n"
+        f"ETA: 40 minutes{weather_note}\n"
+        f"{redeem_block}\n"
         f"Confirm your order?"
     )
     buttons = [{"id": "confirm_order", "title": "Confirm order"}]
@@ -1163,6 +1213,60 @@ async def _send_order_summary(
         prefix="order-summary", body=summary,
         buttons=buttons,
     )
+
+
+async def _redeem_coupon_at_checkout(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    code: str,
+) -> None:
+    """Apply a coupon the customer typed at the order-summary step.
+
+    Redeems against the pending order, reduces the total, and re-sends the summary
+    so the customer sees the new total before confirming. Caller has verified the
+    code belongs to this customer.
+    """
+    from app.coupons.service import CouponError, validate_and_redeem
+    from app.ordering.models import Order
+
+    order_id = conv.state.get("pending_order_id")
+    order = await session.get(Order, order_id) if order_id else None
+    if order is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="coupon-no-order",
+            body="There's no order to apply a coupon to right now.",
+        )
+        return
+    try:
+        redemption = await validate_and_redeem(
+            session,
+            restaurant_id=restaurant_id,
+            code=code,
+            customer_id=order.customer_id,
+            order_id=order.id,
+            order_subtotal_aed=order.subtotal,
+            idempotency_key=f"order:{order.id}:coupon",
+        )
+    except CouponError as e:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="coupon-rejected",
+            body=f"Sorry, I couldn't apply that coupon ({e}). You can still confirm your order.",
+        )
+        return
+    discount = redemption.discount_applied_aed
+    order.coupon_id = redemption.coupon_id
+    order.total = max(order.total - discount, order.delivery_fee_aed)
+    await session.flush()
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=f"coupon-applied-{redemption.id}",
+        body=f"Coupon applied — AED {_aed(discount)} off! 🎉 Here's your updated order:",
+    )
+    await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
 async def _handle_order_confirmation(
@@ -3932,6 +4036,29 @@ async def handle_inbound(
                 session, conv, inbound, restaurant_id, restaurant
             )
             return
+        # Coupon code typed at the order-summary step → apply it. We only treat the
+        # message as a coupon when it EXACTLY matches a code issued to this customer,
+        # so normal chat is never misread as a coupon.
+        if _resolve_phase(conv) == "awaiting_confirmation":
+            from app.ordering.models import Customer
+
+            customer = await session.scalar(
+                select(Customer).where(
+                    Customer.restaurant_id == restaurant_id,
+                    Customer.phone == inbound.from_phone,
+                )
+            )
+            if customer is not None:
+                _, active_coupons = await _redeem_context(
+                    session, restaurant_id=restaurant_id, customer_id=customer.id
+                )
+                typed = text.strip().upper()
+                match = next((c for c in active_coupons if c.code.upper() == typed), None)
+                if match is not None:
+                    await _redeem_coupon_at_checkout(
+                        session, conv, inbound, restaurant_id, match.code
+                    )
+                    return
 
     # All remaining text + button_reply → AI
     await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
