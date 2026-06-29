@@ -23,14 +23,19 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const navigate = useNavigate();
   const [openTickets, setOpenTickets] = useState(0);
 
-  // Best-effort open-complaint count for the nav badge. Hidden if unavailable.
+  // Live open-complaint count for the nav badge — polls every 30s so a complaint
+  // raised while the manager is on another page surfaces without a reload.
   useEffect(() => {
     let cancelled = false;
-    listTickets("open")
-      .then((t) => !cancelled && setOpenTickets(t.length))
-      .catch(() => {});
+    const refresh = () =>
+      listTickets("open")
+        .then((t) => !cancelled && setOpenTickets(t.length))
+        .catch(() => {});
+    refresh();
+    const id = setInterval(refresh, 30_000);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, []);
 

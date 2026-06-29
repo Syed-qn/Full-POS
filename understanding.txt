@@ -1311,3 +1311,17 @@
   never cross-loop. Tests unaffected (conftest uses its own engine). identity/webhook/catalog
   109 pass; engine pool confirmed NullPool; lint clean. NOTE: needs Render redeploy to take
   effect. Login is by PHONE + password (POST /api/v1/auth/login {phone,password}), not email.
+
+[2026-06-29] fix + diagnosis: deployed dashboard "dummy / not editable" investigation
+- VERIFIED current main is sound (prod build served via FastAPI like Render): index.html
+  loads, /assets/*.js 200; coupon create -> 201, ticket resolve -> 200; drawer note/amount
+  inputs editable (tests type into them + pass). SideDrawer z-index correct (panel over scrim).
+  Conclusion: "fields not editable / pages dummy" on the LIVE app = the Render deploy not
+  actually on current main (frontend build stage hadn't landed when tested), NOT a code bug.
+- Hardened deploy: Dockerfile CMD now `alembic upgrade head && uvicorn` (was `|| echo`),
+  so a failed migration FAILS the deploy instead of silently serving a broken app.
+- Real code fix: NavSidebar complaint badge now POLLS every 30s (was once on mount) so a
+  newly-raised complaint surfaces without a reload (#3 "no notification" in-dashboard signal).
+- Still genuinely open (need live browser console/network to confirm root cause): if the
+  green deploy of current main still shows the issues, it is environment-specific (chunk
+  404 / hydration error) observable only in the browser devtools.
