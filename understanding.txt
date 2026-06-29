@@ -1280,3 +1280,23 @@
   create missing + idempotent re-sync). catalog 33 pass; lint clean. (Pre-existing
   confirmation-totals failure unrelated; a location-radius test is flaky in full-suite
   ordering but passes in isolation.)
+
+[2026-06-29] feat: loyalty program (tiers Phase 1 + earn Phase 2) — config-driven, nothing hardcoded
+- src/app/loyalty/service.py: ALL thresholds/rates/discounts read from per-restaurant
+  settings.loyalty (defaults in DEFAULT_SETTINGS, editable via SettingsPatch). Functions:
+  compute_tier (RFM+Monetary), recompute_tier (demotion grace + manual lock + welcome
+  reward coupon + tier-up notify), maybe_issue_recurring_reward (every_n_orders),
+  set_manual_tier/unlock_tier (manager override = sticky lock), tier_progress_text
+  ("how do I reach Gold"), earn (% subtotal -> wallet credit, capped, idempotent
+  loyalty:earn:{order_id}), reverse_earn (refund clawback).
+- Wiring: dispatch/delivery.advance_delivery (delivered) -> earn + recompute_tier +
+  recurring reward (best-effort, config-gated, AFTER stats refresh). loyalty.worker
+  recompute_all_tenants Celery beat (4am, maintenance queue). Engine: _is_tier_query/
+  _handle_tier_query deterministic answer (falls to AI if loyalty disabled).
+- Customer model: loyalty_tier/_since/_locked/_reward_anchor (migration a1c2e3f4b5d6).
+  CustomerProfileOut exposes tier+locked; POST /customers/{id}/loyalty-tier override.
+- Decisions locked: tiers first; perks=reward coupons (not free delivery); auto-enroll;
+  5% earn default; 90-day expiry; welcome+recurring rewards; nightly+on-delivery recompute;
+  sticky manual override. EVERYTHING per-restaurant editable from a Loyalty SettingsScreen tab.
+- Tests: 19 loyalty (tiers, earn, on-delivery, tier-query). Migration verified on fresh DB.
+- NEXT: frontend Loyalty settings tab + tier card on profile (in progress via subagent).
