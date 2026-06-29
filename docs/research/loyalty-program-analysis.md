@@ -1,25 +1,28 @@
 # Customer Loyalty Program — Analysis & Real-World Scenarios
 
-> **Status:** Research / design note. No loyalty program is implemented yet.
-> **Date:** 2026-06-28
+> **Status:** Implementation-ready design. Loyalty itself not built yet, but the primitives it needs (ledger-backed wallet, generalized coupons, RFM) now exist — §6+ is a concrete build spec on top of them.
+> **Date:** 2026-06-28 · **Updated:** 2026-06-29 (wallet + generalized coupons shipped)
 > **Scope:** Multi-tenant WhatsApp restaurant platform (COD, UAE F&B, own-fleet delivery).
-> **Audience:** Product + engineering, ahead of any loyalty build.
+> **Audience:** Product + engineering. §1–5 = analysis + 200 scenarios. §6–13 = buildable design.
 
 ---
 
 ## 1. Current State — What Exists Today
 
-**There is no dedicated loyalty program.** But the building blocks are already in place:
+**There is no dedicated loyalty program.** But the building blocks — and now the earn/redeem rails — are in place:
 
 | Asset | File | What it gives you |
 |-------|------|-------------------|
-| **RFM segmentation** | `src/app/marketing/rfm.py` | 6 mutually-exclusive cohorts: `champions` / `loyal` / `potential` / `at_risk` / `lost` / `new`, computed from `total_orders` + `last_order_at` |
+| **RFM segmentation** | `src/app/marketing/rfm.py` | 6 mutually-exclusive cohorts: `champions` / `loyal` / `potential` / `at_risk` / `lost` / `new`, from `total_orders` + `last_order_at` |
 | **Customer aggregates** | `src/app/ordering/models.py:Customer` | `total_orders`, `total_spend`, `first_order_at`, `last_order_at`, `usual_order_times`, `tags` (JSONB) |
-| **Coupons** | `src/app/coupons/models.py` | Single-use AED-discount codes, status FSM (`issued`/`redeemed`/`expired`) — but **only** late-delivery apology coupons today, not rewards |
+| **Wallet ledger (NEW, shipped)** | `src/app/wallet/` | Append-only `WalletAccount`+`WalletEntry`; **derived balance**, idempotent `credit`/`debit`/`hold`/`capture`/`release`, freeze, reversal, per-tenant, never-negative. **This is the earn/redeem rail loyalty needs.** |
+| **Wallet spend at checkout (NEW)** | `src/app/ordering/payments.py` | Auto-applies wallet credit at confirm → `cod_due = total − wallet`; capture on delivery, release on cancel. No double-charge. |
+| **Coupons, generalized (NEW)** | `src/app/coupons/` | Campaign + apology coupons: fixed/percent, caps, min-order, per-customer + total limits, validity, **dup-proof `CouponRedemption` ledger**, pause kill-switch, ~50-bit codes. |
+| **WhatsApp utility templates (NEW)** | `src/app/whatsapp/templates.py` | 24h-window-aware customer notifications (session text in-window, approved template out). `coupon_issued`, `wallet_credit_added` already defined. |
 | **Segment DSL** | `src/app/marketing/segments.py` | Targeting on `total_spend`, `order_count`, `last_order_days_ago` |
 | **Marketing engine** | `src/app/marketing/service.py` | Throttle + send-window + opt-out + WhatsApp template send to any segment |
 
-**Conclusion:** the data layer (customer aggregates), the targeting layer (RFM + segment DSL), and the delivery layer (marketing send pipeline) all exist. What is missing is the loyalty **mechanic** (earn → balance → redeem) and the **reward issuance loop**.
+**Conclusion (updated 2026-06-29):** the data layer (aggregates), targeting (RFM + DSL), delivery (marketing send + window-aware templates), AND the **earn/redeem rail (wallet ledger + checkout spend)** now exist. What remains for loyalty is a thin layer: a **tier engine** (RFM+Monetary → tier → perks) and a **points-as-wallet-credit earn loop**. Most of the hard money plumbing is already done — see §6.
 
 ### Current RFM formula (`_classify`)
 
@@ -345,6 +348,151 @@ Most of the 200 above collapse into a handful of systemic challenges:
 6. **Liability & margin** — outstanding points are a real financial liability; tier free-delivery and free dishes erode margin. Needs caps, kill switches, and reporting.
 7. **Fraud surface** — COD + self-service + manual orders + referrals is a wide abuse surface. Velocity checks and audit trails are mandatory, not optional.
 8. **Consent & PDPL** — enrollment, messaging, profiling, and erasure all have legal edges in the UAE. Loyalty data is personal data.
+
+---
+
+## 6. Implementation Design — Build on What's Already Shipped
+
+The earlier sections were written before the wallet/coupon work landed. They now have a concrete substrate. The loyalty program is **two thin layers** over existing, tested primitives:
+
+```
+        ┌─────────────────────────────────────────────┐
+        │  LOYALTY (new, thin)                          │
+        │   • Tier engine: RFM+M → tier → perks         │
+        │   • Earn loop: order delivered → points       │
+        └───────────────┬───────────────┬──────────────┘
+                        │ rewards as     │ tier perks as
+                        │ wallet credit  │ free-delivery / coupon
+        ┌───────────────▼───────────────▼──────────────┐
+        │  EXISTING, SHIPPED                             │
+        │   wallet ledger · coupons · checkout spend ·  │
+        │   RFM · marketing send · utility templates    │
+        └───────────────────────────────────────────────┘
+```
+
+**Design rule:** loyalty issues **value only through the existing rails** — points become **wallet credit** (already spendable at checkout), tier rewards become **coupons** or **free-delivery at confirm**. No new money primitive. This inherits the wallet's idempotency, audit, never-negative, and no-double-charge guarantees for free.
+
+---
+
+## 7. The Two Mechanics (ship tiers first, points second)
+
+### 7a. Tiers (Phase 1 — recommended first)
+RFM cohort → tier → perks. **No new earn state needed** — recompute nightly from data we already have.
+
+| Tier | RFM source (after Monetary upgrade) | Perks (all via existing rails) |
+|------|--------------------------------------|---------------------------------|
+| 🥇 Gold | `champions` (high F, recent, high M) | Free delivery always; early access to today's special |
+| 🥈 Silver | `loyal` | Free delivery above min order; birthday reward (coupon) |
+| 🥉 Bronze | `potential` | "1 order from Silver" nudge |
+| — | new / at_risk / lost | targeted win-back (marketing), no standing perk |
+
+Perks map to mechanisms that exist: **free delivery** = set `delivery_fee_aed = 0` at confirm for the tier; **birthday/welcome reward** = `coupons.issue_coupon` or a wallet credit; **early access** = marketing segment send.
+
+### 7b. Points → wallet credit (Phase 2)
+"Earn X% of order value back as wallet credit." On order **delivered**, credit the wallet:
+`points_credit = round(order.subtotal × earn_rate, 2)` → `wallet.credit(type="promo_credit", reason="loyalty_earn", idempotency_key=f"loyalty:earn:{order_id}")`.
+- **Idempotent per order** (the wallet key guarantees no double-earn on webhook/retry).
+- **Spendable immediately** — checkout already auto-applies wallet credit (no new redemption code).
+- **Stamps variant** ("buy 9, get 10th free") = a counter on the customer; the 10th order issues a 100%-capped coupon. Simpler for customers to track; pick per restaurant.
+
+**Why points = wallet credit, not a separate balance:** the wallet is already a correct, audited, spendable ledger. A parallel `points_balance` would duplicate it and re-introduce the double-spend/expiry problems the wallet already solved.
+
+---
+
+## 8. Monetary RFM Upgrade (prerequisite, tiny)
+
+`rfm.py:_classify` uses only R + F today (flagged at `rfm.py:9`). Add Monetary so tiers reflect spend:
+
+```
+m = total_spend
+# champion now requires money, not just frequency:
+if f >= 5 and r <= 30 and m >= settings.loyalty_champion_min_spend:  -> "champions"
+```
+Per-restaurant thresholds in settings (`loyalty_*`). Keep buckets mutually exclusive (the counts/targeting code is untouched — only `_classify` changes). Back-compat: default the spend threshold to 0 so existing behavior is preserved until a restaurant tunes it.
+
+---
+
+## 9. Data Model (minimal — most state already exists)
+
+```
+# Tier is DERIVED nightly; persist only for fast reads + change detection.
+Customer (extend):
+  loyalty_tier        String(12)  # gold|silver|bronze|none  (recomputed nightly)
+  loyalty_tier_since  DateTime    # for "you've been Gold since…" + demotion grace
+
+# Per-restaurant config (settings JSONB — no schema change):
+  loyalty_enabled, earn_rate (e.g. 0.05), tier thresholds, champion_min_spend,
+  perk map (gold_free_delivery: true, …), stamp_target (e.g. 10), reward_value.
+
+# Earn is just a wallet entry (NO new table):
+  WalletEntry(type="promo_credit", reason_note="loyalty_earn", idempotency_key="loyalty:earn:{order_id}")
+
+# Optional stamps counter (only if stamps chosen):
+  LoyaltyStamps(restaurant_id, customer_id, count, last_order_id)  # tiny
+```
+
+No new money table. Tier is a denormalized cache of an RFM computation; the wallet is the value store.
+
+---
+
+## 10. Wiring (every hook point already exists)
+
+- **Earn**: `dispatch/delivery.py:advance_delivery` (the `delivered` branch — already where capture + stats recompute happen) → call `loyalty.earn(order)`. Idempotent via the wallet key.
+- **Tier recompute**: nightly Celery beat (mirror `wallet.reconcile` / `predictions` beat) → recompute `loyalty_tier` per customer from RFM+M; on change, notify ("You're now Gold 🥇") via the window-aware sender.
+- **Tier perks at checkout**: `ordering/payments.apply_at_confirm` (already runs at confirm) → if tier grants free delivery, set `delivery_fee_aed = 0` before computing COD.
+- **Conversation surfacing**: the order-summary redeem block (already conditional in `engine._send_order_summary`) → add a tier line ("Gold member — delivery's on us 🥇") when the customer has a tier/perk. Reuses the exact pattern just built for wallet/coupon options.
+- **Birthday/welcome rewards**: marketing beat or signup hook → `coupons.issue_coupon` (notified via the `coupon_issued` utility template).
+- **Dashboard**: tier shown on `CustomerProfileScreen` (next to the wallet/coupons sections already there); a Loyalty settings tab (reuse `SettingsScreen` pattern) for earn rate + thresholds + perk toggles.
+
+---
+
+## 11. Guardrails (mostly inherited)
+
+| Risk | Mitigation (existing unless noted) |
+|------|------------------------------------|
+| Double-earn (webhook/retry) | Wallet idempotency key `loyalty:earn:{order_id}` |
+| Earn on cancelled/refunded order | Earn fires on `delivered` only; a later refund reverses via the wallet reversal already built |
+| Liability blowup | Earn rate capped per restaurant; outstanding = wallet liability already reconciled nightly |
+| Tier gaming (bulk corp account) | Monetary axis + per-restaurant thresholds; manager can manually adjust |
+| Free-delivery margin erosion | Perk gated by tier + optional min-order/distance cap (settings) |
+| Cross-tenant leak | Wallet + coupons already per-`restaurant_id`; tier is per-customer-per-tenant |
+| Points expiry | Reuse the wallet expiry sweep (`wallet.reconcile.expire_credits`) — loyalty credit expires like any credit |
+| Customer confusion (points vs wallet vs coupon) | **Single mental model**: there are no "points" — earnings are AED wallet credit. One balance the bot can state plainly. |
+
+---
+
+## 12. Build Plan (TDD, phased — small because the rails exist)
+
+**Phase 1 — Tiers (no money):**
+1. Monetary RFM upgrade in `_classify` (+ settings thresholds). Test: spend changes the bucket.
+2. `Customer.loyalty_tier` + nightly recompute beat. Test: cohort → tier mapping + change detection.
+3. Free-delivery perk in `apply_at_confirm`. Test: Gold → COD excludes delivery fee.
+4. Tier line in order summary + tier on customer profile. Tests.
+
+**Phase 2 — Earn (points = wallet credit):**
+5. `loyalty.earn(order)` on `delivered`, idempotent. Test: one credit per order, none on cancel.
+6. Settings: earn rate + enable toggle + dashboard Loyalty tab.
+7. Refund reversal path (earn reversed when the order is refunded). Test.
+
+**Phase 3 — Rewards & comms:**
+8. Birthday/welcome coupons via existing issuance + `coupon_issued` template.
+9. Tier-change notifications (window-aware). Tier-migration KPIs on Analytics.
+
+Each phase ships independently and is useful alone. Phase 1 needs **zero** new money code.
+
+---
+
+## 13. Open Decisions (need product input before building)
+
+1. **Tiers, points, or stamps first?** (Recommend: tiers — zero money risk, immediate perceived value.)
+2. **Earn rate** default + whether it's per-restaurant tunable (recommend yes).
+3. **Do tiers expire / demote?** Grace period before Gold→Silver on going quiet (recommend 30-day grace).
+4. **Free-delivery perk caps** — distance/min-order limits to protect margin?
+5. **Points expiry** — reuse wallet TTL (recommend 90 days, off by default)?
+6. **Enrollment** — auto-enroll all customers (recommend) vs opt-in?
+7. **Naming** — "wallet credit" covers earnings; do we even surface the word "points/loyalty" to customers, or just "credit + member tier"?
+
+These map directly onto scenarios in §4 (A. Enrollment, B. Earning, D. Tiers, E. Expiry) — answer them there.
 
 ---
 
