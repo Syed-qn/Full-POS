@@ -206,14 +206,16 @@ async def test_catalog_typed_order_adds_directly_not_catalogue(db_session, resta
     assert any("Added" in (o.payload.get("body", "") or "") for o in outs)  # got a text reply
 
 
-async def test_catalog_typed_noncatalogue_item_falls_through(db_session, restaurant):
-    """A typed item NOT in the catalogue (Lemon Mint) must NOT be added by the
-    deterministic catalogue interceptor — it returns False so the AI gives the honest
-    'we don't have it' reply (no text-menu leak, no silent add)."""
+async def test_catalog_typed_noncatalogue_item_answered_not_catalogue(db_session, restaurant):
+    """A typed item NOT in the catalogue (Lemon Mint) is answered deterministically with
+    an honest 'we don't have it' — NOT silently added, and NOT bounced to the AI which
+    sometimes re-sends the whole catalogue. Leading filler ('ok add one ...') is stripped."""
     from app.conversation.engine import _try_catalog_typed_order
     from app.conversation.models import Conversation
     from app.identity.models import Restaurant
+    from app.outbox.models import OutboxMessage
     from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
 
     await _seed(db_session, restaurant, catalog_mode=True)
     conv = Conversation(
@@ -224,16 +226,33 @@ async def test_catalog_typed_noncatalogue_item_falls_through(db_session, restaur
     await db_session.commit()
     rest = await db_session.get(Restaurant, restaurant.id)
 
-    for text in ("one lemon mint", "what is chicken biryani", "done", "menu"):
+    # Not-in-catalogue typed item (with filler) → handled here with an honest reply.
+    for text in ("one lemon mint", "ok add one lemon mint", "please give me lemon mint"):
         msg = InboundMessage(
             wa_message_id=f"wamid.{text.replace(' ', '_')}", from_phone="+971501110002",
             type=MessageType.TEXT, payload={"text": text},
             restaurant_phone="+97141234567", timestamp=1717660800,
         )
-        handled = await _try_catalog_typed_order(
-            db_session, conv, msg, restaurant.id, rest
+        handled = await _try_catalog_typed_order(db_session, conv, msg, restaurant.id, rest)
+        assert handled is True, f"{text!r} should be answered here, not bounced to the AI"
+    await db_session.commit()
+    bodies = [o.payload.get("body", "") or "" for o in (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110002")
+    )).all()]
+    assert any("don't have" in b.lower() for b in bodies)
+    assert not any(o.payload.get("type") == "product_list" for o in (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110002")
+    )).all())
+
+    # Genuine questions / control words / menu requests still fall through to the AI.
+    for text in ("what is chicken biryani", "done", "menu", "hi"):
+        msg = InboundMessage(
+            wa_message_id=f"wamid.ft_{text.replace(' ', '_')}", from_phone="+971501110002",
+            type=MessageType.TEXT, payload={"text": text},
+            restaurant_phone="+97141234567", timestamp=1717660800,
         )
-        assert handled is False, f"{text!r} should fall through to the AI, not be intercepted"
+        handled = await _try_catalog_typed_order(db_session, conv, msg, restaurant.id, rest)
+        assert handled is False, f"{text!r} should fall through to the AI"
 
 
 def test_is_cart_query_detection():

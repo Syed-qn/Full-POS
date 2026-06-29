@@ -1254,3 +1254,14 @@
   cancels ("cancel my order", "clear cart", "add to cart"). Tests: _is_cart_query unit +
   end-to-end cart query shows cart not product_list. conv+catalog 172 pass (only pre-existing
   confirmation-totals failure); lint clean.
+
+- 2026-06-29 07:55 Asia/Dubai — Harden typed-order interceptor: "ok add one mutton biryani"
+  was bouncing to the AI (which re-sent the catalogue) instead of saying "we don't have
+  mutton biryani". Fixes in _try_catalog_typed_order: (1) strip leading filler/politeness
+  ("ok", "okay", "please", "add", "i want", "give me", "can i get", "pls"...) before parsing
+  so the real dish+qty is found; (2) a typed item that's a known dish but NOT in the
+  catalogue now gets a deterministic honest reply ("Sorry, we don't have <dish> on our
+  menu...") instead of falling to the AI. Belt-and-suspenders prompt rule (deepseek): use
+  show_menu ONLY for explicit menu requests, never for an add/order or an unavailable item.
+  Tests updated: not-in-catalogue typed item (with filler) answered here (no product_list);
+  questions/control/menu still fall through. llm+catalog 66 pass; lint clean.

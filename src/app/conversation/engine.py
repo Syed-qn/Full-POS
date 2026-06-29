@@ -3989,7 +3989,27 @@ async def _try_catalog_typed_order(
     if not text or "?" in text or _is_menu_request(text.lower()):
         return False  # questions / menu requests → AI
 
-    qty, dish_query = parse_qty_and_text(text)
+    # Strip leading politeness/filler so "ok add one mutton biryani", "please give me 2
+    # biryani", "i want chicken" parse down to the real dish + quantity.
+    fillers = (
+        "i would like", "i'd like", "id like", "i'll have", "ill have", "can i get",
+        "could i get", "let me get", "i want", "i need", "give me", "get me", "gimme",
+        "please", "kindly", "okay", "okey", "ok", "pls", "add", "want",
+    )
+    body = text
+    changed = True
+    while changed:
+        changed = False
+        low0 = body.lower()
+        for f in fillers:
+            if low0.startswith(f + " "):
+                body = body[len(f) + 1:].strip()
+                changed = True
+                break
+    if not body:
+        return False
+
+    qty, dish_query = parse_qty_and_text(body)
     dq = dish_query.strip().lower()
     # Control words and obvious non-orders → AI (never intercept "done", greetings, etc.).
     if (not dq or dq in {
@@ -4005,7 +4025,16 @@ async def _try_catalog_typed_order(
         return False  # ambiguous / no match → AI (gives the warm reply or disambiguates)
     dish = result.candidates[0]
     if await _catalog_excludes_dish(session, restaurant_id, dish):
-        return False  # not in the catalogue → AI gives the honest "we don't have it" reply
+        # Typed an item that isn't in the catalogue → answer honestly and
+        # deterministically here (never let it fall to the AI, which sometimes
+        # re-sends the whole catalogue instead of saying we don't have it).
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="catalog-typed-unavailable",
+            body=(f"Sorry, we don't have {dish.name} on our menu 🙏 "
+                  "Tap the catalogue to see what's available, or tell me another dish 😊"),
+        )
+        return True
 
     add_qty = qty or 1
     if add_qty > _max_item_qty(restaurant):
