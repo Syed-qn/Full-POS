@@ -206,6 +206,37 @@ async def test_catalog_typed_order_adds_directly_not_catalogue(db_session, resta
     assert any("Added" in (o.payload.get("body", "") or "") for o in outs)  # got a text reply
 
 
+async def test_catalog_typed_order_adds_on_first_message_not_in_ordering_phase(db_session, restaurant):
+    """Regression: a typed dish as the FIRST order (conversation NOT yet in 'ordering'
+    phase, e.g. right after 'hi') must still be added — not fall through to the model,
+    which re-sent the catalogue/menu instead of adding (the live WhatsApp bug)."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    # No "ordering" phase — a brand-new greeting-ish state, like a real first order.
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110009", counterpart="customer",
+        state={"dialogue_phase": "greeting"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.first1", from_phone="+971501110009", type=MessageType.TEXT,
+        payload={"text": "1 chicken biryani"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert len(items) == 1 and items[0].dish_name == "Chicken Biryani"  # added, not menu
+
+
 async def test_catalog_typed_noncatalogue_item_answered_not_catalogue(db_session, restaurant):
     """A typed item NOT in the catalogue (Lemon Mint) is answered deterministically with
     an honest 'we don't have it' — NOT silently added, and NOT bounced to the AI which

@@ -1645,3 +1645,16 @@
   +2 matching regressions (different-protein -> NO_MATCH; size-qualified still DIRECT); matching
   +modification +multi_item +variants 30 pass; ruff clean. Pre-existing confirmation-totals
   failure still unrelated.
+
+[2026-06-29 23:40 +04] fix(conversation): typed dish order ignored on WhatsApp (catalogue mode) + non-Latin qty.
+  Live bug: customer typed "1 chicken biriyani" → bot re-sent menu instead of adding to cart (Hindi VOICE worked).
+  Root cause 1: _try_catalog_typed_order (engine.py:4561) gated on `_resolve_phase(conv)=="ordering"`. The FIRST
+    order right after "hi" isn't in ordering phase yet → fell through to LLM, which returned show_menu. Removed the
+    phase gate — by the time this runs in handle_inbound, all greeting/menu/cart/tracking/checkout guards already
+    passed, so a clear typed dish is an order regardless of phase. Still catalogue-mode + TEXT scoped.
+  Root cause 2: parse_qty_and_text (service.py:645) regex `[a-zA-Z؀-ۿ]` only allowed Latin+Arabic → Hindi/Telugu
+    kept the leading qty in the dish query. Broadened to `\D` (any non-digit script). Verified Hindi/Telugu/Latin.
+  Price AED 20 vs 30: NOT an add_item bug — OrderItem snapshots Dish.price_aed at add time (correct). The menu
+    showed the stale CatalogProduct mirror price; resolves once dish→Meta auto-publish runs.
+  Tests: test_catalog_typed_order_adds_on_first_message_not_in_ordering_phase (new regression). 377 pass; the one
+    failing test (test_order_confirmation_message_includes_totals_and_eta) is PRE-EXISTING (fails on clean tree).

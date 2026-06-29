@@ -641,8 +641,10 @@ def parse_qty_and_text(text: str) -> tuple[int, str]:
         if 1 <= qty <= 20:
             return qty, m.group(2)
 
-    # Natural: "2 biryani" or "make it 2 biryani" — find rightmost plausible qty
-    m = re.search(r"\b(\d+)\s+([a-zA-Z؀-ۿ].+)$", text)
+    # Natural: "2 biryani" / "make it 2 biryani" / "1 चिकन बिरयानी" / "2 బిర్యానీ" —
+    # qty followed by a dish name in ANY script. Use \D (any non-digit) so it's not
+    # limited to Latin+Arabic; otherwise Hindi/Telugu/etc. left the qty in the query.
+    m = re.search(r"\b(\d+)\s+(\D.*)$", text)
     if m:
         qty = int(m.group(1))
         if 1 <= qty <= 20:  # dish numbers are 100+ so small ints are quantities

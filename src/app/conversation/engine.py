@@ -4558,7 +4558,12 @@ async def _try_catalog_typed_order(
         add_item, create_draft_order, get_or_create_customer, parse_qty_and_text,
     )
 
-    if inbound.type != MessageType.TEXT or _resolve_phase(conv) != "ordering":
+    # No phase gate: by the time we reach here in handle_inbound, every greeting /
+    # menu-request / cart / tracking / checkout guard has already run, so a clearly
+    # typed dish is an order REGARDLESS of phase. (The old `phase=="ordering"` gate
+    # meant the FIRST dish right after "hi" — before any "ordering" phase was set —
+    # fell through to the model, which then re-sent the catalogue instead of adding.)
+    if inbound.type != MessageType.TEXT:
         return False
     if not await _catalog_mode_on(session, restaurant_id):
         return False
