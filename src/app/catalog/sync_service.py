@@ -203,8 +203,16 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
     return result
 
 
-async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> SyncResult:
-    """Push local dishes to the restaurant's Meta catalogue."""
+async def push_dishes_to_meta(
+    session: AsyncSession, *, restaurant_id: int, wait_for_ingest: bool = True
+) -> SyncResult:
+    """Push local dishes to the restaurant's Meta catalogue.
+
+    ``wait_for_ingest`` True (manual Publish): block until Meta finishes ingesting so the
+    UI toast/counts are accurate. False (auto-publish on a dish edit): fire-and-forget so
+    the manager's edit doesn't block on Meta and rapid edits don't pile up overlapping
+    in-flight batches.
+    """
     from app.menu.models import Dish, Menu
 
     rest = await session.get(Restaurant, restaurant_id)
@@ -293,7 +301,7 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
         return SyncResult()
 
     try:
-        await push_products_batch(catalog_id, requests, wait_for_ingest=True)
+        await push_products_batch(catalog_id, requests, wait_for_ingest=wait_for_ingest)
     except CatalogWriteError as exc:
         result = SyncResult()
         result.push_errors = [str(exc)]
@@ -351,7 +359,11 @@ async def auto_publish_to_meta(session: AsyncSession, *, restaurant_id: int) -> 
     if not catalog_id:
         return SyncResult()  # Meta not connected — nothing to publish to.
     try:
-        return await push_dishes_to_meta(session, restaurant_id=restaurant_id)
+        # Fire-and-forget: don't block the manager's dish edit on Meta ingest, and avoid
+        # overlapping in-flight batches when several edits happen quickly.
+        return await push_dishes_to_meta(
+            session, restaurant_id=restaurant_id, wait_for_ingest=False
+        )
     except (CatalogReadError, CatalogWriteError) as exc:
         logger.warning("auto-publish to Meta skipped for restaurant %s: %s", restaurant_id, exc)
         return SyncResult()

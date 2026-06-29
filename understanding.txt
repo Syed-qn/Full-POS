@@ -1742,3 +1742,11 @@
   Kept new-vs-updated UI counts via internal "_was_linked" flag on the request; push_products_batch now strips
   "_"-prefixed keys before POST so Meta never sees them. Tests: test_push_uses_upsert_update_for_unlinked_dish.
   46 catalog tests pass; boot+lint clean.
+
+[2026-06-30 01:56 +04] fix(catalog): auto-publish on dish edits is now fire-and-forget (similar-problem sweep).
+  After fixing the CREATE→UPDATE duplicate cause, audited related paths. Found: auto_publish_to_meta (fires on
+  EVERY dish edit/availability toggle + menu activation) called push_dishes_to_meta with wait_for_ingest=True —
+  blocking the manager's request for seconds AND risking overlapping in-flight Meta batches on rapid edits.
+  Added wait_for_ingest param to push_dishes_to_meta (default True for manual Publish so toast counts are accurate);
+  auto_publish passes False (fire-and-forget). Audit confirmed only two batch method sites remain: UPDATE (push,
+  upsert) and DELETE (unpublish, best-effort non-blocking). 75 catalog+menu tests pass; boot+lint clean.
