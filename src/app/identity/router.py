@@ -64,16 +64,17 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad credentials")
     if not verify_password(body.password, restaurant.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad credentials")
+    restaurant_id = restaurant.id
     # First sign-in only: submit the transactional utility templates for approval.
     # Best-effort — a template-provider hiccup must never block login.
     try:
         from app.whatsapp.templates import ensure_utility_templates
 
-        if await ensure_utility_templates(session, restaurant_id=restaurant.id):
+        if await ensure_utility_templates(session, restaurant_id=restaurant_id):
             await session.commit()
     except Exception:  # noqa: BLE001 — login must succeed regardless
         await session.rollback()
-    return TokenOut(access_token=create_access_token(restaurant_id=restaurant.id))
+    return TokenOut(access_token=create_access_token(restaurant_id=restaurant_id))
 
 
 @router.get("/me", response_model=RestaurantOut)
