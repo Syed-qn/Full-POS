@@ -1345,3 +1345,25 @@
   the next customer in chat ("⚡ ready now, X% off, fast"), handle 'yes' -> capture their
   address -> accept_resale -> dispatch; batch with any fresh dishes they add. Backend is
   ready; this is the customer-facing conversational slice.
+
+[2026-06-29] feat: RAG + Open Knowledge Format (OKF) grounding to cut hallucination
+- New app/okf/: OkfDoc store (markdown+YAML concept docs per restaurant, pg_trgm GIN
+  index on search_text). Migration b2d4f6a8c0e2.
+- producer.py: builds OKF docs from DB — restaurant profile, delivery/COD policy,
+  per-dish (incl. description/halal/allergen text), customer profile (tier/wallet/
+  recents), order. Idempotent upsert on (restaurant_id, kind, slug).
+- retrieval.py: LEXICAL retrieval (pg_trgm word_similarity, same engine as dish
+  matcher — no vector DB per decision). Pins policy + the customer's own profile,
+  fills rest by similarity. grounding_block() renders an authoritative
+  "answer ONLY from this, never invent" prompt block.
+- Wired: engine._okf_grounding lazily builds the bundle on first use, refreshes the
+  customer doc, retrieves for the message; injected as context["grounding"] ->
+  deepseek._build_system appends it last (overrides model priors). Best-effort.
+- Decision: lexical first (pg_trgm, zero new infra); ground everything (menu/policy/
+  customer/order). pgvector deferred unless lexical proves insufficient.
+- Tests: 8 OKF (producer idempotent, retrieval finds halal/policy/customer, grounding
+  block, lazy-build wiring, non-text empty). Migration verified on fresh DB.
+- Also fixed this session: ETA ~7319min guard (bad rider ping), wallet COD line in AI
+  confirm path, address-capture prompt guardrails (no restaurant-location over-share/loop),
+  cancel releases rider from dispatch, resale offer/accept (cancelled-cooked food ->
+  discounted fast re-sell + re-dispatch + batch), loyalty (tiers+earn, all editable).
