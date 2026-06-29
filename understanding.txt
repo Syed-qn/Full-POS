@@ -1690,3 +1690,13 @@
   - Frontend: OrderDetailOut.convo_summary type; OrderDetailDrawer Overview summary card (sla-warn styling,
     unicode-bidi: plaintext so Arabic/Urdu render RTL correctly).
   - Tests: test_kitchen_convo_summary_is_multilingual_and_drops_greetings. 162 ordering pass; tsc clean; drawer 10 pass.
+
+[2026-06-30 00:31 +04] fix(chat): proactive status pings now recorded in dashboard conversation.
+  Bug: "The restaurant has started preparing your order." (and other rider_flow status pings) reached the customer
+  on WhatsApp but were INVISIBLE in the dashboard chat — _notify_customer_status only called enqueue_message
+  (outbox→WhatsApp), never record_message (conversation Message that the chat reads). The bot's normal _send_text
+  does BOTH; this path only did the first.
+  Fix: added a local _record() in _notify_customer_status that get_or_create_conversation + record_message for
+  both branches (text status + picked_up CTA_URL). Best-effort (try/except) so chat mirroring never blocks the ping.
+  Covers preparing / on-the-way / near_door / delivered. Test: test_status_ping_is_recorded_in_conversation_chat.
+  117 dispatch tests pass; boot+lint clean.

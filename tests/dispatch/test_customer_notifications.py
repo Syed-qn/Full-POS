@@ -327,3 +327,30 @@ async def test_delivered_blocked_until_tracker_started(db_session):
     rider_msgs = await _cust_msgs(db_session, rider.phone)
     assert any("start live tracker" in (m.payload.get("button_label", "").lower())
                for m in rider_msgs)
+
+
+async def test_status_ping_is_recorded_in_conversation_chat(db_session):
+    """A proactive status ping (e.g. 'preparing') must also be recorded as an outbound
+    conversation Message so the dashboard chat shows it — not just delivered to WhatsApp.
+    Regression: 'The restaurant has started preparing your order.' reached the customer
+    but was invisible in the dashboard chat."""
+    from app.conversation.models import Conversation, Message
+
+    r, _rider, o, _batch, c = await _seed(db_session, status="preparing")
+    await _notify_customer_status(
+        db_session, restaurant_id=r.id, order=o, status_key="preparing"
+    )
+    await db_session.commit()
+
+    # Delivered to WhatsApp (outbox) ...
+    outs = await _cust_msgs(db_session, c.phone)
+    assert any("preparing" in (m.payload.get("body", "") or "").lower() for m in outs)
+    # ... AND mirrored into the conversation chat.
+    conv = await db_session.scalar(
+        select(Conversation).where(Conversation.phone == c.phone)
+    )
+    assert conv is not None
+    msgs = (await db_session.scalars(
+        select(Message).where(Message.conversation_id == conv.id, Message.direction == "outbound")
+    )).all()
+    assert any("preparing" in (m.payload.get("body", "") or "").lower() for m in msgs)
