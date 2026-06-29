@@ -1325,3 +1325,23 @@
 - Still genuinely open (need live browser console/network to confirm root cause): if the
   green deploy of current main still shows the issues, it is environment-specific (chunk
   404 / hydration error) observable only in the browser devtools.
+
+[2026-06-29] fix+feat: cancel releases rider; resale offer/accept backend
+- BUG FIX: cancel_order left an assigned rider attached (kept being told to collect
+  cancelled food). New dispatch.release_order_from_dispatch: drop batch stop, stop
+  tracking, free idle rider, complete emptied batch, push rider the cancellation,
+  null rider_id. Wired into cancel_order (idempotent, best-effort). 3 tests.
+- BUG FIX: cancel_order's ON_RESALE copy never cloned OrderItems (resold food had no
+  line items). Now clones items onto the resale copy.
+- FEATURE (resale backend): settings.resale {enabled, discount_type, discount_value,
+  max_age_minutes} — all manager-editable (DEFAULT_SETTINGS + SettingsPatch validated).
+  ordering/resale.py: resale_offer_for_customer (exclusion + freshness + discount calc),
+  accept_resale (ON_RESALE->RESOLD, spawn discounted READY deliverable for new customer+
+  address, clone items, run_dispatch_engine -> assigns rider to NEW location, batches with
+  the customer's other ready items via companion_order). 5 tests. 268 ordering+dispatch pass.
+- DONE THIS TURN ALSO: NavSidebar complaint badge polls 30s; Dockerfile migrate hardened
+  (alembic && uvicorn — fail deploy on migration failure, was silently swallowed).
+- NEXT (resale, not yet built): conversation-engine wiring — present the resale offer to
+  the next customer in chat ("⚡ ready now, X% off, fast"), handle 'yes' -> capture their
+  address -> accept_resale -> dispatch; batch with any fresh dishes they add. Backend is
+  ready; this is the customer-facing conversational slice.
