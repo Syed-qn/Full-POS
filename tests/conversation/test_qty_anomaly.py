@@ -1,6 +1,7 @@
 """Large-quantity anomaly guard: an unusually big line (e.g. "100000 lemon mints")
-must NOT auto-add — the bot hands the chat to a human to confirm. Threshold is
-per-restaurant (settings.max_item_qty, default 10)."""
+must NOT auto-add. The bot STAYS ACTIVE (never mutes the chat) and asks for a realistic
+quantity, pointing bulk orders to the phone. Threshold is per-restaurant
+(settings.max_item_qty, default 10)."""
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -63,7 +64,7 @@ async def test_large_add_qty_escalates_and_does_not_add(db_session, restaurant):
     await _drive(db_session, restaurant, phone, "wamid.big1", "100000 lemon mints", result)
 
     conv = await _conv(db_session, restaurant, phone)
-    assert conv.manual_takeover is True          # handed to a human
+    assert conv.manual_takeover is False         # bot stays ACTIVE, never muted
     assert await _items(db_session, conv) == []  # nothing auto-added
 
     msgs = (await db_session.scalars(
@@ -71,7 +72,7 @@ async def test_large_add_qty_escalates_and_does_not_add(db_session, restaurant):
                               Message.direction == "outbound")
     )).all()
     bodies = " ".join((m.payload or {}).get("body", "") for m in msgs).lower()
-    assert "large quantity" in bodies or "flagged" in bodies
+    assert "big order" in bodies                  # asks for a realistic quantity, not silence
 
 
 async def test_normal_qty_still_adds(db_session, restaurant):
@@ -104,6 +105,6 @@ async def test_large_update_qty_escalates_and_keeps_old_qty(db_session, restaura
     await _drive(db_session, restaurant, phone, "wamid.u2", "not 1. 100000", upd)
 
     conv = await _conv(db_session, restaurant, phone)
-    assert conv.manual_takeover is True
+    assert conv.manual_takeover is False         # bot stays ACTIVE, never muted
     items = await _items(db_session, conv)
-    assert items and items[0].qty == 1   # unchanged — not set to 100000
+    assert items and items[0].qty == 1   # unchanged, not set to 100000

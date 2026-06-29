@@ -1119,3 +1119,15 @@
   rule (both deepseek.py and claude.py): always use the EXACT restaurant name, never
   alter/expand/abbreviate/restyle. Also removed two em dashes from the identity block
   (house rule). llm 34 pass; prompt .format verified; lint clean.
+
+- 2026-06-29 06:40 Asia/Dubai — FIX: bot went silent on a chat after a big-quantity ask.
+  Diagnosis: _escalate_large_qty set conv.manual_takeover=True, which makes handle_inbound
+  return silently on ALL later messages (engine.py ~3795) until a manager flips the chat
+  back to AI in the dashboard. So a customer (or troll) typing "100000 lemon mints" muted
+  the bot with no way for the customer to recover -> the silent "Menu pls/Hi/Hlo" the user
+  saw on +918220958384. (Manager dashboard takeover still exists; only the AUTOMATIC mute
+  is removed.) Fix: _escalate_large_qty no longer mutes; the big-order GUARD stays (never
+  auto-adds an absurd qty) but the bot STAYS ACTIVE and asks for a realistic quantity,
+  pointing genuine bulk orders to the restaurant phone. Tests updated: qty-anomaly now
+  asserts manual_takeover stays False + message says "big order". conversation+catalog 168
+  pass (only pre-existing confirmation-totals failure); lint clean.

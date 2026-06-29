@@ -3015,17 +3015,27 @@ async def _escalate_large_qty(
     qty: int,
     dish_query: str,
 ) -> None:
-    """Hand the chat to a human and tell the customer we'll confirm. Used when a
-    requested quantity exceeds the restaurant's anomaly threshold — we never
-    auto-add an unusually large line; a manager confirms it from the dashboard."""
-    conv.manual_takeover = True
+    """Big-order guard. An unusually large single line (e.g. "100000 lemon mints") is
+    NEVER auto-added. The bot STAYS ACTIVE (no manual-takeover mute, so the customer is
+    never left in silence) and simply asks for a realistic quantity, pointing genuine
+    bulk orders to the phone. Previously this muted the chat, which trapped customers
+    (and testing) in dead air until a manager flipped it back in the dashboard."""
+    from app.identity.models import Restaurant
+
     item = (dish_query or "").strip() or "that"
+    rest = await session.get(Restaurant, restaurant_id)
+    phone = (rest.phone if rest else "") or ""
+    call_line = (
+        f" For a genuine bulk order, please call us on {phone} and the team will set it up."
+        if phone else
+        " For a genuine bulk order, let us know and the team will set it up."
+    )
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="qty-anomaly",
         body=(
-            f"That's a large quantity ({qty}x {item})! 🤔 I've flagged your order "
-            "for our team to confirm. Someone will be with you shortly to finalise it. 😊"
+            f"That's a big order ({qty}x {item})! 😊 I can't add that many automatically. "
+            f"How many would you actually like?{call_line}"
         ),
     )
 
