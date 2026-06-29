@@ -19,6 +19,7 @@ export function TicketsScreen() {
   function reload() {
     listTickets()
       .then(setTickets)
+      .catch(() => setTickets([]))
       .finally(() => setLoaded(true));
   }
 
