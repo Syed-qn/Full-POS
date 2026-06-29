@@ -72,3 +72,5 @@ async def test_unified_menu_link_statuses(db_session, restaurant):
     assert out.linked_count == 1
     assert out.dish_only_count == 1
     assert out.catalog_only_count == 1
+    biryani = next(i for i in out.items if i.name == "Chicken Biryani")
+    assert biryani.price_aed == Decimal("22.00")  # dish price, not Meta mirror

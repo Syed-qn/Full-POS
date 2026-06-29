@@ -158,8 +158,9 @@ export function OnboardingScreen() {
       ) : (
         <div className={s.card}>
           <p className={s.hint}>
-            Paste your Meta Catalog ID, sync both ways, then finish. Unlinked text dishes
-            are pushed to Meta automatically.
+            Create a catalogue in Meta Commerce Manager, connect it to WhatsApp, paste the
+            Catalog ID, then run Sync both ways. Every text dish must show Linked before
+            you finish — unlinked dishes are pushed automatically when the server token is set.
           </p>
           <UnifiedMenuPanel onCatalogIdSaved={refreshStatus} />
           <Button onClick={finish} disabled={busy || !status?.catalog_synced}>

@@ -167,3 +167,189 @@ async def test_sync_endpoint_and_list(client, db_session, monkeypatch, auth_head
     lst = await client.get("/api/v1/catalog/products", headers=auth_headers)
     assert lst.status_code == 200
     assert [p["retailer_id"] for p in lst.json()] == ["r1"]
+
+
+async def test_push_dishes_includes_required_meta_fields(db_session, restaurant, monkeypatch):
+    """Push must send link, image_link, brand, condition — Meta rejects CREATE without them."""
+    from app.catalog.meta_client import build_catalog_item_data, format_meta_price
+    from app.catalog.sync_service import push_dishes_to_meta
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Biryani",
+        price_aed=Decimal("30.00"), category="Rice", is_available=True,
+        name_normalized="biryani",
+    ))
+    await db_session.commit()
+
+    captured: list[dict] = []
+
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        captured.extend(requests)
+        return {"handles": [], "validation_status": []}
+
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+
+    res = await push_dishes_to_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert res.pushed == 1
+    assert len(captured) == 1
+    data = captured[0]["data"]
+    assert data["condition"] == "new"
+    assert data["brand"] == restaurant.name
+    assert data["link"].startswith("http")
+    assert data["image_link"].startswith("http")
+    assert data["price"] == format_meta_price(Decimal("30.00"))
+    assert build_catalog_item_data(
+        name="X", description=None, price_aed=Decimal("1"), category="C",
+        is_available=True, restaurant_name="R", product_link="http://x", image_link="http://i",
+    )["title"] == "X"
+
+
+async def test_push_mirrors_local_catalog_without_meta_pull(db_session, restaurant, monkeypatch):
+    from app.catalog.models import CatalogProduct
+    from app.catalog.sync_service import push_dishes_to_meta
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2, name="Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="mint",
+    ))
+    await db_session.commit()
+
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        return {"handles": [], "validation_status": []}
+
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+
+    await push_dishes_to_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    row = await db_session.scalar(
+        select(CatalogProduct).where(CatalogProduct.restaurant_id == restaurant.id)
+    )
+    assert row is not None
+    assert row.name == "Mint"
+    assert row.price_aed == Decimal("12.00")
+    assert row.is_active is True
+
+
+async def test_push_raises_on_meta_validation_errors(db_session, restaurant, monkeypatch):
+    from app.catalog.meta_client import CatalogWriteError
+    from app.catalog.sync_service import push_dishes_to_meta
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, name="Soup",
+        price_aed=Decimal("10.00"), is_available=True, name_normalized="soup",
+    ))
+    await db_session.commit()
+
+    async def _bad_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        raise CatalogWriteError("Meta rejected 1 item(s): rid: missing image_link")
+
+    monkeypatch.setattr(sync_service, "push_products_batch", _bad_batch)
+
+    with pytest.raises(CatalogWriteError, match="image_link"):
+        await push_dishes_to_meta(db_session, restaurant_id=restaurant.id)
+
+
+async def test_sync_full_bidirectional_pushes_then_repulls(db_session, restaurant, monkeypatch):
+    from app.catalog.sync_service import sync_full_bidirectional
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Biryani",
+        price_aed=Decimal("30.00"), category="Rice", is_available=True,
+        name_normalized="biryani",
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2, name="Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="mint",
+    ))
+    await db_session.commit()
+
+    pull_calls = 0
+    mint_rid: list[str] = []
+
+    async def _fake_pull(catalog_id):  # noqa: ARG001
+        nonlocal pull_calls
+        pull_calls += 1
+        if pull_calls == 1:
+            return [_mp("r1", "Biryani", 30, "Rice")]
+        rid = mint_rid[0] if mint_rid else "mint-rid"
+        return [_mp("r1", "Biryani", 30, "Rice"), _mp(rid, "Mint", 12, "Drinks")]
+
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        for req in requests:
+            if req.get("data", {}).get("title") == "Mint":
+                mint_rid.append(req["retailer_id"])
+        return {"handles": ["h1"], "validation_status": []}
+
+    from app.catalog import meta_client
+
+    monkeypatch.setattr(sync_service, "fetch_catalog_products", _fake_pull)
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+    monkeypatch.setattr(meta_client, "wait_for_batch_handles", lambda *a, **k: None)
+
+    res = await sync_full_bidirectional(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert pull_calls == 2
+    assert res.pushed == 1  # Mint is new; Biryani already linked on first pull → UPDATE
+    assert res.push_updated == 1
+    rows = (await db_session.scalars(
+        select(CatalogProduct).where(CatalogProduct.restaurant_id == restaurant.id)
+    )).all()
+    assert len(rows) == 2
+
+
+async def test_is_catalog_fully_synced_requires_all_dishes_linked(db_session, restaurant):
+    from app.catalog.models import CatalogProduct
+    from app.catalog.sync_service import is_catalog_fully_synced
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    linked = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, name="Biryani",
+        price_aed=Decimal("30.00"), is_available=True, name_normalized="biryani",
+        catalog_retailer_id="r1",
+    )
+    solo = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, name="Mint",
+        price_aed=Decimal("12.00"), is_available=True, name_normalized="mint",
+    )
+    db_session.add_all([linked, solo])
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="r1", name="Biryani",
+        price_aed=Decimal("30.00"), is_active=True, raw={},
+    ))
+    await db_session.commit()
+    assert await is_catalog_fully_synced(db_session, restaurant_id=restaurant.id) is False
+
+    solo.catalog_retailer_id = "r2"
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="r2", name="Mint",
+        price_aed=Decimal("12.00"), is_active=True, raw={},
+    ))
+    await db_session.commit()
+    assert await is_catalog_fully_synced(db_session, restaurant_id=restaurant.id) is True

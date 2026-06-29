@@ -1550,3 +1550,17 @@
   3-step wizard; MenuManagerScreen drops text/catalog toggle; App Guarded → /onboarding.
 - TESTS: test_unified_menu.py, test_onboarding.py, catalog send fallback updated;
   MenuManagerScreen + App.test.tsx mocks fixed; 34 catalog + 195 FE pass.
+
+[2026-06-29 22:45 +04] fix(catalog): Meta items_batch push — required fields + reliable bidirectional sync
+- meta_client.py: build_catalog_item_data() sends title, description, availability, condition,
+  price ("22.00 AED"), link, image_link, brand (Meta Commerce CREATE requirements); format_meta_price();
+  push_products_batch validates validation_status errors; wait_for_batch_handles() polls async ingest.
+- config: APP_CATALOG_PLACEHOLDER_IMAGE_URL for dishes without photos; .env.example documents
+  APP_WA_CATALOG_TOKEN (catalog_management system user, separate from messaging token).
+- sync_service.py: push assigns retailer_id + mirrors to catalog_products immediately (no Meta lag);
+  sync_full_bidirectional pull→push→re-pull; is_catalog_fully_synced() = zero available dish_only rows.
+- unified.py: linked items show dish price (source of truth pushed to Meta).
+- identity onboarding: catalog_synced requires full link, not just any Meta product.
+- FE UnifiedMenuPanel: Commerce Manager setup guide + push error toasts; onboarding copy updated.
+- TESTS: push required fields, local mirror, validation error, sync_full, is_catalog_fully_synced,
+  onboarding dish_only gate; 14 catalog/menu/onboarding pass.

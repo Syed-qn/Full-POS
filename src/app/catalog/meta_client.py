@@ -11,6 +11,8 @@ SecretStr, httpx.AsyncClient with a timeout). Paginates through ``paging.next``.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
@@ -18,14 +20,22 @@ import httpx
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _FIELDS = "id,retailer_id,name,description,price,currency,availability,image_url,category"
 # Hard cap so a misconfigured catalogue can't loop forever; WhatsApp shows <=30 anyway.
 _MAX_PAGES = 20
 _PER_PAGE = 100
+_BATCH_POLL_INTERVAL_S = 2.0
+_BATCH_POLL_MAX_ATTEMPTS = 15
 
 
 class CatalogReadError(RuntimeError):
     """Raised when the Graph API rejects the catalogue read (bad token / perms / id)."""
+
+
+class CatalogWriteError(RuntimeError):
+    """Raised when pushing products to Meta fails."""
 
 
 @dataclass
@@ -39,6 +49,11 @@ class MetaProduct:
     image_url: str | None
     category: str | None
     raw: dict
+
+
+def format_meta_price(price_aed: Decimal, *, currency: str = "AED") -> str:
+    """Meta price format: number + space + ISO 4217 code (e.g. ``22.00 AED``)."""
+    return f"{price_aed:.2f} {currency}"
 
 
 def _parse_price(raw_price, currency: str | None) -> Decimal | None:
@@ -69,6 +84,56 @@ def _to_product(p: dict) -> MetaProduct:
         category=p.get("category"),
         raw=p,
     )
+
+
+def _dish_retailer_id(dish_id: int, dish_number: int | None) -> str:
+    """Stable Content ID for a dish pushed to Meta."""
+    num = dish_number if dish_number is not None else dish_id
+    return f"dish-{dish_id}-{num}"
+
+
+def build_catalog_item_data(
+    *,
+    name: str,
+    description: str | None,
+    price_aed: Decimal,
+    category: str | None,
+    is_available: bool,
+    restaurant_name: str,
+    product_link: str,
+    image_link: str,
+) -> dict:
+    """Build items_batch ``data`` with Meta Commerce required fields.
+
+    See https://developers.facebook.com/docs/commerce-platform/catalog/fields —
+    CREATE requires title, description, availability, condition, price, link,
+    image_link, and brand.
+    """
+    title = (name or "Item")[:200]
+    desc = (description or title)[:5000]
+    return {
+        "title": title,
+        "name": title,
+        "description": desc,
+        "availability": "in stock" if is_available else "out of stock",
+        "condition": "new",
+        "price": format_meta_price(price_aed),
+        "link": product_link,
+        "image_link": image_link,
+        "brand": (restaurant_name or "Restaurant")[:100],
+        "category": (category or "Menu")[:100],
+    }
+
+
+def _collect_batch_errors(data: dict) -> list[str]:
+    """Surface per-item validation errors from an items_batch response."""
+    errors: list[str] = []
+    for status in data.get("validation_status") or []:
+        rid = status.get("retailer_id") or "?"
+        for err in status.get("errors") or []:
+            msg = err.get("message") or "unknown error"
+            errors.append(f"{rid}: {msg}")
+    return errors
 
 
 async def fetch_catalog_products(catalog_id: str) -> list[MetaProduct]:
@@ -107,19 +172,57 @@ async def fetch_catalog_products(catalog_id: str) -> list[MetaProduct]:
     return products
 
 
-class CatalogWriteError(RuntimeError):
-    """Raised when pushing products to Meta fails."""
+async def check_batch_request_status(catalog_id: str, handle: str) -> dict:
+    """Poll Meta for async items_batch ingestion status."""
+    settings = get_settings()
+    token = settings.wa_catalog_token.get_secret_value()
+    base = f"https://graph.facebook.com/{settings.graph_api_version}"
+    url = f"{base}/{catalog_id}/check_batch_request_status"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            url,
+            params={"access_token": token, "handle": handle},
+        )
+        data = resp.json()
+        if resp.status_code >= 400 or "error" in data:
+            err = (data.get("error") or {}).get("message", f"HTTP {resp.status_code}")
+            raise CatalogWriteError(f"Meta batch status check failed: {err}")
+        return data
 
 
-def _dish_retailer_id(dish_id: int, dish_number: int | None) -> str:
-    """Stable Content ID for a dish pushed to Meta."""
-    num = dish_number if dish_number is not None else dish_id
-    return f"dish-{dish_id}-{num}"
+async def wait_for_batch_handles(catalog_id: str, handles: list[str]) -> None:
+    """Wait until Meta finishes ingesting items_batch uploads (best-effort)."""
+    if not handles:
+        return
+    for attempt in range(_BATCH_POLL_MAX_ATTEMPTS):
+        pending = False
+        for handle in handles:
+            status = await check_batch_request_status(catalog_id, handle)
+            state = (status.get("status") or "").lower()
+            if state in {"", "in_progress", "started"}:
+                pending = True
+                continue
+            if state == "finished":
+                for err in status.get("errors") or []:
+                    msg = err.get("message") or str(err)
+                    raise CatalogWriteError(f"Meta batch ingest failed: {msg}")
+            elif state not in {"finished"}:
+                logger.warning("unexpected Meta batch status %r for handle %s", state, handle)
+        if not pending:
+            return
+        await asyncio.sleep(_BATCH_POLL_INTERVAL_S)
+    logger.warning(
+        "Meta batch handles still pending after %d attempts: %s",
+        _BATCH_POLL_MAX_ATTEMPTS,
+        handles,
+    )
 
 
 async def push_products_batch(
     catalog_id: str,
     requests: list[dict],
+    *,
+    wait_for_ingest: bool = True,
 ) -> dict:
     """Push CREATE/UPDATE/DELETE batch to Meta ``/{catalog_id}/items_batch``.
 
@@ -148,4 +251,12 @@ async def push_products_batch(
         if resp.status_code >= 400 or "error" in data:
             err = (data.get("error") or {}).get("message", f"HTTP {resp.status_code}")
             raise CatalogWriteError(f"Meta catalogue push failed: {err}")
+        validation_errors = _collect_batch_errors(data)
+        if validation_errors:
+            preview = "; ".join(validation_errors[:5])
+            extra = f" (+{len(validation_errors) - 5} more)" if len(validation_errors) > 5 else ""
+            raise CatalogWriteError(f"Meta rejected {len(validation_errors)} item(s): {preview}{extra}")
+        handles = data.get("handles") or []
+        if wait_for_ingest and handles:
+            await wait_for_batch_handles(catalog_id, handles)
         return data

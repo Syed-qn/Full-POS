@@ -54,6 +54,7 @@ class SyncResultOut(BaseModel):
     created: int = 0
     pushed: int = 0
     push_updated: int = 0
+    push_errors: list[str] = []
     products: list[CatalogProductOut]
 
 
@@ -121,7 +122,7 @@ async def push_catalog(
 ):
     """Push local dishes to Meta, then re-pull the catalogue mirror."""
     try:
-        await push_dishes_to_meta(session, restaurant_id=restaurant.id)
+        push = await push_dishes_to_meta(session, restaurant_id=restaurant.id)
         result = await sync_catalog_from_meta(session, restaurant_id=restaurant.id)
     except (CatalogReadError, CatalogWriteError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -134,8 +135,9 @@ async def push_catalog(
         total_active=result.total_active,
         linked=result.linked,
         created=result.created,
-        pushed=result.pushed,
-        push_updated=result.push_updated,
+        pushed=push.pushed,
+        push_updated=push.push_updated,
+        push_errors=push.push_errors,
         products=[CatalogProductOut.model_validate(p) for p in products],
     )
 
@@ -161,5 +163,6 @@ async def sync_catalog_full(
         created=result.created,
         pushed=result.pushed,
         push_updated=result.push_updated,
+        push_errors=result.push_errors,
         products=[CatalogProductOut.model_validate(p) for p in products],
     )

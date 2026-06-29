@@ -22,6 +22,7 @@ export interface CatalogSyncResult {
   created?: number;
   pushed?: number;
   push_updated?: number;
+  push_errors?: string[];
   products: CatalogProductOut[];
 }
 

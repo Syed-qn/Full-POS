@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # feature. Separate from wa_access_token (the messaging token, which can't read
     # catalogs). Empty = catalog sync disabled.
     wa_catalog_token: SecretStr = SecretStr("")
+    # Placeholder image for dishes pushed to Meta without a photo (items_batch
+    # requires image_link). Must be a public JPEG/PNG URL, ≥500×500 px.
+    catalog_placeholder_image_url: str = "https://placehold.co/500x500/png?text=Menu"
     # Rider assignment is a business-INITIATED message; outside WhatsApp's 24h
     # window only an approved template delivers. Set this to the approved template
     # name (e.g. "rider_assignment") to send assignments as a template; leave empty

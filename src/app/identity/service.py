@@ -410,15 +410,12 @@ async def get_onboarding_status(
     ) is not None
     catalog_id = (settings.get("catalog_id") or "").strip()
     catalog_synced = False
-    if catalog_id:
-        from app.catalog.models import CatalogProduct
+    if catalog_id and has_menu:
+        from app.catalog.sync_service import is_catalog_fully_synced
 
-        catalog_synced = await session.scalar(
-            select(CatalogProduct.id).where(
-                CatalogProduct.restaurant_id == restaurant.id,
-                CatalogProduct.is_active.is_(True),
-            ).limit(1)
-        ) is not None
+        catalog_synced = await is_catalog_fully_synced(
+            session, restaurant_id=restaurant.id
+        )
     has_location = restaurant.lat != 0.0 or restaurant.lng != 0.0
     # Legacy tenants (pre-onboarding flag): skip wizard if they already have a menu.
     if "onboarding_complete" not in settings and has_menu:

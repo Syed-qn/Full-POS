@@ -62,9 +62,14 @@ export function UnifiedMenuPanel({
     setSyncing(true);
     try {
       const res = await syncCatalogFull();
+      if (res.push_errors?.length) {
+        toast(res.push_errors.join("; "), "error");
+        return;
+      }
       toast(
         `Synced · ${res.total_active} in Meta` +
           (res.pushed ? ` · ${res.pushed} pushed` : "") +
+          (res.push_updated ? ` · ${res.push_updated} updated` : "") +
           (res.linked ? ` · ${res.linked} linked` : ""),
       );
       await load();
@@ -99,6 +104,19 @@ export function UnifiedMenuPanel({
             One menu for ops and WhatsApp. Customers get catalogue cards when synced;
             text dishes and Meta products stay linked here.
           </p>
+          <details className={s.guide}>
+            <summary>How to create a Meta catalogue</summary>
+            <ol>
+              <li>Open Meta Commerce Manager → Catalogues → Create catalogue.</li>
+              <li>Connect the catalogue to your WhatsApp Business Account.</li>
+              <li>Copy the Catalogue ID and paste it below.</li>
+              <li>
+                Set <code>APP_WA_CATALOG_TOKEN</code> on the server (system user with{" "}
+                <code>catalog_management</code>).
+              </li>
+              <li>Run <b>Sync both ways</b> — text dishes are pushed to Meta automatically.</li>
+            </ol>
+          </details>
         </div>
         <div className={s.actions}>
           <Button variant="ghost" onClick={doPullOnly} disabled={syncing || !catalogId.trim()}>

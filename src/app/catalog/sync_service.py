@@ -7,8 +7,9 @@ from Meta (``meta_client.fetch_catalog_products``) and upserts one row per
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +18,12 @@ from app.catalog.meta_client import (
     CatalogReadError,
     CatalogWriteError,
     _dish_retailer_id,
+    build_catalog_item_data,
     fetch_catalog_products,
     push_products_batch,
 )
 from app.catalog.models import CatalogProduct
+from app.config import get_settings
 from app.identity.models import Restaurant
 
 logger = logging.getLogger(__name__)
@@ -36,6 +39,7 @@ class SyncResult:
     created: int = 0   # orderable dishes auto-created for catalogue products w/o a dish
     pushed: int = 0    # dishes pushed to Meta on outbound sync
     push_updated: int = 0
+    push_errors: list[str] = field(default_factory=list)
 
 
 async def _ensure_orderable_dishes(session: AsyncSession, *, restaurant_id: int, products) -> tuple[int, int]:
@@ -89,6 +93,47 @@ async def _ensure_orderable_dishes(session: AsyncSession, *, restaurant_id: int,
         ))
         created += 1
     return linked, created
+
+
+async def _mirror_dishes_to_catalog(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    dishes: list,
+) -> tuple[int, int]:
+    """Upsert local ``catalog_products`` from pushed dishes (don't wait for Meta re-pull)."""
+    now = datetime.now(timezone.utc)
+    added = updated = 0
+    for dish in dishes:
+        rid = (dish.catalog_retailer_id or "").strip()
+        if not rid or dish.price_aed is None:
+            continue
+        row = await session.scalar(
+            select(CatalogProduct).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.retailer_id == rid,
+            ).limit(1)
+        )
+        if row is None:
+            row = CatalogProduct(restaurant_id=restaurant_id, retailer_id=rid)
+            session.add(row)
+            added += 1
+        else:
+            updated += 1
+        row.name = dish.name
+        row.price_aed = dish.price_aed
+        row.currency = "AED"
+        row.availability = "in stock" if dish.is_available else "out of stock"
+        row.category = dish.category
+        row.is_active = dish.is_available
+        row.synced_at = now
+        row.raw = {
+            "retailer_id": rid,
+            "name": dish.name,
+            "price": f"{dish.price_aed:.2f} AED",
+            "source": "local_push",
+        }
+    return added, updated
 
 
 async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -> SyncResult:
@@ -159,12 +204,14 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
 
 
 async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> SyncResult:
-    """Push local dishes (without Meta link) to the restaurant's Meta catalogue."""
+    """Push local dishes to the restaurant's Meta catalogue."""
     from app.menu.models import Dish, Menu
 
     rest = await session.get(Restaurant, restaurant_id)
-    settings = (rest.settings or {}) if rest is not None else {}
-    catalog_id = (settings.get("catalog_id") or "").strip()
+    if rest is None:
+        return SyncResult()
+    settings_dict = rest.settings or {}
+    catalog_id = (settings_dict.get("catalog_id") or "").strip()
     if not catalog_id:
         raise CatalogWriteError("Set a Catalog ID before pushing to Meta.")
 
@@ -189,44 +236,63 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
         ).all()
     )
 
+    app_settings = get_settings()
+    base_url = app_settings.public_base_url.rstrip("/")
+    image_link = app_settings.catalog_placeholder_image_url
+    brand = rest.name or "Restaurant"
+
     requests: list[dict] = []
+    pushed_dishes: list[Dish] = []
     for dish in dishes:
         if not dish.name or dish.price_aed is None:
             continue
         rid = (dish.catalog_retailer_id or "").strip() or _dish_retailer_id(
             dish.id, dish.dish_number
         )
-        method = "UPDATE" if dish.catalog_retailer_id else "CREATE"
-        price_str = f"{dish.price_aed:.2f} AED"
-        requests.append(
-            {
-                "method": method,
-                "retailer_id": rid,
-                "data": {
-                    "name": dish.name[:100],
-                    "price": price_str,
-                    "currency": "AED",
-                    "availability": "in stock",
-                    "category": (dish.category or "Menu")[:100],
-                    "description": (dish.description or dish.name)[:5000],
-                },
-            }
-        )
-        if not dish.catalog_retailer_id:
+        had_rid = bool((dish.catalog_retailer_id or "").strip())
+        if not had_rid:
             dish.catalog_retailer_id = rid
+        method = "UPDATE" if had_rid else "CREATE"
+        product_link = f"{base_url}/r/{restaurant_id}/menu#{rid}"
+        data = build_catalog_item_data(
+            name=dish.name,
+            description=dish.description,
+            price_aed=Decimal(str(dish.price_aed)),
+            category=dish.category,
+            is_available=dish.is_available,
+            restaurant_name=brand,
+            product_link=product_link,
+            image_link=image_link,
+        )
+        requests.append({"method": method, "retailer_id": rid, "data": data})
+        pushed_dishes.append(dish)
 
     if not requests:
         return SyncResult()
 
-    await push_products_batch(catalog_id, requests)
+    try:
+        await push_products_batch(catalog_id, requests, wait_for_ingest=True)
+    except CatalogWriteError as exc:
+        result = SyncResult()
+        result.push_errors = [str(exc)]
+        raise
+
+    mirror_added, mirror_updated = await _mirror_dishes_to_catalog(
+        session, restaurant_id=restaurant_id, dishes=pushed_dishes
+    )
     result = SyncResult()
     result.pushed = sum(1 for r in requests if r["method"] == "CREATE")
     result.push_updated = sum(1 for r in requests if r["method"] == "UPDATE")
+    result.added = mirror_added
+    result.updated = mirror_updated
+    result.total_active = mirror_added + mirror_updated
     logger.info(
-        "catalog push restaurant %s: +%d ~%d",
+        "catalog push restaurant %s: +%d ~%d (mirror +%d ~%d)",
         restaurant_id,
         result.pushed,
         result.push_updated,
+        mirror_added,
+        mirror_updated,
     )
     return result
 
@@ -234,13 +300,19 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
 async def sync_full_bidirectional(
     session: AsyncSession, *, restaurant_id: int
 ) -> SyncResult:
-    """Pull from Meta, link dishes, then push any dish-only items to Meta."""
-    await sync_catalog_from_meta(session, restaurant_id=restaurant_id)
-    push = await push_dishes_to_meta(session, restaurant_id=restaurant_id)
-    # Re-pull so local mirror matches Meta after push.
+    """Bidirectional sync: pull Meta → link → push all dishes → mirror → re-pull."""
+    pull = await sync_catalog_from_meta(session, restaurant_id=restaurant_id)
+    try:
+        push = await push_dishes_to_meta(session, restaurant_id=restaurant_id)
+    except CatalogWriteError:
+        raise
     final = await sync_catalog_from_meta(session, restaurant_id=restaurant_id)
     final.pushed = push.pushed
     final.push_updated = push.push_updated
+    final.push_errors = push.push_errors
+    # Preserve first-pull link/create counts for the UI toast.
+    final.linked = pull.linked
+    final.created = pull.created
     return final
 
 
@@ -253,3 +325,23 @@ async def list_catalog_products(
         stmt = stmt.where(CatalogProduct.is_active.is_(True))
     stmt = stmt.order_by(CatalogProduct.category, CatalogProduct.name)
     return list((await session.scalars(stmt)).all())
+
+
+async def is_catalog_fully_synced(session: AsyncSession, *, restaurant_id: int) -> bool:
+    """True when every available priced dish is linked to an active catalogue row."""
+    from app.menu.unified import build_unified_menu
+
+    rest = await session.get(Restaurant, restaurant_id)
+    catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
+    if not catalog_id:
+        return False
+    unified = await build_unified_menu(
+        session, restaurant_id=restaurant_id, catalog_id=catalog_id
+    )
+    if unified.linked_count == 0:
+        return False
+    dish_only_available = [
+        i for i in unified.items
+        if i.link_status == "dish_only" and i.is_available and i.price_aed is not None
+    ]
+    return len(dish_only_available) == 0

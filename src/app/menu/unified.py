@@ -87,7 +87,8 @@ async def build_unified_menu(
         if cat is not None and rid:
             status = "linked"
             linked += 1
-            price = cat.price_aed if cat.price_aed is not None else dish.price_aed
+            # Dish price is source of truth — we push it to Meta on sync.
+            price = dish.price_aed if dish.price_aed is not None else cat.price_aed
         else:
             status = "dish_only"
             dish_only += 1
