@@ -1599,3 +1599,11 @@
   auto_publish_to_meta after the OKF refresh — separate try/commit so a Meta push failure can't undo the OKF
   refresh or fail the edit. No catalog_id/token still no-ops. 82 backend pass; boot+lint clean.
   Note: deleting a dish doesn't yet remove it from the Meta catalogue (push only CREATE/UPDATE) — minor, deferred.
+
+[2026-06-29 20:35 +04] feat(menu): delete-from-Meta — removing a dish unpublishes its WhatsApp card.
+  sync_service.unpublish_from_meta(): drops the local catalog_products mirror row + sends a Meta DELETE batch
+  (push_products_batch, method=DELETE, wait_for_ingest=False). Best-effort; no catalog_id/token no-ops.
+  Wired into delete_dish endpoint: capture dish.catalog_retailer_id before delete → unpublish after commit
+  (separate try/commit) → then _refresh_grounding (OKF + auto-publish remaining). Used module-level
+  push_products_batch so tests can monkeypatch. Tests: test_unpublish_sends_delete_and_drops_mirror,
+  test_unpublish_noop_without_catalog_id. 84 backend pass; boot+lint clean.

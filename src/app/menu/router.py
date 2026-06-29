@@ -25,7 +25,7 @@ from app.menu.schemas import (
 )
 from app.menu.service import MenuIncompleteError
 from app.menu.unified import UnifiedMenuOut, build_unified_menu
-from app.catalog.sync_service import auto_publish_to_meta
+from app.catalog.sync_service import auto_publish_to_meta, unpublish_from_meta
 from app.okf.producer import refresh_okf_for_restaurant
 
 
@@ -236,9 +236,17 @@ async def delete_dish(
         before={"dish_number": dish.dish_number, "name": dish.name},
     )
     rid = restaurant.id  # capture before expire_all expires the restaurant row
+    retailer_id = (dish.catalog_retailer_id or "").strip()  # capture before delete
     await session.delete(dish)
     await session.commit()
     session.expire_all()
+    # Remove it from the Meta catalogue too so it stops showing as a WhatsApp card.
+    if retailer_id:
+        try:
+            await unpublish_from_meta(session, restaurant_id=rid, retailer_id=retailer_id)
+            await session.commit()
+        except Exception:  # noqa: BLE001 — unpublish must never fail the delete
+            await session.rollback()
     await _refresh_grounding(session, rid)
 
 

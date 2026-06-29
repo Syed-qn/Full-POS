@@ -362,3 +362,34 @@ async def test_auto_publish_noop_without_catalog_id(db_session, restaurant):
     await db_session.commit()
     res = await sync_service.auto_publish_to_meta(db_session, restaurant_id=restaurant.id)
     assert (res.pushed, res.push_updated, res.added, res.updated) == (0, 0, 0, 0)
+
+
+async def test_unpublish_sends_delete_and_drops_mirror(db_session, restaurant, monkeypatch):
+    """Deleting a dish removes its product from Meta (DELETE batch) and the local mirror."""
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="r9", name="Gone",
+        price_aed=Decimal("5.00"), is_active=True, raw={},
+    ))
+    await db_session.commit()
+
+    sent: list[dict] = []
+    async def _fake_batch(catalog_id, requests, **kw):  # noqa: ARG001
+        sent.extend(requests)
+        return {"handles": []}
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+
+    ok = await sync_service.unpublish_from_meta(db_session, restaurant_id=restaurant.id, retailer_id="r9")
+    await db_session.commit()
+    assert ok is True
+    assert sent == [{"method": "DELETE", "retailer_id": "r9", "data": {}}]
+    assert await db_session.scalar(
+        select(CatalogProduct).where(CatalogProduct.retailer_id == "r9")
+    ) is None
+
+
+async def test_unpublish_noop_without_catalog_id(db_session, restaurant):
+    restaurant.settings = {k: v for k, v in (restaurant.settings or {}).items() if k != "catalog_id"}
+    await db_session.commit()
+    ok = await sync_service.unpublish_from_meta(db_session, restaurant_id=restaurant.id, retailer_id="rX")
+    assert ok is False

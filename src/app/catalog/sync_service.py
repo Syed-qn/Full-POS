@@ -335,6 +335,42 @@ async def auto_publish_to_meta(session: AsyncSession, *, restaurant_id: int) -> 
         return SyncResult()
 
 
+async def unpublish_from_meta(
+    session: AsyncSession, *, restaurant_id: int, retailer_id: str
+) -> bool:
+    """Best-effort: remove a single product from the Meta catalogue (and the local
+    mirror) when its dish is deleted, so it stops showing as a WhatsApp card. No
+    catalog_id/token or Meta error must ever fail the manager's delete. Caller commits.
+    Returns True if a Meta DELETE was sent."""
+    rid = (retailer_id or "").strip()
+    if not rid:
+        return False
+    rest = await session.get(Restaurant, restaurant_id)
+    catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
+
+    # Drop the local mirror row regardless (the dish is gone locally).
+    row = await session.scalar(
+        select(CatalogProduct).where(
+            CatalogProduct.restaurant_id == restaurant_id,
+            CatalogProduct.retailer_id == rid,
+        ).limit(1)
+    )
+    if row is not None:
+        await session.delete(row)
+
+    if not catalog_id:
+        return False
+    try:
+        await push_products_batch(
+            catalog_id, [{"method": "DELETE", "retailer_id": rid, "data": {}}],
+            wait_for_ingest=False,
+        )
+        return True
+    except (CatalogReadError, CatalogWriteError) as exc:
+        logger.warning("Meta unpublish skipped for restaurant %s rid %s: %s", restaurant_id, rid, exc)
+        return False
+
+
 async def list_catalog_products(
     session: AsyncSession, *, restaurant_id: int, active_only: bool = False
 ) -> list[CatalogProduct]:
