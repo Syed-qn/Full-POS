@@ -230,6 +230,18 @@ async def push_products_batch(
     """
     if not requests:
         return {"handles": [], "validation_status": []}
+    # Meta rejects the ENTIRE batch if any retailer_id repeats. Dedupe defensively at
+    # this single chokepoint (last occurrence wins) so no caller can ever trigger
+    # "Duplicate retailer_id in batch api call", regardless of upstream data.
+    deduped: dict[str, dict] = {}
+    for r in requests:
+        deduped[str(r.get("retailer_id") or "")] = r
+    if len(deduped) < len(requests):
+        logger.warning(
+            "items_batch: dropped %d duplicate retailer_id request(s) before push",
+            len(requests) - len(deduped),
+        )
+    requests = list(deduped.values())
     settings = get_settings()
     token = settings.wa_catalog_token.get_secret_value()
     if not token:
