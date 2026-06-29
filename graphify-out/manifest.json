@@ -145,9 +145,9 @@
     "semantic_hash": "8cff2be6702590350a39663b00cb4bbd"
   },
   "frontend/src/App.tsx": {
-    "mtime": 1782679743.2227333,
-    "ast_hash": "a2db36f29757e07f02568d245f034504",
-    "semantic_hash": "a2db36f29757e07f02568d245f034504"
+    "mtime": 1782681788.973374,
+    "ast_hash": "fcc74a32c7a37271b748f8c4392dc471",
+    "semantic_hash": "fcc74a32c7a37271b748f8c4392dc471"
   },
   "frontend/src/components/AppShell.tsx": {
     "mtime": 1782052600.3685367,
@@ -235,9 +235,9 @@
     "semantic_hash": "8129f0d1c2875679388114a5b1937eb8"
   },
   "frontend/src/components/NavSidebar.tsx": {
-    "mtime": 1782679744.7395992,
-    "ast_hash": "8f9f6b62c9f6f9c58e9c2b0bf2bde28f",
-    "semantic_hash": "8f9f6b62c9f6f9c58e9c2b0bf2bde28f"
+    "mtime": 1782705026.534128,
+    "ast_hash": "3f3be483dfd5f24eafc44375d1f31b0f",
+    "semantic_hash": "3f3be483dfd5f24eafc44375d1f31b0f"
   },
   "frontend/src/components/RiderCard.test.tsx": {
     "mtime": 1782250118.3524137,
@@ -395,9 +395,9 @@
     "semantic_hash": "086111f11b202d6c7f4e00e7f24c4d17"
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1782679610.3771915,
-    "ast_hash": "a9c5818196248f2e5bf198a3ad18fa1e",
-    "semantic_hash": "a9c5818196248f2e5bf198a3ad18fa1e"
+    "mtime": 1782681681.570094,
+    "ast_hash": "452fb5e31ce053c95e9f9c3fab4307e6",
+    "semantic_hash": "452fb5e31ce053c95e9f9c3fab4307e6"
   },
   "frontend/src/lib/usePoll.test.tsx": {
     "mtime": 1780741775.740275,
@@ -645,9 +645,9 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "src/app/conversation/engine.py": {
-    "mtime": 1782679017.584094,
-    "ast_hash": "e6bacf5cd9d8d190fa5b7d04a1acc915",
-    "semantic_hash": "e6bacf5cd9d8d190fa5b7d04a1acc915"
+    "mtime": 1782681381.042809,
+    "ast_hash": "f2d99c5a5ad0b4c1d5d266ad5b9b5ec9",
+    "semantic_hash": "f2d99c5a5ad0b4c1d5d266ad5b9b5ec9"
   },
   "src/app/conversation/hours.py": {
     "mtime": 1781260175.814442,
@@ -1055,9 +1055,9 @@
     "semantic_hash": "8aa149ea37c69c53196a6bd3757b8fc5"
   },
   "src/app/ordering/service.py": {
-    "mtime": 1782678733.3280282,
-    "ast_hash": "3d2a34a7bf4a342481209c48bd8ba0be",
-    "semantic_hash": "3d2a34a7bf4a342481209c48bd8ba0be"
+    "mtime": 1782681327.978607,
+    "ast_hash": "dc70a1a23925a6dcc99b70de4bb80227",
+    "semantic_hash": "dc70a1a23925a6dcc99b70de4bb80227"
   },
   "src/app/outbox/__init__.py": {
     "mtime": 1780723797.5527947,
@@ -2100,9 +2100,9 @@
     "semantic_hash": "4be5c139c24715d1dafdd2a4831f169d"
   },
   "understanding.txt": {
-    "mtime": 1782680051.098602,
-    "ast_hash": "8535abe66b6544d860a08a5f781a8b10",
-    "semantic_hash": "8535abe66b6544d860a08a5f781a8b10"
+    "mtime": 1782705140.284872,
+    "ast_hash": "b1cf80848ae70ae601ead9ceffc7dcbd",
+    "semantic_hash": "b1cf80848ae70ae601ead9ceffc7dcbd"
   },
   "alembic/versions/a1b2c3d4e5f6_backfill_customer_order_stats.py": {
     "mtime": 1782052600.3461096,
@@ -2240,9 +2240,9 @@
     "semantic_hash": "49e54b1b2f3450c65767b6958f23102d"
   },
   "src/app/dispatch/rider_actions.py": {
-    "mtime": 1782250118.3773923,
-    "ast_hash": "4ea7df30b5e6686dfe723f9c50f2ea5f",
-    "semantic_hash": "4ea7df30b5e6686dfe723f9c50f2ea5f"
+    "mtime": 1782681362.1786633,
+    "ast_hash": "1e447079d7df1d32996e4a4f6494630b",
+    "semantic_hash": "1e447079d7df1d32996e4a4f6494630b"
   },
   "src/app/dispatch/rider_app.py": {
     "mtime": 1782067733.9096854,
@@ -2900,9 +2900,9 @@
     "semantic_hash": "e7fd54d2d8afe4317aff29bf3ef12a8f"
   },
   "src/app/ordering/payments.py": {
-    "mtime": 1782678705.8929205,
-    "ast_hash": "725f5eb427cb87a0c197a42f549efbba",
-    "semantic_hash": "725f5eb427cb87a0c197a42f549efbba"
+    "mtime": 1782681270.4762716,
+    "ast_hash": "efed8bbfe4896879afaa0f9c0ad49369",
+    "semantic_hash": "efed8bbfe4896879afaa0f9c0ad49369"
   },
   "tests/ordering/test_wallet_coupon_apply.py": {
     "mtime": 1782678883.285605,
@@ -2940,14 +2940,14 @@
     "semantic_hash": "6033b63ea72e4a49fa29206309258775"
   },
   "frontend/src/components/TicketDetailDrawer.test.tsx": {
-    "mtime": 1782679698.3186429,
-    "ast_hash": "1a89434175b31bbc5845334b57fa2d4f",
-    "semantic_hash": "1a89434175b31bbc5845334b57fa2d4f"
+    "mtime": 1782680875.2092247,
+    "ast_hash": "0395e3c93401cc1773794d1ca44dcae8",
+    "semantic_hash": "0395e3c93401cc1773794d1ca44dcae8"
   },
   "frontend/src/components/TicketDetailDrawer.tsx": {
-    "mtime": 1782679672.607713,
-    "ast_hash": "accf1d6bf04f3d05ebe76a60116584bd",
-    "semantic_hash": "accf1d6bf04f3d05ebe76a60116584bd"
+    "mtime": 1782680699.0457401,
+    "ast_hash": "a0fe2f3e832857b6351dd03d9a0555ce",
+    "semantic_hash": "a0fe2f3e832857b6351dd03d9a0555ce"
   },
   "frontend/src/lib/ticketsApi.test.ts": {
     "mtime": 1782679641.6852732,
@@ -2970,8 +2970,28 @@
     "semantic_hash": "9260dc453396b10675853c017a832283"
   },
   "frontend/src/screens/TicketsScreen.tsx": {
-    "mtime": 1782679713.1288593,
-    "ast_hash": "f62f4e39fadd750313febc135354f468",
-    "semantic_hash": "f62f4e39fadd750313febc135354f468"
+    "mtime": 1782705287.4355452,
+    "ast_hash": "41bd8bf3c0767b52bacc76270e69a538",
+    "semantic_hash": "41bd8bf3c0767b52bacc76270e69a538"
+  },
+  "tests/ordering/test_wallet_spend_flow.py": {
+    "mtime": 1782681624.6958234,
+    "ast_hash": "7d8d35dc1633168ad9fda20d90593198",
+    "semantic_hash": "7d8d35dc1633168ad9fda20d90593198"
+  },
+  "frontend/src/lib/couponsApi.ts": {
+    "mtime": 1782681663.65394,
+    "ast_hash": "a20b75f70747e04c4049da930f797df1",
+    "semantic_hash": "a20b75f70747e04c4049da930f797df1"
+  },
+  "frontend/src/screens/CouponsScreen.test.tsx": {
+    "mtime": 1782705042.7376146,
+    "ast_hash": "cd87d6bb23dfa572aa4f3d51a8c3d544",
+    "semantic_hash": "cd87d6bb23dfa572aa4f3d51a8c3d544"
+  },
+  "frontend/src/screens/CouponsScreen.tsx": {
+    "mtime": 1782681712.4674842,
+    "ast_hash": "2bc5f98c9188cabb01581a14182e2ca6",
+    "semantic_hash": "2bc5f98c9188cabb01581a14182e2ca6"
   }
 }
