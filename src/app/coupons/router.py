@@ -9,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.coupons import service as coupon_service
 from app.coupons.models import Coupon
-from app.coupons.schemas import CouponCreateIn, CouponOut
+from app.coupons.schemas import CouponCreateIn, CouponIssueIn, CouponOut
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
+from app.ordering.models import Customer
 
 router = APIRouter(prefix="/api/v1/coupons", tags=["coupons"])
 
@@ -42,6 +43,33 @@ async def create_coupon(
         )
     except coupon_service.CouponError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+    return CouponOut.model_validate(coupon)
+
+
+@router.post("/issue", response_model=CouponOut, status_code=201)
+async def issue_coupon_to_customer(
+    body: CouponIssueIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> CouponOut:
+    """Issue a single-use coupon to a specific customer (e.g. from the chat).
+    Returns the coupon incl. its code so the manager can share it."""
+    cust = await session.scalar(
+        select(Customer).where(
+            Customer.id == body.customer_id, Customer.restaurant_id == restaurant.id
+        )
+    )
+    if cust is None:
+        raise HTTPException(status_code=404, detail="customer not found")
+    coupon = await coupon_service.issue_coupon(
+        session,
+        restaurant_id=restaurant.id,
+        customer_id=body.customer_id,
+        order_id=None,
+        discount_aed=body.discount_aed,
+        validity_days=body.validity_days,
+    )
     await session.commit()
     return CouponOut.model_validate(coupon)
 

@@ -18,6 +18,12 @@ class CouponCreateIn(BaseModel):
     code: str | None = None
 
 
+class CouponIssueIn(BaseModel):
+    customer_id: int
+    discount_aed: Decimal = Field(gt=0)
+    validity_days: int = Field(default=30, ge=1)
+
+
 class CouponOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.conversation import service
 from app.conversation.schemas import (
+    ChatCustomerContextOut,
+    ChatOrderOut,
     DashboardConversationOut,
     DashboardMessageOut,
     SendMessageIn,
@@ -104,6 +106,71 @@ async def list_messages(
         )
         for m in messages
     ]
+
+
+@router.get("/{conversation_id}/context", response_model=ChatCustomerContextOut)
+async def conversation_context(
+    conversation_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> ChatCustomerContextOut:
+    """Customer context for the chat: wallet balance + recent orders, so a manager
+    can issue a coupon / adjust the wallet knowing exactly which orders/details."""
+    from sqlalchemy import select
+
+    from app.conversation.models import Conversation
+    from app.ordering.models import Customer, Order
+    from app.wallet import service as wallet_service
+
+    conv = await session.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.restaurant_id == restaurant.id,
+        )
+    )
+    if conv is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation not found")
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant.id, Customer.phone == conv.phone
+        )
+    )
+    zero = "0.00"
+    if customer is None:
+        return ChatCustomerContextOut(
+            customer_id=None, name=None, phone=conv.phone,
+            wallet_balance_aed=zero, wallet_available_aed=zero,
+            wallet_status=None, recent_orders=[],
+        )
+
+    acc = await wallet_service.get_or_create_account(
+        session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    orders = (
+        await session.scalars(
+            select(Order)
+            .where(Order.customer_id == customer.id, Order.restaurant_id == restaurant.id)
+            .order_by(Order.id.desc())
+            .limit(5)
+        )
+    ).all()
+    return ChatCustomerContextOut(
+        customer_id=customer.id,
+        name=customer.name,
+        phone=conv.phone,
+        wallet_balance_aed=str(await wallet_service.balance(session, account_id=acc.id)),
+        wallet_available_aed=str(await wallet_service.available(session, account_id=acc.id)),
+        wallet_status=acc.status,
+        recent_orders=[
+            ChatOrderOut(
+                id=o.id, order_number=o.order_number, status=o.status,
+                total_aed=str(o.total),
+                created_at=o.created_at.isoformat() if o.created_at else "",
+            )
+            for o in orders
+        ],
+    )
 
 
 @router.post("/{conversation_id}/takeover", status_code=status.HTTP_204_NO_CONTENT)

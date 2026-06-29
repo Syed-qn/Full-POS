@@ -8,3 +8,14 @@ export async function getWallet(customerId: number): Promise<WalletBalance> {
 export async function getWalletEntries(customerId: number): Promise<WalletEntry[]> {
   return apiClient.get<WalletEntry[]>(`/api/v1/wallet/${customerId}/entries`);
 }
+
+export async function creditWallet(
+  customerId: number,
+  amountAed: string,
+  reason: string,
+): Promise<WalletBalance> {
+  return apiClient.post<WalletBalance>(`/api/v1/wallet/${customerId}/credit`, {
+    amount_aed: amountAed,
+    reason,
+  });
+}

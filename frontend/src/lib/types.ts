@@ -310,6 +310,24 @@ export interface WalletEntry {
   created_at: string;
 }
 
+export interface ChatOrder {
+  id: number;
+  order_number: string;
+  status: string;
+  total_aed: string;
+  created_at: string;
+}
+
+export interface ChatCustomerContext {
+  customer_id: number | null;
+  name: string | null;
+  phone: string;
+  wallet_balance_aed: string;
+  wallet_available_aed: string;
+  wallet_status: string | null;
+  recent_orders: ChatOrder[];
+}
+
 export type CouponDiscountType = "fixed" | "percent";
 export type CouponKind = "single_use" | "multi_use";
 

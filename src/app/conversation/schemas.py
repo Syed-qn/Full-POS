@@ -55,3 +55,22 @@ class DashboardMessageOut(BaseModel):
     type: str
     payload: dict
     ts: int
+
+
+# ── In-chat customer context (wallet + recent orders, for issue-coupon/edit-wallet) ──
+class ChatOrderOut(BaseModel):
+    id: int
+    order_number: str
+    status: str
+    total_aed: str
+    created_at: str
+
+
+class ChatCustomerContextOut(BaseModel):
+    customer_id: int | None
+    name: str | None
+    phone: str
+    wallet_balance_aed: str
+    wallet_available_aed: str
+    wallet_status: str | None
+    recent_orders: list[ChatOrderOut]

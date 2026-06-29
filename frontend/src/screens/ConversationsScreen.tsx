@@ -4,6 +4,7 @@ import { ConversationRow } from "../components/ConversationRow";
 import { MessageBubble } from "../components/MessageBubble";
 import { SectionBanner } from "../components/SectionBanner";
 import { fetchConversations, fetchMessages, sendMessage, setTakeover } from "../lib/conversationsApi";
+import { ChatCustomerPanel } from "../components/ChatCustomerPanel";
 import { usePollingRefresh } from "../lib/usePollingRefresh";
 import type { ConversationOut, MessageOut } from "../lib/types";
 import s from "./ConversationsScreen.module.css";
@@ -186,6 +187,16 @@ export function ConversationsScreen() {
                 {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
               </Button>
             </div>
+            {tab === "customer" && (
+              <ChatCustomerPanel
+                conversationId={activeId}
+                onSendToCustomer={(text) => {
+                  if (activeId !== null) sendMessage(activeId, text).then(() => {
+                    fetchMessages(activeId).then(setMessages);
+                  });
+                }}
+              />
+            )}
             {takeover && (
               <SectionBanner tone="warning">You are controlling this conversation.</SectionBanner>
             )}

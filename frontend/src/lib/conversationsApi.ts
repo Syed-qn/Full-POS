@@ -1,6 +1,20 @@
 import { apiClient, ApiError } from "./apiClient";
 import fixtures from "./fixtures/conversations.json";
-import type { ConversationOut, MessageOut } from "./types";
+import type { ChatCustomerContext, ConversationOut, MessageOut } from "./types";
+
+export async function fetchConversationContext(
+  conversationId: number,
+): Promise<ChatCustomerContext | null> {
+  try {
+    return await apiClient.get<ChatCustomerContext>(
+      `/api/v1/conversations/${conversationId}/context`,
+    );
+  } catch (err) {
+    if (!import.meta.env.DEV) throw err;
+    if (err instanceof ApiError && err.status !== 404) throw err;
+    return null; // endpoint not available in fixture/dev mode
+  }
+}
 
 type Fix = { conversations: ConversationOut[]; messages: Record<string, MessageOut[]> };
 const FIX = fixtures as Fix;

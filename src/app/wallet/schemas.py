@@ -1,7 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class WalletCreditIn(BaseModel):
+    amount_aed: Decimal = Field(gt=0)
+    reason: str = Field(min_length=1)
 
 
 class WalletBalanceOut(BaseModel):

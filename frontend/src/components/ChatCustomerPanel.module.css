@@ -1,0 +1,86 @@
+.panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-base);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-default);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.orders {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+  color: var(--text-default);
+}
+
+.code {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.note {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.msg {
+  font-size: 13px;
+  color: var(--accent, #166534);
+  margin: 0;
+}
