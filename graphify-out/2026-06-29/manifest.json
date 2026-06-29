@@ -200,9 +200,9 @@
     "semantic_hash": "24496898631c503e0402650112d2b365"
   },
   "frontend/src/components/DishCard.tsx": {
-    "mtime": 1782236262.3556905,
-    "ast_hash": "7a97eb2c707b479fb737929acb239584",
-    "semantic_hash": "7a97eb2c707b479fb737929acb239584"
+    "mtime": 1782751961.394321,
+    "ast_hash": "f81c0b545f460fb252a3e0a0bfc9deb8",
+    "semantic_hash": "f81c0b545f460fb252a3e0a0bfc9deb8"
   },
   "frontend/src/components/KPITile.test.tsx": {
     "mtime": 1780741775.7052464,
@@ -475,9 +475,9 @@
     "semantic_hash": "7ad06c1c5feab151b52f98ecc1f0b95c"
   },
   "frontend/src/screens/MenuManagerScreen.tsx": {
-    "mtime": 1782750360.8507366,
-    "ast_hash": "4477016905fbd34f272537fff140730b",
-    "semantic_hash": "4477016905fbd34f272537fff140730b"
+    "mtime": 1782752058.5523298,
+    "ast_hash": "478bb28a097730a02ca092746665ff40",
+    "semantic_hash": "478bb28a097730a02ca092746665ff40"
   },
   "frontend/src/screens/NewOrderScreen.test.tsx": {
     "mtime": 1782541230.8373308,
@@ -645,9 +645,9 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "src/app/conversation/engine.py": {
-    "mtime": 1782748320.535332,
-    "ast_hash": "cb5113f88d50af444c1fdf37ee06cc53",
-    "semantic_hash": "cb5113f88d50af444c1fdf37ee06cc53"
+    "mtime": 1782763021.2337048,
+    "ast_hash": "096ed6c003c5d1d260e7d0c057965408",
+    "semantic_hash": "096ed6c003c5d1d260e7d0c057965408"
   },
   "src/app/conversation/hours.py": {
     "mtime": 1781260175.814442,
@@ -1035,9 +1035,9 @@
     "semantic_hash": "aa198a32b3ded00fa6f272f272a00461"
   },
   "src/app/ordering/matching.py": {
-    "mtime": 1782541230.858094,
-    "ast_hash": "4a9d44f670b19eee6d5b1484bd6bd7f6",
-    "semantic_hash": "4a9d44f670b19eee6d5b1484bd6bd7f6"
+    "mtime": 1782761046.501657,
+    "ast_hash": "89984c55c6b1a1c96b0c08fdec8d17ed",
+    "semantic_hash": "89984c55c6b1a1c96b0c08fdec8d17ed"
   },
   "src/app/ordering/models.py": {
     "mtime": 1782715613.4702578,
@@ -1055,9 +1055,9 @@
     "semantic_hash": "3f11eb9378bdcb55fc18eb917ab12356"
   },
   "src/app/ordering/service.py": {
-    "mtime": 1782740439.1922195,
-    "ast_hash": "ac3f330ebb21a332a14f72849048d500",
-    "semantic_hash": "ac3f330ebb21a332a14f72849048d500"
+    "mtime": 1782762009.6256182,
+    "ast_hash": "162edac249bd2021986d2b3df45c61ce",
+    "semantic_hash": "162edac249bd2021986d2b3df45c61ce"
   },
   "src/app/outbox/__init__.py": {
     "mtime": 1780723797.5527947,
@@ -1640,9 +1640,9 @@
     "semantic_hash": "920275236ae836e1f1db4bfc5e3aaea9"
   },
   "tests/ordering/test_matching.py": {
-    "mtime": 1782541230.8633997,
-    "ast_hash": "17ee65148273efdd5afa30625e69042e",
-    "semantic_hash": "17ee65148273efdd5afa30625e69042e"
+    "mtime": 1782761046.5027516,
+    "ast_hash": "30bac1673b9b53249fba6a8db1843e82",
+    "semantic_hash": "30bac1673b9b53249fba6a8db1843e82"
   },
   "tests/ordering/test_modification.py": {
     "mtime": 1780741775.8180819,
@@ -2100,9 +2100,9 @@
     "semantic_hash": "4be5c139c24715d1dafdd2a4831f169d"
   },
   "understanding.txt": {
-    "mtime": 1782750734.0396552,
-    "ast_hash": "de385d9cdda199372deac347f0f824a1",
-    "semantic_hash": "de385d9cdda199372deac347f0f824a1"
+    "mtime": 1782762049.5785723,
+    "ast_hash": "e02ed0cf1ec8dfd895f9d62b6971dd7d",
+    "semantic_hash": "e02ed0cf1ec8dfd895f9d62b6971dd7d"
   },
   "alembic/versions/a1b2c3d4e5f6_backfill_customer_order_stats.py": {
     "mtime": 1782052600.3461096,
@@ -2525,9 +2525,9 @@
     "semantic_hash": "f3a28d55a3ddae92129780bc81e36be6"
   },
   "tests/conversation/test_engine_draft_lifecycle.py": {
-    "mtime": 1782465330.946463,
-    "ast_hash": "13629102affe46c31b420ea9eab64e44",
-    "semantic_hash": "13629102affe46c31b420ea9eab64e44"
+    "mtime": 1782763110.4003465,
+    "ast_hash": "1d08e674004bf5e9b6699ed58ac7c16c",
+    "semantic_hash": "1d08e674004bf5e9b6699ed58ac7c16c"
   },
   "tests/conversation/test_engine_drink_size.py": {
     "mtime": 1782250118.38875,
@@ -3060,9 +3060,9 @@
     "semantic_hash": "97920006308345b72067bfdf924bbe97"
   },
   "src/app/catalog/meta_client.py": {
-    "mtime": 1782745294.870192,
-    "ast_hash": "06a8fee635f4dd2fbfb88cdf19bfaee3",
-    "semantic_hash": "06a8fee635f4dd2fbfb88cdf19bfaee3"
+    "mtime": 1782751720.360239,
+    "ast_hash": "73aeb8f1f2629a74bbd36f5a07d63dfc",
+    "semantic_hash": "73aeb8f1f2629a74bbd36f5a07d63dfc"
   },
   "src/app/catalog/models.py": {
     "mtime": 1782712769.0710473,
@@ -3070,19 +3070,19 @@
     "semantic_hash": "83ebdc194dc6c9af60aec0ee121a5843"
   },
   "src/app/catalog/sync_service.py": {
-    "mtime": 1782750840.988419,
-    "ast_hash": "3d7bc5ae633dc64019eda260ef3ecd21",
-    "semantic_hash": "3d7bc5ae633dc64019eda260ef3ecd21"
+    "mtime": 1782751620.8407235,
+    "ast_hash": "4f2690cc3f0b2abd2ce23a3999099d3c",
+    "semantic_hash": "4f2690cc3f0b2abd2ce23a3999099d3c"
   },
   "tests/catalog/test_catalog_mode_isolation.py": {
-    "mtime": 1782715268.4550257,
-    "ast_hash": "91edac3a73b5d7ffbf788a66b9199e63",
-    "semantic_hash": "91edac3a73b5d7ffbf788a66b9199e63"
+    "mtime": 1782761908.138639,
+    "ast_hash": "acdc20d48d8e342b841235ddd808eea8",
+    "semantic_hash": "acdc20d48d8e342b841235ddd808eea8"
   },
   "tests/catalog/test_catalog_sync.py": {
-    "mtime": 1782750865.0502682,
-    "ast_hash": "c289c3aa6ebfc2aa79ac52275044806d",
-    "semantic_hash": "c289c3aa6ebfc2aa79ac52275044806d"
+    "mtime": 1782751649.6523492,
+    "ast_hash": "333087e7d044b1ecad4f0f52eee4de8f",
+    "semantic_hash": "333087e7d044b1ecad4f0f52eee4de8f"
   },
   "tests/catalog/test_mode_switch.py": {
     "mtime": 1782712769.0976944,
@@ -3225,9 +3225,9 @@
     "semantic_hash": "4aaee367aefd3595aaecec59b2c26357"
   },
   "frontend/src/components/UnifiedMenuPanel.tsx": {
-    "mtime": 1782750437.9029002,
-    "ast_hash": "25ee82e9dc3961ce23eabdc3569d4ee4",
-    "semantic_hash": "25ee82e9dc3961ce23eabdc3569d4ee4"
+    "mtime": 1782751884.3066752,
+    "ast_hash": "9219c0a7f662b4ff995334f1822b519b",
+    "semantic_hash": "9219c0a7f662b4ff995334f1822b519b"
   },
   "frontend/src/lib/onboardingApi.ts": {
     "mtime": 1782742822.2948813,
