@@ -127,6 +127,8 @@ class CustomerProfileOut(BaseModel):
     usual_order_time: str | None = None
     marketing_opted_in: bool
     tags: dict
+    loyalty_tier: str | None = None
+    loyalty_tier_locked: bool = False
     addresses: list[AddressDetailOut]
     recent_orders: list[OrderSummaryOut]
 

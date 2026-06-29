@@ -189,6 +189,21 @@ def _is_complaint(text: str | None) -> bool:
     return any(p in t for p in phrases)
 
 
+def _is_tier_query(text: str | None) -> bool:
+    """True for 'what tier am I / how do I reach Gold / my loyalty status' questions."""
+    if not text:
+        return False
+    t = text.strip().lower()
+    if not t or len(t) > 80:
+        return False
+    phrases = (
+        "my tier", "what tier", "loyalty", "reach gold", "reach silver", "become gold",
+        "how to reach", "my status", "member status", "am i gold", "am i silver",
+        "next tier", "loyalty status", "my membership", "vip status",
+    )
+    return any(p in t for p in phrases)
+
+
 def _is_claim_coupon(text: str | None) -> bool:
     """True when the customer asks to use/claim a coupon by intent (not the code).
 
@@ -1974,6 +1989,46 @@ async def _handle_complaint(
             },
             idempotency_key=f"ticket:{ticket.id}:mgr-alert",
         )
+
+
+async def _handle_tier_query(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> None:
+    """Answer 'what tier am I / how do I reach Gold' from the restaurant's loyalty
+    settings — deterministic, no LLM. No-op-to-AI if loyalty disabled / no customer."""
+    from app.loyalty.service import tier_progress_text
+    from app.ordering.models import Customer
+
+    settings = (restaurant.settings or {}) if restaurant else {}
+    if not (settings.get("loyalty", {}) or {}).get("enabled"):
+        await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
+        return
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id, Customer.phone == inbound.from_phone
+        )
+    )
+    if customer is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="tier-no-customer",
+            body="Place your first order to start earning loyalty rewards! 😊",
+        )
+        return
+    body = tier_progress_text(
+        settings, total_orders=customer.total_orders, total_spend=customer.total_spend,
+        last_order_at=customer.last_order_at,
+    )
+    if customer.loyalty_tier:
+        body = f"You're a {customer.loyalty_tier.title()} member 🌟\n{body}"
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="tier-progress", body=body,
+    )
 
 
 async def _handle_status_query(
@@ -4380,6 +4435,11 @@ async def handle_inbound(
             await _handle_restaurant_location_request(
                 session, conv, inbound, restaurant_id, restaurant
             )
+            return
+        # "What tier am I / how do I reach Gold" → deterministic answer from loyalty
+        # settings (falls through to AI if loyalty is disabled).
+        if _is_tier_query(text):
+            await _handle_tier_query(session, conv, inbound, restaurant_id, restaurant)
             return
         # Coupon code typed at the order-summary step → apply it. We only treat the
         # message as a coupon when it EXACTLY matches a code issued to this customer,

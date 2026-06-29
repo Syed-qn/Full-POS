@@ -1,7 +1,6 @@
 import copy
 from decimal import Decimal
 
-from sqlalchemy import select
 
 from app.dispatch.delivery import advance_delivery
 from app.identity.models import DEFAULT_SETTINGS, Restaurant

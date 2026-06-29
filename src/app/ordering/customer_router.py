@@ -148,6 +148,8 @@ async def get_customer_profile(
         usual_order_time=usual_order_time,
         marketing_opted_in=not opted_out,
         tags=customer.tags if customer.tags is not None else {},
+        loyalty_tier=customer.loyalty_tier,
+        loyalty_tier_locked=customer.loyalty_tier_locked,
         addresses=[
             AddressDetailOut(
                 id=a.id,
@@ -171,6 +173,37 @@ async def get_customer_profile(
             for o in recent_orders_rows
         ],
     )
+
+
+@router.post("/{customer_id}/loyalty-tier", response_model=CustomerProfileOut)
+async def set_loyalty_tier(
+    customer_id: int,
+    body: dict,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> CustomerProfileOut:
+    """Manager override: set+lock a customer's tier, or unlock to resume auto-recompute.
+    Body: {"tier": "gold"|"silver"|"bronze"|null} to set/lock, or {"unlock": true}."""
+    from app.loyalty import service as loyalty
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.id == customer_id, Customer.restaurant_id == restaurant.id
+        )
+    )
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    try:
+        if body.get("unlock"):
+            await loyalty.unlock_tier(session, customer=customer, created_by=f"mgr:{restaurant.id}")
+        else:
+            await loyalty.set_manual_tier(
+                session, customer=customer, tier=body.get("tier"), created_by=f"mgr:{restaurant.id}"
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+    return await get_customer_profile(customer_id, restaurant=restaurant, session=session)
 
 
 @router.patch("/{customer_id}", response_model=CustomerDetailOut)
