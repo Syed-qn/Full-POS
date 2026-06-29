@@ -35,6 +35,9 @@ describe("CustomerProfileScreen wallet editing", () => {
     vi.mocked(walletApi.creditWallet).mockResolvedValue({
       customer_id: 5, balance_aed: "20.00", available_aed: "20.00", status: "active",
     });
+    vi.mocked(walletApi.debitWallet).mockResolvedValue({
+      customer_id: 5, balance_aed: "0.00", available_aed: "0.00", status: "active",
+    });
   });
 
   it("shows an Add credit control and disables it until an amount is entered", async () => {
@@ -54,6 +57,17 @@ describe("CustomerProfileScreen wallet editing", () => {
     fireEvent.click(screen.getByRole("button", { name: /add credit/i }));
     await waitFor(() =>
       expect(vi.mocked(walletApi.creditWallet)).toHaveBeenCalledWith(5, "20", "goodwill"),
+    );
+  });
+
+  it("deducts from the wallet on Deduct click", async () => {
+    renderScreen();
+    await waitFor(() => screen.getByLabelText("credit amount"));
+    fireEvent.change(screen.getByLabelText("credit amount"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("credit reason"), { target: { value: "correction" } });
+    fireEvent.click(screen.getByRole("button", { name: /deduct/i }));
+    await waitFor(() =>
+      expect(vi.mocked(walletApi.debitWallet)).toHaveBeenCalledWith(5, "5", "correction"),
     );
   });
 });

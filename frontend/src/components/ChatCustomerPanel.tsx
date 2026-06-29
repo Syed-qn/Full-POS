@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { fetchConversationContext } from "../lib/conversationsApi";
 import { issueCouponToCustomer } from "../lib/couponsApi";
-import { creditWallet } from "../lib/walletApi";
+import { creditWallet, debitWallet } from "../lib/walletApi";
 import type { ChatCustomerContext } from "../lib/types";
 import s from "./ChatCustomerPanel.module.css";
 
@@ -60,14 +60,15 @@ export function ChatCustomerPanel({
     }
   }
 
-  async function adjustWallet() {
+  async function adjustWallet(kind: "credit" | "debit") {
     setBusy(true);
     setMsg(null);
     try {
-      const w = await creditWallet(cid, walletAmt, walletReason || "manager adjustment");
+      const fn = kind === "credit" ? creditWallet : debitWallet;
+      const w = await fn(cid, walletAmt, walletReason || "manager adjustment");
       setWalletAmt("");
       setWalletReason("");
-      setMsg(`Wallet credited. New balance AED ${w.balance_aed}.`);
+      setMsg(`Wallet updated. New balance AED ${w.balance_aed}.`);
       reload();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not adjust wallet.");
@@ -118,7 +119,7 @@ export function ChatCustomerPanel({
           </div>
 
           <div className={s.section}>
-            <span className={s.label}>Add wallet credit</span>
+            <span className={s.label}>Adjust wallet</span>
             <div className={s.row}>
               <input
                 type="number" min="0" step="0.01" placeholder="amount"
@@ -130,8 +131,11 @@ export function ChatCustomerPanel({
                 value={walletReason} onChange={(e) => setWalletReason(e.target.value)}
                 aria-label="wallet reason"
               />
-              <Button disabled={busy || !(Number(walletAmt) > 0)} onClick={adjustWallet}>
+              <Button disabled={busy || !(Number(walletAmt) > 0)} onClick={() => adjustWallet("credit")}>
                 Credit
+              </Button>
+              <Button variant="ghost" disabled={busy || !(Number(walletAmt) > 0)} onClick={() => adjustWallet("debit")}>
+                Deduct
               </Button>
             </div>
           </div>

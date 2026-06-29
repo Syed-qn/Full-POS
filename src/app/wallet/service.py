@@ -143,6 +143,62 @@ async def credit(
     return entry
 
 
+async def debit(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    customer_id: int,
+    amount: Decimal,
+    idempotency_key: str,
+    type: str = "manual_adjust",
+    reason_note: str | None = None,
+    created_by: str,
+) -> WalletEntry:
+    """Manually deduct posted credit (manager adjustment / correction). Idempotent.
+
+    Never lets the balance go negative — caps at the available balance, raising
+    InsufficientFunds if the requested amount exceeds it. Caller commits.
+    """
+    if amount <= _ZERO:
+        raise WalletError("debit amount must be positive")
+    existing = await _existing_by_key(session, idempotency_key)
+    if existing is not None:
+        return existing
+    acc = await get_or_create_account(
+        session, restaurant_id=restaurant_id, customer_id=customer_id
+    )
+    # Serialize against concurrent spends/debits on the same balance.
+    await session.execute(
+        select(WalletAccount.id).where(WalletAccount.id == acc.id).with_for_update()
+    )
+    avail = await available(session, account_id=acc.id)
+    if amount > avail:
+        raise InsufficientFunds(f"available {avail} < requested debit {amount}")
+    entry = WalletEntry(
+        account_id=acc.id,
+        restaurant_id=restaurant_id,
+        amount_aed=_q(-amount),
+        type=type,
+        status="posted",
+        idempotency_key=idempotency_key,
+        reason_note=reason_note,
+        created_by=created_by,
+    )
+    session.add(entry)
+    await session.flush()
+    await record_audit(
+        session,
+        actor=created_by,
+        restaurant_id=restaurant_id,
+        entity="wallet_entry",
+        entity_id=str(entry.id),
+        action="debit",
+        before=None,
+        after={"amount_aed": str(_q(-amount)), "type": type},
+    )
+    return entry
+
+
 async def hold(
     session: AsyncSession,
     *,

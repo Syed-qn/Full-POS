@@ -19,3 +19,14 @@ export async function creditWallet(
     reason,
   });
 }
+
+export async function debitWallet(
+  customerId: number,
+  amountAed: string,
+  reason: string,
+): Promise<WalletBalance> {
+  return apiClient.post<WalletBalance>(`/api/v1/wallet/${customerId}/debit`, {
+    amount_aed: amountAed,
+    reason,
+  });
+}

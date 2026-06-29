@@ -9,7 +9,7 @@ import {
   patchCustomerAddress,
   patchCustomerProfile,
 } from "../lib/customerApi";
-import { creditWallet, getWallet, getWalletEntries } from "../lib/walletApi";
+import { creditWallet, debitWallet, getWallet, getWalletEntries } from "../lib/walletApi";
 import type {
   AddressDetailOut,
   AddressPatchIn,
@@ -51,18 +51,20 @@ export function CustomerProfileScreen() {
     }
   }
 
-  async function addCredit() {
+  async function adjustWallet(kind: "credit" | "debit") {
     if (!id) return;
     setCreditBusy(true);
     setCreditMsg(null);
     try {
-      await creditWallet(Number(id), creditAmt, creditReason || "manager adjustment");
+      const reason = creditReason || "manager adjustment";
+      const fn = kind === "credit" ? creditWallet : debitWallet;
+      await fn(Number(id), creditAmt, reason);
       setCreditAmt("");
       setCreditReason("");
-      setCreditMsg("Credit added.");
+      setCreditMsg(kind === "credit" ? "Credit added." : "Amount deducted.");
       await reloadWallet();
     } catch (e) {
-      setCreditMsg(e instanceof Error ? e.message : "Could not add credit.");
+      setCreditMsg(e instanceof Error ? e.message : "Could not adjust wallet.");
     } finally {
       setCreditBusy(false);
     }
@@ -239,9 +241,16 @@ export function CustomerProfileScreen() {
                 />
                 <Button
                   disabled={creditBusy || !(Number(creditAmt) > 0)}
-                  onClick={addCredit}
+                  onClick={() => adjustWallet("credit")}
                 >
                   Add credit
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={creditBusy || !(Number(creditAmt) > 0)}
+                  onClick={() => adjustWallet("debit")}
+                >
+                  Deduct
                 </Button>
               </div>
               {creditMsg && <p className={s.walletMsg}>{creditMsg}</p>}

@@ -60,3 +60,22 @@ async def test_cross_tenant_wallet_access_404(db_session, client, auth_headers):
 
     resp = await client.get(f"/api/v1/wallet/{victim.id}", headers=auth_headers)
     assert resp.status_code == 404
+
+
+async def test_debit_endpoint_reduces_and_guards(db_session, client, auth_headers):
+    r = await _restaurant_by_phone(db_session, "+971501234567")
+    c = Customer(restaurant_id=r.id, phone="+971555000444", name="D")
+    db_session.add(c)
+    await db_session.flush()
+    await w.credit(db_session, restaurant_id=r.id, customer_id=c.id, amount=Decimal("20.00"),
+                   idempotency_key="seed-d", created_by="mgr:1")
+    await db_session.commit()
+
+    ok = await client.post(f"/api/v1/wallet/{c.id}/debit", headers=auth_headers,
+                           json={"amount_aed": "5.00", "reason": "correction"})
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["balance_aed"] == "15.00"
+
+    over = await client.post(f"/api/v1/wallet/{c.id}/debit", headers=auth_headers,
+                             json={"amount_aed": "999.00", "reason": "too much"})
+    assert over.status_code == 400

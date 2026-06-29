@@ -85,6 +85,43 @@ async def credit_wallet(
     )
 
 
+@router.post("/{customer_id}/debit", response_model=WalletBalanceOut, status_code=201)
+async def debit_wallet(
+    customer_id: int,
+    body: WalletCreditIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> WalletBalanceOut:
+    """Manager manually deducts from a customer's wallet (correction). Never goes
+    below zero — over-deduct returns 400. Audited."""
+    import uuid
+
+    await _tenant_customer(session, restaurant.id, customer_id)
+    try:
+        await wallet_service.debit(
+            session,
+            restaurant_id=restaurant.id,
+            customer_id=customer_id,
+            amount=body.amount_aed,
+            idempotency_key=f"manual-debit:{restaurant.id}:{customer_id}:{uuid.uuid4().hex}",
+            type="manual_adjust",
+            reason_note=body.reason,
+            created_by=f"mgr:{restaurant.id}",
+        )
+    except WalletError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+    acc = await wallet_service.get_or_create_account(
+        session, restaurant_id=restaurant.id, customer_id=customer_id
+    )
+    return WalletBalanceOut(
+        customer_id=customer_id,
+        balance_aed=await wallet_service.balance(session, account_id=acc.id),
+        available_aed=await wallet_service.available(session, account_id=acc.id),
+        status=acc.status,
+    )
+
+
 @router.get("/{customer_id}/entries", response_model=list[WalletEntryOut])
 async def get_wallet_entries(
     customer_id: int,

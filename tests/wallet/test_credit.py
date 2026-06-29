@@ -44,3 +44,23 @@ async def test_credit_rejects_non_positive(db_session, seed_restaurant_customer)
             db_session, restaurant_id=rid, customer_id=cid, amount=Decimal("0.00"),
             idempotency_key="z", created_by="mgr:1",
         )
+
+
+async def test_debit_reduces_balance(db_session, seed_restaurant_customer):
+    rid, cid = seed_restaurant_customer
+    await w.credit(db_session, restaurant_id=rid, customer_id=cid, amount=Decimal("30.00"),
+                   idempotency_key="c", created_by="mgr:1")
+    await w.debit(db_session, restaurant_id=rid, customer_id=cid, amount=Decimal("10.00"),
+                  idempotency_key="d1", reason_note="correction", created_by="mgr:1")
+    acc = await w.get_or_create_account(db_session, restaurant_id=rid, customer_id=cid)
+    assert await w.balance(db_session, account_id=acc.id) == Decimal("20.00")
+
+
+async def test_debit_cannot_go_negative(db_session, seed_restaurant_customer):
+    from app.wallet.errors import InsufficientFunds
+    rid, cid = seed_restaurant_customer
+    await w.credit(db_session, restaurant_id=rid, customer_id=cid, amount=Decimal("5.00"),
+                   idempotency_key="c", created_by="mgr:1")
+    with pytest.raises(InsufficientFunds):
+        await w.debit(db_session, restaurant_id=rid, customer_id=cid, amount=Decimal("10.00"),
+                      idempotency_key="d1", reason_note="x", created_by="mgr:1")
