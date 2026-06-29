@@ -1073,6 +1073,44 @@ async def _send_location_request(
     )
 
 
+# Leading words to strip when echoing back what the customer asked for, so a
+# negated/filler phrase ("No beef biryani", "a beef biryani") echoes cleanly as
+# "Beef Biryani".
+_ECHO_LEAD_STRIP = frozenset({
+    "no", "not", "a", "an", "the", "some", "any", "want", "need", "give", "me",
+    "i", "id", "please", "pls", "get", "add", "have", "we", "do", "you",
+})
+
+
+def _clean_requested_name(dish_query: str) -> str:
+    """Title-cased dish name to echo in an off-menu reply, or '' if nothing usable.
+
+    Drops leading filler/negation words so "No beef biryani" → "Beef Biryani".
+    Kept short and defensive — never echoes a giant blob back at the customer.
+    """
+    tokens = _re.findall(r"[^\W\d_]+", (dish_query or ""), _re.UNICODE)
+    while tokens and tokens[0].lower() in _ECHO_LEAD_STRIP:
+        tokens.pop(0)
+    if not tokens or len(tokens) > 6:
+        return ""
+    return " ".join(t.capitalize() for t in tokens)
+
+
+def _off_menu_decline(dish_query: str) -> str:
+    """Warm, premium-tone 'we don't have that' reply — NO upselling a substitute.
+
+    The customer is treated as a valued guest: we apologise, never push an
+    alternative dish, and gently point them back to the menu so they choose.
+    """
+    name = _clean_requested_name(dish_query)
+    item = name if name else "that"
+    return (
+        f"My apologies — we don't have {item} on our menu 🙏 "
+        "I'd be glad to help with anything else; just tell me the dish, "
+        "or tap the menu to take a look 😊"
+    )
+
+
 async def _handle_collecting_items(
     session: AsyncSession,
     conv: Conversation,
@@ -1144,8 +1182,7 @@ async def _handle_collecting_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="no-match",
-            body="Sorry, I couldn't find that dish. Please reply with the dish "
-                 "name from the menu, or try a different spelling.",
+            body=_off_menu_decline(dish_query),
         )
         return
 
@@ -1930,7 +1967,7 @@ async def _handle_modify_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="no-match-mod",
-            body="Sorry, I couldn't find that dish. Please reply with the dish name from the menu, or try a different spelling.",
+            body=_off_menu_decline(dish_query),
         )
         return
 

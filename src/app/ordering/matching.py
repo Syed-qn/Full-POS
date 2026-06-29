@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,70 @@ from app.menu.models import Dish, Menu
 # word_similarity("biriyani", "chicken biryani") ≈ 0.55; common typos ≥ 0.45.
 _SINGLE_THRESHOLD = 0.4
 _GAP_THRESHOLD = 0.15
+
+# Words that describe SIZE / PORTION / politeness rather than a different food, plus
+# qty words. These never count as a "distinguishing" token, so "large chicken biryani"
+# or "chicken biryani please" still matches "Chicken Biryani" (the size is resolved by
+# the variant logic, not here). Kept generic + restaurant-agnostic.
+_MODIFIER_STOPWORDS = frozenset({
+    "small", "medium", "large", "regular", "jumbo", "mini", "king", "mega", "big",
+    "family", "sharing", "single", "double", "half", "full", "quarter",
+    "serve", "serves", "serving", "portion", "portions", "plate", "plates",
+    "person", "persons", "pax", "combo", "meal", "set", "deal", "size",
+    "please", "pls", "extra", "some", "the", "and", "with", "for", "order",
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "no", "not", "yes", "want", "need", "give", "add", "make", "get",
+})
+
+
+def _token_covered(token: str, vocab: set[str]) -> bool:
+    """True if ``token`` plausibly refers to a word the dish actually has.
+
+    Covered = exact, substring either way, or a close fuzzy match (handles typos
+    like "chikn"→"chicken", "biriyani"→"biryani"). ``vocab`` is the set of words
+    drawn from the dish name AND its variant names, so a restaurant's own size /
+    descriptor words ("Family", "Spicy") count as covered rather than foreign.
+    """
+    for v in vocab:
+        if not v:
+            continue
+        if token == v or token in v or v in token:
+            return True
+        if SequenceMatcher(None, token, v).ratio() >= 0.6:
+            return True
+    return False
+
+
+def _dish_vocab(dish: "Dish") -> set[str]:
+    """All words a customer could legitimately use for ``dish`` — its name tokens
+    plus the tokens of every serving-size variant name (restaurant-defined)."""
+    vocab = set(normalize_name(dish.name or "").split())
+    for v in getattr(dish, "variants", None) or []:
+        vocab |= set(normalize_name(str(v.get("name", ""))).split())
+    return vocab
+
+
+def _query_has_foreign_food_word(normalized_query: str, dish: "Dish") -> bool:
+    """True when the query names a DIFFERENT food than ``dish``.
+
+    Fires only when the query both overlaps the dish on at least one word AND
+    carries a substantial (≥4-char, non-modifier) word the dish has nowhere — the
+    "beef biryani" vs "Chicken Biryani" case, where the shared "biryani" alone
+    used to force a wrong "did you mean Chicken Biryani?" match. Short descriptors
+    (≤3 chars, e.g. "veg") and size/politeness words never count as foreign, so
+    legitimate partial and size-qualified orders are untouched.
+    """
+    vocab = _dish_vocab(dish)
+    has_overlap = False
+    has_foreign = False
+    for tok in normalized_query.split():
+        if tok in _MODIFIER_STOPWORDS:
+            continue
+        if _token_covered(tok, vocab):
+            has_overlap = True
+        elif len(tok) >= 4:
+            has_foreign = True
+    return has_overlap and has_foreign
 
 
 def normalize_name(raw: str) -> str:
@@ -201,13 +266,25 @@ async def find_dish_matches(
     for dish in (await session.scalars(select(Dish).where(Dish.id.in_(top_ids)))).all():
         dishes_map[dish.id] = dish
 
-    top_dish = dishes_map[rows[0].id]
+    # Drop dishes that merely share a generic word with the query but name a
+    # DIFFERENT food (e.g. "beef biryani" trigram-matching "Chicken Biryani" on
+    # "biryani"). Without this the bot looped on a wrong "did you mean Chicken
+    # Biryani?" instead of telling the customer we don't have beef biryani.
+    ranked = [(r.sim, dishes_map[r.id]) for r in rows if r.id in dishes_map]
+    kept = [
+        (sim, dish)
+        for sim, dish in ranked
+        if not _query_has_foreign_food_word(normalized_query, dish)
+    ]
+    if not kept:
+        return MatchResult(confidence=MatchConfidence.NO_MATCH)
 
-    if len(rows) == 1 or (top_sim - rows[1].sim) > _GAP_THRESHOLD:
+    top_sim, top_dish = kept[0]
+    if len(kept) == 1 or (top_sim - kept[1][0]) > _GAP_THRESHOLD:
         return MatchResult(confidence=MatchConfidence.DIRECT, candidates=[top_dish])
 
     # Multiple close candidates → AMBIGUOUS (return up to 3)
-    candidates = [dishes_map[r.id] for r in rows[:3] if r.id in dishes_map]
+    candidates = [dish for _, dish in kept[:3]]
     return MatchResult(confidence=MatchConfidence.AMBIGUOUS, candidates=candidates)
 
 

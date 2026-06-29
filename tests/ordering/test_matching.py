@@ -125,6 +125,53 @@ async def test_find_dish_matches_by_exact_number(db_session, restaurant):
     assert results.candidates[0].dish_number == 201
 
 
+async def test_different_protein_is_off_menu_not_forced_match(db_session, restaurant):
+    """Regression: "beef biryani" must NOT collapse into "Chicken Biryani" on the
+    shared word "biryani" (it looped on a wrong "did you mean Chicken Biryani?" at
+    checkout). A distinct protein the menu lacks → NO_MATCH (warm off-menu reply)."""
+    from app.ordering.matching import MatchConfidence
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("20.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    ))
+    await db_session.commit()
+
+    for q in ("beef biryani", "mutton biryani", "fish biryani", "No beef biryani"):
+        res = await find_dish_matches(db_session, restaurant_id=restaurant.id, query=q)
+        assert res.confidence == MatchConfidence.NO_MATCH, q
+        assert res.candidates == []
+
+
+async def test_size_qualified_order_still_matches(db_session, restaurant):
+    """A size/descriptor word the dish carries as a VARIANT (or a generic size word)
+    must NOT be treated as a foreign food — "family biryani" / "large chicken
+    biryani" still resolve to Chicken Biryani."""
+    from app.ordering.matching import MatchConfidence
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("20.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+        variants=[{"name": "Family", "price_aed": "55.00", "dish_number": 110}],
+    ))
+    await db_session.commit()
+
+    for q in ("family biryani", "large chicken biryani", "chicken biryani please"):
+        res = await find_dish_matches(db_session, restaurant_id=restaurant.id, query=q)
+        assert res.confidence == MatchConfidence.DIRECT, q
+        assert res.candidates[0].dish_number == 110
+
+
 async def test_find_dish_matches_none_returns_no_match(db_session, restaurant):
     from app.ordering.matching import MatchConfidence
     from app.menu.models import Dish, Menu

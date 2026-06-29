@@ -1625,3 +1625,23 @@
     opposite the availability toggle. So each dish shows its publish state inline — ONE list.
   - MenuManagerScreen: waLinkedIds Set built from onMenuLoaded; passed per-dish to DishCard; de-jargoned header subtitle.
   - tokens-based styling (shadows, radii, sla-safe green). tsc clean, vite build clean, 195/195 frontend tests pass.
+
+- 2026-06-29 21:25 Asia/Dubai — UX FIX: off-menu item at checkout looped on a wrong "Did you
+  mean Chicken Biryani?" prompt. Repro from live log: at order_confirmation the customer typed
+  "1 beef biryani"; AI opened a modify flow, then ordering.matching.find_dish_matches matched
+  "beef biryani" -> "Chicken Biryani" (pg_trgm word_similarity dominated by shared word
+  "biryani"; "beef" ignored), returning AMBIGUOUS. Every reply ("No beef biryani") re-matched
+  the same way -> infinite "did you mean" loop, no escape. Contrast: "mutton biryani" scored
+  low enough to be a clean NO_MATCH and got the good AI decline. Root cause: matcher had no
+  notion of a DIFFERENT-food word. Fix (matching.py): after trigram ranking, drop any candidate
+  where the query both overlaps the dish on >=1 word AND carries a substantial (>=4-char,
+  non-modifier) word absent from the dish name AND all its variant names -> off-menu foods no
+  longer collapse into a same-category dish. Size/portion/politeness words (large, family,
+  please, ...) are stopworded and variant names count as "covered", so "large chicken biryani"
+  / "family biryani" / "chicken biryani please" / typo "chikn biryani" still match. Empty-after-
+  filter -> NO_MATCH. Engine: collecting_items + modify_items NO_MATCH replies now use new warm,
+  premium-tone, NO-upsell decline _off_menu_decline() (per owner: high-profile guest, don't
+  upsell) that echoes the cleaned requested name ("Beef Biryani") and points to the menu. Tests:
+  +2 matching regressions (different-protein -> NO_MATCH; size-qualified still DIRECT); matching
+  +modification +multi_item +variants 30 pass; ruff clean. Pre-existing confirmation-totals
+  failure still unrelated.
