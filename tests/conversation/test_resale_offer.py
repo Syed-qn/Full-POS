@@ -173,3 +173,24 @@ async def test_resale_accept_with_saved_address_sells_it(db_session):
     )).all()
     assert len(sold) == 1
     assert sold[0].subtotal == Decimal("28.00")  # 30% off 40
+
+
+async def test_resale_offered_on_direct_typed_order(db_session):
+    """A NEW customer who skips the greeting and types a dish directly must still be
+    pitched the ready-now resale food (regression: offer only fired on greeting/menu,
+    so a typed order or AI chat never surfaced it)."""
+    r, _dish = await _resto_with_resale(db_session)
+    r.settings = {**(r.settings or {}), "catalog_ordering_enabled": True, "catalog_id": "CAT1"}
+    from app.catalog.models import CatalogProduct
+    db_session.add(CatalogProduct(
+        restaurant_id=r.id, retailer_id="nwb4pa5fbn", name="Biryani",
+        price_aed=Decimal("40.00"), currency="AED", availability="in stock",
+        category="Rice", is_active=True, raw={},
+    ))
+    await db_session.commit()
+
+    phone = "+971500400777"  # different phone → not excluded from the resale
+    await handle_inbound(db_session, _inb(r, phone, "1 biryani"), restaurant_id=r.id)
+    await db_session.commit()
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=phone, counterpart="customer")
+    assert conv.state.get("resale_offer_id") is not None  # offer was pitched

@@ -5086,6 +5086,13 @@ async def handle_inbound(
                         )
                     return
 
+    # Pitch any ready-now resale (cancelled-after-cooking) food to this customer — ONCE,
+    # regardless of how they engage. Previously this only fired on a pure greeting or an
+    # explicit menu request, so a customer who typed a direct order (handled below) or
+    # chatted with the AI never saw the offer. Idempotent via the resale_offer_id guard;
+    # we don't return, so their actual message is still processed right after.
+    await _maybe_offer_resale(session, conv, inbound, restaurant_id)
+
     # Catalogue mode: a clearly-typed single dish is ADDED deterministically here, so a
     # plain "one chicken biryani" reliably goes to the cart instead of the model
     # sometimes re-sending the catalogue cards. Anything else falls through to the AI.

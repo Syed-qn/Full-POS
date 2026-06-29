@@ -1714,3 +1714,11 @@
   "Mutton", old greetings). The conversation is per-phone across all orders. Added _chat_for_this_order(chat, order)
   filtering chat by ts window [created_at-2min, (delivered/cancelled_at or now)+2min] before summarizing.
   Test: test_chat_for_this_order_excludes_other_sessions. 25 detail tests pass.
+
+[2026-06-30 01:30 +04] fix(resale): offer ready-now resale food on ANY first engagement, not just greeting/menu.
+  Bug: resale (cancelled-after-cooking) food was never offered to the next customer. _maybe_offer_resale only ran
+  on a pure greeting or explicit menu request. A new customer who typed a direct order (_try_catalog_typed_order)
+  or chatted with the AI never saw the offer. Added one _maybe_offer_resale call at the dispatch chokepoint in
+  handle_inbound (before typed-order + AI), idempotent via resale_offer_id, non-returning so the real message still
+  processes. Test: test_resale_offered_on_direct_typed_order. 19 resale tests + new one pass. (4 failing conv tests
+  are PRE-EXISTING: abandoned_cart x3, totals_and_eta — fail on clean tree.)
