@@ -163,3 +163,19 @@ async def test_menu_activation_refreshes_okf(db_session):
     await activate_menu(db_session, menu)
     doc = await db_session.scalar(select(OkfDoc).where(OkfDoc.kind == "dish", OkfDoc.title == "Paneer Tikka"))
     assert doc is not None
+
+
+async def test_refresh_okf_for_restaurant_picks_up_dish_edits(db_session):
+    """The best-effort helper (called by inline dish endpoints + catalog sync that
+    bypass activate_menu) rebuilds dish docs from the live menu."""
+    r = await _resto(db_session)
+    await producer.refresh_okf_for_restaurant(db_session, restaurant_id=r.id)
+    dish = (await db_session.scalars(select(Dish).where(Dish.restaurant_id == r.id))).first()
+    # Manager edits price + marks unavailable WITHOUT re-activating the menu.
+    dish.price_aed = Decimal("27.50")
+    dish.is_available = False
+    await db_session.flush()
+    await producer.refresh_okf_for_restaurant(db_session, restaurant_id=r.id)
+    doc = await db_session.scalar(select(OkfDoc).where(OkfDoc.kind == "dish", OkfDoc.entity_id == dish.id))
+    assert "27.50" in doc.body  # new price grounded
+    assert "Available: no" in doc.body  # availability change grounded

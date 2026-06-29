@@ -25,6 +25,18 @@ from app.menu.schemas import (
 )
 from app.menu.service import MenuIncompleteError
 from app.menu.unified import UnifiedMenuOut, build_unified_menu
+from app.okf.producer import refresh_okf_for_restaurant
+
+
+async def _refresh_grounding(session: AsyncSession, restaurant_id: int) -> None:
+    """Rebuild OKF menu/policy docs after a dish mutation so the bot grounds on the
+    live menu (these inline dish endpoints bypass activate_menu's refresh). Best-effort:
+    never let a grounding refresh fail the manager's edit."""
+    try:
+        await refresh_okf_for_restaurant(session, restaurant_id=restaurant_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
 
@@ -155,6 +167,7 @@ async def add_dish(
     )
     await session.commit()
     await session.refresh(dish)
+    await _refresh_grounding(session, restaurant.id)
     return dish
 
 
@@ -194,6 +207,7 @@ async def patch_dish(
     )
     await session.commit()
     await session.refresh(dish)
+    await _refresh_grounding(session, restaurant.id)
     return dish
 
 
@@ -213,9 +227,11 @@ async def delete_dish(
         entity_id=str(dish.id), action="removed",
         before={"dish_number": dish.dish_number, "name": dish.name},
     )
+    rid = restaurant.id  # capture before expire_all expires the restaurant row
     await session.delete(dish)
     await session.commit()
     session.expire_all()
+    await _refresh_grounding(session, rid)
 
 
 @router.patch("/dishes/{dish_id}/availability", response_model=DishOut)
@@ -237,6 +253,7 @@ async def toggle_availability(
     )
     await session.commit()
     await session.refresh(dish)
+    await _refresh_grounding(session, restaurant.id)
     return dish
 
 

@@ -149,6 +149,16 @@ async def refresh_menu_and_policy(session: AsyncSession, *, restaurant_id: int) 
     return n
 
 
+async def refresh_okf_for_restaurant(session: AsyncSession, *, restaurant_id: int) -> None:
+    """Best-effort: rebuild the menu/policy OKF bundle after ANY menu mutation
+    (activate, dish add/delete/availability toggle, catalog sync). Swallows errors
+    so a grounding refresh never breaks the caller's primary action. Caller commits."""
+    try:
+        await refresh_menu_and_policy(session, restaurant_id=restaurant_id)
+    except Exception:  # noqa: BLE001 — grounding refresh is never critical
+        pass
+
+
 async def refresh_customer(session: AsyncSession, *, restaurant_id: int, customer_id: int) -> int:
     """Build/refresh the customer profile OKF doc (tier, wallet, usual order, recents)."""
     from app.ordering.models import Customer, Order

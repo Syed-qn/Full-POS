@@ -21,9 +21,20 @@ from app.catalog.sync_service import (
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
+from app.okf.producer import refresh_okf_for_restaurant
 from app.outbox.service import deliver_pending
 
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
+
+
+async def _refresh_grounding(session: AsyncSession, restaurant_id: int) -> None:
+    """Rebuild OKF menu/policy docs after a Meta-catalog sync writes/updates dishes,
+    so the bot grounds on the live menu. Best-effort: never fail the sync."""
+    try:
+        await refresh_okf_for_restaurant(session, restaurant_id=restaurant_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
 
 
 class SendCatalogIn(BaseModel):
@@ -103,6 +114,7 @@ async def sync_catalog(
     except CatalogReadError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     await session.commit()
+    await _refresh_grounding(session, restaurant.id)
     products = await list_catalog_products(session, restaurant_id=restaurant.id)
     return SyncResultOut(
         added=result.added,
@@ -127,6 +139,7 @@ async def push_catalog(
     except (CatalogReadError, CatalogWriteError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     await session.commit()
+    await _refresh_grounding(session, restaurant.id)
     products = await list_catalog_products(session, restaurant_id=restaurant.id)
     return SyncResultOut(
         added=result.added,
@@ -153,6 +166,7 @@ async def sync_catalog_full(
     except (CatalogReadError, CatalogWriteError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     await session.commit()
+    await _refresh_grounding(session, restaurant.id)
     products = await list_catalog_products(session, restaurant_id=restaurant.id)
     return SyncResultOut(
         added=result.added,

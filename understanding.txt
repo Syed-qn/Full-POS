@@ -1568,3 +1568,13 @@
 [2026-06-29 23:50 +04] chore(graphify): graphify update . — 591 code files re-extracted (AST only);
   graph.json 6045 nodes / 19857 edges / 1212 communities; GRAPH_REPORT.md + 13 cache JSONs;
   new catalog nodes: build_catalog_item_data, wait_for_batch_handles, is_catalog_fully_synced.
+
+[2026-06-29 20:11 +04] fix(okf): close menu-mutation grounding gap — dish edits outside activate_menu now refresh OKF.
+  - Found 7 dish-write paths bypassing activate_menu's OKF refresh (only activate_menu had the hook):
+    menu/router.py create-dish, patch_dish, delete_dish, toggle_availability; catalog sync /sync, /push, /sync-full.
+    Without this, the bot grounded on STALE dish docs (old price/availability) until a full menu re-activation.
+  - Added producer.refresh_okf_for_restaurant() — best-effort wrapper over refresh_menu_and_policy (swallows errors, caller commits).
+  - Wired a local _refresh_grounding() helper (refresh + commit, rollback on error) into all 4 menu/router endpoints
+    and all 3 catalog sync endpoints. delete_dish: captured restaurant.id BEFORE session.expire_all() (else lazy-load MissingGreenlet).
+  - Test: test_refresh_okf_for_restaurant_picks_up_dish_edits (price+availability edit reflected in dish doc without re-activation).
+  - 81 pass (tests/menu + tests/catalog + tests/okf); ruff clean.
