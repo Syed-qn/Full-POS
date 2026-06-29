@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { UnifiedMenu } from "../lib/unifiedMenuApi";
 import { Button } from "../components/Button";
 import { DiffPanel } from "../components/DiffPanel";
 import { DishCard } from "../components/DishCard";
@@ -23,7 +24,20 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   // Bumped on every dish mutation so the unified/catalog panel re-fetches and can
   // never show a stale price (the AED 20-vs-30 bug).
   const [menuRev, setMenuRev] = useState(0);
+  // dish_ids that are live on the WhatsApp catalogue — shown inline on each dish so
+  // there's ONE menu list (no duplicate catalogue grid).
+  const [waLinkedIds, setWaLinkedIds] = useState<Set<number>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const onMenuLoaded = useCallback((m: UnifiedMenu) => {
+    setWaLinkedIds(
+      new Set(
+        m.items
+          .filter((i) => i.link_status === "linked" && i.dish_id != null)
+          .map((i) => i.dish_id as number),
+      ),
+    );
+  }, []);
 
   function reloadDishes() {
     if (activeMenuId !== null) {
@@ -226,7 +240,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
       <PageHeader
         title="Menu"
-        subtitle="One menu — text dishes linked to Meta catalogue; customers get catalogue cards on WhatsApp"
+        subtitle="One menu. Edit here and it publishes to WhatsApp automatically — customers who ask for the menu get tappable cards."
         right={
           <>
             <input
@@ -246,7 +260,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           </>
         }
       />
-      <UnifiedMenuPanel refreshSignal={menuRev} onChanged={reloadDishes} />
+      <UnifiedMenuPanel refreshSignal={menuRev} onChanged={reloadDishes} onMenuLoaded={onMenuLoaded} />
       {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
@@ -348,7 +362,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
                     onDrop={canReorder ? () => onDropDish(items, d.id) : undefined}
                     onDragEnd={() => { setDragId(null); setOverId(null); }}
                   >
-                    <DishCard dish={d} onToggle={onToggle} onEdit={setEditing} onDelete={onDeleteDish} />
+                    <DishCard dish={d} onToggle={onToggle} onEdit={setEditing} onDelete={onDeleteDish} onWhatsapp={waLinkedIds.has(d.id)} />
                   </div>
                 ))}
               </div>

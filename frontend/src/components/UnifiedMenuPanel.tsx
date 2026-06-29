@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { toast } from "./Toaster";
 import { apiClient } from "../lib/apiClient";
@@ -7,18 +7,11 @@ import type { RestaurantOut } from "../lib/types";
 import { fetchUnifiedMenu, syncCatalogFull, type UnifiedMenu } from "../lib/unifiedMenuApi";
 import s from "./UnifiedMenuPanel.module.css";
 
-// Manager-facing status — no Meta jargon. Everything publishes automatically on
-// menu activation; "Not yet" just means it hasn't been pushed since its last edit.
-const BADGE: Record<string, { label: string; cls: string }> = {
-  linked: { label: "On WhatsApp", cls: s.linked },
-  dish_only: { label: "Not on WhatsApp yet", cls: s.dishOnly },
-  catalog_only: { label: "Meta only", cls: s.catOnly },
-};
-
 export function UnifiedMenuPanel({
   onCatalogIdSaved,
   refreshSignal,
   onChanged,
+  onMenuLoaded,
 }: {
   onCatalogIdSaved?: () => void;
   /** Bumped by the parent after a dish edit/delete/availability toggle so the
@@ -27,12 +20,19 @@ export function UnifiedMenuPanel({
   /** Called after a Meta sync that may have created/linked dishes, so the parent
    *  reloads its dish list. */
   onChanged?: () => void;
+  /** Hands the loaded unified menu to the parent so it can show per-dish
+   *  "On WhatsApp" status inline on the single dish list (no duplicate grid). */
+  onMenuLoaded?: (menu: UnifiedMenu) => void;
 }) {
   const [menu, setMenu] = useState<UnifiedMenu | null>(null);
   const [catalogId, setCatalogId] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [savingId, setSavingId] = useState(false);
+  // Keep the callback in a ref so `load` stays referentially stable (no refetch loop
+  // if the parent passes a fresh function each render).
+  const onMenuLoadedRef = useRef(onMenuLoaded);
+  onMenuLoadedRef.current = onMenuLoaded;
 
   const load = useCallback(async () => {
     try {
@@ -41,6 +41,7 @@ export function UnifiedMenuPanel({
         apiClient.get<RestaurantOut>("/api/v1/me"),
       ]);
       setMenu(unified);
+      onMenuLoadedRef.current?.(unified);
       const cid = ((me.settings as Record<string, unknown>)?.catalog_id as string) || "";
       setCatalogId(cid);
     } catch {
@@ -164,53 +165,31 @@ export function UnifiedMenuPanel({
         </Button>
       </label>
 
-      {menu ? (
+      {menu && menu.items.length > 0 ? (
         <div className={s.stats}>
-          <span className={s.stat}>{menu.items.length} items</span>
-          <span className={s.stat}>{menu.linked_count} linked</span>
-          <span className={s.stat}>{menu.dish_only_count} text-only</span>
-          <span className={s.stat}>{menu.catalog_only_count} Meta-only</span>
+          <span className={`${s.stat} ${s.statOn}`}>
+            <span className={s.dot} /> {menu.linked_count} on WhatsApp
+          </span>
+          {menu.dish_only_count > 0 && (
+            <span className={s.stat}>{menu.dish_only_count} not published yet</span>
+          )}
+          {menu.catalog_only_count > 0 && (
+            <span className={s.stat}>{menu.catalog_only_count} only in Meta</span>
+          )}
         </div>
       ) : null}
 
-      {!menu || menu.items.length === 0 ? (
-        <p className={s.empty}>
-          Upload a menu, set your Catalog ID, then run <b>Sync both ways</b>.
+      {menu && menu.dish_only_count > 0 && catalogId.trim() ? (
+        <p className={s.hint}>
+          {menu.dish_only_count} dish{menu.dish_only_count > 1 ? "es" : ""} not on WhatsApp yet —
+          click <b>Publish to WhatsApp</b> to push {menu.dish_only_count > 1 ? "them" : "it"} live.
         </p>
-      ) : (
-        <div className={s.grid}>
-          {menu.items.map((item) => {
-            const b = BADGE[item.link_status] ?? BADGE.dish_only;
-            const key = `${item.link_status}-${item.dish_id ?? item.catalog_product_id}-${item.retailer_id}`;
-            return (
-              <div key={key} className={s.card}>
-                {item.image_url ? (
-                  <img className={s.thumb} src={item.image_url} alt={item.name} />
-                ) : (
-                  <div className={s.thumbPh}>🍽️</div>
-                )}
-                <div className={s.body}>
-                  <div className={s.nameRow}>
-                    <span className={s.name}>
-                      {item.dish_number != null ? `${item.dish_number}. ` : ""}
-                      {item.name}
-                    </span>
-                    <span className={`${s.badge} ${b.cls}`}>{b.label}</span>
-                  </div>
-                  <div className={s.meta}>
-                    {item.category ?? "Menu"}
-                    {item.price_aed != null ? ` · AED ${item.price_aed}` : ""}
-                    {!item.is_available ? " · hidden" : ""}
-                  </div>
-                  {item.retailer_id ? (
-                    <div className={s.rid}>Meta ID: {item.retailer_id}</div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      ) : null}
+      {!catalogId.trim() ? (
+        <p className={s.hint}>
+          Add your Meta Catalog ID above to start publishing your menu to WhatsApp.
+        </p>
+      ) : null}
     </div>
   );
 }

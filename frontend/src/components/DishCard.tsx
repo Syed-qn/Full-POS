@@ -6,11 +6,14 @@ export function DishCard({
   onToggle,
   onEdit,
   onDelete,
+  onWhatsapp,
 }: {
   dish: DishOut;
   onToggle: (id: number, next: boolean) => void;
   onEdit?: (dish: DishOut) => void;
   onDelete?: (dish: DishOut) => void;
+  /** Whether this dish is live on the WhatsApp catalogue. undefined → status unknown. */
+  onWhatsapp?: boolean;
 }) {
   const hasError = dish.dish_number === null || dish.price_aed === null;
   // When a dish offers serving sizes, show the price span (e.g. "AED 18 – 60")
@@ -34,6 +37,16 @@ export function DishCard({
       {/* Dish number is kept in the backend (ordering/FSM) but hidden from the
           manager UI — it's an internal identifier, not customer-facing. */}
       <div className={s.top}>
+        {onWhatsapp !== undefined ? (
+          <span
+            className={`${s.wa} ${onWhatsapp ? s.waOn : s.waOff}`}
+            title={onWhatsapp ? "Live on your WhatsApp catalogue" : "Not published to WhatsApp yet — click Publish to WhatsApp"}
+          >
+            {onWhatsapp ? "On WhatsApp" : "Not on WhatsApp"}
+          </span>
+        ) : (
+          <span />
+        )}
         <button
           role="switch"
           aria-checked={dish.is_available}

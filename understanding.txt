@@ -1613,3 +1613,15 @@
   catalog_retailer_id (earlier name-match link). push_dishes_to_meta now dedupes by retailer_id: pushes the
   first, skips + UNLINKS the duplicate (catalog_retailer_id=None) so it gets its own generated id next push —
   self-heals over one re-publish. Test: test_push_dedupes_duplicate_retailer_id. 43 catalog tests pass.
+
+[2026-06-29 20:55 +04] feat(ui): repair Menu page — single menu list, inline WhatsApp status, slim publish bar.
+  Senior FE/UX pass, scoped to Menu page only.
+  - Root problem: same dishes rendered TWICE (UnifiedMenuPanel card grid w/ Meta IDs + badges, AND the editor grid).
+    Cluttered, confusing, contradicted "one menu".
+  - UnifiedMenuPanel: removed the duplicate dish-card grid. Now a slim card: title, plain-language sub, catalog ID
+    field, "Publish to WhatsApp" button (+ Pull link), and status chips ("N on WhatsApp", "N not published yet").
+    Added onMenuLoaded(menu) callback (via ref, stable) so the parent gets link status. Removed BADGE map.
+  - DishCard: new onWhatsapp?:boolean prop → small chip "On WhatsApp"(green) / "Not on WhatsApp"(grey) in the top row
+    opposite the availability toggle. So each dish shows its publish state inline — ONE list.
+  - MenuManagerScreen: waLinkedIds Set built from onMenuLoaded; passed per-dish to DishCard; de-jargoned header subtitle.
+  - tokens-based styling (shadows, radii, sla-safe green). tsc clean, vite build clean, 195/195 frontend tests pass.
