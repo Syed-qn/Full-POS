@@ -13,6 +13,8 @@ class OrderItemOut(BaseModel):
     name: str          # dish_name field on OrderItem
     qty: int
     price_aed: str     # serialised as string for JS safety
+    variant_name: Optional[str] = None  # serving size, if any
+    notes: Optional[str] = None          # special request (e.g. "double masala") — for kitchen
 
 
 class OrderOut(BaseModel):

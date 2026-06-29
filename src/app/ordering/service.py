@@ -1248,6 +1248,7 @@ async def get_order_detail(
             variant_name=i.variant_name,
             qty=i.qty,
             price_aed=i.price_aed,
+            notes=i.notes,
         )
         for i in items_rows
     ]

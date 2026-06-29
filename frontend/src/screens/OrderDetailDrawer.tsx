@@ -357,6 +357,9 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
               <span className={s.itemName}>
                 {item.dish_name}
                 {item.variant_name ? ` (${item.variant_name})` : ""}
+                {item.notes ? (
+                  <span className={s.itemNote}>📝 {item.notes}</span>
+                ) : null}
               </span>
               <span className={s.itemPrice}>AED {item.line_total}</span>
             </div>

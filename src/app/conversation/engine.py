@@ -11,6 +11,7 @@ from app.ordering.matching import (
     MatchConfidence,
     bundle_variant_for_qty,
     find_dish_matches,
+    normalize_name,
     resolve_variant,
 )
 from app.outbox.service import enqueue_message
@@ -4612,10 +4613,36 @@ async def _try_catalog_typed_order(
                 "could", "is", "are", "tell", "show"}):
         return False
 
-    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
-    if result.confidence != MatchConfidence.DIRECT or not result.candidates:
-        return False  # ambiguous / no match → AI (gives the warm reply or disambiguates)
-    dish = result.candidates[0]
+    # Split a modifier off the dish: prefer the LONGEST prefix that EXACTLY matches a
+    # dish name, with the trailing words as the special note — "chicken biryani double
+    # masala" → dish "Chicken Biryani" + note "double masala". (Fuzzy matching can't be
+    # used for the split: it accepts "chicken biryani double" as the dish, so the note
+    # would lose words.) Without this a typed order WITH a modifier fell through to the
+    # LLM, which misfired (returned clear_cart and wiped the cart).
+    words = dish_query.split()
+    dish = None
+    note: str | None = None
+    for cut in range(len(words), 0, -1):
+        cand = " ".join(words[:cut])
+        pref = await find_dish_matches(session, restaurant_id=restaurant_id, query=cand)
+        if (pref.confidence == MatchConfidence.DIRECT and pref.candidates
+                and pref.candidates[0].name_normalized == normalize_name(cand)):
+            dish = pref.candidates[0]
+            note = (" ".join(words[cut:]).strip() or None)
+            break
+    if dish is None:
+        # No exact dish-name prefix → fall back to a fuzzy match on the WHOLE query (no
+        # note). Catches typos like "chicken biriyani" — still adds the dish.
+        pref = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+        if pref.confidence != MatchConfidence.DIRECT or not pref.candidates:
+            return False  # ambiguous / no match → AI (warm reply or disambiguates)
+        dish = pref.candidates[0]
+    # If the trailing "note" is itself another dish, this is a MULTI-item order — let the
+    # AI handle it (the multi-item parser) rather than burying a second dish in a note.
+    if note:
+        tail = await find_dish_matches(session, restaurant_id=restaurant_id, query=note)
+        if tail.confidence == MatchConfidence.DIRECT and tail.candidates:
+            return False
     if await _catalog_excludes_dish(session, restaurant_id, dish):
         # Typed an item that isn't in the catalogue → answer honestly and
         # deterministically here (never let it fall to the AI, which sometimes
@@ -4652,13 +4679,14 @@ async def _try_catalog_typed_order(
             saved_address_declined=None, saved_address_id=None,
             pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
         )
-    await add_item(session, order=order, dish=dish, qty=add_qty)
+    await add_item(session, order=order, dish=dish, qty=add_qty, notes=note)
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     cart = await _build_cart_summary(session, conv)
+    note_label = f" — {note}" if note else ""
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="catalog-typed-add",
-        body=f"Added {add_qty}x {dish.name} ✅{_cart_tail(cart)}",
+        body=f"Added {add_qty}x {dish.name}{note_label} ✅{_cart_tail(cart)}",
     )
     return True
 

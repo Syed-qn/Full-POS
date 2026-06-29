@@ -1665,3 +1665,17 @@
   Added _note_suffix(it) helper (" — <note>") and applied to all 4 cart/summary renderers in engine.py (confirm
   summary, modify current-items, _build_cart_summary, dish-number summary). Test:
   test_cart_summary_shows_special_note_to_distinguish_duplicate_lines. 377 pass (same pre-existing totals+ETA fail).
+
+[2026-06-30 00:10 +04] fix: typed-order special note (parse + kitchen/manager visibility).
+  Two issues from live WhatsApp + dashboard:
+  (1) "1 chicken biriyani double masala" → bot cleared cart (LLM misfired clear_cart) because the deterministic
+      _try_catalog_typed_order couldn't match the dish with the modifier. Fix: split modifier off via LONGEST
+      EXACT dish-name prefix (fuzzy match over-accepts "chicken biryani double"); tail = special note. Fuzzy
+      fallback on full query (typos) adds dish with no note. Multi-item guard: if tail is itself a dish → AI.
+      add_item now receives notes; confirm reply shows "— <note>". normalize_name imported.
+  (2) Kitchen/manager couldn't SEE the special request. notes was stored on OrderItem but absent from BOTH
+      response schemas. Added notes (+variant_name) to OrderItemOut (router._order_item_out) and notes to
+      OrderItemDetailOut (+service builder). Frontend: OrderItemDetailOut type + OrderDetailDrawer Overview Items
+      renders "📝 <note>" badge (sla-warn styling) so kitchen sees it.
+  Tests: test_catalog_typed_order_with_special_note_adds_dish_and_note. 207 backend ordering/catalog pass;
+  frontend tsc clean, OrderDetailDrawer 10 tests pass.

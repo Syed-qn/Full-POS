@@ -11,6 +11,7 @@ class OrderItemDetailOut(BaseModel):
     variant_name: str | None = None
     qty: int
     price_aed: Decimal
+    notes: str | None = None  # special request (e.g. "double masala") — shown to kitchen
 
     @computed_field  # type: ignore[misc]
     @property

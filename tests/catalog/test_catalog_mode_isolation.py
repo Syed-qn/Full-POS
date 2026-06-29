@@ -237,6 +237,37 @@ async def test_catalog_typed_order_adds_on_first_message_not_in_ordering_phase(d
     assert len(items) == 1 and items[0].dish_name == "Chicken Biryani"  # added, not menu
 
 
+async def test_catalog_typed_order_with_special_note_adds_dish_and_note(db_session, restaurant):
+    """'1 chicken biryani double masala' must ADD Chicken Biryani with note 'double masala'
+    deterministically — NOT fall to the LLM (which misfired clear_cart and wiped the cart)."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110011", counterpart="customer",
+        state={"dialogue_phase": "ordering"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.note1", from_phone="+971501110011", type=MessageType.TEXT,
+        payload={"text": "1 chicken biryani double masala"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert len(items) == 1
+    assert items[0].dish_name == "Chicken Biryani"
+    assert (items[0].notes or "").strip() == "double masala"
+
+
 async def test_catalog_typed_noncatalogue_item_answered_not_catalogue(db_session, restaurant):
     """A typed item NOT in the catalogue (Lemon Mint) is answered deterministically with
     an honest 'we don't have it' — NOT silently added, and NOT bounced to the AI which

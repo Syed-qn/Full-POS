@@ -42,6 +42,8 @@ def _order_item_out(i: OrderItem) -> OrderItemOut:
         name=i.dish_name,
         qty=i.qty,
         price_aed=str(i.price_aed),
+        variant_name=i.variant_name,
+        notes=i.notes,
     )
 
 

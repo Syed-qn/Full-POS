@@ -156,6 +156,7 @@ export interface OrderItemDetailOut {
   qty: number;
   price_aed: string;
   line_total: string;
+  notes?: string | null;
 }
 
 export interface AddressDetailOut {

@@ -144,7 +144,16 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.itemName { color: var(--text-primary); }
+.itemName { color: var(--text-primary); display: flex; flex-direction: column; gap: 3px; }
+.itemNote {
+  align-self: flex-start;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--sla-warn);
+  background: var(--sla-warn-dim);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
 .itemPrice {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
