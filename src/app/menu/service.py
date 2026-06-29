@@ -173,6 +173,16 @@ async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
     )
     await session.commit()
     await session.refresh(menu)
+
+    # Refresh OKF grounding so the bot answers from the NEW menu, not stale dish
+    # docs. Best-effort — a grounding-refresh hiccup must never fail activation.
+    try:
+        from app.okf.producer import refresh_menu_and_policy
+
+        await refresh_menu_and_policy(session, restaurant_id=menu.restaurant_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
     return menu
 
 

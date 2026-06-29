@@ -124,3 +124,42 @@ async def test_retrieval_is_tenant_isolated(db_session):
     docs = await retrieval.retrieve(db_session, restaurant_id=ra.id, query="secret dish")
     assert all(d.restaurant_id == ra.id for d in docs)
     assert not any("secret" in d.body.lower() for d in docs)
+
+
+async def test_refresh_prunes_removed_dishes(db_session):
+    r = await _resto(db_session)
+    # Add a second dish, build, then "remove" it and rebuild -> its doc is pruned.
+    menu = (await db_session.scalars(select(Menu).where(Menu.restaurant_id == r.id))).first()
+    extra = Dish(menu_id=menu.id, restaurant_id=r.id, dish_number=2, name="Mango Lassi",
+                 price_aed=Decimal("8"), category="Drinks", is_available=True, name_normalized="mango lassi")
+    db_session.add(extra)
+    await db_session.flush()
+    await producer.refresh_menu_and_policy(db_session, restaurant_id=r.id)
+    assert await db_session.scalar(select(OkfDoc).where(OkfDoc.kind == "dish", OkfDoc.entity_id == extra.id)) is not None
+    # Remove the dish, rebuild.
+    await db_session.delete(extra)
+    await db_session.flush()
+    await producer.refresh_menu_and_policy(db_session, restaurant_id=r.id)
+    assert await db_session.scalar(select(OkfDoc).where(OkfDoc.kind == "dish", OkfDoc.entity_id == extra.id)) is None
+
+
+async def test_menu_activation_refreshes_okf(db_session):
+    from sqlalchemy.orm import selectinload
+
+    from app.menu.service import activate_menu
+    r = await _resto(db_session)
+    # A fresh draft menu with one dish, activate it -> OKF dish docs exist.
+    menu = Menu(restaurant_id=r.id, version=2, status="draft", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(menu_id=menu.id, restaurant_id=r.id, dish_number=5, name="Paneer Tikka",
+                        price_aed=Decimal("30"), category="Starters", is_available=True, name_normalized="paneer tikka"))
+    await db_session.flush()
+    # Reload with dishes eager-loaded, as the router does before activating (avoids
+    # an async lazy-load on menu.dishes).
+    menu = await db_session.scalar(
+        select(Menu).where(Menu.id == menu.id).options(selectinload(Menu.dishes))
+    )
+    await activate_menu(db_session, menu)
+    doc = await db_session.scalar(select(OkfDoc).where(OkfDoc.kind == "dish", OkfDoc.title == "Paneer Tikka"))
+    assert doc is not None

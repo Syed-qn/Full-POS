@@ -110,9 +110,11 @@ async def refresh_menu_and_policy(session: AsyncSession, *, restaurant_id: int) 
     menu = await session.scalar(
         select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
     )
+    current_dish_slugs: set[str] = set()
     if menu is not None:
         dishes = (await session.scalars(select(Dish).where(Dish.menu_id == menu.id))).all()
         for d in dishes:
+            current_dish_slugs.add(f"dish-{d.id}")
             tags = []
             desc = d.description or ""
             fm = {
@@ -134,6 +136,16 @@ async def refresh_menu_and_policy(session: AsyncSession, *, restaurant_id: int) 
                 search_text=f"{d.name} {d.category or ''} {desc} dish menu",
             )
             n += 1
+
+    # Prune dish docs no longer in the active menu (removed/replaced dishes) so the
+    # bot can't ground on or offer a dish that's gone.
+    stale = await session.scalars(
+        select(OkfDoc).where(OkfDoc.restaurant_id == restaurant_id, OkfDoc.kind == "dish")
+    )
+    for doc in stale:
+        if doc.slug not in current_dish_slugs:
+            await session.delete(doc)
+    await session.flush()
     return n
 
 
