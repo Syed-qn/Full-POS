@@ -79,6 +79,25 @@ def _is_menu_request(text: str) -> bool:
     return any(k in t for k in keywords)
 
 
+def _is_cart_query(text: str) -> bool:
+    """True for 'what's in my cart / show my order' style messages (lowercased).
+
+    Answered deterministically with the real cart so the model can't mis-handle it
+    (e.g. re-send the catalogue). Kept tight, and never matches an edit/cancel
+    ('cancel my order', 'clear cart', 'add to cart') which are real actions."""
+    t = text.strip().lower()
+    if not t or len(t) > 45:
+        return False
+    if any(w in t for w in ("cancel", "clear", "empty", "remove", "delete", "add ")):
+        return False
+    if "cart" in t:                       # "my cart", "what's in my cart", "show cart"
+        return True
+    return any(p in t for p in (
+        "what's in my order", "whats in my order", "my current order", "current order",
+        "what did i order", "show my order", "what's my order", "my order so far",
+    ))
+
+
 # Words that, on their own, mean "hello" (a greeting = start a fresh order).
 _GREET_WORDS = frozenset({
     "hi", "hii", "hiii", "hey", "heya", "hello", "helo", "hellow", "yo", "yoo",
@@ -3241,17 +3260,27 @@ async def _escalate_large_qty(
     qty: int,
     dish_query: str,
 ) -> None:
-    """Hand the chat to a human and tell the customer we'll confirm. Used when a
-    requested quantity exceeds the restaurant's anomaly threshold — we never
-    auto-add an unusually large line; a manager confirms it from the dashboard."""
-    conv.manual_takeover = True
+    """Big-order guard. An unusually large single line (e.g. "100000 lemon mints") is
+    NEVER auto-added. The bot STAYS ACTIVE (no manual-takeover mute, so the customer is
+    never left in silence) and simply asks for a realistic quantity, pointing genuine
+    bulk orders to the phone. Previously this muted the chat, which trapped customers
+    (and testing) in dead air until a manager flipped it back in the dashboard."""
+    from app.identity.models import Restaurant
+
     item = (dish_query or "").strip() or "that"
+    rest = await session.get(Restaurant, restaurant_id)
+    phone = (rest.phone if rest else "") or ""
+    call_line = (
+        f" For a genuine bulk order, please call us on {phone} and the team will set it up."
+        if phone else
+        " For a genuine bulk order, let us know and the team will set it up."
+    )
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="qty-anomaly",
         body=(
-            f"That's a large quantity ({qty}x {item})! 🤔 I've flagged your order "
-            "for our team to confirm. Someone will be with you shortly to finalise it. 😊"
+            f"That's a big order ({qty}x {item})! 😊 I can't add that many automatically. "
+            f"How many would you actually like?{call_line}"
         ),
     )
 
@@ -3934,6 +3963,85 @@ async def _transcribe_voice_note(inbound: InboundMessage) -> str | None:
         return None
 
 
+async def _try_catalog_typed_order(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage,
+    restaurant_id: int, restaurant,
+) -> bool:
+    """In CATALOGUE mode, deterministically ADD a clearly-typed single dish BEFORE the
+    AI runs, so a plain "one chicken biryani" is reliably added to the cart instead of
+    being misclassified by the model as a menu request (which re-sends the catalogue
+    cards with no text reply). Returns True if it handled (added) the message, False to
+    fall through to the AI for anything that isn't an unambiguous single catalogue dish:
+    questions, "done", menu requests, ambiguous/unknown items, multi-item messages.
+
+    Scoped to catalogue mode only, so text-mode ordering (with its size/bundle offers and
+    multi-item parsing in the AI path) is completely unchanged."""
+    from app.ordering.models import Order
+    from app.ordering.service import (
+        add_item, create_draft_order, get_or_create_customer, parse_qty_and_text,
+    )
+
+    if inbound.type != MessageType.TEXT or _resolve_phase(conv) != "ordering":
+        return False
+    if not await _catalog_mode_on(session, restaurant_id):
+        return False
+    text = (inbound.payload.get("text") or "").strip()
+    if not text or "?" in text or _is_menu_request(text.lower()):
+        return False  # questions / menu requests → AI
+
+    qty, dish_query = parse_qty_and_text(text)
+    dq = dish_query.strip().lower()
+    # Control words and obvious non-orders → AI (never intercept "done", greetings, etc.).
+    if (not dq or dq in {
+            "done", "checkout", "that's all", "thats all", "no", "yes", "nope", "yep",
+            "ok", "okey", "okay", "cancel", "menu", "hi", "hello", "hlo", "bas", "nothing"}
+            or dq.split()[0] in {
+                "what", "how", "where", "why", "who", "when", "do", "does", "can",
+                "could", "is", "are", "tell", "show"}):
+        return False
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence != MatchConfidence.DIRECT or not result.candidates:
+        return False  # ambiguous / no match → AI (gives the warm reply or disambiguates)
+    dish = result.candidates[0]
+    if await _catalog_excludes_dish(session, restaurant_id, dish):
+        return False  # not in the catalogue → AI gives the honest "we don't have it" reply
+
+    add_qty = qty or 1
+    if add_qty > _max_item_qty(restaurant):
+        await _escalate_large_qty(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            qty=add_qty, dish_query=dish.name,
+        )
+        return True
+
+    customer = await get_or_create_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone
+    )
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is not None and str(order.status) != "draft":
+        order = None
+    if order is None:
+        order = await create_draft_order(
+            session, restaurant_id=restaurant_id, customer_id=customer.id
+        )
+        _set_state(
+            conv, draft_order_id=order.id, address_offer_made=None,
+            saved_address_declined=None, saved_address_id=None,
+            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
+        )
+    await add_item(session, order=order, dish=dish, qty=add_qty)
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+    cart = await _build_cart_summary(session, conv)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="catalog-typed-add",
+        body=f"Added {add_qty}x {dish.name} ✅{_cart_tail(cart)}",
+    )
+    return True
+
+
 async def handle_inbound(
     session: AsyncSession,
     inbound: InboundMessage,
@@ -4211,6 +4319,19 @@ async def handle_inbound(
                 session, conv, inbound, restaurant_id, prefix="menu-request",
             )
             return
+        # "What's in my cart / show my order" → show the REAL cart deterministically,
+        # in ANY mode, so the model can never mishandle it (e.g. re-send the catalogue).
+        if _is_cart_query(text):
+            cart = await _build_cart_summary(session, conv)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="cart-query",
+                body=(f"🛒 Here's your cart:\n\n{cart}\n\nReply with more items, "
+                      "or send 'done' to check out 😊")
+                if cart else
+                "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+            )
+            return
         # "Where is my order / can I see the live location" → answer with the
         # current status + ETA + the live tracking link, deterministically.
         if _is_tracking_query(text):
@@ -4274,6 +4395,12 @@ async def handle_inbound(
                             body=f"You have a few coupons: {codes}. Send the code you'd like to use.",
                         )
                     return
+
+    # Catalogue mode: a clearly-typed single dish is ADDED deterministically here, so a
+    # plain "one chicken biryani" reliably goes to the cart instead of the model
+    # sometimes re-sending the catalogue cards. Anything else falls through to the AI.
+    if await _try_catalog_typed_order(session, conv, inbound, restaurant_id, restaurant):
+        return
 
     # All remaining text + button_reply → AI
     await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
