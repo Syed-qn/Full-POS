@@ -996,3 +996,20 @@
   complaint tickets (3 actions), ordering integration (coupon+wallet at confirm, FSM capture/
   release), AI complaint detection (open-only), and the manager dashboard. Migration
   f1a2b3c4d5e6 deploys it. Plan: docs/superpowers/plans/2026-06-29-wallet-coupon-tickets.md.
+
+[2026-06-29] feat: activate wallet spend safely + coupon management UI
+- Wallet SPEND now live (was dormant). finalize_confirmation auto-applies available
+  wallet credit via apply_at_confirm(use_wallet=True) -> holds it. New ordering/payments.
+  cod_due_aed(order) = total - wallet_applied (floored 0). dispatch/rider_actions uses
+  cod_due_aed for BOTH the rider stop display AND the recorded COD collection, so the
+  rider collects only the cash remainder; capture on delivery settles the held credit ->
+  wallet + cash == total exactly (NO double-charge). Customer confirmation message shows
+  "Wallet credit applied / Pay on delivery". 3 e2e tests (test_wallet_spend_flow).
+- Coupon management UI (frontend): couponsApi (create/list/pause) + Coupon/CouponCreateIn
+  types + CouponsScreen (create form: fixed/percent, kind, min-order, max-discount,
+  per-customer + total limits; table + pause kill-switch) + /coupons route + nav item.
+  4 tests. 178 frontend tests pass, tsc clean.
+- WALLET + COUPON + TICKETS feature now FULLY wired end-to-end: complaint->ticket->
+  refund-to-wallet, wallet balance/history on profile, wallet spend at checkout (safe),
+  coupon admin, expiry/reconcile/abuse beat. Backend 404 ordering/dispatch/conversation/cod
+  pass (1 pre-existing unrelated failure: test_engine_ordering totals test).
