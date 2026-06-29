@@ -183,6 +183,17 @@ async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
         await session.commit()
     except Exception:  # noqa: BLE001
         await session.rollback()
+
+    # Auto-publish to the Meta catalogue so every available, priced dish shows as a
+    # WhatsApp catalogue card — the manager keeps ONE menu and never clicks "Sync".
+    # Best-effort: no catalog_id / Meta down must never fail activation.
+    try:
+        from app.catalog.sync_service import auto_publish_to_meta
+
+        await auto_publish_to_meta(session, restaurant_id=menu.restaurant_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
     return menu
 
 

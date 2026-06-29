@@ -1578,3 +1578,18 @@
     and all 3 catalog sync endpoints. delete_dish: captured restaurant.id BEFORE session.expire_all() (else lazy-load MissingGreenlet).
   - Test: test_refresh_okf_for_restaurant_picks_up_dish_edits (price+availability edit reflected in dish doc without re-activation).
   - 81 pass (tests/menu + tests/catalog + tests/okf); ruff clean.
+
+[2026-06-29 20:30 +04] feat(menu): simplify to ONE auto-published WhatsApp menu (drop text-only/linked jargon).
+  User ask: "single menu for both text and catalog; when menu requested send catalog on WhatsApp; no complications."
+  - Backend: sync_service.auto_publish_to_meta() — best-effort push of all available+priced dishes to Meta;
+    no-ops silently when no catalog_id/token or Meta down. Wired into activate_menu (after OKF refresh), guarded so
+    activation never depends on Meta. Test: test_auto_publish_noop_without_catalog_id.
+  - Frontend UnifiedMenuPanel: two-way refresh — refreshSignal prop (parent bumps menuRev on dish edit/delete/toggle →
+    panel re-fetches, kills stale AED 20-vs-30) + onChanged callback (after sync, parent reloads dish list).
+    Collapsed "Pull from Meta"+"Sync both ways" into one primary "Publish to WhatsApp"; Pull demoted to small link.
+    Badges reworded: Linked→"On WhatsApp", Text only→"Not on WhatsApp yet". Copy: "One menu... publishes automatically
+    on activation." Title "WhatsApp menu".
+  - MenuManagerScreen: menuRev state bumped in reloadDishes + onToggle; passes refreshSignal/onChanged to panel.
+  - 20-vs-30 root cause: UnifiedMenuPanel only loaded on mount/own-sync, never after an edit → stale Meta-mirror price.
+    build_unified_menu already uses dish price as truth (unified.py:91); fix was the missing refetch.
+  - 82 backend pass (catalog+menu+okf); frontend tsc clean; MenuManagerScreen 4 tests pass.

@@ -7,16 +7,26 @@ import type { RestaurantOut } from "../lib/types";
 import { fetchUnifiedMenu, syncCatalogFull, type UnifiedMenu } from "../lib/unifiedMenuApi";
 import s from "./UnifiedMenuPanel.module.css";
 
+// Manager-facing status — no Meta jargon. Everything publishes automatically on
+// menu activation; "Not yet" just means it hasn't been pushed since its last edit.
 const BADGE: Record<string, { label: string; cls: string }> = {
-  linked: { label: "Linked", cls: s.linked },
-  dish_only: { label: "Text only", cls: s.dishOnly },
+  linked: { label: "On WhatsApp", cls: s.linked },
+  dish_only: { label: "Not on WhatsApp yet", cls: s.dishOnly },
   catalog_only: { label: "Meta only", cls: s.catOnly },
 };
 
 export function UnifiedMenuPanel({
   onCatalogIdSaved,
+  refreshSignal,
+  onChanged,
 }: {
   onCatalogIdSaved?: () => void;
+  /** Bumped by the parent after a dish edit/delete/availability toggle so the
+   *  unified view re-fetches and never shows a stale price (e.g. AED 20 vs 30). */
+  refreshSignal?: number;
+  /** Called after a Meta sync that may have created/linked dishes, so the parent
+   *  reloads its dish list. */
+  onChanged?: () => void;
 }) {
   const [menu, setMenu] = useState<UnifiedMenu | null>(null);
   const [catalogId, setCatalogId] = useState("");
@@ -43,6 +53,12 @@ export function UnifiedMenuPanel({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Re-fetch when the parent signals a dish change (edit/delete/toggle). Skip the
+  // initial 0 so this doesn't double-load on mount.
+  useEffect(() => {
+    if (refreshSignal) load();
+  }, [refreshSignal, load]);
 
   async function saveCatalogId() {
     setSavingId(true);
@@ -73,6 +89,7 @@ export function UnifiedMenuPanel({
           (res.linked ? ` · ${res.linked} linked` : ""),
       );
       await load();
+      onChanged?.();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Sync failed", "error");
     } finally {
@@ -86,6 +103,7 @@ export function UnifiedMenuPanel({
       const res = await syncCatalog();
       toast(`Pulled ${res.total_active} products from Meta`);
       await load();
+      onChanged?.();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Pull failed", "error");
     } finally {
@@ -99,10 +117,11 @@ export function UnifiedMenuPanel({
     <div className={s.panel}>
       <div className={s.head}>
         <div>
-          <h3 className={s.title}>Unified menu</h3>
+          <h3 className={s.title}>WhatsApp menu</h3>
           <p className={s.sub}>
-            One menu for ops and WhatsApp. Customers get catalogue cards when synced;
-            text dishes and Meta products stay linked here.
+            One menu. Dishes publish to WhatsApp automatically when you activate a menu —
+            customers who ask for the menu get tappable catalogue cards. Use{" "}
+            <b>Publish to WhatsApp</b> to push changes right now.
           </p>
           <details className={s.guide}>
             <summary>How to create a Meta catalogue</summary>
@@ -114,17 +133,22 @@ export function UnifiedMenuPanel({
                 Set <code>APP_WA_CATALOG_TOKEN</code> on the server (system user with{" "}
                 <code>catalog_management</code>).
               </li>
-              <li>Run <b>Sync both ways</b> — text dishes are pushed to Meta automatically.</li>
+              <li>That's it — dishes publish automatically on menu activation. <b>Publish to WhatsApp</b> pushes changes on demand.</li>
             </ol>
           </details>
         </div>
         <div className={s.actions}>
-          <Button variant="ghost" onClick={doPullOnly} disabled={syncing || !catalogId.trim()}>
-            Pull from Meta
-          </Button>
           <Button onClick={doSyncFull} disabled={syncing || !catalogId.trim()}>
-            {syncing ? "Syncing…" : "Sync both ways"}
+            {syncing ? "Publishing…" : "Publish to WhatsApp"}
           </Button>
+          <button
+            type="button"
+            className={s.advancedLink}
+            onClick={doPullOnly}
+            disabled={syncing || !catalogId.trim()}
+          >
+            Pull from Meta
+          </button>
         </div>
       </div>
 

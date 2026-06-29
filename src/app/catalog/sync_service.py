@@ -316,6 +316,25 @@ async def sync_full_bidirectional(
     return final
 
 
+async def auto_publish_to_meta(session: AsyncSession, *, restaurant_id: int) -> SyncResult:
+    """Best-effort: push the restaurant's dishes to Meta so every available, priced
+    dish becomes a WhatsApp catalogue product automatically — no manual "Sync" click.
+
+    Called after menu activation. Silently no-ops when there's no catalog_id/token
+    (dev, or a restaurant that hasn't connected Meta yet) or if Meta is unreachable;
+    publishing must NEVER block or fail the manager's menu activation. Caller commits.
+    """
+    rest = await session.get(Restaurant, restaurant_id)
+    catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
+    if not catalog_id:
+        return SyncResult()  # Meta not connected — nothing to publish to.
+    try:
+        return await push_dishes_to_meta(session, restaurant_id=restaurant_id)
+    except (CatalogReadError, CatalogWriteError) as exc:
+        logger.warning("auto-publish to Meta skipped for restaurant %s: %s", restaurant_id, exc)
+        return SyncResult()
+
+
 async def list_catalog_products(
     session: AsyncSession, *, restaurant_id: int, active_only: bool = False
 ) -> list[CatalogProduct]:

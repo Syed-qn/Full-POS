@@ -20,6 +20,9 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   const [editing, setEditing] = useState<DishOut | "new" | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
+  // Bumped on every dish mutation so the unified/catalog panel re-fetches and can
+  // never show a stale price (the AED 20-vs-30 bug).
+  const [menuRev, setMenuRev] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reloadDishes() {
@@ -35,6 +38,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
         })
         .catch(() => {});
     }
+    setMenuRev((v) => v + 1);
   }
 
   useEffect(() => {
@@ -124,6 +128,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, is_available: next } : d)));
     try {
       await setAvailability(id, next);
+      setMenuRev((v) => v + 1); // refresh unified/WhatsApp view with new availability
     } catch {
       setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, is_available: !next } : d)));
       setError("Failed to update availability.");
@@ -241,7 +246,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           </>
         }
       />
-      <UnifiedMenuPanel />
+      <UnifiedMenuPanel refreshSignal={menuRev} onChanged={reloadDishes} />
       {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (

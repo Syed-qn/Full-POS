@@ -353,3 +353,12 @@ async def test_is_catalog_fully_synced_requires_all_dishes_linked(db_session, re
     ))
     await db_session.commit()
     assert await is_catalog_fully_synced(db_session, restaurant_id=restaurant.id) is True
+
+
+async def test_auto_publish_noop_without_catalog_id(db_session, restaurant):
+    """Auto-publish (run on menu activation) must silently no-op when the restaurant
+    hasn't connected a Meta catalogue — activation must never depend on Meta."""
+    restaurant.settings = {k: v for k, v in (restaurant.settings or {}).items() if k != "catalog_id"}
+    await db_session.commit()
+    res = await sync_service.auto_publish_to_meta(db_session, restaurant_id=restaurant.id)
+    assert (res.pushed, res.push_updated, res.added, res.updated) == (0, 0, 0, 0)
