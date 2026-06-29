@@ -1564,3 +1564,7 @@
 - FE UnifiedMenuPanel: Commerce Manager setup guide + push error toasts; onboarding copy updated.
 - TESTS: push required fields, local mirror, validation error, sync_full, is_catalog_fully_synced,
   onboarding dish_only gate; 14 catalog/menu/onboarding pass.
+
+[2026-06-29 23:50 +04] chore(graphify): graphify update . — 591 code files re-extracted (AST only);
+  graph.json 6045 nodes / 19857 edges / 1212 communities; GRAPH_REPORT.md + 13 cache JSONs;
+  new catalog nodes: build_catalog_item_data, wait_for_batch_handles, is_catalog_fully_synced.
