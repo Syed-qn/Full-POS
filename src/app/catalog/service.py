@@ -225,7 +225,10 @@ async def handle_catalog_order(
                 CatalogProduct.is_active.is_(True),
             ).limit(1)
         )
-        if dish is None or dish.price_aed is None or in_catalogue is None:
+        # Also reject a dish the manager turned OFF today, directly on dish.is_available —
+        # a Meta pull can reset CatalogProduct.is_active to True, so is_active alone isn't
+        # a reliable availability gate for a tapped catalogue card.
+        if dish is None or dish.price_aed is None or in_catalogue is None or not dish.is_available:
             price = _to_decimal(item.get("item_price"))
             unmapped.append(
                 f"{qty}x item {retailer_id}" + (f" (AED {_aed(price)})" if price else "")

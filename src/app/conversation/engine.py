@@ -3144,6 +3144,42 @@ async def _handle_size_choice(
     return True
 
 
+async def _offer_unavailable_alternative(
+    session: AsyncSession, conv, inbound: InboundMessage, restaurant_id: int, dish_query: str
+) -> bool:
+    """If ``dish_query`` is a real dish that's just turned OFF today, tell the customer
+    it's unavailable and suggest an available alternative (same category if possible).
+    Returns True if it sent such a message, False if the dish genuinely isn't on the menu
+    (so the caller falls back to the off-menu decline). Catalogue mode: only suggest an
+    alternative that's actually orderable from the catalogue."""
+    from app.ordering.matching import find_unavailable_match, suggest_available_alternative
+
+    off = await find_unavailable_match(session, restaurant_id, dish_query)
+    if off is None:
+        return False
+    alt = await suggest_available_alternative(
+        session, restaurant_id, category=off.category, exclude_id=off.id
+    )
+    if alt is not None and await _catalog_excludes_dish(session, restaurant_id, alt):
+        alt = None  # don't suggest a dish the customer can't actually order
+    if alt is not None:
+        body = (
+            f"Sorry, {off.name} is sold out today 🙏 "
+            f"Can I get you {alt.name} (AED {_aed(alt.price_aed)}) instead, "
+            "or say 'menu' to see what's available? 😊"
+        )
+    else:
+        body = (
+            f"Sorry, {off.name} is sold out today 🙏 "
+            "Say 'menu' to see what we have available right now 😊"
+        )
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="dish-unavailable", body=body,
+    )
+    return True
+
+
 async def _execute_ai_add_item(
     session: AsyncSession,
     conv,
@@ -3169,7 +3205,15 @@ async def _execute_ai_add_item(
     adjust than to silently drop them."""
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH:
-        return "no_match"
+        # Distinguish "we have it but it's off today" from "we don't have it at all".
+        # The matcher only searches AVAILABLE dishes, so a real dish the manager turned
+        # off (e.g. Chicken Biryani sold out today) lands here. Tell the customer it's
+        # unavailable today and offer an available alternative, instead of the misleading
+        # "we don't have that".
+        handled = await _offer_unavailable_alternative(
+            session, conv, inbound, restaurant_id, dish_query
+        )
+        return "unavailable" if handled else "no_match"
     if result.confidence == MatchConfidence.AMBIGUOUS:
         from app.llm.factory import get_arbiter
         try:

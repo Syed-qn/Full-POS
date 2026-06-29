@@ -1750,3 +1750,18 @@
   Added wait_for_ingest param to push_dishes_to_meta (default True for manual Publish so toast counts are accurate);
   auto_publish passes False (fire-and-forget). Audit confirmed only two batch method sites remain: UPDATE (push,
   upsert) and DELETE (unpublish, best-effort non-blocking). 75 catalog+menu tests pass; boot+lint clean.
+
+[2026-06-30 02:05 +04] feat: handle "dish off today" properly (sold-out messaging + tap rejection).
+  Q: restaurant turns off Chicken Biryani for the day — how handled? Audit found:
+  - Text menu: hidden (filters is_available=True). ✓
+  - Typed/AI order: matcher only searches available → NO_MATCH → bot said "we don't have that" (WRONG; we have it,
+    just off). The nice "sold out today + alternative" code (find_unavailable_match/suggest_available_alternative)
+    existed but was DEAD (no callers).
+  - Catalog tap: gated on CatalogProduct.is_active, which a Meta pull resets to True → an off dish could slip in.
+  - Meta/OKF: availability=out_of_stock pushed on toggle; OKF dish doc says Available: no. ✓
+  Fixes:
+  1. _execute_ai_add_item: on NO_MATCH, call new _offer_unavailable_alternative → if it's a real off-today dish,
+     send "Sorry, {dish} is sold out today 🙏 Can I get you {alt} instead..." (same-category available alt, catalogue-
+     filtered) and return new status "unavailable" (callers already only act on no_match/added, so it's handled).
+  2. catalog/service.py tap path: also reject `not dish.is_available` directly (is_active alone unreliable post-pull).
+  Tests: test_dish_unavailable.py (alt offered; genuine off-menu still declines). 165 ordering + conv + catalog pass.
