@@ -559,79 +559,6 @@
       "tests_test_simulator_ordering_py"
     ],
     "6": [
-      "conversation_engine_build_history",
-      "conversation_engine_cart_expired",
-      "conversation_engine_handle_inbound",
-      "conversation_engine_is_claim_coupon",
-      "conversation_engine_is_complaint",
-      "conversation_engine_is_restaurant_location_request",
-      "conversation_engine_is_tracking_query",
-      "conversation_engine_is_valid_action_for_phase",
-      "conversation_engine_rationale_102",
-      "conversation_engine_rationale_132",
-      "conversation_engine_rationale_160",
-      "conversation_engine_rationale_1777",
-      "conversation_engine_rationale_80",
-      "conversation_service_get_or_create_conversation",
-      "conversation_service_record_message",
-      "conversation_service_send_manual_message",
-      "conversation_service_set_manual_takeover",
-      "conversation_test_engine",
-      "conversation_test_engine_full_ai",
-      "conversation_test_engine_full_ai_rationale_183",
-      "conversation_test_engine_full_ai_rationale_222",
-      "conversation_test_engine_full_ai_rationale_258",
-      "conversation_test_engine_full_ai_rationale_262",
-      "conversation_test_engine_full_ai_rationale_300",
-      "conversation_test_engine_full_ai_rationale_352",
-      "conversation_test_engine_full_ai_rationale_402",
-      "conversation_test_engine_full_ai_rationale_415",
-      "conversation_test_engine_full_ai_rationale_427",
-      "conversation_test_engine_full_ai_rationale_429",
-      "conversation_test_engine_full_ai_rationale_460",
-      "conversation_test_engine_full_ai_rationale_480",
-      "conversation_test_engine_full_ai_rationale_495",
-      "conversation_test_engine_full_ai_rationale_506",
-      "conversation_test_engine_full_ai_rationale_544",
-      "conversation_test_engine_full_ai_seed_menu",
-      "conversation_test_engine_full_ai_status_reply_body",
-      "conversation_test_engine_full_ai_test_add_item_action_updates_cart",
-      "conversation_test_engine_full_ai_test_address_step_recovers_stale_draft_pointer",
-      "conversation_test_engine_full_ai_test_build_history_alternates_roles",
-      "conversation_test_engine_full_ai_test_build_history_maps_location_to_text",
-      "conversation_test_engine_full_ai_test_greeting_offers_to_resume_or_start_fresh",
-      "conversation_test_engine_full_ai_test_greeting_starts_fresh_and_drops_abandoned_cart",
-      "conversation_test_engine_full_ai_test_is_restaurant_location_request_detection",
-      "conversation_test_engine_full_ai_test_is_tracking_query_detection",
-      "conversation_test_engine_full_ai_test_location_pin_outside_radius_rejected",
-      "conversation_test_engine_full_ai_test_new_order_clears_previous_address_state",
-      "conversation_test_engine_full_ai_test_outbound_message_stored_after_send",
-      "conversation_test_engine_full_ai_test_phase_guard_blocks_wrong_phase_action",
-      "conversation_test_engine_full_ai_test_remove_item_partial_quantity",
-      "conversation_test_engine_full_ai_test_restaurant_location_request_sends_pin_no_draft",
-      "conversation_test_engine_full_ai_test_resume_cart_continues_the_existing_order",
-      "conversation_test_engine_full_ai_test_status_query_ignores_stale_draft",
-      "conversation_test_engine_full_ai_test_status_query_reports_latest_not_older_open_order",
-      "conversation_test_engine_full_ai_test_tracking_query_replies_with_live_link",
-      "conversation_test_engine_full_ai_test_update_qty_and_remove_item_actions",
-      "conversation_test_engine_make_inbound",
-      "conversation_test_engine_seed_menu",
-      "conversation_test_engine_test_greeting_advances_state_to_menu_sent",
-      "conversation_test_engine_test_greeting_sends_menu_to_outbox",
-      "conversation_test_engine_test_live_location_ping_outside_address_capture_is_silently_dropped",
-      "conversation_test_engine_test_location_in_awaiting_confirmation_phase_is_silently_dropped",
-      "conversation_test_engine_test_manual_takeover_short_circuits_bot",
-      "conversation_test_engine_test_natural_language_optout_records_optout",
-      "conversation_test_engine_test_natural_language_optout_sends_confirmation",
-      "conversation_test_engine_test_ordering_message_not_misclassified_as_optout",
-      "conversation_test_engine_test_second_message_after_menu_sent_does_not_resend_menu",
-      "conversation_test_engine_test_stop_keyword_records_optout",
-      "conversationagentresult",
-      "src_app_conversation_service_py_asyncsession",
-      "src_app_conversation_service_py_conversation",
-      "tests_conversation_test_engine_py_inboundmessage"
-    ],
-    "7": [
       "claude_rationale_104",
       "claude_rationale_113",
       "claude_rationale_140",
@@ -698,7 +625,7 @@
       "src_app_llm_fake_py_uploadedfile",
       "tests_conftest_client"
     ],
-    "8": [
+    "7": [
       "catalog_service_find_dish",
       "catalog_service_rationale_43",
       "conversation_test_abandoned_cart",
@@ -763,9 +690,60 @@
       "tests_conversation_test_abandoned_cart_py_inboundmessage",
       "tests_conversation_test_engine_multi_item_py_inboundmessage"
     ],
+    "8": [
+      "conversation_engine_build_history",
+      "conversation_engine_is_restaurant_location_request",
+      "conversation_engine_is_tracking_query",
+      "conversation_engine_is_valid_action_for_phase",
+      "conversation_engine_rationale_102",
+      "conversation_engine_rationale_80",
+      "conversation_engine_resolve_phase",
+      "conversation_service_get_or_create_conversation",
+      "conversation_service_record_message",
+      "conversation_service_send_manual_message",
+      "conversation_test_engine_full_ai",
+      "conversation_test_engine_full_ai_rationale_183",
+      "conversation_test_engine_full_ai_rationale_222",
+      "conversation_test_engine_full_ai_rationale_258",
+      "conversation_test_engine_full_ai_rationale_262",
+      "conversation_test_engine_full_ai_rationale_300",
+      "conversation_test_engine_full_ai_rationale_352",
+      "conversation_test_engine_full_ai_rationale_402",
+      "conversation_test_engine_full_ai_rationale_415",
+      "conversation_test_engine_full_ai_rationale_427",
+      "conversation_test_engine_full_ai_rationale_429",
+      "conversation_test_engine_full_ai_rationale_460",
+      "conversation_test_engine_full_ai_rationale_480",
+      "conversation_test_engine_full_ai_rationale_495",
+      "conversation_test_engine_full_ai_rationale_506",
+      "conversation_test_engine_full_ai_rationale_544",
+      "conversation_test_engine_full_ai_seed_menu",
+      "conversation_test_engine_full_ai_status_reply_body",
+      "conversation_test_engine_full_ai_test_add_item_action_updates_cart",
+      "conversation_test_engine_full_ai_test_address_step_recovers_stale_draft_pointer",
+      "conversation_test_engine_full_ai_test_build_history_alternates_roles",
+      "conversation_test_engine_full_ai_test_build_history_maps_location_to_text",
+      "conversation_test_engine_full_ai_test_greeting_offers_to_resume_or_start_fresh",
+      "conversation_test_engine_full_ai_test_greeting_starts_fresh_and_drops_abandoned_cart",
+      "conversation_test_engine_full_ai_test_is_restaurant_location_request_detection",
+      "conversation_test_engine_full_ai_test_is_tracking_query_detection",
+      "conversation_test_engine_full_ai_test_location_pin_outside_radius_rejected",
+      "conversation_test_engine_full_ai_test_new_order_clears_previous_address_state",
+      "conversation_test_engine_full_ai_test_outbound_message_stored_after_send",
+      "conversation_test_engine_full_ai_test_phase_guard_blocks_wrong_phase_action",
+      "conversation_test_engine_full_ai_test_remove_item_partial_quantity",
+      "conversation_test_engine_full_ai_test_resolve_phase_maps_old_states",
+      "conversation_test_engine_full_ai_test_restaurant_location_request_sends_pin_no_draft",
+      "conversation_test_engine_full_ai_test_resume_cart_continues_the_existing_order",
+      "conversation_test_engine_full_ai_test_status_query_ignores_stale_draft",
+      "conversation_test_engine_full_ai_test_status_query_reports_latest_not_older_open_order",
+      "conversation_test_engine_full_ai_test_tracking_query_replies_with_live_link",
+      "conversation_test_engine_full_ai_test_update_qty_and_remove_item_actions",
+      "conversationagentresult",
+      "src_app_conversation_service_py_asyncsession",
+      "src_app_conversation_service_py_conversation"
+    ],
     "9": [
-      "components_liveorderrow_test",
-      "components_liveorderrow_test_o",
       "customerprofilescreen_handledeleteaddress",
       "customerprofilescreen_handlesaveaddress",
       "customerprofilescreen_save",
@@ -823,6 +801,8 @@
       "components_compacttable_column",
       "components_compacttable_compacttable",
       "components_compacttable_sk_widths",
+      "components_liveorderrow_test",
+      "components_liveorderrow_test_o",
       "components_slaordercard",
       "components_slaordercard_slaordercard",
       "components_slaordercard_test",
@@ -869,6 +849,57 @@
       "screens_ordersscreen_toymd"
     ],
     "11": [
+      "conversation_engine_cart_expired",
+      "conversation_engine_handle_inbound",
+      "conversation_engine_is_claim_coupon",
+      "conversation_engine_is_complaint",
+      "conversation_engine_rationale_1098",
+      "conversation_engine_rationale_132",
+      "conversation_engine_rationale_160",
+      "conversation_engine_rationale_1777",
+      "conversation_engine_rationale_3192",
+      "conversation_engine_redeem_context",
+      "conversation_engine_transcribe_voice_note",
+      "conversation_service_set_manual_takeover",
+      "conversation_test_complaint_detection",
+      "conversation_test_complaint_detection_inb",
+      "conversation_test_complaint_detection_post_order_conv",
+      "conversation_test_complaint_detection_rationale_1",
+      "conversation_test_complaint_detection_rationale_28",
+      "conversation_test_complaint_detection_seed_menu",
+      "conversation_test_complaint_detection_test_complaint_does_not_compensate",
+      "conversation_test_complaint_detection_test_complaint_opens_ticket",
+      "conversation_test_complaint_detection_test_status_query_not_treated_as_complaint",
+      "conversation_test_engine",
+      "conversation_test_engine_make_inbound",
+      "conversation_test_engine_seed_menu",
+      "conversation_test_engine_test_greeting_advances_state_to_menu_sent",
+      "conversation_test_engine_test_greeting_sends_menu_to_outbox",
+      "conversation_test_engine_test_live_location_ping_outside_address_capture_is_silently_dropped",
+      "conversation_test_engine_test_location_in_awaiting_confirmation_phase_is_silently_dropped",
+      "conversation_test_engine_test_manual_takeover_short_circuits_bot",
+      "conversation_test_engine_test_natural_language_optout_records_optout",
+      "conversation_test_engine_test_natural_language_optout_sends_confirmation",
+      "conversation_test_engine_test_ordering_message_not_misclassified_as_optout",
+      "conversation_test_engine_test_second_message_after_menu_sent_does_not_resend_menu",
+      "conversation_test_engine_test_stop_keyword_records_optout",
+      "conversation_test_rider_flow",
+      "conversation_test_rider_flow_pick_up",
+      "conversation_test_rider_flow_rationale_138",
+      "conversation_test_rider_flow_rationale_163",
+      "conversation_test_rider_flow_rationale_21",
+      "conversation_test_rider_flow_seed_batch",
+      "conversation_test_rider_flow_start_tracker",
+      "conversation_test_rider_flow_test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location",
+      "conversation_test_rider_flow_test_button_only_unknown_id_no_op",
+      "conversation_test_rider_flow_test_delivered_marks_delivered_and_records_cod",
+      "conversation_test_rider_flow_test_last_delivery_frees_rider",
+      "conversation_test_rider_flow_test_orders_picked_advances_all_and_sends_first_stop",
+      "conversation_test_rider_flow_test_orders_picked_paired_but_app_closed_still_gets_web_tracker",
+      "conversation_test_rider_flow_test_orders_picked_while_already_sharing_skips_web_tracker",
+      "tests_conversation_test_engine_py_inboundmessage"
+    ],
+    "12": [
       "marketing_test_service",
       "marketing_test_service_approved_campaign",
       "marketing_test_service_customer",
@@ -918,7 +949,7 @@
       "test_service_test_run_forecast_persists_prediction_run",
       "test_service_test_set_manual_takeover"
     ],
-    "12": [
+    "13": [
       "architecture_md_bounded_contexts",
       "architecture_md_inbound_dataflow",
       "architecture_md_migration_conventions",
@@ -967,7 +998,7 @@
       "readme_ports_and_adapters",
       "readme_transactional_outbox"
     ],
-    "13": [
+    "14": [
       "dispatch_rider_app_rationale_57",
       "dispatch_rider_app_send_rider_app_pairing",
       "identity_router",
@@ -1016,7 +1047,7 @@
       "src_app_identity_router_py_asyncsession",
       "src_app_identity_router_py_restaurant"
     ],
-    "14": [
+    "15": [
       "app_metrics",
       "app_metrics_metrics_response",
       "metrics",
@@ -1064,7 +1095,7 @@
       "tests_sla_test_sla_monitor_py_order",
       "tests_sla_test_sla_monitor_py_restaurant"
     ],
-    "15": [
+    "16": [
       "availabilityin",
       "dishin",
       "dishpatch",
@@ -1112,7 +1143,7 @@
       "src_app_menu_service_py_uploadedfile",
       "test_llm_ordering_ports_rationale_41"
     ],
-    "16": [
+    "17": [
       "campaign",
       "date",
       "marketing_models_Campaign",
@@ -1160,7 +1191,7 @@
       "todays_special_is_personalized",
       "watemplate"
     ],
-    "17": [
+    "18": [
       "couponcreatein",
       "couponissuein",
       "couponout",
@@ -1208,7 +1239,7 @@
       "whatsapp_test_templates_test_register_utility_templates",
       "whatsapp_test_templates_test_within_window_sends_session_text"
     ],
-    "18": [
+    "19": [
       "app_config",
       "app_config_get_settings",
       "app_config_settings",
@@ -1255,7 +1286,7 @@
       "test_factory_test_unknown_provider_raises",
       "workers_celery_app"
     ],
-    "19": [
+    "20": [
       "alembic_env",
       "alembic_env_do_run_migrations",
       "alembic_env_include_object",
@@ -1301,7 +1332,7 @@
       "tickets_service_resolve_wallet_refund",
       "tickets_service_ticketerror"
     ],
-    "20": [
+    "21": [
       "basemodel",
       "conversation_schemas",
       "conversation_schemas_chatcustomercontextout",
@@ -1346,7 +1377,7 @@
       "wallet_schemas_walletcreditin",
       "wallet_schemas_walletentryout"
     ],
-    "21": [
+    "22": [
       "app_first_rider_flow_goal",
       "plan_transport_agnostic_service",
       "understanding___rider_tracker_is_live",
@@ -1390,7 +1421,7 @@
       "understanding_test_simulator_py",
       "understanding_web_tracker_cta"
     ],
-    "22": [
+    "23": [
       "components_pageheader",
       "components_pageheader_pageheader",
       "lib_marketingapi",
@@ -1434,7 +1465,7 @@
       "screens_marketingscreen_templatepreview",
       "screens_marketingscreen_todaysspecial"
     ],
-    "23": [
+    "24": [
       "cratis_api_only_model",
       "cratis_auth_decision",
       "cratis_hard_rules",
@@ -1478,7 +1509,7 @@
       "u_rider_app_only",
       "understanding_changelog"
     ],
-    "24": [
+    "25": [
       "dispatch_models_ordertrackingsession",
       "dispatch_models_rationale_58",
       "dispatch_tracking_live",
@@ -1521,50 +1552,6 @@
       "src_app_dispatch_tracking_router_py_asyncsession",
       "src_app_dispatch_tracking_router_py_httpauthorizationcredentials",
       "src_app_dispatch_tracking_router_py_restaurant"
-    ],
-    "25": [
-      "service",
-      "service_active_order_count",
-      "service_add_item",
-      "service_advance_kitchen_status",
-      "service_auto_dispatch_on_ready",
-      "service_cancel_order",
-      "service_commit_route",
-      "service_compute_exclusion_hash",
-      "service_compute_prep_deadline",
-      "service_create_draft_order",
-      "service_create_manual_order",
-      "service_delete_order",
-      "service_dispatch",
-      "service_dispatch_ortools",
-      "service_dispatchresult",
-      "service_dropoff_coords",
-      "service_finalize_confirmation",
-      "service_geocode_manual_address",
-      "service_get_available_resale_orders",
-      "service_get_last_address",
-      "service_get_or_create_customer",
-      "service_get_order_for_tenant",
-      "service_is_excluded_for_resale",
-      "service_latest_rider_positions",
-      "service_modify_order",
-      "service_parse_qty_and_text",
-      "service_patch_address",
-      "service_rationale_102",
-      "service_rationale_29",
-      "service_rationale_385",
-      "service_rationale_683",
-      "service_rationale_773",
-      "service_rationale_812",
-      "service_reassign_order",
-      "service_refresh_prep_deadline",
-      "service_remove_item",
-      "service_restaurant_lock",
-      "service_run_dispatch_engine",
-      "service_set_item_qty",
-      "service_sweep_ready_once",
-      "service_upsert_address",
-      "worker_dispatch_sweep_ready"
     ],
     "26": [
       "components_appinvitemodal",
@@ -1694,6 +1681,48 @@
       "valueerror"
     ],
     "29": [
+      "service",
+      "service_active_order_count",
+      "service_add_item",
+      "service_advance_kitchen_status",
+      "service_auto_dispatch_on_ready",
+      "service_cancel_order",
+      "service_commit_route",
+      "service_compute_exclusion_hash",
+      "service_compute_prep_deadline",
+      "service_create_draft_order",
+      "service_create_manual_order",
+      "service_delete_order",
+      "service_dispatch",
+      "service_dispatch_ortools",
+      "service_dispatchresult",
+      "service_dropoff_coords",
+      "service_finalize_confirmation",
+      "service_geocode_manual_address",
+      "service_get_available_resale_orders",
+      "service_get_or_create_customer",
+      "service_get_order_for_tenant",
+      "service_is_excluded_for_resale",
+      "service_latest_rider_positions",
+      "service_modify_order",
+      "service_parse_qty_and_text",
+      "service_rationale_102",
+      "service_rationale_29",
+      "service_rationale_385",
+      "service_rationale_683",
+      "service_rationale_773",
+      "service_rationale_812",
+      "service_reassign_order",
+      "service_refresh_prep_deadline",
+      "service_remove_item",
+      "service_restaurant_lock",
+      "service_run_dispatch_engine",
+      "service_set_item_qty",
+      "service_sweep_ready_once",
+      "service_upsert_address",
+      "worker_dispatch_sweep_ready"
+    ],
+    "30": [
       "src_app_wallet_service_py_asyncsession",
       "src_app_wallet_service_py_decimal",
       "wallet_errors",
@@ -1735,7 +1764,7 @@
       "walletaccount",
       "walletentry"
     ],
-    "30": [
+    "31": [
       "App_PairingScreen",
       "App_TrackingScreen",
       "api_getOrders",
@@ -1775,7 +1804,7 @@
       "tasks_sendCurrentLocation",
       "tasks_startBackgroundTracking"
     ],
-    "31": [
+    "32": [
       "cancelorderin",
       "customerlookupout",
       "fsm_rationale_30",
@@ -1815,7 +1844,7 @@
       "src_app_ordering_router_py_orderdetailout",
       "src_app_ordering_router_py_restaurant"
     ],
-    "32": [
+    "33": [
       "conversation_test_engine_ordering",
       "conversation_test_engine_ordering_btn",
       "conversation_test_engine_ordering_conv",
@@ -1855,7 +1884,7 @@
       "menu",
       "tests_conversation_test_engine_ordering_py_inboundmessage"
     ],
-    "33": [
+    "34": [
       "dispatch_rider_actions_deliveroutcome",
       "dispatch_rider_app_router",
       "dispatch_rider_app_router_ackout",
@@ -1895,7 +1924,7 @@
       "src_app_dispatch_rider_app_router_py_httpauthorizationcredentials",
       "src_app_dispatch_rider_app_router_py_rider"
     ],
-    "34": [
+    "35": [
       "prometheus_grafana_datasource",
       "prometheus_job_restaurant_api",
       "prometheus_job_self",
@@ -1934,7 +1963,7 @@
       "understanding_milestone_phase6",
       "understanding_milestone_phase7"
     ],
-    "35": [
+    "36": [
       "conversation_service_get_dashboard_messages",
       "conversation_service_list_dashboard_conversations",
       "conversation_service_message_display_text",
@@ -1972,7 +2001,7 @@
       "ordering_test_order_detail_test_get_order_detail_wrong_tenant_raises",
       "ordering_test_order_detail_token"
     ],
-    "36": [
+    "37": [
       "dispatch_optimizer",
       "dispatch_optimizer_assign_priority",
       "dispatch_optimizer_best_effort_partial",
@@ -2010,7 +2039,7 @@
       "dispatch_test_optimizer_test_two_far_orders_one_rider_serves_what_fits_drops_rest",
       "dispatch_test_optimizer_test_two_near_orders_one_rider_single_route"
     ],
-    "37": [
+    "38": [
       "components_confirmdialog",
       "components_confirmdialog_confirmdialog",
       "components_confirmdialog_props",
@@ -2047,7 +2076,7 @@
       "screens_orderdetaildrawer_timelinelabel",
       "screens_orderdetaildrawer_timelinetab"
     ],
-    "38": [
+    "39": [
       "audiencesegmentout",
       "copywriter_dedupe_adjacent_emoji",
       "copywriter_draft_template",
@@ -2083,7 +2112,7 @@
       "src_app_marketing_router_py_uploadfile",
       "src_app_marketing_router_py_watemplate"
     ],
-    "39": [
+    "40": [
       "components_locationpicker",
       "components_locationpicker_fallback",
       "components_locationpicker_locationpicker",
@@ -2119,7 +2148,7 @@
       "settingsscreen_savegeneral",
       "settingsscreen_updatetier"
     ],
-    "40": [
+    "41": [
       "fake_fakeforecastmodel",
       "fake_fakeforecastmodel_fit",
       "fake_fakeforecastmodel_predict_dish_hour",
@@ -2154,7 +2183,7 @@
       "worker_retrain_all_tenants",
       "worker_run_retrains"
     ],
-    "41": [
+    "42": [
       "dispatch_batching_build_batches",
       "dispatch_batching_insertion_detour_km",
       "dispatch_batching_ordercandidate",
@@ -2188,7 +2217,7 @@
       "test_batch_rationale_68",
       "test_batch_rationale_91"
     ],
-    "42": [
+    "43": [
       "async_sessionmaker",
       "conversation_router_dispatch_outbox",
       "conversation_worker",
@@ -2221,7 +2250,7 @@
       "worker_run_forecasts",
       "worker_send_scheduled_campaigns"
     ],
-    "43": [
+    "44": [
       "cod_models",
       "dispatch_rider_app",
       "dispatch_rider_app_create_pairing_code",
@@ -2254,7 +2283,7 @@
       "src_app_dispatch_rider_app_py_rider",
       "test_rider_app_actions_suite"
     ],
-    "44": [
+    "45": [
       "dispatch_rider_actions_mark_order_delivered",
       "dispatch_rider_actions_rationale_199",
       "dispatch_rider_flow",
@@ -2287,7 +2316,7 @@
       "src_app_dispatch_rider_flow_py_order",
       "src_app_dispatch_rider_flow_py_rider"
     ],
-    "45": [
+    "46": [
       "src_app_marketing_template_mock_py",
       "template_mock_mocktemplateprovider",
       "template_mock_mocktemplateprovider_create",
@@ -2320,7 +2349,39 @@
       "test_worker_test_weekly_retrain_schedule_uses_settings_no_hardcode",
       "tests_marketing_test_worker_py"
     ],
-    "46": [
+    "47": [
+      "addressdetailout",
+      "addresspatchin",
+      "customerdetailout",
+      "customerlistout",
+      "customerpatchin",
+      "customerprofileout",
+      "detail_schemas_line_total",
+      "marketing_models_OptOut",
+      "ordering_customer_router",
+      "ordering_customer_router_delete_address",
+      "ordering_customer_router_delete_customer",
+      "ordering_customer_router_get_customer_profile",
+      "ordering_customer_router_list_customers",
+      "ordering_customer_router_patch_address_endpoint",
+      "ordering_customer_router_patch_customer_endpoint",
+      "ordering_detail_schemas",
+      "ordering_detail_schemas_addressdetailout",
+      "ordering_detail_schemas_addresspatchin",
+      "ordering_detail_schemas_customerdetailout",
+      "ordering_detail_schemas_customerlistout",
+      "ordering_detail_schemas_customerpatchin",
+      "ordering_detail_schemas_customerprofileout",
+      "ordering_detail_schemas_ordersummaryout",
+      "ordering_service_compute_usual_order_time",
+      "ordering_service_order_hours_dubai",
+      "ordering_service_rationale_373",
+      "ordering_service_rationale_395",
+      "src_app_ordering_customer_router_py_asyncsession",
+      "src_app_ordering_customer_router_py_response",
+      "src_app_ordering_customer_router_py_restaurant"
+    ],
+    "48": [
       "components_chatcustomerpanel",
       "components_chatcustomerpanel_chatcustomerpanel",
       "components_chatcustomerpanel_test",
@@ -2352,7 +2413,7 @@
       "screens_conversationsscreen_tab",
       "screens_conversationsscreen_test"
     ],
-    "47": [
+    "49": [
       "decimal",
       "ordering_test_wallet_coupon_apply",
       "ordering_test_wallet_coupon_apply_order",
@@ -2384,7 +2445,7 @@
       "wallet_test_credit_test_debit_cannot_go_negative",
       "wallet_test_credit_test_debit_reduces_balance"
     ],
-    "48": [
+    "50": [
       "marketing_test_router",
       "marketing_test_router_rationale_1",
       "marketing_test_router_rationale_148",
@@ -2416,7 +2477,7 @@
       "test_router_test_list_forecast_runs_empty",
       "test_router_test_prep_ahead_empty"
     ],
-    "49": [
+    "51": [
       "test_compliance_clean_spec",
       "test_compliance_rationale_1",
       "test_compliance_rationale_10",
@@ -2448,7 +2509,7 @@
       "test_compliance_test_url_button_non_https_flagged",
       "tests_marketing_test_compliance_py"
     ],
-    "50": [
+    "52": [
       "claude_rationale_385",
       "deepseek__DS_TOOL",
       "deepseek__async_chat_tools",
@@ -2479,7 +2540,7 @@
       "test_engine_full_ai_suite",
       "tests_llm_test_deepseek_agent_py"
     ],
-    "51": [
+    "53": [
       "conftest_fixtures",
       "factory_get_transcriber",
       "speech_elevenlabs",
@@ -2510,7 +2571,7 @@
       "transcriptionport",
       "whatsapp_factory"
     ],
-    "52": [
+    "54": [
       "any",
       "catalog_test_catalog_send_test_provider_builds_product_list_payload",
       "cloud_provider_build_graph_payload",
@@ -2540,7 +2601,7 @@
       "whatsapp_test_cloud_provider_test_verify_signature_missing_prefix_raises",
       "whatsapp_test_cloud_provider_test_verify_signature_valid"
     ],
-    "53": [
+    "55": [
       "batching_rationale_1",
       "batching_rationale_107",
       "batching_rationale_133",
@@ -2570,7 +2631,7 @@
       "port_rationale_5",
       "test_batch_suite"
     ],
-    "54": [
+    "56": [
       "llm_claude_claudeconversationagent_respond",
       "llm_port_rationale_16",
       "llm_port_strip_dashes",
@@ -2600,7 +2661,7 @@
       "marketing_test_copywriter_test_triple_run_collapses_to_first",
       "src_app_llm_claude_py_conversationagentresult"
     ],
-    "55": [
+    "57": [
       "marketing_models",
       "marketing_models_campaign",
       "marketing_models_marketingsend",
@@ -2630,7 +2691,7 @@
       "test_service_rationale_419",
       "test_service_rationale_444"
     ],
-    "56": [
+    "58": [
       "rider_app_package",
       "rider_app_package_dependencies",
       "rider_app_package_dependencies_expo",
@@ -2660,7 +2721,7 @@
       "rider_app_package_scripts_start",
       "rider_app_package_version"
     ],
-    "57": [
+    "59": [
       "app_first_rider_flow_phase_a",
       "concept_expo",
       "understanding_app_notifications_module",
@@ -2689,7 +2750,7 @@
       "understanding_test_dispatch_engine",
       "understanding_test_order_detail_reassign"
     ],
-    "58": [
+    "60": [
       "conversation_service",
       "conversation_service_rationale_109",
       "conversation_service_reset_conversation_state",
@@ -2718,35 +2779,7 @@
       "src_app_dispatch_service_py_datetime",
       "src_app_dispatch_service_py_order"
     ],
-    "59": [
-      "addressdetailout",
-      "addresspatchin",
-      "customerdetailout",
-      "customerlistout",
-      "customerpatchin",
-      "customerprofileout",
-      "marketing_models_OptOut",
-      "ordering_customer_router",
-      "ordering_customer_router_delete_address",
-      "ordering_customer_router_delete_customer",
-      "ordering_customer_router_get_customer_profile",
-      "ordering_customer_router_list_customers",
-      "ordering_customer_router_patch_address_endpoint",
-      "ordering_customer_router_patch_customer_endpoint",
-      "ordering_detail_schemas_addresspatchin",
-      "ordering_detail_schemas_customerlistout",
-      "ordering_detail_schemas_customerpatchin",
-      "ordering_detail_schemas_customerprofileout",
-      "ordering_detail_schemas_ordersummaryout",
-      "ordering_service_compute_usual_order_time",
-      "ordering_service_order_hours_dubai",
-      "ordering_service_rationale_373",
-      "ordering_service_rationale_395",
-      "src_app_ordering_customer_router_py_asyncsession",
-      "src_app_ordering_customer_router_py_response",
-      "src_app_ordering_customer_router_py_restaurant"
-    ],
-    "60": [
+    "61": [
       "broadcastrequest",
       "broadcastresponse",
       "campaigncreate",
@@ -2774,7 +2807,7 @@
       "templateresponse",
       "uploadfile"
     ],
-    "61": [
+    "62": [
       "conversation_engine_hours_info",
       "conversation_engine_rationale_591",
       "identity_schemas_cart_recovery_config",
@@ -2802,7 +2835,7 @@
       "test_batch_preview_suite",
       "test_cart_tick_endpoint_suite"
     ],
-    "62": [
+    "63": [
       "plan_phase_b",
       "readme_background_gps",
       "readme_device_token",
@@ -2830,7 +2863,7 @@
       "understanding_rider_app_router",
       "understanding_set_push_token"
     ],
-    "63": [
+    "64": [
       "concept_rider",
       "concept_whatsapp",
       "post_delivery_complaints_analysis_sla_auto_coupon",
@@ -2856,33 +2889,6 @@
       "understanding_rider_app_android",
       "understanding_sendCurrentLocation",
       "understanding_sla_monitor"
-    ],
-    "64": [
-      "coupons_conftest",
-      "coupons_conftest_seed_restaurant_customer",
-      "customer",
-      "dispatch_test_live_tracking_api",
-      "dispatch_test_live_tracking_api_seed_tracking_order",
-      "dispatch_test_live_tracking_api_test_live_tracking_expires_when_order_delivered",
-      "dispatch_test_live_tracking_api_test_live_tracking_start_update_public_and_stop",
-      "ordering_test_customer_profile_rationale_119",
-      "ordering_test_customer_profile_test_advance_delivery_updates_customer_spend",
-      "ordering_test_service_rationale_415",
-      "ordering_test_service_test_customer_address_table_has_expected_columns",
-      "ordering_test_service_test_prep_deadline_is_distance_driven",
-      "service_patch_customer",
-      "tests_wallet_test_router_py_restaurant",
-      "tickets_conftest",
-      "tickets_conftest_seed_restaurant_customer",
-      "wallet_conftest",
-      "wallet_conftest_rationale_9",
-      "wallet_conftest_seed_restaurant_customer",
-      "wallet_test_router",
-      "wallet_test_router_restaurant_by_phone",
-      "wallet_test_router_test_cross_tenant_wallet_access_404",
-      "wallet_test_router_test_debit_endpoint_reduces_and_guards",
-      "wallet_test_router_test_get_wallet_entries_lists_newest_first",
-      "wallet_test_router_test_get_wallet_returns_balance"
     ],
     "65": [
       "factory_get_forecast_model",
@@ -2965,30 +2971,30 @@
       "screens_ticketsscreen_ticketsskeleton"
     ],
     "68": [
-      "conversation_engine_answer_dish_info",
-      "conversation_engine_dish_info_question",
-      "conversation_engine_handle_customer_ai",
-      "conversation_engine_is_menu_request",
-      "conversation_engine_normalise_closing",
-      "conversation_engine_rationale_203",
-      "conversation_engine_rationale_223",
-      "conversation_engine_rationale_231",
-      "conversation_engine_rationale_2459",
-      "conversation_engine_rationale_49",
-      "conversation_engine_resolve_phase",
-      "conversation_engine_trim_description",
-      "conversation_test_dish_info",
-      "conversation_test_dish_info_last_body",
-      "conversation_test_dish_info_msg",
-      "conversation_test_dish_info_rationale_1",
-      "conversation_test_dish_info_rationale_80",
-      "conversation_test_dish_info_seed",
-      "conversation_test_dish_info_test_dish_info_question_extracts_name",
-      "conversation_test_dish_info_test_no_description_falls_back_to_short_line",
-      "conversation_test_dish_info_test_shows_stored_description_when_present",
-      "conversation_test_dish_info_test_unknown_dish_does_not_hijack",
-      "conversation_test_engine_full_ai_test_resolve_phase_maps_old_states",
-      "tests_conversation_test_dish_info_py_inboundmessage"
+      "coupons_conftest",
+      "coupons_conftest_seed_restaurant_customer",
+      "customer",
+      "dispatch_test_live_tracking_api",
+      "dispatch_test_live_tracking_api_seed_tracking_order",
+      "dispatch_test_live_tracking_api_test_live_tracking_expires_when_order_delivered",
+      "dispatch_test_live_tracking_api_test_live_tracking_start_update_public_and_stop",
+      "ordering_test_customer_profile_rationale_119",
+      "ordering_test_customer_profile_test_advance_delivery_updates_customer_spend",
+      "ordering_test_service_rationale_415",
+      "ordering_test_service_test_prep_deadline_is_distance_driven",
+      "service_patch_customer",
+      "tests_wallet_test_router_py_restaurant",
+      "tickets_conftest",
+      "tickets_conftest_seed_restaurant_customer",
+      "wallet_conftest",
+      "wallet_conftest_rationale_9",
+      "wallet_conftest_seed_restaurant_customer",
+      "wallet_test_router",
+      "wallet_test_router_restaurant_by_phone",
+      "wallet_test_router_test_cross_tenant_wallet_access_404",
+      "wallet_test_router_test_debit_endpoint_reduces_and_guards",
+      "wallet_test_router_test_get_wallet_entries_lists_newest_first",
+      "wallet_test_router_test_get_wallet_returns_balance"
     ],
     "69": [
       "marketing_test_todays_special",
@@ -3218,6 +3224,30 @@
       "templatestatus"
     ],
     "78": [
+      "conversation_engine_answer_dish_info",
+      "conversation_engine_dish_info_question",
+      "conversation_engine_handle_customer_ai",
+      "conversation_engine_is_menu_request",
+      "conversation_engine_normalise_closing",
+      "conversation_engine_rationale_203",
+      "conversation_engine_rationale_223",
+      "conversation_engine_rationale_231",
+      "conversation_engine_rationale_2459",
+      "conversation_engine_rationale_49",
+      "conversation_engine_trim_description",
+      "conversation_test_dish_info",
+      "conversation_test_dish_info_last_body",
+      "conversation_test_dish_info_msg",
+      "conversation_test_dish_info_rationale_1",
+      "conversation_test_dish_info_rationale_80",
+      "conversation_test_dish_info_seed",
+      "conversation_test_dish_info_test_dish_info_question_extracts_name",
+      "conversation_test_dish_info_test_no_description_falls_back_to_short_line",
+      "conversation_test_dish_info_test_shows_stored_description_when_present",
+      "conversation_test_dish_info_test_unknown_dish_does_not_hijack",
+      "tests_conversation_test_dish_info_py_inboundmessage"
+    ],
+    "79": [
       "ordering_service_create_manual_order",
       "ordering_test_manual_order",
       "ordering_test_manual_order_get_dish_id",
@@ -3241,7 +3271,7 @@
       "ordering_test_manual_order_test_outbox_message_enqueued_after_manual_order",
       "ordering_test_manual_order_token"
     ],
-    "79": [
+    "80": [
       "ConversationRow_ConversationRow",
       "ConversationRow_test",
       "DishCard_DishCard",
@@ -3264,7 +3294,7 @@
       "neworder_test_NewOrderScreenTest",
       "types_DishOut"
     ],
-    "80": [
+    "81": [
       "ai_marketing_optout_plan",
       "customer_profile_screen_plan",
       "full_ai_agent_plan",
@@ -3287,7 +3317,7 @@
       "platform_design_spec_order_modification_rule",
       "platform_design_spec_resale_rule"
     ],
-    "81": [
+    "82": [
       "frontend_tsconfig",
       "frontend_tsconfig_compileroptions",
       "frontend_tsconfig_compileroptions_allowimportingtsextensions",
@@ -3310,7 +3340,7 @@
       "frontend_tsconfig_include",
       "frontend_tsconfig_references"
     ],
-    "82": [
+    "83": [
       "llm_port_forecastadjusterport_parse_override",
       "llm_port_rationale_47",
       "namespace",
@@ -3333,7 +3363,7 @@
       "worker_rationale_23",
       "worker_rationale_28"
     ],
-    "83": [
+    "84": [
       "basesettings",
       "celeryapp_beat_schedule",
       "celeryapp_celery_app",
@@ -3355,7 +3385,7 @@
       "normalizer_parse_single_message",
       "seeddev_main"
     ],
-    "84": [
+    "85": [
       "conversation_engine_execute_ai_add_item",
       "conversation_engine_is_size_choice_dish",
       "conversation_engine_rationale_2171",
@@ -3377,7 +3407,7 @@
       "tests_conversation_test_engine_drink_size_py_conversation",
       "tests_conversation_test_engine_drink_size_py_inboundmessage"
     ],
-    "85": [
+    "86": [
       "create_rider_router",
       "customer_aggregates",
       "geo_provider",
@@ -3398,28 +3428,6 @@
       "test_create_rider_auto_sends_app_invite",
       "understanding_txt",
       "whatsapp_messaging"
-    ],
-    "86": [
-      "customeraddress",
-      "datetime",
-      "detail_schemas_line_total",
-      "ordering_detail_schemas",
-      "ordering_detail_schemas_addressdetailout",
-      "ordering_detail_schemas_chatmessageout",
-      "ordering_detail_schemas_customerdetailout",
-      "ordering_detail_schemas_gpspingout",
-      "ordering_detail_schemas_orderitemdetailout",
-      "ordering_detail_schemas_orderitemdetailout_line_total",
-      "ordering_detail_schemas_riderdetailout",
-      "ordering_detail_schemas_timelineeventout",
-      "ordering_service_ordertimeprediction",
-      "ordering_service_rationale_311",
-      "orderitem",
-      "src_app_ordering_detail_schemas_py_decimal",
-      "src_app_ordering_service_py_customer",
-      "src_app_ordering_service_py_datetime",
-      "src_app_ordering_service_py_decimal",
-      "src_app_ordering_service_py_orderdetailout"
     ],
     "87": [
       "menu_router",
@@ -3530,6 +3538,27 @@
       "start_background_tracking"
     ],
     "92": [
+      "customeraddress",
+      "datetime",
+      "ordering_detail_schemas_chatmessageout",
+      "ordering_detail_schemas_gpspingout",
+      "ordering_detail_schemas_orderitemdetailout",
+      "ordering_detail_schemas_orderitemdetailout_line_total",
+      "ordering_detail_schemas_riderdetailout",
+      "ordering_detail_schemas_timelineeventout",
+      "ordering_service_ordertimeprediction",
+      "ordering_service_rationale_311",
+      "ordering_test_service_test_customer_address_table_has_expected_columns",
+      "orderitem",
+      "service_get_last_address",
+      "service_patch_address",
+      "src_app_ordering_detail_schemas_py_decimal",
+      "src_app_ordering_service_py_customer",
+      "src_app_ordering_service_py_datetime",
+      "src_app_ordering_service_py_decimal",
+      "src_app_ordering_service_py_orderdetailout"
+    ],
+    "93": [
       "dispatch_preview_batch_groups",
       "engine_fee_settings_for",
       "engine_finalize_stored_address",
@@ -3550,7 +3579,7 @@
       "service_create_restaurant",
       "service_update_settings"
     ],
-    "93": [
+    "94": [
       "fakepushprovider",
       "get_push_provider",
       "notifications_expo",
@@ -3571,7 +3600,7 @@
       "src_app_notifications_expo_py_pushmessage",
       "src_app_notifications_fake_py_pushmessage"
     ],
-    "94": [
+    "95": [
       "marketing_rfm",
       "marketing_rfm_classify",
       "marketing_rfm_rationale_1",
@@ -3592,7 +3621,7 @@
       "test_rfm_suite",
       "tests_marketing_test_rfm_py_datetime"
     ],
-    "95": [
+    "96": [
       "marketing_template_meta_body_example_values",
       "marketing_template_meta_build_components",
       "marketing_template_meta_metatemplateprovider_create",
@@ -3613,7 +3642,7 @@
       "templatecreateresult",
       "tests_marketing_test_template_meta_py_templatespec"
     ],
-    "96": [
+    "97": [
       "src_app_wallet_reconcile_py_asyncsession",
       "src_app_wallet_reconcile_py_datetime",
       "wallet_reconcile",
@@ -3634,7 +3663,7 @@
       "wallet_worker_run_expiry",
       "wallet_worker_run_reconcile"
     ],
-    "97": [
+    "98": [
       "code_coupons_models",
       "code_marketing_rfm",
       "code_marketing_segments",
@@ -3654,7 +3683,7 @@
       "loyalty_analysis_doc",
       "loyaltyprogramanalysis_customer_aggregates"
     ],
-    "98": [
+    "99": [
       "conversation_engine_is_pure_greeting",
       "conversation_engine_mentions_can_call",
       "conversation_engine_mentions_do_not_call",
@@ -3674,7 +3703,7 @@
       "conversation_test_do_not_call_test_ordinary_message_does_not_set_preference",
       "tests_conversation_test_do_not_call_py_inboundmessage"
     ],
-    "99": [
+    "100": [
       "conversation_test_engine_draft_lifecycle",
       "conversation_test_engine_draft_lifecycle_chicken",
       "conversation_test_engine_draft_lifecycle_msg",
@@ -3694,7 +3723,7 @@
       "ordering_test_variants_test_different_variants_are_separate_lines",
       "tests_conversation_test_engine_draft_lifecycle_py_inboundmessage"
     ],
-    "100": [
+    "101": [
       "dispatch_test_customer_notifications",
       "dispatch_test_customer_notifications_cust_msgs",
       "dispatch_test_customer_notifications_rationale_1",
@@ -3714,7 +3743,7 @@
       "dispatch_test_customer_notifications_test_picked_with_no_batch_tells_rider",
       "dispatch_test_customer_notifications_test_pickup_gates_stop_and_customer_notify_behind_gps"
     ],
-    "101": [
+    "102": [
       "fees_delivery_fee_aed",
       "fees_outofradiuserror",
       "fees_rationale_1",
@@ -3734,7 +3763,7 @@
       "ordering_fees_rationale_53",
       "src_app_ordering_fees_py_decimal"
     ],
-    "102": [
+    "103": [
       "identity_service",
       "identity_service_create_restaurant",
       "identity_service_create_rider",
@@ -3754,7 +3783,7 @@
       "marketing_template_meta_metatemplateprovider_delete",
       "src_app_identity_service_py_asyncsession"
     ],
-    "103": [
+    "104": [
       "identity_test_riders",
       "identity_test_riders_rationale_177",
       "identity_test_riders_rationale_21",
@@ -3774,7 +3803,7 @@
       "identity_test_riders_test_update_restaurant_location",
       "identity_test_riders_test_update_restaurant_location_out_of_range_422"
     ],
-    "104": [
+    "105": [
       "menu_schemas",
       "menu_schemas_availabilityin",
       "menu_schemas_diffout",
@@ -3794,7 +3823,7 @@
       "router_rationale_87",
       "src_app_menu_schemas_py_decimal"
     ],
-    "105": [
+    "106": [
       "ordering_payments",
       "ordering_payments_apply_at_confirm",
       "ordering_payments_capture_on_deliver",
@@ -3814,7 +3843,7 @@
       "ordering_test_wallet_spend_flow_test_rider_collects_only_remainder_and_capture_settles",
       "src_app_ordering_payments_py_decimal"
     ],
-    "106": [
+    "107": [
       "understanding__deliver_one",
       "understanding_app_tsx",
       "understanding_atomic_claim_issue",
@@ -3834,7 +3863,7 @@
       "understanding_send_current_location_app",
       "understanding_sendcurrentlocation"
     ],
-    "107": [
+    "108": [
       "CustomerProfileScreen_CustomerProfileScreen",
       "CustomersScreen_CustomersScreen",
       "LiveOpsScreen_LiveOpsScreen",
@@ -3853,7 +3882,7 @@
       "types_OrderOut",
       "types_OrderStatus"
     ],
-    "108": [
+    "109": [
       "ai_marketing_optout_phrases",
       "full_ai_agent_7_languages",
       "full_ai_agent_phase_guards",
@@ -3872,7 +3901,7 @@
       "whatsapp_cloud_api_notes_pmp_pricing",
       "whatsapp_cloud_api_notes_template_management"
     ],
-    "109": [
+    "110": [
       "catalog_service_rationale_62",
       "catalog_service_send_catalog",
       "catalog_test_catalog_send",
@@ -3891,7 +3920,7 @@
       "catalog_test_catalog_send_test_show_menu_falls_back_to_text_when_catalog_off",
       "catalog_test_catalog_send_test_show_menu_sends_catalog_when_mode_on"
     ],
-    "110": [
+    "111": [
       "chatcustomercontextout",
       "conversation_router",
       "conversation_router_abandoned_cart_tick",
@@ -3910,7 +3939,7 @@
       "src_app_conversation_router_py_restaurant",
       "takeoverin"
     ],
-    "111": [
+    "112": [
       "rider_app_app_expo",
       "rider_app_app_expo_ios",
       "rider_app_app_expo_name",
@@ -3929,7 +3958,7 @@
       "rider_app_app_splash_resizemode",
       "rider_app_app_updates_url"
     ],
-    "112": [
+    "113": [
       "test_geocode_fakeredis",
       "test_geocode_fakeredis_get",
       "test_geocode_fakeredis_init",
@@ -3948,7 +3977,7 @@
       "test_geocode_test_unknown_returns_none",
       "tests_geo_test_geocode_py"
     ],
-    "113": [
+    "114": [
       "audit_system",
       "cod_payment",
       "complaint_ticket_design",
@@ -3966,7 +3995,7 @@
       "wallet",
       "wallet_coupon_financial_design"
     ],
-    "114": [
+    "115": [
       "conversation_test_engine_variants",
       "conversation_test_engine_variants_conv",
       "conversation_test_engine_variants_last_body",
@@ -3984,7 +4013,7 @@
       "tests_conversation_test_engine_variants_py_conversation",
       "tests_conversation_test_engine_variants_py_inboundmessage"
     ],
-    "115": [
+    "116": [
       "dispatch_advisory_lock",
       "dispatch_commit_route",
       "dispatch_dispatch_greedy",
@@ -4002,7 +4031,7 @@
       "service_delete_rider",
       "service_list_riders"
     ],
-    "116": [
+    "117": [
       "dispatch_rider_actions",
       "dispatch_rider_actions_get_active_run",
       "dispatch_rider_actions_pickupoutcome",
@@ -4020,7 +4049,7 @@
       "str",
       "understanding_rider_actions_refactor"
     ],
-    "117": [
+    "118": [
       "geo_google_maps",
       "geo_google_maps_component",
       "geo_google_maps_concise_area",
@@ -4038,7 +4067,7 @@
       "geo_test_reverse_geocode_test_concise_area_strips_plus_code_in_fallback",
       "google_maps_rationale_1"
     ],
-    "118": [
+    "119": [
       "httpuser",
       "load_locustfile_py",
       "locustfile_dashboardpolluser",
@@ -4056,7 +4085,7 @@
       "locustfile_trigger_reply",
       "locustfile_webhookburstuser"
     ],
-    "119": [
+    "120": [
       "Firebase_Cloud_Messaging",
       "POST_NOTIFICATIONS",
       "app_json",
@@ -4073,7 +4102,7 @@
       "understanding_resale_exclusion",
       "understanding_rider_app_only"
     ],
-    "120": [
+    "121": [
       "batching_build_batches",
       "batching_compute_batch_total_est_min",
       "batching_compute_route_time_to_stops",
@@ -4090,7 +4119,7 @@
       "ordercandidate",
       "src_app_dispatch_service_py_restaurant"
     ],
-    "121": [
+    "122": [
       "claude_celery",
       "claude_cod",
       "claude_delivery_radius",
@@ -4107,7 +4136,7 @@
       "full_ai_agent_radius_from_settings",
       "phase_0_1_foundation_default_settings"
     ],
-    "122": [
+    "123": [
       "conversation_test_dashboard_api",
       "conversation_test_dashboard_api_restaurant",
       "conversation_test_dashboard_api_seed_conversation",
@@ -4124,7 +4153,7 @@
       "conversation_test_dashboard_api_test_takeover_toggles_flag",
       "tests_conversation_test_dashboard_api_py_conversation"
     ],
-    "123": [
+    "124": [
       "rider_app_api_mapslink",
       "rider_app_api_run",
       "rider_app_api_stop",
@@ -4141,7 +4170,7 @@
       "rider_app_tasks_startbackgroundtracking",
       "rider_app_tasks_stopbackgroundtracking"
     ],
-    "124": [
+    "125": [
       "test_segments_seed_customers",
       "test_segments_test_evaluate_any_or",
       "test_segments_test_evaluate_is_tenant_scoped",
@@ -4157,22 +4186,6 @@
       "test_segments_test_validate_dsl_accepts_valid",
       "test_segments_test_validate_dsl_rejects_unsafe",
       "tests_marketing_test_segments_py"
-    ],
-    "125": [
-      "conversation_test_rider_flow",
-      "conversation_test_rider_flow_pick_up",
-      "conversation_test_rider_flow_rationale_138",
-      "conversation_test_rider_flow_rationale_163",
-      "conversation_test_rider_flow_rationale_21",
-      "conversation_test_rider_flow_seed_batch",
-      "conversation_test_rider_flow_start_tracker",
-      "conversation_test_rider_flow_test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location",
-      "conversation_test_rider_flow_test_button_only_unknown_id_no_op",
-      "conversation_test_rider_flow_test_delivered_marks_delivered_and_records_cod",
-      "conversation_test_rider_flow_test_last_delivery_frees_rider",
-      "conversation_test_rider_flow_test_orders_picked_advances_all_and_sends_first_stop",
-      "conversation_test_rider_flow_test_orders_picked_paired_but_app_closed_still_gets_web_tracker",
-      "conversation_test_rider_flow_test_orders_picked_while_already_sharing_skips_web_tracker"
     ],
     "126": [
       "factory_get_geo_provider",
@@ -4940,17 +4953,6 @@
       "worker_run_sweep"
     ],
     "182": [
-      "conversation_test_complaint_detection",
-      "conversation_test_complaint_detection_inb",
-      "conversation_test_complaint_detection_post_order_conv",
-      "conversation_test_complaint_detection_rationale_1",
-      "conversation_test_complaint_detection_rationale_28",
-      "conversation_test_complaint_detection_seed_menu",
-      "conversation_test_complaint_detection_test_complaint_does_not_compensate",
-      "conversation_test_complaint_detection_test_complaint_opens_ticket",
-      "conversation_test_complaint_detection_test_status_query_not_treated_as_complaint"
-    ],
-    "183": [
       "conversation_test_qty_anomaly",
       "conversation_test_qty_anomaly_conv",
       "conversation_test_qty_anomaly_drive",
@@ -4961,7 +4963,7 @@
       "conversation_test_qty_anomaly_test_large_update_qty_escalates_and_keeps_old_qty",
       "conversation_test_qty_anomaly_test_normal_qty_still_adds"
     ],
-    "184": [
+    "183": [
       "file_migration",
       "file_wallet_module",
       "understanding_idempotent_concurrency",
@@ -4972,7 +4974,7 @@
       "understanding_wallet_reconcile",
       "understanding_wallet_service"
     ],
-    "185": [
+    "184": [
       "full_ai_agent_fake_agent",
       "load_test_signed_webhooks",
       "phase_2_whatsapp_core_cloud_provider",
@@ -4983,7 +4985,7 @@
       "whatsapp_cloud_api_notes_message_types",
       "whatsapp_cloud_api_notes_webhook_verification"
     ],
-    "186": [
+    "185": [
       "loyalty_program_analysis_points_ledger",
       "wallet_coupon_financial_design_abuse_detection",
       "wallet_coupon_financial_design_coupon_model",
@@ -4994,7 +4996,7 @@
       "wallet_coupon_financial_design_wallet_entry_ledger",
       "walletcouponfinancialdesign_idempotency_key"
     ],
-    "187": [
+    "186": [
       "menu_test_variants",
       "menu_test_variants_rationale_1",
       "menu_test_variants_test_activate_blocked_if_variant_missing_price",
@@ -5005,7 +5007,7 @@
       "menu_test_variants_test_patch_dish_sets_variants",
       "menu_test_variants_upload"
     ],
-    "188": [
+    "187": [
       "test_accuracy_rationale_32",
       "test_accuracy_rationale_37",
       "test_accuracy_test_accuracy_below_target_is_flagged_by_score",
@@ -5016,7 +5018,7 @@
       "test_accuracy_test_target_accuracy_default_80pct",
       "tests_predictions_test_accuracy_py"
     ],
-    "189": [
+    "188": [
       "test_cancel_order_make_order",
       "test_cancel_order_seed_menu",
       "test_cancel_order_test_cancel_confirmed_order_returns_cancelled",
@@ -5027,7 +5029,7 @@
       "test_cancel_order_token",
       "tests_ordering_test_cancel_order_py"
     ],
-    "190": [
+    "189": [
       "test_fsm_test_all_statuses_have_entries_in_transition_map",
       "test_fsm_test_draft_to_pending_confirmation_allowed",
       "test_fsm_test_illegal_transition_from_delivered",
@@ -5038,7 +5040,7 @@
       "test_fsm_test_transition_helper_audits_and_mutates",
       "tests_ordering_test_fsm_py"
     ],
-    "191": [
+    "190": [
       "tests_tickets_test_router_py_restaurant",
       "tickets_test_router",
       "tickets_test_router_restaurant_by_phone",
@@ -5049,7 +5051,7 @@
       "tickets_test_router_test_resolve_wallet_refund_endpoint",
       "tickets_test_router_test_wallet_refund_requires_amount"
     ],
-    "192": [
+    "191": [
       "todays_special_cron_app_marketing_tick_secret",
       "todays_special_cron_app_outbox_sync_delivery",
       "todays_special_cron_approved_template",
@@ -5060,7 +5062,7 @@
       "todays_special_cron_marketing_tick_endpoint",
       "todays_special_cron_todays_special_automation"
     ],
-    "193": [
+    "192": [
       "webhook_test_webhook_router",
       "webhook_test_webhook_router_seed_restaurant_and_menu",
       "webhook_test_webhook_router_signed_body",
@@ -5071,7 +5073,7 @@
       "webhook_test_webhook_router_test_post_webhook_processes_message_and_queues_outbox",
       "webhook_test_webhook_router_test_post_webhook_sync_delivery_sends_in_request"
     ],
-    "194": [
+    "193": [
       "AppInviteModal_AppInviteModal",
       "AppInviteModal_test",
       "RiderCard_RiderCard",
@@ -5081,7 +5083,7 @@
       "ridersApi_inviteRiderToApp",
       "types_RiderOut"
     ],
-    "195": [
+    "194": [
       "accuracy_accuracy_from_mape",
       "accuracy_mape",
       "accuracy_rationale_1",
@@ -5091,7 +5093,7 @@
       "accuracy_score_prediction",
       "src_app_predictions_accuracy_py"
     ],
-    "196": [
+    "195": [
       "auth_create_access_token",
       "auth_decode_access_token",
       "auth_decode_token",
@@ -5101,7 +5103,7 @@
       "auth_verify_password",
       "src_app_identity_auth_py"
     ],
-    "197": [
+    "196": [
       "catalog_test_catalog_order",
       "catalog_test_catalog_order_order_inbound",
       "catalog_test_catalog_order_rationale_1",
@@ -5111,7 +5113,7 @@
       "catalog_test_catalog_order_test_partial_mapping_adds_known_and_lists_unknown",
       "catalog_test_catalog_order_test_unmapped_items_do_not_create_empty_order"
     ],
-    "198": [
+    "197": [
       "conversation_test_chat_actions",
       "conversation_test_chat_actions_rationale_1",
       "conversation_test_chat_actions_restaurant_by_phone",
@@ -5121,7 +5123,7 @@
       "conversation_test_chat_actions_test_issue_coupon_to_customer",
       "conversation_test_chat_actions_test_manual_wallet_credit"
     ],
-    "199": [
+    "198": [
       "dispatch_rider_location",
       "dispatch_rider_location_update_rider_location",
       "dispatch_rider_location_write_redis_geo",
@@ -5131,7 +5133,7 @@
       "src_app_dispatch_rider_location_py_rider",
       "src_app_dispatch_rider_location_py_riderlocation"
     ],
-    "200": [
+    "199": [
       "dispatch_service_preview_batch_groups",
       "dispatch_service_rationale_123",
       "dispatch_test_batch_preview",
@@ -5141,7 +5143,7 @@
       "dispatch_test_batch_preview_test_assigned_orders_are_excluded_from_preview",
       "dispatch_test_batch_preview_test_nearby_unassigned_orders_share_a_preview_label"
     ],
-    "201": [
+    "200": [
       "full_ai_agent_history",
       "manual_order_endpoints",
       "manual_order_service_function",
@@ -5151,7 +5153,7 @@
       "platform_design_spec_order_fsm",
       "platform_design_spec_outbox_pattern"
     ],
-    "202": [
+    "201": [
       "identity_test_rider_delete",
       "identity_test_rider_delete_order",
       "identity_test_rider_delete_rationale_1",
@@ -5161,7 +5163,7 @@
       "identity_test_rider_delete_test_delete_rider_detaches_active_order_and_cleans_ops",
       "identity_test_rider_delete_test_delete_rider_with_no_refs"
     ],
-    "203": [
+    "202": [
       "ordering_service_get_or_create_customer",
       "ordering_service_upsert_address",
       "ordering_test_service_rationale_50",
@@ -5171,7 +5173,7 @@
       "ordering_test_service_test_upsert_address_does_not_overwrite_existing_customer_name",
       "ordering_test_service_test_upsert_address_overwrites_in_place_one_per_customer"
     ],
-    "204": [
+    "203": [
       "plan_document",
       "plan_phase_a",
       "plan_phase_c",
@@ -5181,7 +5183,7 @@
       "understanding_expo_push_token",
       "understanding_notifications"
     ],
-    "205": [
+    "204": [
       "rider_app_app_android_config",
       "rider_app_app_android_googleservicesfile",
       "rider_app_app_android_package",
@@ -5191,7 +5193,7 @@
       "rider_app_app_expo_android",
       "rider_app_app_googlemaps_apikey"
     ],
-    "206": [
+    "205": [
       "test_delivery_fsm_seed",
       "test_delivery_fsm_test_assigned_to_picked_up",
       "test_delivery_fsm_test_full_happy_path_to_delivered_sets_timestamp",
@@ -5201,7 +5203,7 @@
       "test_delivery_fsm_test_transition_writes_audit",
       "tests_dispatch_test_delivery_fsm_py"
     ],
-    "207": [
+    "206": [
       "test_diff_dish",
       "test_diff_draft",
       "test_diff_test_added_and_removed",
@@ -5211,7 +5213,7 @@
       "test_diff_test_unchanged_not_reported",
       "tests_menu_test_diff_py"
     ],
-    "208": [
+    "207": [
       "test_hours_rationale_1",
       "test_hours_test_closed_before_opening_then_open",
       "test_hours_test_empty_config_is_always_open",
@@ -5221,7 +5223,7 @@
       "test_hours_test_next_opening_weekday_label",
       "tests_conversation_test_hours_py"
     ],
-    "209": [
+    "208": [
       "test_llm_ordering_ports_test_arbiter_protocol_satisfied_by_fake",
       "test_llm_ordering_ports_test_describer_protocol_satisfied_by_fake",
       "test_llm_ordering_ports_test_fake_arbiter_returns_one_of_candidates",
@@ -5231,7 +5233,7 @@
       "test_llm_ordering_ports_test_intent_classifier_protocol_satisfied_by_fake",
       "tests_llm_test_llm_ordering_ports_py"
     ],
-    "210": [
+    "209": [
       "test_whatsapp_formatting_rationale_1",
       "test_whatsapp_formatting_test_bold_inside_a_line_is_converted",
       "test_whatsapp_formatting_test_double_asterisk_bold_becomes_single",
@@ -5241,7 +5243,7 @@
       "test_whatsapp_formatting_test_underscores_are_left_alone",
       "tests_outbox_test_whatsapp_formatting_py"
     ],
-    "211": [
+    "210": [
       "wallet_test_spend",
       "wallet_test_spend_funded",
       "wallet_test_spend_test_capture_posts_debit_and_nets_hold",
@@ -5251,7 +5253,7 @@
       "wallet_test_spend_test_hold_rejects_over_available",
       "wallet_test_spend_test_release_returns_credit_to_available"
     ],
-    "212": [
+    "211": [
       "App_tsx",
       "api_ts",
       "doDelivered",
@@ -5260,7 +5262,7 @@
       "sendCurrentLocation",
       "tasks_ts"
     ],
-    "213": [
+    "212": [
       "auth_gettoken",
       "auth_isauthenticated",
       "auth_login",
@@ -5269,7 +5271,7 @@
       "auth_signup",
       "frontend_src_lib_auth_ts"
     ],
-    "214": [
+    "213": [
       "complaintticketsystemdesign_audit",
       "complaintticketsystemdesign_complaint_detection",
       "complaintticketsystemdesign_manager_dashboard",
@@ -5278,7 +5280,7 @@
       "understanding_complaint_intent",
       "understanding_ticket"
     ],
-    "215": [
+    "214": [
       "engine_handle_collecting_items",
       "engine_handle_greeting",
       "engine_handle_modify_confirm",
@@ -5287,7 +5289,7 @@
       "engine_render_menu",
       "engine_resolve_draft_order"
     ],
-    "216": [
+    "215": [
       "ensure_tracking_session",
       "handle_orders_picked",
       "mark_batch_picked_up",
@@ -5296,7 +5298,7 @@
       "rider_tracker_is_live",
       "send_start_tracker_required"
     ],
-    "217": [
+    "216": [
       "factory_rationale_6",
       "fake_fakeweatherport",
       "fake_fakeweatherport_is_delay_active",
@@ -5305,7 +5307,7 @@
       "port_weatherport",
       "port_weatherport_is_delay_active"
     ],
-    "218": [
+    "217": [
       "fsm_next_states",
       "fsm_rationale_100",
       "fsm_validate",
@@ -5314,7 +5316,7 @@
       "src_app_ordering_fsm_py_asyncsession",
       "src_app_ordering_fsm_py_order"
     ],
-    "219": [
+    "218": [
       "llm_test_location_grounding",
       "llm_test_location_grounding_build",
       "llm_test_location_grounding_rationale_1",
@@ -5323,7 +5325,7 @@
       "llm_test_location_grounding_test_system_prompt_handles_unknown_location",
       "llm_test_location_grounding_test_system_prompt_includes_real_location_and_no_invent_rule"
     ],
-    "220": [
+    "219": [
       "loyaltyprogramanalysis_coupon",
       "loyaltyprogramanalysis_marketing_engine",
       "loyaltyprogramanalysis_points_stamps",
@@ -5332,7 +5334,7 @@
       "walletcouponfinancialdesign_coupon",
       "walletcouponfinancialdesign_coupon_redemption"
     ],
-    "221": [
+    "220": [
       "matching_MatchConfidence",
       "matching_find_dish_matches",
       "matching_find_unavailable_match",
@@ -5341,7 +5343,7 @@
       "matching_resolve_variant",
       "test_matching_suite"
     ],
-    "222": [
+    "221": [
       "ordering_models_Customer",
       "ordering_service_compute_customer_order_stats",
       "ordering_service_recompute_customer_stats",
@@ -5350,7 +5352,7 @@
       "service_rationale_286",
       "service_recompute_customer_stats"
     ],
-    "223": [
+    "222": [
       "scripts_build_cratis_doc",
       "scripts_build_cratis_doc_body",
       "scripts_build_cratis_doc_bullet",
@@ -5359,7 +5361,7 @@
       "scripts_build_cratis_doc_shade",
       "scripts_build_cratis_doc_table"
     ],
-    "224": [
+    "223": [
       "scripts_build_cratis_overview",
       "scripts_build_cratis_overview_body",
       "scripts_build_cratis_overview_bullet",
@@ -5368,7 +5370,7 @@
       "scripts_build_cratis_overview_shade",
       "scripts_build_cratis_overview_table"
     ],
-    "225": [
+    "224": [
       "src_app_marketing_throttle_py",
       "throttle_can_send_marketing",
       "throttle_count_sends_last_24h",
@@ -5377,7 +5379,7 @@
       "throttle_rationale_59",
       "throttle_senddecision"
     ],
-    "226": [
+    "225": [
       "test_cancellation_seed_order",
       "test_cancellation_test_cancel_before_preparing_transitions_to_cancelled",
       "test_cancellation_test_cancel_during_preparing_creates_resale_copy",
@@ -5386,7 +5388,7 @@
       "test_cancellation_test_resale_offer_matcher_filters_by_exclusion",
       "tests_ordering_test_cancellation_py"
     ],
-    "227": [
+    "226": [
       "test_claim_race_rationale_1",
       "test_claim_race_rationale_31",
       "test_claim_race_rationale_61",
@@ -5395,7 +5397,7 @@
       "test_claim_race_test_worker_delivers_dispatching_row",
       "tests_outbox_test_claim_race_py"
     ],
-    "228": [
+    "227": [
       "test_config_rationale_37",
       "test_config_test_defaults_load_without_env_file",
       "test_config_test_env_prefix_overrides",
@@ -5404,7 +5406,7 @@
       "test_config_test_whatsapp_settings_defaults",
       "tests_test_config_py"
     ],
-    "229": [
+    "228": [
       "test_coupons_seed",
       "test_coupons_test_issue_coupon_creates_unique_code",
       "test_coupons_test_redeem_coupon_marks_redeemed",
@@ -5413,7 +5415,7 @@
       "test_coupons_test_redeem_unknown_code_rejected",
       "tests_coupons_test_coupons_py"
     ],
-    "230": [
+    "229": [
       "test_edit_test_add_dish",
       "test_edit_test_delete_dish",
       "test_edit_test_duplicate_dish_number_409",
@@ -5422,7 +5424,7 @@
       "test_edit_upload",
       "tests_menu_test_edit_py"
     ],
-    "231": [
+    "230": [
       "test_reextract_rationale_27",
       "test_reextract_rationale_51",
       "test_reextract_rationale_7",
@@ -5431,7 +5433,7 @@
       "test_reextract_test_upload_creates_menu_file_row",
       "tests_menu_test_reextract_py"
     ],
-    "232": [
+    "231": [
       "test_tracking_seed_order",
       "test_tracking_seed_restaurant",
       "test_tracking_seed_rider",
@@ -5440,7 +5442,7 @@
       "test_tracking_test_tracking_reply_preparing",
       "tests_dispatch_test_tracking_py"
     ],
-    "233": [
+    "232": [
       "_notify_customer_status",
       "_rider_tracker_is_live",
       "rider_actions_py",
@@ -5448,7 +5450,7 @@
       "rider_flow_py",
       "test_rider_app"
     ],
-    "234": [
+    "233": [
       "catalog_service",
       "catalog_service_aed",
       "catalog_service_rationale_1",
@@ -5456,7 +5458,7 @@
       "catalog_service_to_decimal",
       "src_app_catalog_service_py_decimal"
     ],
-    "235": [
+    "234": [
       "concept_ledger",
       "coupons_context",
       "coupons_models",
@@ -5464,7 +5466,7 @@
       "tickets_context",
       "wallet_context"
     ],
-    "236": [
+    "235": [
       "conversation_test_cart_tick_endpoint",
       "conversation_test_cart_tick_endpoint_patch_secret",
       "conversation_test_cart_tick_endpoint_rationale_1",
@@ -5472,7 +5474,7 @@
       "conversation_test_cart_tick_endpoint_test_cart_tick_503_when_secret_unconfigured",
       "conversation_test_cart_tick_endpoint_test_cart_tick_runs_with_correct_secret"
     ],
-    "237": [
+    "236": [
       "cratisintegrationrequirements_cratis_pos",
       "cratisintegrationrequirements_menu_sync",
       "cratisintegrationrequirements_order_intake",
@@ -5480,7 +5482,7 @@
       "understanding_menu",
       "understanding_order_fsm"
     ],
-    "238": [
+    "237": [
       "customerapi_deletecustomeraddress",
       "customerapi_getcustomerprofile",
       "customerapi_listcustomers",
@@ -5488,7 +5490,7 @@
       "customerapi_patchcustomerprofile",
       "frontend_src_lib_customerapi_ts"
     ],
-    "239": [
+    "238": [
       "dispatch_optimizer_greedy",
       "dispatch_optimizer_ortools",
       "dispatch_optimizer_shadow_mode",
@@ -5496,7 +5498,7 @@
       "understanding_ortools",
       "understanding_shadow_mode"
     ],
-    "240": [
+    "239": [
       "file_ordering_service",
       "file_payments",
       "file_rider_actions",
@@ -5504,7 +5506,7 @@
       "understanding_no_double_charge",
       "understanding_wallet_spend"
     ],
-    "241": [
+    "240": [
       "logging_config_configure_logging",
       "logging_config_get_request_id_processor",
       "logging_config_rationale_1",
@@ -5512,7 +5514,7 @@
       "logging_config_rationale_50",
       "src_app_logging_config_py"
     ],
-    "242": [
+    "241": [
       "marketing_test_tick_endpoint",
       "marketing_test_tick_endpoint_patch_secret",
       "marketing_test_tick_endpoint_rationale_1",
@@ -5520,7 +5522,7 @@
       "marketing_test_tick_endpoint_test_tick_503_when_secret_unconfigured",
       "marketing_test_tick_endpoint_test_tick_runs_with_correct_secret"
     ],
-    "243": [
+    "242": [
       "rider_app_mappanel",
       "rider_app_mappanel_fmtkm",
       "rider_app_mappanel_haversinekm",
@@ -5528,7 +5530,7 @@
       "rider_app_mappanel_props",
       "rider_app_mappanel_styles"
     ],
-    "244": [
+    "243": [
       "src_app_marketing_window_py",
       "window_is_within_uae_window",
       "window_next_window_open",
@@ -5536,7 +5538,7 @@
       "window_rationale_18",
       "window_rationale_29"
     ],
-    "245": [
+    "244": [
       "test_backoff_rationale_1",
       "test_backoff_rationale_15",
       "test_backoff_rationale_5",
@@ -5544,7 +5546,7 @@
       "test_backoff_test_permanent_failure_marked_dead",
       "tests_outbox_test_backoff_py"
     ],
-    "246": [
+    "245": [
       "test_cod_order",
       "test_cod_seed",
       "test_cod_test_reconcile_shift_balanced",
@@ -5552,7 +5554,7 @@
       "test_cod_test_record_collection_writes_row",
       "tests_cod_test_cod_py"
     ],
-    "247": [
+    "246": [
       "test_dispatch_router_rationale_1",
       "test_dispatch_router_rationale_11",
       "test_dispatch_router_rationale_5",
@@ -5560,7 +5562,7 @@
       "test_dispatch_router_test_dispatch_trigger_runs_and_returns_ok",
       "tests_dispatch_test_dispatch_router_py"
     ],
-    "248": [
+    "247": [
       "test_jwt_claims_rationale_29",
       "test_jwt_claims_test_backward_compat_no_audience_param",
       "test_jwt_claims_test_manager_token_carries_iss_and_aud",
@@ -5568,7 +5570,7 @@
       "test_jwt_claims_test_wrong_audience_rejected",
       "tests_identity_test_jwt_claims_py"
     ],
-    "249": [
+    "248": [
       "test_mock_provider_test_inbound_message_shape",
       "test_mock_provider_test_mock_drain_clears_log",
       "test_mock_provider_test_mock_inject_inbound_queues_message",
@@ -5576,7 +5578,7 @@
       "test_mock_provider_test_outbound_message_text_shape",
       "tests_whatsapp_test_mock_provider_py"
     ],
-    "250": [
+    "249": [
       "test_optout_test_is_stop_keyword_false",
       "test_optout_test_is_stop_keyword_true",
       "test_optout_test_opt_out_is_tenant_scoped",
@@ -5584,7 +5586,7 @@
       "test_optout_test_record_then_is_opted_out",
       "tests_marketing_test_optout_py"
     ],
-    "251": [
+    "250": [
       "test_replay_test_far_future_rejected",
       "test_replay_test_fresh_timestamp_passes",
       "test_replay_test_future_skew_tolerated_within_window",
@@ -5592,7 +5594,7 @@
       "test_replay_test_stale_timestamp_rejected",
       "tests_webhook_test_replay_py"
     ],
-    "252": [
+    "251": [
       "test_status_reply_seed_active_order",
       "test_status_reply_status_msg",
       "test_status_reply_test_status_query_confirmed_order_returns_status_message",
@@ -5600,7 +5602,7 @@
       "test_status_reply_test_status_query_preparing_mentions_kitchen",
       "tests_ordering_test_status_reply_py"
     ],
-    "253": [
+    "252": [
       "test_upload_rationale_2",
       "test_upload_test_second_upload_increments_version",
       "test_upload_test_upload_menu_returns_drafts",
@@ -5608,7 +5610,7 @@
       "test_upload_test_upload_requires_auth",
       "tests_menu_test_upload_py"
     ],
-    "254": [
+    "253": [
       "wallet_test_freeze_reversal",
       "wallet_test_freeze_reversal_test_cannot_reverse_held_entry",
       "wallet_test_freeze_reversal_test_frozen_account_blocks_hold",
@@ -5616,965 +5618,957 @@
       "wallet_test_freeze_reversal_test_reverse_is_idempotent",
       "wallet_test_freeze_reversal_test_unfreeze_restores_spend"
     ],
-    "255": [
+    "254": [
       "4ed3145276fb_composite_indexes_customers_orders_downgrade",
       "4ed3145276fb_composite_indexes_customers_orders_rationale_1",
       "4ed3145276fb_composite_indexes_customers_orders_rationale_24",
       "4ed3145276fb_composite_indexes_customers_orders_upgrade",
       "alembic_versions_4ed3145276fb_composite_indexes_customers_orders_py"
     ],
-    "256": [
+    "255": [
       "adjust_apply_overrides",
       "adjust_money",
       "adjust_rationale_1",
       "adjust_rationale_29",
       "src_app_predictions_adjust_py"
     ],
-    "257": [
+    "256": [
       "ai_marketing_optout_record_opt_in",
       "customer_profile_customers_screen",
       "customer_profile_screen_address_delete_rule",
       "customer_profile_screen_endpoints",
       "order_detail_customer_patch"
     ],
-    "258": [
+    "257": [
       "apiclient_apierror",
       "apiclient_apierror_constructor",
       "apiclient_authheaders",
       "apiclient_request",
       "frontend_src_lib_apiclient_ts"
     ],
-    "259": [
+    "258": [
       "bucket_tokenbucketlimiter",
       "bucket_tokenbucketlimiter_allow",
       "bucket_tokenbucketlimiter_init",
       "bucket_tokenbucketlimiter_script",
       "src_app_ratelimit_bucket_py"
     ],
-    "260": [
+    "259": [
       "coupons_test_router_v2",
       "coupons_test_router_v2_test_create_and_list_coupon",
       "coupons_test_router_v2_test_create_rejects_bad_discount",
       "coupons_test_router_v2_test_list_coupons_by_phone",
       "coupons_test_router_v2_test_pause_coupon"
     ],
-    "261": [
+    "260": [
       "frontend_src_lib_transport_pollingtransport_ts",
       "pollingtransport_pollingtransport",
       "pollingtransport_pollingtransport_constructor",
       "pollingtransport_pollingtransport_subscribe",
       "pollingtransport_pollingtransport_tick"
     ],
-    "262": [
+    "261": [
       "geo_port",
       "geo_port_addresssuggestion",
       "geo_port_geoport_suggest",
       "geo_port_rationale_44",
       "geo_port_rationale_7"
     ],
-    "263": [
+    "262": [
       "marketing_optout",
       "marketing_template_mock",
       "marketing_template_port",
       "test_marketing_service_suite",
       "test_template_meta_suite"
     ],
-    "264": [
+    "263": [
       "ordering_test_order_batch_indicator",
       "ordering_test_order_batch_indicator_order",
       "ordering_test_order_batch_indicator_rationale_1",
       "ordering_test_order_batch_indicator_test_batched_orders_report_trip_members",
       "ordering_test_order_batch_indicator_test_solo_order_has_no_batch_size"
     ],
-    "265": [
+    "264": [
       "replay_assert_fresh",
       "replay_rationale_1",
       "replay_rationale_16",
       "replay_replayerror",
       "src_app_webhook_replay_py"
     ],
-    "266": [
+    "265": [
       "test_activate_test_activate_blocked_when_missing_price",
       "test_activate_test_activate_menu",
       "test_activate_test_activate_supersedes_previous",
       "test_activate_upload",
       "tests_menu_test_activate_py"
     ],
-    "267": [
+    "266": [
       "test_auth_test_jwt_garbage_rejected",
       "test_auth_test_jwt_roundtrip",
       "test_auth_test_password_hash_roundtrip",
       "test_auth_test_token_missing_sub_rejected",
       "tests_identity_test_auth_py"
     ],
-    "268": [
+    "267": [
       "test_engine_rider_seed_rider",
       "test_engine_rider_test_rider_conversation_counterpart_is_rider",
       "test_engine_rider_test_rider_location_records_ping",
       "test_engine_rider_test_unknown_phone_routed_as_customer",
       "tests_conversation_test_engine_rider_py"
     ],
-    "269": [
+    "268": [
       "test_hashing_test_hash_roundtrip",
       "test_hashing_test_hashes_are_salted_unique",
       "test_hashing_test_no_passlib_import",
       "test_hashing_test_verifies_legacy_passlib_hash",
       "tests_identity_test_hashing_py"
     ],
-    "270": [
+    "269": [
       "test_haversine_test_distance_gt_10km",
       "test_haversine_test_distance_is_symmetric",
       "test_haversine_test_known_distance_dubai_to_deira",
       "test_haversine_test_same_point_is_zero",
       "tests_geo_test_haversine_py"
     ],
-    "271": [
+    "270": [
       "test_metrics_rationale_1",
       "test_metrics_test_counter_increments",
       "test_metrics_test_metrics_importable",
       "test_metrics_test_metrics_response_returns_bytes",
       "tests_test_metrics_py"
     ],
-    "272": [
+    "271": [
       "test_outbox_worker_seed_outbox",
       "test_outbox_worker_test_deliver_one_marks_dead_after_3_failures",
       "test_outbox_worker_test_deliver_one_marks_failed_on_send_error",
       "test_outbox_worker_test_deliver_one_sends_and_marks_sent",
       "tests_outbox_test_outbox_worker_py"
     ],
-    "273": [
+    "272": [
       "understanding_GoogleMapsGeoProvider",
       "understanding_google_maps",
       "understanding_google_maps_geo_provider",
       "understanding_googlemapsgeoprovider",
       "understanding_haversine"
     ],
-    "274": [
+    "273": [
       "understanding_dashboard_duty_badge",
       "understanding_identity_models",
       "understanding_identity_schemas",
       "understanding_rider_on_duty",
       "understanding_riders_on_duty_col"
     ],
-    "275": [
+    "274": [
       "352c3723491c_messages_ts_bigint_downgrade",
       "352c3723491c_messages_ts_bigint_rationale_1",
       "352c3723491c_messages_ts_bigint_upgrade",
       "alembic_versions_352c3723491c_messages_ts_bigint_py"
     ],
-    "276": [
+    "275": [
       "464f76bc2e70_menu_files_downgrade",
       "464f76bc2e70_menu_files_rationale_1",
       "464f76bc2e70_menu_files_upgrade",
       "alembic_versions_464f76bc2e70_menu_files_py"
     ],
-    "277": [
+    "276": [
       "539d266a5dda_optout_downgrade",
       "539d266a5dda_optout_rationale_1",
       "539d266a5dda_optout_upgrade",
       "alembic_versions_539d266a5dda_optout_py"
     ],
-    "278": [
+    "277": [
       "61767852ea41_customers_customer_addresses_downgrade",
       "61767852ea41_customers_customer_addresses_rationale_1",
       "61767852ea41_customers_customer_addresses_upgrade",
       "alembic_versions_61767852ea41_customers_customer_addresses_py"
     ],
-    "279": [
+    "278": [
       "65800d534af2_orders_order_items_downgrade",
       "65800d534af2_orders_order_items_rationale_1",
       "65800d534af2_orders_order_items_upgrade",
       "alembic_versions_65800d534af2_orders_order_items_py"
     ],
-    "280": [
+    "279": [
       "6695a9376ea3_menus_dishes_downgrade",
       "6695a9376ea3_menus_dishes_rationale_1",
       "6695a9376ea3_menus_dishes_upgrade",
       "alembic_versions_6695a9376ea3_menus_dishes_py"
     ],
-    "281": [
+    "280": [
       "683a8b807b47_webhook_events_processed_at_timestamptz_downgrade",
       "683a8b807b47_webhook_events_processed_at_timestamptz_rationale_1",
       "683a8b807b47_webhook_events_processed_at_timestamptz_upgrade",
       "alembic_versions_683a8b807b47_webhook_events_processed_at_timestamptz_py"
     ],
-    "282": [
+    "281": [
       "90f99618609c_dispatch_tables_downgrade",
       "90f99618609c_dispatch_tables_rationale_1",
       "90f99618609c_dispatch_tables_upgrade",
       "alembic_versions_90f99618609c_dispatch_tables_py"
     ],
-    "283": [
+    "282": [
       "alembic_versions_ba337a5ead4a_webhook_outbox_conversation_messages_py",
       "ba337a5ead4a_webhook_outbox_conversation_messages_downgrade",
       "ba337a5ead4a_webhook_outbox_conversation_messages_rationale_1",
       "ba337a5ead4a_webhook_outbox_conversation_messages_upgrade"
     ],
-    "284": [
+    "283": [
       "alembic_versions_bc71688df050_order_rider_fk_rider_performance_py",
       "bc71688df050_order_rider_fk_rider_performance_downgrade",
       "bc71688df050_order_rider_fk_rider_performance_rationale_1",
       "bc71688df050_order_rider_fk_rider_performance_upgrade"
     ],
-    "285": [
+    "284": [
       "alembic_versions_ce9e6a9b5dae_sla_coupon_cod_tables_py",
       "ce9e6a9b5dae_sla_coupon_cod_tables_downgrade",
       "ce9e6a9b5dae_sla_coupon_cod_tables_rationale_1",
       "ce9e6a9b5dae_sla_coupon_cod_tables_upgrade"
     ],
-    "286": [
+    "285": [
       "alembic_versions_e99f4e761d39_pg_trgm_name_normalized_py",
       "e99f4e761d39_pg_trgm_name_normalized_downgrade",
       "e99f4e761d39_pg_trgm_name_normalized_rationale_1",
       "e99f4e761d39_pg_trgm_name_normalized_upgrade"
     ],
-    "287": [
+    "286": [
       "alembic_versions_ea09f818d3c3_marketing_tables_py",
       "ea09f818d3c3_marketing_tables_downgrade",
       "ea09f818d3c3_marketing_tables_rationale_1",
       "ea09f818d3c3_marketing_tables_upgrade"
     ],
-    "288": [
+    "287": [
       "alembic_versions_ea5ef5651223_restaurants_riders_py",
       "ea5ef5651223_restaurants_riders_downgrade",
       "ea5ef5651223_restaurants_riders_rationale_1",
       "ea5ef5651223_restaurants_riders_upgrade"
     ],
-    "289": [
+    "288": [
       "alembic_versions_eb6f4dfb6f23_sla_events_unique_order_type_py",
       "eb6f4dfb6f23_sla_events_unique_order_type_downgrade",
       "eb6f4dfb6f23_sla_events_unique_order_type_rationale_1",
       "eb6f4dfb6f23_sla_events_unique_order_type_upgrade"
     ],
-    "290": [
+    "289": [
       "alembic_versions_f5b3d88a3a89_prediction_tables_py",
       "f5b3d88a3a89_prediction_tables_downgrade",
       "f5b3d88a3a89_prediction_tables_rationale_1",
       "f5b3d88a3a89_prediction_tables_upgrade"
     ],
-    "291": [
+    "290": [
       "alembic_versions_f6764ecf8b8d_updated_at_triggers_audit_composite_py",
       "f6764ecf8b8d_updated_at_triggers_audit_composite_downgrade",
       "f6764ecf8b8d_updated_at_triggers_audit_composite_rationale_1",
       "f6764ecf8b8d_updated_at_triggers_audit_composite_upgrade"
     ],
-    "292": [
+    "291": [
       "alembic_versions_fef0973b618c_audit_log_py",
       "fef0973b618c_audit_log_downgrade",
       "fef0973b618c_audit_log_rationale_1",
       "fef0973b618c_audit_log_upgrade"
     ],
-    "293": [
+    "292": [
       "coupons_test_codegen",
       "coupons_test_codegen_test_code_avoids_ambiguous_chars",
       "coupons_test_codegen_test_code_has_prefix_and_entropy",
       "coupons_test_codegen_test_codes_are_unique_across_calls"
     ],
-    "294": [
+    "293": [
       "db_get_engine",
       "db_get_session",
       "db_get_session_factory",
       "src_app_db_py"
     ],
-    "295": [
+    "294": [
       "diff_diff_menus",
       "diff_diffreport",
       "diff_norm",
       "src_app_menu_diff_py"
     ],
-    "296": [
+    "295": [
       "dispatch_service_py",
       "notify_rider_assigned",
       "test_dispatch_engine",
       "test_order_detail_reassign"
     ],
-    "297": [
+    "296": [
       "frontend_src_lib_orderdetailapi_ts",
       "orderdetailapi_fetchorderdetail",
       "orderdetailapi_patchaddress",
       "orderdetailapi_patchcustomer"
     ],
-    "298": [
+    "297": [
       "frontend_src_lib_predictionsapi_ts",
       "predictionsapi_fetchforecastruns",
       "predictionsapi_fetchlatestforecast",
       "predictionsapi_fetchprepaheadadvice"
     ],
-    "299": [
+    "298": [
       "item_variants_activation_guard",
       "item_variants_plan",
       "phase_3_ordering_plan",
       "platform_design_spec_menu_activation_rules"
     ],
-    "300": [
+    "299": [
       "phase_4_logistics_batching",
       "phase_4_logistics_rider_scoring",
       "platform_design_spec_dispatch_flow",
       "platform_design_spec_rider_no_reject"
     ],
-    "301": [
+    "300": [
       "rider_app_app_eas_projectid",
       "rider_app_app_expo_extra",
       "rider_app_app_extra_apibase",
       "rider_app_app_extra_eas"
     ],
-    "302": [
+    "301": [
       "rider_app_tsconfig",
       "rider_app_tsconfig_compileroptions",
       "rider_app_tsconfig_compileroptions_strict",
       "rider_app_tsconfig_extends"
     ],
-    "303": [
+    "302": [
       "sentry_init_sentry",
       "sentry_rationale_1",
       "sentry_rationale_8",
       "src_app_obs_sentry_py"
     ],
-    "304": [
+    "303": [
       "test_bucket_limiter",
       "test_bucket_test_allows_up_to_capacity_then_blocks",
       "test_bucket_test_independent_keys",
       "tests_ratelimit_test_bucket_py"
     ],
-    "305": [
+    "304": [
       "test_fake_test_fake_agent_new_interface",
       "test_fake_test_fake_extractor_canned_override",
       "test_fake_test_fake_extractor_returns_drafts",
       "tests_llm_test_fake_py"
     ],
-    "306": [
+    "305": [
       "test_lifespan_rationale_1",
       "test_lifespan_rationale_5",
       "test_lifespan_test_app_health_check_via_client",
       "tests_test_lifespan_py"
     ],
-    "307": [
+    "306": [
       "test_rolling_test_rolling_cold_start_falls_back_to_global_dish_mean",
       "test_rolling_test_rolling_predicts_weekday_hour_mean_per_dish",
       "test_rolling_ts",
       "tests_predictions_test_rolling_py"
     ],
-    "308": [
+    "307": [
       "test_simulator_test_simulator_index_returns_html",
       "test_simulator_test_simulator_messages_returns_list",
       "test_simulator_test_simulator_send_queues_inbound_and_returns_ok",
       "tests_test_simulator_py"
     ],
-    "309": [
+    "308": [
       "test_weather_stub_test_fake_weather_port_default_no_delay",
       "test_weather_stub_test_fake_weather_port_delay_active",
       "test_weather_stub_test_fake_weather_port_satisfies_protocol",
       "tests_ordering_test_weather_stub_py"
     ],
-    "310": [
+    "309": [
       "LocationPicker_LocationPicker",
       "LocationPicker_reverseGeocode",
       "LocationPicker_searchPlaces"
     ],
-    "311": [
+    "310": [
       "conversation_models",
       "test_engine_draft_lifecycle_suite",
       "test_engine_suite"
     ],
-    "312": [
+    "311": [
       "dashboard_design_brief_component_inventory",
       "dashboard_design_brief_ia_screens",
       "dashboard_design_brief_live_ops_screen"
     ],
-    "313": [
+    "312": [
       "frontend_index_html",
       "phase_5_dashboard_plan",
       "phase_5_dashboard_polling_transport"
     ],
-    "314": [
+    "313": [
       "frontend_live_ops_module_css",
       "frontend_live_ops_screen",
       "live_ops_dispatch_map"
     ],
-    "315": [
+    "314": [
       "frontend_src_screens_loginscreen_test_tsx",
       "loginscreen_test_clicksignuptab",
       "loginscreen_test_tokenresponse"
     ],
-    "316": [
+    "315": [
       "handle_delivered",
       "mark_order_delivered",
       "rider_app_delivered_endpoint"
     ],
-    "317": [
+    "316": [
       "haversine_distance_km",
       "haversine_rationale_7",
       "src_app_geo_haversine_py"
     ],
-    "318": [
+    "317": [
       "marketing_models_MarketingMedia",
       "marketing_router_upload_image",
       "media_router_serve_media"
     ],
-    "319": [
+    "318": [
       "outboundmessagetype",
       "outbox_service_enqueue_message",
       "src_app_outbox_service_py_outboxmessage"
     ],
-    "320": [
+    "319": [
       "rfm_classify",
       "rfm_segment_counts",
       "rfm_segment_customer_ids"
     ],
-    "321": [
+    "320": [
       "rider_app_api_ts_registerPushToken",
       "rider_app_notifications_ts_getExpoPushTokenAsync",
       "rider_app_notifications_ts_registerForPush"
     ],
-    "322": [
+    "321": [
       "rider_app_location_record",
       "rider_app_router_location_endpoint",
       "rider_flow__notify_customer_status"
     ],
-    "323": [
+    "322": [
       "test_celery_metadata_rationale_1",
       "test_celery_metadata_test_worker_registers_restaurants_table_for_outbox_fk",
       "tests_workers_test_celery_metadata_py"
     ],
-    "324": [
+    "323": [
       "test_login_rate_limit_test_login_rate_limit_scoped_per_phone",
       "test_login_rate_limit_test_login_rate_limited_after_threshold",
       "tests_identity_test_login_rate_limit_py"
     ],
-    "325": [
+    "324": [
       "test_outbox_service_test_enqueue_duplicate_idempotency_key_raises",
       "test_outbox_service_test_enqueue_writes_pending_row",
       "tests_outbox_test_outbox_service_py"
     ],
-    "326": [
+    "325": [
       "test_storage_test_put_get_roundtrip",
       "test_storage_test_tenant_isolation",
       "tests_menu_test_storage_py"
     ],
-    "327": [
+    "326": [
       "understanding_post_riders_app_push_token",
       "understanding_rider_app_router_post_push_token",
       "understanding_rider_app_set_push_token"
     ],
-    "328": [
+    "327": [
       "understanding_rider_actions_mark_order_delivered",
       "understanding_rider_app_router_post_orders_delivered",
       "understanding_rider_flow_handle_delivered"
     ],
-    "329": [
+    "328": [
       "versions_a1b2c3d4e5f6_backfill_customer_order_stats",
       "versions_a1b2c3d4e5f6_backfill_customer_order_stats_downgrade",
       "versions_a1b2c3d4e5f6_backfill_customer_order_stats_upgrade"
     ],
-    "330": [
+    "329": [
       "versions_b4e7c2a9f1d3_partner_api_keys",
       "versions_b4e7c2a9f1d3_partner_api_keys_downgrade",
       "versions_b4e7c2a9f1d3_partner_api_keys_upgrade"
     ],
-    "331": [
+    "330": [
       "versions_c4a8b1f7d2e1_order_tracking_sessions",
       "versions_c4a8b1f7d2e1_order_tracking_sessions_downgrade",
       "versions_c4a8b1f7d2e1_order_tracking_sessions_upgrade"
     ],
-    "332": [
+    "331": [
       "versions_c9f2a1b4d6e8_marketing_media_blobs",
       "versions_c9f2a1b4d6e8_marketing_media_blobs_downgrade",
       "versions_c9f2a1b4d6e8_marketing_media_blobs_upgrade"
     ],
-    "333": [
+    "332": [
       "versions_d1a2c3e4f5b6_dish_catalog_retailer_id",
       "versions_d1a2c3e4f5b6_dish_catalog_retailer_id_downgrade",
       "versions_d1a2c3e4f5b6_dish_catalog_retailer_id_upgrade"
     ],
-    "334": [
+    "333": [
       "versions_d5e6f7a8b9c0_rider_app_pairing",
       "versions_d5e6f7a8b9c0_rider_app_pairing_downgrade",
       "versions_d5e6f7a8b9c0_rider_app_pairing_upgrade"
     ],
-    "335": [
+    "334": [
       "versions_d7e8f9a0b1c2_dish_variants",
       "versions_d7e8f9a0b1c2_dish_variants_downgrade",
       "versions_d7e8f9a0b1c2_dish_variants_upgrade"
     ],
-    "336": [
+    "335": [
       "versions_e2b3d4f5a6c7_rider_on_duty",
       "versions_e2b3d4f5a6c7_rider_on_duty_downgrade",
       "versions_e2b3d4f5a6c7_rider_on_duty_upgrade"
     ],
-    "337": [
+    "336": [
       "versions_e8f1a2b3c4d5_order_prep_deadline",
       "versions_e8f1a2b3c4d5_order_prep_deadline_downgrade",
       "versions_e8f1a2b3c4d5_order_prep_deadline_upgrade"
     ],
-    "338": [
+    "337": [
       "versions_f1a2b3c4d5e6_wallet_tickets_coupons",
       "versions_f1a2b3c4d5e6_wallet_tickets_coupons_downgrade",
       "versions_f1a2b3c4d5e6_wallet_tickets_coupons_upgrade"
     ],
-    "339": [
+    "338": [
       "versions_f9a2b3c4d5e6_dish_prep_and_cook_estimate",
       "versions_f9a2b3c4d5e6_dish_prep_and_cook_estimate_downgrade",
       "versions_f9a2b3c4d5e6_dish_prep_and_cook_estimate_upgrade"
     ],
-    "340": [
+    "339": [
       "AnalyticsScreen_AnalyticsScreen",
       "marketingApi_fetchCampaigns"
     ],
-    "341": [
+    "340": [
       "button_button",
       "frontend_src_components_button_tsx"
     ],
-    "342": [
+    "341": [
       "catalog_init_rationale_1",
       "src_app_catalog_init_py_catalog_init"
     ],
-    "343": [
+    "342": [
       "conversation_engine_looks_like_menu",
       "conversation_engine_rationale_39"
     ],
-    "344": [
-      "conversation_engine_rationale_1098",
-      "conversation_engine_redeem_context"
-    ],
-    "345": [
-      "conversation_engine_rationale_3192",
-      "conversation_engine_transcribe_voice_note"
-    ],
-    "346": [
+    "343": [
       "countdowntimer_countdowntimer",
       "frontend_src_components_countdowntimer_tsx"
     ],
-    "347": [
+    "344": [
       "countdowntimer_test_iso",
       "frontend_src_components_countdowntimer_test_tsx"
     ],
-    "348": [
+    "345": [
       "dashboard_design_brief_batch_lasso",
       "dashboard_design_brief_motion_principles"
     ],
-    "349": [
+    "346": [
       "file_wallet_reconcile",
       "understanding_wallet_maintenance"
     ],
-    "350": [
+    "347": [
       "frontend_src_components_kpitile_tsx",
       "kpitile_kpitile"
     ],
-    "351": [
+    "348": [
       "frontend_src_components_liveorderrow_tsx",
       "liveorderrow_liveorderrow"
     ],
-    "352": [
+    "349": [
       "frontend_src_components_sectionbanner_tsx",
       "sectionbanner_sectionbanner"
     ],
-    "353": [
+    "350": [
       "frontend_src_components_sidedrawer_tsx",
       "sidedrawer_sidedrawer"
     ],
-    "354": [
+    "351": [
       "frontend_src_components_spinner_tsx",
       "spinner_spinner"
     ],
-    "355": [
+    "352": [
       "frontend_src_lib_sla_test_ts",
       "sla_test_iso"
     ],
-    "356": [
+    "353": [
       "frontend_src_lib_usepoll_test_tsx",
       "usepoll_test_probe"
     ],
-    "357": [
+    "354": [
       "frontend_src_lib_usepoll_ts",
       "usepoll_usepoll"
     ],
-    "358": [
+    "355": [
       "geo_google_GoogleMapsGeoProvider",
       "geo_haversine_haversine"
     ],
-    "359": [
+    "356": [
       "init_rationale_1",
       "notifications_init"
     ],
-    "360": [
+    "357": [
       "marketing_models_marketingmedia",
       "marketing_models_rationale_75"
     ],
-    "361": [
+    "358": [
       "marketing_schemas_audiencesegmentout",
       "marketing_schemas_rationale_89"
     ],
-    "362": [
+    "359": [
       "partner_init",
       "partner_init_rationale_1"
     ],
-    "363": [
+    "360": [
       "template_port_rationale_35",
       "template_port_templatespec_to_compliance_dict"
     ],
-    "364": [
+    "361": [
       "test_audit_test_record_audit_persists_row",
       "tests_test_audit_py"
     ],
-    "365": [
+    "362": [
       "test_health_test_health",
       "tests_test_health_py"
     ],
-    "366": [
+    "363": [
       "test_processed_at_type_test_processed_at_is_datetime",
       "tests_webhook_test_processed_at_type_py"
     ],
-    "367": [
+    "364": [
       "understanding_arch_decision_menu_file_blobstore",
       "understanding_arch_decision_menu_file_greeting"
     ],
-    "368": [
+    "365": [
       "understanding_datetime_now_timezone_utc",
       "understanding_outbox_worker_py"
     ],
-    "369": [
+    "366": [
       "understanding_liveopsscreen",
       "understanding_svg_map"
     ],
-    "370": [
+    "367": [
       "understanding_notifications_module",
       "understanding_post_push_token_endpoint"
     ],
-    "371": [
+    "368": [
       "understanding_rider_actions_get_active_run",
       "understanding_rider_app_router_get_orders"
     ],
-    "372": [
+    "369": [
       "App_App"
     ],
-    "373": [
+    "370": [
       "CompactTable_CompactTable"
     ],
-    "374": [
+    "371": [
       "ConversationsScreen_ConversationsScreen"
     ],
-    "375": [
+    "372": [
       "GoogleMapsGeoProvider"
     ],
-    "376": [
+    "373": [
       "LiveOpsScreen"
     ],
-    "377": [
+    "374": [
       "_deliver_one"
     ],
-    "378": [
+    "375": [
       "_enqueue_rider_assignment"
     ],
-    "379": [
+    "376": [
       "app_notifications"
     ],
-    "380": [
+    "377": [
       "celery_duplicate_message_risk"
     ],
-    "381": [
+    "378": [
       "claude_claude_ai"
     ],
-    "382": [
+    "379": [
       "claude_google_maps"
     ],
-    "383": [
+    "380": [
       "cod_service_rationale_1"
     ],
-    "384": [
+    "381": [
       "concept_customer"
     ],
-    "385": [
+    "382": [
       "coupons_models_rationale_11"
     ],
-    "386": [
+    "383": [
       "dispatch_service__enqueue_rider_assignment"
     ],
-    "387": [
+    "384": [
       "e2e_smoke_spec"
     ],
-    "388": [
+    "385": [
       "engine_handle_restaurant_location"
     ],
-    "389": [
+    "386": [
       "engine_handle_status_query"
     ],
-    "390": [
+    "387": [
       "fixtures_conversations"
     ],
-    "391": [
+    "388": [
       "fixtures_orders"
     ],
-    "392": [
+    "389": [
       "frontend_playwright_config_ts"
     ],
-    "393": [
+    "390": [
       "frontend_src_app_test_tsx"
     ],
-    "394": [
+    "391": [
       "frontend_src_components_compacttable_test_tsx"
     ],
-    "395": [
+    "392": [
       "frontend_src_components_diffpanel_test_tsx"
     ],
-    "396": [
+    "393": [
       "frontend_src_components_diffpanel_tsx"
     ],
-    "397": [
+    "394": [
       "frontend_src_components_kpitile_test_tsx"
     ],
-    "398": [
+    "395": [
       "frontend_src_components_sidedrawer_test_tsx"
     ],
-    "399": [
+    "396": [
       "frontend_src_components_statuspill_test_tsx"
     ],
-    "400": [
+    "397": [
       "frontend_src_lib_apiclient_test_ts"
     ],
-    "401": [
+    "398": [
       "frontend_src_lib_auth_test_ts"
     ],
-    "402": [
+    "399": [
       "frontend_src_lib_ordersapi_test_ts"
     ],
-    "403": [
+    "400": [
       "frontend_src_lib_transport_index_ts"
     ],
-    "404": [
+    "401": [
       "frontend_src_lib_transport_pollingtransport_test_ts"
     ],
-    "405": [
+    "402": [
       "frontend_src_main_tsx"
     ],
-    "406": [
+    "403": [
       "frontend_src_screens_analyticsscreen_test_tsx"
     ],
-    "407": [
+    "404": [
       "frontend_src_test_setup_ts"
     ],
-    "408": [
+    "405": [
       "frontend_src_vite_env_d_ts"
     ],
-    "409": [
+    "406": [
       "frontend_vite_config"
     ],
-    "410": [
+    "407": [
       "get_active_run"
     ],
-    "411": [
+    "408": [
       "last_run_lastRun"
     ],
-    "412": [
+    "409": [
       "loyaltyprogramanalysis_referral_loop"
     ],
-    "413": [
+    "410": [
       "marketing_conftest_rationale_8"
     ],
-    "414": [
+    "411": [
       "marketing_models_Segment"
     ],
-    "415": [
+    "412": [
       "marketing_test_worker_rationale_1"
     ],
-    "416": [
+    "413": [
       "marketing_test_worker_rationale_11"
     ],
-    "417": [
+    "414": [
       "marketing_worker_rationale_1"
     ],
-    "418": [
+    "415": [
       "matching_bundle_variant_for_qty"
     ],
-    "419": [
+    "416": [
       "matching_suggest_available_alternative"
     ],
-    "420": [
+    "417": [
       "ordering_conftest_rationale_8"
     ],
-    "421": [
+    "418": [
       "ordering_dispatch_is_excluded_for_resale"
     ],
-    "422": [
+    "419": [
       "ordering_models_CustomerAddress"
     ],
-    "423": [
+    "420": [
       "phase_6_marketing_segment_dsl"
     ],
-    "424": [
+    "421": [
       "phase_7_redis_rate_limiter"
     ],
-    "425": [
+    "422": [
       "platform_design_spec_actors"
     ],
-    "426": [
+    "423": [
       "predictions_router_rationale_1"
     ],
-    "427": [
+    "424": [
       "predictions_worker_rationale_1"
     ],
-    "428": [
+    "425": [
       "readme_repository_map"
     ],
-    "429": [
+    "426": [
       "rider_app_api_ts_getOrders"
     ],
-    "430": [
+    "427": [
       "rider_app_app_config"
     ],
-    "431": [
+    "428": [
       "rider_app_babel_config"
     ],
-    "432": [
+    "429": [
       "rider_app_router_module"
     ],
-    "433": [
+    "430": [
       "scripts_run_live_ps1"
     ],
-    "434": [
+    "431": [
       "scripts_stop_live_ps1"
     ],
-    "435": [
+    "432": [
       "service_create_rider"
     ],
-    "436": [
+    "433": [
       "service_set_rider_status"
     ],
-    "437": [
+    "434": [
       "sla_breach_40_customer_outbox_rule"
     ],
-    "438": [
+    "435": [
       "sla_breach_coupon_rule"
     ],
-    "439": [
+    "436": [
       "sla_models_rationale_11"
     ],
-    "440": [
+    "437": [
       "sla_monitor_idempotency_rule"
     ],
-    "441": [
+    "438": [
       "sla_weather_delay_skip_coupon_rule"
     ],
-    "442": [
+    "439": [
       "sla_yellow_30_outbox_rule"
     ],
-    "443": [
+    "440": [
       "src_app_speech_init_py_speech_init"
     ],
-    "444": [
+    "441": [
       "src_app_tickets_init_py_tickets_init"
     ],
-    "445": [
+    "442": [
       "src_app_wallet_init_py_wallet_init"
     ],
-    "446": [
+    "443": [
       "test_worker_retrain_for_restaurant"
     ],
-    "447": [
+    "444": [
       "tests_catalog_init_py_catalog_init"
     ],
-    "448": [
+    "445": [
       "tests_speech_init_py_speech_init"
     ],
-    "449": [
+    "446": [
       "tests_tickets_init_py_tickets_init"
     ],
-    "450": [
+    "447": [
       "tests_wallet_init_py_wallet_init"
     ],
-    "451": [
+    "448": [
       "tsconfig_tsconfig"
     ],
-    "452": [
+    "449": [
       "types_ConversationOut"
     ],
-    "453": [
+    "450": [
       "understanding_LiveOpsScreen"
     ],
-    "454": [
+    "451": [
       "understanding__enqueue_rider_assignment"
     ],
-    "455": [
+    "452": [
       "understanding_app_notifications"
     ],
-    "456": [
+    "453": [
       "understanding_app_only_rider_flow"
     ],
-    "457": [
+    "454": [
       "understanding_app_rider_app_info"
     ],
-    "458": [
+    "455": [
       "understanding_eas"
     ],
-    "459": [
+    "456": [
       "understanding_fcm"
     ],
-    "460": [
+    "457": [
       "understanding_frontend"
     ],
-    "461": [
+    "458": [
       "understanding_live_location_gate"
     ],
-    "462": [
+    "459": [
       "understanding_liveops_dispatch_map"
     ],
-    "463": [
+    "460": [
       "understanding_liveops_screen"
     ],
-    "464": [
+    "461": [
       "understanding_loadrun"
     ],
-    "465": [
+    "462": [
       "understanding_post_rider_app_push_token"
     ],
-    "466": [
+    "463": [
       "understanding_push_notification_flow"
     ],
-    "467": [
+    "464": [
       "understanding_push_token"
     ],
-    "468": [
+    "465": [
       "understanding_push_token_column"
     ],
-    "469": [
+    "466": [
       "understanding_re_optimization"
     ],
-    "470": [
+    "467": [
       "understanding_reveal_first_stop_on_tracking_live"
     ],
-    "471": [
+    "468": [
       "understanding_rider_router"
     ],
-    "472": [
+    "469": [
       "understanding_splash_fix"
     ],
-    "473": [
+    "470": [
       "understanding_test_coverage"
     ],
-    "474": [
+    "471": [
       "understanding_understanding_txt"
     ],
-    "475": [
+    "472": [
       "understanding_utcnow_fix"
     ],
-    "476": [
+    "473": [
       "understanding_whatsapp_flow"
     ],
-    "477": [
+    "474": [
       "understanding_whatsapp_pairing"
     ],
-    "478": [
+    "475": [
       "wallet_coupon_financial_design_coupon"
     ],
-    "479": [
+    "476": [
       "wallet_coupon_financial_design_double_entry_ledger"
     ],
-    "480": [
+    "477": [
       "wallet_coupon_financial_design_wallet_entry"
     ],
-    "481": [
+    "478": [
       "whatsapp_cloud_api_notes_throughput"
     ],
-    "482": [
+    "479": [
       "whatsapp_factory_rationale_9"
     ]
   },
@@ -6585,69 +6579,69 @@
     "3": 0.06073871409028728,
     "4": 0.06775067750677506,
     "5": 0.0627027027027027,
-    "6": 0.05875251509054326,
-    "7": 0.07884615384615384,
-    "8": 0.06246799795186892,
-    "9": 0.059506531204644414,
-    "10": 0.0700354609929078,
-    "11": 0.09485815602836879,
-    "12": 0.043478260869565216,
-    "13": 0.1267345050878816,
-    "14": 0.11980676328502415,
-    "15": 0.10048309178743961,
-    "16": 0.0966183574879227,
-    "17": 0.07342995169082125,
-    "18": 0.08484848484848485,
-    "19": 0.09830866807610994,
-    "20": 0.07308970099667775,
-    "21": 0.08013937282229965,
-    "22": 0.06736353077816493,
-    "23": 0.07084785133565621,
-    "24": 0.11382113821138211,
-    "25": 0.07317073170731707,
+    "6": 0.07884615384615384,
+    "7": 0.06246799795186892,
+    "8": 0.06588235294117648,
+    "9": 0.06274509803921569,
+    "10": 0.06612244897959184,
+    "11": 0.08503401360544217,
+    "12": 0.09485815602836879,
+    "13": 0.043478260869565216,
+    "14": 0.1267345050878816,
+    "15": 0.11980676328502415,
+    "16": 0.10048309178743961,
+    "17": 0.0966183574879227,
+    "18": 0.07342995169082125,
+    "19": 0.08484848484848485,
+    "20": 0.09830866807610994,
+    "21": 0.07308970099667775,
+    "22": 0.08013937282229965,
+    "23": 0.06736353077816493,
+    "24": 0.07084785133565621,
+    "25": 0.11382113821138211,
     "26": 0.08902439024390243,
     "27": 0.08461538461538462,
     "28": 0.1423076923076923,
-    "29": 0.1423076923076923,
-    "30": 0.06543385490753911,
-    "31": 0.2574679943100996,
-    "32": 0.16216216216216217,
-    "33": 0.11948790896159317,
-    "34": 0.05555555555555555,
-    "35": 0.11428571428571428,
-    "36": 0.10952380952380952,
-    "37": 0.07226890756302522,
-    "38": 0.1140819964349376,
-    "39": 0.0784313725490196,
-    "40": 0.07765151515151515,
-    "41": 0.13709677419354838,
-    "42": 0.09462365591397849,
-    "43": 0.11827956989247312,
-    "44": 0.15698924731182795,
-    "45": 0.0967741935483871,
-    "46": 0.11494252873563218,
-    "47": 0.12643678160919541,
-    "48": 0.06666666666666667,
+    "29": 0.0782051282051282,
+    "30": 0.1423076923076923,
+    "31": 0.06543385490753911,
+    "32": 0.2574679943100996,
+    "33": 0.16216216216216217,
+    "34": 0.11948790896159317,
+    "35": 0.05555555555555555,
+    "36": 0.11428571428571428,
+    "37": 0.10952380952380952,
+    "38": 0.07226890756302522,
+    "39": 0.1140819964349376,
+    "40": 0.0784313725490196,
+    "41": 0.07765151515151515,
+    "42": 0.13709677419354838,
+    "43": 0.09462365591397849,
+    "44": 0.11827956989247312,
+    "45": 0.15698924731182795,
+    "46": 0.0967741935483871,
+    "47": 0.24367816091954023,
+    "48": 0.11494252873563218,
     "49": 0.12643678160919541,
-    "50": 0.08374384236453201,
-    "51": 0.09359605911330049,
-    "52": 0.1111111111111111,
-    "53": 0.10317460317460317,
-    "54": 0.10846560846560846,
-    "55": 0.2830687830687831,
-    "56": 0.07142857142857142,
-    "57": 0.10256410256410256,
-    "58": 0.1908831908831909,
-    "59": 0.24307692307692308,
-    "60": 0.46153846153846156,
-    "61": 0.11076923076923077,
-    "62": 0.1076923076923077,
-    "63": 0.12666666666666668,
-    "64": 0.10666666666666667,
+    "50": 0.06666666666666667,
+    "51": 0.12643678160919541,
+    "52": 0.08374384236453201,
+    "53": 0.09359605911330049,
+    "54": 0.1111111111111111,
+    "55": 0.10317460317460317,
+    "56": 0.10846560846560846,
+    "57": 0.2830687830687831,
+    "58": 0.07142857142857142,
+    "59": 0.10256410256410256,
+    "60": 0.1908831908831909,
+    "61": 0.46153846153846156,
+    "62": 0.11076923076923077,
+    "63": 0.1076923076923077,
+    "64": 0.12666666666666668,
     "65": 0.09666666666666666,
     "66": 0.09,
     "67": 0.13768115942028986,
-    "68": 0.11956521739130435,
+    "68": 0.11231884057971014,
     "69": 0.13405797101449277,
     "70": 0.15217391304347827,
     "71": 0.10276679841897234,
@@ -6657,54 +6651,54 @@
     "75": 0.11067193675889328,
     "76": 0.14624505928853754,
     "77": 0.1067193675889328,
-    "78": 0.24675324675324675,
-    "79": 0.1,
-    "80": 0.11904761904761904,
-    "81": 0.09523809523809523,
-    "82": 0.11428571428571428,
-    "83": 0.12631578947368421,
-    "84": 0.2,
-    "85": 0.14736842105263157,
-    "86": 0.3631578947368421,
+    "78": 0.1341991341991342,
+    "79": 0.24675324675324675,
+    "80": 0.1,
+    "81": 0.11904761904761904,
+    "82": 0.09523809523809523,
+    "83": 0.11428571428571428,
+    "84": 0.12631578947368421,
+    "85": 0.2,
+    "86": 0.14736842105263157,
     "87": 0.28421052631578947,
     "88": 0.1,
     "89": 0.1,
     "90": 0.14619883040935672,
     "91": 0.1286549707602339,
-    "92": 0.11695906432748537,
-    "93": 0.1286549707602339,
-    "94": 0.1871345029239766,
-    "95": 0.14619883040935672,
-    "96": 0.15204678362573099,
-    "97": 0.13725490196078433,
-    "98": 0.16339869281045752,
-    "99": 0.1830065359477124,
-    "100": 0.20261437908496732,
-    "101": 0.1895424836601307,
-    "102": 0.1830065359477124,
-    "103": 0.1111111111111111,
-    "104": 0.1830065359477124,
-    "105": 0.16993464052287582,
+    "92": 0.26900584795321636,
+    "93": 0.11695906432748537,
+    "94": 0.1286549707602339,
+    "95": 0.1871345029239766,
+    "96": 0.14619883040935672,
+    "97": 0.15204678362573099,
+    "98": 0.13725490196078433,
+    "99": 0.16339869281045752,
+    "100": 0.1830065359477124,
+    "101": 0.20261437908496732,
+    "102": 0.1895424836601307,
+    "103": 0.1830065359477124,
+    "104": 0.1111111111111111,
+    "105": 0.1830065359477124,
     "106": 0.16993464052287582,
-    "107": 0.19117647058823528,
-    "108": 0.11764705882352941,
-    "109": 0.15441176470588236,
-    "110": 0.18382352941176472,
-    "111": 0.11764705882352941,
-    "112": 0.125,
-    "113": 0.25833333333333336,
-    "114": 0.325,
-    "115": 0.16666666666666666,
-    "116": 0.18333333333333332,
-    "117": 0.14166666666666666,
-    "118": 0.15833333333333333,
-    "119": 0.13333333333333333,
-    "120": 0.14285714285714285,
+    "107": 0.16993464052287582,
+    "108": 0.19117647058823528,
+    "109": 0.11764705882352941,
+    "110": 0.15441176470588236,
+    "111": 0.18382352941176472,
+    "112": 0.11764705882352941,
+    "113": 0.125,
+    "114": 0.25833333333333336,
+    "115": 0.325,
+    "116": 0.16666666666666666,
+    "117": 0.18333333333333332,
+    "118": 0.14166666666666666,
+    "119": 0.15833333333333333,
+    "120": 0.13333333333333333,
     "121": 0.14285714285714285,
-    "122": 0.2571428571428571,
-    "123": 0.2761904761904762,
-    "124": 0.2,
-    "125": 0.27472527472527475,
+    "122": 0.14285714285714285,
+    "123": 0.2571428571428571,
+    "124": 0.2761904761904762,
+    "125": 0.2,
     "126": 0.15384615384615385,
     "127": 0.2967032967032967,
     "128": 0.25274725274725274,
@@ -6761,99 +6755,99 @@
     "179": 0.2222222222222222,
     "180": 0.2222222222222222,
     "181": 0.25,
-    "182": 0.4722222222222222,
-    "183": 0.5555555555555556,
+    "182": 0.5555555555555556,
+    "183": 0.2222222222222222,
     "184": 0.2222222222222222,
-    "185": 0.2222222222222222,
-    "186": 0.3611111111111111,
-    "187": 0.3888888888888889,
-    "188": 0.2222222222222222,
-    "189": 0.4722222222222222,
-    "190": 0.2222222222222222,
-    "191": 0.4722222222222222,
-    "192": 0.2222222222222222,
-    "193": 0.4444444444444444,
-    "194": 0.2857142857142857,
-    "195": 0.32142857142857145,
-    "196": 0.2857142857142857,
-    "197": 0.4642857142857143,
-    "198": 0.5357142857142857,
-    "199": 0.32142857142857145,
-    "200": 0.42857142857142855,
-    "201": 0.25,
-    "202": 0.5357142857142857,
-    "203": 0.32142857142857145,
-    "204": 0.35714285714285715,
-    "205": 0.25,
-    "206": 0.4642857142857143,
-    "207": 0.5357142857142857,
+    "185": 0.3611111111111111,
+    "186": 0.3888888888888889,
+    "187": 0.2222222222222222,
+    "188": 0.4722222222222222,
+    "189": 0.2222222222222222,
+    "190": 0.4722222222222222,
+    "191": 0.2222222222222222,
+    "192": 0.4444444444444444,
+    "193": 0.2857142857142857,
+    "194": 0.32142857142857145,
+    "195": 0.2857142857142857,
+    "196": 0.4642857142857143,
+    "197": 0.5357142857142857,
+    "198": 0.32142857142857145,
+    "199": 0.42857142857142855,
+    "200": 0.25,
+    "201": 0.5357142857142857,
+    "202": 0.32142857142857145,
+    "203": 0.35714285714285715,
+    "204": 0.25,
+    "205": 0.4642857142857143,
+    "206": 0.5357142857142857,
+    "207": 0.25,
     "208": 0.25,
     "209": 0.25,
-    "210": 0.25,
-    "211": 0.4642857142857143,
-    "212": 0.2857142857142857,
-    "213": 0.42857142857142855,
-    "214": 0.3333333333333333,
+    "210": 0.4642857142857143,
+    "211": 0.2857142857142857,
+    "212": 0.42857142857142855,
+    "213": 0.3333333333333333,
+    "214": 0.2857142857142857,
     "215": 0.2857142857142857,
-    "216": 0.2857142857142857,
-    "217": 0.38095238095238093,
-    "218": 0.3333333333333333,
-    "219": 0.42857142857142855,
-    "220": 0.2857142857142857,
-    "221": 0.47619047619047616,
+    "216": 0.38095238095238093,
+    "217": 0.3333333333333333,
+    "218": 0.42857142857142855,
+    "219": 0.2857142857142857,
+    "220": 0.47619047619047616,
+    "221": 0.3333333333333333,
     "222": 0.3333333333333333,
     "223": 0.3333333333333333,
     "224": 0.3333333333333333,
-    "225": 0.3333333333333333,
+    "225": 0.38095238095238093,
     "226": 0.38095238095238093,
-    "227": 0.38095238095238093,
-    "228": 0.2857142857142857,
+    "227": 0.2857142857142857,
+    "228": 0.5238095238095238,
     "229": 0.5238095238095238,
-    "230": 0.5238095238095238,
-    "231": 0.2857142857142857,
-    "232": 0.6190476190476191,
-    "233": 0.3333333333333333,
-    "234": 0.4666666666666667,
-    "235": 0.3333333333333333,
-    "236": 0.5333333333333333,
+    "230": 0.2857142857142857,
+    "231": 0.6190476190476191,
+    "232": 0.3333333333333333,
+    "233": 0.4666666666666667,
+    "234": 0.3333333333333333,
+    "235": 0.5333333333333333,
+    "236": 0.3333333333333333,
     "237": 0.3333333333333333,
-    "238": 0.3333333333333333,
-    "239": 0.5333333333333333,
-    "240": 0.4,
-    "241": 0.3333333333333333,
-    "242": 0.5333333333333333,
-    "243": 0.4666666666666667,
+    "238": 0.5333333333333333,
+    "239": 0.4,
+    "240": 0.3333333333333333,
+    "241": 0.5333333333333333,
+    "242": 0.4666666666666667,
+    "243": 0.3333333333333333,
     "244": 0.3333333333333333,
-    "245": 0.3333333333333333,
-    "246": 0.7333333333333333,
+    "245": 0.7333333333333333,
+    "246": 0.3333333333333333,
     "247": 0.3333333333333333,
     "248": 0.3333333333333333,
     "249": 0.3333333333333333,
     "250": 0.3333333333333333,
-    "251": 0.3333333333333333,
-    "252": 0.6666666666666666,
+    "251": 0.6666666666666666,
+    "252": 0.3333333333333333,
     "253": 0.3333333333333333,
-    "254": 0.3333333333333333,
-    "255": 0.4,
-    "256": 0.5,
-    "257": 0.4,
+    "254": 0.4,
+    "255": 0.5,
+    "256": 0.4,
+    "257": 0.5,
     "258": 0.5,
-    "259": 0.5,
-    "260": 0.4,
-    "261": 0.5,
+    "259": 0.4,
+    "260": 0.5,
+    "261": 0.4,
     "262": 0.4,
-    "263": 0.4,
-    "264": 0.6,
-    "265": 0.5,
-    "266": 0.7,
-    "267": 0.4,
-    "268": 0.7,
+    "263": 0.6,
+    "264": 0.5,
+    "265": 0.7,
+    "266": 0.4,
+    "267": 0.7,
+    "268": 0.4,
     "269": 0.4,
     "270": 0.4,
-    "271": 0.4,
-    "272": 0.7,
+    "271": 0.7,
+    "272": 0.4,
     "273": 0.4,
-    "274": 0.4,
+    "274": 0.5,
     "275": 0.5,
     "276": 0.5,
     "277": 0.5,
@@ -6872,9 +6866,9 @@
     "290": 0.5,
     "291": 0.5,
     "292": 0.5,
-    "293": 0.5,
+    "293": 0.8333333333333334,
     "294": 0.8333333333333334,
-    "295": 0.8333333333333334,
+    "295": 0.5,
     "296": 0.5,
     "297": 0.5,
     "298": 0.5,
@@ -6885,10 +6879,10 @@
     "303": 0.5,
     "304": 0.5,
     "305": 0.5,
-    "306": 0.5,
-    "307": 0.8333333333333334,
+    "306": 0.8333333333333334,
+    "307": 0.5,
     "308": 0.5,
-    "309": 0.5,
+    "309": 0.6666666666666666,
     "310": 0.6666666666666666,
     "311": 0.6666666666666666,
     "312": 0.6666666666666666,
@@ -6896,8 +6890,8 @@
     "314": 0.6666666666666666,
     "315": 0.6666666666666666,
     "316": 0.6666666666666666,
-    "317": 0.6666666666666666,
-    "318": 1.0,
+    "317": 1.0,
+    "318": 0.6666666666666666,
     "319": 0.6666666666666666,
     "320": 0.6666666666666666,
     "321": 0.6666666666666666,
@@ -6918,7 +6912,7 @@
     "336": 0.6666666666666666,
     "337": 0.6666666666666666,
     "338": 0.6666666666666666,
-    "339": 0.6666666666666666,
+    "339": 1.0,
     "340": 1.0,
     "341": 1.0,
     "342": 1.0,
@@ -7058,10 +7052,7 @@
     "476": 1.0,
     "477": 1.0,
     "478": 1.0,
-    "479": 1.0,
-    "480": 1.0,
-    "481": 1.0,
-    "482": 1.0
+    "479": 1.0
   },
   "gods": [
     {
