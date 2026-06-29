@@ -236,6 +236,65 @@ async def test_catalog_typed_noncatalogue_item_falls_through(db_session, restaur
         assert handled is False, f"{text!r} should fall through to the AI, not be intercepted"
 
 
+def test_is_cart_query_detection():
+    """Cart queries are detected; edits/cancels/menu are NOT (they are real actions)."""
+    from app.conversation.engine import _is_cart_query
+
+    for yes in ("what's in my cart", "whats in my cart now", "show my cart", "my cart",
+                "what's in my order", "show my order", "what did i order"):
+        assert _is_cart_query(yes) is True, yes
+    for no in ("cancel my order", "clear cart", "empty my cart", "add to cart",
+               "add 2 biryani", "menu", "one chicken biryani", "hi"):
+        assert _is_cart_query(no) is False, no
+
+
+async def test_cart_query_shows_cart_not_catalogue(db_session, restaurant):
+    """'What's in my cart' must show the REAL cart deterministically, never re-send the
+    catalogue cards (the model used to mishandle it in catalogue mode)."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.menu.models import Dish
+    from app.outbox.models import OutboxMessage
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110003"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    biryani = await db_session.scalar(
+        select(Dish).where(Dish.name == "Chicken Biryani")
+    )
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110003", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "menu_sent",
+               "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.cartq", from_phone="+971501110003", type=MessageType.TEXT,
+        payload={"text": "whats in my cart now"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110003")
+    )).all()
+    types = [o.payload.get("type") for o in outs]
+    bodies = [o.payload.get("body", "") or "" for o in outs]
+    assert "product_list" not in types                       # no catalogue re-send
+    assert any("cart" in b.lower() and "Chicken Biryani" in b for b in bodies)
+
+
 async def test_what_is_nonctalog_item_never_describes_it(db_session, restaurant):
     """'what is <text-menu item>' in catalogue mode must NEVER return the dish's stored
     description/price — the catalogue dish-info guard returns None, so the bot can't talk

@@ -79,6 +79,25 @@ def _is_menu_request(text: str) -> bool:
     return any(k in t for k in keywords)
 
 
+def _is_cart_query(text: str) -> bool:
+    """True for 'what's in my cart / show my order' style messages (lowercased).
+
+    Answered deterministically with the real cart so the model can't mis-handle it
+    (e.g. re-send the catalogue). Kept tight, and never matches an edit/cancel
+    ('cancel my order', 'clear cart', 'add to cart') which are real actions."""
+    t = text.strip().lower()
+    if not t or len(t) > 45:
+        return False
+    if any(w in t for w in ("cancel", "clear", "empty", "remove", "delete", "add ")):
+        return False
+    if "cart" in t:                       # "my cart", "what's in my cart", "show cart"
+        return True
+    return any(p in t for p in (
+        "what's in my order", "whats in my order", "my current order", "current order",
+        "what did i order", "show my order", "what's my order", "my order so far",
+    ))
+
+
 # Words that, on their own, mean "hello" (a greeting = start a fresh order).
 _GREET_WORDS = frozenset({
     "hi", "hii", "hiii", "hey", "heya", "hello", "helo", "hellow", "yo", "yoo",
@@ -4072,6 +4091,19 @@ async def handle_inbound(
             # Catalogue first (when enabled), text menu otherwise.
             await _send_menu_or_catalog(
                 session, conv, inbound, restaurant_id, prefix="menu-request",
+            )
+            return
+        # "What's in my cart / show my order" → show the REAL cart deterministically,
+        # in ANY mode, so the model can never mishandle it (e.g. re-send the catalogue).
+        if _is_cart_query(text):
+            cart = await _build_cart_summary(session, conv)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="cart-query",
+                body=(f"🛒 Here's your cart:\n\n{cart}\n\nReply with more items, "
+                      "or send 'done' to check out 😊")
+                if cart else
+                "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
             )
             return
         # "Where is my order / can I see the live location" → answer with the

@@ -1147,3 +1147,12 @@
   (L732) is dead code (never called) — the live add path is the AI. Tests: typed order
   adds directly (no product_list); non-catalogue/question/control fall through. conv+catalog
   170 pass (only pre-existing confirmation-totals failure); lint clean.
+
+- 2026-06-29 07:30 Asia/Dubai — FIX: "what's in my cart" returned the catalogue instead
+  of the cart. The model mis-handled a cart query (re-sent catalogue cards). Added a
+  deterministic _is_cart_query detector + handler in handle_inbound (after the menu-request
+  check, before the AI): "what's in my cart / show my order / my cart" -> reply with the
+  real cart summary in ANY mode; empty cart -> friendly "cart is empty". Excludes edits/
+  cancels ("cancel my order", "clear cart", "add to cart"). Tests: _is_cart_query unit +
+  end-to-end cart query shows cart not product_list. conv+catalog 172 pass (only pre-existing
+  confirmation-totals failure); lint clean.
