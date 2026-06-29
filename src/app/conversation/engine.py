@@ -204,6 +204,18 @@ def _is_tier_query(text: str | None) -> bool:
     return any(p in t for p in phrases)
 
 
+def _is_resale_accept(text: str | None) -> bool:
+    """True when the customer accepts a pending resale offer in words."""
+    if not text:
+        return False
+    t = text.strip().lower()
+    if not t or len(t) > 40:
+        return False
+    if t in {"yes", "yeah", "ok", "okay", "sure", "yes please"}:
+        return True
+    return any(p in t for p in ("grab", "take it", "i want it", "claim", "deal"))
+
+
 def _is_claim_coupon(text: str | None) -> bool:
     """True when the customer asks to use/claim a coupon by intent (not the code).
 
@@ -667,6 +679,94 @@ async def _handle_greeting(
         action="state_transition",
         before={"dialogue_state": "greeting"},
         after={"dialogue_state": "menu_sent"},
+    )
+    # Offer any cancelled-but-cooked food to this customer (fast, discounted).
+    await _maybe_offer_resale(session, conv, inbound, restaurant_id)
+
+
+async def _maybe_offer_resale(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+) -> bool:
+    """If a resale (cancelled-after-cooking) order is available to this customer,
+    pitch it: ready now, delivered fast, at the restaurant's configured discount.
+    Stores the offer id in conv.state so a 'grab'/button reply can accept it.
+    Returns True if an offer was sent."""
+    from app.identity.models import Restaurant
+    from app.ordering.models import OrderItem
+    from app.ordering.resale import resale_offer_for_customer
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    settings = (restaurant.settings or {}) if restaurant else {}
+    offer = await resale_offer_for_customer(
+        session, restaurant_id=restaurant_id, phone=inbound.from_phone, settings=settings,
+    )
+    if offer is None:
+        return False
+    order = offer["order"]
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    dish_line = ", ".join(f"{i.qty}x {i.dish_name}" for i in items) or "a freshly-made meal"
+    _set_state(conv, resale_offer_id=order.id)
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=f"resale-offer-{order.id}",
+        body=(
+            f"⚡ Ready *right now* — skip the wait!\n"
+            f"{dish_line}\n"
+            f"Just AED {_aed(offer['discounted_subtotal'])} "
+            f"(save AED {_aed(offer['discount_aed'])}) — already cooked, delivered fast. 🛵"
+        ),
+        buttons=[{"id": f"resale_accept:{order.id}", "title": "Grab it ⚡"}],
+    )
+    return True
+
+
+async def _handle_resale_accept(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int,
+    order_id: int,
+) -> None:
+    """Customer accepted a resale offer. If they have a saved address, sell it now
+    (mark RESOLD, spawn discounted ready order, dispatch to their address). Else ask
+    them to share their location to claim it."""
+    from app.identity.models import Restaurant
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Order
+    from app.ordering.resale import accept_resale
+    from app.ordering.service import get_last_address, get_or_create_customer
+
+    resale_order = await session.get(Order, order_id)
+    if resale_order is None or str(resale_order.status) != str(OrderStatus.ON_RESALE):
+        _set_state(conv, resale_offer_id=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="resale-gone",
+            body="Sorry, that deal was just taken 😕 Reply with a dish to order fresh.",
+        )
+        return
+    customer = await get_or_create_customer(session, restaurant_id=restaurant_id, phone=inbound.from_phone)
+    addr = await get_last_address(session, customer.id)
+    if addr is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="resale-need-loc",
+            body="Great choice! 📍 Share your delivery location and I'll send it right over.",
+        )
+        return
+    restaurant = await session.get(Restaurant, restaurant_id)
+    settings = (restaurant.settings or {}) if restaurant else {}
+    new_order = await accept_resale(
+        session, resale_order=resale_order, customer_id=customer.id, address_id=addr.id,
+        settings=settings, distance_km=resale_order.distance_km,
+    )
+    _set_state(conv, resale_offer_id=None, dialogue_phase="post_order", dialogue_state="order_placed")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=f"resale-accepted-{new_order.id}",
+        body=(
+            f"Yours! 🎉 Order #{new_order.order_number} — AED {_aed(new_order.total)} (COD).\n"
+            f"It's already cooked and on its way fast. 🛵"
+        ),
     )
 
 
@@ -4309,6 +4409,11 @@ async def handle_inbound(
     # customer's choice is honoured exactly and a typed address is never asked twice.
     if inbound.type == MessageType.BUTTON_REPLY:
         btn_id = inbound.payload.get("id", "")
+        if btn_id.startswith("resale_accept:"):
+            arg = btn_id.split(":", 1)[1]
+            if arg.isdigit():
+                await _handle_resale_accept(session, conv, inbound, restaurant_id, int(arg))
+            return
         if btn_id == "use_saved_address":
             saved_id = conv.state.get("saved_address_id") or await _resolve_saved_address_id(
                 session, restaurant_id, inbound.from_phone
@@ -4440,6 +4545,11 @@ async def handle_inbound(
         # settings (falls through to AI if loyalty is disabled).
         if _is_tier_query(text):
             await _handle_tier_query(session, conv, inbound, restaurant_id, restaurant)
+            return
+        # Accept a pending resale offer by text ("grab", "yes", "i want it").
+        pending_resale = conv.state.get("resale_offer_id")
+        if pending_resale and _is_resale_accept(text):
+            await _handle_resale_accept(session, conv, inbound, restaurant_id, int(pending_resale))
             return
         # Coupon code typed at the order-summary step → apply it. We only treat the
         # message as a coupon when it EXACTLY matches a code issued to this customer,
