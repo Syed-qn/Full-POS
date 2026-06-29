@@ -243,12 +243,26 @@ async def push_dishes_to_meta(session: AsyncSession, *, restaurant_id: int) -> S
 
     requests: list[dict] = []
     pushed_dishes: list[Dish] = []
+    seen_rids: set[str] = set()
     for dish in dishes:
         if not dish.name or dish.price_aed is None:
             continue
         rid = (dish.catalog_retailer_id or "").strip() or _dish_retailer_id(
             dish.id, dish.dish_number
         )
+        # Meta rejects a whole items_batch if any retailer_id repeats. Two dishes can
+        # collide on the same catalog_retailer_id (e.g. both name-matched to one Meta
+        # product in an earlier sync). Push the first, skip the rest, and unlink the
+        # duplicate locally so it gets its own id on the next push instead of colliding.
+        if rid in seen_rids:
+            logger.warning(
+                "skipping dish %s (%s): duplicate retailer_id %s in push batch",
+                dish.id, dish.name, rid,
+            )
+            if (dish.catalog_retailer_id or "").strip() == rid:
+                dish.catalog_retailer_id = None
+            continue
+        seen_rids.add(rid)
         had_rid = bool((dish.catalog_retailer_id or "").strip())
         if not had_rid:
             dish.catalog_retailer_id = rid

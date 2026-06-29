@@ -1607,3 +1607,9 @@
   (separate try/commit) → then _refresh_grounding (OKF + auto-publish remaining). Used module-level
   push_products_batch so tests can monkeypatch. Tests: test_unpublish_sends_delete_and_drops_mirror,
   test_unpublish_noop_without_catalog_id. 84 backend pass; boot+lint clean.
+
+[2026-06-29 20:42 +04] fix(catalog): "Duplicate retailer_id in batch" on Publish to WhatsApp.
+  Meta rejects the whole items_batch if any retailer_id repeats. Two dishes had collided on the same
+  catalog_retailer_id (earlier name-match link). push_dishes_to_meta now dedupes by retailer_id: pushes the
+  first, skips + UNLINKS the duplicate (catalog_retailer_id=None) so it gets its own generated id next push —
+  self-heals over one re-publish. Test: test_push_dedupes_duplicate_retailer_id. 43 catalog tests pass.

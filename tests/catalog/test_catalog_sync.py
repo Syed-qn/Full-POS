@@ -393,3 +393,37 @@ async def test_unpublish_noop_without_catalog_id(db_session, restaurant):
     await db_session.commit()
     ok = await sync_service.unpublish_from_meta(db_session, restaurant_id=restaurant.id, retailer_id="rX")
     assert ok is False
+
+
+async def test_push_dedupes_duplicate_retailer_id(db_session, restaurant, monkeypatch):
+    """Two dishes sharing a catalog_retailer_id must NOT produce a duplicate in the
+    Meta batch (Meta rejects the whole call). Push the first, unlink the duplicate."""
+    from app.catalog.sync_service import push_dishes_to_meta
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    d1 = Dish(menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Biryani",
+              price_aed=Decimal("30.00"), category="Rice", is_available=True,
+              name_normalized="biryani", catalog_retailer_id="dup1")
+    d2 = Dish(menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2, name="Biryani Special",
+              price_aed=Decimal("35.00"), category="Rice", is_available=True,
+              name_normalized="biryani special", catalog_retailer_id="dup1")
+    db_session.add_all([d1, d2])
+    await db_session.commit()
+
+    captured: list[dict] = []
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        captured.extend(requests)
+        return {"handles": [], "validation_status": []}
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+
+    await push_dishes_to_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    rids = [r["retailer_id"] for r in captured]
+    assert rids.count("dup1") == 1  # no duplicate in the batch
+    # The duplicate dish was unlinked so it gets its own id next push.
+    await db_session.refresh(d2)
+    assert d2.catalog_retailer_id is None
