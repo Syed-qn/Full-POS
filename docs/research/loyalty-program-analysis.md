@@ -482,17 +482,65 @@ Each phase ships independently and is useful alone. Phase 1 needs **zero** new m
 
 ---
 
-## 13. Open Decisions (need product input before building)
+## 13. Resolved Decisions (2026-06-29) — locked for build
 
-1. **Tiers, points, or stamps first?** (Recommend: tiers — zero money risk, immediate perceived value.)
-2. **Earn rate** default + whether it's per-restaurant tunable (recommend yes).
-3. **Do tiers expire / demote?** Grace period before Gold→Silver on going quiet (recommend 30-day grace).
-4. **Free-delivery perk caps** — distance/min-order limits to protect margin?
-5. **Points expiry** — reuse wallet TTL (recommend 90 days, off by default)?
-6. **Enrollment** — auto-enroll all customers (recommend) vs opt-in?
-7. **Naming** — "wallet credit" covers earnings; do we even surface the word "points/loyalty" to customers, or just "credit + member tier"?
+| # | Decision | Detail |
+|---|----------|--------|
+| 1 | **Tiers ship first (Phase 1)** | RFM+Monetary → tier → **reward coupons** (not free delivery). Points-as-credit = Phase 2. |
+| 2 | **Auto-enroll everyone** | No opt-in. Phone = identity. |
+| 3 | **Perks = reward coupons, NOT free delivery** | Predictable cost; each tier issues periodic AED-off reward coupons via existing `coupons.issue_coupon`. |
+| 4 | **Earn = 5% of food subtotal as wallet credit** (Phase 2) | Default 5%; **per-restaurant editable**; capped per order; on `delivered`, post-discount, excludes delivery + tip. |
+| 5 | **90-day credit expiry** | Reuses `wallet.reconcile.expire_credits` (`wallet_credit_ttl_days` from settings); warn before expiry. |
+| 6 | **EVERYTHING per-restaurant editable from the dashboard** | NOTHING hardcoded — earn rate, tier thresholds, tier→reward map, expiry days, enable toggle all live in per-restaurant settings, edited from a **Loyalty tab in SettingsScreen**. |
 
-These map directly onto scenarios in §4 (A. Enrollment, B. Earning, D. Tiers, E. Expiry) — answer them there.
+### 13a. Per-restaurant config (settings JSONB — editable via SettingsPatch + frontend)
+
+```jsonc
+// Restaurant.settings.loyalty — all defaults overridable per tenant from the UI
+{
+  "enabled": false,                 // master on/off (kill switch, #142)
+  "earn_rate": 0.05,                // fraction of subtotal → wallet credit (Phase 2)
+  "earn_max_per_order_aed": 20.00,  // catering cap (#37,133)
+  "credit_ttl_days": 90,            // 0 = never (#104)
+  "tiers": {                        // thresholds the restaurant controls (#94)
+    "gold":   { "min_orders": 5, "min_spend_aed": 300, "max_recency_days": 30 },
+    "silver": { "min_orders": 3, "min_spend_aed": 120, "max_recency_days": 60 },
+    "bronze": { "min_orders": 2, "min_spend_aed": 0,   "max_recency_days": 90 }
+  },
+  "tier_rewards": {                 // perk = a coupon issued on entering/holding a tier
+    "gold":   { "discount_aed": 25, "every_n_orders": 5 },
+    "silver": { "discount_aed": 10, "every_n_orders": 6 },
+    "bronze": null
+  },
+  "demotion_grace_days": 30,        // anti-thrash (#79,#85,#135)
+  "scope_includes_catalog": true    // earn/tier on catalog orders too (#36,164)
+}
+```
+
+Defaults live in `DEFAULT_SETTINGS` (identity/models). The **Loyalty SettingsScreen tab** PATCHes `settings.loyalty`, validated in `SettingsPatch` like the existing dispatch/cart/fees tabs. A manager changes any number without a deploy — the nightly recompute + earn loop read settings live.
+
+### 13b. Still deferred (not v1)
+- Identity **merge / transfer / multi-number** (#2,3,4,17,198) — phone stays the key.
+- **Birthday rewards** (#185) — no DOB collected; skip until we do.
+- **Referrals** (#118) — separate feature.
+- **Platform-wide** loyalty (#10,68) — per-restaurant only.
+
+### 13c. Finalized phase plan (TDD, config-driven)
+
+**Phase 1 — Tiers + reward coupons (no money earning):**
+1. `settings.loyalty` schema + `DEFAULT_SETTINGS` + `SettingsPatch` validation.
+2. Monetary RFM upgrade — `_classify` reads tier thresholds **from settings**, not hardcoded.
+3. `Customer.loyalty_tier` + `loyalty_tier_since`; nightly recompute beat with **demotion grace + hysteresis**; manual override (#86).
+4. Tier-reward coupon issuance (`every_n_orders`) via `coupons.issue_coupon` + `coupon_issued` template.
+5. Tier on `CustomerProfileScreen`; **Loyalty tab in SettingsScreen** (all config editable); tier line in order summary + bot "what do I need for Gold?" (#83).
+6. Tier-change notification (window-aware), gentle on demotion (#76,171).
+
+**Phase 2 — Earn (points = wallet credit):**
+7. `loyalty.earn(order)` on `delivered`, idempotent, rate+cap from settings; refund reversal.
+8. 90-day expiry (wallet TTL from settings) + pre-expiry warning.
+9. Liability / breakage / tier-migration KPIs on Analytics.
+
+Each step ships independently; Phase 1 needs **zero** new money code.
 
 ---
 
