@@ -1131,3 +1131,19 @@
   pointing genuine bulk orders to the restaurant phone. Tests updated: qty-anomaly now
   asserts manual_takeover stays False + message says "big order". conversation+catalog 168
   pass (only pre-existing confirmation-totals failure); lint clean.
+
+- 2026-06-29 07:10 Asia/Dubai — FIX: catalogue mode re-sent the catalogue on a typed order
+  instead of adding it. Symptom: "1 chicken" added, but "One chicken biryani" / "Okey 3
+  chicken biryani" returned the catalogue cards with NO text reply (model inconsistently
+  classified the typed order as a menu/show_menu request). User wants typed orders to add
+  directly. Fix: new _try_catalog_typed_order interceptor runs BEFORE the AI, ONLY in
+  catalogue mode + ordering phase: parses qty+dish (parse_qty_and_text handles "one",
+  "okey 3 ..."), and if find_dish_matches is a DIRECT match to an in-catalogue dish, ADDS
+  it deterministically and replies "Added Nx <dish> ✅ + cart". Falls through to the AI for
+  questions ("?", what/how/...), control words (done/menu/hi/...), menu requests, and any
+  ambiguous/no-match/non-catalogue item (so the warm "we don't have it" + disambiguation
+  still come from the AI; no text-menu leak). Scoped to catalogue mode only, so text-mode
+  ordering (size/bundle offers, multi-item) is unchanged. Note: _handle_collecting_items
+  (L732) is dead code (never called) — the live add path is the AI. Tests: typed order
+  adds directly (no product_list); non-catalogue/question/control fall through. conv+catalog
+  170 pass (only pre-existing confirmation-totals failure); lint clean.

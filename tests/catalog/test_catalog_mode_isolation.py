@@ -168,6 +168,74 @@ async def test_update_qty_nonctalog_item_never_named(db_session, restaurant):
     assert name is None            # never the leaked "Lemon Mint"
 
 
+async def test_catalog_typed_order_adds_directly_not_catalogue(db_session, restaurant):
+    """In catalogue mode, typing 'one chicken biryani' (a catalogue dish) must ADD it to
+    the cart deterministically, NOT re-send the catalogue cards. Regression: the model
+    sometimes classified a typed order as a menu request and pushed the catalogue with no
+    text reply, so a typed order silently did nothing."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.outbox.models import OutboxMessage
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "menu_sent"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.typed1", from_phone="+971501110001", type=MessageType.TEXT,
+        payload={"text": "one chicken biryani"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert len(items) == 1 and items[0].dish_name == "Chicken Biryani"  # added directly
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    types = [o.payload.get("type") for o in outs]
+    assert "product_list" not in types  # did NOT re-send the catalogue cards
+    assert any("Added" in (o.payload.get("body", "") or "") for o in outs)  # got a text reply
+
+
+async def test_catalog_typed_noncatalogue_item_falls_through(db_session, restaurant):
+    """A typed item NOT in the catalogue (Lemon Mint) must NOT be added by the
+    deterministic catalogue interceptor — it returns False so the AI gives the honest
+    'we don't have it' reply (no text-menu leak, no silent add)."""
+    from app.conversation.engine import _try_catalog_typed_order
+    from app.conversation.models import Conversation
+    from app.identity.models import Restaurant
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    await _seed(db_session, restaurant, catalog_mode=True)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110002", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "menu_sent"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+    rest = await db_session.get(Restaurant, restaurant.id)
+
+    for text in ("one lemon mint", "what is chicken biryani", "done", "menu"):
+        msg = InboundMessage(
+            wa_message_id=f"wamid.{text.replace(' ', '_')}", from_phone="+971501110002",
+            type=MessageType.TEXT, payload={"text": text},
+            restaurant_phone="+97141234567", timestamp=1717660800,
+        )
+        handled = await _try_catalog_typed_order(
+            db_session, conv, msg, restaurant.id, rest
+        )
+        assert handled is False, f"{text!r} should fall through to the AI, not be intercepted"
+
+
 async def test_what_is_nonctalog_item_never_describes_it(db_session, restaurant):
     """'what is <text-menu item>' in catalogue mode must NEVER return the dish's stored
     description/price — the catalogue dish-info guard returns None, so the bot can't talk
