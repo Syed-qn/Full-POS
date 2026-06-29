@@ -42,6 +42,7 @@ celery_app.conf.update(
         "ml.*": {"queue": "ml"},
         "marketing.*": {"queue": "marketing"},
         "wallet.*": {"queue": "maintenance"},
+        "loyalty.*": {"queue": "maintenance"},
     },
     beat_schedule={
         "sla-monitor-tick": {
@@ -99,10 +100,14 @@ celery_app.conf.update(
             "task": "wallet.reconcile_all_tenants",
             "schedule": crontab(hour=3, minute=30),  # 3:30am Asia/Dubai
         },
+        "loyalty-recompute-tiers": {
+            "task": "loyalty.recompute_all_tenants",
+            "schedule": crontab(hour=4, minute=0),  # 4am Asia/Dubai (after reconcile)
+        },
     },
 )
 celery_app.autodiscover_tasks(
     ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation",
-     "app.dispatch", "app.wallet"],
+     "app.dispatch", "app.wallet", "app.loyalty"],
     related_name="worker",
 )

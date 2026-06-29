@@ -79,6 +79,25 @@ async def advance_delivery(
     from app.ordering.service import recompute_customer_stats
 
     await recompute_customer_stats(session, order.customer_id)
+
+    # Loyalty (config-driven; no-op when settings.loyalty.enabled is False). Runs
+    # AFTER stats refresh so tier/earn see the new totals. Best-effort — a loyalty
+    # hiccup must never fail the delivery.
+    if to_status == "delivered":
+        try:
+            from app.identity.models import Restaurant
+            from app.loyalty import service as loyalty
+            from app.ordering.models import Customer
+
+            restaurant = await session.get(Restaurant, order.restaurant_id)
+            customer = await session.get(Customer, order.customer_id)
+            if restaurant is not None and customer is not None:
+                settings = restaurant.settings or {}
+                await loyalty.earn(session, order=order, settings=settings)
+                await loyalty.recompute_tier(session, customer=customer, settings=settings)
+                await loyalty.maybe_issue_recurring_reward(session, customer=customer, settings=settings)
+        except Exception:  # noqa: BLE001 — loyalty never blocks delivery
+            pass
     return order
 
 
