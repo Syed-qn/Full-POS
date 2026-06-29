@@ -123,7 +123,8 @@ async def test_item_collection_no_match_polite_retry(db_session, restaurant):
 
     rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
     last = rows[-1].payload["body"].lower()
-    assert "couldn't find" in last or "name" in last or "didn't find" in last
+    # Warm, honest, grounded: we don't have it, and a pointer back to the real menu.
+    assert "don't have" in last and "menu" in last
 
     from app.ordering.models import OrderItem
     items = (await db_session.execute(select(OrderItem))).scalars().all()

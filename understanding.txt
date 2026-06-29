@@ -1096,3 +1096,17 @@
   (2) deterministic net _looks_like_menu replaces any fabricated priced list (>=2 prices) with
   the real mode-correct menu. Honest limit: a single UN-priced invented name can still slip
   the regex net; the prompt is the defense there. llm + full-ai 54 pass; lint clean.
+
+- 2026-06-29 05:25 Asia/Dubai — Warm, grounded "we don't have that" replies for unknown
+  dishes (replacing robotic "(couldn't find: X)"). Per user: when a customer asks/adds an
+  item not on the menu, reply like a human, honestly, no invention. Changed in engine.py:
+  * confirm-step edit (_apply_confirmation_edit): unmatched add now sends
+    "Sorry, we don't have <X> on our menu 🙏 Want to add something else, or say 'menu'...".
+    Echoes only the customer's own term (never an invented dish); summary still re-shown.
+  * single-add no_match: "Sorry, we don't have <X> on our menu 🙏 Want to try another dish,
+    or say 'menu'...". multi-add all-fail + per-item note reworded the same way; removed an
+    em dash (house rule: no em/en dashes customer-side).
+  Tests: new test_confirm_edit_unknown_dish_gives_warm_grounded_reply; updated two wording
+  assertions (ordering polite-retry, multi-item unknown-dish). conversation+catalog 168 pass
+  (only the pre-existing confirmation-totals test fails on clean main too). lint clean on
+  changed files.

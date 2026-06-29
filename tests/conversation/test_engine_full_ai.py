@@ -658,6 +658,68 @@ async def test_proceed_to_address_checks_saved_address_despite_stale_flag(db_ses
     assert not any("share your delivery location" in b.lower() for b in bodies)
 
 
+async def test_confirm_edit_unknown_dish_gives_warm_grounded_reply(db_session, restaurant):
+    """Adding a non-menu dish AT the confirmation step must get a warm, honest, grounded
+    reply ('we don't have <X>', pointer to the menu) — never a robotic '(couldn't find:
+    X)' and never an invented dish. The order is unchanged and the summary re-shown."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+    from app.menu.models import Dish
+    from app.ordering.models import CustomerAddress, OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.outbox.models import OutboxMessage
+
+    await _seed_menu(db_session, restaurant.id)
+    phone = "+971507888999"
+    customer = await get_or_create_customer(db_session, restaurant_id=restaurant.id, phone=phone)
+    addr = CustomerAddress(
+        customer_id=customer.id, latitude=25.2050, longitude=55.2710,
+        room_apartment="123", building="Tower B", receiver_name="asfer", confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
+    dish = await db_session.scalar(select(Dish))
+    await add_item(db_session, order=order, dish=dish, qty=1, notes=None)
+    order.address_id = addr.id
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    conv.state = {
+        **conv.state,
+        "dialogue_phase": "awaiting_confirmation", "dialogue_state": "order_confirmation",
+        "draft_order_id": order.id, "pending_order_id": order.id,
+    }
+    await db_session.commit()
+
+    add_unknown = ConversationAgentResult(
+        message="Adding", action="add_item",
+        action_data={"dish_query": "unicorn stew", "qty": 1, "special_note": ""},
+    )
+    inbound = InboundMessage(
+        wa_message_id="wamid.confirm-edit-unknown", from_phone=phone, type=MessageType.TEXT,
+        payload={"text": "add one unicorn stew"}, restaurant_phone=restaurant.phone,
+        timestamp=1717664000,
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=add_unknown)):
+        await handle_inbound(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    bodies = [o.payload.get("body", "") for o in (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == phone)
+    )).all()]
+    # Warm + honest + grounded (echoes only the customer's term, never an invented dish).
+    assert any("don't have" in b.lower() and "unicorn stew" in b.lower() for b in bodies)
+    assert not any("couldn't find:" in b.lower() for b in bodies)  # no robotic note
+    # The order itself is untouched (only the seeded chicken biryani item).
+    items = (await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))).all()
+    assert len(items) == 1
+
+
 def test_is_tracking_query_detection():
     """'live location' / 'where is my order' style messages are tracking queries."""
     from app.conversation.engine import _is_tracking_query

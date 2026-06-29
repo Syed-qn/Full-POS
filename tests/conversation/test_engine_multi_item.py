@@ -228,4 +228,4 @@ async def test_multi_dish_unknown_dish_is_reported_not_silently_dropped(db_sessi
         select(OutboxMessage).order_by(OutboxMessage.id)
     )).scalars().all()
     body = rows[-1].payload["body"].lower()
-    assert "couldn't find" in body and "unicorn stew" in body
+    assert "don't have" in body and "unicorn stew" in body

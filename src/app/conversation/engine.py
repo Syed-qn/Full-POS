@@ -2779,7 +2779,13 @@ async def _apply_confirmation_edit(
             if status == "no_match":
                 not_found.append(dq)
         if not_found:
-            note = "couldn't find: " + ", ".join(not_found)
+            # Warm, honest, grounded: name only what the customer asked for (never an
+            # invented dish), say we don't have it, and point them back to the real menu.
+            names = ", ".join(not_found)
+            note = (
+                f"Sorry, we don't have {names} on our menu 🙏 "
+                "Want to add something else, or say 'menu' to see what we have? 😊"
+            )
     elif action == "remove_item":
         raw_qty = data.get("qty")
         await _execute_ai_remove_item(
@@ -2799,7 +2805,7 @@ async def _apply_confirmation_edit(
     _set_state(conv, dialogue_phase="awaiting_confirmation", dialogue_state="order_confirmation")
     if note:
         await _send_text(session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                         prefix="confirm-edit-note", body=f"({note})")
+                         prefix="confirm-edit-note", body=note)
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
@@ -3111,14 +3117,15 @@ async def _dispatch_action(
                     lead = "Got it! 😊"
                 body = f"{lead}{_cart_tail(cart)}"
             else:
-                body = "Sorry, I couldn't add any of those — check the dish names against our menu."
+                body = ("Sorry, none of those are on our menu 🙏 "
+                        "Say 'menu' to see what we have, or tell me another dish 😊")
             notes = []
             if not_found:
-                notes.append("couldn't find: " + ", ".join(not_found))
+                notes.append("we don't have " + ", ".join(not_found) + " on our menu")
             if too_many:
                 notes.append(
                     "that's a large quantity for " + ", ".join(too_many)
-                    + " — please call us to arrange a big order"
+                    + ", please call us to arrange a big order"
                 )
             if notes:
                 body = f"{body}\n\n({'; '.join(notes)})"
@@ -3152,8 +3159,8 @@ async def _dispatch_action(
                 await _send_text(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                     prefix="ai-no-match",
-                    body=f"Sorry, I couldn't find '{dish_query}' in our menu. "
-                         "Try the exact dish name or check the menu spelling.",
+                    body=f"Sorry, we don't have {dish_query} on our menu 🙏 "
+                         "Want to try another dish, or say 'menu' to see everything we have? 😊",
                 )
         else:
             if reply:
