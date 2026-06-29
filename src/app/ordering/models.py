@@ -35,6 +35,13 @@ class Customer(Base, TimestampMixin):
     tags: Mapped[dict] = mapped_column(JSONB, default=dict)
     total_orders: Mapped[int] = mapped_column(Integer, default=0)
     total_spend: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    # Loyalty (Phase 1). tier is a denormalized cache of the nightly/on-delivery
+    # RFM+Monetary computation; locked = manager manually set it (recompute skips).
+    # reward_anchor = total_orders at tier entry, for "every N orders" reward counting.
+    loyalty_tier: Mapped[str | None] = mapped_column(String(12))
+    loyalty_tier_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    loyalty_tier_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    loyalty_reward_anchor: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CustomerAddress(Base, TimestampMixin):

@@ -112,6 +112,61 @@ class SettingsPatch(BaseModel):
     catalog_ordering_enabled: bool | None = None
     # Today's Special automation (marketing). Sent as a whole object by the UI.
     todays_special: dict | None = None
+    # Loyalty program config — sent as a whole object by the Loyalty settings tab.
+    # Every value here is restaurant-editable; defaults live in DEFAULT_SETTINGS.
+    loyalty: dict | None = None
+
+    @field_validator("loyalty")
+    @classmethod
+    def _validate_loyalty(cls, v: dict | None) -> dict | None:
+        """Validate the loyalty config the UI sends. All numbers are non-negative;
+        earn_rate is a 0..1 fraction; tiers/rewards are objects keyed by tier name.
+        This is what lets a restaurant edit thresholds/discounts without a deploy."""
+        if v is None:
+            return v
+        if not isinstance(v, dict):
+            raise ValueError("loyalty must be an object")
+        if "enabled" in v and not isinstance(v["enabled"], bool):
+            raise ValueError("loyalty.enabled must be a boolean")
+        if "earn_rate" in v:
+            r = v["earn_rate"]
+            if not isinstance(r, (int, float)) or not (0 <= r <= 1):
+                raise ValueError("loyalty.earn_rate must be a fraction between 0 and 1")
+        for num_key in ("earn_max_per_order_aed", "credit_ttl_days", "demotion_grace_days"):
+            if num_key in v and v[num_key] is not None:
+                if not isinstance(v[num_key], (int, float)) or v[num_key] < 0:
+                    raise ValueError(f"loyalty.{num_key} must be >= 0")
+        if "scope_includes_catalog" in v and not isinstance(v["scope_includes_catalog"], bool):
+            raise ValueError("loyalty.scope_includes_catalog must be a boolean")
+        tiers = v.get("tiers")
+        if tiers is not None:
+            if not isinstance(tiers, dict):
+                raise ValueError("loyalty.tiers must be an object")
+            for name, tcfg in tiers.items():
+                if name not in ("gold", "silver", "bronze"):
+                    raise ValueError(f"unknown loyalty tier {name!r}")
+                if not isinstance(tcfg, dict):
+                    raise ValueError(f"loyalty.tiers.{name} must be an object")
+                for k in ("min_orders", "min_spend_aed", "max_recency_days"):
+                    if k in tcfg and tcfg[k] is not None:
+                        if not isinstance(tcfg[k], (int, float)) or tcfg[k] < 0:
+                            raise ValueError(f"loyalty.tiers.{name}.{k} must be >= 0")
+        rewards = v.get("tier_rewards")
+        if rewards is not None:
+            if not isinstance(rewards, dict):
+                raise ValueError("loyalty.tier_rewards must be an object")
+            for name, rcfg in rewards.items():
+                if name not in ("gold", "silver", "bronze"):
+                    raise ValueError(f"unknown loyalty tier reward {name!r}")
+                if rcfg is None:
+                    continue
+                if not isinstance(rcfg, dict):
+                    raise ValueError(f"loyalty.tier_rewards.{name} must be an object or null")
+                for k in ("discount_aed", "every_n_orders"):
+                    if k in rcfg and rcfg[k] is not None:
+                        if not isinstance(rcfg[k], (int, float)) or rcfg[k] < 0:
+                            raise ValueError(f"loyalty.tier_rewards.{name}.{k} must be >= 0")
+        return v
 
     @field_validator("todays_special")
     @classmethod

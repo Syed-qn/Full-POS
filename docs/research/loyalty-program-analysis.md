@@ -519,6 +519,12 @@ Each phase ships independently and is useful alone. Phase 1 needs **zero** new m
 
 Defaults live in `DEFAULT_SETTINGS` (identity/models). The **Loyalty SettingsScreen tab** PATCHes `settings.loyalty`, validated in `SettingsPatch` like the existing dispatch/cart/fees tabs. A manager changes any number without a deploy — the nightly recompute + earn loop read settings live.
 
+### 13a-bis. Phase-1 edge decisions (2026-06-29)
+- **Reward trigger:** BOTH — a welcome coupon on tier entry AND a recurring coupon every `every_n_orders` delivered orders held in the tier (counted from `loyalty_reward_anchor` = total_orders at entry). All idempotent.
+- **Recompute cadence:** nightly beat **+ on each delivery** (near-instant upgrade for the ordering customer).
+- **Manual override:** manager-set tier is **sticky** — `loyalty_tier_locked=true`; nightly/on-delivery recompute skips locked customers until unlocked.
+- **Bot tier-progress:** Phase 1 includes a templated "what do I need to reach Gold?" answer computed from settings.
+
 ### 13b. Still deferred (not v1)
 - Identity **merge / transfer / multi-number** (#2,3,4,17,198) — phone stays the key.
 - **Birthday rewards** (#185) — no DOB collected; skip until we do.

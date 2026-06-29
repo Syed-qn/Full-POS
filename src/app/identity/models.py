@@ -85,6 +85,31 @@ DEFAULT_SETTINGS: dict = {
     # cart from it, the catalog flow turns it into an order. Empty = not configured.
     "catalog_id": "",
     "catalog_ordering_enabled": False,
+    # Loyalty program (per-restaurant, fully manager-editable; read via .get()).
+    # Tiers (Phase 1) map RFM+Monetary cohorts to reward coupons; earning (Phase 2)
+    # credits a % of food subtotal to the customer's wallet on delivery. NOTHING is
+    # hardcoded — every threshold/rate below is editable from the Loyalty settings tab.
+    "loyalty": {
+        "enabled": False,
+        # Phase 2 earning
+        "earn_rate": 0.05,                 # fraction of subtotal -> wallet credit
+        "earn_max_per_order_aed": 20.0,    # per-order cap (catering/abuse guard)
+        "credit_ttl_days": 90,             # earned-credit expiry; 0 = never
+        # Phase 1 tiers — thresholds the restaurant controls
+        "tiers": {
+            "gold": {"min_orders": 5, "min_spend_aed": 300, "max_recency_days": 30},
+            "silver": {"min_orders": 3, "min_spend_aed": 120, "max_recency_days": 60},
+            "bronze": {"min_orders": 2, "min_spend_aed": 0, "max_recency_days": 90},
+        },
+        # Perk = a coupon issued on tier entry (welcome) AND every N delivered orders.
+        "tier_rewards": {
+            "gold": {"discount_aed": 25, "every_n_orders": 5},
+            "silver": {"discount_aed": 10, "every_n_orders": 6},
+            "bronze": None,
+        },
+        "demotion_grace_days": 30,         # anti-thrash before dropping a tier
+        "scope_includes_catalog": True,    # earn/tier on catalog orders too
+    },
 }
 
 
