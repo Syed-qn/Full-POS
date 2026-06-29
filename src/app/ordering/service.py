@@ -798,6 +798,16 @@ async def cancel_order(
     except Exception:  # noqa: BLE001
         pass
 
+    # If a rider was already assigned/batched, detach the order from dispatch so the
+    # rider stops being told to collect/deliver cancelled food (frees rider, stops
+    # tracking, pushes the cancellation). No-op if never dispatched. Best-effort.
+    try:
+        from app.dispatch.service import release_order_from_dispatch
+
+        await release_order_from_dispatch(session, order=order, actor=actor)
+    except Exception:  # noqa: BLE001 — never block the cancel
+        pass
+
     if order.status == OrderStatus.PREPARING:
         await fsm_transition(
             session, order, OrderStatus.ON_RESALE, actor=actor,

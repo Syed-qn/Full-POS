@@ -144,6 +144,27 @@ async def notify_rider_assigned(
     )
 
 
+async def notify_rider_cancelled(
+    session: AsyncSession, *, rider: Rider, order_number: str
+) -> bool:
+    """Push the rider that an order on their run was CANCELLED — do not collect/
+    deliver it. Best-effort: no token / push failure returns False, never raises."""
+    if not rider.push_token:
+        return False
+    from app.notifications.factory import get_push_provider
+    from app.notifications.port import PushMessage
+
+    provider = get_push_provider()
+    return await provider.send(
+        PushMessage(
+            to_token=rider.push_token,
+            title="Order cancelled",
+            body=f"Order {order_number} was cancelled — do not collect or deliver it.",
+            data={"type": "cancellation", "order_number": order_number},
+        )
+    )
+
+
 async def record_rider_app_location(
     session: AsyncSession,
     *,

@@ -1058,6 +1058,76 @@ def _log_shadow_compare(
         _logger.exception("dispatch shadow-compare failed")
 
 
+async def release_order_from_dispatch(
+    session: AsyncSession, *, order: Order, actor: str = "system"
+) -> bool:
+    """Detach a (cancelled) order from dispatch: remove its batch stop, stop live
+    tracking, free the rider if idle, mark an emptied batch complete, push the
+    rider that it's cancelled, and null order.rider_id. Idempotent + best-effort —
+    no-op if the order was never assigned/batched. Caller commits.
+
+    Without this, cancelling an already-assigned order leaves the rider with a
+    live stop + 'collect' push for food that no longer exists.
+    """
+    bo = await session.scalar(select(BatchOrder).where(BatchOrder.order_id == order.id))
+    rider_id = order.rider_id
+    if bo is None and rider_id is None:
+        return False  # never dispatched — nothing to release
+
+    batch_id = bo.batch_id if bo is not None else None
+    if bo is not None:
+        await session.delete(bo)
+        await session.flush()
+
+    # Stop the public/rider live-tracking session for this order.
+    try:
+        from app.dispatch.tracking_live import TRACKING_STOPPED, stop_tracking_session
+
+        await stop_tracking_session(session, order_id=order.id, reason=TRACKING_STOPPED)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Free the rider if they have no other live orders; push them the cancellation.
+    if rider_id is not None:
+        rider = await session.get(Rider, rider_id)
+        if rider is not None:
+            live = await session.scalar(
+                select(func.count(Order.id)).where(
+                    Order.rider_id == rider_id,
+                    Order.id != order.id,
+                    Order.status.in_(
+                        [OrderStatus.ASSIGNED, OrderStatus.PICKED_UP, OrderStatus.ARRIVING]
+                    ),
+                )
+            )
+            if not live and rider.status != "deactivated":
+                rider.status = "available"
+            try:
+                from app.dispatch.rider_app import notify_rider_cancelled
+
+                await notify_rider_cancelled(session, rider=rider, order_number=order.order_number)
+            except Exception:  # noqa: BLE001 — push is best-effort
+                _logger.exception("rider cancel push failed for order %s", order.id)
+
+    # Mark an emptied batch complete.
+    if batch_id is not None:
+        remaining = await session.scalar(
+            select(func.count(BatchOrder.id)).where(BatchOrder.batch_id == batch_id)
+        )
+        if not remaining:
+            batch = await session.get(Batch, batch_id)
+            if batch is not None:
+                batch.status = "completed"
+
+    order.rider_id = None
+    await record_audit(
+        session, actor=actor, restaurant_id=order.restaurant_id,
+        entity="order", entity_id=str(order.id), action="released_from_dispatch",
+        before={"rider_id": rider_id}, after={"rider_id": None},
+    )
+    return True
+
+
 async def reassign_order(
     session: AsyncSession,
     *,
