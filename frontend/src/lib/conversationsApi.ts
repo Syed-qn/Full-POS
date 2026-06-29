@@ -1,4 +1,4 @@
-import { apiClient, ApiError } from "./apiClient";
+import { apiClient, ApiError, TOKEN_KEY } from "./apiClient";
 import fixtures from "./fixtures/conversations.json";
 import type { ChatCustomerContext, ConversationOut, MessageOut } from "./types";
 
@@ -52,6 +52,30 @@ export async function setTakeover(conversationId: number, active: boolean): Prom
     // fixture mode: no-op
   }
 }
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
+export async function fetchMessageMedia(conversationId: number, messageId: number): Promise<Blob> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const resp = await fetch(
+    `${API_BASE}/api/v1/conversations/${conversationId}/messages/${messageId}/media`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  );
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const data = await resp.json();
+      detail = typeof data.detail === "string" ? data.detail : detail;
+    } catch {
+      /* non-JSON */
+    }
+    throw new ApiError(resp.status, detail);
+  }
+  return resp.blob();
+}
+
+/** @deprecated Use fetchMessageMedia — kept for older call sites. */
+export const fetchMessageAudio = fetchMessageMedia;
 
 export async function sendMessage(conversationId: number, text: string): Promise<void> {
   try {

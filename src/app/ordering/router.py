@@ -1,5 +1,7 @@
 # src/app/ordering/router.py
-from fastapi import APIRouter, Depends, HTTPException
+from collections import defaultdict
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,115 +36,177 @@ from app.ordering.service import (
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
 
+def _order_item_out(i: OrderItem) -> OrderItemOut:
+    return OrderItemOut(
+        dish_number=i.dish_number,
+        name=i.dish_name,
+        qty=i.qty,
+        price_aed=str(i.price_aed),
+    )
+
+
+def _address_parts(addr: CustomerAddress) -> tuple[str | None, float | None, float | None]:
+    parts = [p for p in [addr.room_apartment, addr.building] if p]
+    return ", ".join(parts) or None, addr.latitude, addr.longitude
+
+
+async def _enrich_orders_bulk(
+    session: AsyncSession,
+    orders: list[Order],
+    *,
+    batch_preview: dict[int, str] | None = None,
+) -> list[OrderOut]:
+    """Join related rows for many orders in a constant number of queries."""
+    if not orders:
+        return []
+
+    from app.dispatch.models import BatchOrder
+
+    preview = batch_preview or {}
+    order_ids = [o.id for o in orders]
+    customer_ids = {o.customer_id for o in orders if o.customer_id is not None}
+    rider_ids = {o.rider_id for o in orders if o.rider_id is not None}
+    address_ids = {o.address_id for o in orders if o.address_id is not None}
+
+    customers: dict[int, Customer] = {}
+    if customer_ids:
+        for c in (
+            await session.scalars(select(Customer).where(Customer.id.in_(customer_ids)))
+        ).all():
+            customers[c.id] = c
+
+    items_by_order: dict[int, list[OrderItem]] = defaultdict(list)
+    for item in (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id.in_(order_ids)))
+    ).all():
+        items_by_order[item.order_id].append(item)
+
+    riders: dict[int, Rider] = {}
+    if rider_ids:
+        for r in (
+            await session.scalars(select(Rider).where(Rider.id.in_(rider_ids)))
+        ).all():
+            riders[r.id] = r
+
+    addresses: dict[int, CustomerAddress] = {}
+    if address_ids:
+        for a in (
+            await session.scalars(
+                select(CustomerAddress).where(CustomerAddress.id.in_(address_ids))
+            )
+        ).all():
+            addresses[a.id] = a
+
+    nameless_customer_ids = [
+        cid
+        for cid in customer_ids
+        if not (customers.get(cid) and (customers[cid].name or "").strip())
+    ]
+    fallback_receiver: dict[int, str] = {}
+    if nameless_customer_ids:
+        for a in (
+            await session.scalars(
+                select(CustomerAddress)
+                .where(
+                    CustomerAddress.customer_id.in_(nameless_customer_ids),
+                    CustomerAddress.receiver_name.isnot(None),
+                )
+                .order_by(CustomerAddress.id.desc())
+            )
+        ).all():
+            rn = (a.receiver_name or "").strip()
+            if rn and a.customer_id not in fallback_receiver:
+                fallback_receiver[a.customer_id] = rn
+
+    batch_by_order: dict[int, BatchOrder] = {}
+    for bo in (
+        await session.scalars(select(BatchOrder).where(BatchOrder.order_id.in_(order_ids)))
+    ).all():
+        batch_by_order[bo.order_id] = bo
+
+    batch_numbers_by_batch: dict[int, list[str]] = defaultdict(list)
+    batch_ids = {bo.batch_id for bo in batch_by_order.values()}
+    if batch_ids:
+        for batch_id, order_number in (
+            await session.execute(
+                select(BatchOrder.batch_id, Order.order_number)
+                .join(Order, Order.id == BatchOrder.order_id)
+                .where(BatchOrder.batch_id.in_(batch_ids))
+                .order_by(BatchOrder.batch_id, BatchOrder.sequence)
+            )
+        ).all():
+            batch_numbers_by_batch[batch_id].append(order_number)
+
+    out: list[OrderOut] = []
+    for order in orders:
+        customer = customers.get(order.customer_id) if order.customer_id else None
+        customer_name = getattr(customer, "name", None) if customer else None
+        customer_phone = customer.phone if customer else ""
+
+        if order.address_id is not None and order.address_id in addresses:
+            addr = addresses[order.address_id]
+            if not (customer_name or "").strip() and addr.receiver_name:
+                customer_name = addr.receiver_name
+
+        if customer is not None and not (customer_name or "").strip():
+            customer_name = fallback_receiver.get(customer.id)
+
+        address_str: str | None = None
+        lat: float | None = None
+        lng: float | None = None
+        if order.address_id is not None and order.address_id in addresses:
+            address_str, lat, lng = _address_parts(addresses[order.address_id])
+
+        rider_name = (
+            riders[order.rider_id].name
+            if order.rider_id is not None and order.rider_id in riders
+            else None
+        )
+
+        bo = batch_by_order.get(order.id)
+        batch_id = bo.batch_id if bo is not None else None
+        batch_order_numbers = (
+            batch_numbers_by_batch.get(batch_id, []) if batch_id is not None else []
+        )
+
+        out.append(
+            OrderOut(
+                id=order.id,
+                order_number=order.order_number,
+                resale_of_order_id=order.resale_of_order_id,
+                status=str(order.status),
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                items=[_order_item_out(i) for i in items_by_order.get(order.id, [])],
+                total_aed=str(order.total),
+                rider_id=order.rider_id,
+                rider_name=rider_name,
+                sla_started_at=(
+                    order.sla_confirmed_at.isoformat() if order.sla_confirmed_at else None
+                ),
+                prep_deadline=(
+                    order.prep_deadline.isoformat() if order.prep_deadline else None
+                ),
+                cook_estimate_minutes=order.cook_estimate_minutes,
+                created_at=order.created_at.isoformat(),
+                address=address_str,
+                lat=lat,
+                lng=lng,
+                batch_id=batch_id,
+                batch_size=(len(batch_order_numbers) or None),
+                batch_order_numbers=batch_order_numbers,
+                batch_preview=preview.get(order.id),
+            )
+        )
+    return out
+
+
 async def _enrich(
     session: AsyncSession, order: Order, *, batch_preview: str | None = None
 ) -> OrderOut:
     """Join customer, address, items, and rider to produce the full OrderOut."""
-    customer = await session.get(Customer, order.customer_id)
-    customer_name = getattr(customer, "name", None)
-    customer_phone = customer.phone if customer else ""
-
-    items_rows = list(
-        (
-            await session.scalars(
-                select(OrderItem).where(OrderItem.order_id == order.id)
-            )
-        ).all()
-    )
-    items = [
-        OrderItemOut(
-            dish_number=i.dish_number,
-            name=i.dish_name,
-            qty=i.qty,
-            price_aed=str(i.price_aed),
-        )
-        for i in items_rows
-    ]
-
-    rider_name: str | None = None
-    if order.rider_id is not None:
-        rider = await session.get(Rider, order.rider_id)
-        rider_name = rider.name if rider else None
-
-    address_str: str | None = None
-    lat: float | None = None
-    lng: float | None = None
-    if order.address_id is not None:
-        addr = await session.get(CustomerAddress, order.address_id)
-        if addr:
-            parts = [p for p in [addr.room_apartment, addr.building] if p]
-            address_str = ", ".join(parts) or None
-            lat = addr.latitude
-            lng = addr.longitude
-            # Fall back to the delivery receiver name when the customer has no
-            # name on file (older orders predating the name backfill).
-            if not (customer_name or "").strip() and addr.receiver_name:
-                customer_name = addr.receiver_name
-
-    # Still nameless (e.g. a draft with no address yet)? Use the customer's most
-    # recent receiver name from any of their past orders.
-    if customer is not None and not (customer_name or "").strip():
-        customer_name = await session.scalar(
-            select(CustomerAddress.receiver_name)
-            .where(
-                CustomerAddress.customer_id == customer.id,
-                CustomerAddress.receiver_name.isnot(None),
-            )
-            .order_by(CustomerAddress.id.desc())
-            .limit(1)
-        )
-
-    sla_started_at = (
-        order.sla_confirmed_at.isoformat() if order.sla_confirmed_at else None
-    )
-
-    # Batching: if this order is part of a rider trip, list every order on that trip
-    # (in delivery sequence) so the dashboard can flag matched orders.
-    from app.dispatch.models import BatchOrder
-
-    batch_id: int | None = None
-    batch_order_numbers: list[str] = []
-    bo = await session.scalar(
-        select(BatchOrder).where(BatchOrder.order_id == order.id)
-    )
-    if bo is not None:
-        batch_id = bo.batch_id
-        batch_order_numbers = list(
-            (
-                await session.execute(
-                    select(Order.order_number)
-                    .join(BatchOrder, BatchOrder.order_id == Order.id)
-                    .where(BatchOrder.batch_id == bo.batch_id)
-                    .order_by(BatchOrder.sequence)
-                )
-            ).scalars().all()
-        )
-
-    return OrderOut(
-        id=order.id,
-        order_number=order.order_number,
-        resale_of_order_id=order.resale_of_order_id,
-        status=str(order.status),
-        customer_name=customer_name,
-        customer_phone=customer_phone,
-        items=items,
-        total_aed=str(order.total),
-        rider_id=order.rider_id,
-        rider_name=rider_name,
-        sla_started_at=sla_started_at,
-        prep_deadline=(
-            order.prep_deadline.isoformat() if order.prep_deadline else None
-        ),
-        cook_estimate_minutes=order.cook_estimate_minutes,
-        created_at=order.created_at.isoformat(),
-        address=address_str,
-        lat=lat,
-        lng=lng,
-        batch_id=batch_id,
-        batch_size=(len(batch_order_numbers) or None),
-        batch_order_numbers=batch_order_numbers,
-        batch_preview=batch_preview,
-    )
+    preview = {order.id: batch_preview} if batch_preview else {}
+    return (await _enrich_orders_bulk(session, [order], batch_preview=preview))[0]
 
 
 @router.get("/manual/customer-lookup", response_model=CustomerLookupOut)
@@ -325,17 +389,20 @@ async def get_order(
 async def list_orders(
     status: str | None = None,
     limit: int = 50,
+    preview_batch: bool = Query(default=True),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
     orders = await list_orders_for_tenant(
         session, restaurant_id=restaurant.id, status=status, limit=limit
     )
-    # Forecast which still-unassigned orders will batch together, so the list can
-    # flag it before a rider is assigned.
-    from app.dispatch.service import preview_batch_groups
+    preview: dict[int, str] = {}
+    if preview_batch:
+        # Forecast which still-unassigned orders will batch together, so the list can
+        # flag it before a rider is assigned.
+        from app.dispatch.service import preview_batch_groups
 
-    preview = await preview_batch_groups(session, restaurant_id=restaurant.id)
-    return [await _enrich(session, o, batch_preview=preview.get(o.id)) for o in orders]
+        preview = await preview_batch_groups(session, restaurant_id=restaurant.id)
+    return await _enrich_orders_bulk(session, orders, batch_preview=preview)
 
 

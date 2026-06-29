@@ -1,19 +1,6 @@
 # src/app/webhook/normalizer.py
-import re
-
+from app.identity.phones import normalize_phone as _normalize_phone
 from app.whatsapp.port import InboundMessage, MessageType
-
-
-def _normalize_phone(raw: str) -> str:
-    """Normalize a phone to '+<digits>' (E.164-ish), stripping spaces, dashes,
-    parentheses, etc.
-
-    Meta's ``display_phone_number`` can arrive formatted ('+1 555-148-7637') while
-    the same number elsewhere is bare ('15551487637'); both must compare equal so
-    restaurant/customer matching never silently fails on cosmetic formatting.
-    """
-    digits = re.sub(r"\D", "", raw or "")
-    return f"+{digits}" if digits else (raw or "")
 
 
 def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
@@ -86,13 +73,60 @@ def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
         )
 
     if msg_type == "image":
+        image = msg.get("image", {})
         return InboundMessage(
             wa_message_id=wa_id,
             from_phone=from_phone,
             type=MessageType.IMAGE,
             payload={
-                "image_id": msg.get("image", {}).get("id"),
-                "caption": msg.get("image", {}).get("caption"),
+                "image_id": image.get("id"),
+                "mime": image.get("mime_type"),
+                "caption": image.get("caption"),
+            },
+            restaurant_phone=restaurant_phone,
+            timestamp=timestamp,
+        )
+
+    if msg_type == "document":
+        doc = msg.get("document", {})
+        return InboundMessage(
+            wa_message_id=wa_id,
+            from_phone=from_phone,
+            type=MessageType.DOCUMENT,
+            payload={
+                "document_id": doc.get("id"),
+                "mime": doc.get("mime_type"),
+                "filename": doc.get("filename"),
+                "caption": doc.get("caption"),
+            },
+            restaurant_phone=restaurant_phone,
+            timestamp=timestamp,
+        )
+
+    if msg_type == "video":
+        video = msg.get("video", {})
+        return InboundMessage(
+            wa_message_id=wa_id,
+            from_phone=from_phone,
+            type=MessageType.VIDEO,
+            payload={
+                "video_id": video.get("id"),
+                "mime": video.get("mime_type"),
+                "caption": video.get("caption"),
+            },
+            restaurant_phone=restaurant_phone,
+            timestamp=timestamp,
+        )
+
+    if msg_type == "sticker":
+        sticker = msg.get("sticker", {})
+        return InboundMessage(
+            wa_message_id=wa_id,
+            from_phone=from_phone,
+            type=MessageType.STICKER,
+            payload={
+                "sticker_id": sticker.get("id"),
+                "mime": sticker.get("mime_type"),
             },
             restaurant_phone=restaurant_phone,
             timestamp=timestamp,

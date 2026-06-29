@@ -122,6 +122,34 @@ def test_parse_audio_voice_note():
     assert m.from_phone == "+971509876543"
 
 
+def test_parse_document_pdf():
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [{"changes": [{"value": {
+            "metadata": {"display_phone_number": "+97141234567", "phone_number_id": "111"},
+            "messages": [{
+                "id": "wamid.DOC1",
+                "from": "971509876543",
+                "timestamp": "1717661200",
+                "type": "document",
+                "document": {
+                    "id": "media-doc-1",
+                    "mime_type": "application/pdf",
+                    "filename": "menu.pdf",
+                    "caption": "updated menu",
+                },
+            }],
+        }, "field": "messages"}]}],
+    }
+    msgs = parse_cloud_payload(payload)
+    assert len(msgs) == 1
+    m = msgs[0]
+    assert m.type == MessageType.DOCUMENT
+    assert m.payload["document_id"] == "media-doc-1"
+    assert m.payload["filename"] == "menu.pdf"
+    assert m.payload["caption"] == "updated menu"
+
+
 def test_parse_status_update_returns_empty():
     payload = {
         "object": "whatsapp_business_account",

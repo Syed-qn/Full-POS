@@ -6,6 +6,7 @@ and send a manager-authored message to the customer. Tenant-scoped to the
 logged-in restaurant.
 """
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -83,6 +84,56 @@ async def list_conversations(
 ) -> list[DashboardConversationOut]:
     rows = await service.list_dashboard_conversations(session, restaurant_id=restaurant.id)
     return [DashboardConversationOut(**row) for row in rows]
+
+
+def _attachment_response(
+    data: bytes, mime: str, *, filename: str | None = None
+) -> Response:
+    headers = {"Cache-Control": "private, max-age=3600"}
+    if filename:
+        safe = filename.replace('"', "")
+        headers["Content-Disposition"] = f'inline; filename="{safe}"'
+    return Response(content=data, media_type=mime, headers=headers)
+
+
+@router.get("/{conversation_id}/messages/{message_id}/media")
+async def get_message_media(
+    conversation_id: int,
+    message_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Stream a stored inbound attachment (image, PDF, video, voice, etc.)."""
+    result = await service.get_message_media(
+        session,
+        restaurant_id=restaurant.id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not available")
+    data, mime, filename = result
+    return _attachment_response(data, mime, filename=filename)
+
+
+@router.get("/{conversation_id}/messages/{message_id}/audio")
+async def get_message_audio(
+    conversation_id: int,
+    message_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Backward-compatible alias for voice-note playback."""
+    result = await service.get_message_audio(
+        session,
+        restaurant_id=restaurant.id,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "voice note not available")
+    data, mime = result
+    return _attachment_response(data, mime)
 
 
 @router.get("/{conversation_id}/messages", response_model=list[DashboardMessageOut])

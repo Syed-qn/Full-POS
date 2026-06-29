@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String
+from sqlalchemy import BigInteger, Boolean, ForeignKey, LargeBinary, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base, TimestampMixin
@@ -24,3 +24,7 @@ class Message(Base, TimestampMixin):
     type: Mapped[str] = mapped_column(String(32))
     payload: Mapped[dict] = mapped_column(JSONB)
     ts: Mapped[int] = mapped_column(BigInteger, default=0)  # unix epoch — BigInteger avoids 2038 overflow
+    # Inbound WhatsApp attachments (voice, image, PDF, video): persisted at receive
+    # time so managers can view them in the dashboard after Meta media ids expire.
+    media_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    media_mime: Mapped[str | None] = mapped_column(String(64), nullable=True)

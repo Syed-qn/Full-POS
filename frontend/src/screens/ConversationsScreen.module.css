@@ -84,6 +84,11 @@
 .viewerHead {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+}
+.riderHint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 .thread {
   flex: 1;

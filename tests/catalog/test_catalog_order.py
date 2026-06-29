@@ -159,6 +159,21 @@ async def test_basket_rejects_dish_without_active_catalog_product(db_session, re
     assert "couldn't match" in body.lower()
 
 
+async def test_basket_accepts_alternate_retailer_id_keys(db_session, restaurant):
+    """Simulator / legacy payloads may use productretailerid instead of product_retailer_id."""
+    await _seed_catalog_menu(db_session, restaurant.id)
+    inbound = _order_inbound([
+        {"productretailerid": "nwb4pa5fbn", "quantity": "1", "item_price": "20", "currency": "AED"},
+        {"productretailer_id": "lemonmint01", "quantity": "3", "item_price": "12", "currency": "AED"},
+    ])
+    await handle_catalog_order(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert len(items) == 2
+    assert sum(i.qty for i in items if i.dish_name == "Lemon Mint") == 3
+
+
 async def test_partial_mapping_adds_known_and_lists_unknown(db_session, restaurant):
     await _seed_catalog_menu(db_session, restaurant.id)
     inbound = _order_inbound([

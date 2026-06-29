@@ -21,6 +21,63 @@
 .text {
   display: block;
 }
+.mediaAudio {
+  display: block;
+  width: 100%;
+  min-width: 220px;
+  max-width: 280px;
+  height: 32px;
+  margin-bottom: 6px;
+}
+.mediaImage {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  object-fit: contain;
+}
+.mediaVideo {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  max-height: 240px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+.mediaDoc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.mediaPdf {
+  width: 100%;
+  min-width: 220px;
+  max-width: 280px;
+  height: 220px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg-canvas);
+}
+.mediaDownload {
+  font-size: 12px;
+  color: inherit;
+  text-decoration: underline;
+}
+.mediaLoading,
+.mediaUnavailable,
+.mediaTag {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+.mediaTag {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: 600;
+}
 .voiceTag {
   display: inline-block;
   margin: 0 6px 2px 0;

@@ -1441,6 +1441,35 @@
   status=preparing; customer only sees "No problem, order #X is cancelled… Send 'hi'…".
 - TEST: test_cancel_during_preparing_uses_simple_message_no_resale_disclaimer (3 cancel tests pass).
 
+[2026-06-29 20:00 +04] fix(tickets): highlight mandatory fields on complaints drawer
+- User: complaints page — make required fields obvious (resolution note + refund amount).
+- FE TicketDetailDrawer: RequiredLabel (* + REQUIRED badge), rose-tinted requiredGroup for
+  note, dashed refundRequiredGroup; empty inputs get requiredEmpty border/glow until filled.
+- TEST: TicketDetailDrawer.test asserts Required / Required for refund badges.
+
+[2026-06-29 19:45 +04] fix(resale+catalog): resale not offered in catalogue ordering flow
+- User: resale inventory exists but catalogue basket ("Got your basket…") never pitched
+  fast-deal / Grab it; productitems JSON with mixed retailer id keys.
+- ROOT CAUSES: (1) catalog greeting returned before _maybe_offer_resale; (2) text "done"
+  after basket skipped resale + saved-address path (only AI proceed_to_address had it);
+  (3) alternate payload keys productretailerid / productretailer_id not normalized.
+- FIX: _begin_address_capture() shared checkout (resale → saved addr → pin); catalog hi
+  offers resale; catalog/service _retailer_id_from_item() + productitems alias.
+- TESTS: test_resale_offered_on_catalog_greeting, test_resale_offered_when_done_after_
+  catalog_basket, test_basket_accepts_alternate_retailer_id_keys (11 pass).
+
+[2026-06-29 19:15 +04] perf(dashboard): slow load on all DB-connected manager pages
+- User: orders, customers, dashboard (and any DB page) slow / not real-time on Render.
+- ROOT CAUSES: (1) GET /api/v1/orders N+1 _enrich — ~5-7 SQL/order × 50 rows × 4s poll;
+  (2) list_dashboard_conversations N+1 last-message query per conversation;
+  (3) preview_batch_groups on every orders list; (4) polls stacked when requests >4s;
+  (5) background tabs still hammering API every 4s.
+- FIX BE: _enrich_orders_bulk() constant ~8 queries for any list size; preview_batch query
+  param (skip for live-ops); conversations list bulk max(message.id) + one fetch.
+- FIX FE: PollingTransport + usePollingRefresh in-flight guard + pause when tab hidden;
+  LiveOps fetchOrders({ previewBatch: false }); non-live screens default 12s poll interval.
+- TESTS: test_list_orders_skips_batch_preview_when_disabled; ordering+dashboard 33 pass.
+
 [2026-06-29 18:45 +04] fix(coupons): /coupons page create/list felt broken on Render
 - User report: https://restaurant-whatsapp-service.onrender.com/coupons — create coupon "nothing
   working", page felt dummy.
@@ -1451,6 +1480,48 @@
 - FIX FE CouponsScreen: load errors surfaced, toast on create/pause, optimistic row insert,
   loading text, type=button, validation hint. e2e/coupons.spec.ts + test_list_includes_single_use.
 
+[2026-06-29 21:20 +04] feat(chats): images, PDFs, video + sticker attachments in dashboard
+- User follow-up: what about images, PDFs and other attachments (not just voice)?
+- GAP: normalizer parsed image only; document/video/sticker → UNKNOWN; no bytes stored; no UI.
+- FIX: MessageType DOCUMENT/VIDEO/STICKER; normalizer parses all; media.py download+persist;
+  messages.media_data/media_mime (rename migration g7b8c9d0e1f2); GET .../messages/{id}/media;
+  MessageBubble renders photo preview, PDF iframe+download, video player, voice audio.
+- TESTS: test_attachments.py, test_parse_document_pdf, dashboard image media endpoint.
+
+[2026-06-29 21:00 +04] fix(chats): voice-note playback in manager dashboard
+- User: unable to listen to voice notes in Chats — only transcript shown (🎙️ Voice + STT text).
+- ROOT CAUSE: dashboard stored transcript only; no audio bytes persisted and no playback API/UI.
+- FIX BE: messages.audio_data + audio_mime columns (migration f6a7b8c9d0e1); download+store at
+  inbound; GET /conversations/{id}/messages/{msg_id}/audio (tenant-guarded); payload.has_audio flag.
+- FIX FE MessageBubble: HTML5 audio player (auth blob fetch) above transcript; ConversationsScreen
+  passes conversationId. Older msgs without stored bytes fall back to live WhatsApp media_id fetch.
+- TESTS: test_engine_voice audio_data assert; dashboard audio endpoint + has_audio; MessageBubble player.
+
+[2026-06-29 20:30 +04] fix(chats): rider WhatsApp messages visible + manager notified
+- User: Chats page silently ignored rider messages; manager should receive them.
+- ROOT CAUSES: (1) rider handler ran after manual_takeover early-return (dispatch
+  blocked once manager took over); (2) outbound dispatch prompts not mirrored to
+  messages table; (3) Drivers tab composer required takeover though riders have no
+  AI; (4) legacy rider phones stored without '+' failed _resolve_counterpart lookup.
+- FIX BE: rider branch before customer manual_takeover; free-text sets takeover +
+  WhatsApp alert to restaurant.phone (mgr) + rider ack; shared phones.py normalize +
+  phone_lookup_values; record_message bumps conv.updated_at; list_dashboard sorts by
+  latest message id; enqueue_message mirrors rider outbound to Chats thread.
+- FIX FE ConversationsScreen: Drivers tab composer always enabled; rider hint banner.
+- TESTS: test_rider_chat.py (3) + ConversationsScreen driver-tab test; 6 rider pass.
+
 [2026-06-29 18:35 +04] chore(graphify): incremental update after cancel-message fix
 - graphify update . — 574 files re-extracted; 5679 nodes, 15336 edges, 1196 communities;
   graph.json + GRAPH_REPORT.md refreshed in graphify-out/ (479 extraction warnings, no new AMBIGUOUS).
+
+[2026-06-29 20:15 +04] feat(dispatch+ordering): proactive customer order updates on WhatsApp
+- PREPARING: advance_kitchen_status (confirmed→preparing) now calls _notify_customer_status
+  (idempotent cust-preparing-{order_id}); body from tracking._HUMAN_STATUS.
+- PICKED UP: updated copy — "Your order has been picked up by our rider for delivery."
+  (still deferred to first live GPS ping; CTA Track link unchanged).
+- NEAR DOOR: notify_customer_near_door_if_applicable at CUSTOMER_NEAR_KM=0.05 (50 m);
+  idempotent cust-near_door-{order_id}; "Keep an eye on the door — our rider is just
+  around the corner!" Hooked on every GPS ping: rider app, web tracker, WhatsApp location
+  (via check_and_send_near_dual_if_applicable). Rider 100 m dual Delivered buttons unchanged.
+- TESTS: test_preparing_notifies_customer, test_near_door_notifies_customer_at_50m,
+  test_near_door_is_idempotent; 10/10 test_customer_notifications pass; ruff clean.

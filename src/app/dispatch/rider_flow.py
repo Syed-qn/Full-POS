@@ -34,8 +34,8 @@ _logger = logging.getLogger(__name__)
 async def _notify_customer_status(
     session: AsyncSession, *, restaurant_id: int, order: Order, status_key: str
 ) -> None:
-    """Proactively message the customer when delivery progresses (picked_up → on
-    the way, delivered). Idempotent per (order, status) so a rider double-tap or
+    """Proactively message the customer on kitchen/delivery progress (preparing,
+    picked_up → on the way, near_door, delivered). Idempotent per (order, status) so a rider double-tap or
     an outbox re-delivery never double-pings the customer. The customer's 24h
     window is open (they ordered minutes ago), so a free-form text delivers — no
     template needed (unlike the rider side). Reuses build_tracking_reply so the
@@ -54,7 +54,10 @@ async def _notify_customer_status(
     customer = await session.get(Customer, order.customer_id)
     if customer is None or not customer.phone:
         return
-    body = await build_tracking_reply(session, order=order, geo=get_geo_provider())
+    if status_key == "near_door":
+        body = "Keep an eye on the door — our rider is just around the corner!"
+    else:
+        body = await build_tracking_reply(session, order=order, geo=get_geo_provider())
     if status_key == "picked_up":
         from app.dispatch.tracking_live import build_tracking_url, ensure_tracking_session
 
@@ -119,6 +122,8 @@ async def reveal_first_stop_on_tracking_live(
 
 # ~100 m per spec §4.4 + transcript (geofence worker). Button click ONLY way to reveal next location (flow integrity).
 NEAR_KM = 0.1
+# ~50 m — proactive customer "around the corner" ping (separate from rider dual buttons).
+CUSTOMER_NEAR_KM = 0.05
 # Power bank + constant power supply provided per ops policy for all-day live location sharing.
 
 
@@ -477,6 +482,39 @@ async def _send_stop(
     )
 
 
+async def notify_customer_near_door_if_applicable(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    rider: Rider,
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> None:
+    """If the rider is within ~50 m of the current undelivered stop, ping the
+    customer once to keep an eye on the door. Idempotent per order."""
+    bo = await session.scalar(
+        select(BatchOrder)
+        .join(Batch, BatchOrder.batch_id == Batch.id)
+        .where(Batch.rider_id == rider.id, BatchOrder.delivered_at.is_(None))
+        .order_by(BatchOrder.sequence)
+        .limit(1)
+    )
+    if not bo:
+        return
+    order = await session.get(Order, bo.order_id)
+    if not order or order.status not in ("picked_up", "arriving"):
+        return
+    if latitude is not None and longitude is not None:
+        pos = (latitude, longitude)
+    else:
+        pos = await _get_latest_rider_location(session, rider.id)
+    drop = await _dropoff_coords(session, order)
+    if pos and drop and distance_km(*pos, *drop) <= CUSTOMER_NEAR_KM:
+        await _notify_customer_status(
+            session, restaurant_id=restaurant_id, order=order, status_key="near_door"
+        )
+
+
 async def check_and_send_near_dual_if_applicable(
     session: AsyncSession, *, restaurant_id: int, rider: Rider
 ) -> None:
@@ -504,6 +542,9 @@ async def check_and_send_near_dual_if_applicable(
         # simple: always send dual in this path for test (refine later)
         # to match: call a dual sender
         await _send_delivery_choice(session, restaurant_id, rider.phone, order)
+    await notify_customer_near_door_if_applicable(
+        session, restaurant_id=restaurant_id, rider=rider
+    )
 
 
 async def _send_delivery_choice(

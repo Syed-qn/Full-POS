@@ -114,7 +114,10 @@ function StatCard({
 }
 
 export function LiveOpsScreen() {
-  const { data, error } = usePoll<OrderOut[]>(fetchOrders, 4000);
+  const { data, error } = usePoll<OrderOut[]>(
+    () => fetchOrders({ previewBatch: false }),
+    4000,
+  );
   // First paint, before the initial poll resolves — show the skeleton.
   const loading = data === null && error == null;
   const orders = data ?? [];

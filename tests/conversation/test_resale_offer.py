@@ -57,6 +57,62 @@ async def _last(db_session, conv_id):
     return str(rows[0].payload) if rows else ""
 
 
+async def test_resale_offered_on_catalog_greeting(db_session):
+    """Catalog mode must still pitch resale (greeting used to return too early)."""
+    r, _dish = await _resto_with_resale(db_session)
+    r.settings = {**(r.settings or {}), "catalog_ordering_enabled": True, "catalog_id": "CAT1"}
+    from app.catalog.models import CatalogProduct
+    db_session.add(CatalogProduct(
+        restaurant_id=r.id, retailer_id="nwb4pa5fbn", name="Biryani",
+        price_aed=Decimal("40.00"), currency="AED", availability="in stock",
+        category="Rice", is_active=True, raw={},
+    ))
+    await db_session.commit()
+
+    phone = "+971500400998"
+    await handle_inbound(db_session, _inb(r, phone, "hi"), restaurant_id=r.id)
+    await db_session.commit()
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=phone, counterpart="customer")
+    assert conv.state.get("resale_offer_id") is not None
+
+
+async def test_resale_offered_when_done_after_catalog_basket(db_session):
+    """Typing 'done' after a catalogue basket must pitch resale before address."""
+    r, dish = await _resto_with_resale(db_session)
+    phone = "+971500400997"
+    buyer = Customer(restaurant_id=r.id, phone=phone, name="Buyer")
+    db_session.add(buyer)
+    dish.catalog_retailer_id = "x"
+    from app.catalog.models import CatalogProduct
+    db_session.add(CatalogProduct(
+        restaurant_id=r.id, retailer_id="x", name="Biryani",
+        price_aed=Decimal("40.00"), currency="AED", availability="in stock",
+        category="Rice", is_active=True, raw={},
+    ))
+    await db_session.commit()
+
+    from app.catalog.service import handle_catalog_order
+    from app.whatsapp.port import InboundMessage, MessageType
+
+    await handle_catalog_order(
+        db_session,
+        InboundMessage(
+            wa_message_id="w-basket", from_phone=phone, type=MessageType.ORDER,
+            payload={"product_items": [
+                {"product_retailer_id": "x", "quantity": 1, "item_price": "40", "currency": "AED"},
+            ]},
+            restaurant_phone=r.phone, timestamp=1717660900,
+        ),
+        restaurant_id=r.id,
+    )
+    await db_session.commit()
+
+    await handle_inbound(db_session, _inb(r, phone, "done"), restaurant_id=r.id)
+    await db_session.commit()
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=phone, counterpart="customer")
+    assert conv.state.get("resale_offer_id") is not None
+
+
 async def test_resale_offered_on_greeting(db_session):
     r, dish = await _resto_with_resale(db_session)
     phone = "+971500400999"

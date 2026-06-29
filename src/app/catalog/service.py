@@ -41,6 +41,20 @@ def _to_decimal(value) -> Decimal | None:
         return None
 
 
+def _retailer_id_from_item(item: dict) -> str:
+    """Normalize retailer id keys from Cloud API / simulator / legacy payloads."""
+    for key in (
+        "product_retailer_id",
+        "productretailerid",
+        "product_retailer_id",
+        "productretailer_id",
+    ):
+        val = item.get(key)
+        if val:
+            return str(val)
+    return ""
+
+
 async def _find_dish(session: AsyncSession, *, restaurant_id: int, retailer_id: str) -> Dish | None:
     """Map a catalog product (Content / retailer id) back to a dish for this restaurant."""
     if not retailer_id:
@@ -147,6 +161,8 @@ async def handle_catalog_order(
 
     payload = inbound.payload or {}
     product_items: list[dict] = payload.get("product_items") or []
+    if not product_items and isinstance(payload.get("productitems"), list):
+        product_items = payload["productitems"]
     if not product_items:
         return
 
@@ -193,7 +209,7 @@ async def handle_catalog_order(
     added = 0
     unmapped: list[str] = []
     for item in product_items:
-        retailer_id = str(item.get("product_retailer_id") or "")
+        retailer_id = _retailer_id_from_item(item)
         try:
             qty = max(1, int(item.get("quantity", 1)))
         except (TypeError, ValueError):

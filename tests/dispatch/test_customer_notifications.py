@@ -202,6 +202,112 @@ async def test_notify_is_idempotent(db_session):
     assert len(msgs) == 1  # second call deduped, no duplicate ping
 
 
+async def test_preparing_notifies_customer(db_session):
+    """When the kitchen starts preparing, the customer gets a proactive update."""
+    from app.ordering.models import CustomerAddress
+    from app.ordering.service import advance_kitchen_status
+
+    r, rider, o, batch, c = await _seed(db_session, status="confirmed")
+    addr = CustomerAddress(
+        customer_id=c.id, latitude=25.2050, longitude=55.2710, confirmed=True
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    o.address_id = addr.id
+    await db_session.commit()
+
+    await advance_kitchen_status(db_session, order=o)
+    await db_session.commit()
+
+    msgs = await _cust_msgs(db_session, c.phone)
+    prep = next(
+        (m for m in msgs if m.idempotency_key == f"cust-preparing-{o.id}"), None
+    )
+    assert prep is not None
+    assert "preparing" in prep.payload["body"].lower()
+
+
+async def test_near_door_notifies_customer_at_50m(db_session):
+    """Rider within ~50 m of drop-off → customer gets the around-the-corner ping."""
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import RiderLocation
+    from app.dispatch.rider_flow import notify_customer_near_door_if_applicable
+    from app.ordering.models import CustomerAddress
+
+    r, rider, o, batch, c = await _seed(db_session, status="picked_up")
+    drop_lat, drop_lon = 25.2050, 55.2710
+    addr = CustomerAddress(
+        customer_id=c.id, latitude=drop_lat, longitude=drop_lon, confirmed=True
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    o.address_id = addr.id
+    # ~44 m north of drop-off (0.0004° lat < 50 m at Dubai latitude).
+    db_session.add(
+        RiderLocation(
+            rider_id=rider.id,
+            restaurant_id=r.id,
+            latitude=drop_lat + 0.0004,
+            longitude=drop_lon,
+            ts=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    await notify_customer_near_door_if_applicable(
+        db_session, restaurant_id=r.id, rider=rider
+    )
+    await db_session.commit()
+
+    msgs = await _cust_msgs(db_session, c.phone)
+    near = next(
+        (m for m in msgs if m.idempotency_key == f"cust-near_door-{o.id}"), None
+    )
+    assert near is not None
+    assert "around the corner" in near.payload["body"].lower()
+
+
+async def test_near_door_is_idempotent(db_session):
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import RiderLocation
+    from app.dispatch.rider_flow import notify_customer_near_door_if_applicable
+    from app.ordering.models import CustomerAddress
+
+    r, rider, o, batch, c = await _seed(db_session, status="picked_up")
+    drop_lat, drop_lon = 25.2050, 55.2710
+    addr = CustomerAddress(
+        customer_id=c.id, latitude=drop_lat, longitude=drop_lon, confirmed=True
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    o.address_id = addr.id
+    db_session.add(
+        RiderLocation(
+            rider_id=rider.id,
+            restaurant_id=r.id,
+            latitude=drop_lat + 0.0004,
+            longitude=drop_lon,
+            ts=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    for _ in range(2):
+        await notify_customer_near_door_if_applicable(
+            db_session, restaurant_id=r.id, rider=rider
+        )
+        await db_session.commit()
+
+    msgs = [
+        m
+        for m in await _cust_msgs(db_session, c.phone)
+        if m.idempotency_key == f"cust-near_door-{o.id}"
+    ]
+    assert len(msgs) == 1
+
+
 async def test_delivered_blocked_until_tracker_started(db_session):
     """Rider can't mark a stop delivered until live tracking is on. Without a
     recent GPS ping, handle_delivered must NOT advance and must re-send the

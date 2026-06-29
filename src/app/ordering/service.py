@@ -954,6 +954,14 @@ async def advance_kitchen_status(
     # confirm) and warn the kitchen if it just got tighter.
     if next_status == OrderStatus.PREPARING:
         await _refresh_prep_deadline(session, order)
+        from app.dispatch.rider_flow import _notify_customer_status
+
+        await _notify_customer_status(
+            session,
+            restaurant_id=order.restaurant_id,
+            order=order,
+            status_key="preparing",
+        )
     await session.commit()
     await session.refresh(order)
     # Event-driven dispatch: as soon as an order is READY, assign a rider — no

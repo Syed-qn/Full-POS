@@ -24,6 +24,9 @@ export function ConversationsScreen() {
 
   const customerCount = convs.filter((c) => c.counterpart === "customer").length;
   const riderCount = convs.filter((c) => c.counterpart === "rider").length;
+  const isRiderTab = tab === "rider";
+  // Drivers have no AI bot — managers can always reply; customers need takeover first.
+  const canCompose = isRiderTab || takeover;
   // Filter by number: compare digits only, so "+971 50" and "97150" both match.
   const digits = query.replace(/\D/g, "");
   const visible = convs.filter(
@@ -183,17 +186,25 @@ export function ConversationsScreen() {
         ) : (
           <>
             <div className={s.viewerHead}>
-              <Button variant={takeover ? "danger" : "ghost"} onClick={toggleTakeover}>
-                {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
-              </Button>
+              {!isRiderTab && (
+                <Button variant={takeover ? "danger" : "ghost"} onClick={toggleTakeover}>
+                  {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
+                </Button>
+              )}
+              {isRiderTab && (
+                <span className={s.riderHint}>Driver WhatsApp — replies send to their phone.</span>
+              )}
             </div>
             {tab === "customer" && <ChatCustomerPanel conversationId={activeId} />}
-            {takeover && (
+            {takeover && !isRiderTab && (
               <SectionBanner tone="warning">You are controlling this conversation.</SectionBanner>
+            )}
+            {isRiderTab && takeover && (
+              <SectionBanner tone="info">Driver sent a message — reply below.</SectionBanner>
             )}
             <div className={s.thread} ref={threadRef}>
               {messages.map((m) => (
-                <MessageBubble key={m.id} message={m} />
+                <MessageBubble key={m.id} message={m} conversationId={activeId ?? undefined} />
               ))}
             </div>
             <div className={s.composer}>
@@ -202,9 +213,9 @@ export function ConversationsScreen() {
                 placeholder="Type message"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                disabled={!takeover}
+                disabled={!canCompose}
               />
-              <Button onClick={send} disabled={!takeover}>Send</Button>
+              <Button onClick={send} disabled={!canCompose}>Send</Button>
             </div>
           </>
         )}

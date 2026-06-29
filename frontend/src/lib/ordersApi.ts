@@ -6,9 +6,22 @@ import type { OrderOut } from "./types";
 // In production we rethrow so failures surface instead of masking with stale data.
 // NOTE: vitest runs with import.meta.env.DEV === true, so existing tests still
 // exercise the fixture fallback path.
-export async function fetchOrders(): Promise<OrderOut[]> {
+export type FetchOrdersOpts = {
+  /** Skip batch-preview grouping on list (faster for live-ops polls). */
+  previewBatch?: boolean;
+  status?: string;
+  limit?: number;
+};
+
+export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.previewBatch === false) params.set("preview_batch", "false");
+  const qs = params.toString();
+  const path = qs ? `/api/v1/orders?${qs}` : "/api/v1/orders";
   try {
-    return await apiClient.get<OrderOut[]>("/api/v1/orders");
+    return await apiClient.get<OrderOut[]>(path);
   } catch (err) {
     if (!import.meta.env.DEV) throw err;
     // Endpoint not yet deployed (404) or backend unreachable → recorded fixtures.

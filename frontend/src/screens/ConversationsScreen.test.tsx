@@ -41,6 +41,17 @@ describe("ConversationsScreen", () => {
     expect(screen.queryByText("+971501234567")).not.toBeInTheDocument();
   });
 
+  it("driver tab enables composer without takeover", async () => {
+    render(<ConversationsScreen />);
+    await waitFor(() => screen.getByRole("tab", { name: /drivers/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /drivers/i }));
+    await waitFor(() => screen.getByText("+971555550199"));
+    await userEvent.click(screen.getByText("+971555550199"));
+    const input = screen.getByPlaceholderText("Type message");
+    expect(input).not.toBeDisabled();
+    expect(screen.queryByRole("button", { name: /switch to human reply/i })).not.toBeInTheDocument();
+  });
+
   it("activating takeover shows the control banner", async () => {
     render(<ConversationsScreen />);
     await waitFor(() => screen.getByText("+971501234567"));

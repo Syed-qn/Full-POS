@@ -66,6 +66,8 @@ async def test_voice_note_transcribed_and_added_to_order(db_session, restaurant)
         select(Message).where(Message.wa_message_id == "wamid.va1")
     )).scalars().all()
     assert audio_rows and audio_rows[0].type == "audio"
+    assert audio_rows[0].media_data == b"chicken biryani"
+    assert audio_rows[0].payload.get("text") == "chicken biryani"
 
 
 async def test_unintelligible_voice_note_asks_to_retry(db_session, restaurant, monkeypatch):

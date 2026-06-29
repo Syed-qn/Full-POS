@@ -43,9 +43,9 @@ describe("TicketDetailDrawer", () => {
   it("disables Refund to Wallet without an amount and note", () => {
     render(<TicketDetailDrawer ticket={ticket} onResolved={() => {}} />);
     expect(screen.getByRole("button", { name: /refund to wallet/i })).toBeDisabled();
-    expect(
-      screen.getByText(/type a resolution note first/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/required — type a resolution note/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Required").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Required for refund")).toBeInTheDocument();
   });
 
   it("enables Refund to Wallet only once amount and note are set", () => {

@@ -37,6 +37,58 @@
   color: var(--text-secondary);
 }
 
+.requiredGroup {
+  background: var(--sla-critical-dim);
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 28%, transparent);
+  border-radius: 10px;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.requiredLabel {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.requiredMark {
+  color: var(--sla-critical);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.requiredBadge {
+  background: color-mix(in srgb, var(--sla-critical) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 35%, transparent);
+  border-radius: 999px;
+  color: var(--sla-critical);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  text-transform: uppercase;
+}
+
+.requiredEmpty {
+  border-color: color-mix(in srgb, var(--sla-critical) 55%, var(--border-default));
+  box-shadow: 0 0 0 2px var(--sla-critical-dim);
+}
+
+.requiredFilled {
+  border-color: var(--border-default);
+  box-shadow: none;
+}
+
+.refundRequiredGroup {
+  background: var(--bg-surface);
+  border: 1px dashed color-mix(in srgb, var(--sla-critical) 40%, var(--border-subtle));
+  border-radius: 10px;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
 .message {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);

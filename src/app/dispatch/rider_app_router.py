@@ -355,9 +355,17 @@ async def rider_app_location(
                     order=order,
                     status_key="picked_up",
                 )
-    await session.commit()
-    if first_ping_orders:
-        from app.outbox.service import deliver_pending
+    from app.dispatch.rider_flow import notify_customer_near_door_if_applicable
 
-        await deliver_pending(session, rider.restaurant_id)
+    await notify_customer_near_door_if_applicable(
+        session,
+        restaurant_id=rider.restaurant_id,
+        rider=rider,
+        latitude=body.latitude,
+        longitude=body.longitude,
+    )
+    await session.commit()
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, rider.restaurant_id)
     return AckOut()

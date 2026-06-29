@@ -1,7 +1,19 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fetchMessageMedia } from "../lib/conversationsApi";
 import { MessageBubble } from "./MessageBubble";
 import type { MessageOut } from "../lib/types";
+
+vi.mock("../lib/conversationsApi", () => ({
+  fetchMessageMedia: vi.fn().mockResolvedValue(new Blob(["audio"], { type: "audio/ogg" })),
+}));
+
+beforeEach(() => {
+  vi.stubGlobal("URL", {
+    createObjectURL: vi.fn(() => "blob:mock-audio"),
+    revokeObjectURL: vi.fn(),
+  });
+});
 
 const inbound: MessageOut = { id: 1, direction: "inbound", type: "text", payload: { text: "Hi" }, ts: 1717660800 };
 const outbound: MessageOut = { id: 2, direction: "outbound", type: "text", payload: { text: "Welcome" }, ts: 1717660830 };
@@ -36,6 +48,33 @@ describe("MessageBubble", () => {
     const { container } = render(<MessageBubble message={msg} />);
     expect(container.textContent).toContain("Voice");
     expect(container.textContent).toContain("two chicken biryani please");
+  });
+
+  it("renders an audio player when a playable voice note is available", async () => {
+    const msg: MessageOut = {
+      id: 6,
+      direction: "inbound",
+      type: "audio",
+      payload: { text: "one chicken biryani", has_media: true, media_kind: "audio" },
+      ts: 1717660830,
+    };
+    render(<MessageBubble message={msg} conversationId={42} />);
+    await waitFor(() => expect(document.querySelector("audio")).not.toBeNull());
+  });
+
+  it("renders an image preview for inbound photos", async () => {
+    vi.mocked(fetchMessageMedia).mockResolvedValueOnce(
+      new Blob(["img"], { type: "image/jpeg" }),
+    );
+    const msg: MessageOut = {
+      id: 7,
+      direction: "inbound",
+      type: "image",
+      payload: { text: "menu photo", has_media: true, media_kind: "image" },
+      ts: 1717660830,
+    };
+    render(<MessageBubble message={msg} conversationId={42} />);
+    await waitFor(() => expect(document.querySelector("img")).not.toBeNull());
   });
 
   it("does NOT tag a normal typed message with the voice marker", () => {

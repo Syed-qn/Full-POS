@@ -188,13 +188,24 @@ async def update_order_location(
             rider_id=access.session.rider_id,
         )
         await _notify_customers_tracking_live(session, rider_id=access.session.rider_id)
-    await session.commit()
-    if was_first_ping:
-        # Location POSTs aren't webhook calls, so nothing flushes the outbox for
-        # us — deliver the just-enqueued customer notifications now.
-        from app.outbox.service import deliver_pending
+    from app.dispatch.rider_flow import notify_customer_near_door_if_applicable
+    from app.identity.models import Rider
 
-        await deliver_pending(session, access.order.restaurant_id)
+    rider = await session.get(Rider, access.session.rider_id)
+    if rider is not None:
+        await notify_customer_near_door_if_applicable(
+            session,
+            restaurant_id=access.order.restaurant_id,
+            rider=rider,
+            latitude=body.latitude,
+            longitude=body.longitude,
+        )
+    await session.commit()
+    # Location POSTs aren't webhook calls, so nothing flushes the outbox for us —
+    # deliver any just-enqueued customer notifications (first ping or near-door).
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, access.order.restaurant_id)
     return TrackingAckOut()
 
 

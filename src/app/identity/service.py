@@ -65,6 +65,9 @@ async def create_rider(
     name: str,
     phone: str,
 ) -> Rider:
+    from app.identity.phones import normalize_phone
+
+    phone = normalize_phone(phone)
     existing = await session.scalar(
         select(Rider).where(Rider.restaurant_id == restaurant_id, Rider.phone == phone)
     )
@@ -254,6 +257,10 @@ async def update_rider_profile(
     if rider is None or rider.restaurant_id != restaurant_id:
         return None
     before = {"name": rider.name, "phone": rider.phone}
+    if phone is not None:
+        from app.identity.phones import normalize_phone
+
+        phone = normalize_phone(phone)
     if phone is not None and phone != rider.phone:
         dup = await session.scalar(
             select(Rider).where(

@@ -62,6 +62,68 @@ async def test_messages_endpoint_normalizes_body_to_text(client, auth_headers, d
     assert msgs[1]["payload"]["text"] == "I want biryani"
 
 
+async def test_messages_endpoint_marks_audio_playback(client, auth_headers, db_session):
+    restaurant = await _restaurant(db_session)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971500000022", counterpart="customer", state={}
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    db_session.add(
+        Message(
+            conversation_id=conv.id,
+            direction="inbound",
+            type="audio",
+            payload={"audio_id": "x", "text": "one biryani"},
+            ts=100,
+            media_data=b"ogg",
+            media_mime="audio/ogg",
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    row = resp.json()[0]["payload"]
+    assert row["has_audio"] is True
+    assert row["has_media"] is True
+    assert row["media_kind"] == "audio"
+
+
+async def test_message_media_endpoint_streams_image(client, auth_headers, db_session):
+    restaurant = await _restaurant(db_session)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971500000023", counterpart="customer", state={}
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    db_session.add(
+        Message(
+            conversation_id=conv.id,
+            direction="inbound",
+            type="image",
+            payload={"image_id": "img-1", "text": "menu photo"},
+            ts=100,
+            media_data=b"\xff\xd8\xff",
+            media_mime="image/jpeg",
+        )
+    )
+    await db_session.commit()
+    msg = await db_session.scalar(
+        select(Message).where(Message.conversation_id == conv.id)
+    )
+
+    resp = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages/{msg.id}/media",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.content == b"\xff\xd8\xff"
+    assert "image" in resp.headers["content-type"]
+
+
 async def test_messages_unknown_conversation_is_404(client, auth_headers, db_session):
     resp = await client.get("/api/v1/conversations/999999/messages", headers=auth_headers)
     assert resp.status_code == 404
@@ -206,6 +268,79 @@ async def test_send_message_records_outbound_and_delivers(
     assert len(rows) == 1
     assert rows[0].status == "sent"
     assert rows[0].wa_message_id is not None
+
+
+async def test_message_audio_endpoint_streams_voice_note(
+    client, auth_headers, db_session,
+):
+    """Managers can replay inbound voice notes from the Chats screen."""
+    restaurant = await _restaurant(db_session)
+    conv = Conversation(
+        restaurant_id=restaurant.id,
+        phone="+971500000020",
+        counterpart="customer",
+        state={},
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    audio_bytes = b"voice-note-bytes"
+    db_session.add(
+        Message(
+            conversation_id=conv.id,
+            direction="inbound",
+            type="audio",
+            payload={"audio_id": "media-old", "text": "one chicken biryani"},
+            ts=300,
+            media_data=audio_bytes,
+            media_mime="audio/ogg",
+        )
+    )
+    await db_session.commit()
+    msg = await db_session.scalar(
+        select(Message).where(Message.conversation_id == conv.id)
+    )
+
+    resp = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages/{msg.id}/audio",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.content == audio_bytes
+    assert "audio" in resp.headers["content-type"]
+
+
+async def test_message_audio_other_tenant_is_404(client, auth_headers, db_session):
+    other = Restaurant(
+        name="Other4", phone="+971599999996", password_hash="x", lat=25.0, lng=55.0
+    )
+    db_session.add(other)
+    await db_session.flush()
+    conv = Conversation(
+        restaurant_id=other.id, phone="+971500000021", counterpart="customer", state={}
+    )
+    db_session.add(conv)
+    await db_session.flush()
+    db_session.add(
+        Message(
+            conversation_id=conv.id,
+            direction="inbound",
+            type="audio",
+            payload={"text": "hi"},
+            ts=1,
+            media_data=b"x",
+            media_mime="audio/ogg",
+        )
+    )
+    await db_session.commit()
+    msg = await db_session.scalar(
+        select(Message).where(Message.conversation_id == conv.id)
+    )
+
+    resp = await client.get(
+        f"/api/v1/conversations/{conv.id}/messages/{msg.id}/audio",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
 
 
 async def test_send_message_unknown_conversation_is_404(client, auth_headers):

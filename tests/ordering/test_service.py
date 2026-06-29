@@ -168,6 +168,42 @@ async def test_get_order_api_404_for_unknown(client, restaurant):
     assert resp.status_code == 404
 
 
+async def test_list_orders_skips_batch_preview_when_disabled(client, db_session, restaurant):
+    """preview_batch=false avoids the dispatch grouping pass on hot list polls."""
+    from decimal import Decimal
+    from unittest.mock import AsyncMock, patch
+
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Customer, Order
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501220003", name="Preview Off",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    db_session.add(
+        Order(
+            restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-PV0",
+            status=OrderStatus.CONFIRMED, priority="normal",
+            weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+            subtotal=Decimal("10.00"), total=Decimal("10.00"),
+        )
+    )
+    await db_session.commit()
+
+    with patch(
+        "app.dispatch.service.preview_batch_groups", new_callable=AsyncMock
+    ) as mock_preview:
+        resp = await client.get(
+            "/api/v1/orders",
+            params={"preview_batch": "false"},
+            headers={"Authorization": f"Bearer {_token_for(restaurant.id)}"},
+        )
+    assert resp.status_code == 200
+    mock_preview.assert_not_called()
+
+
 async def test_list_orders_api_filters_by_status(client, db_session, restaurant):
     """GET /api/v1/orders?status=... returns only matching orders for the restaurant."""
     from decimal import Decimal

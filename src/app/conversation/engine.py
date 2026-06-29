@@ -599,6 +599,8 @@ async def _handle_greeting(
                 body="Our catalogue is just loading 🙏 Please type what you'd like and I'll add it right away 😊",
             )
         _set_state(conv, dialogue_state="menu_sent")
+        # Catalogue greeting used to return before resale — offer fast-deal food here too.
+        await _maybe_offer_resale(session, conv, inbound, restaurant_id)
         return
 
     menu = await session.scalar(
@@ -1116,12 +1118,7 @@ async def _handle_collecting_items(
                 body="Your cart is empty. Please add at least one dish before proceeding.",
             )
             return
-        _set_state(conv, dialogue_state="address_capture")
-        await _send_location_request(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="ask-location",
-            body="Great! Please share your delivery location 📍. Tap the button below to send your pin.",
-        )
+        await _begin_address_capture(session, conv, inbound, restaurant_id)
         return
 
     # "What is X?" dish question → stored menu description (verbatim) when present,
@@ -3426,6 +3423,46 @@ async def _execute_save_address(
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
+async def _begin_address_capture(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    restaurant=None,
+    location_prefix: str = "ask-location",
+    location_body: str = (
+        "Great! Please share your delivery location 📍. "
+        "Tap the button below to send your pin."
+    ),
+) -> None:
+    """Shared checkout path: resale pitch → saved address → location pin."""
+    from app.identity.models import Restaurant
+
+    if restaurant is None:
+        restaurant = await session.get(Restaurant, restaurant_id)
+
+    await _maybe_offer_resale(session, conv, inbound, restaurant_id)
+    _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
+
+    if not conv.state.get("saved_address_declined"):
+        saved_id = await _resolve_saved_address_id(
+            session, restaurant_id, inbound.from_phone
+        )
+        if saved_id:
+            _set_state(conv, address_offer_made=True, saved_address_id=saved_id)
+            await _attach_saved_address_to_order(
+                session, conv, inbound, restaurant_id, saved_id, restaurant
+            )
+            return
+
+    await _send_location_request(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=location_prefix,
+        body=location_body,
+    )
+
+
 async def _resolve_saved_address_id(
     session: AsyncSession, restaurant_id: int, phone: str
 ) -> int | None:
@@ -3975,39 +4012,13 @@ async def _dispatch_action(
                 body="Your cart is empty. Please add at least one dish first! 😊",
             )
             return
-        # Pitch any cancelled-but-cooked food before address capture — the customer
-        # may grab the fast deal and batch it with the cart they're checking out.
-        await _maybe_offer_resale(session, conv, inbound, restaurant_id)
-        _set_state(conv, dialogue_phase="address_capture", dialogue_state="address_capture")
-        # ALWAYS check for a saved address BEFORE asking for a location pin: a returning
-        # customer auto-attaches their saved address and jumps straight to the order
-        # summary (which shows the address) with a "Use new address" button — a repeat
-        # order is one tap, never a re-shared pin. We gate ONLY on whether the customer
-        # explicitly chose a NEW address for THIS order (saved_address_declined), NOT on
-        # the broader address_offer_made flag, which can go stale across orders (e.g. a
-        # catalogue basket) and would wrongly skip the check. New customers / declined /
-        # no saved address fall through to the location-pin ask below.
-        if not conv.state.get("saved_address_declined"):
-            saved_id = await _resolve_saved_address_id(
-                session, restaurant_id, inbound.from_phone
-            )
-            if saved_id:
-                _set_state(conv, address_offer_made=True, saved_address_id=saved_id)
-                await _attach_saved_address_to_order(
-                    session, conv, inbound, restaurant_id, saved_id, restaurant
-                )
-                return
-        # New customer, no saved address: DETERMINISTICALLY request the WhatsApp
-        # location pin. We do NOT forward the LLM's reply here — the model tends to
-        # ask for a free-text address, which yields NO coordinates: dispatch then
-        # can't route the rider to the customer (it falls back to the restaurant
-        # location) and the fee/radius check has no real distance. The pin is
-        # mandatory; the follow-up apt/building/receiver collection stays AI-driven.
-        await _send_location_request(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="ai-proceed-addr-loc",
-            body="Great! Please share your delivery location 📍. Tap the button below "
-                 "to send your pin so the rider reaches you exactly.",
+        await _begin_address_capture(
+            session, conv, inbound, restaurant_id, restaurant=restaurant,
+            location_prefix="ai-proceed-addr-loc",
+            location_body=(
+                "Great! Please share your delivery location 📍. Tap the button below "
+                "to send your pin so the rider reaches you exactly."
+            ),
         )
         return
 
@@ -4344,10 +4355,12 @@ async def _resolve_counterpart(
 ):
     """Return ("rider", rider) if the phone is a rider for this tenant, else ("customer", None)."""
     from app.identity.models import Rider
+    from app.identity.phones import phone_lookup_values
 
     rider = await session.scalar(
         select(Rider).where(
-            Rider.restaurant_id == restaurant_id, Rider.phone == phone
+            Rider.restaurant_id == restaurant_id,
+            Rider.phone.in_(phone_lookup_values(phone)),
         )
     )
     return ("rider", rider) if rider is not None else ("customer", None)
@@ -4407,27 +4420,74 @@ async def _handle_rider_inbound(
                     trigger_msg_id=inbound.wa_message_id,
                 )
         return
-    # Other rider message types (e.g. free text) are ignored — flow is button-only.
+
+    # Free-form rider messages (text, voice transcript, etc.) — no bot reply, but
+    # flag the thread for the manager, notify them on WhatsApp, and ack the rider.
+    if inbound.type in {MessageType.TEXT, MessageType.AUDIO, MessageType.IMAGE}:
+        text = (inbound.payload.get("text") or inbound.payload.get("caption") or "").strip()
+        if inbound.type == MessageType.TEXT and not text:
+            return
+        conv.manual_takeover = True
+        conv.taken_over_by = restaurant_id
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=inbound.from_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": "Got it — the manager has been notified and will reply shortly.",
+            },
+            idempotency_key=f"rider-free-ack-{inbound.wa_message_id}",
+            mirror_rider_conversation=False,
+        )
+        from app.identity.models import Restaurant as RestaurantModel
+
+        restaurant = await session.get(RestaurantModel, restaurant_id)
+        if restaurant is not None and restaurant.phone:
+            preview = text if text else "📎 attachment"
+            if len(preview) > 160:
+                preview = preview[:160].rstrip() + "…"
+            rider_label = getattr(rider, "name", None) or inbound.from_phone
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=restaurant.phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={
+                    "body": (
+                        f"🛵 Driver {rider_label} ({inbound.from_phone}) sent a message:\n"
+                        f"\"{preview}\"\n"
+                        "Open Chats → Drivers to reply."
+                    ),
+                },
+                idempotency_key=f"rider-msg-mgr-{inbound.wa_message_id}",
+                mirror_rider_conversation=False,
+            )
+        return
 
 
-async def _transcribe_voice_note(inbound: InboundMessage) -> str | None:
-    """Download a WhatsApp voice note and transcribe it to text. Returns the
-    transcript, or None on any failure (missing id, download/transcription error,
-    empty result). STT is best-effort — it never raises into the dialogue flow."""
+async def _download_and_transcribe_voice(
+    inbound: InboundMessage,
+) -> tuple[str | None, bytes | None, str | None]:
+    """Download a WhatsApp voice note, transcribe it, and return raw bytes for
+    dashboard replay. Returns (transcript, audio_bytes, mime). STT is best-effort
+    — never raises into the dialogue flow."""
     media_id = inbound.payload.get("audio_id")
     if not media_id:
-        return None
+        return None, None, None
     try:
         from app.speech.factory import get_transcriber
         from app.whatsapp.factory import get_whatsapp_provider
 
         provider = get_whatsapp_provider()
         audio, mime = await provider.download_media(media_id)
+        mime = mime or inbound.payload.get("mime") or "audio/ogg"
         transcript = await get_transcriber().transcribe(audio, mime=mime)
-        return (transcript or "").strip() or None
+        text = (transcript or "").strip() or None
+        return text, audio or None, mime
     except Exception:
         _logger.exception("voice transcription failed (%s)", inbound.wa_message_id)
-        return None
+        return None, None, None
 
 
 async def _try_catalog_typed_order(
@@ -4547,10 +4607,12 @@ async def handle_inbound(
     counterpart, rider = await _resolve_counterpart(
         session, restaurant_id, inbound.from_phone
     )
+    from app.identity.phones import normalize_phone
+
     conv = await get_or_create_conversation(
         session,
         restaurant_id=restaurant_id,
-        phone=inbound.from_phone,
+        phone=normalize_phone(inbound.from_phone),
         counterpart=counterpart,
     )
     # Heal stale counterpart — phone may have been registered as a rider after
@@ -4563,11 +4625,30 @@ async def handle_inbound(
     # non-text message as "[audio]" otherwise — the AI would "hear" the literal
     # word "audio"). The row stays type "audio" for audit; downstream the in-memory
     # inbound is swapped to TEXT so every handler runs unchanged.
-    _voice_transcript = (
-        await _transcribe_voice_note(inbound)
-        if inbound.type == MessageType.AUDIO
-        else None
-    )
+    from app.conversation.media import download_inbound_media
+
+    _voice_transcript: str | None = None
+    _media_data: bytes | None = None
+    _media_mime: str | None = None
+    if inbound.type == MessageType.AUDIO:
+        _voice_transcript, _media_data, _media_mime = await _download_and_transcribe_voice(
+            inbound
+        )
+    elif inbound.type in {
+        MessageType.IMAGE,
+        MessageType.DOCUMENT,
+        MessageType.VIDEO,
+        MessageType.STICKER,
+    }:
+        _media_data, _media_mime = await download_inbound_media(inbound)
+
+    _record_payload = dict(inbound.payload or {})
+    if _voice_transcript:
+        _record_payload["text"] = _voice_transcript
+    elif inbound.type in {MessageType.IMAGE, MessageType.DOCUMENT, MessageType.VIDEO}:
+        caption = (_record_payload.get("caption") or "").strip()
+        if caption:
+            _record_payload["text"] = caption
 
     await record_message(
         session,
@@ -4575,12 +4656,10 @@ async def handle_inbound(
         direction="inbound",
         wa_message_id=inbound.wa_message_id,
         msg_type=str(inbound.type),
-        payload=(
-            {**inbound.payload, "text": _voice_transcript}
-            if _voice_transcript
-            else inbound.payload
-        ),
+        payload=_record_payload,
         ts=inbound.timestamp,
+        media_data=_media_data,
+        media_mime=_media_mime,
     )
 
     if inbound.type == MessageType.AUDIO:
@@ -4621,13 +4700,15 @@ async def handle_inbound(
         )
         return  # do not process further
 
-    # Manual takeover: bot is silent, human handles it
-    if conv.manual_takeover:
-        return
-
-    # Rider conversations bypass the customer dialogue entirely.
+    # Rider conversations bypass the customer dialogue entirely. Process dispatch
+    # actions (location/buttons) even during manual takeover — managers may be
+    # chatting while the rider still taps Delivered or shares GPS.
     if counterpart == "rider":
         await _handle_rider_inbound(session, conv, inbound, restaurant_id, rider)
+        return
+
+    # Manual takeover: bot is silent, human handles it (customer threads only).
+    if conv.manual_takeover:
         return
 
     # ── Customer conversation (full AI) ────────────────────────────────────

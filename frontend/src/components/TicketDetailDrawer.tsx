@@ -105,38 +105,41 @@ export function TicketDetailDrawer({
             </div>
           )}
 
-          <div className={s.section}>
-            <label className={s.label} htmlFor="ticket-note">
-              Resolution note (required)
-            </label>
+          <div className={`${s.section} ${s.requiredGroup}`}>
+            <RequiredLabel htmlFor="ticket-note" text="Resolution note" />
             <textarea
               id="ticket-note"
-              className={s.textarea}
+              className={`${s.textarea} ${noteOk ? s.requiredFilled : s.requiredEmpty}`}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="What was decided / communicated to the customer"
               disabled={submitting}
+              required
+              aria-required="true"
             />
             {!noteOk && (
               <p className={s.hint}>
-                Type a resolution note first — the action buttons below stay disabled until you do.
+                Required — type a resolution note before any action below.
               </p>
             )}
           </div>
 
-          <div className={s.action}>
-            <label className={s.label} htmlFor="ticket-amount">
-              Refund amount (AED)
-            </label>
+          <div className={`${s.action} ${s.refundRequiredGroup}`}>
+            <RequiredLabel
+              htmlFor="ticket-amount"
+              text="Refund amount (AED)"
+              badge="Required for refund"
+            />
             <input
               id="ticket-amount"
-              className={s.input}
+              className={`${s.input} ${amountOk ? s.requiredFilled : s.requiredEmpty}`}
               type="number"
               min="0"
               step="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               disabled={submitting}
+              aria-required="true"
             />
             <Button
               type="button"
@@ -179,6 +182,26 @@ export function TicketDetailDrawer({
         </>
       )}
     </SideDrawer>
+  );
+}
+
+function RequiredLabel({
+  htmlFor,
+  text,
+  badge = "Required",
+}: {
+  htmlFor: string;
+  text: string;
+  badge?: string;
+}) {
+  return (
+    <label className={`${s.label} ${s.requiredLabel}`} htmlFor={htmlFor}>
+      <span className={s.requiredMark} aria-hidden>
+        *
+      </span>
+      <span>{text}</span>
+      <span className={s.requiredBadge}>{badge}</span>
+    </label>
   );
 }
 
