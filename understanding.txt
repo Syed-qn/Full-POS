@@ -1110,3 +1110,12 @@
   assertions (ordering polite-retry, multi-item unknown-dish). conversation+catalog 168 pass
   (only the pre-existing confirmation-totals test fails on clean main too). lint clean on
   changed files.
+
+- 2026-06-29 06:05 Asia/Dubai — FIX: bot called itself "You ARE Biryani Restaurant".
+  Root cause was the PROMPT, not the LLM: deepseek _IDENTITY began literally with
+  "You ARE {restaurant_name} — ..." so with name "Biryani Restaurant" it read "You ARE
+  Biryani Restaurant" and the model echoed the whole phrase as the name. Reworded to
+  "You are the friendly owner and host of {restaurant_name}, ..." + added an explicit
+  rule (both deepseek.py and claude.py): always use the EXACT restaurant name, never
+  alter/expand/abbreviate/restyle. Also removed two em dashes from the identity block
+  (house rule). llm 34 pass; prompt .format verified; lint clean.
