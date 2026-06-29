@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 
@@ -27,7 +28,16 @@ class TimestampMixin:
 
 @lru_cache
 def get_engine():
-    return create_async_engine(get_settings().database_url, pool_pre_ping=True)
+    # NullPool: open a fresh asyncpg connection per checkout and close it on release.
+    # Why not a pooled engine with pool_pre_ping=True? On Render the managed Postgres
+    # drops idle connections, and the SAME cached async engine is shared by the web app
+    # and the Celery workers (which run each task in their OWN event loop via
+    # asyncio.run). A pooled connection bound to one event loop, then pre-pinged from
+    # another, raises `MissingGreenlet: greenlet_spawn has not been called` and 500s the
+    # request (e.g. login). NullPool sidesteps all of that: every checkout is a new
+    # connection in the CURRENT loop, never stale, never cross-loop. Slightly more
+    # connect overhead, negligible at this app's scale and far safer.
+    return create_async_engine(get_settings().database_url, poolclass=NullPool)
 
 
 @lru_cache
