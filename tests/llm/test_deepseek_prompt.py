@@ -16,6 +16,15 @@ def test_ordering_prompt_has_completion_first_decision():
     sys = agent._build_system("Testaurant", "ordering",
                               {"menu_text": "1. Lemon mint", "cart_summary": "1x Lemon mint"})
     low = sys.lower()
+
+    # NEW: verify the DECISION ORDER block exists and is structurally ordered correctly.
+    completion_pos = sys.find("DECISION ORDER")
+    menu_pos = sys.find("MENU / BROWSING")
+    assert completion_pos != -1, "DECISION ORDER block missing from ordering prompt"
+    assert menu_pos != -1, "MENU / BROWSING section missing from ordering prompt"
+    assert completion_pos < menu_pos, "DECISION ORDER must precede MENU / BROWSING"
+    assert "STEP 1, COMPLETION" in sys, "STEP 1, COMPLETION marker missing from DECISION ORDER block"
+
     # Completion decision is evaluated first, language-agnostic.
     assert "proceed_to_address" in sys
     assert "any language" in low
