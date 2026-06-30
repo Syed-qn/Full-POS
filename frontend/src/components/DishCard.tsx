@@ -37,12 +37,11 @@ export function DishCard({
       {/* Dish number is kept in the backend (ordering/FSM) but hidden from the
           manager UI — it's an internal identifier, not customer-facing. */}
       <div className={s.top}>
-        {onWhatsapp !== undefined ? (
-          <span
-            className={`${s.wa} ${onWhatsapp ? s.waOn : s.waOff}`}
-            title={onWhatsapp ? "Live on your WhatsApp catalogue" : "Not published to WhatsApp yet — click Publish to WhatsApp"}
-          >
-            {onWhatsapp ? "On WhatsApp" : "Not on WhatsApp"}
+        {/* Only the positive "On WhatsApp" badge is shown. A dish that isn't live yet
+            shows no badge (it publishes automatically), to avoid "Not on WhatsApp" noise. */}
+        {onWhatsapp ? (
+          <span className={`${s.wa} ${s.waOn}`} title="Live on your WhatsApp catalogue">
+            On WhatsApp
           </span>
         ) : (
           <span />

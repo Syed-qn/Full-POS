@@ -84,7 +84,7 @@ DEFAULT_SETTINGS: dict = {
     # catalog connected to this restaurant's WhatsApp number; when a customer sends a
     # cart from it, the catalog flow turns it into an order. Empty = not configured.
     "catalog_id": "",
-    "catalog_ordering_enabled": False,
+    "catalog_ordering_enabled": True,
     # False until signup onboarding (menu upload + Meta sync) is finished.
     "onboarding_complete": False,
     # Resale of cancelled-after-cooking orders (spec §3). When the kitchen has
@@ -122,6 +122,17 @@ DEFAULT_SETTINGS: dict = {
         "scope_includes_catalog": True,    # earn/tier on catalog orders too
     },
 }
+
+
+def catalog_mode_enabled(settings: dict | None) -> bool:
+    """True only when catalogue ordering is BOTH switched on AND a Meta catalogue is
+    connected (``catalog_id`` set). The flag alone is not enough: with no catalog_id
+    there are no product cards to send, so the conversation must stay in text-menu
+    mode. ``catalog_ordering_enabled`` now defaults to True, so this catalog_id guard
+    is what keeps a freshly-created restaurant on the text menu until its catalogue is
+    wired up (catalog_id comes from the environment / onboarding)."""
+    s = settings or {}
+    return bool(s.get("catalog_ordering_enabled") and (s.get("catalog_id") or "").strip())
 
 
 class Restaurant(Base, TimestampMixin):

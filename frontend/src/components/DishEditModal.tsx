@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "./Button";
 import { toast } from "./Toaster";
-import { addDish, deleteDish, patchDish } from "../lib/menuApi";
+import { addDish, deleteDish, patchDish, uploadDishImage } from "../lib/menuApi";
 import { ApiError } from "../lib/apiClient";
 import type { DishOut } from "../lib/types";
 import s from "./DishEditModal.module.css";
+
+const DISH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 /** Standard restaurant menu categories offered in the dropdown. */
 const PRESET_CATEGORIES = [
@@ -60,6 +62,37 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
   const [price, setPrice] = useState(d?.price_aed ?? "");
   const [category, setCategory] = useState(d?.category ?? "");
   const [description, setDescription] = useState(d?.description ?? "");
+  // ── Meta catalogue product fields ──────────────────────────────────────────
+  // Only the fields a restaurant actually sets are shown: the Photo (Meta requires
+  // an image) and an optional Sale price. The rest (brand=restaurant name,
+  // condition=new, status=active, content id=auto, FB category) are filled
+  // automatically on the server, so they're not surfaced here.
+  const [imageUrl, setImageUrl] = useState(d?.image_url ?? "");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [salePrice, setSalePrice] = useState(d?.sale_price_aed ?? "");
+
+  async function onPickImage(file: File | undefined) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png"].includes(file.type)) {
+      toast("Dish photo must be a JPG or PNG.", "error");
+      return;
+    }
+    if (file.size > DISH_IMAGE_MAX_BYTES) {
+      toast("Image is too large (max 5 MB).", "error");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const { url } = await uploadDishImage(file);
+      setImageUrl(url);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Image upload failed.", "error");
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
   // Serving-size variants (e.g. 1 serve / 4 serve), each with its own price. Empty
   // = flat dish priced at the base price above.
   const [variants, setVariants] = useState<{ name: string; price_aed: string }[]>(
@@ -105,7 +138,21 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
       Number(v.price_aed) > 0 &&
       !servesTooSmall(v.name),
   );
-  const canSave = name.trim() !== "" && price.trim() !== "" && variantsValid && !busy;
+  // Meta REQUIRES a product image, so a NEW dish must carry a photo before it can go
+  // live on WhatsApp. Existing dishes keep working (placeholder fallback on the server).
+  const imageOk = !isNew || imageUrl.trim() !== "";
+  // Sale price, when set, must be a positive number below the base price.
+  const saleOk =
+    salePrice.trim() === "" ||
+    (Number(salePrice) > 0 && (price.trim() === "" || Number(salePrice) < Number(price)));
+  const canSave =
+    name.trim() !== "" &&
+    price.trim() !== "" &&
+    variantsValid &&
+    imageOk &&
+    saleOk &&
+    !uploadingImage &&
+    !busy;
 
   async function onSave() {
     if (!canSave) return;
@@ -117,6 +164,9 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
       price_aed: price.trim(),
       category: category.trim() || null,
       description: description.trim() || null,
+      // Meta catalogue product fields (rest are auto-filled on the server).
+      image_url: imageUrl.trim() || null,
+      sale_price_aed: salePrice.trim() || null,
       variants: variants.map((v) => ({ name: v.name.trim(), price_aed: v.price_aed.trim() })),
     };
     try {
@@ -172,6 +222,48 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
             />
           </label>
 
+          <div className={s.field}>
+            <span className={s.label}>Photo {isNew ? "*" : ""}</span>
+            <div className={s.imageRow}>
+              <div className={s.imageThumb}>
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" />
+                ) : (
+                  <span className={s.imagePh}>No photo</span>
+                )}
+              </div>
+              <div className={s.imageActions}>
+                <input
+                  ref={imageInputRef}
+                  data-testid="dish-image-input"
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  style={{ display: "none" }}
+                  onChange={(e) => onPickImage(e.target.files?.[0] ?? undefined)}
+                />
+                <Button
+                  variant="ghost"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={uploadingImage}
+                >
+                  {uploadingImage ? "Uploading…" : imageUrl ? "Replace photo" : "Upload photo"}
+                </Button>
+                {imageUrl && (
+                  <button
+                    type="button"
+                    className={s.imageRemove}
+                    onClick={() => setImageUrl("")}
+                  >
+                    Remove
+                  </button>
+                )}
+                <span className={s.hint}>
+                  JPG or PNG, at least 500×500. Required to publish on WhatsApp.
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div className={s.row}>
             <label className={s.field}>
               <span className={s.label}>{isDrink ? "Base price (AED) *" : "Price (AED) — single serve *"}</span>
@@ -208,6 +300,24 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               placeholder="Customer-facing description (max 3 lines, no price)"
               rows={3}
             />
+          </label>
+
+          <label className={s.field}>
+            <span className={s.label}>Sale price (AED)</span>
+            <input
+              className={s.input}
+              type="number"
+              step="0.01"
+              value={salePrice}
+              onChange={(e) => setSalePrice(e.target.value)}
+              placeholder="Optional — discounted price shown on WhatsApp"
+              aria-label="Sale price"
+            />
+            {!saleOk && (
+              <span className={s.hint} style={{ color: "#b02a2a" }}>
+                Sale price must be a positive number below the base price.
+              </span>
+            )}
           </label>
 
           <div className={s.variants}>

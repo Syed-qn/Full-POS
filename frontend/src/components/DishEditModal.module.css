@@ -110,6 +110,56 @@
 .textarea:focus {
   border-color: var(--accent-primary);
 }
+/* Dish photo (Meta catalogue image) */
+.imageRow {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.imageThumb {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset, var(--bg-surface));
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.imageThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.imagePh {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.imageActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.imageRemove {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #b02a2a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Meta catalogue fields section */
+.metaSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 14px;
+}
 /* Serving-size variants editor */
 .variants {
   display: flex;
@@ -120,8 +170,8 @@
 }
 .variantsHead {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 3px;
 }
 .hint {
   font-size: 11px;
@@ -130,14 +180,14 @@
 }
 .variantRow {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 .variantName {
-  flex: 2;
+  flex: 1 1 auto;
 }
 .variantPrice {
-  flex: 1;
+  flex: 0 0 110px;
 }
 .variantRemove {
   background: none;

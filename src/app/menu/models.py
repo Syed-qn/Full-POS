@@ -56,6 +56,25 @@ class Dish(Base, TimestampMixin):
     # Estimated cook time for one portion (minutes). Null = unknown -> the order's cook
     # estimate falls back to the restaurant's default_prep_minutes setting.
     prep_minutes: Mapped[int | None] = mapped_column(Integer)
+    # ── Meta Commerce catalogue product fields ───────────────────────────────────
+    # These mirror the fields on Meta's "Add product" form so a dish pushed to the
+    # WhatsApp catalogue carries a real photo and the optional commerce metadata.
+    # Title=name, Description=description, Price=price_aed, Availability=is_available,
+    # Website link=auto, Content ID=catalog_retailer_id (above) — those reuse existing
+    # columns. The rest are stored here:
+    #   image_url           — Images (Meta REQUIRES one; falls back to a shared
+    #                         placeholder only when a dish has none).
+    #   sale_price_aed      — Sale price (optional; shown struck-through in Meta).
+    #   fb_product_category — Facebook product category (optional; Meta taxonomy).
+    #   condition           — new | refurbished | used (Meta default "new").
+    #   meta_status         — active | archived (maps to Meta visibility).
+    #   brand               — Brand override (optional; defaults to restaurant name).
+    image_url: Mapped[str | None] = mapped_column(String(512))
+    sale_price_aed: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    fb_product_category: Mapped[str | None] = mapped_column(String(128))
+    condition: Mapped[str] = mapped_column(String(16), default="new", server_default="new")
+    meta_status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    brand: Mapped[str | None] = mapped_column(String(100))
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
 

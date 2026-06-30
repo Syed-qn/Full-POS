@@ -475,21 +475,21 @@ async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str
 
 
 async def _catalog_mode_on(session: AsyncSession, restaurant_id: int) -> bool:
-    """True if this restaurant is in catalogue ordering mode."""
-    from app.identity.models import Restaurant
+    """True if this restaurant is in catalogue ordering mode (flag on AND catalog_id set)."""
+    from app.identity.models import Restaurant, catalog_mode_enabled
 
     rest = await session.get(Restaurant, restaurant_id)
-    return bool(rest is not None and (rest.settings or {}).get("catalog_ordering_enabled"))
+    return bool(rest is not None and catalog_mode_enabled(rest.settings))
 
 
 async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish) -> bool:
     """In CATALOGUE mode, True when ``dish`` is NOT part of the synced Meta catalogue —
     so the bot won't describe, recommend, or let a customer type-order a text-menu item
     that isn't actually orderable. Always False in text mode (no restriction)."""
-    from app.identity.models import Restaurant
+    from app.identity.models import Restaurant, catalog_mode_enabled
 
     rest = await session.get(Restaurant, restaurant_id)
-    if rest is None or not (rest.settings or {}).get("catalog_ordering_enabled"):
+    if rest is None or not catalog_mode_enabled(rest.settings):
         return False
     rid = getattr(dish, "catalog_retailer_id", None)
     if not rid:
@@ -527,15 +527,11 @@ async def _render_menu(
     dishes — so the bot never offers items the customer can't order from the catalogue.
     ``force_text`` bypasses that bound (used when catalogue cards could not be sent).
     """
-    from app.identity.models import Restaurant
+    from app.identity.models import Restaurant, catalog_mode_enabled
     from app.menu.models import Dish, Menu
 
     _rest = await session.get(Restaurant, restaurant_id)
-    if (
-        not force_text
-        and _rest is not None
-        and (_rest.settings or {}).get("catalog_ordering_enabled")
-    ):
+    if not force_text and _rest is not None and catalog_mode_enabled(_rest.settings):
         return await _render_catalog_menu(session, restaurant_id)
 
     menu = await session.scalar(
@@ -626,12 +622,12 @@ async def _handle_greeting(
     import base64
 
     from app.config import get_settings
-    from app.identity.models import Restaurant
+    from app.identity.models import Restaurant, catalog_mode_enabled
     from app.menu.models import Menu, MenuFile
     from app.menu.storage import FileBlobStore
 
     restaurant = await session.get(Restaurant, restaurant_id)
-    if restaurant is not None and (restaurant.settings or {}).get("catalog_ordering_enabled"):
+    if restaurant is not None and catalog_mode_enabled(restaurant.settings):
         # Catalogue mode — strict. Send the cards; if they can't be sent, ask the
         # customer to type (the engine still parses typed items) but show NO text menu.
         from app.catalog.service import send_catalog

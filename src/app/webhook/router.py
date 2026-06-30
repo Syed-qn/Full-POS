@@ -32,8 +32,9 @@ _CATALOG_KEYWORDS = {"menu", "catalog", "catalogue", "order", "items", "list"}
 def _wants_catalog(inbound, restaurant) -> bool:
     if inbound.type != MessageType.TEXT:
         return False
-    settings = getattr(restaurant, "settings", None) or {}
-    if not settings.get("catalog_ordering_enabled"):
+    from app.identity.models import catalog_mode_enabled
+
+    if not catalog_mode_enabled(getattr(restaurant, "settings", None)):
         return False
     text = (inbound.payload or {}).get("text", "")
     return text.strip().lower() in _CATALOG_KEYWORDS

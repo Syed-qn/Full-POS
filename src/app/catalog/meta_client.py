@@ -102,27 +102,47 @@ def build_catalog_item_data(
     restaurant_name: str,
     product_link: str,
     image_link: str,
+    sale_price_aed: Decimal | None = None,
+    fb_product_category: str | None = None,
+    condition: str | None = None,
+    meta_status: str | None = None,
+    brand: str | None = None,
 ) -> dict:
-    """Build items_batch ``data`` with Meta Commerce required fields.
+    """Build items_batch ``data`` with Meta Commerce fields.
 
     See https://developers.facebook.com/docs/commerce-platform/catalog/fields —
     CREATE requires title, description, availability, condition, price, link,
-    image_link, and brand.
+    image_link, and brand. The remaining args mirror the optional fields on Meta's
+    "Add product" form and are emitted only when set:
+      * ``sale_price_aed``      → ``sale_price`` (struck-through price in Meta)
+      * ``fb_product_category`` → ``category`` (Facebook taxonomy); the internal
+        menu ``category`` is always sent as ``product_type``.
+      * ``condition``           → ``condition`` (defaults "new")
+      * ``meta_status``         → ``visibility`` ("active"→published, else staging)
+      * ``brand``               → ``brand`` override (defaults to restaurant name)
     """
     title = (name or "Item")[:200]
     desc = (description or title)[:5000]
-    return {
+    internal_category = (category or "Menu")[:100]
+    fb_category = (fb_product_category or "").strip() or internal_category
+    data = {
         "title": title,
-        "name": title,
         "description": desc,
         "availability": "in stock" if is_available else "out of stock",
-        "condition": "new",
+        "condition": (condition or "new").strip().lower() or "new",
         "price": format_meta_price(price_aed),
         "link": product_link,
         "image_link": image_link,
-        "brand": (restaurant_name or "Restaurant")[:100],
-        "category": (category or "Menu")[:100],
+        "brand": ((brand or "").strip() or restaurant_name or "Restaurant")[:100],
+        # Facebook product category vs the restaurant's own menu section.
+        "category": fb_category[:100],
+        "product_type": internal_category,
+        # active → published (live), archived → staging (hidden from shoppers).
+        "visibility": "published" if (meta_status or "active") == "active" else "staging",
     }
+    if sale_price_aed is not None:
+        data["sale_price"] = format_meta_price(sale_price_aed)
+    return data
 
 
 def _collect_batch_errors(data: dict) -> list[str]:
@@ -253,11 +273,17 @@ async def push_products_batch(
 
     base = f"https://graph.facebook.com/{settings.graph_api_version}"
     url = f"{base}/{catalog_id}/items_batch"
-    # Send only Meta's expected keys — callers may attach internal "_"-prefixed metadata
-    # (e.g. "_was_linked" for UI counting) that Meta must not receive.
-    wire = [
-        {k: v for k, v in r.items() if not k.startswith("_")} for r in requests
-    ]
+    # Meta's items_batch wants the retailer/Content ID as ``data.id`` — NOT a top-level
+    # ``retailer_id`` (which it rejects with "Can not find required field id"). Internally
+    # we key on top-level retailer_id (dedup above, "_"-prefixed UI metadata), so build
+    # the wire payload here: move retailer_id into data.id and drop the internal keys.
+    wire = []
+    for r in requests:
+        rid = str(r.get("retailer_id") or "")
+        data = dict(r.get("data") or {})
+        if rid:
+            data["id"] = rid
+        wire.append({"method": r.get("method", "UPDATE"), "data": data})
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             url,
@@ -275,7 +301,7 @@ async def push_products_batch(
             # Diagnostic: surface exactly what we sent so a "Duplicate retailer_id"
             # can be traced (our batch is deduped, so a dupe here means Meta's catalog
             # already holds two products with that retailer_id).
-            sent = [str(r.get("retailer_id") or "") for r in wire]
+            sent = [str((r.get("data") or {}).get("id") or "") for r in wire]
             dupes = sorted({rid for rid in sent if sent.count(rid) > 1})
             diag = f" [sent rids: {sent}; in-batch dupes: {dupes or 'none'}]"
             logger.error("items_batch rejected: %s%s", validation_errors, diag)

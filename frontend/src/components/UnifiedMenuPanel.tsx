@@ -24,6 +24,10 @@ export function UnifiedMenuPanel({
    *  "On WhatsApp" status inline on the single dish list (no duplicate grid). */
   onMenuLoaded?: (menu: UnifiedMenu) => void;
 }) {
+  // Onboarding passes onCatalogIdSaved; the Menu page does not. On the Menu page the
+  // catalog ID and server token are managed from the environment, so we hide all of
+  // those setup details and just show the live publish/sync controls.
+  const setupMode = onCatalogIdSaved !== undefined;
   const [menu, setMenu] = useState<UnifiedMenu | null>(null);
   const [catalogId, setCatalogId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -124,19 +128,21 @@ export function UnifiedMenuPanel({
             customers who ask for the menu get tappable catalogue cards. Use{" "}
             <b>Publish to WhatsApp</b> to push changes right now.
           </p>
-          <details className={s.guide}>
-            <summary>How to create a Meta catalogue</summary>
-            <ol>
-              <li>Open Meta Commerce Manager → Catalogues → Create catalogue.</li>
-              <li>Connect the catalogue to your WhatsApp Business Account.</li>
-              <li>Copy the Catalogue ID and paste it below.</li>
-              <li>
-                Set <code>APP_WA_CATALOG_TOKEN</code> on the server (system user with{" "}
-                <code>catalog_management</code>).
-              </li>
-              <li>That's it — dishes publish automatically on menu activation. <b>Publish to WhatsApp</b> pushes changes on demand.</li>
-            </ol>
-          </details>
+          {setupMode && (
+            <details className={s.guide}>
+              <summary>How to create a Meta catalogue</summary>
+              <ol>
+                <li>Open Meta Commerce Manager → Catalogues → Create catalogue.</li>
+                <li>Connect the catalogue to your WhatsApp Business Account.</li>
+                <li>Copy the Catalogue ID and paste it below.</li>
+                <li>
+                  Set <code>APP_WA_CATALOG_TOKEN</code> on the server (system user with{" "}
+                  <code>catalog_management</code>).
+                </li>
+                <li>That's it — dishes publish automatically on menu activation. <b>Publish to WhatsApp</b> pushes changes on demand.</li>
+              </ol>
+            </details>
+          )}
         </div>
         <div className={s.actions}>
           <Button onClick={doSyncFull} disabled={syncing || !catalogId.trim()}>
@@ -153,17 +159,19 @@ export function UnifiedMenuPanel({
         </div>
       </div>
 
-      <label className={s.catalogField}>
-        <span className="label-upper">Meta Catalog ID</span>
-        <input
-          value={catalogId}
-          onChange={(e) => setCatalogId(e.target.value)}
-          placeholder="From Meta Commerce Manager"
-        />
-        <Button variant="ghost" onClick={saveCatalogId} disabled={savingId}>
-          {savingId ? "Saving…" : "Save catalog ID"}
-        </Button>
-      </label>
+      {setupMode && (
+        <label className={s.catalogField}>
+          <span className="label-upper">Meta Catalog ID</span>
+          <input
+            value={catalogId}
+            onChange={(e) => setCatalogId(e.target.value)}
+            placeholder="From Meta Commerce Manager"
+          />
+          <Button variant="ghost" onClick={saveCatalogId} disabled={savingId}>
+            {savingId ? "Saving…" : "Save catalog ID"}
+          </Button>
+        </label>
+      )}
 
       {menu && menu.items.length > 0 ? (
         <div className={s.stats}>
@@ -185,7 +193,7 @@ export function UnifiedMenuPanel({
           click <b>Publish to WhatsApp</b> to push {menu.dish_only_count > 1 ? "them" : "it"} live.
         </p>
       ) : null}
-      {!catalogId.trim() ? (
+      {setupMode && !catalogId.trim() ? (
         <p className={s.hint}>
           Add your Meta Catalog ID above to start publishing your menu to WhatsApp.
         </p>

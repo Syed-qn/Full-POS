@@ -53,6 +53,14 @@ export interface DishOut {
   category: string | null;
   description: string | null;
   is_available: boolean;
+  catalog_retailer_id?: string | null;
+  // Meta Commerce catalogue product fields.
+  image_url?: string | null;
+  sale_price_aed?: string | null;
+  fb_product_category?: string | null;
+  condition?: string;
+  meta_status?: string;
+  brand?: string | null;
   variants?: VariantOut[];
 }
 
