@@ -1801,3 +1801,17 @@
   Fix: new _is_closing(text) — matches exact closing phrase OR a closing phrase wrapped in negation/filler
   ("No that's all", "ok done thanks", "nahi bas"), while NOT misfiring on "no onion"/"ok" alone. Guard in
   _handle_customer_ai now uses _is_closing. Test extended with "No that's all"/"ok done thanks". 178 conv pass.
+
+[2026-06-30 08:46 +04] feat: ordering-flow gates — menu only when explicitly asked (LLM-driven, multilingual) + no-address confirm gate.
+  User wants gates confirming the ordering flow + "menu only if explicitly asked" + "it's multilingual, use the LLM".
+  - Menu gate: did NOT hardcode a keyword suppression (would break non-listed languages). The LLM is the multilingual
+    intent judge. Strengthened DeepSeek prompt: show_menu ONLY on an explicit menu request in ANY language, and
+    "show_menu IS NOT A FALLBACK — if unsure, ask a clarifying question, never dump the menu." Real fallback-loop
+    triggers (typed orders, closings) are already caught deterministically BEFORE the LLM (script-agnostic dish
+    matcher + _is_closing), so a show_menu reaching dispatch is a genuine menu intent.
+  - _is_menu_request expanded to a multilingual fast-path (EN/Hindi-Urdu/Arabic/Telugu) — ADDITIVE only (deterministic
+    shortcut; LLM still handles every other language). Not a suppression gate.
+  - FSM gate: _execute_confirm_order now refuses to confirm an order with NO address_id → routes back to address
+    capture (can't dispatch an order with no drop-off). Joins existing empty-cart gate.
+  Tests: test_confirm_without_address_routes_to_address_capture. 343 conv+ordering pass (1 pre-existing cross-suite
+  resale flake, passes 7/7 in isolation).

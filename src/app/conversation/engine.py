@@ -73,19 +73,34 @@ def _looks_like_menu(text: str) -> bool:
     return False
 
 
-def _is_menu_request(text: str) -> bool:
-    """True for short, explicit 'show me the menu' messages (lowercased).
+# Explicit "show me the menu" keywords — MULTILINGUAL (this is a multi-language SaaS:
+# English, Hindi/Urdu roman + Devanagari, Arabic, Telugu). The word "menu" itself is
+# widely borrowed across all of these, but we add native words too so a menu request in
+# any served language is recognised deterministically.
+_MENU_KEYWORDS: tuple[str, ...] = (
+    # English
+    "menu", "full menu", "show menu", "see menu", "the list",
+    "what do you have", "what do you serve", "what's available", "options",
+    # Hindi / Urdu (roman + script) — menu-intent phrases, not generic "what is"
+    "menu dikhao", "menu bhejo", "menu dikha", "kya kya hai", "kya milega", "list bhejo",
+    "मेनू", "सूची",
+    # Arabic (menu / the list / what do you have)
+    "قائمة", "المنيو", "منيو", "القائمة", "ماذا لديكم",
+    # Telugu (menu / what items are there / list)
+    "మెను", "మెనూ", "ఏమి ఉన్నాయి", "జాబితా",
+)
 
-    Kept tight (short message + menu/list keyword) so normal ordering text like
-    'add the chicken from the menu' isn't intercepted — the AI's show_menu action
-    covers the natural-language cases.
-    """
-    t = text.strip()
+
+def _is_menu_request(text: str) -> bool:
+    """True for short, explicit 'show me the menu' messages, in ANY served language.
+
+    Kept tight (short message + a menu keyword) so normal ordering text like
+    'add the chicken from the menu' isn't intercepted. Multilingual so a menu request in
+    Hindi/Arabic/Telugu is honoured, not suppressed by the menu gate."""
+    t = text.strip().lower()
     if not t or len(t) > 40:
         return False
-    keywords = ("menu", "full menu", "show menu", "see menu", "the list", "what do you have",
-                "what do you serve", "options")
-    return any(k in t for k in keywords)
+    return any(k in t for k in _MENU_KEYWORDS)
 
 
 def _is_cart_query(text: str) -> bool:
@@ -3666,6 +3681,16 @@ async def _execute_confirm_order(
             body="Your cart is empty, so there's nothing to confirm. Please add a dish to order 😊",
         )
         return
+    # SAFETY GATE: never confirm without a delivery address — a placed order with no
+    # drop-off can't be dispatched. Route back to address capture instead.
+    if order.address_id is None:
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="address_capture")
+        await _begin_address_capture(
+            session, conv, inbound, restaurant_id, restaurant=None,
+            location_prefix="confirm-need-loc",
+            location_body="Almost there! 📍 Share your delivery location so we can send your order.",
+        )
+        return
     await finalize_confirmation(session, order=order, actor="customer")
     # Drop the cart pointers now the order is placed — a later order must start a
     # fresh draft, not reuse this (now confirmed) order's id.
@@ -3889,6 +3914,7 @@ async def _dispatch_action(
     # Phase guard — wrong-phase action falls back to no_action
     if not _is_valid_action_for_phase(action, phase):
         action = "no_action"
+
 
     # Anti-hallucination safety net: if the AI dumped a (fabricated) menu into its
     # reply, swap in the REAL menu before it goes out. Runs in EVERY phase — the model

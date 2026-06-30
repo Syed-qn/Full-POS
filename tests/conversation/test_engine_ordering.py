@@ -837,3 +837,38 @@ def test_looks_like_menu_detects_fabricated_list():
     assert _looks_like_menu(
         "Added! 🛒 1x Chicken Biryani (AED 20) | Subtotal: AED 20"
     ) is False
+
+
+async def test_confirm_without_address_routes_to_address_capture(db_session, restaurant):
+    """FSM gate: confirming an order that has items but NO delivery address must not place
+    it — route back to address capture instead of dispatching an undeliverable order."""
+    from app.menu.models import Dish
+    from app.ordering.models import Customer, Order, OrderItem
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.cna"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    cust = Customer(restaurant_id=restaurant.id, phone="+971501110001", name="NoAddr",
+                    total_orders=0, total_spend=Decimal("0.00"))
+    db_session.add(cust)
+    await db_session.flush()
+    dish = (await db_session.scalars(select(Dish).where(Dish.dish_number == 110))).first()
+    order = Order(restaurant_id=restaurant.id, customer_id=cust.id, order_number="R1-NOADDR",
+                  status="pending_confirmation", subtotal=Decimal("22.00"),
+                  delivery_fee_aed=Decimal("0.00"), total=Decimal("22.00"), address_id=None)
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add(OrderItem(order_id=order.id, dish_id=dish.id, dish_number=110,
+                             dish_name="Chicken Biryani", price_aed=Decimal("22.00"), qty=1))
+    await db_session.flush()
+    conv = await _conv(db_session)
+    conv.state = {**conv.state, "dialogue_phase": "awaiting_confirmation",
+                  "dialogue_state": "order_confirmation", "pending_order_id": order.id}
+    await db_session.commit()
+
+    await handle_inbound(db_session, _btn("confirm_order", "wamid.cnab"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await db_session.refresh(order)
+    assert order.status == "pending_confirmation"  # NOT confirmed (no address)
+    conv = await _conv(db_session)
+    assert conv.state["dialogue_state"] == "address_capture"
