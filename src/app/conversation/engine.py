@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_audit
 from app.conversation.models import Conversation
 from app.conversation.service import get_or_create_conversation, record_message
+from app.llm.action_schema import LEGACY_PHASE_ACTIONS
 from app.ordering.matching import (
     MatchConfidence,
     bundle_variant_for_qty,
@@ -3001,21 +3002,18 @@ _PHASE_MAP = {
 
 _VALID_PHASES = frozenset({"ordering", "address_capture", "awaiting_confirmation", "post_order"})
 
+# Single source of truth: derived from action_schema.LEGACY_PHASE_ACTIONS (W1) so
+# engine phase-guard and provider tool schemas can never drift.
+# Delta from old hand-written literal:
+#   ordering: +add_item/update_qty/remove_item (superset; schema-correct).
+#             status_query preserved explicitly — ACTION_SPECS scopes it to
+#             post_order only, but allowing it here prevents a wrong-phase guard
+#             no-op when a customer asks about a past order mid-ordering session.
+#   awaiting_confirmation: +add_item/update_qty/remove_item (superset; these are
+#             intercepted before the guard by the confirmation-edit special case).
 _PHASE_ACTIONS: dict[str, frozenset] = {
-    "ordering": frozenset({
-        "add_item", "remove_item", "update_qty", "clear_cart", "proceed_to_address",
-        "cancel_order", "status_query", "show_menu", "no_action",
-    }),
-    "address_capture": frozenset({
-        "send_location_request", "save_address_text", "use_saved_address",
-        "proceed_to_confirmation", "cancel_order", "no_action",
-    }),
-    "awaiting_confirmation": frozenset({
-        "confirm_order", "request_modification", "cancel_order", "no_action",
-    }),
-    "post_order": frozenset({
-        "status_query", "request_modification", "cancel_order", "no_action",
-    }),
+    phase: actions | ({"status_query"} if phase == "ordering" else frozenset())
+    for phase, actions in LEGACY_PHASE_ACTIONS.items()
 }
 
 
@@ -4173,6 +4171,24 @@ async def _dispatch_action(
     action = result.action
     data = result.action_data or {}
     reply = result.message or ""
+
+    # Required-field validation gate (W1, R-069): the interpreter chose an action
+    # whose mandatory fields were missing. to_engine_result sets needs_clarification
+    # on the action_data and returns action="no_action". Do NOT mutate; send one
+    # deterministic clarification reply authored by the engine (not an LLM phrase).
+    if data.get("needs_clarification"):
+        await _send_text(
+            session,
+            conv=conv,
+            inbound=inbound,
+            restaurant_id=restaurant_id,
+            prefix="ai-clarify",
+            body=reply or (
+                "Sorry, I didn't quite catch that — could you tell me the dish "
+                "and the exact quantity you'd like? 😊"
+            ),
+        )
+        return
 
     # Confirm-step edits: "add a special biryani also" / "make it 2" / "remove the
     # mint" must EDIT the order being confirmed and re-show the summary — not be
