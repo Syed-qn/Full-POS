@@ -2766,44 +2766,6 @@ async def _handle_status_query(
     )
 
 
-async def _fetch_conversation_history(
-    session: AsyncSession, conversation_id: int, limit: int = 20
-) -> list[dict]:
-    """Fetch last N messages as Claude-compatible history (alternating roles)."""
-    from app.conversation.models import Message
-
-    rows = list(
-        (
-            await session.scalars(
-                select(Message)
-                .where(Message.conversation_id == conversation_id)
-                .order_by(Message.id.desc())
-                .limit(limit)
-            )
-        ).all()
-    )
-    rows.reverse()
-    raw: list[dict] = []
-    for m in rows:
-        if m.type in ("text", "audio"):
-            # Voice notes (type "audio") carry their transcript under "text".
-            content = m.payload.get("text") or m.payload.get("body") or ""
-        else:
-            content = f"[{m.type}]"
-        if not content:
-            continue
-        role = "user" if m.direction == "inbound" else "assistant"
-        raw.append({"role": role, "content": content})
-    # Claude requires strictly alternating user/assistant — merge consecutive same-role
-    merged: list[dict] = []
-    for item in raw:
-        if merged and merged[-1]["role"] == item["role"]:
-            merged[-1]["content"] += "\n" + item["content"]
-        else:
-            merged.append({"role": item["role"], "content": item["content"]})
-    return merged
-
-
 async def _order_has_items(session: AsyncSession, order_id: int) -> bool:
     from app.ordering.models import OrderItem
 
