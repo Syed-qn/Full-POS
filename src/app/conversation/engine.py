@@ -776,6 +776,27 @@ async def _finalize_resale_accept(
 ) -> None:
     """Mark resale sold, spawn the discounted READY order, dispatch (+ batch companion)."""
     from app.ordering.resale import accept_resale
+    from app.ordering.service import is_excluded_for_resale
+
+    # AND-gate delivery guard (now that we know the buyer's real address): refuse only when
+    # phone + door/apartment + building + pin ALL match the canceller's — i.e. the same
+    # person trying to get their own cancelled food back at the same address.
+    if is_excluded_for_resale(
+        getattr(resale_order, "exclusion_hash", None),
+        phone=inbound.from_phone,
+        room_apartment=getattr(addr, "room_apartment", None),
+        building=getattr(addr, "building", None),
+        lat=getattr(addr, "latitude", None),
+        lon=getattr(addr, "longitude", None),
+    ):
+        _set_state(conv, resale_offer_id=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="resale-same-address",
+            body="Sorry, this deal can't be delivered to this address 🙏 "
+                 "Reply with a dish to order fresh.",
+        )
+        return
 
     companion = await _companion_order_for_resale(session, conv)
     new_order = await accept_resale(

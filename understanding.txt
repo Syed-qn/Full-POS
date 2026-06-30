@@ -1782,3 +1782,14 @@
   tiers, tier_rewards) so they never read None. Confirmed resale accept path already handles all edges (saved addr →
   sell; else location pin; undeliverable; "deal taken" if resale gone/sold). 30-min freshness + same-customer
   exclusion confirmed correct and KEPT per user. Test: test_loyalty_cfg_merges_defaults_for_legacy_settings. 11 pass.
+
+[2026-06-30 08:22 +04] feat(resale): exclusion is an AND gate (door + building + pin + phone) + accept-time guard.
+  User: refuse re-delivery only when address AND details match A — door/apartment, pinned location, building name,
+  phone must ALL match (AND, not OR). Reworked exclusion:
+  - _compute_exclusion_hash now hashes phone | room_apartment | building | pin(lat,lon rounded 4dp) — single hash =
+    AND (all must match → same hash). is_excluded_for_resale + get_available_resale_orders + resale_offer_for_customer
+    signatures updated to (phone, room_apartment, building, lat, lon). cancel_order computes from A's CustomerAddress.
+  - At OFFER time the buyer's address is unknown → can't AND-match → they see the offer (new customers included).
+  - NEW accept-time guard in _finalize_resale_accept: with B's real address known, if phone+door+building+pin ALL
+    match A → refuse "this deal can't be delivered to this address", leave resale ON_RESALE (not sold).
+  Tests updated/added (AND-gate helper, matcher, hash, accept-time refusal). 461 ordering+conversation+dispatch pass.

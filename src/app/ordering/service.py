@@ -82,31 +82,44 @@ async def compute_cook_estimate(session: "AsyncSession", order: Order) -> int | 
     return max((prep_by.get(i.dish_id) or default) for i in items)
 
 
+def _norm_pin(v: float | None) -> str:
+    # ~11 m precision: same physical drop-off rounds to the same key.
+    return f"{round(float(v), 4)}" if v is not None else ""
+
+
 def _compute_exclusion_hash(
-    phone: str, receiver_name: str | None, address_id: int | None
+    phone: str,
+    room_apartment: str | None = None,
+    building: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> str:
-    """Single source for exclusion hash format (phone:receiver:addr_id). Used by cancel and matcher."""
-    receiver = (receiver_name or "").strip().lower()
-    addr = str(address_id or "")
-    return hashlib.sha256(f"{phone}:{receiver}:{addr}".encode()).hexdigest()
+    """Exclusion key = phone + door/apartment + building + pinned location, combined as a
+    SINGLE hash → an AND gate: a buyer is barred ONLY when ALL of phone, room/apartment,
+    building, AND pin match the canceller's. Any one differing → different hash → allowed.
+    (Used by the offer matcher and the accept-time delivery guard.)"""
+    room = (room_apartment or "").strip().lower()
+    bld = (building or "").strip().lower()
+    key = f"{phone}|{room}|{bld}|{_norm_pin(lat)}|{_norm_pin(lon)}"
+    return hashlib.sha256(key.encode()).hexdigest()
 
 
 def is_excluded_for_resale(
     exclusion_hash: str | None,
     *,
     phone: str,
-    receiver_name: str | None = None,
-    address_id: int | None = None,
+    room_apartment: str | None = None,
+    building: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> bool:
-    """Return True if this buyer (phone + person/address) is barred from this resale per spec §1 and §4.3.7.
-
-    Used by dispatch offer matcher and conversation resale suggestion to enforce
-    "excluded from same phone/person/address".
-    """
+    """True only when the buyer's phone AND door/apartment AND building AND pinned
+    location ALL match the canceller's (AND gate). Used to refuse re-delivering the
+    cancelled food to the SAME address+phone, while allowing every genuinely different
+    customer/address."""
     if not exclusion_hash:
         return False
-    h = _compute_exclusion_hash(phone, receiver_name, address_id)
-    return h == exclusion_hash
+    return _compute_exclusion_hash(phone, room_apartment, building, lat, lon) == exclusion_hash
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,14 +132,15 @@ async def get_available_resale_orders(
     session: "AsyncSession",
     restaurant_id: int,
     phone: str,
-    receiver_name: str | None = None,
-    address_id: int | None = None,
+    room_apartment: str | None = None,
+    building: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> list[Order]:
-    """Resale-offer matcher: returns on_resale orders for which the given buyer is NOT excluded.
-
-    Enforces post-cook cancel exclusion (same phone/person/address hash) per spec §1/§4.3.7.
-    Used by dispatch engine / conversation when suggesting resale fast orders.
-    """
+    """Resale-offer matcher: on_resale orders this buyer is NOT excluded from. Exclusion is
+    the AND of phone + door/apartment + building + pin (see is_excluded_for_resale). At
+    offer time the buyer's address is usually unknown, so the full AND can't match → they
+    see the offer; the strict same-address guard is re-checked at accept (delivery)."""
     # Only the resale *copy* rows are sellable (they carry exclusion_hash + items).
     # The cancelled original also transitions to on_resale but must not be offered.
     resales = (
@@ -141,7 +155,8 @@ async def get_available_resale_orders(
     available: list[Order] = []
     for r in resales:
         if not is_excluded_for_resale(
-            r.exclusion_hash, phone=phone, receiver_name=receiver_name, address_id=address_id
+            r.exclusion_hash, phone=phone, room_apartment=room_apartment,
+            building=building, lat=lat, lon=lon,
         ):
             available.append(r)
     return available
@@ -821,15 +836,20 @@ async def cancel_order(
 
         customer = await session.get(Customer, order.customer_id)
         phone = customer.phone if customer else ""
-        # Spec §3: exclude same phone/PERSON/address — receiver_name covers the
-        # person dimension (different address or phone, same receiver = still barred).
-        receiver = ""
+        # AND-gate exclusion: bar re-delivery only when phone + door/apartment + building +
+        # pinned location ALL match the canceller's (so the same person can't game it at the
+        # same address, but every other customer/address can still buy the food).
+        room = building = ""
+        lat = lon = None
         if order.address_id is not None:
             address = await session.get(CustomerAddress, order.address_id)
-            receiver = (address.receiver_name or "").strip().lower() if address else ""
-        exclusion_hash = _compute_exclusion_hash(phone, receiver, order.address_id)
-        # Resale exclusion enforced via is_excluded_for_resale (single hash source above).
-        # Matcher (get_available_resale_orders) filters buyers against exclusion_hash when offering.
+            if address is not None:
+                room = (address.room_apartment or "").strip().lower()
+                building = (address.building or "").strip().lower()
+                lat, lon = address.latitude, address.longitude
+        exclusion_hash = _compute_exclusion_hash(phone, room, building, lat, lon)
+        # Enforced at OFFER (matcher) and re-checked at ACCEPT (delivery guard) via
+        # is_excluded_for_resale with the buyer's actual address.
 
         resale = Order(
             restaurant_id=order.restaurant_id,

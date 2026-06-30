@@ -59,22 +59,25 @@ async def resale_offer_for_customer(
     restaurant_id: int,
     phone: str,
     settings: dict,
-    receiver_name: str | None = None,
-    address_id: int | None = None,
+    room_apartment: str | None = None,
+    building: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
     now: datetime | None = None,
 ) -> dict | None:
     """Best available resale offer for this customer, or None.
 
-    Honors enable flag, exclusion (same phone/person/address), and a freshness cap
-    (``max_age_minutes`` from the order's cancellation time). Returns
-    {order, original_subtotal, discounted_subtotal, discount_aed, age_minutes}.
+    Honors enable flag, AND-gate exclusion (phone + door + building + pin all matching the
+    canceller → barred), and a freshness cap (``max_age_minutes`` from the cancellation
+    time). Returns {order, original_subtotal, discounted_subtotal, discount_aed, age_minutes}.
     """
     cfg = _resale_cfg(settings)
     if not cfg.get("enabled"):
         return None
     now = now or datetime.now(timezone.utc)
     candidates = await get_available_resale_orders(
-        session, restaurant_id, phone, receiver_name, address_id
+        session, restaurant_id, phone,
+        room_apartment=room_apartment, building=building, lat=lat, lon=lon,
     )
     max_age = cfg.get("max_age_minutes")
     best: Order | None = None
