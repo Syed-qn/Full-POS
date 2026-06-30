@@ -7,6 +7,7 @@ reward coupons. Earning credits a % of food subtotal to the wallet on delivery.
 """
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -21,7 +22,16 @@ _ZERO = Decimal("0.00")
 
 
 def _loyalty_cfg(settings: dict | None) -> dict:
-    return (settings or {}).get("loyalty", {}) or {}
+    """Loyalty config with DEFAULT_SETTINGS merged in. Restaurant settings are raw JSONB
+    set at creation and not merged with defaults on read, so a restaurant created before a
+    loyalty key existed would miss it. Per-key merge keeps `enabled` honest (default False)
+    while filling any missing sub-keys (rates/tiers/rewards) so they never read as None."""
+    from app.identity.models import DEFAULT_SETTINGS
+
+    base = copy.deepcopy(DEFAULT_SETTINGS.get("loyalty", {}))
+    block = (settings or {}).get("loyalty", {}) or {}
+    base.update(block)
+    return base
 
 
 def _recency_days(last_order_at: datetime | None, now: datetime) -> float | None:

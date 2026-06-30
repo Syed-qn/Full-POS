@@ -126,3 +126,20 @@ def test_tier_progress_text(loyalty_settings):
     txt = loy.tier_progress_text(loyalty_settings, total_orders=1, total_spend=Decimal("0"),
                                  last_order_at=NOW, now=NOW)
     assert "Bronze" in txt or "Silver" in txt or "Gold" in txt
+
+
+def test_loyalty_cfg_merges_defaults_for_legacy_settings():
+    """Restaurants created before the loyalty block existed (raw JSONB, no merge on read)
+    must not crash and stay OFF; partial blocks get missing sub-keys from defaults."""
+    from app.loyalty.service import _loyalty_cfg
+
+    # No loyalty block at all → defaults, disabled.
+    cfg = _loyalty_cfg({"max_radius_km": 10})
+    assert cfg["enabled"] is False
+    assert "tiers" in cfg and "tier_rewards" in cfg  # sub-keys present, never None
+
+    # Partial block (enabled, but missing rate/tiers) → defaults fill the gaps.
+    cfg2 = _loyalty_cfg({"loyalty": {"enabled": True}})
+    assert cfg2["enabled"] is True
+    assert float(cfg2["earn_rate"]) > 0
+    assert "tiers" in cfg2

@@ -1774,3 +1774,11 @@
   Fix: _resale_cfg now merges DEFAULT_SETTINGS["resale"] under the restaurant's block (per-key), so missing/partial
   resale config falls back to defaults (enabled, 30%, 30min). Reproduced with a no-resale-block restaurant (B got
   no offer) → after fix B gets it. Test: test_resale_offered_even_when_settings_lack_resale_block. 14 resale tests pass.
+
+[2026-06-30 08:02 +04] fix(loyalty): same legacy-settings class bug as resale — merge defaults in _loyalty_cfg.
+  After fixing resale's missing-block bug, fixed the same class in loyalty: _loyalty_cfg read settings["loyalty"]
+  raw, so a restaurant created before a loyalty key existed missed it. Now merges DEFAULT_SETTINGS["loyalty"] per-key
+  (deepcopy) — keeps enabled honest (default False, no surprise activation) but fills missing sub-keys (earn_rate,
+  tiers, tier_rewards) so they never read None. Confirmed resale accept path already handles all edges (saved addr →
+  sell; else location pin; undeliverable; "deal taken" if resale gone/sold). 30-min freshness + same-customer
+  exclusion confirmed correct and KEPT per user. Test: test_loyalty_cfg_merges_defaults_for_legacy_settings. 11 pass.
