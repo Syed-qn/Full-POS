@@ -148,7 +148,7 @@ async def test_resale_offer_matcher_filters_by_exclusion(db_session, restaurant)
     db_session.add(order)
     await db_session.flush()
 
-    resale = await cancel_order(db_session, order=order, actor="manager", reason="cooked")
+    resale = await cancel_order(db_session, order=order, actor="customer", reason="cooked")
     await db_session.commit()
 
     # Same buyer — phone + door + building + pin ALL match → excluded (AND gate).
@@ -174,3 +174,38 @@ async def test_resale_offer_matcher_filters_by_exclusion(db_session, restaurant)
         room_apartment="Test Apt", building="Test Bldg", lat=25.2048, lon=55.2708,
     )
     assert not any(r.id == resale.id for r in available_ex)
+
+
+async def test_resale_only_on_customer_cancel_not_restaurant(db_session, restaurant):
+    """Resale fires ONLY when the CUSTOMER cancels cooking food. A restaurant/manager
+    cancel of a preparing order → plain cancelled, no resale copy."""
+    async def _prep_order(phone: str, num: str) -> Order:
+        c = Customer(restaurant_id=restaurant.id, phone=phone, name="C",
+                     usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"))
+        db_session.add(c)
+        await db_session.flush()
+        o = Order(restaurant_id=restaurant.id, customer_id=c.id, order_number=num,
+                  status=OrderStatus.PREPARING, priority="normal", weather_delay_disclosed=False,
+                  delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("22.00"), total=Decimal("22.00"))
+        db_session.add(o)
+        await db_session.commit()
+        return o
+
+    # Restaurant cancels a preparing order → cancelled, NO resale.
+    o1 = await _prep_order("+971501230081", "R1-MGR")
+    r1 = await cancel_order(db_session, order=o1, actor="manager", reason="out of stock")
+    await db_session.commit()
+    assert r1 is None
+    await db_session.refresh(o1)
+    assert o1.status == OrderStatus.CANCELLED
+    assert await db_session.scalar(
+        select(Order).where(Order.resale_of_order_id == o1.id)
+    ) is None
+
+    # Customer cancels a preparing order → on_resale + resale copy.
+    o2 = await _prep_order("+971501230082", "R1-CUST")
+    r2 = await cancel_order(db_session, order=o2, actor="customer", reason="changed mind")
+    await db_session.commit()
+    assert r2 is not None
+    await db_session.refresh(o2)
+    assert o2.status == OrderStatus.ON_RESALE

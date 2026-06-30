@@ -69,7 +69,10 @@ async def test_cancel_confirmed_order_returns_cancelled(client, db_session, rest
     assert order.cancellation_reason == "customer changed mind"
 
 
-async def test_cancel_preparing_order_goes_to_resale(client, db_session, restaurant):
+async def test_cancel_preparing_via_endpoint_is_cancelled_not_resold(client, db_session, restaurant):
+    """The cancel ENDPOINT is restaurant/manager-initiated. A restaurant cancel of a
+    cooking order goes to 'cancelled' (food assumed unavailable/unfit) and must NOT be
+    resold. Resale is customer-initiated only."""
     order = await _make_order(db_session, restaurant.id, "+971509993002")
     order.status = "preparing"  # already cooking
     await db_session.commit()
@@ -79,14 +82,13 @@ async def test_cancel_preparing_order_goes_to_resale(client, db_session, restaur
         headers={"Authorization": f"Bearer {_token(restaurant.id)}"},
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "on_resale"
+    assert resp.json()["status"] == "cancelled"
 
-    # a resale copy must exist, linked back to the cancelled original
+    # NO resale copy — restaurant cancellation never resells.
     resale = await db_session.scalar(
         select(Order).where(Order.resale_of_order_id == order.id)
     )
-    assert resale is not None
-    assert resale.status == "on_resale"
+    assert resale is None
 
 
 async def test_cancel_ready_order_is_422(client, db_session, restaurant):

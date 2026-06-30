@@ -793,10 +793,14 @@ async def cancel_order(
 ) -> Order | None:
     """Cancel an order.
 
-    Before cooking (status != preparing) → plain transition to CANCELLED.
-    After cooking started (status == preparing) → transition original to
-    ON_RESALE and create a resale copy carrying an exclusion hash so the same
-    phone/address combination is barred from buying the resold food.
+    Resale (re-offer the cooked food to the next customer) happens ONLY when the
+    CUSTOMER cancels an order that's already cooking — the food exists and is fine, the
+    customer just backed out. When the RESTAURANT/manager cancels, the food is assumed
+    unavailable or unfit (out of stock, kitchen issue, bad batch), so it is NOT resold —
+    plain transition to CANCELLED.
+
+    So: customer cancel while ``preparing`` → ON_RESALE + resale copy (exclusion hash).
+    Any other cancel (pre-cooking, or restaurant-initiated) → CANCELLED.
 
     Returns the resale Order if one was created, else None. Caller must commit.
     """
@@ -828,7 +832,7 @@ async def cancel_order(
     except Exception:  # noqa: BLE001 — never block the cancel
         pass
 
-    if order.status == OrderStatus.PREPARING:
+    if order.status == OrderStatus.PREPARING and actor == "customer":
         await fsm_transition(
             session, order, OrderStatus.ON_RESALE, actor=actor,
             extra_audit={"reason": reason or ""},

@@ -1815,3 +1815,13 @@
     capture (can't dispatch an order with no drop-off). Joins existing empty-cart gate.
   Tests: test_confirm_without_address_routes_to_address_capture. 343 conv+ordering pass (1 pre-existing cross-suite
   resale flake, passes 7/7 in isolation).
+
+[2026-06-30 09:15 +04] fix(resale): only resell when the CUSTOMER cancels — not the restaurant.
+  Flaw spotted by user: resale fired on ANY cancel of a preparing order, ignoring actor. If the RESTAURANT cancels
+  (out of stock, kitchen issue, bad batch) the food is unavailable/unfit → must NOT be resold.
+  Fix: cancel_order creates ON_RESALE + resale copy ONLY when status==PREPARING AND actor=="customer". Manager/
+  restaurant cancel (incl. the dashboard cancel endpoint, actor="manager") → plain CANCELLED, no resale.
+  Added CANCELLED to the FSM's PREPARING transitions (was READY/ON_RESALE only) so restaurant-cancel of a cooking
+  order is a legal edge. Updated cancel endpoint docstring. Tests: test_resale_only_on_customer_cancel_not_restaurant
+  + reworked test_cancel_preparing_via_endpoint_is_cancelled_not_resold; existing resale tests now cancel as customer.
+  174 ordering+resale tests pass.

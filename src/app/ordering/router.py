@@ -295,9 +295,10 @@ async def cancel_order_endpoint(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
-    """Cancel an order. Legal before delivery only: draft/pending/confirmed →
-    cancelled; preparing → on_resale (food already cooked, auto-resold per spec).
-    Later states (ready/assigned/picked_up/arriving/terminal) return 422."""
+    """Cancel an order (MANAGER/restaurant-initiated). Legal before delivery only:
+    draft/pending/confirmed/preparing → cancelled. Restaurant cancellation never resells
+    the food (assumed unavailable/unfit) — resale only happens on a CUSTOMER cancel of a
+    cooking order. Later states (ready/assigned/picked_up/arriving/terminal) return 422."""
     order = await get_order_for_tenant(
         session, restaurant_id=restaurant.id, order_id=order_id
     )

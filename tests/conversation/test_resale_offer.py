@@ -225,7 +225,7 @@ async def test_resale_offered_even_when_settings_lack_resale_block(db_session):
     db_session.add(OrderItem(order_id=o.id, dish_id=dish.id, dish_number=1, dish_name="Biryani",
                              price_aed=Decimal("40.00"), qty=1))
     await db_session.flush()
-    await ordering.cancel_order(db_session, order=o, actor="manager", reason="x")
+    await ordering.cancel_order(db_session, order=o, actor="customer", reason="x")
     await db_session.commit()
 
     phone = "+971500402002"  # different customer B

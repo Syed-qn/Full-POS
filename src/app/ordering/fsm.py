@@ -47,8 +47,11 @@ class OrderFSM:
         },
         OrderStatus.PREPARING: {
             OrderStatus.READY,
-            # post-cooking cancellation → on_resale (FSM allows it; service layer decides)
+            # post-cooking cancellation: customer-cancel → on_resale (re-sell the cooked
+            # food); restaurant-cancel → cancelled (food unavailable/unfit). The service
+            # layer picks the edge by actor; the FSM permits both.
             OrderStatus.ON_RESALE,
+            OrderStatus.CANCELLED,
         },
         OrderStatus.READY: {
             OrderStatus.ASSIGNED,
