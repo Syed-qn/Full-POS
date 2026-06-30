@@ -4551,59 +4551,6 @@ async def _handle_location_pin(
     )
 
 
-# A bare "no more / that's it / done" reply to the "Anything else?" prompt must
-# move the order to checkout — never re-add a dish. The LLM occasionally defaults
-# to repeating the last add_item here, which loops ("Butter Chicken added!" on
-# every "No"). This deterministic guard catches the common English/Hinglish
-# closing phrases before the model runs, so the loop can't happen for them.
-_CLOSING_PHRASES: frozenset[str] = frozenset({
-    "no", "no more", "nope", "na", "nah", "np", "no thanks", "no thank you",
-    "nothing", "nothing else", "nothing more", "that's all", "thats all",
-    "that's it", "thats it", "thats all thanks", "done", "im done", "i'm done",
-    "all done", "finish", "finished", "complete", "checkout", "check out",
-    "proceed", "place order", "place the order", "order", "all good", "im good",
-    "i'm good", "good", "bas", "bus", "khalas", "khalaas", "khallas", "enough",
-})
-
-
-def _normalise_closing(text: str | None) -> str:
-    """Lowercase + strip punctuation/emoji/extra spaces so "No.", "Np!", and
-    "That's all 🙏" all normalise to a comparable closing phrase."""
-    import re
-
-    if not text:
-        return ""
-    t = re.sub(r"[^\w\s']", " ", text.lower())
-    return re.sub(r"\s+", " ", t).strip()
-
-
-# Filler tokens that can wrap a closing phrase without changing its meaning, so
-# "No that's all", "ok done thanks", "nahi bas" still read as "finish ordering".
-_CLOSING_FILLER: frozenset[str] = frozenset({
-    "no", "nope", "na", "nah", "ok", "okay", "okey", "yes", "yeah", "ya",
-    "thanks", "thank", "you", "please", "pls", "and", "ji",
-    "nahi", "nahin",
-})
-
-
-def _is_closing(text: str | None) -> bool:
-    """True if the message means "I'm done ordering" — exact closing phrase, or a closing
-    phrase wrapped in filler/negation ("No that's all", "ok done thanks"). Catching the
-    wrapped forms stops the bot falling through to the LLM (which sometimes re-shows the
-    menu instead of moving to checkout)."""
-    norm = _normalise_closing(text)
-    if not norm:
-        return False
-    if norm in _CLOSING_PHRASES:
-        return True
-    # Drop surrounding filler; if a real closing token remains, treat as closing.
-    core = [w for w in norm.split() if w not in _CLOSING_FILLER]
-    if not core:
-        # All filler — only treat as closing if it actually contained a closing word
-        # like "no"/"bas"/"nope" (not e.g. "ok" alone, which isn't a finish signal).
-        return any(w in _CLOSING_PHRASES for w in norm.split())
-    return " ".join(core) in _CLOSING_PHRASES
-
 
 async def _okf_grounding(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
@@ -4657,7 +4604,6 @@ async def _handle_customer_ai(
     """Phase-aware AI handler: owns the entire customer conversation."""
     from app.identity.models import Restaurant as RestaurantModel
     from app.llm.factory import get_conversation_agent
-    from app.llm.port import ConversationAgentResult
 
     if restaurant is None:
         restaurant = await session.get(RestaurantModel, restaurant_id)
@@ -4666,25 +4612,6 @@ async def _handle_customer_ai(
     phase = _resolve_phase(conv)
     history = await _build_history(session, conv, limit=10)
     context = await _build_context(session, conv, restaurant_id, phase, restaurant)
-
-    # Deterministic closing-intent guard: in the ordering phase, a bare closing
-    # reply with a non-empty cart goes straight to address capture — bypassing
-    # the LLM so it can never loop by re-adding the last dish (observed bug).
-    if (
-        phase == "ordering"
-        and inbound.type == MessageType.TEXT
-        and _is_closing(inbound.payload.get("text"))
-        and (context.get("cart_summary") or "").strip()
-    ):
-        await _dispatch_action(
-            session, conv, inbound, restaurant_id,
-            ConversationAgentResult(
-                message="Great! Let's get your delivery details 😊",
-                action="proceed_to_address", action_data={},
-            ),
-            phase, restaurant,
-        )
-        return
 
     # Dish-info question ("what's special in the biryani?") → answer with the dish's
     # menu description (verbatim) when present, else a short human line. Deterministic
