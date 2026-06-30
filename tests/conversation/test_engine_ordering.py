@@ -206,8 +206,10 @@ async def test_negative_reply_advances_and_does_not_re_add(db_session, restauran
     before = (await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))).all()
     qty_before = sum(it.qty for it in before)
 
-    # Several closing phrases in a row must NOT each re-add a dish.
-    for i, word in enumerate(("No", "Np", "That's all", "that's it")):
+    # Several closing phrases in a row must NOT each re-add a dish — including ones
+    # wrapped in negation/filler like "No that's all" (regression: this fell through to
+    # the LLM, which re-showed the menu instead of moving to checkout).
+    for i, word in enumerate(("No that's all", "No", "Np", "That's all", "ok done thanks")):
         await handle_inbound(db_session, _msg(word, f"wamid.close{i}"), restaurant_id=restaurant.id)
         await db_session.commit()
 

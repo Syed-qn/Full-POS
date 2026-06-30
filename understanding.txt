@@ -1793,3 +1793,11 @@
   - NEW accept-time guard in _finalize_resale_accept: with B's real address known, if phone+door+building+pin ALL
     match A → refuse "this deal can't be delivered to this address", leave resale ON_RESALE (not sold).
   Tests updated/added (AND-gate helper, matcher, hash, accept-time refusal). 461 ordering+conversation+dispatch pass.
+
+[2026-06-30 08:30 +04] fix(conversation): "No that's all" → checkout, not menu.
+  Bug: after adding a dish, "No that's all" showed the MENU instead of going to checkout. Triggered by the AI:
+  the deterministic closing-guard required EXACT phrase membership (_normalise_closing(text) in _CLOSING_PHRASES);
+  "no that's all" (negation-wrapped) wasn't in the set → fell through to the LLM → LLM returned show_menu.
+  Fix: new _is_closing(text) — matches exact closing phrase OR a closing phrase wrapped in negation/filler
+  ("No that's all", "ok done thanks", "nahi bas"), while NOT misfiring on "no onion"/"ok" alone. Guard in
+  _handle_customer_ai now uses _is_closing. Test extended with "No that's all"/"ok done thanks". 178 conv pass.

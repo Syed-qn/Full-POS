@@ -4343,6 +4343,34 @@ def _normalise_closing(text: str | None) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+# Filler tokens that can wrap a closing phrase without changing its meaning, so
+# "No that's all", "ok done thanks", "nahi bas" still read as "finish ordering".
+_CLOSING_FILLER: frozenset[str] = frozenset({
+    "no", "nope", "na", "nah", "ok", "okay", "okey", "yes", "yeah", "ya",
+    "thanks", "thank", "you", "please", "pls", "and", "ji",
+    "nahi", "nahin",
+})
+
+
+def _is_closing(text: str | None) -> bool:
+    """True if the message means "I'm done ordering" — exact closing phrase, or a closing
+    phrase wrapped in filler/negation ("No that's all", "ok done thanks"). Catching the
+    wrapped forms stops the bot falling through to the LLM (which sometimes re-shows the
+    menu instead of moving to checkout)."""
+    norm = _normalise_closing(text)
+    if not norm:
+        return False
+    if norm in _CLOSING_PHRASES:
+        return True
+    # Drop surrounding filler; if a real closing token remains, treat as closing.
+    core = [w for w in norm.split() if w not in _CLOSING_FILLER]
+    if not core:
+        # All filler — only treat as closing if it actually contained a closing word
+        # like "no"/"bas"/"nope" (not e.g. "ok" alone, which isn't a finish signal).
+        return any(w in _CLOSING_PHRASES for w in norm.split())
+    return " ".join(core) in _CLOSING_PHRASES
+
+
 async def _okf_grounding(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
 ) -> str:
@@ -4411,7 +4439,7 @@ async def _handle_customer_ai(
     if (
         phase == "ordering"
         and inbound.type == MessageType.TEXT
-        and _normalise_closing(inbound.payload.get("text")) in _CLOSING_PHRASES
+        and _is_closing(inbound.payload.get("text"))
         and (context.get("cart_summary") or "").strip()
     ):
         await _dispatch_action(
