@@ -47,6 +47,9 @@ filterwarnings = [
     # FastAPI 0.115 deprecated old HTTP status constant names — harmless until 1.0
     "ignore::DeprecationWarning:starlette.*",
 ]
+markers = [
+    "eval: transcript-replay capability/regression evals (W0 harness)",
+]
 
 [tool.ruff]
 line-length = 100
