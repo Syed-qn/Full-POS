@@ -1825,3 +1825,26 @@
   order is a legal edge. Updated cancel endpoint docstring. Tests: test_resale_only_on_customer_cancel_not_restaurant
   + reworked test_cancel_preparing_via_endpoint_is_cancelled_not_resold; existing resale tests now cancel as customer.
   174 ordering+resale tests pass.
+
+- 2026-06-30 10:55 Asia/Dubai — FIX (2 convo bugs from a live chat): (1) CANCEL TRAP — once the
+  AI dropped a customer into the modify flow, tapping the summary's "Cancel order" button (a stale
+  button) was routed to _handle_modify_items FIRST (engine.py modify-state routing runs before any
+  button/cancel logic), so it was read as "not a dish" → "Please type the name or number of a dish"
+  and looped; the customer could only escape by typing "Hi". Fix: before dispatching modify_items/
+  modify_confirm, intercept a cancel_order button OR a cancel-intent message (new _is_cancel_intent)
+  and call new _handle_cancel_during_modify(), which exits the modify flow and cancels the order via
+  cancel_order() (or, if the FSM no longer allows cancel, just exits the loop). (2) OFF-MENU ORDER
+  MIS-ROUTED — off-menu handling was left to the LLM, which was inconsistent: "mutton biryani" got the
+  warm decline (good) but "I want one beef biryani also" (at the summary) opened a modify flow and
+  "One beef bitani" fired the clear_cart action. Root cause: no deterministic guarantee an off-menu
+  order is declined. Fix: new _extract_order_dish_query() (tight: explicit order verb / qty prefix, a
+  >=2-word food phrase after stripping articles+politeness+digits, non-question head, skips modify
+  phrasing like "make it"/"change"/"instead") + _maybe_decline_off_menu_order() guard placed AFTER
+  _try_catalog_typed_order and BEFORE _handle_customer_ai. Fires ONLY when the phrase is a clear order
+  AND find_dish_matches==NO_MATCH AND find_unavailable_match==None; valid/uncertain dishes still flow
+  to the AI untouched. Skipped in catalogue mode. Phase-gated to ordering + awaiting_confirmation.
+  Reply = warm no-upsell _off_menu_decline(). Tests: new tests/conversation/test_off_menu_and_cancel.py
+  (extractor pos/neg, cancel-intent, off-menu-at-summary declines without modify, cancel-button-in-
+  modify cancels order & exits). Full conversation+ordering suite 352 passed; ruff clean. Adjusted the
+  guard once after _confirmation_no_action_reshows_real_summary caught "make it two" — added modify-
+  phrase exclusion. Not pushed (user: dont push).

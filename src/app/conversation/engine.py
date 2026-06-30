@@ -213,6 +213,32 @@ def _is_complaint(text: str | None) -> bool:
     return any(p in t for p in phrases)
 
 
+def _is_cancel_intent(text: str | None) -> bool:
+    """True when the customer clearly asks to cancel the order (not a coupon/etc.).
+
+    Used to give an ESCAPE from the modify flow — without it a 'Cancel order' tap
+    or 'cancel' message inside modify_items was treated as a dish and looped. Kept
+    tight (short message, explicit cancel words) so normal ordering text never fires.
+    """
+    if not text:
+        return False
+    t = " ".join(text.strip().lower().split()).replace("’", "'")
+    if not t or len(t) > 40:
+        return False
+    if "coupon" in t or "voucher" in t or t.startswith("don't") or t.startswith("dont"):
+        return False
+    exact = {
+        "cancel", "cancel it", "stop", "abort", "forget it", "forget the order",
+        "never mind", "nevermind", "discard", "discard order", "scrap it",
+    }
+    if t in exact:
+        return True
+    return t.startswith((
+        "cancel order", "cancel my order", "cancel the order", "cancel this",
+        "cancel everything", "stop order", "stop the order", "forget this order",
+    ))
+
+
 def _is_tier_query(text: str | None) -> bool:
     """True for 'what tier am I / how do I reach Gold / my loyalty status' questions."""
     if not text:
@@ -1154,6 +1180,134 @@ def _off_menu_decline(dish_query: str) -> str:
         "I'd be glad to help with anything else; just tell me the dish, "
         "or tap the menu to take a look 😊"
     )
+
+
+# Explicit "I'm ordering X" verb prefixes (longest first so the most specific wins).
+# Used ONLY to recognise a clear order so an OFF-MENU one always gets the warm
+# decline, instead of the LLM sometimes mis-routing it to clear_cart / modify.
+_ORDER_VERB_PREFIXES = (
+    "i want to order ", "i want to add ", "i would like to order ",
+    "i'd like to order ", "can i please get ", "could i please get ",
+    "i will have ", "i'll have ", "ill have ", "i'll take ", "ill take ",
+    "i'll get ", "ill get ", "i would like ", "i'd like ", "id like ",
+    "can i get ", "can i have ", "could i get ", "could i have ", "may i have ",
+    "please give me ", "please get me ", "let me get ", "lemme get ",
+    "give me ", "get me ", "i want ", "i wanna ", "i need ", "order ", "add ",
+)
+# Leading filler/articles/quantities dropped from the extracted dish phrase.
+_BODY_LEAD_STRIP = frozenset({
+    "a", "an", "the", "some", "my", "our", "your", "it", "that", "this", "them",
+    "me", "of", "for", "one", "two", "three", "four", "five", "six", "seven",
+    "eight", "nine", "ten", "more", "another", "also", "plus", "and",
+})
+# Trailing politeness/filler dropped from the extracted dish phrase.
+_BODY_TRAIL_STRIP = frozenset({
+    "also", "too", "please", "pls", "now", "thanks", "thanx", "thankyou",
+    "as", "well", "more", "and", "plz",
+})
+# First words that mean the message is NOT an order (a question / a control word),
+# so the off-menu guard never hijacks them.
+_NON_ORDER_HEADS = frozenset({
+    "to", "know", "see", "check", "cancel", "change", "modify", "remove", "delete",
+    "stop", "wait", "hold", "help", "talk", "speak", "call", "where", "when",
+    "what", "why", "how", "who", "which", "is", "are", "do", "does", "can", "could",
+    "will", "would", "info", "information", "details", "detail", "status", "track",
+    "menu", "cart", "order", "bill", "total", "price", "cost", "delivery", "address",
+    "location", "time", "minute", "second", "moment", "coupon", "discount", "refund",
+})
+
+
+def _extract_order_dish_query(text: str | None) -> str | None:
+    """If the message is clearly 'I want to order <dish>', return the dish phrase.
+
+    Deliberately tight so it NEVER fires on questions, control words, or chit-chat:
+    requires an explicit order verb / quantity prefix, a ≥2-word food phrase after
+    stripping articles+politeness, and a non-question head word. Returns None
+    otherwise. The caller only acts on the result when the phrase is OFF the menu,
+    so a valid dish is never intercepted — it still flows to the AI as before.
+    """
+    if not text:
+        return None
+    t = " ".join(text.strip().split()).replace("’", "'")
+    if not t or len(t) > 70 or "?" in t:
+        return None
+    low = t.lower()
+    # MODIFY / qty-change phrasing is NOT a fresh order — leave it to the AI /
+    # deterministic summary path (e.g. "make it two", "change to ...", "instead").
+    if any(p in low for p in (
+        "make it", "change", "instead", "actually", "swap", "replace",
+        "update", "remove", "take off", "rather",
+    )):
+        return None
+
+    body: str | None = None
+    for v in _ORDER_VERB_PREFIXES:
+        if low.startswith(v):
+            body = t[len(v):].strip()
+            break
+    if body is None:
+        from app.ordering.service import parse_qty_and_text
+
+        _q, rest = parse_qty_and_text(t)
+        if rest and rest.strip().lower() != low:  # a real quantity prefix was present
+            body = rest.strip()
+        else:
+            return None
+
+    toks = [w for w in body.split()]
+    while toks and (
+        toks[0].lower().strip(",.!") in _BODY_LEAD_STRIP
+        or toks[0].strip(",.!x").isdigit()  # leading qty digit ("2", "2x")
+    ):
+        toks.pop(0)
+    while toks and toks[-1].lower().strip(",.!") in _BODY_TRAIL_STRIP:
+        toks.pop()
+    if len(toks) < 2 or len(toks) > 5:
+        return None
+    if toks[0].lower().strip(",.!") in _NON_ORDER_HEADS:
+        return None
+    return " ".join(toks)
+
+
+async def _maybe_decline_off_menu_order(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> bool:
+    """Deterministic guard: a clear order for an OFF-MENU dish always gets the warm
+    decline — so 'beef biryani' behaves exactly like 'mutton biryani' every time,
+    never mis-routed by the LLM to clear_cart / modify.
+
+    Returns True (and replies) only when the message is unambiguously an order, the
+    dish isn't on the menu and isn't a known out-of-stock item. A valid or unknown-
+    intent message returns False and falls through to the normal AI flow untouched.
+    Skipped in catalogue mode (the catalogue flow + AI own that path).
+    """
+    if inbound.type != MessageType.TEXT:
+        return False
+    phase = _resolve_phase(conv)
+    if phase not in ("ordering", "awaiting_confirmation"):
+        return False
+    dish_query = _extract_order_dish_query(inbound.payload.get("text"))
+    if not dish_query:
+        return False
+    if await _catalog_mode_on(session, restaurant_id):
+        return False
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence != MatchConfidence.NO_MATCH:
+        return False  # on the menu (or fuzzy-close) → let the AI handle it normally
+    from app.ordering.matching import find_unavailable_match
+
+    if await find_unavailable_match(session, restaurant_id=restaurant_id, query=dish_query):
+        return False  # we DO have it, just out of stock → AI offers an alternative
+
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="off-menu-order", body=_off_menu_decline(dish_query),
+    )
+    return True
 
 
 async def _handle_collecting_items(
@@ -2221,6 +2375,60 @@ async def _handle_modify_confirm(
     # re-prompt
     proposed = conv.state.get("modify_proposed", []) or []
     await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
+
+
+async def _handle_cancel_during_modify(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Cancel the order from inside the modify flow, so a 'Cancel order' tap (or a
+    'cancel' message) is honoured instead of being read as a dish — the customer is
+    never trapped in modify_items with no way out.
+
+    Always exits the modify flow first. Then cancels the underlying order when the
+    FSM still allows it (draft / pre-ready); if it's already too far along, it keeps
+    the order but still drops the customer out of the modify loop.
+    """
+    from app.ordering.fsm import IllegalTransitionError
+    from app.ordering.models import Order
+    from app.ordering.service import cancel_order
+
+    oid = conv.state.get("modify_order_id") or conv.state.get("pending_order_id")
+    order = await session.get(Order, oid) if oid else None
+    # Drop out of the modify flow no matter what (the trap is the bug we're fixing).
+    _set_state(conv, modify_order_id=None, modify_proposed=None)
+
+    if order is None:
+        _set_state(conv, dialogue_state="cancelled",
+                   draft_order_id=None, pending_order_id=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="modify-cancel-noorder",
+            body="No problem — there's nothing to cancel. Send 'hi' to start a new order.",
+        )
+        return
+
+    try:
+        await cancel_order(session, order=order, actor="customer", reason="customer_cancel")
+    except IllegalTransitionError:
+        _set_state(conv, dialogue_state="order_placed")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="modify-cancel-blocked",
+            body=(f"Order #{order.order_number} can't be cancelled now, but I've stopped "
+                  "the changes. Please call the restaurant if you need help."),
+        )
+        return
+
+    _set_state(conv, dialogue_state="cancelled",
+               draft_order_id=None, pending_order_id=None)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="modify-cancelled-order",
+        body=_cancel_confirmation_body(order.order_number),
+    )
 
 
 async def _handle_restaurant_location_request(
@@ -5008,6 +5216,23 @@ async def handle_inbound(
 
     # Modify FSM states: route to dedicated handlers (preserves SLA-restart and audit logic)
     state_key = conv.state.get("dialogue_state", "")
+    if state_key in ("modify_items", "modify_confirm"):
+        # ESCAPE HATCH: a 'Cancel order' tap (often a stale summary button) or a
+        # 'cancel' message must cancel the order — not be read as a dish, which
+        # trapped the customer in the modify loop with no way out.
+        _cancel_btn = (
+            inbound.payload.get("id", "") == "cancel_order"
+            if inbound.type == MessageType.BUTTON_REPLY
+            else False
+        )
+        _cancel_txt = (
+            _is_cancel_intent(inbound.payload.get("text"))
+            if inbound.type == MessageType.TEXT
+            else False
+        )
+        if _cancel_btn or _cancel_txt:
+            await _handle_cancel_during_modify(session, conv, inbound, restaurant_id)
+            return
     if state_key == "modify_items":
         await _handle_modify_items(session, conv, inbound, restaurant_id)
         return
@@ -5216,6 +5441,12 @@ async def handle_inbound(
     # plain "one chicken biryani" reliably goes to the cart instead of the model
     # sometimes re-sending the catalogue cards. Anything else falls through to the AI.
     if await _try_catalog_typed_order(session, conv, inbound, restaurant_id, restaurant):
+        return
+
+    # A clear order for an OFF-MENU dish always gets the warm decline here, so the
+    # LLM can't sometimes mis-route it to clear_cart / modify (a valid dish is never
+    # intercepted — it falls through to the AI unchanged).
+    if await _maybe_decline_off_menu_order(session, conv, inbound, restaurant_id):
         return
 
     # All remaining text + button_reply → AI
