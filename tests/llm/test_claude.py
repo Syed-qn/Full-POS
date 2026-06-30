@@ -3,8 +3,60 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.llm.claude import ClaudeExtractor
-from app.llm.port import UploadedFile
+import app.llm.claude as cl
+import app.llm.deepseek as ds
+from app.llm.claude import ClaudeConversationAgent, ClaudeExtractor
+from app.llm.port import ConversationAgentResult, UploadedFile
+
+
+# ---------------------------------------------------------------------------
+# W1 Task 3: tool-schema parity tests
+# ---------------------------------------------------------------------------
+
+def test_claude_tool_action_enum_matches_deepseek():
+    c = set(cl._CONVERSATION_TOOL["input_schema"]["properties"]["action"]["enum"])
+    d = set(ds._DS_TOOL["function"]["parameters"]["properties"]["action"]["enum"])
+    assert c == d
+
+
+def test_claude_tool_has_items_op_and_note():
+    props = cl._CONVERSATION_TOOL["input_schema"]["properties"]
+    assert "note" in props
+    assert set(props["items"]["items"]["properties"]["op"]["enum"]) == {
+        "add_delta", "set_total", "remove_delta",
+    }
+
+
+async def test_claude_respond_translates_canonical_to_legacy():
+    """Round-trip: Claude returns canonical 'cart_add' -> respond() yields legacy 'add_item'."""
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = "take_action"
+    block.input = {
+        "action": "cart_add",
+        "dish_query": "biryani",
+        "add_qty": 2,
+        "reply": "Added!",
+    }
+    response = MagicMock()
+    response.content = [block]
+
+    agent = ClaudeConversationAgent.__new__(ClaudeConversationAgent)
+    agent._model = "claude-opus-4-8"
+    agent._client = MagicMock()
+    agent._client.messages.create = AsyncMock(return_value=response)
+
+    result = await agent.respond(
+        restaurant_name="Test",
+        dialogue_phase="ordering",
+        history=[{"role": "user", "content": "2 biryani"}],
+        context={"menu_text": "1. Biryani AED 22", "cart_summary": "empty"},
+    )
+
+    assert isinstance(result, ConversationAgentResult)
+    assert result.action == "add_item", (
+        f"respond() must translate canonical 'cart_add' -> legacy 'add_item', got {result.action!r}"
+    )
 
 RAW = {
     "dishes": [

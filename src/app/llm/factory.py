@@ -89,6 +89,11 @@ def get_forecast_adjuster():
 def get_conversation_agent():
     settings = get_settings()
     if settings.llm_provider == "claude":
+        if not getattr(settings, "claude_conversation_enabled", False):
+            # Claude is parity-gated (W1). Until explicitly enabled, fall back to the
+            # contract-tested DeepSeek agent rather than a divergent action surface.
+            from app.llm.deepseek import DeepSeekConversationAgent
+            return DeepSeekConversationAgent()
         from app.llm.claude import ClaudeConversationAgent
         return ClaudeConversationAgent()
     if settings.llm_provider == "deepseek":

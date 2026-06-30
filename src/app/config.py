@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_audience_manager: str = "manager"
     jwt_audience_rider: str = "rider"
     llm_provider: str = "fake"  # fake | claude | deepseek
+    # W1 parity gate: ClaudeConversationAgent is schema-parity-complete but gated
+    # behind an explicit ops flag so a future regression can't silently ship a
+    # non-compliant Claude action surface. Flip to True once the offline parity
+    # contract test (W1 Task 5) passes in CI. Falls back to DeepSeek when False.
+    claude_conversation_enabled: bool = False
     # Which provider extracts dishes from uploaded menus (PDF/image/text).
     # "auto" = use Claude when an Anthropic key is set (it reads PDFs/images
     # natively so no dishes are missed), else fall back to llm_provider. The chat

@@ -5,6 +5,7 @@ from anthropic import AsyncAnthropic
 from pydantic import ValidationError
 
 from app.config import get_settings
+from app.llm.action_schema import CANON_PHASE_ACTIONS, build_anthropic_tool, to_engine_result
 from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile, strip_dashes
 
 _TOOL = {
@@ -355,33 +356,9 @@ class ClaudeCompletionDetector:
         return raw.lower().startswith("y")
 
 
-_CONVERSATION_TOOL = {
-    "name": "take_action",
-    "description": "Record the structured action inferred from the customer message, plus your reply text.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["add_item", "proceed_checkout", "cancel_cart", "no_action"],
-                "description": "add_item: customer wants to add a dish. proceed_checkout: cart is ready, move to delivery. cancel_cart: customer wants to cancel. no_action: greeting, question, or unclear.",
-            },
-            "dish_query": {
-                "type": "string",
-                "description": "Dish name or number the customer wants (only for add_item).",
-            },
-            "qty": {
-                "type": "integer",
-                "description": "Quantity to add (only for add_item, default 1).",
-            },
-            "reply": {
-                "type": "string",
-                "description": "Natural WhatsApp reply to send to the customer (keep it short and friendly).",
-            },
-        },
-        "required": ["action", "reply"],
-    },
-}
+# Tool definition is derived from the single-source-of-truth schema so providers
+# can never drift from the canonical action vocabulary (W1 Task 3).
+_CONVERSATION_TOOL = build_anthropic_tool("take_action")
 
 _CONVERSATION_SYSTEM = """\
 You are a friendly WhatsApp ordering assistant for {restaurant_name}.
@@ -441,6 +418,16 @@ ALWAYS call take_action. Never reply without the tool.
 """
 
 
+def _phase_guidance(phase: str) -> str:
+    allowed = sorted(CANON_PHASE_ACTIONS.get(phase, CANON_PHASE_ACTIONS["ordering"]))
+    return (
+        f"\nCURRENT PHASE: {phase}. You may ONLY use these actions this phase: "
+        f"{', '.join(allowed)}. cart_add.add_qty is a DELTA; cart_set_qty.new_total "
+        f"is the ABSOLUTE new total ('only 1' -> cart_set_qty new_total=1, never add). "
+        f"For multiple dishes in one message use items[] with an explicit op per dish.\n"
+    )
+
+
 class ClaudeConversationAgent:
     """AI-powered full-conversation agent for customer ordering via WhatsApp."""
 
@@ -465,7 +452,7 @@ class ClaudeConversationAgent:
             menu_text=context.get("menu_text", "Menu unavailable."),
             cart_summary=context.get("cart_summary") or "empty",
             delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
-        )
+        ) + _phase_guidance(dialogue_phase)
         messages = history if history else [{"role": "user", "content": "hi"}]
         response = await self._client.messages.create(
             model=self._model,
@@ -477,20 +464,17 @@ class ClaudeConversationAgent:
         )
         for block in response.content:
             if block.type == "tool_use" and block.name == "take_action":
-                inp = block.input
-                _q = inp.get("qty")
-                qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
+                inp = dict(block.input)
+                # Translate canonical action + payload to engine-legacy (action, action_data).
+                # Required-field validation happens inside to_engine_result: missing fields
+                # yield ("no_action", {needs_clarification: True, ...}) so the engine never
+                # mutates state from an under-specified tool call.
+                legacy_action, action_data = to_engine_result(
+                    inp.get("action", "no_action"), inp,
+                )
                 return ConversationAgentResult(
                     message=strip_dashes(inp.get("reply", "")),
-                    action=inp.get("action", "no_action"),
-                    action_data={
-                        "dish_query": inp.get("dish_query", ""),
-                        "qty": qty,
-                        "special_note": inp.get("special_note", ""),
-                        "items": [],
-                        "apt_room": inp.get("apt_room", ""),
-                        "building": inp.get("building", ""),
-                        "receiver_name": inp.get("receiver_name", ""),
-                    },
+                    action=legacy_action,
+                    action_data=action_data,
                 )
         raise RuntimeError("ClaudeConversationAgent: no take_action block in response")
