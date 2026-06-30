@@ -965,3 +965,29 @@ async def test_confirm_without_address_routes_to_address_capture(db_session, res
     assert order.status == "pending_confirmation"  # NOT confirmed (no address)
     conv = await _conv(db_session)
     assert conv.state["dialogue_state"] == "address_capture"
+
+
+async def test_frustration_closing_advances_no_inflation(db_session, restaurant):
+    """A frustrated 'thats all can't you understand' with a non-empty cart advances
+    to address capture without re-adding (real Fake agent path)."""
+    from app.ordering.models import OrderItem
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.fg"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("chicken biryani", "wamid.fi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    order_id = conv.state["draft_order_id"]
+    qty_before = sum(it.qty for it in (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id))).all())
+
+    await handle_inbound(db_session, _msg("thats all can't you understand", "wamid.ff"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id))).all()
+    assert sum(it.qty for it in items) == qty_before
+    assert conv.state["dialogue_state"] == "address_capture"
