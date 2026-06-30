@@ -151,7 +151,13 @@ class FakeConversationAgent:
             )
             _cart = (context.get("cart_summary") or "").strip()
             _is_decline = last_user.strip() in {"no", "na", "nah", "np"}
-            if _cart and (_is_decline or any(w in last_user for w in _closing_tokens)):
+            if _is_decline or any(w in last_user for w in _closing_tokens):
+                if not _cart:
+                    return ConversationAgentResult(
+                        message="Your cart is empty 😊 What would you like to order?",
+                        action="no_action",
+                        action_data={},
+                    )
                 return ConversationAgentResult(
                     message="Great! Let me get your delivery details.",
                     action="proceed_to_address",

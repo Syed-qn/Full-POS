@@ -77,6 +77,27 @@ async def test_done_with_items_proceeds(db_session, restaurant):
     assert len(items) == 1
 
 
+async def test_proceed_with_empty_cart_is_refused_by_engine_gate(db_session, restaurant, monkeypatch):
+    """Engine safety gate: even if the agent returns proceed_to_address with an
+    empty cart, the engine refuses and tells the customer the cart is empty."""
+    from app.llm.port import ConversationAgentResult
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _txt("hi", "wpg1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    class _StubProceed:
+        async def respond(self, **kwargs):
+            return ConversationAgentResult(message="ok", action="proceed_to_address", action_data={})
+    monkeypatch.setattr("app.llm.factory.get_conversation_agent", lambda: _StubProceed())
+
+    await handle_inbound(db_session, _txt("done", "wpg2"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert any("cart is empty" in b.lower() for b in await _bodies(db_session))
+    conv = (await db_session.scalars(
+        select(Conversation).where(Conversation.phone == "+971501110001"))).one()
+    assert conv.state.get("dialogue_state") != "address_capture"
+
+
 async def test_manual_order_with_no_items_is_rejected(db_session, restaurant):
     """The manager manual-order path refuses an empty item list instead of placing an
     empty order."""
