@@ -18,6 +18,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.catalog.service import handle_catalog_order
 from app.conversation.engine import handle_inbound
 from app.conversation.models import Conversation, Message
 from app.ordering.models import Order, OrderItem
@@ -130,7 +131,13 @@ async def drive_turns(
         ) or 0
 
         inbound = _build_inbound(turn, phone, idx, restaurant_phone)
-        await handle_inbound(session, inbound, restaurant_id=restaurant_id)
+        # Route catalog basket (ORDER) the same way the production webhook does:
+        # to handle_catalog_order, NOT handle_inbound.  Everything else goes through
+        # the conversation engine as normal.
+        if inbound.type == MessageType.ORDER:
+            await handle_catalog_order(session, inbound, restaurant_id=restaurant_id)
+        else:
+            await handle_inbound(session, inbound, restaurant_id=restaurant_id)
         await session.flush()
 
         # Capture outbound Message rows created during this turn.
