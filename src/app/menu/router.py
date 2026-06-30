@@ -52,6 +52,13 @@ router = APIRouter(prefix="/api/v1", tags=["menu"])
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
+def _menu_out(menu: Menu) -> MenuOut:
+    """Serialize a menu for the manager dashboard, hiding archived (soft-deleted) dishes."""
+    out = MenuOut.model_validate(menu)
+    out.dishes = [d for d in out.dishes if d.meta_status != "archived"]
+    return out
+
+
 async def _load_menu(
     menu_id: int,
     restaurant: Restaurant,
@@ -138,7 +145,7 @@ async def get_active_menu(
     if not menu:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No active menu")
     await session.refresh(menu)
-    return menu
+    return _menu_out(menu)
 
 
 @router.get("/menus/{menu_id}", response_model=MenuOut)
@@ -147,7 +154,8 @@ async def get_menu(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    return await _load_menu(menu_id, restaurant, session)
+    menu = await _load_menu(menu_id, restaurant, session)
+    return _menu_out(menu)
 
 
 @router.post("/dishes/image", status_code=201)
@@ -282,11 +290,12 @@ async def delete_dish(
         dish.is_available = False
         dish.whatsapp_enabled = False
         dish.catalog_retailer_id = None
+        dish.meta_status = "archived"
         await record_audit(
             session, actor="manager", restaurant_id=restaurant.id, entity="dish",
             entity_id=str(dish.id), action="deactivated",
             before={"dish_number": dish.dish_number, "name": dish.name},
-            after={"reason": "deleted in OPS; has order history → deactivated"},
+            after={"reason": "deleted in OPS; has order history → archived"},
         )
     else:
         await record_audit(

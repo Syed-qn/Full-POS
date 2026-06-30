@@ -488,6 +488,8 @@ async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish
     that isn't actually orderable. Always False in text mode (no restriction)."""
     from app.identity.models import Restaurant, catalog_mode_enabled
 
+    if getattr(dish, "meta_status", "active") == "archived":
+        return True
     rest = await session.get(Restaurant, restaurant_id)
     if rest is None or not catalog_mode_enabled(rest.settings):
         return False
@@ -545,7 +547,11 @@ async def _render_menu(
 
     dishes = await session.scalars(
         select(Dish)
-        .where(Dish.menu_id == menu.id, Dish.is_available == True)  # noqa: E712
+        .where(
+            Dish.menu_id == menu.id,
+            Dish.is_available == True,  # noqa: E712
+            Dish.meta_status == "active",
+        )
         .order_by(Dish.category, Dish.dish_number)
     )
     dish_list = list(dishes)

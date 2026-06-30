@@ -296,6 +296,7 @@ async def push_dishes_to_meta(
                     Dish.menu_id == menu.id,
                     Dish.is_available.is_(True),
                     Dish.price_aed.is_not(None),
+                    Dish.meta_status == "active",
                     # Manager turned this dish OFF for WhatsApp → never publish it.
                     Dish.whatsapp_enabled.is_(True),
                 )

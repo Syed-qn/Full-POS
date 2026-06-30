@@ -5,6 +5,7 @@ import { DiffPanel } from "../components/DiffPanel";
 import { DishCard } from "../components/DishCard";
 import { DishEditModal } from "../components/DishEditModal";
 import { SectionBanner } from "../components/SectionBanner";
+import { ApiError } from "../lib/apiClient";
 import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, setWhatsapp, uploadMenu } from "../lib/menuApi";
 import { toast } from "../components/Toaster";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
@@ -131,13 +132,14 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
   async function onDeleteDish(dish: DishOut) {
     if (activeMenuId === null) return;
-    if (!window.confirm(`Delete “${dish.name}” from the menu?`)) return;
+    if (!window.confirm(`Remove “${dish.name}” from the menu? It will also be removed from WhatsApp.`)) return;
     try {
       await deleteDish(activeMenuId, dish.id);
-      toast(`“${dish.name}” deleted.`);
-      reloadDishes();
-    } catch {
-      toast("Failed to delete dish.", "error");
+      setDishes((ds) => ds.filter((d) => d.id !== dish.id));
+      setMenuRev((v) => v + 1);
+      toast(`“${dish.name}” removed from the menu.`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Failed to remove dish.", "error");
     }
   }
 

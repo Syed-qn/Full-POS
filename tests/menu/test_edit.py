@@ -42,6 +42,64 @@ async def test_delete_dish(client, auth_headers):
     assert dish["id"] not in [d["id"] for d in menu_after["dishes"]]
 
 
+async def test_delete_dish_with_order_history_archives(client, auth_headers, db_session):
+    """Dishes that were ordered can't be hard-deleted — they're archived off the menu."""
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+
+    from sqlalchemy import select
+
+    from app.identity.models import Restaurant
+    from app.menu.models import Dish
+    from app.ordering.models import Customer, Order, OrderItem
+
+    menu = await _upload(client, auth_headers)
+    dish_id = menu["dishes"][0]["id"]
+    rest = await db_session.scalar(
+        select(Restaurant).where(Restaurant.phone == "+971501234567")
+    )
+    dish = await db_session.get(Dish, dish_id)
+    customer = Customer(
+        restaurant_id=rest.id, phone="+971509876543", name="Cust",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    now = datetime.now(timezone.utc)
+    order = Order(
+        restaurant_id=rest.id, customer_id=customer.id,
+        order_number="R1-DEL1", status="confirmed",
+        priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("22.00"), total=Decimal("22.00"),
+        sla_confirmed_at=now,
+        sla_deadline=now + timedelta(minutes=40),
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add(OrderItem(
+        order_id=order.id, dish_id=dish.id,
+        dish_number=dish.dish_number or 1, dish_name=dish.name,
+        price_aed=dish.price_aed or Decimal("22.00"), qty=1,
+    ))
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/menus/{menu['id']}/dishes/{dish_id}", headers=auth_headers
+    )
+    assert resp.status_code == 204
+
+    menu_after = (
+        await client.get(f"/api/v1/menus/{menu['id']}", headers=auth_headers)
+    ).json()
+    assert dish_id not in [d["id"] for d in menu_after["dishes"]]
+
+    await db_session.refresh(dish)
+    assert dish.meta_status == "archived"
+    assert dish.is_available is False
+    assert dish.whatsapp_enabled is False
+
+
 async def test_upload_dish_image_returns_servable_url(client, auth_headers):
     # 1x1 PNG.
     png = (

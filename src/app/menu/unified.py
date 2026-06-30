@@ -60,7 +60,7 @@ async def build_unified_menu(
             (
                 await session.scalars(
                     select(Dish)
-                    .where(Dish.menu_id == menu.id)
+                    .where(Dish.menu_id == menu.id, Dish.meta_status != "archived")
                     .order_by(Dish.category, Dish.dish_number)
                 )
             ).all()

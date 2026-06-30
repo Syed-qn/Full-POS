@@ -191,11 +191,11 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
     setError(null);
     try {
       await deleteDish(menuId, d.id);
-      toast(`“${d.name}” deleted.`);
+      toast(`“${d.name}” removed from the menu.`);
       onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Failed to delete dish.");
+      setError(err instanceof ApiError ? err.detail : "Failed to remove dish.");
       setBusy(false);
     }
   }
