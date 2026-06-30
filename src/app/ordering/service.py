@@ -480,6 +480,25 @@ async def create_draft_order(
     return order
 
 
+def _effective_unit_price(dish: "Dish", variant: dict | None = None) -> Decimal:
+    """Price charged for one unit of a cart line.
+
+    A chosen serving-size variant carries its own price. Otherwise the flat dish is
+    charged at its SALE price when one is set and valid (0 < sale < base) — so a dish
+    on sale (e.g. Mojito base 40 / sale 20) is added to the cart at 20, not 40. Falls
+    back to the base price when there's no sale price.
+    """
+    if variant:
+        return Decimal(str(variant["price_aed"]))
+    base = dish.price_aed
+    sale = getattr(dish, "sale_price_aed", None)
+    if sale is not None:
+        sale_dec = Decimal(str(sale))
+        if sale_dec > 0 and (base is None or sale_dec < base):
+            return sale_dec
+    return base
+
+
 async def add_item(
     session: "AsyncSession",
     *,
@@ -490,9 +509,9 @@ async def add_item(
     variant: dict | None = None,
 ) -> OrderItem:
     # When a serving-size variant is chosen, snapshot its name + price; otherwise the
-    # dish behaves exactly as before (base price, no variant label).
+    # dish is charged at its sale price when set (else base price), no variant label.
     variant_name = variant.get("name") if variant else None
-    unit_price = Decimal(str(variant["price_aed"])) if variant else dish.price_aed
+    unit_price = _effective_unit_price(dish, variant)
 
     # Merge into an existing line for the same dish + variant + notes so the cart shows
     # "2x Mango Lassi" instead of two separate "1x" lines (matches how real ordering
@@ -744,17 +763,18 @@ async def modify_order(
         dish = entry["dish"]
         qty = entry.get("qty", 1)
         notes = entry.get("notes")
+        unit_price = _effective_unit_price(dish)
         item = OrderItem(
             order_id=order.id,
             dish_id=dish.id,
             dish_number=dish.dish_number,
             dish_name=dish.name,
-            price_aed=dish.price_aed,
+            price_aed=unit_price,
             qty=qty,
             notes=notes,
         )
         session.add(item)
-        subtotal += dish.price_aed * qty
+        subtotal += unit_price * qty
 
     order.subtotal = subtotal
     order.total = subtotal + order.delivery_fee_aed

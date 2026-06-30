@@ -75,6 +75,25 @@ async def test_add_item_without_variant_unchanged(db_session, restaurant):
     assert order.total == Decimal("24.00")
 
 
+async def test_add_item_uses_sale_price_when_set(db_session, restaurant):
+    """A dish on sale is added to the cart at its sale price, not the base price."""
+    order, _biryani, lassi = await _seed(db_session, restaurant)
+    lassi.sale_price_aed = Decimal("8.00")  # base 12 → sale 8
+    await db_session.flush()
+    item = await add_item(db_session, order=order, dish=lassi, qty=2)
+    assert item.price_aed == Decimal("8.00")
+    assert order.total == Decimal("16.00")
+
+
+async def test_add_item_ignores_invalid_sale_price(db_session, restaurant):
+    """A sale price that isn't below the base price is ignored (charges base)."""
+    order, _biryani, lassi = await _seed(db_session, restaurant)
+    lassi.sale_price_aed = Decimal("20.00")  # >= base 12 → ignore
+    await db_session.flush()
+    item = await add_item(db_session, order=order, dish=lassi, qty=1)
+    assert item.price_aed == Decimal("12.00")
+
+
 async def test_add_item_with_variant_snapshots_price(db_session, restaurant):
     order, biryani, _lassi = await _seed(db_session, restaurant)
     variant = {"name": "4 serve", "price_aed": "60.00", "dish_number": None}
