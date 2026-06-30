@@ -5121,6 +5121,43 @@ async def handle_inbound(
     if conv.manual_takeover:
         return
 
+    # Browse-by-category: taps on the category picker are self-identifying interactive
+    # ids, so they work in any dialogue state. Three shapes, all paginated so EVERY dish
+    # is reachable by tapping:
+    #   cat:<name>            -> first 30 cards of that category
+    #   catmore:<offset>:<name> -> next 30 cards of that category ("Show more")
+    #   catpage:<n>           -> next page of the category list ("More categories")
+    # Only ever fires when the manager enabled the picker (that's how the customer got
+    # the list in the first place), so it stays fully revertable.
+    if inbound.type in (MessageType.LIST_REPLY, MessageType.BUTTON_REPLY):
+        _iid = inbound.payload.get("id") or inbound.payload.get("button_id") or ""
+        if _iid.startswith(("cat:", "catmore:", "catpage:")):
+            from app.catalog.service import send_catalog_categories, send_catalog_category
+
+            _ik = f"catbrowse-{conv.id}-{inbound.wa_message_id}"
+            if _iid.startswith("catpage:"):
+                _pg = _iid[len("catpage:"):]
+                await send_catalog_categories(
+                    session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                    page=int(_pg) if _pg.isdigit() else 0, idempotency_key=_ik,
+                )
+            elif _iid.startswith("catmore:"):
+                _parts = _iid.split(":", 2)  # ["catmore", offset, name]
+                _off = _parts[1] if len(_parts) > 1 else "0"
+                _cat = _parts[2] if len(_parts) > 2 else ""
+                await send_catalog_category(
+                    session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                    category=_cat, offset=int(_off) if _off.isdigit() else 0,
+                    idempotency_key=_ik,
+                )
+            else:  # cat:<name>
+                await send_catalog_category(
+                    session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                    category=_iid[len("cat:"):], offset=0, idempotency_key=_ik,
+                )
+            _set_state(conv, dialogue_state="menu_sent")
+            return
+
     # ── Customer conversation (full AI) ────────────────────────────────────
     from app.identity.models import Restaurant as RestaurantModel
     restaurant = await session.get(RestaurantModel, restaurant_id)
