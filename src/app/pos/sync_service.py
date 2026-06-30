@@ -73,9 +73,15 @@ async def sync_menu_from_pos(
     *,
     restaurant_id: int,
     provider: PosProvider | None = None,
+    limit: int | None = None,
+    publish: bool = True,
 ) -> PosSyncResult:
     """Pull the POS menu and mirror it into dishes. Caller commits. Best-effort image
-    generation; a single image failure never aborts the sync."""
+    generation; a single image failure never aborts the sync.
+
+    ``limit`` caps how many sellable items are synced (for a safe first/validation run).
+    ``publish`` False skips the Meta push (dishes created locally only — a dry run).
+    """
     from app.menu.service import store_dish_image
 
     rest = await session.get(Restaurant, restaurant_id)
@@ -84,6 +90,8 @@ async def sync_menu_from_pos(
 
     pos_menu = await provider.fetch_menu(account=account, location=location, base_url=base_url)
     records = map_pos_menu(pos_menu)
+    if limit is not None and limit >= 0:
+        records = records[:limit]
     result = PosSyncResult(fetched=len(records))
 
     # SAFETY: never wipe the live menu if the POS returns nothing (outage / bad response).
@@ -184,14 +192,15 @@ async def sync_menu_from_pos(
     )
 
     # Publish to Meta so the POS menu shows on WhatsApp (best-effort, never fail the sync).
-    try:
-        from app.catalog.sync_service import auto_publish_to_meta
+    if publish:
+        try:
+            from app.catalog.sync_service import auto_publish_to_meta
 
-        await auto_publish_to_meta(session, restaurant_id=restaurant_id)
-        await session.commit()
-    except Exception:  # noqa: BLE001
-        await session.rollback()
-        logger.exception("auto-publish after POS sync failed (restaurant %s)", restaurant_id)
+            await auto_publish_to_meta(session, restaurant_id=restaurant_id)
+            await session.commit()
+        except Exception:  # noqa: BLE001
+            await session.rollback()
+            logger.exception("auto-publish after POS sync failed (restaurant %s)", restaurant_id)
 
     # Refresh the bot's grounding so it answers from the new menu.
     try:
