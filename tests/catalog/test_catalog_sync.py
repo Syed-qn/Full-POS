@@ -126,6 +126,40 @@ async def test_send_catalog_text_fallback_when_all_in_review(db_session, restaur
     assert "AED 12" in msg.payload["body"]
 
 
+async def test_sync_deletes_dish_when_product_removed_in_meta(db_session, restaurant, monkeypatch):
+    """A dish whose Meta product was deleted is removed here too on the next sync
+    (no order history → hard delete)."""
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
+                           "catalog_ordering_enabled": True}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Gone",
+        price_aed=Decimal("9.00"), category="Misc", is_available=True,
+        name_normalized="gone", catalog_retailer_id="gone1",
+    )
+    db_session.add(dish)
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="gone1", name="Gone",
+        price_aed=Decimal("9.00"), is_active=True, raw={},
+    ))
+    await db_session.commit()
+    dish_id = dish.id
+
+    # Meta now returns an EMPTY catalogue → the product (and its dish) are gone.
+    _patch_meta(monkeypatch, [])
+    res = await sync_catalog_from_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    assert res.deactivated == 1
+    assert await db_session.get(Dish, dish_id) is None  # dish deleted
+    assert await db_session.scalar(
+        select(CatalogProduct).where(CatalogProduct.retailer_id == "gone1")
+    ) is None  # mirror row deleted
+
+
 async def test_sync_upserts_and_deactivates(db_session, restaurant, monkeypatch):
     restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
                            "catalog_ordering_enabled": True}
@@ -143,7 +177,7 @@ async def test_sync_upserts_and_deactivates(db_session, restaurant, monkeypatch)
     assert {r.name for r in rows} == {"Biryani", "Mint"}
     assert next(r for r in rows if r.retailer_id == "r1").price_aed == Decimal("30.00")
 
-    # Second sync: r2 gone from Meta, r1 price changed → r1 updated, r2 deactivated.
+    # Second sync: r2 gone from Meta, r1 price changed → r1 updated, r2 DELETED.
     _patch_meta(monkeypatch, [_mp("r1", "Biryani", 28, "Rice")])
     res2 = await sync_catalog_from_meta(db_session, restaurant_id=restaurant.id)
     await db_session.commit()
@@ -155,7 +189,7 @@ async def test_sync_upserts_and_deactivates(db_session, restaurant, monkeypatch)
         select(CatalogProduct).where(CatalogProduct.retailer_id == "r2")
     )
     assert r1.price_aed == Decimal("28.00") and r1.is_active is True
-    assert r2.is_active is False  # vanished from Meta → deactivated, not deleted
+    assert r2 is None  # deleted in Meta → deleted here too (delete is delete)
 
 
 async def test_sync_links_and_creates_orderable_dishes(db_session, restaurant, monkeypatch):

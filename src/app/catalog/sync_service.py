@@ -204,12 +204,47 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
         )
         row.synced_at = now
 
-    # Products that disappeared from Meta → mark inactive (don't delete, keep history
-    # + any order references intact).
+    # Products that disappeared from Meta → DELETE them here too (delete is delete): drop
+    # the catalogue mirror row AND the linked dish. Exception: a dish with past order
+    # history can't be hard-deleted without corrupting those orders (FK), so it is instead
+    # unlinked + turned off for WhatsApp (kept in the menu, off the catalogue).
+    from app.audit import record_audit
+    from app.menu.models import Dish
+    from app.ordering.models import OrderItem
+
     for retailer_id, row in existing.items():
-        if retailer_id not in seen and row.is_active:
-            row.is_active = False
-            result.deactivated += 1
+        if retailer_id in seen:
+            continue
+        result.deactivated += 1
+        dish = await session.scalar(
+            select(Dish).where(
+                Dish.restaurant_id == restaurant_id,
+                Dish.catalog_retailer_id == retailer_id,
+            ).limit(1)
+        )
+        if dish is not None:
+            has_orders = await session.scalar(
+                select(OrderItem.id).where(OrderItem.dish_id == dish.id).limit(1)
+            )
+            if has_orders:
+                # Preserve order history — unlink + turn off instead of hard-deleting.
+                dish.catalog_retailer_id = None
+                dish.whatsapp_enabled = False
+                await record_audit(
+                    session, actor="meta-sync", restaurant_id=restaurant_id,
+                    entity="dish", entity_id=str(dish.id),
+                    action="whatsapp_unlinked_meta_deleted",
+                    before={"catalog_retailer_id": retailer_id},
+                    after={"whatsapp_enabled": False, "reason": "deleted in Meta; has orders"},
+                )
+            else:
+                await record_audit(
+                    session, actor="meta-sync", restaurant_id=restaurant_id,
+                    entity="dish", entity_id=str(dish.id), action="removed",
+                    before={"name": dish.name, "reason": "deleted in Meta"},
+                )
+                await session.delete(dish)
+        await session.delete(row)
 
     result.total_active = len(seen)
     # Make every synced product orderable (link/create its Dish) so a customer can type

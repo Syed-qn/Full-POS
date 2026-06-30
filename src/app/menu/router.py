@@ -256,12 +256,8 @@ async def delete_dish(
     dish = await session.get(Dish, dish_id)
     if dish is None or dish.menu_id != menu.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dish not found")
-    await record_audit(
-        session, actor="manager", restaurant_id=restaurant.id, entity="dish",
-        entity_id=str(dish.id), action="removed",
-        before={"dish_number": dish.dish_number, "name": dish.name},
-    )
     from app.catalog.meta_client import _dish_retailer_id
+    from app.ordering.models import OrderItem
 
     rid = restaurant.id  # capture before expire_all expires the restaurant row
     # Capture EVERY Content ID this dish could exist under in Meta, before the delete:
@@ -276,7 +272,29 @@ async def delete_dish(
             _dish_retailer_id(dish.id, dish.dish_number),
         ) if r
     }
-    await session.delete(dish)
+    # A dish with order history can't be hard-deleted (order_items FK → would corrupt past
+    # orders). In that case DEACTIVATE it instead: unlink, turn WhatsApp off, mark
+    # unavailable, keep the row. Otherwise hard-delete. Either way it's removed from Meta.
+    has_orders = await session.scalar(
+        select(OrderItem.id).where(OrderItem.dish_id == dish.id).limit(1)
+    )
+    if has_orders:
+        dish.is_available = False
+        dish.whatsapp_enabled = False
+        dish.catalog_retailer_id = None
+        await record_audit(
+            session, actor="manager", restaurant_id=restaurant.id, entity="dish",
+            entity_id=str(dish.id), action="deactivated",
+            before={"dish_number": dish.dish_number, "name": dish.name},
+            after={"reason": "deleted in OPS; has order history → deactivated"},
+        )
+    else:
+        await record_audit(
+            session, actor="manager", restaurant_id=restaurant.id, entity="dish",
+            entity_id=str(dish.id), action="removed",
+            before={"dish_number": dish.dish_number, "name": dish.name},
+        )
+        await session.delete(dish)
     await session.commit()
     session.expire_all()
     # Remove it from the Meta catalogue too so it stops showing as a WhatsApp card.

@@ -3,7 +3,7 @@ import {
   formatEngineLabel,
   formatRejectionReason,
 } from "../lib/dispatchDisplay";
-import type { DispatchExplainOut } from "../lib/types";
+import type { DispatchExplainOut, DispatchPerStopOut } from "../lib/types";
 import s from "./DispatchExplainSection.module.css";
 
 export function DispatchExplainSection({
@@ -15,7 +15,7 @@ export function DispatchExplainSection({
   batchPreviewLabel?: string | null;
   orderId: number;
 }) {
-  const perStop =
+  const perStop: DispatchPerStopOut[] =
     explain.per_stop ??
     (explain.projected_min
       ? Object.entries(explain.projected_min).map(([oid, projected_min]) => ({
