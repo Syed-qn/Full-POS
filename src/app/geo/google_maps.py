@@ -19,6 +19,7 @@ _CITY_SPEED_KMH = 25.0
 _ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 _FIELD_MASK = "routes.distanceMeters,routes.duration"
 _GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+_DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json"
 
 # Address-component types, most→least specific, used to build an "Area, City"
 # label from a Google reverse-geocode result. "Specific" = the place name a
@@ -113,6 +114,39 @@ class GoogleMapsGeoProvider:
         """Return ETA in whole minutes (static speed when is_estimate=True)."""
         raw = (distance_km / _CITY_SPEED_KMH) * 60
         return max(1, math.ceil(raw)) + buffer_minutes
+
+    def distance_matrix(
+        self,
+        origins: list[tuple[float, float]],
+        destinations: list[tuple[float, float]],
+    ) -> list[list[float]]:
+        """Return travel minutes from each origin to each destination.
+
+        Uses the Google Distance Matrix API when configured; falls back to
+        haversine + static speed (``is_estimate=True``) on any failure.
+        """
+        if not origins or not destinations:
+            return []
+        try:
+            return self._maps_distance_matrix(origins, destinations)
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully on any failure
+            logger.warning("Google distance matrix failed, using haversine: %s", exc)
+            self.is_estimate = True
+            return self._fallback_distance_matrix(origins, destinations)
+
+    def _fallback_distance_matrix(
+        self,
+        origins: list[tuple[float, float]],
+        destinations: list[tuple[float, float]],
+    ) -> list[list[float]]:
+        matrix: list[list[float]] = []
+        for olat, olon in origins:
+            row: list[float] = []
+            for dlat, dlon in destinations:
+                d = _haversine(olat, olon, dlat, dlon)
+                row.append(float(self.eta_minutes(d, buffer_minutes=0)))
+            matrix.append(row)
+        return matrix
 
     def suggest(self, query, *, near=None, limit=5):
         """Address candidates via the Google Geocoding API, biased toward ``near``.
@@ -242,3 +276,45 @@ class GoogleMapsGeoProvider:
         if meters <= 0:
             raise ValueError("Invalid distance from Google Maps")
         return meters / 1000.0
+
+    def _maps_distance_matrix(
+        self,
+        origins: list[tuple[float, float]],
+        destinations: list[tuple[float, float]],
+    ) -> list[list[float]]:
+        """Call Google Distance Matrix API. Raises on any failure for graceful fallback."""
+        if not self._api_key:
+            raise ValueError("APP_GOOGLE_MAPS_API_KEY not configured")
+
+        def _fmt(points: list[tuple[float, float]]) -> str:
+            return "|".join(f"{lat},{lon}" for lat, lon in points)
+
+        params = {
+            "origins": _fmt(origins),
+            "destinations": _fmt(destinations),
+            "key": self._api_key,
+            "mode": "driving",
+        }
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(_DISTANCE_MATRIX_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        rows = data.get("rows") or []
+        if len(rows) != len(origins):
+            raise ValueError("Unexpected distance matrix row count")
+        matrix: list[list[float]] = []
+        for row in rows:
+            elements = row.get("elements") or []
+            if len(elements) != len(destinations):
+                raise ValueError("Unexpected distance matrix element count")
+            mins_row: list[float] = []
+            for el in elements:
+                if el.get("status") != "OK":
+                    raise ValueError(f"Distance matrix element status: {el.get('status')}")
+                duration = el.get("duration") or {}
+                seconds = duration.get("value")
+                if seconds is None:
+                    raise ValueError("Missing duration in distance matrix element")
+                mins_row.append(float(seconds) / 60.0)
+            matrix.append(mins_row)
+        return matrix

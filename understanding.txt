@@ -1853,3 +1853,52 @@
   modify cancels order & exits). Full conversation+ordering suite 352 passed; ruff clean. Adjusted the
   guard once after _confirmation_no_action_reshows_real_summary caught "make it two" — added modify-
   phrase exclusion. Not pushed (user: dont push).
+
+- 2026-06-30 18:30 Asia/Dubai — DOCS: Updated dispatch batching enterprise upgrade plan
+  (docs/superpowers/plans/2026-06-30-dispatch-batching-enterprise-upgrade.md) with new §3.6
+  "Travel time & 40-minute SLA — current behaviour & gaps": SLA clock from finalize_confirmation
+  (40 min), greedy 30-min internal gate vs OR-Tools 40-min hard constraint, _compute_route_time_to_stops
+  / geo port legs, tenant sla_buffer_per_order_minutes:0 vs global 10, live tracking batch buffer,
+  gaps mapped to Phase 0/2/3/4 PRs, production geo+ortools recommendation. Changelog + code refs
+  updated. Not committed (user: no git without permission).
+
+- 2026-06-30 19:15 Asia/Dubai — DESIGN SPEC: Brainstorming complete for dispatch enterprise
+  upgrade (B=Phases 0–4 spec §4.3, C=SLA-first). Wrote consolidated design spec at
+  docs/superpowers/specs/2026-06-30-dispatch-enterprise-design.md (goals, architecture,
+  candidate pool, smart hold, zones, re-batch FSM, explainability schema, error matrix,
+  testing, 4-week schedule, SLA-safe launch defaults, preparing-order notify=option A).
+  Self-reviewed: no TBDs/contradictions. Next: user spec review → writing-plans. Not committed.
+
+- 2026-06-30 19:45 Asia/Dubai — PLAN: User approved design spec. Wrote TDD implementation plan
+  docs/superpowers/plans/2026-06-30-dispatch-enterprise-implementation.md (15 tasks + O1, week 1–4,
+  batch_plan.py, candidate_pool.py, zones.py, concrete pytest snippets, SLA merge gates). Self-reviewed
+  vs spec — full coverage. Awaiting execution choice (subagent vs inline) + git permission. Not committed.
+
+- 2026-06-30 13:00 Asia/Dubai — DISPATCH ENTERPRISE (parallel subagents, user: run CLAUDE.md tests each task):
+  Week1 done: batch_plan.py, simulation harness, preview=engine, OR-Tools default+fallback, Settings presets.
+  Parallel batch2: Week2 backend (explain.py, schemas, candidate_pool, smart hold, assignments API) 142 passed;
+  zones.py; frontend DispatchExplainSection+KpiPanel 201 npm tests; rebatch 35 passed; zones wired to batching 24;
+  distance_matrix geo+optimizer 41 passed. Post-task gate: pytest tests/dispatch/, ruff, graphify update, frontend npm test.
+  Not committed.
+- [2026-06-30 12:50 +04] FE DISPATCH Tasks 7+12 DONE (frontend only, no backend): (1) Task 7 — types.ts
+  AlgorithmScoreOut/DispatchExplainOut + dispatch_explain|batch_preview_label on OrderDetailOut;
+  DispatchExplainSection.tsx renders engine, total_est_min, per_stop table, rejections w/ reason labels,
+  zone/batch_reason/route_sequence; wired into OrderDetailDrawer Overview tab. (2) Task 12 —
+  DispatchKpiPanel.tsx (batch rate, avg stops, engine fallback %) + dispatchApi.ts placeholder
+  GET /api/v1/dispatch/kpis w/ MOCK_DISPATCH_KPIS 404 fallback; integrated on LiveOpsScreen.
+  Tests: OrderDetailDrawer dispatch explainability, DispatchKpiPanel, dispatchDisplay. vitest 201/201 pass.
+  Not committed.
+- [2026-06-30 12:52 +04] BE DISPATCH Tasks 13–15 DONE: Re-batch FSM in `src/app/dispatch/service.py`.
+  Movable orders now join-filtered to `Batch.status == "planned"` only (picked_up immutable).
+  `_dispatch_ortools` post-solve: `_apply_unbatch_sla_safety` splits multi-stop routes with any
+  stop > 40 min; `_plan_splits_batch` + `record_audit(action=batch_split_sla_risk)` + manager alert
+  when a former multi-order planned batch is broken apart. Ready hook (`advance_kitchen_status`) and
+  `sweep_ready_once` already call `run_dispatch_engine` → same ortools movable path. Task 15:
+  `_notify_eta_change` on resequence (existing) covered by `test_resequence_enqueues_customer_eta_update`.
+  New `tests/dispatch/test_rebatch.py` (6 tests: insert into planned batch, kitchen hook, no-op after
+  pickup, SLA unbatch+audit, sweep w/ movable, customer ETA on resequence). Mandatory pytest:
+  35 passed; ruff clean on `src/app/dispatch` + test_rebatch.py. Not committed.
+- [2026-06-30 12:55 +04] Week-2 dispatch backend (Tasks 5–6, 8–9, service.py owner): rich `algorithm_score` via `src/app/dispatch/explain.py` (`build_route_algorithm_score`, `build_rejections_for_dropped`) on greedy + OR-Tools `_commit_route` paths — engine, engine_fallback, route_sequence, total_est_min, per_stop[{order_id, projected_min, route_min, buffer_min}], rejections, batch_reason; `GET /api/v1/dispatch/assignments` + `AssignmentExplainOut` in `src/app/dispatch/schemas.py`; prep-aware pool `src/app/dispatch/candidate_pool.py` (`build_order_candidates`) wired into `_dispatch` with `prep_dispatch_lead_min` (default 8) in identity settings; preparing orders keep `preparing` until ready but get `rider_id`; smart hold `hold_until = min(ready_at + batch_hold_seconds, prep_deadline_mate − rider_eta)` via `_hold_until` + `_nearest_rider_eta_min`. Tests: test_dispatch_engine explainability, test_dispatch_router assignments API, test_prep_aware_dispatch.py, test_batch_hold smart cap. Mandatory: `pytest tests/dispatch/` 142 passed; ruff clean on dispatch/identity/tests/dispatch. Not committed.
+- [2026-06-30 13:45 Asia/Dubai] FIX: Flaky `test_login_rate_limited_after_threshold` in full suite — app lifespan was overwriting test-injected `TokenBucketLimiter` with prod redis limiter (stale bucket keys). Fix: `APP_RATE_LIMIT_ENABLED=false` default in tests/conftest; `rate_limiter` fixture enables it per-test; lifespan only `set_limiter` when `get_limiter()` is None and clears on shutdown if it installed one. Not committed.
+- [2026-06-30 14:05 Asia/Dubai] DISPATCH ENTERPRISE CODE 100% (user: no assumptions): (1) Preview pool — `_build_preview_candidates` uses `build_order_candidates` (ready + prep-aware preparing); fixed `test_batch_preview` to seed `ready` orders. (2) P0 E2E — `test_preview_matches_post_dispatch_batch_assignments` proves preview labels == post-dispatch `BatchOrder` groups. (3) HTTP — `test_live_map_includes_active_batch_polyline`, `test_dispatch_kpis_numeric_types`. (4) Frontend — removed `MOCK_DISPATCH_KPIS` from `dispatchApi.ts`; moved to `frontend/src/test/fixtures/dispatch.ts`. (5) Docs — design spec status → Implemented; plan Tasks 1–15 steps [x]; O1 ops deploy steps remain [ ]. Verification: `pytest tests/dispatch tests/ordering/test_order_detail` 186 passed; frontend vitest 203 passed. Not committed.
+- [2026-06-30 13:30 Asia/Dubai] DISPATCH ENTERPRISE 100% WIRING (audit gaps closed): (1) Order detail — `OrderDetailOut.batch_preview_label` + `dispatch_explain` from `Assignment.algorithm_score` + `preview_batch_groups` in `get_order_detail()`. (2) APIs — `GET /api/v1/dispatch/kpis` (`dispatch/kpis.py` compute_dispatch_kpis) + `GET /api/v1/dispatch/live-map` (`dispatch/live_map.py` batch polylines + SLA rings). (3) Explainability — `explain.py` now sets `zone` + `same_zone`/`same_zone_corridor_ok` batch_reason when `delivery_zones` configured; passed through greedy/ortools commit paths. (4) Preview=engine — `dry_plan_batches()` runs OR-Tools dry solve when `dispatch_engine: ortools`; `preview_batch_groups` uses it. Greedy proximity default aligned to 1.5; engine default `ortools` in `_dispatch`. (5) Settings — `delivery_zones` on `SettingsPatch` with validator; zone editor + `prep_dispatch_lead_min` on Dispatch tab; PATCH on save. (6) Frontend — `LiveOpsMap.tsx` on LiveOpsScreen (fleet map); `fetchDispatchKpis`/`fetchLiveOpsMap` real APIs (no mock KPI fallback); Settings zone editor test. (7) Tests — simulation A,B,A,D,B,A; order detail dispatch_explain; dispatch router kpis/live-map; preview ortools alignment. `pytest tests/dispatch tests/ordering/test_order_detail` 177 passed; full suite 1176 passed (1 unrelated flaky login rate-limit); frontend vitest 203 passed. Not committed.

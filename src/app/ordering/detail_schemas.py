@@ -93,6 +93,8 @@ class OrderDetailOut(BaseModel):
     chat: list[ChatMessageOut]
     convo_summary: str | None = None  # kitchen-facing digest: special requests + customer asks
     route: list[GpsPingOut]
+    batch_preview_label: str | None = None
+    dispatch_explain: dict | None = None
 
 
 class CustomerPatchIn(BaseModel):

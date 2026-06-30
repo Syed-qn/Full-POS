@@ -56,6 +56,21 @@ class FakeGeoProvider:
         raw = (distance_km / _CITY_SPEED_KMH) * 60
         return max(1, math.ceil(raw)) + buffer_minutes
 
+    def distance_matrix(
+        self,
+        origins: list[tuple[float, float]],
+        destinations: list[tuple[float, float]],
+    ) -> list[list[float]]:
+        """Return travel minutes from each origin to each destination (haversine + static speed)."""
+        matrix: list[list[float]] = []
+        for olat, olon in origins:
+            row: list[float] = []
+            for dlat, dlon in destinations:
+                d = self.distance_km(olat, olon, dlat, dlon)
+                row.append(float(self.eta_minutes(d, buffer_minutes=0)))
+            matrix.append(row)
+        return matrix
+
     def suggest(self, query, *, near=None, limit=5):
         """Offline address candidates from the Dubai gazetteer (dev/tests).
 

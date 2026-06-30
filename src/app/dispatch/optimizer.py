@@ -186,14 +186,22 @@ def optimize_dispatch(
 
     # Integer travel-time matrix (scaled minutes).
     matrix = [[0] * n_nodes for _ in range(n_nodes)]
-    for i in range(n_nodes):
-        for j in range(n_nodes):
-            if i == j:
-                continue
-            mins = _leg_minutes(
-                points[i][0], points[i][1], points[j][0], points[j][1], geo_provider
-            )
-            matrix[i][j] = int(round(mins * _SCALE))
+    if geo_provider is not None and hasattr(geo_provider, "distance_matrix"):
+        mins_matrix = geo_provider.distance_matrix(points, points)
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                if i == j:
+                    continue
+                matrix[i][j] = int(round(mins_matrix[i][j] * _SCALE))
+    else:
+        for i in range(n_nodes):
+            for j in range(n_nodes):
+                if i == j:
+                    continue
+                mins = _leg_minutes(
+                    points[i][0], points[i][1], points[j][0], points[j][1], geo_provider
+                )
+                matrix[i][j] = int(round(mins * _SCALE))
 
     n_vehicles = len(vrp_riders)
     manager = pywrapcp.RoutingIndexManager(n_nodes, n_vehicles, 0)

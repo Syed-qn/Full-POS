@@ -26,6 +26,9 @@ os.environ.setdefault("APP_MARKETING_TEMPLATE_PROVIDER", "mock")
 # Never start the in-process dispatch sweep loop during tests — it would re-dispatch
 # orders out from under tests on a timer. Production/dev leave it on (default True).
 os.environ.setdefault("APP_DISPATCH_INPROCESS_SWEEP", "false")
+# Disable lifespan-installed rate limiting by default — tests that exercise the
+# limiter opt in via the ``rate_limiter`` fixture (isolated redis DB 9).
+os.environ.setdefault("APP_RATE_LIMIT_ENABLED", "false")
 
 
 import pytest
@@ -134,9 +137,13 @@ async def redis_client():
 
 
 @pytest.fixture
-async def rate_limiter(redis_client):
+async def rate_limiter(redis_client, monkeypatch):
     """Install a live token-bucket limiter for the app under test, isolated per
     test (redis/9 flushed before+after), and reset afterwards."""
+    monkeypatch.setenv("APP_RATE_LIMIT_ENABLED", "true")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
     limiter = TokenBucketLimiter(redis_client)
     set_limiter(limiter)
     yield limiter

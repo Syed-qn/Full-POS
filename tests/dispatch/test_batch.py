@@ -208,6 +208,71 @@ def test_compute_total_est_includes_depot_leg():
     assert est_with_origin >= 25, "14 km depot leg must add a meaningful drive estimate"
 
 
+NORTH_ZONE = {
+    "name": "North",
+    "center_lat": 25.225,
+    "center_lng": 55.270,
+    "radius_km": 0.5,
+}
+ON_WAY_ZONE = {
+    "name": "MidNorth",
+    "center_lat": 25.211,
+    "center_lng": 55.270,
+    "radius_km": 0.5,
+}
+SPLIT_ZONES = [NORTH_ZONE, ON_WAY_ZONE]
+MARINA_ZONE = [{"name": "Marina", "center_lat": 25.08, "center_lng": 55.14, "radius_km": 2.5}]
+
+
+def test_zones_same_zone_batches_nearby():
+    """When delivery_zones are configured, same-zone orders batch even if far apart."""
+    origin = (25.08, 55.14)
+    a = _order(1, 25.081, 55.141)
+    b = _order(2, 25.082, 55.142, ready_offset_s=60)
+    # Without zones these are ~0.15 km apart and would batch anyway; with zones they
+    # must still batch via same-zone eligibility.
+    batches = build_batches(
+        [a, b],
+        proximity_km=0.01,
+        origin=origin,
+        delivery_zones=MARINA_ZONE,
+    )
+    assert len(batches) == 1
+    assert {o.order_id for o in batches[0].orders} == {1, 2}
+
+
+def test_zones_corridor_batches_on_the_way_different_zones():
+    """Corridor eligibility batches on-the-way orders across adjacent zones."""
+    origin = (25.200, 55.270)
+    far = _order(1, 25.225, 55.270)
+    on_way = _order(2, 25.211, 55.270, ready_offset_s=60)
+    # Flat proximity would reject (~1.5 km between drop-offs); zones+corridor accepts.
+    batches = build_batches(
+        [far, on_way],
+        proximity_km=0.5,
+        origin=origin,
+        max_detour_km=0.6,
+        delivery_zones=SPLIT_ZONES,
+    )
+    assert len(batches) == 1
+    assert [o.order_id for o in batches[0].orders] == [2, 1]
+
+
+def test_zones_rejects_off_route_lateral_stop():
+    """Zone mode still rejects an off-route lateral stop (big corridor detour)."""
+    origin = (25.200, 55.270)
+    north = _order(1, 25.225, 55.270)
+    east = _order(2, 25.205, 55.300, ready_offset_s=60)
+    batches = build_batches(
+        [north, east],
+        proximity_km=5.0,
+        origin=origin,
+        max_detour_km=0.6,
+        delivery_zones=SPLIT_ZONES,
+    )
+    assert len(batches) == 2
+
+
 def test_planned_batch_and_compute_respects_geo_port_equiv_for_inter_stop():
     """Unit drive: when geo passed (future), inter calc uses its distance/eta; haversine fallback when None.
     (In practice engine passes get_geo_provider() which for tests is Fake equiv to haversine 25kmh.)

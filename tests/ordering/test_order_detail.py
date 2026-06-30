@@ -145,6 +145,59 @@ async def test_get_order_detail_no_rider_returns_null(db_session, restaurant):
     assert detail.route == []
 
 
+async def test_get_order_detail_includes_dispatch_explain(db_session, restaurant):
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import Assignment
+    from app.identity.models import Rider
+
+    order, _, addr = await _seed_full_order(db_session, restaurant.id)
+    order.status = "assigned"
+    rider = Rider(
+        restaurant_id=restaurant.id,
+        name="R1",
+        phone="+971500000111",
+        status="on_delivery",
+        performance={},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    order.rider_id = rider.id
+    order.address_id = addr.id
+    score = {
+        "engine": "ortools",
+        "engine_fallback": False,
+        "route_sequence": [order.id],
+        "total_est_min": 22.0,
+        "per_stop": [
+            {
+                "order_id": order.id,
+                "projected_min": 22.0,
+                "route_min": 8.0,
+                "buffer_min": 0,
+            }
+        ],
+        "rejections": [],
+        "batch_reason": "solo",
+    }
+    db_session.add(
+        Assignment(
+            order_id=order.id,
+            rider_id=rider.id,
+            assigned_at=datetime.now(timezone.utc),
+            algorithm_score=score,
+        )
+    )
+    await db_session.commit()
+
+    detail = await get_order_detail(
+        db_session, restaurant_id=restaurant.id, order_id=order.id
+    )
+    assert detail.dispatch_explain is not None
+    assert detail.dispatch_explain["engine"] == "ortools"
+    assert detail.dispatch_explain["per_stop"][0]["order_id"] == order.id
+
+
 async def test_get_order_detail_timeline_from_audit_log(db_session, restaurant):
     from app.audit.service import record_audit
 
@@ -311,6 +364,48 @@ async def test_api_order_detail_returns_200(client, db_session, restaurant):
     assert "timeline" in data
     assert "chat" in data
     assert "route" in data
+
+
+async def test_api_order_detail_includes_dispatch_explain(client, db_session, restaurant):
+    from datetime import datetime, timezone
+
+    from app.dispatch.models import Assignment
+    from app.identity.models import Rider
+
+    order, _, addr = await _seed_full_order(db_session, restaurant.id)
+    order.status = "assigned"
+    rider = Rider(
+        restaurant_id=restaurant.id,
+        name="R1",
+        phone="+971500000112",
+        status="on_delivery",
+        performance={},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    order.rider_id = rider.id
+    order.address_id = addr.id
+    db_session.add(
+        Assignment(
+            order_id=order.id,
+            rider_id=rider.id,
+            assigned_at=datetime.now(timezone.utc),
+            algorithm_score={
+                "engine": "ortools",
+                "per_stop": [{"order_id": order.id, "projected_min": 22.0}],
+            },
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/v1/orders/{order.id}/detail",
+        headers=_auth(restaurant.id),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["dispatch_explain"]["engine"] == "ortools"
+    assert data["dispatch_explain"]["per_stop"][0]["order_id"] == order.id
 
 
 async def test_api_order_detail_unknown_id_returns_404(client, db_session, restaurant):

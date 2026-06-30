@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -95,6 +95,22 @@ const mockDetail: OrderDetailOut = {
     { direction: "outbound", text: null, ts: 1717660810 },
   ],
   route: [],
+  dispatch_explain: {
+    engine: "ortools",
+    engine_fallback: false,
+    route_sequence: [1, 15],
+    total_est_min: 28.5,
+    per_stop: [
+      { order_id: 1, projected_min: 22.1, route_min: 8.0, buffer_min: 0 },
+      { order_id: 15, projected_min: 28.5, route_min: 14.2, buffer_min: 10 },
+    ],
+    rejections: [
+      { order_id: 99, reason: "sla_risk", projected_min: 41.2 },
+    ],
+    zone: "Marina",
+    batch_reason: "same_zone_corridor_ok",
+  },
+  batch_preview_label: "A",
 };
 
 const mockBasicOrder: OrderOut = {
@@ -242,5 +258,19 @@ describe("OrderDetailDrawer", () => {
   it("renders nothing when orderId is null", () => {
     renderDrawer(null);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  // 8. Dispatch section shows engine, projections, and rejection reasons
+  it("Overview tab renders dispatch explainability with rejection reasons", async () => {
+    renderDrawer(1);
+    await waitFor(() => screen.getByText("Chicken Biryani"));
+
+    const dispatch = screen.getByRole("region", { name: /dispatch explainability/i });
+    expect(within(dispatch).getByText(/OR-Tools optimizer/i)).toBeInTheDocument();
+    expect(within(dispatch).getAllByText(/28\.5 min/).length).toBeGreaterThanOrEqual(1);
+    expect(within(dispatch).getByText(/SLA risk/i)).toBeInTheDocument();
+    expect(within(dispatch).getByText(/#99/)).toBeInTheDocument();
+    expect(within(dispatch).getByText(/41\.2 min projected/i)).toBeInTheDocument();
+    expect(within(dispatch).getByText(/Marina/)).toBeInTheDocument();
   });
 });

@@ -1,0 +1,26 @@
+.panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.skTile {
+  min-width: 150px;
+  flex: 1;
+  height: 88px;
+  border-radius: var(--radius);
+  background: var(--bg-surface-inset);
+  animation: dispatchKpiPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dispatchKpiPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.error {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: 0;
+}

@@ -22,6 +22,7 @@ Schema adaptation (Phase-3 T2 flags — NO new migration required):
     remain dispatchable.
 """
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -33,15 +34,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
 from app.config import get_settings
+from app.dispatch.batch_plan import (
+    BatchPlanSettings,
+    labels_from_batches,
+    run_batch_plan,  # noqa: F401 — re-export for tests/plan
+)
 from app.dispatch.batching import (
     OrderCandidate,
     PlannedBatch,
+    _leg_minutes,
     _sequence_stops,
     build_batches,
     compute_batch_total_est_min,
 )
+from app.dispatch.candidate_pool import build_order_candidates
+from app.dispatch.explain import (
+    build_rejections_for_dropped,
+    build_route_algorithm_score,
+)
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
-from app.dispatch.optimizer import OptOrder, OptRider, optimize_dispatch
+from app.dispatch.optimizer import OptOrder, OptPlan, OptRoute, OptRider, optimize_dispatch
 from app.dispatch.scoring import RiderCandidate, rank_riders
 from app.geo.factory import get_geo_provider
 from app.geo.haversine import distance_km
@@ -53,6 +65,9 @@ from app.outbox.service import enqueue_message
 from app.whatsapp.port import OutboundMessageType
 
 _logger = logging.getLogger(__name__)
+
+# OR-Tools solve budget; exceeded → greedy fallback so dispatch never blocks the sweep.
+_ORTOOLS_SOLVE_TIMEOUT_SEC = 2.0
 
 
 @dataclass
@@ -117,61 +132,181 @@ async def run_dispatch_engine(
 run_dispatch = run_dispatch_engine
 
 
-async def preview_batch_groups(
-    session: AsyncSession, *, restaurant_id: int
-) -> dict[int, str]:
-    """Map order_id -> a batch-preview label ("A", "B", …) for active UNASSIGNED
-    orders whose drop-offs are close enough to ride together, so the order list can
-    show the upcoming batching BEFORE dispatch assigns a rider.
-
-    Uses the SAME proximity rule and cap the real engine uses (batch_proximity_km /
-    max_orders_per_batch), greedily seeding a group and pulling in nearby orders.
-    Only groups of 2+ get a label; a lone order returns nothing. This is a forecast,
-    not a commitment — the actual batch forms when orders are marked ready."""
-    from app.identity.models import Restaurant
-    from app.ordering.models import CustomerAddress, Order
-
-    restaurant = await session.get(Restaurant, restaurant_id)
+def _batch_plan_settings_from_restaurant(restaurant: Restaurant | None) -> BatchPlanSettings:
+    """Per-restaurant batch-plan knobs shared by preview and greedy dispatch."""
     rs = (restaurant.settings or {}) if restaurant is not None else {}
-    proximity_km = float(rs.get("batch_proximity_km", 1.0))
-    max_per = int(rs.get("max_orders_per_batch", 3))
+    _global = get_settings()
+    return BatchPlanSettings(
+        proximity_km=float(rs.get("batch_proximity_km", 1.5)),
+        window_min=int(rs.get("batch_window_minutes", 10)),
+        max_per_batch=int(rs.get("max_orders_per_batch", 3)),
+        buffer_per_order=int(
+            rs.get("sla_buffer_per_order_minutes", _global.sla_buffer_per_order_minutes)
+        ),
+        max_detour_km=float(rs.get("batch_max_detour_km", 0) or 0),
+        delivery_zones=rs.get("delivery_zones") or None,
+        engine=str(rs.get("dispatch_engine", "ortools")),
+    )
 
-    rows = (
-        await session.execute(
-            select(Order.id, CustomerAddress.latitude, CustomerAddress.longitude)
-            .join(CustomerAddress, CustomerAddress.id == Order.address_id)
-            .where(
+
+async def _build_preview_candidates(
+    session: AsyncSession, restaurant_id: int
+) -> list[OrderCandidate]:
+    """Load unassigned preview-eligible orders using the same pool as ``_dispatch``.
+
+    Uses ``build_order_candidates``: ``ready`` always; ``preparing`` only when
+    ``prep_deadline - now <= prep_dispatch_lead_min``. Geocoded drop-offs only.
+    """
+    restaurant = await session.get(Restaurant, restaurant_id)
+    now = datetime.now(timezone.utc)
+    rs = (restaurant.settings or {}) if restaurant is not None else {}
+    prep_lead_min = int(rs.get("prep_dispatch_lead_min", 8))
+    pool_orders = (
+        await session.scalars(
+            select(Order).where(
                 Order.restaurant_id == restaurant_id,
-                Order.status.in_(("confirmed", "preparing", "ready")),
                 Order.rider_id.is_(None),
-                CustomerAddress.latitude.is_not(None),
-                CustomerAddress.longitude.is_not(None),
+                Order.status.in_(
+                    (str(OrderStatus.READY), str(OrderStatus.PREPARING))
+                ),
             )
             .order_by(Order.id)
         )
     ).all()
-    items = [(int(r[0]), float(r[1]), float(r[2])) for r in rows]
+    dropoffs = await _dropoff_coords(session, list(pool_orders))
+    pool = await build_order_candidates(
+        session,
+        restaurant_id,
+        prep_lead_min=prep_lead_min,
+        now=now,
+        dropoff_coords=dropoffs,
+    )
+    return pool.candidates
 
-    labels: dict[int, str] = {}
-    used: set[int] = set()
-    group_index = 0
-    for i, (oid, lat, lon) in enumerate(items):
-        if oid in used:
+
+async def dry_plan_batches(
+    session: AsyncSession,
+    *,
+    restaurant: Restaurant | None,
+    restaurant_id: int,
+    candidates: list[OrderCandidate],
+    settings: BatchPlanSettings,
+    geo,
+    origin: tuple[float, float] | None,
+    customer_sla_min: int = 40,
+) -> list[PlannedBatch]:
+    """Shared dry-run planner for preview and invariant tests.
+
+    Greedy engine → ``run_batch_plan``. OR-Tools engine → same solver as live
+    dispatch (no DB writes) so preview labels match the default engine path.
+    """
+    if settings.engine != "ortools" or origin is None or len(candidates) < 2:
+        return run_batch_plan(
+            candidates,
+            settings=settings,
+            geo_provider=geo,
+            origin=origin,
+        )
+
+    riders = list(
+        (
+            await session.scalars(
+                select(Rider).where(
+                    Rider.restaurant_id == restaurant_id,
+                    Rider.status == "available",
+                    Rider.on_duty.is_(True),
+                )
+            )
+        ).all()
+    )
+    positions = await _latest_rider_positions(session, restaurant_id)
+    depot = origin
+    if not riders:
+        opt_riders = [
+            OptRider(rider_id=0, lat=depot[0], lon=depot[1], active_load=0)
+        ]
+    else:
+        opt_riders = [
+            OptRider(
+                rider_id=rd.id,
+                lat=positions.get(rd.id, depot)[0],
+                lon=positions.get(rd.id, depot)[1],
+                active_load=0,
+            )
+            for rd in riders
+        ]
+
+    opt_orders = [
+        OptOrder(
+            order_id=c.order_id,
+            lat=c.lat,
+            lon=c.lon,
+            minutes_elapsed=c.minutes_elapsed,
+            priority=c.priority,
+        )
+        for c in candidates
+    ]
+    plan = optimize_dispatch(
+        orders=opt_orders,
+        riders=opt_riders,
+        origin=origin,
+        customer_sla_min=customer_sla_min,
+        geo_provider=geo,
+        time_limit_seconds=1,
+    )
+    candidates_by_id = {c.order_id: c for c in candidates}
+    batches: list[PlannedBatch] = []
+    for route in plan.routes:
+        if len(route.order_ids) < 2:
             continue
-        group = [oid]
-        used.add(oid)
-        for oid2, lat2, lon2 in items[i + 1:]:
-            if oid2 in used or len(group) >= max_per:
-                continue
-            if distance_km(lat, lon, lat2, lon2) <= proximity_km:
-                group.append(oid2)
-                used.add(oid2)
-        if len(group) >= 2:
-            label = chr(ord("A") + group_index)
-            group_index += 1
-            for member in group:
-                labels[member] = label
-    return labels
+        seq = [
+            candidates_by_id[oid]
+            for oid in route.order_ids
+            if oid in candidates_by_id
+        ]
+        if len(seq) >= 2:
+            batches.append(
+                PlannedBatch(
+                    orders=seq,
+                    per_order_buffer_min=settings.buffer_per_order,
+                )
+            )
+    return batches
+
+
+async def preview_batch_groups(
+    session: AsyncSession, *, restaurant_id: int
+) -> dict[int, str]:
+    """Map order_id -> a batch-preview label ("A", "B", …) for active UNASSIGNED
+    orders that the configured engine would batch together, so the order list can
+    show the upcoming batching BEFORE dispatch assigns a rider.
+
+    Uses the SAME dry planner as dispatch (greedy or OR-Tools per tenant setting).
+    Only groups of 2+ get a label; a lone order returns nothing. Forecast only."""
+    restaurant = await session.get(Restaurant, restaurant_id)
+    candidates = await _build_preview_candidates(session, restaurant_id)
+    if len(candidates) < 2:
+        return {}
+
+    origin = (
+        (restaurant.lat, restaurant.lng)
+        if restaurant is not None
+        and restaurant.lat is not None
+        and restaurant.lng is not None
+        else None
+    )
+    geo = get_geo_provider()
+    settings = _batch_plan_settings_from_restaurant(restaurant)
+    batches = await dry_plan_batches(
+        session,
+        restaurant=restaurant,
+        restaurant_id=restaurant_id,
+        candidates=candidates,
+        settings=settings,
+        geo=geo,
+        origin=origin,
+    )
+    return labels_from_batches(batches)
 
 
 async def sweep_ready_once() -> int:
@@ -364,7 +499,9 @@ async def _commit_route(
 
     for seq, (order, _lat, _lon) in enumerate(stops, start=1):
         before = {"status": order.status, "rider_id": order.rider_id}
-        order.status = "assigned"
+        # Prep-aware pool: preparing orders keep status until kitchen marks ready.
+        if order.status == str(OrderStatus.READY):
+            order.status = "assigned"
         order.rider_id = rider.id
         session.add(BatchOrder(batch_id=batch.id, order_id=order.id, sequence=seq))
         session.add(
@@ -384,7 +521,7 @@ async def _commit_route(
             entity_id=str(order.id),
             action="state_transition",
             before=before,
-            after={"status": "assigned", "rider_id": rider.id},
+            after={"status": order.status, "rider_id": rider.id},
         )
 
     rider.status = "on_delivery"
@@ -396,6 +533,303 @@ async def _commit_route(
     except Exception:  # noqa: BLE001 - push is best-effort
         _logger.exception("assignment push failed for rider %s", rider.id)
     return len(stops)
+
+
+async def _dispatch_greedy(
+    session: AsyncSession,
+    *,
+    restaurant: Restaurant,
+    restaurant_id: int,
+    candidates: list[OrderCandidate],
+    orders_by_id: dict[int, Order],
+    origin: tuple[float, float] | None,
+    geo,
+    now: datetime,
+    customer_sla_min: int,
+    engine_fallback: bool = False,
+) -> DispatchResult:
+    """Proximity batching + per-batch rider scoring. Shared by the primary greedy path
+    and the OR-Tools timeout fallback."""
+    rs = restaurant.settings or {}
+    _global = get_settings()
+    proximity_km = float(rs.get("batch_proximity_km", 1.5))
+    window_min = int(rs.get("batch_window_minutes", 10))
+    max_per = int(rs.get("max_orders_per_batch", 3))
+    buffer_per = int(
+        rs.get("sla_buffer_per_order_minutes", _global.sla_buffer_per_order_minutes)
+    )
+    max_detour_km = float(rs.get("batch_max_detour_km", 0) or 0)
+    delivery_zones = rs.get("delivery_zones") or None
+    corridor = max_detour_km > 0 and origin is not None
+
+    if not engine_fallback:
+        DISPATCH_RUNS.labels(engine="greedy").inc()
+    _t0 = time.perf_counter()
+    batches = build_batches(
+        candidates,
+        geo_provider=geo,
+        origin=origin,
+        max_per_batch=max_per,
+        proximity_km=proximity_km,
+        window_min=window_min,
+        buffer_per_order=buffer_per,
+        max_detour_km=max_detour_km,
+        delivery_zones=delivery_zones,
+    )
+    DISPATCH_SOLVE_SECONDS.labels(engine="greedy").observe(time.perf_counter() - _t0)
+
+    if candidates and not engine_fallback and get_settings().dispatch_shadow_compare and origin is not None:
+        _log_shadow_compare(
+            candidates=candidates,
+            restaurant=restaurant,
+            origin=origin,
+            geo=geo,
+            greedy_batches=batches,
+            customer_sla_min=customer_sla_min,
+        )
+
+    _priority_batches = [b for b in batches if b.seed.priority != "normal"]
+    _normal_batches = [b for b in batches if b.seed.priority == "normal"]
+    _normal_batches.sort(
+        key=lambda b: compute_batch_total_est_min(b, geo_provider=geo, origin=origin),
+        reverse=True,
+    )
+    batches = _priority_batches + _normal_batches
+
+    result = DispatchResult()
+
+    for planned in batches:
+        riders = (
+            await session.scalars(
+                select(Rider).where(
+                    Rider.restaurant_id == restaurant_id,
+                    Rider.status == "available",
+                    Rider.on_duty.is_(True),
+                )
+            )
+        ).all()
+        if not riders:
+            result.unassigned_count += len(planned.orders)
+            result.needs_retry = True
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=restaurant.phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={
+                    "body": (
+                        f"No available riders for {len(planned.orders)} ready "
+                        "order(s). Orders are waiting; dispatch will retry."
+                    )
+                },
+                idempotency_key=(
+                    f"norider-{restaurant_id}-{planned.seed.order_id}-"
+                    f"{int(now.timestamp() // 600)}"
+                ),
+            )
+            projected = compute_batch_total_est_min(
+                planned, geo_provider=geo, origin=origin
+            )
+            if projected > customer_sla_min:
+                numbers = ", ".join(
+                    orders_by_id[pc.order_id].order_number for pc in planned.orders
+                )
+                await enqueue_message(
+                    session,
+                    restaurant_id=restaurant_id,
+                    to_phone=restaurant.phone,
+                    msg_type=OutboundMessageType.TEXT,
+                    payload={
+                        "body": (
+                            f"⚠️ Order(s) {numbers} can't meet the {customer_sla_min}-min "
+                            f"SLA with current riders (projected ~{projected} min and still "
+                            "waiting). Add a rider or mark priority now."
+                        )
+                    },
+                    idempotency_key=(
+                        f"slabreach-pred-{restaurant_id}-{planned.seed.order_id}"
+                    ),
+                )
+            continue
+
+        positions = await _latest_rider_positions(session, restaurant_id)
+        scored = rank_riders(
+            [
+                RiderCandidate(
+                    rider_id=rd.id,
+                    distance_km=distance_km(
+                        *positions.get(rd.id, (restaurant.lat, restaurant.lng)),
+                        restaurant.lat,
+                        restaurant.lng,
+                    ),
+                    active_orders=await _active_order_count(session, rd.id),
+                    on_time_pct=float(rd.performance.get("on_time_pct", 100.0)),
+                )
+                for rd in riders
+            ]
+        )
+        best_id = scored[0].rider_id
+        rider = next(rd for rd in riders if rd.id == best_id)
+
+        seq_orders = (
+            _sequence_stops(planned.orders, origin, geo)
+            if origin is not None
+            else planned.orders
+        )
+        seq_batch = PlannedBatch(
+            orders=seq_orders, per_order_buffer_min=planned.per_order_buffer_min
+        )
+        total_est = compute_batch_total_est_min(seq_batch, geo_provider=geo, origin=origin)
+        stops = [
+            (orders_by_id[pc.order_id], pc.lat, pc.lon) for pc in seq_orders
+        ]
+        algorithm_score = build_route_algorithm_score(
+            engine="greedy",
+            engine_fallback=engine_fallback,
+            seq_orders=seq_orders,
+            per_order_buffer_min=buffer_per,
+            geo_provider=geo,
+            origin=origin,
+            rider_breakdown=dict(scored[0].breakdown),
+            total_est_min=total_est,
+            corridor=corridor,
+            delivery_zones=delivery_zones,
+        )
+        result.assigned_count += await _commit_route(
+            session,
+            restaurant_id=restaurant_id,
+            rider=rider,
+            stops=stops,
+            total_est=total_est,
+            algorithm_score=algorithm_score,
+            now=now,
+        )
+
+    if result.assigned_count:
+        DISPATCH_ORDERS.labels(engine="greedy", outcome="assigned").inc(
+            result.assigned_count
+        )
+    if result.unassigned_count:
+        DISPATCH_ORDERS.labels(engine="greedy", outcome="dropped").inc(
+            result.unassigned_count
+        )
+    return result
+
+
+def _route_breaches_customer_sla(
+    route: OptRoute, *, customer_sla_min: int
+) -> bool:
+    """True when any stop on a multi-order route projects past the customer SLA."""
+    if len(route.order_ids) <= 1:
+        return False
+    return any(
+        route.projected_minutes.get(oid, 0) > customer_sla_min for oid in route.order_ids
+    )
+
+
+def _split_route_on_sla_risk(
+    route: OptRoute,
+    *,
+    orders_by_id: dict[int, Order],
+    coords: dict[int, tuple[float, float]],
+    origin: tuple[float, float],
+    geo,
+    now: datetime,
+    customer_sla_min: int,
+) -> tuple[list[OptRoute], list[int]]:
+    """Break a multi-stop route into solo legs; drop orders that cannot meet SLA."""
+    from app.dispatch.batching import _leg_minutes
+
+    solos: list[OptRoute] = []
+    dropped: list[int] = []
+    for oid in route.order_ids:
+        order = orders_by_id[oid]
+        leg = _leg_minutes(origin[0], origin[1], coords[oid][0], coords[oid][1], geo)
+        projected = _minutes_since_sla(order, now) + leg
+        if projected <= customer_sla_min:
+            solos.append(
+                OptRoute(
+                    rider_id=route.rider_id,
+                    order_ids=[oid],
+                    projected_minutes={oid: projected},
+                )
+            )
+        else:
+            dropped.append(oid)
+    return solos, dropped
+
+
+def _apply_unbatch_sla_safety(
+    plan: OptPlan,
+    *,
+    orders_by_id: dict[int, Order],
+    coords: dict[int, tuple[float, float]],
+    origin: tuple[float, float],
+    geo,
+    now: datetime,
+    customer_sla_min: int,
+) -> OptPlan:
+    """Split multi-stop routes that breach the 40-min customer SLA (safety valve)."""
+    rebuilt: list[OptRoute] = []
+    for route in plan.routes:
+        if not _route_breaches_customer_sla(route, customer_sla_min=customer_sla_min):
+            rebuilt.append(route)
+            continue
+        solos, dropped = _split_route_on_sla_risk(
+            route,
+            orders_by_id=orders_by_id,
+            coords=coords,
+            origin=origin,
+            geo=geo,
+            now=now,
+            customer_sla_min=customer_sla_min,
+        )
+        rebuilt.extend(solos)
+        for oid in dropped:
+            if oid not in plan.unassigned:
+                plan.unassigned.append(oid)
+    plan.routes = rebuilt
+    return plan
+
+
+def _plan_splits_batch(batch_order_ids: list[int], plan: OptPlan) -> bool:
+    """True when a former multi-order batch is broken across routes or dropped."""
+    if len(batch_order_ids) < 2:
+        return False
+    route_by_order: dict[int, int] = {}
+    for idx, route in enumerate(plan.routes):
+        for oid in route.order_ids:
+            route_by_order[oid] = idx
+    routes_used: set[int] = set()
+    for oid in batch_order_ids:
+        if oid in plan.unassigned or oid not in route_by_order:
+            return True
+        routes_used.add(route_by_order[oid])
+    return len(routes_used) > 1
+
+
+async def _planned_multi_batch_groups(
+    session: AsyncSession, restaurant_id: int, movable_ids: set[int]
+) -> dict[int, list[int]]:
+    """Map batch_id -> sorted order_ids for planned multi-stop batches."""
+    if not movable_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Batch.id, BatchOrder.order_id)
+            .join(BatchOrder, BatchOrder.batch_id == Batch.id)
+            .where(
+                Batch.restaurant_id == restaurant_id,
+                Batch.status == "planned",
+                BatchOrder.order_id.in_(movable_ids),
+            )
+            .order_by(Batch.id, BatchOrder.sequence)
+        )
+    ).all()
+    groups: dict[int, list[int]] = {}
+    for batch_id, order_id in rows:
+        groups.setdefault(batch_id, []).append(order_id)
+    return {bid: oids for bid, oids in groups.items() if len(oids) >= 2}
 
 
 async def _dispatch_ortools(
@@ -426,16 +860,25 @@ async def _dispatch_ortools(
         result.needs_retry = True
         return result
 
-    ready_ids = {c.order_id for c in candidates}
+    pool_ids = {c.order_id for c in candidates}
+    ready_ids = {
+        oid
+        for oid in pool_ids
+        if str(orders_by_id[oid].status) == str(OrderStatus.READY)
+    }
 
-    # Assigned-but-not-picked orders are eligible for re-optimisation (food not yet
-    # collected, so re-sequencing is safe). picked_up / arriving are left alone.
+    # Assigned orders in a *planned* batch may be re-optimised (insert / resequence).
+    # picked_up / arriving batches are immutable (spec §5.4).
     movable = (
         await session.scalars(
-            select(Order).where(
+            select(Order)
+            .join(BatchOrder, BatchOrder.order_id == Order.id)
+            .join(Batch, Batch.id == BatchOrder.batch_id)
+            .where(
                 Order.restaurant_id == restaurant_id,
                 Order.status == str(OrderStatus.ASSIGNED),
                 Order.rider_id.is_not(None),
+                Batch.status == "planned",
             )
         )
     ).all()
@@ -496,11 +939,105 @@ async def _dispatch_ortools(
     ]
 
     _t0 = time.perf_counter()
-    plan = optimize_dispatch(
-        orders=opt_orders, riders=opt_riders, origin=origin,
-        customer_sla_min=customer_sla_min, geo_provider=geo,
-    )
+    try:
+        plan = await asyncio.wait_for(
+            asyncio.to_thread(
+                optimize_dispatch,
+                orders=opt_orders,
+                riders=opt_riders,
+                origin=origin,
+                customer_sla_min=customer_sla_min,
+                geo_provider=geo,
+                # Keep the solver budget inside the outer wait_for ceiling (default
+                # optimizer limit is 3s, which would always trip the 2s guard).
+                time_limit_seconds=max(1, int(_ORTOOLS_SOLVE_TIMEOUT_SEC) - 1),
+            ),
+            timeout=_ORTOOLS_SOLVE_TIMEOUT_SEC,
+        )
+    except asyncio.TimeoutError:
+        _logger.warning(
+            "ortools dispatch solve timed out after %.1fs; falling back to greedy "
+            "(restaurant_id=%s, orders=%d)",
+            _ORTOOLS_SOLVE_TIMEOUT_SEC,
+            restaurant_id,
+            len(candidates),
+        )
+        DISPATCH_SOLVE_SECONDS.labels(engine="ortools").observe(
+            time.perf_counter() - _t0
+        )
+        return await _dispatch_greedy(
+            session,
+            restaurant=restaurant,
+            restaurant_id=restaurant_id,
+            candidates=candidates,
+            orders_by_id=orders_by_id,
+            origin=origin,
+            geo=geo,
+            now=now,
+            customer_sla_min=customer_sla_min,
+            engine_fallback=True,
+        )
     DISPATCH_SOLVE_SECONDS.labels(engine="ortools").observe(time.perf_counter() - _t0)
+
+    plan = _apply_unbatch_sla_safety(
+        plan,
+        orders_by_id=orders_by_id,
+        coords=coords,
+        origin=origin,
+        geo=geo,
+        now=now,
+        customer_sla_min=customer_sla_min,
+    )
+
+    multi_batches = await _planned_multi_batch_groups(
+        session, restaurant_id, movable_ids
+    )
+    for batch_id, order_ids in multi_batches.items():
+        if _plan_splits_batch(order_ids, plan):
+            await record_audit(
+                session,
+                actor="system",
+                restaurant_id=restaurant_id,
+                entity="batch",
+                entity_id=str(batch_id),
+                action="batch_split_sla_risk",
+                before={"order_ids": order_ids},
+                after={
+                    "reason": "sla_risk",
+                    "routes": [
+                        {
+                            "rider_id": r.rider_id,
+                            "order_ids": r.order_ids,
+                            "projected_min": {
+                                str(oid): round(r.projected_minutes.get(oid, 0), 1)
+                                for oid in r.order_ids
+                            },
+                        }
+                        for r in plan.routes
+                        if any(oid in order_ids for oid in r.order_ids)
+                    ],
+                    "unassigned": [
+                        oid for oid in plan.unassigned if oid in order_ids
+                    ],
+                },
+            )
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=restaurant.phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={
+                    "body": (
+                        f"⚠️ Batch #{batch_id} was split — re-planning would breach the "
+                        f"{customer_sla_min}-min SLA for one or more stops. Orders are "
+                        "being routed solo or held for a fresh rider."
+                    )
+                },
+                idempotency_key=(
+                    f"batch-split-sla-{restaurant_id}-{batch_id}-"
+                    f"{int(now.timestamp() // 60)}"
+                ),
+            )
 
     # Current per-rider sequence of movable orders (to detect unchanged routes).
     current: dict[int, list[int]] = {}
@@ -516,13 +1053,22 @@ async def _dispatch_ortools(
         for order_id, rider_id, _seq in rows:
             current.setdefault(rider_id, []).append(order_id)
 
+    candidates_by_id = {c.order_id: c for c in candidates}
+    dropped_ready = [oid for oid in plan.unassigned if oid in ready_ids]
+    plan_rejections = build_rejections_for_dropped(
+        dropped_ready,
+        candidates_by_id=candidates_by_id,
+        origin=origin,
+        geo_provider=geo,
+    )
+
     for route in plan.routes:
         rider = riders_by_id.get(route.rider_id)
         if rider is None:
             continue
         new_ids = route.order_ids
         # Unchanged route (same movable orders, same order, nothing new) -> no churn.
-        if new_ids == current.get(rider.id, []) and not (set(new_ids) & ready_ids):
+        if new_ids == current.get(rider.id, []) and not (set(new_ids) & pool_ids):
             continue
 
         # Tear down any existing batch rows for the movable orders we are re-placing
@@ -537,6 +1083,23 @@ async def _dispatch_ortools(
             )
 
         stops = [(orders_by_id[oid], *coords[oid]) for oid in new_ids]
+        seq_candidates = [
+            OrderCandidate(
+                order_id=oid,
+                lat=coords[oid][0],
+                lon=coords[oid][1],
+                ready_at=orders_by_id[oid].updated_at or now,
+                minutes_elapsed=_minutes_since_sla(orders_by_id[oid], now),
+                priority=orders_by_id[oid].priority or "normal",
+            )
+            for oid in new_ids
+        ]
+        buffer_per = int(
+            (restaurant.settings or {}).get(
+                "sla_buffer_per_order_minutes",
+                get_settings().sla_buffer_per_order_minutes,
+            )
+        )
         total_est = max(
             (int(round(route.projected_minutes.get(oid, 0))) for oid in new_ids),
             default=1,
@@ -547,16 +1110,26 @@ async def _dispatch_ortools(
             rider=rider,
             stops=stops,
             total_est=max(1, total_est),
-            algorithm_score={
-                "engine": "ortools",
-                "projected_min": {
-                    str(oid): round(route.projected_minutes.get(oid, 0), 1)
-                    for oid in new_ids
-                },
-            },
+            algorithm_score=build_route_algorithm_score(
+                engine="ortools",
+                engine_fallback=False,
+                seq_orders=seq_candidates,
+                per_order_buffer_min=buffer_per,
+                geo_provider=geo,
+                origin=origin,
+                rejections=plan_rejections,
+                total_est_min=max(1, total_est),
+                projected_by_order=route.projected_minutes,
+                corridor=float(
+                    (restaurant.settings or {}).get("batch_max_detour_km", 0) or 0
+                )
+                > 0,
+                delivery_zones=(restaurant.settings or {}).get("delivery_zones")
+                or None,
+            ),
             now=now,
         )
-        result.assigned_count += sum(1 for oid in new_ids if oid in ready_ids)
+        result.assigned_count += sum(1 for oid in new_ids if oid in pool_ids)
 
         # Proactively message customers whose ETA shifted because of the re-plan.
         for oid in new_ids:
@@ -581,7 +1154,6 @@ async def _dispatch_ortools(
 
     # Best-effort: only READY orders that were dropped are a manager problem; dropped
     # movable orders simply keep their existing assignment.
-    dropped_ready = [oid for oid in plan.unassigned if oid in ready_ids]
     if dropped_ready:
         result.unassigned_count += len(dropped_ready)
         result.needs_retry = True
@@ -622,6 +1194,72 @@ def _minutes_since_sla(order: Order, now: datetime) -> float:
     if sla.tzinfo is None:
         sla = sla.replace(tzinfo=timezone.utc)
     return max(0.0, (now - sla).total_seconds() / 60.0)
+
+
+async def _nearest_rider_eta_min(
+    session: AsyncSession,
+    *,
+    restaurant: Restaurant,
+    restaurant_id: int,
+    geo,
+) -> float:
+    """Minutes for the nearest on-duty available rider to reach the restaurant."""
+    riders = (
+        await session.scalars(
+            select(Rider).where(
+                Rider.restaurant_id == restaurant_id,
+                Rider.status == "available",
+                Rider.on_duty.is_(True),
+            )
+        )
+    ).all()
+    if not riders or restaurant.lat is None or restaurant.lng is None:
+        return 0.0
+    positions = await _latest_rider_positions(session, restaurant_id)
+    origin = (restaurant.lat, restaurant.lng)
+    return min(
+        _leg_minutes(
+            *positions.get(rd.id, origin),
+            origin[0],
+            origin[1],
+            geo,
+        )
+        for rd in riders
+    )
+
+
+def _hold_until(
+    *,
+    ready_at: datetime,
+    hold_seconds: int,
+    now: datetime,
+    candidate_lat: float,
+    candidate_lon: float,
+    pipeline_orders: list[Order],
+    pipeline_coords: dict[int, tuple[float, float]],
+    hold_proximity_km: float,
+    rider_eta_min: float,
+) -> datetime:
+    """Smart hold deadline: ``min(ready_at + hold, prep_deadline_mate - rider_eta)``."""
+    if ready_at.tzinfo is None:
+        ready_at = ready_at.replace(tzinfo=timezone.utc)
+    hold_deadline = ready_at + timedelta(seconds=hold_seconds)
+    mate_deadlines: list[datetime] = []
+    for po in pipeline_orders:
+        coords = pipeline_coords.get(po.id)
+        if coords is None or po.prep_deadline is None:
+            continue
+        if distance_km(candidate_lat, candidate_lon, coords[0], coords[1]) > hold_proximity_km:
+            continue
+        deadline = po.prep_deadline
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        mate_deadlines.append(deadline)
+    if mate_deadlines:
+        cap = min(mate_deadlines) - timedelta(minutes=rider_eta_min)
+        if cap < hold_deadline:
+            hold_deadline = cap
+    return hold_deadline
 
 
 async def _notify_eta_change(
@@ -670,54 +1308,35 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     restaurant = await session.get(Restaurant, restaurant_id)
     now = datetime.now(timezone.utc)
     _customer_sla_min = get_settings().sla_customer_minutes
-
-    ready = (
-        await session.scalars(
-            select(Order).where(
-                Order.restaurant_id == restaurant_id,
-                Order.status == "ready",
-                Order.rider_id.is_(None),
-            )
-        )
-    ).all()
-    if not ready:
-        return DispatchResult()
+    rs = restaurant.settings or {}
+    prep_lead_min = int(rs.get("prep_dispatch_lead_min", 8))
 
     # Resale exclusion enforced: filter on_resale orders using is_excluded_for_resale for the original buyer.
     # (exclusion_hash from cancel after cooking; prevents same phone/person/address from re-buying per spec).
 
-    dropoffs = await _dropoff_coords(session, ready)
-    geo = get_geo_provider()
-    candidates = []
-    skipped_no_geo: list[Order] = []
-    for o in ready:
-        coords = dropoffs.get(o.id)
-        if coords is None:
-            # GAP#7: an order with no geocoded drop-off must NOT be faked to the
-            # restaurant location — that makes it look like a zero-distance delivery,
-            # so it batches as best-case and silently breaches the SLA on the road.
-            # Surface it for manual handling instead of masking the distance.
-            skipped_no_geo.append(o)
-            continue
-        lat, lon = coords
-        # Real elapsed from sla_confirmed_at (set at order confirm/modify per ordering/service + spec);
-        # fallback 0 if not present (e.g. legacy tests). Uses UTC.
-        minutes_elapsed = 0.0
-        if o.sla_confirmed_at is not None:
-            sla = o.sla_confirmed_at
-            if sla.tzinfo is None:
-                sla = sla.replace(tzinfo=timezone.utc)
-            minutes_elapsed = max(0.0, (now - sla).total_seconds() / 60.0)
-        candidates.append(
-            OrderCandidate(
-                order_id=o.id,
-                lat=lat,
-                lon=lon,
-                ready_at=o.updated_at or now,
-                minutes_elapsed=minutes_elapsed,
-                priority=o.priority or "normal",
+    pool_orders = (
+        await session.scalars(
+            select(Order).where(
+                Order.restaurant_id == restaurant_id,
+                Order.rider_id.is_(None),
+                Order.status.in_(
+                    (str(OrderStatus.READY), str(OrderStatus.PREPARING))
+                ),
             )
         )
+    ).all()
+    dropoffs = await _dropoff_coords(session, list(pool_orders))
+    geo = get_geo_provider()
+    pool = await build_order_candidates(
+        session,
+        restaurant_id,
+        prep_lead_min=prep_lead_min,
+        now=now,
+        dropoff_coords=dropoffs,
+    )
+    candidates = pool.candidates
+    orders_by_id = pool.orders_by_id
+    skipped_no_geo = pool.skipped_no_geo
 
     if skipped_no_geo:
         # Leave these orders ready/unassigned and alert the manager so a human can
@@ -745,14 +1364,15 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             ),
         )
 
+    if not candidates:
+        return DispatchResult()
+
     # Restaurant pickup coords seed the depot->first-stop leg (GAP#1, spec §4.3.2).
     origin = (
         (restaurant.lat, restaurant.lng)
         if restaurant.lat is not None and restaurant.lng is not None
         else None
     )
-    orders_by_id = {o.id: o for o in ready}
-
     # ── Batch hold window (opt-in via batch_hold_seconds; 0 = off, default) ──────────
     # Defer a freshly-ready LONE order briefly so a nearby order can join its batch
     # before a rider is committed — the standard "batching window". A held order is
@@ -764,11 +1384,23 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
     # mate in the pipeline at all, is priority, or is under SLA pressure (waiting the
     # window would risk the internal target). Applies to BOTH engines, so it sits
     # before the engine branch.
-    rs = restaurant.settings or {}
     hold_seconds = int(rs.get("batch_hold_seconds", 0) or 0)
-    if hold_seconds > 0 and candidates:
+    ready_candidates = [
+        c
+        for c in candidates
+        if orders_by_id[c.order_id].status == str(OrderStatus.READY)
+    ]
+    preparing_candidates = [
+        c
+        for c in candidates
+        if orders_by_id[c.order_id].status == str(OrderStatus.PREPARING)
+    ]
+    if hold_seconds > 0 and ready_candidates:
         hold_proximity_km = float(rs.get("batch_proximity_km", 1.0))
         internal_target = get_settings().sla_internal_target_minutes
+        rider_eta_min = await _nearest_rider_eta_min(
+            session, restaurant=restaurant, restaurant_id=restaurant_id, geo=geo
+        )
         # Plausible upcoming batch-mates: orders still in the kitchen (confirmed/
         # preparing, not yet assigned) that could become ready within the window. A
         # lone ready order is only worth holding if such a mate exists *nearby* —
@@ -785,55 +1417,66 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             )
         ).all()
         pipeline_coords = await _dropoff_coords(session, list(pipeline_orders))
-        pipeline_pts = [
-            pipeline_coords[o.id] for o in pipeline_orders if o.id in pipeline_coords
-        ]
-        eligible: list[OrderCandidate] = []
+        eligible_ready: list[OrderCandidate] = []
         held: list[OrderCandidate] = []
-        for c in candidates:
+        for c in ready_candidates:
             ready_at = c.ready_at
             if ready_at.tzinfo is None:
                 ready_at = ready_at.replace(tzinfo=timezone.utc)
-            waited = (now - ready_at).total_seconds()
+            hold_deadline = _hold_until(
+                ready_at=ready_at,
+                hold_seconds=hold_seconds,
+                now=now,
+                candidate_lat=c.lat,
+                candidate_lon=c.lon,
+                pipeline_orders=pipeline_orders,
+                pipeline_coords=pipeline_coords,
+                hold_proximity_km=hold_proximity_km,
+                rider_eta_min=rider_eta_min,
+            )
+            remaining_hold_sec = max(0.0, (hold_deadline - now).total_seconds())
             has_mate = any(
                 other.order_id != c.order_id
                 and distance_km(c.lat, c.lon, other.lat, other.lon) <= hold_proximity_km
                 for other in candidates
+                if orders_by_id[other.order_id].status == str(OrderStatus.READY)
             )
-            # A mate that's still cooking nearby and could join once it's ready.
             has_pipeline_mate = any(
-                distance_km(c.lat, c.lon, plat, plon) <= hold_proximity_km
-                for plat, plon in pipeline_pts
+                po.id in pipeline_coords
+                and distance_km(
+                    c.lat, c.lon, pipeline_coords[po.id][0], pipeline_coords[po.id][1]
+                )
+                <= hold_proximity_km
+                for po in pipeline_orders
             )
-            # Would waiting out the rest of the window push it past the internal target?
             sla_pressure = (
-                c.minutes_elapsed + max(0.0, hold_seconds - waited) / 60.0
-                >= internal_target
+                c.minutes_elapsed + remaining_hold_sec / 60.0 >= internal_target
             )
             if (
                 c.priority != "normal"
-                or waited >= hold_seconds
+                or now >= hold_deadline
                 or has_mate
                 or sla_pressure
-                or not has_pipeline_mate  # nothing nearby to wait for → assign now
+                or not has_pipeline_mate
             ):
-                eligible.append(c)
+                eligible_ready.append(c)
             else:
                 held.append(c)
         if held:
             _logger.info(
-                "dispatch: holding %d fresh order(s) up to %ds for batching "
+                "dispatch: holding %d fresh order(s) for batching "
                 "(restaurant_id=%s): %s",
-                len(held), hold_seconds, restaurant_id,
+                len(held),
+                restaurant_id,
                 ", ".join(orders_by_id[c.order_id].order_number for c in held),
             )
-        candidates = eligible
+        candidates = eligible_ready + preparing_candidates
         if not candidates:
             return DispatchResult()
 
     # Per-restaurant engine flag (spec §4.3). Default greedy; "ortools" opts into the
     # SLA-first VRP optimizer. Unknown values fall back to greedy.
-    engine = (restaurant.settings or {}).get("dispatch_engine", "greedy")
+    engine = (restaurant.settings or {}).get("dispatch_engine", "ortools")
     if engine == "ortools" and candidates:
         DISPATCH_RUNS.labels(engine="ortools").inc()
         return await _dispatch_ortools(
@@ -848,167 +1491,17 @@ async def _dispatch(session: AsyncSession, restaurant_id: int) -> DispatchResult
             customer_sla_min=_customer_sla_min,
         )
 
-    # Per-restaurant batching geometry (defaults preserve the original behaviour).
-    rs = restaurant.settings or {}
-    _global = get_settings()
-    proximity_km = float(rs.get("batch_proximity_km", 1.0))
-    window_min = int(rs.get("batch_window_minutes", 10))
-    max_per = int(rs.get("max_orders_per_batch", 3))
-    buffer_per = int(rs.get("sla_buffer_per_order_minutes", _global.sla_buffer_per_order_minutes))
-    max_detour_km = float(rs.get("batch_max_detour_km", 0) or 0)
-
-    DISPATCH_RUNS.labels(engine="greedy").inc()
-    _t0 = time.perf_counter()
-    batches = build_batches(
-        candidates, geo_provider=geo, origin=origin,
-        max_per_batch=max_per, proximity_km=proximity_km, window_min=window_min,
-        buffer_per_order=buffer_per, max_detour_km=max_detour_km,
+    return await _dispatch_greedy(
+        session,
+        restaurant=restaurant,
+        restaurant_id=restaurant_id,
+        candidates=candidates,
+        orders_by_id=orders_by_id,
+        origin=origin,
+        geo=geo,
+        now=now,
+        customer_sla_min=_customer_sla_min,
     )
-    DISPATCH_SOLVE_SECONDS.labels(engine="greedy").observe(time.perf_counter() - _t0)
-
-    # Shadow compare: run the optimizer in-memory (no writes) and log what it WOULD do,
-    # so we can evaluate ortools-vs-greedy on real traffic before flipping a restaurant.
-    if candidates and get_settings().dispatch_shadow_compare and origin is not None:
-        _log_shadow_compare(
-            candidates=candidates, restaurant=restaurant, origin=origin, geo=geo,
-            greedy_batches=batches, customer_sla_min=_customer_sla_min,
-        )
-
-    # Assignment order: priority batches first (they bypass batching), then normal
-    # batches by LEAST SLA slack (highest projected completion) so a scarce rider goes to
-    # the order closest to its deadline rather than whichever became ready first. No
-    # cross-batch (Hungarian) matching is needed: every batch picks up at the SAME
-    # restaurant, so a rider's score (pickup distance + workload + on-time) is identical
-    # for all batches → per-batch best-available is already globally optimal. Route /
-    # drop-off-aware assignment is the OR-Tools engine's job, not greedy's.
-    _priority_batches = [b for b in batches if b.seed.priority != "normal"]
-    _normal_batches = [b for b in batches if b.seed.priority == "normal"]
-    _normal_batches.sort(
-        key=lambda b: compute_batch_total_est_min(b, geo_provider=geo, origin=origin),
-        reverse=True,
-    )
-    batches = _priority_batches + _normal_batches
-
-    result = DispatchResult()
-
-    for planned in batches:
-        riders = (
-            await session.scalars(
-                select(Rider).where(
-                    Rider.restaurant_id == restaurant_id,
-                    Rider.status == "available",
-                    Rider.on_duty.is_(True),
-                )
-            )
-        ).all()
-        if not riders:
-            # No riders: alert manager, leave orders untouched, request retry.
-            result.unassigned_count += len(planned.orders)
-            result.needs_retry = True
-            await enqueue_message(
-                session,
-                restaurant_id=restaurant_id,
-                to_phone=restaurant.phone,
-                msg_type=OutboundMessageType.TEXT,
-                payload={
-                    "body": (
-                        f"No available riders for {len(planned.orders)} ready "
-                        "order(s). Orders are waiting; dispatch will retry."
-                    )
-                },
-                idempotency_key=(
-                    # Bucket per 10 min so the periodic dispatch sweep (every 30s)
-                    # re-tries the order without re-alerting the manager each tick.
-                    f"norider-{restaurant_id}-{planned.seed.order_id}-"
-                    f"{int(now.timestamp() // 600)}"
-                ),
-            )
-            # Predictive breach warning: if this batch could not meet the 40-min
-            # customer SLA even if a rider left RIGHT NOW (projected = elapsed +
-            # depot/route + buffer, per GAP#1), the wait alone guarantees a breach.
-            # Tell the manager now instead of waiting for the 40-min monitor tick —
-            # the only fix is adding a rider or marking the order priority.
-            projected = compute_batch_total_est_min(
-                planned, geo_provider=geo, origin=origin
-            )
-            if projected > _customer_sla_min:
-                numbers = ", ".join(
-                    orders_by_id[pc.order_id].order_number for pc in planned.orders
-                )
-                await enqueue_message(
-                    session,
-                    restaurant_id=restaurant_id,
-                    to_phone=restaurant.phone,
-                    msg_type=OutboundMessageType.TEXT,
-                    payload={
-                        "body": (
-                            f"⚠️ Order(s) {numbers} can't meet the {_customer_sla_min}-min "
-                            f"SLA with current riders (projected ~{projected} min and still "
-                            "waiting). Add a rider or mark priority now."
-                        )
-                    },
-                    idempotency_key=(
-                        f"slabreach-pred-{restaurant_id}-{planned.seed.order_id}"
-                    ),
-                )
-            continue
-
-        positions = await _latest_rider_positions(session, restaurant_id)
-        # Pickup distance = rider -> restaurant. Riders with no ping are treated
-        # as already at the restaurant (distance 0).
-        scored = rank_riders(
-            [
-                RiderCandidate(
-                    rider_id=rd.id,
-                    distance_km=distance_km(
-                        *positions.get(rd.id, (restaurant.lat, restaurant.lng)),
-                        restaurant.lat,
-                        restaurant.lng,
-                    ),
-                    active_orders=await _active_order_count(session, rd.id),
-                    on_time_pct=float(rd.performance.get("on_time_pct", 100.0)),
-                )
-                for rd in riders
-            ]
-        )
-        best_id = scored[0].rider_id
-        rider = next(rd for rd in riders if rd.id == best_id)
-
-        # Deliver the batch's stops nearest-first from the restaurant (shortest route),
-        # not in arrival order. Corridor mode already sequenced them, so this is a no-op
-        # there. Build a LOCAL sequence — never mutate planned.orders, whose first element
-        # (seed) feeds the no-rider / breach idempotency keys above.
-        seq_orders = (
-            _sequence_stops(planned.orders, origin, geo)
-            if origin is not None
-            else planned.orders
-        )
-        seq_batch = PlannedBatch(
-            orders=seq_orders, per_order_buffer_min=planned.per_order_buffer_min
-        )
-        total_est = compute_batch_total_est_min(seq_batch, geo_provider=geo, origin=origin)
-        stops = [
-            (orders_by_id[pc.order_id], pc.lat, pc.lon) for pc in seq_orders
-        ]
-        result.assigned_count += await _commit_route(
-            session,
-            restaurant_id=restaurant_id,
-            rider=rider,
-            stops=stops,
-            total_est=total_est,
-            algorithm_score=scored[0].breakdown,
-            now=now,
-        )
-
-    if result.assigned_count:
-        DISPATCH_ORDERS.labels(engine="greedy", outcome="assigned").inc(
-            result.assigned_count
-        )
-    if result.unassigned_count:
-        DISPATCH_ORDERS.labels(engine="greedy", outcome="dropped").inc(
-            result.unassigned_count
-        )
-    return result
 
 
 def _log_shadow_compare(

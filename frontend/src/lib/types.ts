@@ -205,6 +205,102 @@ export interface GpsPingOut {
   ts: string;
 }
 
+// ── Dispatch explainability (assignments.algorithm_score) ────────────────────
+
+export type DispatchEngine = "ortools" | "greedy";
+
+export type DispatchRejectionReason =
+  | "sla_risk"
+  | "proximity"
+  | "max_per_batch"
+  | "no_rider"
+  | "no_geo"
+  | "priority_solo"
+  | "hold_matured_solo";
+
+export interface DispatchPerStopOut {
+  order_id: number;
+  projected_min: number;
+  route_min?: number;
+  buffer_min?: number;
+}
+
+export interface DispatchRejectionOut {
+  order_id: number;
+  reason: DispatchRejectionReason | string;
+  projected_min?: number;
+}
+
+/** Rich explainability payload persisted on assignments.algorithm_score. */
+export interface AlgorithmScoreOut {
+  engine: DispatchEngine;
+  engine_fallback?: boolean;
+  route_sequence?: number[];
+  total_est_min?: number;
+  per_stop?: DispatchPerStopOut[];
+  rejections?: DispatchRejectionOut[];
+  zone?: string | null;
+  batch_reason?: string | null;
+  /** Legacy greedy scoring breakdown (distance + workload composite). */
+  distance_km?: number;
+  workload_score?: number;
+  on_time_pct?: number;
+  composite?: number;
+  /** OR-Tools commit path may use projected_min map keyed by order id string. */
+  projected_min?: Record<string, number>;
+}
+
+/** Order-detail alias — same shape as algorithm_score when backend exposes it. */
+export type DispatchExplainOut = AlgorithmScoreOut;
+
+export interface DispatchKpisOut {
+  /** Share of dispatched trips with more than one stop (0–100). */
+  batch_rate_pct: number;
+  /** Mean stops per dispatched batch/run. */
+  avg_stops: number;
+  /** Share of assignments that fell back to greedy engine (0–100). */
+  engine_fallback_pct: number;
+  /** Optional reporting window label from the API (e.g. "today"). */
+  window?: string;
+}
+
+export interface LiveMapStopOut {
+  order_id: number;
+  order_number: string;
+  sequence: number;
+  lat: number;
+  lng: number;
+  sla_deadline?: string | null;
+}
+
+export interface LiveMapBatchOut {
+  batch_id: number;
+  rider_id: number;
+  rider_name?: string | null;
+  status: string;
+  color: string;
+  stops: LiveMapStopOut[];
+  polyline: number[][];
+  total_est_min?: number | null;
+}
+
+export interface SlaRingOut {
+  order_id: number;
+  order_number: string;
+  lat: number;
+  lng: number;
+  sla_deadline: string;
+  minutes_remaining: number;
+  urgency: "safe" | "warn" | "critical" | string;
+  radius_km: number;
+}
+
+export interface LiveOpsMapOut {
+  origin: { lat: number; lng: number; name?: string };
+  batches: LiveMapBatchOut[];
+  sla_rings: SlaRingOut[];
+}
+
 export interface OrderDetailOut {
   id: number;
   order_number: string;
@@ -225,6 +321,10 @@ export interface OrderDetailOut {
   chat: ChatMessageOut[];
   route: GpsPingOut[];
   convo_summary?: string | null;
+  /** Pre-assignment batch preview label ("A", "B", …) when orders will batch together. */
+  batch_preview_label?: string | null;
+  /** Dispatch explainability from assignments.algorithm_score (when assigned). */
+  dispatch_explain?: DispatchExplainOut | null;
 }
 
 export interface CustomerPatchIn {

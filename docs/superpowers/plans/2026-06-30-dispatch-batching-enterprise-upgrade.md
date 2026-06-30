@@ -84,6 +84,102 @@ Exposed in `SettingsScreen.tsx`: `dispatch_engine`, `batch_proximity_km`, `batch
 | Hold for stack | Always (implicit) | Often | **Opt-in, default off** |
 | Re-batch | Until pickup | Until pickup | **Mostly at assign** |
 
+### 3.6 Travel time & 40-minute SLA — current behaviour & gaps
+
+**Short answer:** Distance and drive time **are** used when deciding whether a batch is SLA-safe and when projecting ETAs — but **not** for the initial proximity cluster (that uses haversine km). The **40-minute customer promise** applies to every order from confirm; greedy batching enforces a **30-minute internal** gate plus optional per-stop buffer, while OR-Tools enforces the full **40-minute** budget at solve time.
+
+#### 3.6.1 What the SLA clock measures
+
+| Concept | Source | Value / rule |
+|---------|--------|--------------|
+| Customer promise | `ordering/service.py` → `finalize_confirmation()` | `sla_deadline = now + 40 min` (`APP_SLA_CUSTOMER_MINUTES`) |
+| Elapsed at dispatch | `OrderCandidate.minutes_elapsed` | `now − sla_confirmed_at` (not rider departure) |
+| Internal batch gate | `batching.py` → `_within_internal_target()` | `elapsed + route_to_stop + buffer ≤ 30 min` (`APP_SLA_INTERNAL_TARGET_MINUTES`) |
+| Per-extra-stop buffer | `PlannedBatch.sla_buffer_min` | `(stops − 1) × sla_buffer_per_order_minutes` (global default **10**; tenant `DEFAULT_SETTINGS` **0**) |
+| Breach handling | `sla/monitor.py` | `breach_40` → manager alert + auto-coupon (unless `weather_delay_disclosed`) |
+
+Design intent: **30 min internal + up to 10 min buffer per extra stop ≈ 40 min customer headroom**. When `sla_buffer_per_order_minutes: 0` (current tenant default), greedy batching is more aggressive; the 40-min monitor and predictive manager alert remain the safety net.
+
+#### 3.6.2 How travel time is computed
+
+```
+restaurant (origin)
+    │  depot leg via geo port
+    ▼
+stop 1 ──inter-stop leg──► stop 2 ──► stop 3
+         (sequenced sum)
+```
+
+| Function | File | Role |
+|----------|------|------|
+| `_leg_minutes()` | `batching.py` | One leg: `geo.distance_km` + `geo.eta_minutes(dist, 0)` |
+| `_compute_route_time_to_stops()` | `batching.py` | Cumulative minutes to each stop in visit order |
+| `compute_batch_total_est_min()` | `batching.py` | `max(elapsed + route_to_stop + batch_buffer)` → `batches.total_est_min` |
+| `_within_internal_target()` | `batching.py` | SLA gate when appending orders to a batch |
+| `optimize_dispatch()` | `optimizer.py` | OR-Tools time dimension: upper bound = `40 − minutes_elapsed` per node |
+
+**Geo provider:**
+
+| `APP_GEO_PROVIDER` | Distance | ETA |
+|--------------------|----------|-----|
+| `google_maps` | Road network | Traffic-aware minutes |
+| `fake` (tests/dev) | Haversine | Static city speed (`APP_GEO_CITY_SPEED_KMH`, default 25 km/h) |
+
+**Live customer ETA** (`tracking.py`): rider GPS → drop-off via geo port, plus **10 min × (sequence − 1)** for preceding stops in the same batch.
+
+#### 3.6.3 Greedy vs OR-Tools — SLA enforcement difference
+
+| Aspect | Greedy (`dispatch_engine: greedy`) | OR-Tools (`dispatch_engine: ortools`) |
+|--------|-----------------------------------|---------------------------------------|
+| Hard constraint | 30-min **internal** target per stop | **40-min customer** SLA per routed order |
+| Buffer | Applied in `_within_internal_target` | Baked into per-node time upper bound |
+| Infeasible order | Starts fresh batch or holds solo | Dropped with penalty → `unassigned` list |
+| Route sequencing | Arrival order (corridor mode: nearest-neighbour) | Solver optimizes visit order |
+| Rider → restaurant | **Excluded** from batch SLA math | **Excluded** (spec §4.3.4; handled in `scoring.py`) |
+
+OR-Tools is the correct default for enterprise SLA-first behaviour (Phase 1). Greedy is conservative on paper (30 min) but tenant `sla_buffer_per_order_minutes: 0` can allow tighter stacks than the global 10-min design assumes.
+
+#### 3.6.4 What is NOT in SLA / batching math today
+
+| Gap | Impact | Addressed in |
+|-----|--------|--------------|
+| Initial cluster uses **haversine km** (`batch_proximity_km`), not drive minutes | Two nearby-as-crow-flies drops on opposite sides of a highway may batch; far-apart-on-corridor may not | Phase 3 (zones + distance matrix) |
+| `preview_batch_groups()` uses simplified proximity, not full SLA gate | Dashboard "will batch" labels can disagree with actual dispatch | **PR-0.3** (Phase 0) |
+| **Kitchen / cook time** not in route projection | SLA clock starts at confirm; long prep can consume budget before rider leaves | Phase 2 (prep-aware pool) |
+| **Rider → restaurant** leg excluded | Rider far away can be assigned; scoring ranks by ETA but batch SLA does not wait for pickup | Phase 2 (smart hold) |
+| Re-batch mostly at assign, not until pickup | Late same-area order cannot join an in-flight run | Phase 4 |
+| Enforcement at **assign time only** | Traffic spike or kitchen delay after assign → `breach_40` + coupon, not re-solve | Phase 4 + live monitor |
+
+#### 3.6.5 40 minutes for every order in a batch
+
+Business rule (spec + `config.py`): **each** order gets its own 40-minute deadline from confirm — batched or solo.
+
+At dispatch assign time the engine checks (per stop in the planned route):
+
+```
+projected_min = minutes_elapsed + route_time_to_that_stop + batch_buffer
+```
+
+- **Greedy:** batch only if `projected_min ≤ 30` for **every** stop in the batch.
+- **OR-Tools:** route only if `projected_min ≤ 40` for **every** served node.
+- **Persisted:** `batches.total_est_min` = worst-case stop projection (used for sorting and ops).
+- **No riders:** if `projected > 40` while still waiting, manager gets a predictive WhatsApp alert (`service.py` ~L926–953) — not a hard block.
+
+**Not a hard guarantee end-to-end:** assign-time math cannot prevent breaches caused by post-assign kitchen overrun, rider unavailability, stale GPS, or zero buffer with aggressive batching. `sla/monitor.py` is the backstop.
+
+#### 3.6.6 Configuration knobs affecting travel / SLA
+
+| Setting | Default (global) | Tenant `DEFAULT_SETTINGS` | Effect |
+|---------|------------------|---------------------------|--------|
+| `sla_customer_minutes` | 40 | — (env) | Customer promise; OR-Tools hard cap |
+| `sla_internal_target_minutes` | 30 | — (env) | Greedy batch gate |
+| `sla_buffer_per_order_minutes` | 10 | **0** | Minutes added per extra batched stop |
+| `batch_proximity_km` | — | 1.0 | Haversine cluster radius (not drive time) |
+| `batch_max_detour_km` | — | 0 (off) | Corridor / on-the-way batching |
+| `APP_GEO_PROVIDER` | `fake` | prod should be `google_maps` | Road + traffic vs straight-line |
+
+**Production recommendation:** `google_maps` + `ortools` + restore `sla_buffer_per_order_minutes: 10` (or tune via preset) before claiming marketplace-grade SLA accuracy.
+
 ---
 
 ## 4. Target architecture
@@ -416,6 +512,10 @@ Execute in order:
 | Batch hold tests | `tests/dispatch/test_batch_hold.py` |
 | Optimizer tests | `tests/dispatch/test_optimizer.py` |
 | Batch preview tests | `tests/dispatch/test_batch_preview.py` |
+| Live tracking ETA | `src/app/dispatch/tracking.py` |
+| SLA monitor / coupons | `src/app/sla/monitor.py` |
+| Order SLA deadline | `src/app/ordering/service.py` (`finalize_confirmation`) |
+| Global SLA config | `src/app/config.py` (`sla_*`, `geo_*`) |
 | Spec §4.3 | `docs/superpowers/specs/2026-06-06-whatsapp-restaurant-platform-design.md` |
 | Phase 4 plan (original) | `docs/superpowers/plans/2026-06-06-phase-4-logistics.md` |
 
@@ -426,3 +526,4 @@ Execute in order:
 | Date | Author | Note |
 |------|--------|------|
 | 2026-06-30 | Engineering | Initial plan from marketplace comparison + codebase audit |
+| 2026-06-30 | Engineering | §3.6 added: travel-time computation, greedy vs OR-Tools SLA gates, 40-min-per-order behaviour, gaps mapped to phases |

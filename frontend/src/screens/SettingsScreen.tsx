@@ -125,6 +125,74 @@ const TIER_LABELS: Record<LoyaltyTierKey, string> = {
   bronze: "🥉 Bronze",
 };
 
+// Dispatch presets — design §8.2. Buttons apply values to form state only (save separately).
+const DISPATCH_PRESETS = {
+  slaSafe: {
+    dispatch_engine: "ortools",
+    batch_proximity_km: 1.5,
+    batch_max_detour_km: 0.5,
+    batch_hold_seconds: 120,
+    sla_buffer_per_order_minutes: 10,
+  },
+  dense: {
+    dispatch_engine: "ortools",
+    batch_proximity_km: 2.0,
+    batch_max_detour_km: 0.8,
+    batch_hold_seconds: 150,
+    sla_buffer_per_order_minutes: 10,
+  },
+  suburban: {
+    dispatch_engine: "ortools",
+    batch_proximity_km: 3.0,
+    batch_max_detour_km: 1.5,
+    batch_hold_seconds: 120,
+    sla_buffer_per_order_minutes: 10,
+  },
+  conservative: {
+    dispatch_engine: "greedy",
+    batch_proximity_km: 1.0,
+    batch_max_detour_km: 0,
+    batch_hold_seconds: 0,
+    sla_buffer_per_order_minutes: 10,
+  },
+} as const;
+
+type DispatchPresetKey = keyof typeof DISPATCH_PRESETS;
+
+type DeliveryZone = {
+  name: string;
+  center_lat: number;
+  center_lng: number;
+  radius_km: number;
+};
+
+const DISPATCH_PRESET_BUTTONS: {
+  key: DispatchPresetKey;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: "slaSafe",
+    label: "SLA-safe launch",
+    hint: "OR-Tools with tight geometry — recommended default for new restaurants.",
+  },
+  {
+    key: "dense",
+    label: "Dense city",
+    hint: "Wider grouping for high-density areas; use after a week of on-time delivery.",
+  },
+  {
+    key: "suburban",
+    label: "Suburban",
+    hint: "Larger proximity and detour for spread-out delivery zones.",
+  },
+  {
+    key: "conservative",
+    label: "Conservative",
+    hint: "Legacy greedy routing — instant rollback if SLA regresses.",
+  },
+];
+
 function defaultHours(): DayHours[] {
   return DAY_LABELS.map(() => ({ ...DEFAULT_DAY }));
 }
@@ -155,6 +223,9 @@ export function SettingsScreen() {
   const [batchProximity, setBatchProximity] = useState(1.0);
   const [maxDetour, setMaxDetour] = useState(0); // 0 = corridor off
   const [holdSeconds, setHoldSeconds] = useState(0); // 0 = batch hold window off
+  const [slaBuffer, setSlaBuffer] = useState(10);
+  const [prepLeadMin, setPrepLeadMin] = useState(8);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
 
   // Cart recovery tab
   const [cartReminder, setCartReminder] = useState(true);
@@ -206,6 +277,18 @@ export function SettingsScreen() {
       if (typeof sset.batch_proximity_km === "number") setBatchProximity(sset.batch_proximity_km);
       if (typeof sset.batch_max_detour_km === "number") setMaxDetour(sset.batch_max_detour_km);
       if (typeof sset.batch_hold_seconds === "number") setHoldSeconds(sset.batch_hold_seconds);
+      if (typeof sset.sla_buffer_per_order_minutes === "number") setSlaBuffer(sset.sla_buffer_per_order_minutes);
+      if (typeof sset.prep_dispatch_lead_min === "number") setPrepLeadMin(sset.prep_dispatch_lead_min);
+      if (Array.isArray(sset.delivery_zones)) {
+        setDeliveryZones(
+          (sset.delivery_zones as DeliveryZone[]).map((z) => ({
+            name: String(z.name ?? ""),
+            center_lat: Number(z.center_lat ?? 0),
+            center_lng: Number(z.center_lng ?? 0),
+            radius_km: Number(z.radius_km ?? 1),
+          })),
+        );
+      }
       if (typeof sset.cart_reminder_enabled === "boolean") setCartReminder(sset.cart_reminder_enabled);
       if (typeof sset.cart_recovery_minutes === "number") setCartRecoveryMin(sset.cart_recovery_minutes);
       if (typeof sset.cart_expiry_minutes === "number") setCartExpiryMin(sset.cart_expiry_minutes);
@@ -332,15 +415,54 @@ export function SettingsScreen() {
     });
   }
 
+  function applyDispatchPreset(key: DispatchPresetKey) {
+    const p = DISPATCH_PRESETS[key];
+    setDispatchEngine(p.dispatch_engine);
+    setBatchProximity(p.batch_proximity_km);
+    setMaxDetour(p.batch_max_detour_km);
+    setHoldSeconds(p.batch_hold_seconds);
+    setSlaBuffer(p.sla_buffer_per_order_minutes);
+  }
+
+  function addDeliveryZone() {
+    setDeliveryZones((zones) => [
+      ...zones,
+      { name: `Zone ${zones.length + 1}`, center_lat: Number(lat) || 25.2, center_lng: Number(lng) || 55.2, radius_km: 2.5 },
+    ]);
+  }
+
+  function updateDeliveryZone(index: number, patch: Partial<DeliveryZone>) {
+    setDeliveryZones((zones) =>
+      zones.map((z, i) => (i === index ? { ...z, ...patch } : z)),
+    );
+  }
+
+  function removeDeliveryZone(index: number) {
+    setDeliveryZones((zones) => zones.filter((_, i) => i !== index));
+  }
+
   async function saveDispatch() {
+    for (const z of deliveryZones) {
+      if (!z.name.trim()) {
+        flash("Each delivery zone needs a name.");
+        return;
+      }
+      if (z.radius_km <= 0 || z.radius_km > 10) {
+        flash("Zone radius must be between 0.1 and 10 km.");
+        return;
+      }
+    }
     try {
       await apiClient.patch("/api/v1/settings", {
         dispatch_engine: dispatchEngine,
         default_prep_minutes: defaultPrep,
+        prep_dispatch_lead_min: prepLeadMin,
         batch_expedite_radius_km: expediteRadius,
         batch_proximity_km: batchProximity,
         batch_max_detour_km: maxDetour,
         batch_hold_seconds: holdSeconds,
+        sla_buffer_per_order_minutes: slaBuffer,
+        delivery_zones: deliveryZones,
       });
       flash();
     } catch {
@@ -953,6 +1075,27 @@ export function SettingsScreen() {
 
       {tab === "dispatch" && (
         <div className={s.section}>
+          <div className={s.rowStacked}>
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>Quick presets</span>
+              <span className={s.rowHint}>
+                One-click starting points for routing and batching. Adjust fields below, then Save.
+              </span>
+            </div>
+            <div className={s.presets} role="group" aria-label="Dispatch presets">
+              {DISPATCH_PRESET_BUTTONS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={s.chip}
+                  title={p.hint}
+                  onClick={() => applyDispatchPreset(p.key)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className={`${s.col} ${s.colField}`}>
             <span className={s.rowName}>Dispatch engine</span>
             <select
@@ -961,8 +1104,8 @@ export function SettingsScreen() {
               onChange={(e) => setDispatchEngine(e.target.value as "greedy" | "ortools")}
               className={s.input}
             >
-              <option value="greedy">Greedy (default), proximity batching</option>
-              <option value="ortools">OR Tools, SLA first route optimizer</option>
+              <option value="greedy">Greedy — proximity batching (rollback)</option>
+              <option value="ortools">OR-Tools — SLA-first route optimizer (default)</option>
             </select>
             <span className={s.rowHint}>
               OR Tools optimizes routes and assignment jointly and drops orders that can't
@@ -1002,9 +1145,96 @@ export function SettingsScreen() {
               one. 0 keeps simple nearby grouping. The 40 min SLA is always enforced.
             </span>
           </label>
+          <label className={`${s.col} ${s.colField}`}>
+            <span className={s.rowName}>SLA buffer per extra stop (min)</span>
+            <input
+              aria-label="sla buffer per order minutes" type="number" min={0} max={30} step={1}
+              value={slaBuffer} onChange={(e) => setSlaBuffer(Number(e.target.value))}
+              onFocus={(e) => e.target.select()} className={`${s.input} ${s.inputNum}`}
+            />
+            <span className={s.rowHint}>
+              Minutes added to the internal SLA budget for each extra batched stop. 10 min per
+              stop keeps the 40 min customer promise with headroom.
+            </span>
+          </label>
+
+          <h4 className={s.groupTitle}>Delivery zones</h4>
+          <p className={s.rowHint}>
+            Named areas for same-zone batching. Orders in the same zone can batch even when farther apart.
+          </p>
+          {deliveryZones.map((zone, idx) => (
+            <div key={idx} className={`${s.row2} ${s.row2Compact}`}>
+              <label className={s.col}>
+                <span className={s.rowName}>Name</span>
+                <input
+                  aria-label={`zone ${idx + 1} name`}
+                  className={s.input}
+                  value={zone.name}
+                  onChange={(e) => updateDeliveryZone(idx, { name: e.target.value })}
+                />
+              </label>
+              <label className={s.col}>
+                <span className={s.rowName}>Center lat</span>
+                <input
+                  aria-label={`zone ${idx + 1} center lat`}
+                  type="number"
+                  step="0.0001"
+                  className={`${s.input} ${s.inputNum}`}
+                  value={zone.center_lat}
+                  onChange={(e) => updateDeliveryZone(idx, { center_lat: Number(e.target.value) })}
+                />
+              </label>
+              <label className={s.col}>
+                <span className={s.rowName}>Center lng</span>
+                <input
+                  aria-label={`zone ${idx + 1} center lng`}
+                  type="number"
+                  step="0.0001"
+                  className={`${s.input} ${s.inputNum}`}
+                  value={zone.center_lng}
+                  onChange={(e) => updateDeliveryZone(idx, { center_lng: Number(e.target.value) })}
+                />
+              </label>
+              <label className={s.col}>
+                <span className={s.rowName}>Radius (km)</span>
+                <input
+                  aria-label={`zone ${idx + 1} radius km`}
+                  type="number"
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  className={`${s.input} ${s.inputNum}`}
+                  value={zone.radius_km}
+                  onChange={(e) => updateDeliveryZone(idx, { radius_km: Number(e.target.value) })}
+                />
+              </label>
+              <button type="button" className={s.chip} onClick={() => removeDeliveryZone(idx)}>
+                Remove
+              </button>
+            </div>
+          ))}
+          <button type="button" className={s.addTier} onClick={addDeliveryZone}>
+            Add delivery zone
+          </button>
 
           <h4 className={s.groupTitle}>Kitchen</h4>
           <div className={`${s.row2} ${s.row2Compact}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Prep dispatch lead (min)</span>
+              <input
+                aria-label="prep dispatch lead minutes"
+                type="number"
+                min={1}
+                max={30}
+                value={prepLeadMin}
+                onChange={(e) => setPrepLeadMin(Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                className={`${s.input} ${s.inputNum}`}
+              />
+              <span className={s.rowHint}>
+                How many minutes before prep_deadline a preparing order enters the dispatch pool.
+              </span>
+            </label>
             <label className={s.col}>
               <span className={s.rowName}>Default cook time (min)</span>
               <input

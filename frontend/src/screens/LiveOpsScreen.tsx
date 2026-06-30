@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CompactTable, type Column } from "../components/CompactTable";
+import { DispatchKpiPanel } from "../components/DispatchKpiPanel";
+import { LiveOpsMap } from "../components/LiveOpsMap";
 import { SectionBanner } from "../components/SectionBanner";
 import { SLAOrderCard } from "../components/SLAOrderCard";
 import { StatusPill } from "../components/StatusPill";
@@ -225,6 +227,15 @@ export function LiveOpsScreen() {
           accent="var(--sla-safe)" sub={`${kpis.completion}% completion`} />
         <StatCard icon="💰" label="Money Collected" value={kpis.revenue}
           accent="var(--accent-revenue)" sub="collected today" />
+      </div>
+
+      <div className={s.dispatchKpiRow}>
+        <DispatchKpiPanel />
+      </div>
+
+      <div className={s.card}>
+        <div className={s.cardTitle}>Fleet Map</div>
+        <LiveOpsMap />
       </div>
 
       {/* ── Urgent orders (need attention) ─── */}

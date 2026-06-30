@@ -27,6 +27,7 @@ from app.webhook.router import router as webhook_router
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     redis_conn = None
+    limiter_installed = False
 
     # --- startup ---
     from app.obs.sentry import init_sentry
@@ -57,9 +58,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     if settings.rate_limit_enabled and redis_conn is not None:
         from app.ratelimit.bucket import TokenBucketLimiter
-        from app.ratelimit.deps import set_limiter
+        from app.ratelimit.deps import get_limiter, set_limiter
 
-        set_limiter(TokenBucketLimiter(redis_conn))
+        # Tests inject an isolated limiter via ``set_limiter`` before lifespan
+        # runs — never overwrite an already-installed instance.
+        if get_limiter() is None:
+            set_limiter(TokenBucketLimiter(redis_conn))
+            limiter_installed = True
     if settings.geocode_cache_enabled and redis_conn is not None:
         from app.geo.cache import set_geocode_redis
 
@@ -99,6 +104,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except (asyncio.CancelledError, Exception):  # noqa: BLE001
             pass
 
+    if limiter_installed:
+        from app.ratelimit.deps import set_limiter
+
+        set_limiter(None)
     if redis_conn is not None:
         from app.geo.cache import set_geocode_redis
 

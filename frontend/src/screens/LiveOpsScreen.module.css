@@ -83,6 +83,9 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
+.dispatchKpiRow {
+  margin-top: 16px;
+}
 .stat {
   position: relative;
   background: var(--bg-surface);

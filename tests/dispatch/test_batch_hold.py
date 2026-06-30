@@ -23,13 +23,14 @@ from app.identity.models import Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order
 
 
-async def _restaurant(db_session, hold_seconds, lat=25.2048, lng=55.2708):
+async def _restaurant(db_session, hold_seconds, lat=25.2048, lng=55.2708, **extra_settings):
     r = Restaurant(
         name="R", phone=f"+9710{hold_seconds:06d}", password_hash="x", lat=lat, lng=lng,
         settings={
             "dispatch_engine": "greedy",
             "batch_hold_seconds": hold_seconds,
             "batch_proximity_km": 1.0,
+            **extra_settings,
         },
     )
     db_session.add(r)
@@ -83,7 +84,9 @@ async def _ready_order(
     return o
 
 
-async def _pipeline_order(db_session, r, lat, lon, num, status="preparing"):
+async def _pipeline_order(
+    db_session, r, lat, lon, num, status="preparing", prep_deadline_minutes=15.0,
+):
     """An order still in the kitchen (confirmed/preparing, unassigned) — a plausible
     upcoming batch-mate. It is NOT a dispatch candidate itself."""
     c = Customer(
@@ -102,6 +105,7 @@ async def _pipeline_order(db_session, r, lat, lon, num, status="preparing"):
         subtotal=Decimal("10.00"), total=Decimal("10.00"), address_id=addr.id,
         sla_confirmed_at=now, sla_deadline=now + timedelta(minutes=40),
         promised_eta=now + timedelta(minutes=40),
+        prep_deadline=now + timedelta(minutes=prep_deadline_minutes),
     )
     db_session.add(o)
     await db_session.flush()
@@ -229,6 +233,52 @@ async def test_sla_pressure_overrides_hold(db_session):
     assert o.status == "assigned"
     assert o.rider_id == rd.id
     assert res.assigned_count == 1
+
+
+async def test_smart_hold_capped_by_prep_deadline_minus_rider_eta(db_session, monkeypatch):
+    """Hold window is capped by prep_deadline_mate - rider_eta, not the full 120s."""
+    from app.dispatch import service as dispatch_service
+
+    async def _fake_eta(*_args, **_kwargs):
+        return 1.0
+
+    monkeypatch.setattr(dispatch_service, "_nearest_rider_eta_min", _fake_eta)
+
+    r = await _restaurant(
+        db_session,
+        hold_seconds=120,
+        prep_dispatch_lead_min=2,
+    )
+    await _rider(db_session, r)
+    o = await _ready_order(db_session, r, 25.2050, 55.2710, 80, ready_minutes_ago=0)
+    # Mate prep in 2.5 min — outside 2-min dispatch lead (stays pipeline-only) but
+    # caps hold at 1.5 min (2.5 − rider_eta), below the flat 120s window.
+    await _pipeline_order(
+        db_session, r, 25.2052, 55.2712, 80, status="preparing", prep_deadline_minutes=2.5,
+    )
+    await db_session.commit()
+
+    res = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(o)
+    assert o.status == "ready"
+    assert res.assigned_count == 0
+
+    # Simulate 1.6 min wait — past the smart cap (1.5 min) but under flat 120s window.
+    now = datetime.now(timezone.utc)
+    o.updated_at = (now - timedelta(minutes=1, seconds=36)).replace(tzinfo=None)
+    pipeline = await db_session.scalar(
+        select(Order).where(Order.order_number == "P80")
+    )
+    # Advance the mate's prep clock too so the cap is in the past (not still ~90s out).
+    pipeline.prep_deadline = now - timedelta(seconds=30)
+    await db_session.commit()
+
+    res2 = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+    await db_session.refresh(o)
+    assert o.status == "assigned"
+    assert res2.assigned_count >= 1
 
 
 async def test_priority_order_not_held(db_session):

@@ -6,6 +6,7 @@ import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CountdownTimer } from "../components/CountdownTimer";
+import { DispatchExplainSection } from "../components/DispatchExplainSection";
 import { PrepCountdown } from "../components/PrepCountdown";
 import { apiClient } from "../lib/apiClient";
 import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
@@ -427,6 +428,14 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
           />
         </div>
       </section>
+
+      {detail.dispatch_explain ? (
+        <DispatchExplainSection
+          explain={detail.dispatch_explain}
+          batchPreviewLabel={detail.batch_preview_label}
+          orderId={detail.id}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1483,6 +1483,25 @@ async def get_order_detail(
             .limit(1)
         )
 
+    dispatch_explain: dict | None = None
+    batch_preview_label: str | None = None
+    assignment = await session.scalar(
+        select(Assignment).where(Assignment.order_id == order.id)
+    )
+    if assignment and assignment.algorithm_score:
+        dispatch_explain = assignment.algorithm_score
+    if order.rider_id is None and order.status in (
+        "confirmed",
+        "preparing",
+        "ready",
+    ):
+        from app.dispatch.service import preview_batch_groups
+
+        preview = await preview_batch_groups(
+            session, restaurant_id=restaurant_id
+        )
+        batch_preview_label = preview.get(order.id)
+
     return OrderDetailOut(
         id=order.id,
         order_number=order.order_number,
@@ -1514,6 +1533,8 @@ async def get_order_detail(
             _chat_for_this_order(chat, order), items_rows
         ),
         route=route,
+        batch_preview_label=batch_preview_label,
+        dispatch_explain=dispatch_explain,
     )
 
 

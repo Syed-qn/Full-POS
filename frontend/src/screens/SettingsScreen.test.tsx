@@ -70,6 +70,38 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect((screen.getByDisplayValue("Test Resto") as HTMLInputElement).value).toBe("Test Resto"));
   });
 
+  it("saves delivery zones on dispatch tab", async () => {
+    const spy = vi.mocked(fetch);
+    render(<SettingsScreen />);
+    await waitFor(() => screen.getByRole("button", { name: /dispatch/i }));
+    await userEvent.click(screen.getByRole("button", { name: /dispatch/i }));
+    await waitFor(() => screen.getByRole("button", { name: /add delivery zone/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add delivery zone/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() =>
+      expect(
+        spy.mock.calls.some(([u, init]) => {
+          if (!String(u).includes("/settings") || init?.method !== "PATCH") return false;
+          const body = JSON.parse(String(init?.body ?? "{}"));
+          return Array.isArray(body.delivery_zones) && body.delivery_zones.length === 1;
+        }),
+      ).toBe(true),
+    );
+  });
+
+  it("applies SLA-safe launch preset", async () => {
+    render(<SettingsScreen />);
+    await waitFor(() => screen.getByRole("button", { name: /dispatch/i }));
+    await userEvent.click(screen.getByRole("button", { name: /dispatch/i }));
+    await waitFor(() => screen.getByRole("button", { name: /sla-safe launch/i }));
+    await userEvent.click(screen.getByRole("button", { name: /sla-safe launch/i }));
+    expect(screen.getByLabelText(/dispatch engine/i)).toHaveValue("ortools");
+    expect((screen.getByLabelText(/batch proximity/i) as HTMLInputElement).value).toBe("1.5");
+    expect((screen.getByLabelText(/batch max detour/i) as HTMLInputElement).value).toBe("0.5");
+    expect((screen.getByLabelText(/batch hold seconds/i) as HTMLInputElement).value).toBe("120");
+    expect((screen.getByLabelText(/sla buffer per order/i) as HTMLInputElement).value).toBe("10");
+  });
+
   it("saves loyalty config with a loyalty object", async () => {
     const spy = vi.mocked(fetch);
     render(<SettingsScreen />);

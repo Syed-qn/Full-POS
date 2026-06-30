@@ -111,3 +111,73 @@ def test_google_maps_uses_routes_api_and_returns_real_distance(monkeypatch):
     assert "routes.googleapis.com" in captured.get("url", "")
     assert captured.get("headers", {}).get("X-Goog-Api-Key") == "test-key"
     assert "routes.distanceMeters" in (captured.get("headers", {}).get("X-Goog-FieldMask") or "")
+
+
+def test_distance_matrix_fallback_square():
+    from app.geo.fake import FakeGeoProvider
+
+    m = FakeGeoProvider().distance_matrix(
+        [(25.0, 55.0)], [(25.01, 55.01), (25.02, 55.02)]
+    )
+    assert len(m[0]) == 2
+    assert m[0][0] < m[0][1]
+
+
+def test_google_maps_distance_matrix_uses_api(monkeypatch):
+    """GoogleMapsGeoProvider.distance_matrix calls Distance Matrix API on success."""
+    import os
+
+    from app.config import get_settings
+
+    os.environ["APP_GOOGLE_MAPS_API_KEY"] = "test-key"
+    get_settings.cache_clear()
+    from app.geo.google_maps import GoogleMapsGeoProvider
+
+    captured = {}
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "rows": [
+                    {
+                        "elements": [
+                            {"status": "OK", "duration": {"value": 300}},
+                            {"status": "OK", "duration": {"value": 600}},
+                        ]
+                    }
+                ]
+            }
+
+    def fake_get(self, url, params=None, **kw):
+        captured["url"] = url
+        captured["params"] = params
+        return FakeResp()
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        get = fake_get
+
+    monkeypatch.setattr("httpx.Client", FakeClient)
+
+    provider = GoogleMapsGeoProvider()
+    m = provider.distance_matrix(
+        [(25.0, 55.0)], [(25.01, 55.01), (25.02, 55.02)]
+    )
+    assert len(m) == 1
+    assert len(m[0]) == 2
+    assert m[0][0] == pytest.approx(5.0)
+    assert m[0][1] == pytest.approx(10.0)
+    assert provider.is_estimate is False
+    assert "distancematrix" in captured.get("url", "")
+    assert captured.get("params", {}).get("key") == "test-key"

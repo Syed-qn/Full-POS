@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from app.config import get_settings
+from app.dispatch.zones import same_zone_or_corridor, zone_for_point
 from app.geo.haversine import distance_km
 
 if TYPE_CHECKING:
@@ -212,6 +213,29 @@ def _within_internal_target(
     return True
 
 
+def _zone_batch_eligible(
+    seed: OrderCandidate,
+    order: OrderCandidate,
+    *,
+    delivery_zones: list[dict],
+    origin: tuple[float, float] | None,
+    max_detour_km: float,
+) -> bool:
+    """True when seed and order share a zone or qualify via corridor detour."""
+    zone_seed = zone_for_point(seed.lat, seed.lon, delivery_zones)
+    zone_order = zone_for_point(order.lat, order.lon, delivery_zones)
+    if origin is None:
+        return zone_seed is not None and zone_seed == zone_order
+    return same_zone_or_corridor(
+        zone_seed,
+        zone_order,
+        origin,
+        (seed.lat, seed.lon),
+        (order.lat, order.lon),
+        max_detour_km,
+    )
+
+
 def build_batches(
     orders: list[OrderCandidate],
     *,
@@ -222,6 +246,7 @@ def build_batches(
     origin: tuple[float, float] | None = None,
     buffer_per_order: int = SLA_BUFFER_PER_ORDER_MIN,
     max_detour_km: float = 0.0,
+    delivery_zones: list[dict] | None = None,
 ) -> list[PlannedBatch]:
     """Greedy proximity batching (with inter-stop travel gap fix per GAP#4/spec §4.3).
 
@@ -243,6 +268,7 @@ def build_batches(
     # Corridor ("on-the-way") batching is opt-in: only when a positive max_detour_km is
     # set AND we know the restaurant origin to measure the route from.
     corridor = max_detour_km > 0 and origin is not None
+    zones_mode = bool(delivery_zones)
 
     # Spec §4.3.2: priority orders bypass batching — each gets its own single-order batch.
     priority_orders = [o for o in remaining if o.priority != "normal"]
@@ -260,19 +286,30 @@ def build_batches(
             if len(batch.orders) >= max_per_batch:
                 continue
             seed = batch.seed
-            # Geometric gate: near the seed (radius) OR a small detour off the route
-            # (corridor). Either way the SLA check below still has the final say.
-            within_proximity = (
-                distance_km(seed.lat, seed.lon, order.lat, order.lon) <= proximity_km
-            )
-            within_corridor = corridor and (
-                _insertion_detour_km(batch.orders, order, origin) <= max_detour_km
-            )
+            # Geometric gate: zones (same zone / corridor) OR proximity radius /
+            # corridor detour. The SLA check below still has the final say.
+            if zones_mode:
+                assert delivery_zones is not None
+                within_geometry = _zone_batch_eligible(
+                    seed,
+                    order,
+                    delivery_zones=delivery_zones,
+                    origin=origin,
+                    max_detour_km=max_detour_km,
+                )
+            else:
+                within_proximity = (
+                    distance_km(seed.lat, seed.lon, order.lat, order.lon) <= proximity_km
+                )
+                within_corridor = corridor and (
+                    _insertion_detour_km(batch.orders, order, origin) <= max_detour_km
+                )
+                within_geometry = within_proximity or within_corridor
             within_window = order.ready_at - seed.ready_at <= timedelta(
                 minutes=window_min
             )
             if (
-                (within_proximity or within_corridor)
+                within_geometry
                 and within_window
                 and _within_internal_target(
                     batch, order, geo_provider=geo_provider, origin=origin,

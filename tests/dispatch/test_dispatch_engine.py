@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from app.dispatch.models import Assignment, Batch, BatchOrder, RiderLocation
 from app.dispatch.service import run_dispatch_engine
-from app.identity.models import Restaurant, Rider
+from app.identity.models import DEFAULT_SETTINGS, Restaurant, Rider
 from app.ordering.models import Customer, CustomerAddress, Order
 from app.outbox.models import OutboxMessage
 
@@ -428,7 +428,7 @@ async def test_ungeocoded_order_skipped_not_faked_to_restaurant(db_session):
     db_session.add(order)
     await db_session.commit()
 
-    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
     await db_session.commit()
 
     await db_session.refresh(order)
@@ -495,6 +495,116 @@ async def test_unassigned_order_within_sla_no_breach_warning(db_session):
     ).all()
     bodies = " ".join(str(m.payload) for m in msgs).lower()
     assert "cannot" not in bodies and "can't" not in bodies
+
+
+def test_default_dispatch_engine_is_ortools():
+    """New tenants inherit SLA-safe dispatch defaults (spec §8.1)."""
+    assert DEFAULT_SETTINGS["dispatch_engine"] == "ortools"
+    assert DEFAULT_SETTINGS["sla_buffer_per_order_minutes"] == 10
+    assert DEFAULT_SETTINGS["batch_hold_seconds"] == 120
+    assert DEFAULT_SETTINGS["batch_proximity_km"] == 1.5
+    assert DEFAULT_SETTINGS["batch_max_detour_km"] == 0.5
+
+
+async def test_ortools_timeout_falls_back_to_greedy(db_session, monkeypatch):
+    """When OR-Tools exceeds the 2s solve budget, dispatch still assigns via greedy."""
+    import time as _time
+
+    from app.dispatch import service as dispatch_service
+
+    def _slow_optimize(*args, **kwargs):
+        _time.sleep(3)
+        raise AssertionError("should not return after timeout")
+
+    monkeypatch.setattr(dispatch_service, "optimize_dispatch", _slow_optimize)
+
+    r = await _seed_restaurant(db_session, dispatch_engine="ortools")
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000043", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    order = await _ready_order(db_session, r.id, 25.2050, 55.2710, 43)
+    await db_session.commit()
+
+    result = await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.status == "assigned"
+    assert order.rider_id == rider.id
+    assert result.assigned_count == 1
+    assignment = await db_session.scalar(
+        select(Assignment).where(Assignment.order_id == order.id)
+    )
+    assert assignment.algorithm_score.get("engine") == "greedy"
+    assert assignment.algorithm_score.get("engine_fallback") is True
+
+
+MARINA_ZONE = [
+    {"name": "Marina", "center_lat": 25.08, "center_lng": 55.14, "radius_km": 2.5}
+]
+
+
+async def test_assignment_algorithm_score_includes_zone(db_session):
+    """When delivery_zones are configured, algorithm_score carries the zone name."""
+    r = await _seed_restaurant(db_session, lat=25.08, lng=55.14, dispatch_engine="greedy")
+    r.settings = {
+        **(r.settings or {}),
+        "delivery_zones": MARINA_ZONE,
+        "batch_proximity_km": 2.0,
+        "batch_hold_seconds": 0,
+    }
+    db_session.add(r)
+    await db_session.flush()
+    rider = Rider(
+        restaurant_id=r.id,
+        name="Z",
+        phone="+971500000142",
+        status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.08, 55.14)
+    await _ready_order(db_session, r.id, 25.081, 55.141, 201)
+    await _ready_order(db_session, r.id, 25.082, 55.142, 202)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    asn = await db_session.scalar(select(Assignment))
+    assert asn.algorithm_score.get("zone") == "Marina"
+
+
+async def test_assignment_algorithm_score_explainability(db_session):
+    """Committed assignments carry rich algorithm_score (route_sequence, per_stop)."""
+    r = await _seed_restaurant(db_session, dispatch_engine="ortools")
+    rider = Rider(
+        restaurant_id=r.id, name="X", phone="+971500000141", status="available",
+        performance={"on_time_pct": 100.0, "avg_delivery_min": 20, "total_deliveries": 0},
+    )
+    db_session.add(rider)
+    await db_session.flush()
+    await _ping(db_session, rider, r.id, 25.2048, 55.2708)
+    await _ready_order(db_session, r.id, 25.2050, 55.2710, 141)
+    await _ready_order(db_session, r.id, 25.2055, 55.2715, 142)
+    await db_session.commit()
+
+    await run_dispatch_engine(db_session, restaurant_id=r.id)
+    await db_session.commit()
+
+    asn = await db_session.scalar(select(Assignment))
+    score = asn.algorithm_score
+    assert score["engine"] == "ortools"
+    assert "route_sequence" in score
+    assert "per_stop" in score
+    assert "total_est_min" in score
+    assert "batch_reason" in score
+    assert all(p["projected_min"] <= 40 for p in score["per_stop"])
 
 
 async def test_ortools_engine_assigns_and_tags_score(db_session):
@@ -603,7 +713,7 @@ async def test_ortools_reopt_unchanged_route_is_noop(db_session):
     db_session.add(rider)
     await db_session.flush()
     await _ping(db_session, rider, r.id, 25.2048, 55.2708)
-    o1 = await _ready_order(db_session, r.id, 25.2050, 55.2710, 49, minutes_since_sla=2)
+    await _ready_order(db_session, r.id, 25.2050, 55.2710, 49, minutes_since_sla=2)
     await db_session.commit()
     await run_dispatch_engine(db_session, restaurant_id=r.id)
     await db_session.commit()

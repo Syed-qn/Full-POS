@@ -101,6 +101,8 @@ class SettingsPatch(BaseModel):
     prep_handling_minutes: int | None = Field(default=None, ge=0, le=30)
     batch_safety_minutes: int | None = Field(default=None, ge=0, le=30)
     default_prep_minutes: int | None = Field(default=None, ge=1, le=180)
+    # Minutes before prep_deadline when a preparing order enters the dispatch pool.
+    prep_dispatch_lead_min: int | None = Field(default=None, ge=1, le=30)
     batch_expedite_radius_km: float | None = Field(default=None, gt=0, le=10)
     # Greedy batching geometry. max_detour_km = 0 turns corridor batching OFF.
     batch_proximity_km: float | None = Field(default=None, gt=0, le=10)
@@ -110,6 +112,8 @@ class SettingsPatch(BaseModel):
     # Batching hold window: seconds to defer a lone fresh order so a neighbour can
     # join its batch. 0 = off. Capped at 600s (10 min) to stay well under the SLA.
     batch_hold_seconds: int | None = Field(default=None, ge=0, le=600)
+    # Manual delivery zones for batching (spec §5.3).
+    delivery_zones: list[dict] | None = None
     # Abandoned-cart recovery. reminder toggles the nudge; recovery = minutes quiet
     # before the nudge; expiry = minutes quiet before the draft cart is auto-cleared.
     cart_reminder_enabled: bool | None = None
@@ -143,6 +147,28 @@ class SettingsPatch(BaseModel):
                     raise ValueError(f"resale.{k} must be >= 0")
         if v.get("discount_type") == "percent" and v.get("discount_value", 0) > 100:
             raise ValueError("resale percent discount cannot exceed 100")
+        return v
+
+    @field_validator("delivery_zones")
+    @classmethod
+    def _validate_delivery_zones(cls, v: list[dict] | None) -> list[dict] | None:
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError("delivery_zones must be a list")
+        for zone in v:
+            if not isinstance(zone, dict):
+                raise ValueError("each delivery zone must be an object")
+            for key in ("name", "center_lat", "center_lng", "radius_km"):
+                if key not in zone:
+                    raise ValueError(f"delivery zone missing {key}")
+            if not isinstance(zone["name"], str) or not zone["name"].strip():
+                raise ValueError("delivery zone name must be a non-empty string")
+            for coord in ("center_lat", "center_lng", "radius_km"):
+                if not isinstance(zone[coord], (int, float)):
+                    raise ValueError(f"delivery zone {coord} must be numeric")
+            if zone["radius_km"] <= 0 or zone["radius_km"] > 10:
+                raise ValueError("delivery zone radius_km must be between 0 and 10")
         return v
 
     @field_validator("loyalty")

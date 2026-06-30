@@ -29,10 +29,10 @@ DEFAULT_SETTINGS: dict = {
         {"max_km": 10, "fee_aed": 10},
     ],
     "max_radius_km": 10,
-    # Dispatch engine per restaurant (spec §4.3). "greedy" = proximity batching
-    # (default, safe). "ortools" = SLA-first VRP route optimizer (opt-in pilot).
+    # Dispatch engine per restaurant (spec §4.3). "ortools" = SLA-first VRP route
+    # optimizer (default for new tenants). "greedy" = proximity batching fallback.
     # Existing rows without this key read as "greedy" via .get() in the service.
-    "dispatch_engine": "greedy",
+    "dispatch_engine": "ortools",
     # Kitchen prep deadline tuning (minutes), read via .get() with these defaults.
     # handling = pickup/hand-off slack reserved for the rider at the restaurant;
     # batch_safety = margin so an order that later joins a batch (extra inter-stop
@@ -45,22 +45,24 @@ DEFAULT_SETTINGS: dict = {
     # stop. max_detour > 0 turns on "on-the-way" (corridor) batching: an order joins
     # when inserting its stop adds at most this many km of detour to the route (it is
     # then visited in nearest-first order). 0 = corridor off (pure proximity).
-    "batch_proximity_km": 1.0,
+    "batch_proximity_km": 1.5,
     "batch_window_minutes": 10,
     # Per-extra-stop safety margin in the batching SLA gate. Kept at 0 so realistic
     # mid-range orders actually batch (a higher value reserves time and blocks
     # batching for orders more than a few km out); the 40-min customer SLA + the
     # predictive-breach alert remain the real safety net. Not exposed in the UI.
-    "sla_buffer_per_order_minutes": 0,
-    "batch_max_detour_km": 0,
+    "sla_buffer_per_order_minutes": 10,
+    "batch_max_detour_km": 0.5,
     # Batching "hold window": seconds to defer a freshly-ready LONE order so a nearby
     # order can join its batch before a rider is committed. 0 = off (assign at once).
     # An order is never held if it already has a batch-mate, is priority, or is under
     # SLA pressure. Released by the periodic dispatch sweep once it matures.
-    "batch_hold_seconds": 0,
+    "batch_hold_seconds": 120,
     # Fallback cook time (minutes) for a dish with no prep_minutes set — used to estimate
     # an order's "start cooking by" time.
     "default_prep_minutes": 15,
+    # Minutes before prep_deadline when a preparing order enters the dispatch pool.
+    "prep_dispatch_lead_min": 8,
     # Today's Special automation (marketing). When enabled, every opted-in customer
     # is sent the chosen APPROVED template ~lead_minutes before their predicted usual
     # order time (clamped to the UAE 9am-6pm window). Customers without a clear habit
