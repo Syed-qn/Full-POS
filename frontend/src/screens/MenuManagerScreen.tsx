@@ -5,7 +5,7 @@ import { DiffPanel } from "../components/DiffPanel";
 import { DishCard } from "../components/DishCard";
 import { DishEditModal } from "../components/DishEditModal";
 import { SectionBanner } from "../components/SectionBanner";
-import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, uploadMenu } from "../lib/menuApi";
+import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, setWhatsapp, uploadMenu } from "../lib/menuApi";
 import { toast } from "../components/Toaster";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
@@ -24,18 +24,21 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   // Bumped on every dish mutation so the unified/catalog panel re-fetches and can
   // never show a stale price (the AED 20-vs-30 bug).
   const [menuRev, setMenuRev] = useState(0);
-  // dish_ids that are live on the WhatsApp catalogue — shown inline on each dish so
-  // there's ONE menu list (no duplicate catalogue grid).
+  // dish_ids that are LIVE on the WhatsApp catalogue (Meta finished processing the
+  // image) — shown inline on each dish so there's ONE menu list (no duplicate grid).
   const [waLinkedIds, setWaLinkedIds] = useState<Set<number>>(new Set());
+  // dish_ids linked to a catalogue product that is still IN REVIEW (image processing) —
+  // kept off WhatsApp until ready, shown with an "In review" pill.
+  const [waReviewIds, setWaReviewIds] = useState<Set<number>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onMenuLoaded = useCallback((m: UnifiedMenu) => {
+    const linked = m.items.filter((i) => i.link_status === "linked" && i.dish_id != null);
     setWaLinkedIds(
-      new Set(
-        m.items
-          .filter((i) => i.link_status === "linked" && i.dish_id != null)
-          .map((i) => i.dish_id as number),
-      ),
+      new Set(linked.filter((i) => i.sendable !== false).map((i) => i.dish_id as number)),
+    );
+    setWaReviewIds(
+      new Set(linked.filter((i) => i.sendable === false).map((i) => i.dish_id as number)),
     );
   }, []);
 
@@ -146,6 +149,19 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     } catch {
       setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, is_available: !next } : d)));
       setError("Failed to update availability.");
+    }
+  }
+
+  async function onWhatsappToggle(id: number, next: boolean) {
+    // Optimistic flip; the unified panel re-fetch updates the live/review badge.
+    setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, whatsapp_enabled: next } : d)));
+    try {
+      await setWhatsapp(id, next);
+      toast(next ? "Dish turned on for WhatsApp." : "Dish hidden from WhatsApp.");
+      setMenuRev((v) => v + 1);
+    } catch {
+      setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, whatsapp_enabled: !next } : d)));
+      toast("Failed to update WhatsApp setting.", "error");
     }
   }
 
@@ -362,7 +378,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
                     onDrop={canReorder ? () => onDropDish(items, d.id) : undefined}
                     onDragEnd={() => { setDragId(null); setOverId(null); }}
                   >
-                    <DishCard dish={d} onToggle={onToggle} onEdit={setEditing} onDelete={onDeleteDish} onWhatsapp={waLinkedIds.has(d.id)} />
+                    <DishCard dish={d} onToggle={onToggle} onEdit={setEditing} onDelete={onDeleteDish} onWhatsapp={waLinkedIds.has(d.id)} inReview={waReviewIds.has(d.id)} onWhatsappToggle={onWhatsappToggle} />
                   </div>
                 ))}
               </div>

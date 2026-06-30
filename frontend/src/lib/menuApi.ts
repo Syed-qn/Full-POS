@@ -21,6 +21,12 @@ export async function setAvailability(dishId: number, isAvailable: boolean): Pro
   });
 }
 
+/** Turn a dish's WhatsApp catalogue presence on/off. Off → unpublished from Meta and
+ *  hidden from WhatsApp; on → republished (shows once Meta finishes processing it). */
+export async function setWhatsapp(dishId: number, enabled: boolean): Promise<DishOut> {
+  return apiClient.patch<DishOut>(`/api/v1/dishes/${dishId}/whatsapp`, { enabled });
+}
+
 export interface VariantInput {
   name: string;
   price_aed: string;

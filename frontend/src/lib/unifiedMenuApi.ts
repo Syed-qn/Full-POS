@@ -14,6 +14,9 @@ export interface UnifiedMenuItem {
   is_available: boolean;
   catalog_active: boolean | null;
   image_url: string | null;
+  /** Live on WhatsApp (Meta finished processing the image) vs still in review. */
+  sendable: boolean | null;
+  review_status: string | null;
 }
 
 export interface UnifiedMenu {

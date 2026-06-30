@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -22,7 +22,13 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_FIELDS = "id,retailer_id,name,description,price,currency,availability,image_url,category"
+_FIELDS = (
+    "id,retailer_id,name,description,price,currency,availability,image_url,category,"
+    # image_fetch_status / review_status tell us whether Meta has finished processing
+    # the product (image fetched onto Meta's CDN + approved). A product is only sendable
+    # in a WhatsApp product_list once that is done — until then we keep it "in review".
+    "image_fetch_status,review_status"
+)
 # Hard cap so a misconfigured catalogue can't loop forever; WhatsApp shows <=30 anyway.
 _MAX_PAGES = 20
 _PER_PAGE = 100
@@ -48,7 +54,12 @@ class MetaProduct:
     availability: str | None
     image_url: str | None
     category: str | None
-    raw: dict
+    # Meta processing state: image_fetch_status (e.g. FETCHED / OUTDATED / FETCH_FAILED /
+    # DIRECT_UPLOAD) and review_status (approved / pending / rejected / outdated).
+    # Defaulted so callers that predate these fields keep working.
+    image_fetch_status: str | None = None
+    review_status: str | None = None
+    raw: dict = field(default_factory=dict)
 
 
 def format_meta_price(price_aed: Decimal, *, currency: str = "AED") -> str:
@@ -82,8 +93,37 @@ def _to_product(p: dict) -> MetaProduct:
         availability=p.get("availability"),
         image_url=p.get("image_url"),
         category=p.get("category"),
+        image_fetch_status=p.get("image_fetch_status"),
+        review_status=p.get("review_status"),
         raw=p,
     )
+
+
+# A product image is on Meta's CDN (sendable) when fetched or uploaded directly.
+_IMAGE_READY = {"fetched", "direct_upload"}
+# Anything else (in_progress, outdated, partial_fetch, fetch_failed, no_status, "") means
+# Meta hasn't finished processing the image yet → not sendable in a product_list.
+
+
+def is_product_sendable(product: "MetaProduct") -> bool:
+    """True when WhatsApp can include this product in an interactive product_list.
+
+    Meta only serves a product card once it has FETCHED the image onto its own CDN and
+    the product is not rejected in review. Until then a product_list that contains it
+    fails entirely (#131009 "None of the products provided could be sent"), so we treat
+    such a product as still "in review" and exclude it from the catalogue message.
+
+    Falls back to inspecting the image_url host (``fbcdn.net`` == processed) when Meta
+    omits ``image_fetch_status`` (older catalogues / partial field sets).
+    """
+    fetch = (product.image_fetch_status or "").strip().lower()
+    review = (product.review_status or "").strip().lower()
+    if review == "rejected":
+        return False
+    if fetch:
+        return fetch in _IMAGE_READY
+    # No explicit status — infer from where the image is hosted.
+    return "fbcdn.net" in (product.image_url or "")
 
 
 def _dish_retailer_id(dish_id: int, dish_number: int | None) -> str:

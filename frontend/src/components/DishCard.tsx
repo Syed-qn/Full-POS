@@ -7,6 +7,8 @@ export function DishCard({
   onEdit,
   onDelete,
   onWhatsapp,
+  inReview,
+  onWhatsappToggle,
 }: {
   dish: DishOut;
   onToggle: (id: number, next: boolean) => void;
@@ -14,7 +16,36 @@ export function DishCard({
   onDelete?: (dish: DishOut) => void;
   /** Whether this dish is live on the WhatsApp catalogue. undefined → status unknown. */
   onWhatsapp?: boolean;
+  /** Linked to a catalogue product Meta is still processing (image fetch/review). It is
+      kept off WhatsApp until ready — shown with an "In review" pill, not "On WhatsApp". */
+  inReview?: boolean;
+  /** Manager flips the dish's WhatsApp presence on/off. When provided the badge becomes
+      an interactive switch. */
+  onWhatsappToggle?: (id: number, next: boolean) => void;
 }) {
+  // Manager's WhatsApp switch (default on for older backends).
+  const waEnabled = dish.whatsapp_enabled !== false;
+  const waLabel = !waEnabled
+    ? "WhatsApp off"
+    : onWhatsapp
+      ? "On WhatsApp"
+      : inReview
+        ? "In review"
+        : "WhatsApp on";
+  const waClass = !waEnabled
+    ? s.waOff
+    : onWhatsapp
+      ? s.waOn
+      : inReview
+        ? s.waReview
+        : s.waPending;
+  const waTitle = !waEnabled
+    ? "Turned off — hidden from your WhatsApp catalogue. Tap to turn on."
+    : onWhatsapp
+      ? "Live on your WhatsApp catalogue. Tap to turn off."
+      : inReview
+        ? "Meta is still processing this dish's image — goes live automatically once ready. Tap to turn off."
+        : "On for WhatsApp — publishes automatically. Tap to turn off.";
   const hasError = dish.dish_number === null || dish.price_aed === null;
   // When a dish offers serving sizes, show the price span (e.g. "AED 18 – 60")
   // instead of a single base price, so the manager sees the range at a glance.
@@ -37,11 +68,26 @@ export function DishCard({
       {/* Dish number is kept in the backend (ordering/FSM) but hidden from the
           manager UI — it's an internal identifier, not customer-facing. */}
       <div className={s.top}>
-        {/* Only the positive "On WhatsApp" badge is shown. A dish that isn't live yet
-            shows no badge (it publishes automatically), to avoid "Not on WhatsApp" noise. */}
-        {onWhatsapp ? (
-          <span className={`${s.wa} ${s.waOn}`} title="Live on your WhatsApp catalogue">
-            On WhatsApp
+        {/* WhatsApp on/off switch. State reflects "On WhatsApp" (live), "In review" (Meta
+            still processing), "WhatsApp on" (queued), or "WhatsApp off" (manager turned it
+            off → unlinked & hidden). Tapping flips it. Static badge when no toggle handler. */}
+        {onWhatsappToggle ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={waEnabled}
+            className={`${s.wa} ${s.waBtn} ${waClass}`}
+            title={waTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onWhatsappToggle(dish.id, !waEnabled);
+            }}
+          >
+            {waLabel}
+          </button>
+        ) : waEnabled && (onWhatsapp || inReview) ? (
+          <span className={`${s.wa} ${waClass}`} title={waTitle}>
+            {waLabel}
           </span>
         ) : (
           <span />

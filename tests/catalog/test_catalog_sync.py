@@ -14,11 +14,12 @@ from app.catalog.sync_service import sync_catalog_from_meta
 from app.outbox.models import OutboxMessage
 
 
-def _mp(retailer_id, name, price, cat=None):
+def _mp(retailer_id, name, price, cat=None, *, image_url=None, fetch=None, review=None):
     return MetaProduct(
         retailer_id=retailer_id, meta_product_id=f"meta-{retailer_id}", name=name,
         price_aed=Decimal(str(price)), currency="AED", availability="in stock",
-        image_url=None, category=cat, raw={"retailer_id": retailer_id},
+        image_url=image_url, category=cat, image_fetch_status=fetch, review_status=review,
+        raw={"retailer_id": retailer_id},
     )
 
 
@@ -26,6 +27,103 @@ def _patch_meta(monkeypatch, products):
     async def _fake(catalog_id):  # noqa: ARG001
         return products
     monkeypatch.setattr(sync_service, "fetch_catalog_products", _fake)
+
+
+def test_is_product_sendable_logic():
+    """A product is sendable only once Meta has fetched its image and not rejected it."""
+    from app.catalog.meta_client import is_product_sendable
+
+    assert is_product_sendable(_mp("r", "X", 10, fetch="fetched")) is True
+    assert is_product_sendable(_mp("r", "X", 10, fetch="direct_upload")) is True
+    # Still processing / failed / outdated → in review (not sendable).
+    assert is_product_sendable(_mp("r", "X", 10, fetch="in_progress")) is False
+    assert is_product_sendable(_mp("r", "X", 10, fetch="fetch_failed")) is False
+    # Rejected always wins regardless of image state.
+    assert is_product_sendable(_mp("r", "X", 10, fetch="fetched", review="rejected")) is False
+    # No status → infer from image host (Meta CDN == processed).
+    assert is_product_sendable(
+        _mp("r", "X", 10, image_url="https://scontent.fdxb.fbcdn.net/x.jpg")
+    ) is True
+    assert is_product_sendable(
+        _mp("r", "X", 10, image_url="https://placehold.co/x.png")
+    ) is False
+
+
+async def test_sync_marks_unprocessed_product_in_review(db_session, restaurant, monkeypatch):
+    """Sync links (makes sendable) only products Meta has processed; the rest stay
+    in review so they're kept off the WhatsApp product_list."""
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
+                           "catalog_ordering_enabled": True}
+    await db_session.commit()
+    _patch_meta(monkeypatch, [
+        _mp("ready", "Live", 30, "Rice", fetch="fetched"),
+        _mp("pending", "Processing", 12, "Drinks", fetch="in_progress"),
+    ])
+    await sync_catalog_from_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+    rows = {r.retailer_id: r for r in (await db_session.scalars(
+        select(CatalogProduct).where(CatalogProduct.restaurant_id == restaurant.id)
+    )).all()}
+    assert rows["ready"].is_sendable is True
+    assert rows["pending"].is_sendable is False
+    assert rows["pending"].review_status == "in_review"
+
+
+async def test_send_catalog_skips_in_review_products(db_session, restaurant):
+    """The product_list contains ONLY sendable products; an in-review one is excluded."""
+    from app.catalog.service import send_catalog
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
+                           "catalog_ordering_enabled": True}
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="ready", name="Live",
+        price_aed=Decimal("30.00"), currency="AED", availability="in stock",
+        category="Rice", is_active=True, is_sendable=True, raw={},
+    ))
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="pending", name="Processing",
+        price_aed=Decimal("12.00"), currency="AED", availability="in stock",
+        category="Drinks", is_active=True, is_sendable=False, review_status="in_review", raw={},
+    ))
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone="+971501110001")
+    await db_session.commit()
+    assert sent is True
+    msg = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).one()
+    assert msg.payload["type"] == "product_list"
+    retailer_ids = {
+        it["product_retailer_id"]
+        for s in msg.payload["sections"] for it in s["product_items"]
+    }
+    assert retailer_ids == {"ready"}  # the in-review product is kept off WhatsApp
+
+
+async def test_send_catalog_text_fallback_when_all_in_review(db_session, restaurant):
+    """When NO product is sendable yet, send a text menu instead of an un-sendable
+    product_list — so a 'menu' request is never left unanswered."""
+    from app.catalog.service import send_catalog
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
+                           "catalog_ordering_enabled": True}
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="pending", name="Processing",
+        price_aed=Decimal("12.00"), currency="AED", availability="in stock",
+        category="Drinks", is_active=True, is_sendable=False, review_status="in_review", raw={},
+    ))
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone="+971501110001")
+    await db_session.commit()
+    assert sent is True
+    msg = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).one()
+    assert msg.payload["type"] == "text"
+    assert "Processing" in msg.payload["body"]
+    assert "AED 12" in msg.payload["body"]
 
 
 async def test_sync_upserts_and_deactivates(db_session, restaurant, monkeypatch):
@@ -480,6 +578,45 @@ async def test_unpublish_sends_delete_and_drops_mirror(db_session, restaurant, m
     assert await db_session.scalar(
         select(CatalogProduct).where(CatalogProduct.retailer_id == "r9")
     ) is None
+
+
+async def test_delete_dish_endpoint_removes_from_meta(client, db_session, monkeypatch, auth_headers):
+    """Deleting a dish in the dashboard also deletes its product from Commerce Manager —
+    under BOTH its stored link AND the deterministic push id, so it can't be left
+    orphaned in Meta (and thus on WhatsApp)."""
+    from app.identity.models import Restaurant
+    from app.menu.models import Dish, Menu
+
+    rest = await db_session.scalar(
+        select(Restaurant).where(Restaurant.phone == "+971501234567")
+    )
+    rest.settings = {**(rest.settings or {}), "catalog_id": "CAT1",
+                     "catalog_ordering_enabled": True}
+    menu = Menu(restaurant_id=rest.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=rest.id, dish_number=7, name="Doomed",
+        price_aed=Decimal("9.00"), category="Misc", is_available=True,
+        name_normalized="doomed", catalog_retailer_id="meta-native-id",
+    )
+    db_session.add(dish)
+    await db_session.commit()
+    dish_id = dish.id
+
+    sent: list[dict] = []
+    async def _fake_batch(catalog_id, requests, **kw):  # noqa: ARG001
+        sent.extend(requests)
+        return {"handles": []}
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+
+    r = await client.delete(f"/api/v1/menus/{menu.id}/dishes/{dish_id}", headers=auth_headers)
+    assert r.status_code == 204, r.text
+
+    deleted_ids = {req["retailer_id"] for req in sent if req["method"] == "DELETE"}
+    # Both the stored Meta id and the deterministic dish-<id>-<number> push id.
+    assert "meta-native-id" in deleted_ids
+    assert f"dish-{dish_id}-7" in deleted_ids
 
 
 async def test_unpublish_noop_without_catalog_id(db_session, restaurant):

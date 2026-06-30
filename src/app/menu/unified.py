@@ -28,6 +28,11 @@ class UnifiedMenuItemOut(BaseModel):
     is_available: bool = True
     catalog_active: bool | None = None
     image_url: str | None = None
+    # Whether this linked product is actually live on WhatsApp (Meta finished processing
+    # its image) vs still "in review". Drives the dashboard pill. None when not on the
+    # catalogue at all.
+    sendable: bool | None = None
+    review_status: str | None = None
 
 
 class UnifiedMenuOut(BaseModel):
@@ -108,6 +113,8 @@ async def build_unified_menu(
                 is_available=dish.is_available,
                 catalog_active=cat.is_active if cat else None,
                 image_url=cat.image_url if cat else None,
+                sendable=cat.is_sendable if cat else None,
+                review_status=cat.review_status if cat else None,
             )
         )
 
@@ -126,6 +133,8 @@ async def build_unified_menu(
                 is_available=False,
                 catalog_active=p.is_active,
                 image_url=p.image_url,
+                sendable=p.is_sendable,
+                review_status=p.review_status,
             )
         )
 

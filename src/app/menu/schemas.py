@@ -70,6 +70,7 @@ class DishOut(BaseModel):
     condition: str = "new"
     meta_status: str = "active"
     brand: str | None = None
+    whatsapp_enabled: bool = True
     variants: list[VariantOut] = []
 
 
@@ -117,6 +118,7 @@ class DishIn(BaseModel):
     condition: str = "new"
     meta_status: str = "active"
     brand: str | None = None
+    whatsapp_enabled: bool = True
     # Content ID override; blank/None → auto-generated on push.
     catalog_retailer_id: str | None = None
     variants: list[VariantIn] = []
@@ -156,6 +158,7 @@ class DishPatch(BaseModel):
     condition: str | None = None
     meta_status: str | None = None
     brand: str | None = None
+    whatsapp_enabled: bool | None = None
     catalog_retailer_id: str | None = None
     variants: list[VariantIn] | None = None
 
@@ -196,3 +199,9 @@ class MenuWithDiffOut(MenuOut):
 
 class AvailabilityIn(BaseModel):
     is_available: bool
+
+
+class WhatsappToggleIn(BaseModel):
+    """Manager turning a dish's WhatsApp catalogue presence on/off."""
+
+    enabled: bool

@@ -47,6 +47,17 @@ class CatalogProduct(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
+    # Whether WhatsApp can actually SEND this product in a product_list — i.e. Meta has
+    # finished fetching/processing its image and approved it. A product that is active
+    # but not yet sendable is "in review": kept off WhatsApp (so the message can't fail
+    # with #131009) and shown with an "In review" pill in the dashboard until ready.
+    # Defaults true for back-compat with rows synced before this column existed.
+    is_sendable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Meta's processing/review state, surfaced for the dashboard pill (e.g. "pending",
+    # "approved", "in_review"). Informational only — sendability is the is_sendable gate.
+    review_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Full raw product JSON from Meta, for fields we don't model yet.
     raw: Mapped[dict] = mapped_column(JSONB, default=dict)
     synced_at: Mapped[datetime | None] = mapped_column(

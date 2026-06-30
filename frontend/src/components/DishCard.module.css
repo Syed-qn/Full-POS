@@ -74,6 +74,24 @@
   color: var(--text-muted);
   background: var(--bg-surface-inset);
 }
+.waReview {
+  color: #b27300;
+  background: rgba(245, 166, 35, 0.16);
+}
+.waPending {
+  color: #128c4b;
+  background: rgba(37, 211, 102, 0.1);
+}
+.waBtn {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 0.12s, box-shadow 0.12s;
+}
+.waBtn:hover {
+  filter: brightness(0.96);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
 .num {
   font-family: var(--font-mono);
   font-weight: 700;

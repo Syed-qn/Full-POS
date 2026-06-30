@@ -20,6 +20,7 @@ from app.catalog.meta_client import (
     _dish_retailer_id,
     build_catalog_item_data,
     fetch_catalog_products,
+    is_product_sendable,
     push_products_batch,
 )
 from app.catalog.models import CatalogProduct
@@ -114,20 +115,30 @@ async def _mirror_dishes_to_catalog(
                 CatalogProduct.retailer_id == rid,
             ).limit(1)
         )
+        is_new = row is None
         if row is None:
             row = CatalogProduct(restaurant_id=restaurant_id, retailer_id=rid)
             session.add(row)
             added += 1
         else:
             updated += 1
+        old_image = (row.image_url or "").strip()
         row.name = dish.name
         row.price_aed = dish.price_aed
         row.currency = "AED"
         row.availability = "in stock" if dish.is_available else "out of stock"
         row.category = dish.category
         row.is_active = dish.is_available
-        if (getattr(dish, "image_url", None) or "").strip():
+        new_image = (getattr(dish, "image_url", None) or "").strip()
+        if new_image:
             row.image_url = dish.image_url
+        # A just-pushed product (or one whose image changed) must be RE-FETCHED by Meta
+        # before WhatsApp can send it — keep it "in review" until the next Sync confirms
+        # the image is on Meta's CDN. Don't reset products that were already live and
+        # whose image is unchanged (so editing one dish never knocks others off WhatsApp).
+        if is_new or (new_image and new_image != old_image):
+            row.is_sendable = False
+            row.review_status = "in_review"
         row.synced_at = now
         row.raw = {
             "retailer_id": rid,
@@ -182,6 +193,15 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
         row.category = p.category
         row.raw = p.raw
         row.is_active = True
+        # Only LINK (make sendable on WhatsApp) once Meta has fetched the image onto its
+        # CDN and approved the product; otherwise keep it "in review" so the product_list
+        # message can never fail with #131009.
+        row.is_sendable = is_product_sendable(p)
+        row.review_status = (
+            (p.review_status or "").strip().lower() or None
+            if row.is_sendable
+            else "in_review"
+        )
         row.synced_at = now
 
     # Products that disappeared from Meta → mark inactive (don't delete, keep history
@@ -241,6 +261,8 @@ async def push_dishes_to_meta(
                     Dish.menu_id == menu.id,
                     Dish.is_available.is_(True),
                     Dish.price_aed.is_not(None),
+                    # Manager turned this dish OFF for WhatsApp → never publish it.
+                    Dish.whatsapp_enabled.is_(True),
                 )
             )
         ).all()

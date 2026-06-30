@@ -110,11 +110,33 @@ async def send_catalog(
         )
         return False
 
+    # Only products Meta has finished processing (image on its CDN + approved) can be
+    # sent in a product_list — including a still-"in review" product makes the WHOLE
+    # message fail with #131009 "None of the products provided could be sent". So we
+    # link only sendable products here; the rest stay in review (shown with a pill in
+    # the dashboard) until the next Sync flips them sendable.
+    sendable = [p for p in synced if p.is_sendable]
+    if not sendable:
+        # Everything is still in review → don't drop the customer. Reply with a text menu
+        # they can order from by typing, so "menu" always gets an answer.
+        await _send_catalog_text_fallback(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=to_phone,
+            products=synced,
+            idempotency_key=idempotency_key,
+        )
+        logger.info(
+            "send_catalog: %d product(s) still in review for restaurant %s — sent text "
+            "menu fallback instead of an (un-sendable) product_list", len(synced), restaurant_id,
+        )
+        return True
+
     # Group into sections by category (WhatsApp limits: <=10 sections, <=30
     # products total, section title <=24 chars). Stable, readable order.
     sections: dict[str, list[dict]] = {}
     total = 0
-    for p in synced:
+    for p in sendable:
         if total >= 30:
             break
         cat = (p.category or "Menu")[:24]
@@ -143,6 +165,41 @@ async def send_catalog(
         to_phone, restaurant_id, total, len(payload_sections),
     )
     return True
+
+
+async def _send_catalog_text_fallback(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    to_phone: str,
+    products: list[CatalogProduct],
+    idempotency_key: str | None = None,
+) -> None:
+    """Send a plain-text menu when no catalogue product is sendable yet (all in review).
+
+    Lists the active products (name + price) grouped by category so the customer can
+    still order by typing. Prevents the "menu" request from going unanswered while Meta
+    finishes processing the product images. Caller commits."""
+    lines: list[str] = ["Here's our menu 😊 Reply with what you'd like and we'll add it:"]
+    current_cat: str | None = None
+    for p in products[:40]:
+        cat = (p.category or "Menu").strip()
+        if cat != current_cat:
+            lines.append(f"\n*{cat}*")
+            current_cat = cat
+        price = f" — AED {_aed(p.price_aed)}" if p.price_aed is not None else ""
+        lines.append(f"• {p.name}{price}")
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=to_phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={"body": "\n".join(lines)[:4096]},
+        idempotency_key=(
+            f"{idempotency_key}-textfallback" if idempotency_key
+            else f"catalog-textfallback-{restaurant_id}-{to_phone}-{uuid4().hex}"
+        ),
+    )
 
 
 async def handle_catalog_order(

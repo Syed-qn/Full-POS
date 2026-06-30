@@ -75,6 +75,13 @@ class Dish(Base, TimestampMixin):
     condition: Mapped[str] = mapped_column(String(16), default="new", server_default="new")
     meta_status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
     brand: Mapped[str | None] = mapped_column(String(100))
+    # Manager's per-dish WhatsApp switch. True (default) → the dish is published to the
+    # Meta catalogue and can show on WhatsApp (subject to the image being processed).
+    # False → the manager has turned it OFF: it is unpublished from Meta and never linked
+    # or shown on WhatsApp, regardless of availability/processing state.
+    whatsapp_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
+    )
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
 

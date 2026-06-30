@@ -61,6 +61,8 @@ export interface DishOut {
   condition?: string;
   meta_status?: string;
   brand?: string | null;
+  /** Manager's WhatsApp switch: false → unlinked & hidden from the WhatsApp catalogue. */
+  whatsapp_enabled?: boolean;
   variants?: VariantOut[];
 }
 

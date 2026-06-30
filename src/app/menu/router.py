@@ -21,6 +21,7 @@ from app.menu.schemas import (
     DishPatch,
     MenuOut,
     MenuWithDiffOut,
+    WhatsappToggleIn,
     serialize_variants,
 )
 from app.menu.service import MenuIncompleteError
@@ -260,13 +261,26 @@ async def delete_dish(
         entity_id=str(dish.id), action="removed",
         before={"dish_number": dish.dish_number, "name": dish.name},
     )
+    from app.catalog.meta_client import _dish_retailer_id
+
     rid = restaurant.id  # capture before expire_all expires the restaurant row
-    retailer_id = (dish.catalog_retailer_id or "").strip()  # capture before delete
+    # Capture EVERY Content ID this dish could exist under in Meta, before the delete:
+    #   * its stored link (catalog_retailer_id — set on sync/push), and
+    #   * the deterministic push id (dish-<id>-<number>) it would have been pushed under
+    #     even if the link was never persisted (e.g. an auto-push that failed pre-fix).
+    # Deleting under both guarantees the product is removed from Commerce Manager so it
+    # also disappears from the WhatsApp catalogue — not just hidden locally.
+    retailer_ids = {
+        r for r in (
+            (dish.catalog_retailer_id or "").strip(),
+            _dish_retailer_id(dish.id, dish.dish_number),
+        ) if r
+    }
     await session.delete(dish)
     await session.commit()
     session.expire_all()
     # Remove it from the Meta catalogue too so it stops showing as a WhatsApp card.
-    if retailer_id:
+    for retailer_id in retailer_ids:
         try:
             await unpublish_from_meta(session, restaurant_id=rid, retailer_id=retailer_id)
             await session.commit()
@@ -295,6 +309,53 @@ async def toggle_availability(
     await session.commit()
     await session.refresh(dish)
     await _refresh_grounding(session, restaurant.id)
+    return dish
+
+
+@router.patch("/dishes/{dish_id}/whatsapp", response_model=DishOut)
+async def toggle_whatsapp(
+    dish_id: int,
+    body: WhatsappToggleIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Manager turns a dish's WhatsApp catalogue presence ON or OFF.
+
+    OFF → unpublish it from the Meta catalogue (and drop the local mirror) so it is no
+    longer linked or shown on WhatsApp. ON → republish so it shows again once Meta has
+    processed it. Independent of availability and of the automatic review-gating."""
+    from app.catalog.meta_client import _dish_retailer_id
+
+    dish = await session.get(Dish, dish_id)
+    if dish is None or dish.restaurant_id != restaurant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "dish not found")
+    before = {"whatsapp_enabled": dish.whatsapp_enabled}
+    dish.whatsapp_enabled = body.enabled
+    rid = restaurant.id
+    retailer_ids = {
+        r for r in (
+            (dish.catalog_retailer_id or "").strip(),
+            _dish_retailer_id(dish.id, dish.dish_number),
+        ) if r
+    }
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant.id, entity="dish",
+        entity_id=str(dish.id), action="whatsapp_toggled",
+        before=before, after={"whatsapp_enabled": body.enabled},
+    )
+    await session.commit()
+    await session.refresh(dish)
+    # Turned OFF → remove from Meta now so it stops showing on WhatsApp. (Turned ON →
+    # _refresh_grounding's auto-publish below pushes it back.)
+    if not body.enabled:
+        for retailer_id in retailer_ids:
+            try:
+                await unpublish_from_meta(session, restaurant_id=rid, retailer_id=retailer_id)
+                await session.commit()
+            except Exception:  # noqa: BLE001 — unpublish must never fail the toggle
+                await session.rollback()
+    await _refresh_grounding(session, rid)
+    await session.refresh(dish)
     return dish
 
 
