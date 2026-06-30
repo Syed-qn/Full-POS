@@ -229,13 +229,13 @@ async def _seed_lemon_mint(db_session, restaurant_id):
     menu = (await db_session.scalars(
         select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
     )).first()
-    if menu:
-        db_session.add(Dish(
-            menu_id=menu.id, restaurant_id=restaurant_id, dish_number=301,
-            name="Lemon Mint", price_aed=Decimal("8.00"),
-            category="Drinks", is_available=True, name_normalized="lemon mint",
-        ))
-        await db_session.flush()
+    assert menu is not None, "active menu required for lemon mint seed"
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant_id, dish_number=301,
+        name="Lemon Mint", price_aed=Decimal("8.00"),
+        category="Drinks", is_available=True, name_normalized="lemon mint",
+    ))
+    await db_session.flush()
 
 
 async def test_readd_backstop_blocks_inflation_on_unnamed_add(db_session, restaurant, monkeypatch):

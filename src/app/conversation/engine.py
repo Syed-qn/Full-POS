@@ -1310,6 +1310,39 @@ async def _maybe_decline_off_menu_order(
     return True
 
 
+def _is_checkout_intent(text: str) -> bool:
+    """True when the customer wants to finish ordering (not a dish name)."""
+    t = (text or "").strip().lower()
+    return t in ("done", "checkout", "that's all", "thats all")
+
+
+async def _handle_done_checkout(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    restaurant=None,
+    empty_prefix: str = "empty-cart",
+) -> None:
+    """Proceed to address only when the draft cart has items; otherwise block checkout."""
+    from app.ordering.models import Order
+
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None or str(order.status) != "draft" or not await _order_has_items(
+        session, order.id
+    ):
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix=empty_prefix,
+            body="Your cart is empty. Please add at least one dish before proceeding.",
+        )
+        return
+    await _begin_address_capture(session, conv, inbound, restaurant_id, restaurant=restaurant)
+
+
 async def _handle_collecting_items(
     session: AsyncSession,
     conv: Conversation,
@@ -1337,23 +1370,8 @@ async def _handle_collecting_items(
     qty, dish_query = parse_qty_and_text(text)
 
     # "done" → proceed to delivery details (only if at least one item exists).
-    if dish_query.lower() in ("done", "checkout", "that's all", "thats all"):
-        # SAFETY GATE: never proceed to checkout on a missing, finalised, or empty cart
-        # — doing so silently drops the order (kitchen gets nothing). Verify the draft
-        # still exists, is still a draft, and actually has items.
-        draft_order_id = conv.state.get("draft_order_id")
-        order = await session.get(Order, draft_order_id) if draft_order_id else None
-        if order is None or str(order.status) != "draft" or not await _order_has_items(
-            session, order.id
-        ):
-            _set_state(conv, dialogue_state="collecting_items")
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="empty-cart",
-                body="Your cart is empty. Please add at least one dish before proceeding.",
-            )
-            return
-        await _begin_address_capture(session, conv, inbound, restaurant_id)
+    if _is_checkout_intent(dish_query):
+        await _handle_done_checkout(session, conv, inbound, restaurant_id)
         return
 
     # "What is X?" dish question → stored menu description (verbatim) when present,
@@ -4231,23 +4249,30 @@ async def _dispatch_action(
             # Re-add backstop: the agent named a dish already in the cart, but the
             # customer never named it (and gave no quantity) -> this is a mis-fired
             # add (e.g. a closing parsed as add_item). Do NOT inflate the cart.
-            already = await _resolve_cart_dish(
-                session,
-                order_id=conv.state.get("draft_order_id"),
-                candidates=(await find_dish_matches(
-                    session, restaurant_id=restaurant_id, query=dish_query)).candidates,
-            )
-            gave_qty = data.get("qty") is not None
-            if (already is not None
-                    and not gave_qty
-                    and not _dish_name_in_text(already.name, raw_text)):
-                cart = await _build_cart_summary(session, conv)
-                await _send_text(
-                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                    prefix="ai-readd-noop",
-                    body=f"You're all set 😊{_cart_tail(cart)}\nReady to checkout? Just say 'done'.",
+            # Only run this backstop when a draft order exists; short-circuit for perf.
+            _draft_id = conv.state.get("draft_order_id")
+            if _draft_id:
+                already = await _resolve_cart_dish(
+                    session,
+                    order_id=_draft_id,
+                    candidates=(await find_dish_matches(
+                        session, restaurant_id=restaurant_id, query=dish_query)).candidates,
                 )
-                return
+                gave_qty = data.get("qty") is not None
+                # Known limit: if the menu/DB dish name and the customer's script differ
+                # (e.g. English DB name vs Arabic message), the name won't be found in
+                # raw_text and a genuine name-less repeat is suppressed. Accepted tradeoff
+                # vs silent overcharge.
+                if (already is not None
+                        and not gave_qty
+                        and not _dish_name_in_text(already.name, raw_text)):
+                    cart = await _build_cart_summary(session, conv)
+                    await _send_text(
+                        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                        prefix="ai-readd-noop",
+                        body=f"You're all set 😊{_cart_tail(cart)}\nReady to checkout? Just say 'done'.",
+                    )
+                    return
             status = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty, special_note
             )
@@ -5314,6 +5339,13 @@ async def handle_inbound(
                       "or send 'done' to check out 😊")
                 if cart else
                 "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+            )
+            return
+        # "done" / checkout during ordering (incl. menu_sent) — deterministic gate so
+        # an empty cart never reaches the AI or address capture silently.
+        if _is_checkout_intent(text) and _resolve_phase(conv) == "ordering":
+            await _handle_done_checkout(
+                session, conv, inbound, restaurant_id, restaurant=restaurant,
             )
             return
         # "Where is my order / can I see the live location" → answer with the
