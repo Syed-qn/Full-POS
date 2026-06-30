@@ -4230,14 +4230,17 @@ async def _dispatch_action(
             return
 
         # Single dish — named via the items list (length 1) or the flat dish_query.
+        # Capture the raw (pre-default) qty from whichever source supplied the dish, so
+        # the backstop's "did the customer give a quantity?" check reads the same source.
         if len(items) == 1 and not data.get("dish_query"):
             dish_query = items[0].get("dish_query", "")
-            qty = int(items[0].get("qty") or 1)
+            _raw_qty = items[0].get("qty")
             special_note = items[0].get("special_note", "")
         else:
             dish_query = data.get("dish_query", "")
-            qty = int(data.get("qty") or 1)
+            _raw_qty = data.get("qty")
             special_note = data.get("special_note", "")
+        qty = int(_raw_qty or 1)
         if dish_query and qty > _max_item_qty(restaurant):
             await _escalate_large_qty(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -4258,7 +4261,7 @@ async def _dispatch_action(
                     candidates=(await find_dish_matches(
                         session, restaurant_id=restaurant_id, query=dish_query)).candidates,
                 )
-                gave_qty = data.get("qty") is not None
+                gave_qty = _raw_qty is not None
                 # Known limit: if the menu/DB dish name and the customer's script differ
                 # (e.g. English DB name vs Arabic message), the name won't be found in
                 # raw_text and a genuine name-less repeat is suppressed. Accepted tradeoff
@@ -5339,13 +5342,6 @@ async def handle_inbound(
                       "or send 'done' to check out 😊")
                 if cart else
                 "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
-            )
-            return
-        # "done" / checkout during ordering (incl. menu_sent) — deterministic gate so
-        # an empty cart never reaches the AI or address capture silently.
-        if _is_checkout_intent(text) and _resolve_phase(conv) == "ordering":
-            await _handle_done_checkout(
-                session, conv, inbound, restaurant_id, restaurant=restaurant,
             )
             return
         # "Where is my order / can I see the live location" → answer with the
