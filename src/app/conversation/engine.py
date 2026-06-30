@@ -4095,6 +4095,18 @@ async def _escalate_large_qty(
     )
 
 
+def _dish_name_in_text(dish_name: str, raw_text: str) -> bool:
+    """True if the dish's own name appears in the customer's message (case/space
+    -insensitive substring). Menu-data-driven, language-agnostic — no phrase table."""
+    if not dish_name or not raw_text:
+        return False
+
+    def norm(s: str) -> str:
+        return _re.sub(r"\s+", " ", s.casefold()).strip()
+
+    return norm(dish_name) in norm(raw_text)
+
+
 async def _dispatch_action(
     session: AsyncSession,
     conv: Conversation,
@@ -4215,6 +4227,27 @@ async def _dispatch_action(
             )
             return
         if dish_query:
+            raw_text = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+            # Re-add backstop: the agent named a dish already in the cart, but the
+            # customer never named it (and gave no quantity) -> this is a mis-fired
+            # add (e.g. a closing parsed as add_item). Do NOT inflate the cart.
+            already = await _resolve_cart_dish(
+                session,
+                order_id=conv.state.get("draft_order_id"),
+                candidates=(await find_dish_matches(
+                    session, restaurant_id=restaurant_id, query=dish_query)).candidates,
+            )
+            gave_qty = data.get("qty") is not None
+            if (already is not None
+                    and not gave_qty
+                    and not _dish_name_in_text(already.name, raw_text)):
+                cart = await _build_cart_summary(session, conv)
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="ai-readd-noop",
+                    body=f"You're all set 😊{_cart_tail(cart)}\nReady to checkout? Just say 'done'.",
+                )
+                return
             status = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty, special_note
             )

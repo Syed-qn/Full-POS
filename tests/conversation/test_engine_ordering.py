@@ -222,6 +222,98 @@ async def test_negative_reply_advances_and_does_not_re_add(db_session, restauran
     assert await db_session.get(Order, order_id) is not None
 
 
+async def _seed_lemon_mint(db_session, restaurant_id):
+    """Add a Lemon Mint dish to the existing active menu (for re-add backstop tests)."""
+    from app.menu.models import Dish, Menu
+
+    menu = (await db_session.scalars(
+        select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
+    )).first()
+    if menu:
+        db_session.add(Dish(
+            menu_id=menu.id, restaurant_id=restaurant_id, dish_number=301,
+            name="Lemon Mint", price_aed=Decimal("8.00"),
+            category="Drinks", is_available=True, name_normalized="lemon mint",
+        ))
+        await db_session.flush()
+
+
+async def test_readd_backstop_blocks_inflation_on_unnamed_add(db_session, restaurant, monkeypatch):
+    """If the agent mis-fires add_item for a dish already in the cart and the
+    customer's text does not name that dish, the cart line must not inflate."""
+    from app.ordering.models import OrderItem
+    from app.llm.port import ConversationAgentResult
+
+    await _seed_menu(db_session, restaurant.id)
+    await _seed_lemon_mint(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.bg"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("lemon mint", "wamid.bi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    order_id = conv.state["draft_order_id"]
+    qty_before = sum(
+        it.qty for it in (await db_session.scalars(
+            select(OrderItem).where(OrderItem.order_id == order_id))).all()
+    )
+
+    class _StubAddAgent:
+        async def respond(self, **kwargs):
+            # Mis-fire: add the dish already in cart, customer text won't name it.
+            return ConversationAgentResult(
+                message="1x Lemon mint added! Anything else?",
+                action="add_item",
+                action_data={"dish_query": "lemon mint", "qty": None, "items": [],
+                             "special_note": "", "apt_room": "", "building": "",
+                             "receiver_name": ""},
+            )
+
+    monkeypatch.setattr("app.llm.factory.get_conversation_agent", lambda: _StubAddAgent())
+
+    await handle_inbound(db_session, _msg("No that's all", "wamid.bclose"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id))).all()
+    assert sum(it.qty for it in items) == qty_before  # backstop prevented inflation
+
+
+async def test_readd_backstop_allows_named_repeat(db_session, restaurant, monkeypatch):
+    """Naming the dish again (or giving a qty) is a real add — backstop must allow it."""
+    from app.ordering.models import OrderItem
+    from app.llm.port import ConversationAgentResult
+
+    await _seed_menu(db_session, restaurant.id)
+    await _seed_lemon_mint(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.rg"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("lemon mint", "wamid.ri"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    order_id = conv.state["draft_order_id"]
+    qty_before = sum(it.qty for it in (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id))).all())
+
+    class _StubAddAgent:
+        async def respond(self, **kwargs):
+            return ConversationAgentResult(
+                message="Added another Lemon mint! 🛒", action="add_item",
+                action_data={"dish_query": "lemon mint", "qty": None, "items": [],
+                             "special_note": "", "apt_room": "", "building": "",
+                             "receiver_name": ""})
+    monkeypatch.setattr("app.llm.factory.get_conversation_agent", lambda: _StubAddAgent())
+
+    # Customer NAMES the dish -> real add.
+    await handle_inbound(db_session, _msg("another lemon mint", "wamid.rclose"),
+                         restaurant_id=restaurant.id)
+    await db_session.commit()
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id))).all()
+    assert sum(it.qty for it in items) == qty_before + 1  # named -> added
+
+
 async def test_location_pin_within_radius_advances_to_address_text(db_session, restaurant):
     """A pin within 10 km is accepted; bot asks for room/building text address."""
     await _seed_menu(db_session, restaurant.id)
