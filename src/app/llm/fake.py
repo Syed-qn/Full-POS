@@ -134,6 +134,8 @@ class FakeConversationAgent:
             if msg.get("role") == "user":
                 last_user = (msg.get("content") or "").lower()
                 break
+        # Unify curly/smart apostrophes so "that's all" == "that's all".
+        last_user = last_user.replace("’", "'").replace("ʼ", "'")
 
         # ordering phase
         if dialogue_phase == "ordering":
@@ -141,7 +143,15 @@ class FakeConversationAgent:
                 return ConversationAgentResult(
                     message="Here's our menu! 😊", action="show_menu", action_data={},
                 )
-            if any(w in last_user for w in ("done", "that's all", "bas", "khalaas", "proceed", "checkout")):
+            # Closing / decline / impatience with a non-empty cart -> proceed.
+            # Test double only; real comprehension is DeepSeek's job.
+            _closing_tokens = (
+                "done", "that's all", "thats all", "bas", "khalaas", "khalas",
+                "proceed", "checkout", "no more", "nothing else", "nope",
+            )
+            _cart = (context.get("cart_summary") or "").strip()
+            _is_decline = last_user.strip() in {"no", "na", "nah", "np"}
+            if _cart and (_is_decline or any(w in last_user for w in _closing_tokens)):
                 return ConversationAgentResult(
                     message="Great! Let me get your delivery details.",
                     action="proceed_to_address",

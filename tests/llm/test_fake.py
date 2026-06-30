@@ -1,6 +1,32 @@
-
-from app.llm.fake import FakeExtractor
+import pytest
+from app.llm.fake import FakeConversationAgent, FakeExtractor
 from app.llm.port import DishDraft, UploadedFile
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _closing(text: str):
+    agent = FakeConversationAgent()
+    return await agent.respond(
+        restaurant_name="Test",
+        dialogue_phase="ordering",
+        history=[
+            {"role": "assistant", "content": "1x Lemon mint added! Anything else?"},
+            {"role": "user", "content": text},
+        ],
+        context={"cart_summary": "1x Lemon mint"},
+    )
+
+
+@pytest.mark.parametrize("text", [
+    "No that’s all",          # curly apostrophe (U+2019) — production keyboard
+    "That’s all",
+    "thats all can’t you understand",
+    "no",
+])
+async def test_fake_closing_variants_proceed(text):
+    result = await _closing(text)
+    assert result.action == "proceed_to_address"
 
 
 async def test_fake_extractor_returns_drafts():
@@ -18,6 +44,17 @@ async def test_fake_extractor_canned_override():
     fake = FakeExtractor(canned=canned)
     drafts = await fake.extract_menu([])
     assert drafts == canned
+
+
+async def test_fake_closing_empty_cart_does_not_proceed():
+    agent = FakeConversationAgent()
+    result = await agent.respond(
+        restaurant_name="Test",
+        dialogue_phase="ordering",
+        history=[{"role": "user", "content": "no"}],
+        context={"cart_summary": ""},
+    )
+    assert result.action != "proceed_to_address"
 
 
 async def test_fake_agent_new_interface():
