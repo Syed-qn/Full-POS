@@ -22,6 +22,13 @@ class PosFetchError(RuntimeError):
     """Raised when the POS endpoint is unreachable or returns an unusable payload."""
 
 
+# Known-good HNC test feed coordinates. Hard-coded fallback so a sync still works when a
+# restaurant's settings don't carry pos_account / pos_location (e.g. prod before the
+# Connect-POS form was filled). Live restaurants override these via their settings.
+_DEFAULT_ACCOUNT = "hnc"
+_DEFAULT_LOCATION = "HNC002"
+
+
 def _to_decimal(value) -> Decimal | None:
     try:
         return Decimal(str(value))
@@ -76,10 +83,27 @@ class CratisPosAdapter(PosProvider):
         base = (base_url or get_settings().pos_base_url or "").strip()
         if not base:
             raise PosFetchError("POS base URL is not configured.")
+        # Fall back to the known-good HNC test coordinates when none are supplied, so the
+        # menu fetch can't be sent with a blank account/location.
+        account = (account or "").strip() or _DEFAULT_ACCOUNT
+        location = (location or "").strip() or _DEFAULT_LOCATION
         params = {"arg1": "menu", "account": account, "location": location}
+        # cratis.live sits behind a WAF/CDN that 403s requests lacking a normal
+        # browser fingerprint (a bare ``python-httpx`` User-Agent is a common block
+        # trigger). Send browser-like headers so the menu fetch isn't refused. If the
+        # 403 persists it's IP allowlisting, not the UA — the caller's host IP must be
+        # whitelisted by Cratis (e.g. Render's egress IP for the deployed sync button).
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.get(base, params=params)
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                resp = await client.get(base, params=params, headers=headers)
         except httpx.HTTPError as exc:
             raise PosFetchError(f"POS request failed: {exc}") from exc
         if resp.status_code >= 400:

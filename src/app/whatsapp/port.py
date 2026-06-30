@@ -14,6 +14,7 @@ class OutboundMessageType(StrEnum):
     DOCUMENT = "document"
     TEMPLATE = "template"
     PRODUCT_LIST = "product_list"  # WhatsApp catalog products as tappable cards (catalog flow)
+    CATALOG_MESSAGE = "catalog_message"  # "View catalog" button → native full-catalogue browse
 
 
 class MessageType(StrEnum):

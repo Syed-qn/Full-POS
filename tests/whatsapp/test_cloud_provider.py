@@ -23,6 +23,30 @@ def test_build_location_payload():
     assert "address" not in out["location"]  # omitted when not provided
 
 
+def test_build_catalog_message_payload():
+    """CATALOG_MESSAGE maps to an interactive catalog_message with the View-catalog
+    action and a thumbnail product; footer included only when provided."""
+    msg = OutboundMessage(
+        to_phone="+971500000000",
+        type=OutboundMessageType.CATALOG_MESSAGE,
+        payload={
+            "type": "catalog_message",
+            "body": "Here's our full menu 😊",
+            "footer": "Send your basket to order.",
+            "thumbnail_product_retailer_id": "dish-9-7",
+        },
+        idempotency_key="cat-1",
+    )
+    out = _build_graph_payload(msg)
+    assert out["type"] == "interactive"
+    inter = out["interactive"]
+    assert inter["type"] == "catalog_message"
+    assert inter["body"]["text"] == "Here's our full menu 😊"
+    assert inter["action"]["name"] == "catalog_message"
+    assert inter["action"]["parameters"]["thumbnail_product_retailer_id"] == "dish-9-7"
+    assert inter["footer"]["text"] == "Send your basket to order."
+
+
 def test_verify_signature_valid():
     secret = "testsecret"
     body = b'{"object":"whatsapp_business_account"}'

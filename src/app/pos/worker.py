@@ -71,6 +71,18 @@ async def run_pos_sync(
             result = await sync_menu_from_pos(
                 session, restaurant_id=restaurant_id, publish=publish, provider=provider
             )
+        # Best-effort: refresh Meta collections so the native catalogue stays grouped by
+        # category. Never let a collections hiccup mark the whole sync as failed.
+        collections = None
+        if publish:
+            try:
+                from app.catalog.sync_service import sync_collections
+
+                async with factory() as session:
+                    collections = await sync_collections(session, restaurant_id=restaurant_id)
+                    await session.commit()
+            except Exception:  # noqa: BLE001 - collections are non-critical
+                logger.exception("collections refresh failed (restaurant %s)", restaurant_id)
         status = {
             "state": "done",
             "finished_at": _now_iso(),
@@ -80,6 +92,7 @@ async def run_pos_sync(
             "deactivated": result.deactivated,
             "images": result.images,
             "skipped_empty": result.skipped_empty,
+            "collections": collections,
         }
         await _set_status(restaurant_id, status, session_factory=factory)
         logger.info("POS background sync done (restaurant %s): %s", restaurant_id, status)

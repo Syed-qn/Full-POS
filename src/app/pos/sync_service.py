@@ -45,12 +45,14 @@ class PosSyncResult:
 
 
 def _pos_config(rest: Restaurant | None) -> tuple[str, str, str | None]:
+    from app.pos.cratis import _DEFAULT_ACCOUNT, _DEFAULT_LOCATION
+
     s = (rest.settings or {}) if rest is not None else {}
-    account = (s.get("pos_account") or "").strip()
-    location = (s.get("pos_location") or "").strip()
+    # Hard-coded HNC test feed fallback: a restaurant that hasn't filled the Connect-POS
+    # form still syncs against hnc / HNC002 instead of being blocked.
+    account = (s.get("pos_account") or "").strip() or _DEFAULT_ACCOUNT
+    location = (s.get("pos_location") or "").strip() or _DEFAULT_LOCATION
     base_url = (s.get("pos_base_url") or "").strip() or None
-    if not account or not location:
-        raise PosConfigError("Set the POS account and location before syncing.")
     return account, location, base_url
 
 

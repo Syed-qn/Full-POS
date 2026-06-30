@@ -12,6 +12,7 @@ SecretStr, httpx.AsyncClient with a timeout). Paginates through ``paging.next``.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -357,3 +358,76 @@ async def push_products_batch(
         if wait_for_ingest and handles:
             await wait_for_batch_handles(catalog_id, handles)
         return data
+
+
+async def upsert_product_sets(catalog_id: str, groups: dict[str, list[str]]) -> dict:
+    """Create/update Meta product sets (a.k.a. "collections") — one per category — so the
+    native WhatsApp catalogue groups the menu by category.
+
+    ``groups`` maps ``category_name -> [retailer_id, ...]``. A set's membership is a filter
+    on retailer_id, so updating a category just re-sends its filter. Idempotent: existing
+    sets are matched by name and updated; the rest are created. Never raises on per-set
+    Meta errors — logs and continues so one bad category can't abort the whole sync.
+    Returns ``{"created": int, "updated": int, "failed": int}``.
+    """
+    if not groups:
+        return {"created": 0, "updated": 0, "failed": 0}
+    settings = get_settings()
+    token = settings.wa_catalog_token.get_secret_value()
+    if not token:
+        raise CatalogWriteError("Collections need APP_WA_CATALOG_TOKEN.")
+    if not catalog_id:
+        raise CatalogWriteError("This restaurant has no catalog_id set.")
+    base = f"https://graph.facebook.com/{settings.graph_api_version}"
+
+    created = updated = failed = 0
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        # Page through existing sets so we update in place instead of duplicating.
+        existing: dict[str, str] = {}
+        url: str | None = f"{base}/{catalog_id}/product_sets"
+        params: dict | None = {"fields": "name,id", "limit": 100, "access_token": token}
+        while url:
+            resp = await client.get(url, params=params)
+            data = resp.json()
+            if resp.status_code >= 400 or "error" in data:
+                err = (data.get("error") or {}).get("message", f"HTTP {resp.status_code}")
+                raise CatalogWriteError(f"Listing product sets failed: {err}")
+            for s in data.get("data", []):
+                if s.get("name"):
+                    existing[s["name"]] = s["id"]
+            url = (data.get("paging") or {}).get("next")
+            params = None
+
+        for name, rids in groups.items():
+            filt = json.dumps({"retailer_id": {"is_any": sorted(set(rids))}})
+            try:
+                if name in existing:
+                    resp = await client.post(
+                        f"{base}/{existing[name]}",
+                        params={"access_token": token},
+                        json={"filter": filt},
+                    )
+                    is_create = False
+                else:
+                    resp = await client.post(
+                        f"{base}/{catalog_id}/product_sets",
+                        params={"access_token": token},
+                        json={"name": name, "filter": filt},
+                    )
+                    is_create = True
+                body = resp.json()
+                if resp.status_code >= 400 or "error" in body:
+                    err = (body.get("error") or {}).get("message", f"HTTP {resp.status_code}")
+                    logger.warning("product set %r failed: %s", name, err)
+                    failed += 1
+                    continue
+                created += int(is_create)
+                updated += int(not is_create)
+            except httpx.HTTPError as exc:
+                logger.warning("product set %r request error: %s", name, exc)
+                failed += 1
+    logger.info(
+        "synced %d collection(s) for catalog %s: %d created, %d updated, %d failed",
+        len(groups), catalog_id, created, updated, failed,
+    )
+    return {"created": created, "updated": updated, "failed": failed}

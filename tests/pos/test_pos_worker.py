@@ -61,14 +61,25 @@ async def test_run_pos_sync_creates_dishes_and_records_done(db_session, restaura
     assert restaurant.settings["pos_last_sync"]["state"] == "done"
 
 
+class _BoomPos:
+    """A provider whose fetch blows up — to prove the runner captures the failure as a
+    breadcrumb and never propagates the exception."""
+
+    async def fetch_menu(self, *, account, location, base_url=None):
+        raise RuntimeError("POS exploded")
+
+
 async def test_run_pos_sync_records_error_and_never_raises(db_session, restaurant):
-    # No pos_account/pos_location configured → PosConfigError, captured as breadcrumb.
+    # account/location now default to the HNC test feed, so a missing config no longer
+    # errors. The "never raises" guarantee is proven instead with a provider that throws.
     await db_session.commit()
     factory = _factory(db_session)
 
-    status = await run_pos_sync(restaurant.id, publish=False, session_factory=factory)
+    status = await run_pos_sync(
+        restaurant.id, publish=False, session_factory=factory, provider=_BoomPos()
+    )
 
     assert status["state"] == "error"
-    assert "POS account" in status["error"]
+    assert "POS exploded" in status["error"]
     await db_session.refresh(restaurant)
     assert restaurant.settings["pos_last_sync"]["state"] == "error"

@@ -93,6 +93,27 @@ def _build_graph_payload(msg: OutboundMessage) -> dict[str, Any]:
             interactive["footer"] = {"text": msg.payload["footer"]}
         base["interactive"] = interactive
 
+    elif msg.type == OutboundMessageType.CATALOG_MESSAGE:
+        # payload: {"body": str, "footer": str?, "thumbnail_product_retailer_id": str}
+        # A single "View catalog" button that opens the WABA's connected catalogue in
+        # WhatsApp's native storefront — the customer browses EVERY product (no 30-card
+        # cap, no "Show more") with collections shown as categories. The thumbnail is one
+        # sendable product shown on the button card.
+        base["type"] = "interactive"
+        cat_interactive: dict[str, Any] = {
+            "type": "catalog_message",
+            "body": {"text": msg.payload["body"]},
+            "action": {
+                "name": "catalog_message",
+                "parameters": {
+                    "thumbnail_product_retailer_id": msg.payload["thumbnail_product_retailer_id"],
+                },
+            },
+        }
+        if msg.payload.get("footer"):
+            cat_interactive["footer"] = {"text": msg.payload["footer"]}
+        base["interactive"] = cat_interactive
+
     elif msg.type == OutboundMessageType.LOCATION:
         # payload: {"latitude": float, "longitude": float, "name": str?, "address": str?}
         # Sends a native WhatsApp location pin (opens in the recipient's maps app).

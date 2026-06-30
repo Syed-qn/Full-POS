@@ -120,6 +120,10 @@ async def send_catalog(
         )
         return False
 
+    # The mirror's category column is NULL (Meta doesn't echo it), so resolve each
+    # product's real category from its dish for grouping and the text fallback.
+    _apply_category_map(synced, await _load_category_map(session, restaurant_id))
+
     # Only products Meta has finished processing (image on its CDN + approved) can be
     # sent in a product_list — including a still-"in review" product makes the WHOLE
     # message fail with #131009 "None of the products provided could be sent". So we
@@ -142,6 +146,32 @@ async def send_catalog(
         )
         return True
 
+    # Native catalogue view (the market-standard way to show a big menu): instead of
+    # paginating cards 30 at a time, send ONE "View full menu" button that opens
+    # WhatsApp's built-in catalogue UI. The customer browses EVERY product there — no
+    # 30-card cap, no "Show more" — and Meta collections show as categories. Preferred
+    # when enabled; the product_list / category-picker paths below stay as fallbacks for
+    # clients where the catalogue button doesn't render. Default off → unchanged.
+    if settings.get("catalog_native_view"):
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=to_phone,
+            msg_type=OutboundMessageType.CATALOG_MESSAGE,
+            payload={
+                "body": "Here's our full menu 😊 Tap *View full menu* to browse "
+                        "everything, or just tell me what you'd like.",
+                "footer": "Add dishes to your basket, then send it to order.",
+                "thumbnail_product_retailer_id": sendable[0].retailer_id,
+            },
+            idempotency_key=idempotency_key or f"catalog-view-{restaurant_id}-{to_phone}-{uuid4().hex}",
+        )
+        logger.info(
+            "sent native catalog view to %s for restaurant %s (%d sendable, thumb=%s)",
+            to_phone, restaurant_id, len(sendable), sendable[0].retailer_id,
+        )
+        return True
+
     # Browse-by-category: a single product_list maxes out at 30 cards, so a big menu
     # (e.g. a POS pull of hundreds of dishes) would silently hide everything past the
     # first 30. When the manager turns this on AND there's more than one message worth
@@ -160,7 +190,7 @@ async def send_catalog(
     for p in sendable:
         if total >= 30:
             break
-        cat = (p.category or "Menu")[:24]
+        cat = _category_of(p)[:24]
         sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
         total += 1
 
@@ -204,7 +234,7 @@ async def _send_catalog_text_fallback(
     lines: list[str] = ["Here's our menu 😊 Reply with what you'd like and we'll add it:"]
     current_cat: str | None = None
     for p in products[:40]:
-        cat = (p.category or "Menu").strip()
+        cat = _category_of(p)
         if cat != current_cat:
             lines.append(f"\n*{cat}*")
             current_cat = cat
@@ -224,8 +254,39 @@ async def _send_catalog_text_fallback(
 
 
 def _category_of(product: CatalogProduct) -> str:
-    """Display category for a catalogue product; products with none bucket into "Menu"."""
-    return ((product.category or "").strip()) or "Menu"
+    """Display category for a catalogue product; products with none bucket into "Menu".
+
+    Prefers the category resolved from the linked dish (stashed on ``_resolved_category``
+    by :func:`_apply_category_map`) because the Meta catalogue mirror
+    (``catalog_products.category``) comes back NULL — Meta doesn't echo our category. The
+    real category lives on the dish, so we resolve it at send time and fall back to the
+    mirror column, then to "Menu"."""
+    resolved = getattr(product, "_resolved_category", None)
+    return ((resolved or product.category or "").strip()) or "Menu"
+
+
+async def _load_category_map(session: AsyncSession, restaurant_id: int) -> dict[str, str]:
+    """Map ``retailer_id -> dish category`` for a restaurant. The catalogue mirror
+    doesn't carry category back from Meta, so the source of truth is the dish, linked by
+    ``dishes.catalog_retailer_id == catalog_products.retailer_id``."""
+    rows = (
+        await session.execute(
+            select(Dish.catalog_retailer_id, Dish.category).where(
+                Dish.restaurant_id == restaurant_id,
+                Dish.catalog_retailer_id.is_not(None),
+            )
+        )
+    ).all()
+    return {rid: cat for rid, cat in rows if rid and cat}
+
+
+def _apply_category_map(products: list[CatalogProduct], cat_map: dict[str, str]) -> None:
+    """Stash each product's dish category on a transient ``_resolved_category`` attribute
+    (not a mapped column, so it never persists) for :func:`_category_of` to pick up."""
+    for p in products:
+        cat = cat_map.get(p.retailer_id)
+        if cat:
+            p._resolved_category = cat
 
 
 async def _load_sendable_products(
@@ -248,7 +309,9 @@ async def _load_sendable_products(
             ).order_by(CatalogProduct.name)
         )
     ).all()
-    return catalog_id, [p for p in synced if p.is_sendable]
+    sendable = [p for p in synced if p.is_sendable]
+    _apply_category_map(sendable, await _load_category_map(session, restaurant_id))
+    return catalog_id, sendable
 
 
 def _ordered_categories(products: list[CatalogProduct]) -> list[tuple[str, int]]:

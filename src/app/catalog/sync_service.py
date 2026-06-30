@@ -22,6 +22,7 @@ from app.catalog.meta_client import (
     fetch_catalog_products,
     is_product_sendable,
     push_products_batch,
+    upsert_product_sets,
 )
 from app.catalog.models import CatalogProduct
 from app.config import get_settings
@@ -436,6 +437,38 @@ async def auto_publish_to_meta(session: AsyncSession, *, restaurant_id: int) -> 
     except (CatalogReadError, CatalogWriteError) as exc:
         logger.warning("auto-publish to Meta skipped for restaurant %s: %s", restaurant_id, exc)
         return SyncResult()
+
+
+async def sync_collections(session: AsyncSession, *, restaurant_id: int) -> dict:
+    """Push one Meta product set ("collection") per dish category so the native WhatsApp
+    catalogue groups the menu by category. Builds ``category -> [retailer_id]`` from the
+    restaurant's published dishes (those with a ``catalog_retailer_id`` and a category)
+    and upserts the sets. Best-effort: returns a skip marker rather than raising when Meta
+    isn't connected. Caller commits (no DB writes here, but keep the contract uniform)."""
+    rest = await session.get(Restaurant, restaurant_id)
+    catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
+    if not catalog_id:
+        return {"created": 0, "updated": 0, "failed": 0, "skipped": "no catalog_id"}
+
+    from app.menu.models import Dish
+
+    rows = (
+        await session.execute(
+            select(Dish.category, Dish.catalog_retailer_id).where(
+                Dish.restaurant_id == restaurant_id,
+                Dish.catalog_retailer_id.is_not(None),
+                Dish.category.is_not(None),
+            )
+        )
+    ).all()
+    groups: dict[str, list[str]] = {}
+    for cat, rid in rows:
+        name = (cat or "").strip()
+        if name and rid:
+            groups.setdefault(name, []).append(rid)
+    if not groups:
+        return {"created": 0, "updated": 0, "failed": 0, "skipped": "no categorised dishes"}
+    return await upsert_product_sets(catalog_id, groups)
 
 
 async def unpublish_from_meta(

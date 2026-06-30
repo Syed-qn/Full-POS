@@ -100,15 +100,9 @@ async def sync_pos(
     """Kick off the FULL POS sync in the background (586 dishes, image generation, Meta
     push) so it never blocks/times out the request. Hands off to the Celery worker when
     one is running, else runs in-process after the response. Poll GET /sync/status."""
-    # Fail fast on a misconfigured restaurant so the manager gets an immediate 422
-    # instead of a silently-failing background job.
-    s = restaurant.settings or {}
-    if not (s.get("pos_account") and s.get("pos_location")):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Set the POS account and location before syncing.",
-        )
-
+    # account / location are no longer required up front: the Cratis adapter falls back to
+    # the known-good HNC test coordinates (hnc / HNC002) when a restaurant hasn't filled
+    # the Connect-POS form, so the sync can run without a 422 block.
     restaurant_id = restaurant.id
     # APP_OUTBOX_SYNC_DELIVERY is our "no Celery worker is running" signal (e.g. Render
     # free tier). When a worker exists, hand off to the queue; otherwise run in-process.

@@ -174,6 +174,101 @@ async def test_show_more_button_tap_routes_through_engine(db_session, restaurant
     assert len(out.payload["sections"][0]["product_items"]) == 5  # the remaining 5
 
 
+async def test_native_catalog_view_when_enabled(db_session, restaurant):
+    """catalog_native_view ON → one "View full menu" catalog_message (the native browse),
+    NOT a 30-card product_list. This is what makes all 586 reachable in a single tap."""
+    restaurant.settings = {**restaurant.settings, "catalog_id": "1528685515412822",
+                           "catalog_ordering_enabled": True, "catalog_native_view": True}
+    for i in range(3):
+        db_session.add(CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id=f"p{i}", name=f"Dish {i}",
+            price_aed=Decimal("100.00"), currency="AED", availability="in stock",
+            category=None, is_active=True, is_sendable=True, raw={},
+        ))
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone=PHONE)
+    await db_session.commit()
+    assert sent is True
+    msg = await _last_out(db_session)
+    assert msg.payload.get("type") == "catalog_message"
+    # Thumbnail is a real sendable product so the button card renders.
+    assert msg.payload["thumbnail_product_retailer_id"] in {"p0", "p1", "p2"}
+
+
+async def test_native_view_falls_back_to_text_when_nothing_sendable(db_session, restaurant):
+    """Native view still needs ≥1 sendable product for the thumbnail; if everything is in
+    review it must NOT crash — it sends the text menu fallback."""
+    restaurant.settings = {**restaurant.settings, "catalog_id": "1528685515412822",
+                           "catalog_ordering_enabled": True, "catalog_native_view": True}
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="p0", name="Dish 0",
+        price_aed=Decimal("100.00"), currency="AED", availability="in stock",
+        category=None, is_active=True, is_sendable=False, raw={},
+    ))
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone=PHONE)
+    await db_session.commit()
+    assert sent is True
+    msg = await _last_out(db_session)
+    assert msg.payload.get("type") == "text"
+
+
+async def test_category_resolved_from_dish_when_mirror_null(db_session, restaurant):
+    """PROD reality: the Meta catalogue mirror comes back with category=NULL (Meta
+    doesn't echo our category), but the real category lives on the dish. The picker must
+    group by the DISH category, not collapse everything into one "Menu" bucket."""
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "1528685515412822",
+                           "catalog_ordering_enabled": True,
+                           "catalog_browse_by_category": True}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+
+    # 35 products (>30 → picker) across 3 real categories, mirror category NULL throughout.
+    spec = [("APPETIZER", 15), ("SANDWICHES", 12), ("PASTA", 8)]
+    n = 0
+    for cat, count in spec:
+        for _ in range(count):
+            n += 1
+            rid = f"dish-{n}"
+            db_session.add(Dish(
+                menu_id=menu.id, restaurant_id=restaurant.id, dish_number=n,
+                name=f"Item {n}", name_normalized=f"item {n}",
+                price_aed=Decimal("100.00"), category=cat, is_available=True,
+                catalog_retailer_id=rid,
+            ))
+            db_session.add(CatalogProduct(
+                restaurant_id=restaurant.id, retailer_id=rid, name=f"Item {n}",
+                price_aed=Decimal("100.00"), currency="AED", availability="in stock",
+                category=None, is_active=True, is_sendable=True, raw={},
+            ))
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone=PHONE)
+    await db_session.commit()
+    assert sent is True
+    msg = await _last_out(db_session)
+    assert msg.payload.get("type") == "list"  # picker, not a truncated product_list
+    titles = [r["title"] for r in msg.payload["sections"][0]["rows"]]
+    # Real dish categories surface, largest first — NOT a single "Menu" bucket.
+    assert titles[:3] == ["APPETIZER", "SANDWICHES", "PASTA"]
+    assert "Menu" not in titles
+
+    # And tapping one returns exactly that category's dishes.
+    sent2 = await send_catalog_category(
+        db_session, restaurant_id=restaurant.id, to_phone=PHONE, category="PASTA"
+    )
+    await db_session.commit()
+    assert sent2 is True
+    out = await _last_out(db_session)
+    assert out.payload["type"] == "product_list"
+    assert len(out.payload["sections"][0]["product_items"]) == 8
+
+
 async def test_category_send_filters_unsendable(db_session, restaurant):
     """A category with everything still in review sends nothing (gentle text nudge)."""
     await _seed_big_catalogue(db_session, restaurant, browse=True)
