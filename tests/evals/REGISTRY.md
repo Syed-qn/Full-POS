@@ -1,9 +1,10 @@
 # Eval Registry — W0 Capability Suite
 
-All 20 evals are seeded verbatim from the two production transcripts (biryani
-correction incident + voice order incident) as described in the root-cause doc
-§6.3.  Each capability eval is `xfail(strict=True)` until the fixing workstream
-lands; it then graduates to the permanent regression suite.
+All 20 evals (21 test functions — eval #20 spans two test functions) are seeded
+verbatim from the two production transcripts (biryani correction incident + voice
+order incident) as described in the root-cause doc §6.3.  Each capability eval is
+`xfail(strict=True)` until the fixing workstream lands; it then graduates to the
+permanent regression suite.
 
 7 evals from the original 20-task list already passed with the Fake LLM on W0
 and were immediately converted to non-xfail regression tests (marked ✅ below).
@@ -37,11 +38,16 @@ and were immediately converted to non-xfail regression tests (marked ✅ below).
 
 ## Summary
 
-| Category | Count |
-|----------|-------|
-| xfail capability evals (W0) | 11 |
-| regression evals (converted from xfail — already correct) | 10 |
-| **Total** | **21** |
+| Category | Logical evals | Test functions |
+|----------|--------------|----------------|
+| xfail capability evals (W0) | 11 | 11 |
+| regression evals (converted from xfail — already correct) | 9 | 10 |
+| **Total** | **20** | **21** |
+
+> Eval #20 covers two test functions (`test_english_menu_request_updates_dialogue_state`
+> + `test_no_hallucination_in_menu_state`), both guarding the same "menu keyword →
+> send_catalog" behaviour.  That is why the logical eval count (20) differs from the
+> test-function count (21).
 
 ## Graduation rule
 

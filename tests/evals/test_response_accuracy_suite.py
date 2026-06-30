@@ -116,7 +116,9 @@ async def test_voice_order_five_items_all_present(db_session, restaurant, seed_b
         ],
     )
     final = res.final_cart()
-    assert len(final) >= 3, f"expected ≥3 cart lines from voice order, got {final}"
+    # Fixture has exactly 4 unique product lines (chicken biryani, mutton biryani,
+    # mndhi, lemon mint) — assert the exact count, not a weak threshold.
+    assert len(final) == 4, f"expected exactly 4 cart lines from voice order, got {final}"
 
 
 @pytest.mark.asyncio
@@ -145,11 +147,21 @@ async def test_modify_flow_remove_decrements(db_session, restaurant, seed_biryan
 @pytest.mark.asyncio
 @pytest.mark.xfail(
     strict=True,
-    reason="W8 QuantityPolicy: 'lakh' is not a valid qty — must escalate, never set 1",
+    reason="W8 QuantityPolicy: lakh escalates, not silent huge qty",
 )
 async def test_lakh_is_not_quantity_one(db_session, restaurant, seed_biryani_menu):
     """'make it 1 lakh' after adding lemon mint.  The engine today silently
-    accepts qty 1 (treating 'lakh' as filler) instead of escalating."""
+    accepts qty 1 (treating 'lakh' as filler) without sending any escalation
+    or clarification reply.  W8 must send a clarification message and leave the
+    cart unchanged (qty stays 1, but an escalation reply is produced).
+
+    Correct W8 behaviour:
+      - cart qty < 1000 (lakh must never be literally parsed as 100 000)
+      - last outbound reply contains escalation/clarification language
+
+    Current bug: engine sends a non-escalation reply (or none at all), so the
+    escalation_markers assertion fails → correct xfail today.
+    """
     res = await drive_turns(
         db_session,
         restaurant_id=restaurant.id,
@@ -160,8 +172,34 @@ async def test_lakh_is_not_quantity_one(db_session, restaurant, seed_biryani_men
         ],
     )
     lemon = [r for r in res.final_cart() if "lemon" in r["dish_name"].lower()]
-    assert lemon and lemon[0]["qty"] != 1, (
-        "lakh must trigger escalation; engine must not silently keep qty 1"
+    assert lemon, "lemon mint must still be in cart after escalation"
+    # W8: lakh must never be parsed as a literal large number.
+    assert lemon[0]["qty"] < 1000, (
+        f"lakh parsed as a large literal qty: {lemon[0]['qty']}"
+    )
+    # W8: escalation/clarification reply must be sent — NOT a generic off-menu decline.
+    # Current bug: engine interprets "make it 1 lakh" as a dish lookup, gets NO_MATCH,
+    # and sends "Sorry, we don't have make it 1 lakh on our menu..." — which is
+    # semantically wrong (this is a quantity mutation, not a dish search).
+    # W8 QuantityPolicy will detect "lakh" before calling add_item and will instead
+    # send a quantity-specific clarification like "How many lemon mints did you want?"
+    # or "1 lakh isn't a valid quantity — please clarify".
+    # Assertions that FAIL today (off-menu decline contains none of these) and will
+    # PASS once W8 sends a genuine quantity-escalation reply:
+    last_reply = (
+        res.turns[-1].outbounds[-1].body if res.turns[-1].outbounds else ""
+    ).lower()
+    # W8 must NOT send the generic "don't have X on our menu" off-menu response —
+    # the engine should know this is a qty intent, not a dish search.
+    assert "don't have" not in last_reply and "on our menu" not in last_reply, (
+        f"engine sent an off-menu-decline instead of a quantity escalation: {last_reply!r}"
+    )
+    # W8 must send a reply that references the quantity problem
+    # (e.g. "how many", "quantity", "valid", "lakh is not").
+    quantity_markers = ("how many", "quantity", "valid", "invalid", "lakh is not")
+    assert any(m in last_reply for m in quantity_markers), (
+        f"engine must send a quantity-escalation reply for 'lakh'; "
+        f"got: {last_reply!r}"
     )
 
 
@@ -322,6 +360,7 @@ async def test_idempotent_redelivery_same_wa_message_id(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# NOTE: Fake-scoped guard. Passes because FakeConversationAgent does not reproduce this LLM-interpretation bug. Real coverage requires the live-LLM eval harness (deferred). Does NOT prove the production LLM path is correct.
 @pytest.mark.asyncio
 async def test_why_did_you_add_is_not_a_mutation(db_session, restaurant, seed_biryani_menu):
     """'Why did you add 2 biriyani' must not mutate the cart.
@@ -359,6 +398,7 @@ async def test_that_is_all_once_proceeds(db_session, restaurant, seed_biryani_me
     )
 
 
+# NOTE: Fake-scoped guard. Passes because FakeConversationAgent does not reproduce this LLM-interpretation bug. Real coverage requires the live-LLM eval harness (deferred). Does NOT prove the production LLM path is correct.
 @pytest.mark.asyncio
 async def test_saved_address_question_truthful(db_session, restaurant, seed_biryani_menu):
     """'Do you have my saved address?' with no address in DB — bot must deny.
@@ -379,6 +419,7 @@ async def test_saved_address_question_truthful(db_session, restaurant, seed_biry
     )
 
 
+# NOTE: Fake-scoped guard. Passes because FakeConversationAgent does not reproduce this LLM-interpretation bug. Real coverage requires the live-LLM eval harness (deferred). Does NOT prove the production LLM path is correct.
 @pytest.mark.asyncio
 async def test_non_english_question_no_invented_english_dish(
     db_session, restaurant, seed_biryani_menu
@@ -482,18 +523,33 @@ async def test_caps_insensitive_dish_match(db_session, restaurant, seed_biryani_
 async def test_english_menu_request_updates_dialogue_state(
     db_session, restaurant, seed_biryani_menu
 ):
-    """'menu' must update dialogue_state to 'menu_sent'.
-    CONVERTED FROM XFAIL: engine correctly calls _send_menu_or_catalog for menu keywords.
-    Note: send_catalog writes to OutboxMessage (not Message), so outbounds list is empty
-    in the driver — we check state instead."""
-    res = await drive_turns(
+    """'menu' keyword must trigger send_catalog and enqueue a product_list.
+
+    After I-2 driver fix: the harness now mirrors production routing — a TEXT message
+    whose normalised text is in _CATALOG_KEYWORDS and whose restaurant has catalog mode
+    on is routed directly to send_catalog (bypassing handle_inbound), exactly as
+    webhook/router.py does.  In this path, dialogue_state is NOT written to
+    'menu_sent'; instead we assert that an OutboxMessage of type product_list was
+    enqueued (the production-faithful signal that the menu was sent)."""
+    from app.outbox.models import OutboxMessage
+    from sqlalchemy import select
+
+    await drive_turns(
         db_session,
         restaurant_id=restaurant.id,
         phone="+971500000049",
         turns=[{"type": "text", "text": "menu"}],
     )
-    assert res.turns[0].state.get("dialogue_state") == "menu_sent", (
-        f"dialogue_state should be 'menu_sent', got {res.turns[0].state}"
+    outbox = (
+        await db_session.scalars(
+            select(OutboxMessage).order_by(OutboxMessage.id.desc()).limit(5)
+        )
+    ).all()
+    # OutboxMessage stores the type inside payload["type"] (not a top-level column).
+    product_list_msgs = [m for m in outbox if m.payload.get("type") == "product_list"]
+    assert product_list_msgs, (
+        f"'menu' keyword did not trigger send_catalog product_list; "
+        f"outbox: {[(m.payload.get('type'), m.payload) for m in outbox]}"
     )
 
 
