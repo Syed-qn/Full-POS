@@ -628,6 +628,53 @@ async def set_item_qty(
     return survivor
 
 
+async def set_item_note(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    dish_id: int,
+    notes: str,
+    qty: int | None = None,
+) -> OrderItem | None:
+    """Move an existing cart dish to a kitchen-note line and merge duplicates.
+
+    Special requests are line-level state. When a customer says "no onion on the
+    biryani" after the biryani is already in the cart, that should update the
+    existing line rather than add another paid biryani. ``qty`` optionally sets
+    the final total quantity for the noted line.
+    """
+    clean_notes = (notes or "").strip()
+    if not clean_notes:
+        return None
+
+    items = (
+        await session.scalars(
+            select(OrderItem)
+            .where(OrderItem.order_id == order.id, OrderItem.dish_id == dish_id)
+            .order_by(OrderItem.id)
+        )
+    ).all()
+    if not items:
+        return None
+
+    survivor = next((i for i in items if (i.notes or "").strip() == clean_notes), items[0])
+    survivor.notes = clean_notes
+    survivor.qty = max(1, qty) if qty is not None else sum(i.qty for i in items)
+    for item in items:
+        if item.id != survivor.id:
+            await session.delete(item)
+    await session.flush()
+
+    remaining = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    subtotal = sum((i.price_aed * i.qty for i in remaining), Decimal("0.00"))
+    order.subtotal = subtotal
+    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+    return survivor
+
+
 def parse_qty_and_text(text: str) -> tuple[int, str]:
     """Parse quantity prefixes from free text. Returns (qty, remaining_text).
 

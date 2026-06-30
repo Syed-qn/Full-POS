@@ -151,3 +151,110 @@ async def test_cart_summary_shows_special_note_to_distinguish_duplicate_lines(db
     assert "double masala" in summary  # the note is visible
     # Two distinct lines (plain + double masala), not silently merged into one.
     assert summary.count("Chicken Biryani") == 2
+
+
+async def test_special_note_for_existing_cart_item_updates_line_not_duplicate(db_session, restaurant):
+    """A prep note for an item already in the cart must update that line, not add a
+    second copy of the same dish and overcharge the customer."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.llm.port import ConversationAgentResult
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    cust = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
+    chicken = await _chicken(db_session, restaurant.id)
+    await add_item(db_session, order=order, dish=chicken, qty=1)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"draft_order_id": order.id, "dialogue_phase": "ordering",
+               "dialogue_state": "collecting_items"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    result = ConversationAgentResult(
+        message="Noted, double masala for the Chicken Biryani.",
+        action="add_item",
+        action_data={
+            "dish_query": "chicken biryani",
+            "qty": 1,
+            "special_note": "double masala",
+        },
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=result)):
+        await handle_inbound(
+            db_session,
+            _msg("Need double masala in biriyani", "wamid.note-existing"),
+            restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).all()
+    assert len(items) == 1
+    assert items[0].qty == 1
+    assert items[0].notes == "double masala"
+    await db_session.refresh(order)
+    assert order.subtotal == Decimal("20.00")
+
+
+async def test_quantity_correction_with_note_collapses_duplicate_same_dish_lines(
+    db_session, restaurant
+):
+    """If a duplicate plain/noted line already exists, a structured correction to
+    exactly one noted item must collapse the cart to that single line."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.llm.port import ConversationAgentResult
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    cust = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
+    chicken = await _chicken(db_session, restaurant.id)
+    await add_item(db_session, order=order, dish=chicken, qty=1)
+    await add_item(db_session, order=order, dish=chicken, qty=1, notes="double masala")
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"draft_order_id": order.id, "dialogue_phase": "ordering",
+               "dialogue_state": "collecting_items"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    result = ConversationAgentResult(
+        message="Updated to 1 Chicken Biryani with double masala.",
+        action="update_qty",
+        action_data={
+            "dish_query": "chicken biryani",
+            "qty": 1,
+            "special_note": "double masala",
+        },
+    )
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(return_value=result)):
+        await handle_inbound(
+            db_session,
+            _msg("I need only 1 biriyani with double masala", "wamid.note-correct"),
+            restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).all()
+    assert len(items) == 1
+    assert items[0].qty == 1
+    assert items[0].notes == "double masala"
+    await db_session.refresh(order)
+    assert order.subtotal == Decimal("20.00")
