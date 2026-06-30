@@ -272,7 +272,16 @@ async def push_products_batch(
         if validation_errors:
             preview = "; ".join(validation_errors[:5])
             extra = f" (+{len(validation_errors) - 5} more)" if len(validation_errors) > 5 else ""
-            raise CatalogWriteError(f"Meta rejected {len(validation_errors)} item(s): {preview}{extra}")
+            # Diagnostic: surface exactly what we sent so a "Duplicate retailer_id"
+            # can be traced (our batch is deduped, so a dupe here means Meta's catalog
+            # already holds two products with that retailer_id).
+            sent = [str(r.get("retailer_id") or "") for r in wire]
+            dupes = sorted({rid for rid in sent if sent.count(rid) > 1})
+            diag = f" [sent rids: {sent}; in-batch dupes: {dupes or 'none'}]"
+            logger.error("items_batch rejected: %s%s", validation_errors, diag)
+            raise CatalogWriteError(
+                f"Meta rejected {len(validation_errors)} item(s): {preview}{extra}{diag}"
+            )
         handles = data.get("handles") or []
         if wait_for_ingest and handles:
             await wait_for_batch_handles(catalog_id, handles)

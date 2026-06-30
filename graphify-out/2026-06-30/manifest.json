@@ -1605,9 +1605,9 @@
     "semantic_hash": "8314e790a30fb4ddf619636634f27f14"
   },
   "tests/ordering/test_cancellation.py": {
-    "mtime": 1782796529.2455835,
-    "ast_hash": "fa9ce856e7e9973088193b1f429a67fa",
-    "semantic_hash": "fa9ce856e7e9973088193b1f429a67fa"
+    "mtime": 1782796579.4739819,
+    "ast_hash": "2bb08a1f86a1d9d9539af84af6f9a68d",
+    "semantic_hash": "2bb08a1f86a1d9d9539af84af6f9a68d"
   },
   "tests/ordering/test_customer_patch.py": {
     "mtime": 1781079998.3780363,
@@ -2100,9 +2100,9 @@
     "semantic_hash": "4be5c139c24715d1dafdd2a4831f169d"
   },
   "understanding.txt": {
-    "mtime": 1782794902.1391182,
-    "ast_hash": "c59a12f5cbdc9ee65fedbc7519e4ab42",
-    "semantic_hash": "c59a12f5cbdc9ee65fedbc7519e4ab42"
+    "mtime": 1782796632.1662562,
+    "ast_hash": "1744ffcefb767dab54b7661b5f9bcc8a",
+    "semantic_hash": "1744ffcefb767dab54b7661b5f9bcc8a"
   },
   "alembic/versions/a1b2c3d4e5f6_backfill_customer_order_stats.py": {
     "mtime": 1782052600.3461096,
