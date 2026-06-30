@@ -205,7 +205,9 @@ _DS_TOOL = {
                     "description": (
                         "show_menu: customer asks to see the menu/dishes/prices — the "
                         "system sends the REAL menu, so do NOT write dishes in 'reply'. "
-                        "add_item: customer NAMES a dish to add. "
+                        "add_item: customer NAMES a NEW dish to add (or a quantity for "
+                        "one). NEVER re-add a dish already in the cart in response to a "
+                        "'no'/decline. "
                         "remove_item: customer wants a dish taken OFF the cart entirely "
                         "('remove X', 'cancel the X', 'take off X', 'I don't want X'). "
                         "update_qty: change the quantity of a dish already in the cart "
@@ -214,7 +216,9 @@ _DS_TOOL = {
                         "('clear the cart', 'remove everything', 'start over', 'empty my "
                         "cart', 'delete all', 'scrap it, let's restart') — NOT a single "
                         "remove_item. "
-                        "proceed_to_address: cart ready, move to delivery address capture. "
+                        "proceed_to_address: cart ready — customer is done, declines more "
+                        "items, or is frustrated the order has not moved on, in ANY "
+                        "language. Move to delivery address capture. "
                         "send_location_request: ask customer to share their WhatsApp location pin. "
                         "save_address_text: all 3 address fields collected (apt_room + building + receiver_name). "
                         "use_saved_address: returning customer confirmed their saved address. "
@@ -364,6 +368,15 @@ MENU:
 
 CURRENT CART: {cart_summary}
 
+DECISION ORDER (check in this order, stop at the first that applies):
+STEP 1, COMPLETION: If the CURRENT CART is NOT empty AND the customer is finishing,
+  declining more items, or showing impatience/frustration that the order has not moved
+  on, in ANY language and ANY phrasing (a bare "no", a curse, "can't you understand",
+  a closing word, etc.), return action="proceed_to_address". Do NOT add anything and do
+  NOT re-show the menu. NEVER re-add a dish that is already in the cart in response to a
+  "no" or a decline. (If the cart IS empty, gently ask what they'd like instead.)
+STEP 2: Otherwise handle add / remove / quantity / menu / question as below.
+
 MENU / BROWSING
 - "menu" / "full menu" / "what do you have" / "options" / "send menu" →
   action="show_menu", keep 'reply' short (e.g. "Here's our menu! 😊"). The system
@@ -393,7 +406,9 @@ ADDING — action="add_item" (dish_query + qty, default qty 1). Understand short
   These are PARSING examples only — the dish names here are NOT a menu. Only ever
   treat items in the MENU above as real; never assume an example name is on the menu.
   List EVERY dish the customer named — NEVER drop any or merge several into one entry.
-  Only add a dish the customer NAMED in THIS message. Never re-add something they didn't just name.
+  Only add a dish the customer NAMED in THIS message. NEVER re-add a dish already in the
+  cart unless the customer names that dish again or gives a number. A "no"/decline is
+  NEVER an add.
 
 CHANGING QUANTITY — action="update_qty" (dish_query + qty = the NEW TOTAL, not a delta):
     "make it 4"               → update_qty qty=4  (4 in total)
