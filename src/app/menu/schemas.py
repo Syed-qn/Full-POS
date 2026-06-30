@@ -63,6 +63,10 @@ class DishOut(BaseModel):
     description: str | None
     is_available: bool
     catalog_retailer_id: str | None = None
+    # Set when the dish is owned by a POS sync (Cratis). The manager UI uses this to lock
+    # editing — POS is the source of truth for name/price/category, so an edit here would
+    # silently drift from (and be overwritten by) the next sync.
+    pos_product_id: str | None = None
     # Meta Commerce catalogue product fields (see Dish model).
     image_url: str | None = None
     sale_price_aed: Decimal | None = None

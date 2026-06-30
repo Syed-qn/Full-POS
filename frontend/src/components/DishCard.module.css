@@ -134,6 +134,19 @@
   font-weight: 600;
   color: var(--sla-warn);
 }
+/* "From POS" tag on read-only, POS-synced dishes (editing locked). */
+.posTag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, var(--border, #e2e2e2));
+  border-radius: 7px;
+  padding: 4px 9px;
+  cursor: default;
+}
 .toggle {
   display: inline-flex;
   align-items: center;
