@@ -4,7 +4,7 @@ import { toast } from "./Toaster";
 import { apiClient } from "../lib/apiClient";
 import { syncCatalog } from "../lib/catalogApi";
 import type { RestaurantOut } from "../lib/types";
-import { fetchUnifiedMenu, syncCatalogFull, type UnifiedMenu } from "../lib/unifiedMenuApi";
+import { fetchUnifiedMenu, type UnifiedMenu } from "../lib/unifiedMenuApi";
 import s from "./UnifiedMenuPanel.module.css";
 
 export function UnifiedMenuPanel({
@@ -79,29 +79,6 @@ export function UnifiedMenuPanel({
     }
   }
 
-  async function doSyncFull() {
-    setSyncing(true);
-    try {
-      const res = await syncCatalogFull();
-      if (res.push_errors?.length) {
-        toast(res.push_errors.join("; "), "error");
-        return;
-      }
-      toast(
-        `Synced · ${res.total_active} in Meta` +
-          (res.pushed ? ` · ${res.pushed} pushed` : "") +
-          (res.push_updated ? ` · ${res.push_updated} updated` : "") +
-          (res.linked ? ` · ${res.linked} linked` : ""),
-      );
-      await load();
-      onChanged?.();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Sync failed", "error");
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   async function doPullOnly() {
     setSyncing(true);
     try {
@@ -116,7 +93,26 @@ export function UnifiedMenuPanel({
     }
   }
 
-  if (loading) return <p className={s.empty}>Loading unified menu…</p>;
+  if (loading)
+    return (
+      <div className={s.panel} aria-busy="true" aria-label="Loading WhatsApp menu">
+        <div className={s.head}>
+          <div className={s.skHeadText}>
+            <span className={`${s.sk} ${s.skTitle}`} />
+            <span className={`${s.sk} ${s.skLine}`} />
+            <span className={`${s.sk} ${s.skLineShort}`} />
+          </div>
+          <div className={s.actions}>
+            <span className={`${s.sk} ${s.skBtn}`} />
+          </div>
+        </div>
+        <div className={s.stats}>
+          {[70, 92, 86, 100].map((w, i) => (
+            <span key={i} className={`${s.sk} ${s.skPill}`} style={{ width: w }} />
+          ))}
+        </div>
+      </div>
+    );
 
   return (
     <div className={s.panel}>
@@ -124,9 +120,9 @@ export function UnifiedMenuPanel({
         <div>
           <h3 className={s.title}>WhatsApp menu</h3>
           <p className={s.sub}>
-            One menu. Dishes publish to WhatsApp automatically when you activate a menu —
-            customers who ask for the menu get tappable catalogue cards. Use{" "}
-            <b>Publish to WhatsApp</b> to push changes right now.
+            Your dishes publish to WhatsApp automatically when you edit them. Use{" "}
+            <b>Pull from Meta</b> to refresh, so dishes still processing go live and anything
+            deleted in Meta is cleared here.
           </p>
           {setupMode && (
             <details className={s.guide}>
@@ -139,23 +135,15 @@ export function UnifiedMenuPanel({
                   Set <code>APP_WA_CATALOG_TOKEN</code> on the server (system user with{" "}
                   <code>catalog_management</code>).
                 </li>
-                <li>That's it — dishes publish automatically on menu activation. <b>Publish to WhatsApp</b> pushes changes on demand.</li>
+                <li>That's it. Dishes publish automatically. Use <b>Pull from Meta</b> to refresh status.</li>
               </ol>
             </details>
           )}
         </div>
         <div className={s.actions}>
-          <Button onClick={doSyncFull} disabled={syncing || !catalogId.trim()}>
-            {syncing ? "Publishing…" : "Publish to WhatsApp"}
+          <Button onClick={doPullOnly} disabled={syncing || !catalogId.trim()}>
+            {syncing ? "Pulling…" : "Pull from Meta"}
           </Button>
-          <button
-            type="button"
-            className={s.advancedLink}
-            onClick={doPullOnly}
-            disabled={syncing || !catalogId.trim()}
-          >
-            Pull from Meta
-          </button>
         </div>
       </div>
 
@@ -175,22 +163,38 @@ export function UnifiedMenuPanel({
 
       {menu && menu.items.length > 0 ? (
         <div className={s.stats}>
-          <span className={`${s.stat} ${s.statOn}`}>
-            <span className={s.dot} /> {menu.linked_count} on WhatsApp
-          </span>
-          {menu.dish_only_count > 0 && (
-            <span className={s.stat}>{menu.dish_only_count} not published yet</span>
-          )}
-          {menu.catalog_only_count > 0 && (
-            <span className={s.stat}>{menu.catalog_only_count} only in Meta</span>
-          )}
+          {(() => {
+            const dishItems = menu.items.filter((i) => i.dish_id != null);
+            const dishCount = dishItems.length;
+            const availCount = dishItems.filter((i) => i.is_available).length;
+            const catCount = new Set(dishItems.map((i) => i.category ?? "Other")).size;
+            const linked = menu.items.filter((i) => i.link_status === "linked");
+            const onWa = linked.filter((i) => i.sendable !== false).length;
+            const inReview = linked.filter((i) => i.sendable === false).length;
+            return (
+              <>
+                <span className={s.stat}><b>{dishCount}</b> dishes</span>
+                <span className={s.stat}>
+                  <span className={s.dot} /> {availCount} available
+                </span>
+                <span className={s.stat}><b>{catCount}</b> categories</span>
+                <span className={s.statDivider} />
+                <span className={`${s.stat} ${s.statOn}`}>
+                  <span className={s.dot} /> {onWa} on WhatsApp
+                </span>
+                {inReview > 0 && (
+                  <span className={`${s.stat} ${s.statReview}`}>{inReview} in review</span>
+                )}
+              </>
+            );
+          })()}
         </div>
       ) : null}
 
-      {menu && menu.dish_only_count > 0 && catalogId.trim() ? (
+      {menu && menu.items.some((i) => i.link_status === "linked" && i.sendable === false) ? (
         <p className={s.hint}>
-          {menu.dish_only_count} dish{menu.dish_only_count > 1 ? "es" : ""} not on WhatsApp yet —
-          click <b>Publish to WhatsApp</b> to push {menu.dish_only_count > 1 ? "them" : "it"} live.
+          Some dishes are still being processed by Meta. They go live on WhatsApp
+          automatically. Click <b>Pull from Meta</b> to check if they're ready.
         </p>
       ) : null}
       {setupMode && !catalogId.trim() ? (

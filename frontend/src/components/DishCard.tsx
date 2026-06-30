@@ -40,23 +40,23 @@ export function DishCard({
         ? s.waReview
         : s.waPending;
   const waTitle = !waEnabled
-    ? "Turned off — hidden from your WhatsApp catalogue. Tap to turn on."
+    ? "Turned off, so it is hidden from your WhatsApp catalogue. Tap to turn on."
     : onWhatsapp
       ? "Live on your WhatsApp catalogue. Tap to turn off."
       : inReview
-        ? "Meta is still processing this dish's image — goes live automatically once ready. Tap to turn off."
-        : "On for WhatsApp — publishes automatically. Tap to turn off.";
+        ? "Meta is still processing this dish's image. It goes live automatically once ready. Tap to turn off."
+        : "On for WhatsApp and publishes automatically. Tap to turn off.";
   const hasError = dish.dish_number === null || dish.price_aed === null;
-  // When a dish offers serving sizes, show the price span (e.g. "AED 18 – 60")
+  // When a dish offers serving sizes, show the price span (e.g. "AED 18 to 60")
   // instead of a single base price, so the manager sees the range at a glance.
   const variants = dish.variants ?? [];
-  let priceLabel = `AED ${dish.price_aed ?? "—"}`;
+  let priceLabel = `AED ${dish.price_aed ?? "?"}`;
   if (variants.length > 0) {
     const nums = variants.map((v) => Number(v.price_aed)).filter((n) => !Number.isNaN(n));
     if (nums.length > 0) {
       const lo = Math.min(...nums);
       const hi = Math.max(...nums);
-      priceLabel = lo === hi ? `AED ${lo}` : `AED ${lo} – ${hi}`;
+      priceLabel = lo === hi ? `AED ${lo}` : `AED ${lo} to ${hi}`;
     }
   }
   return (
@@ -74,8 +74,8 @@ export function DishCard({
         {onWhatsappToggle ? (
           <button
             type="button"
-            role="switch"
-            aria-checked={waEnabled}
+            aria-pressed={waEnabled}
+            aria-label={`WhatsApp: ${waLabel}`}
             className={`${s.wa} ${s.waBtn} ${waClass}`}
             title={waTitle}
             onClick={(e) => {

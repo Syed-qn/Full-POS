@@ -59,6 +59,36 @@ def _menu_out(menu: Menu) -> MenuOut:
     return out
 
 
+async def _fill_catalog_images(
+    session: AsyncSession, restaurant_id: int, out: MenuOut
+) -> None:
+    """For a dish that has no own ``image_url`` but is linked to a Meta catalogue product,
+    surface that product's image so the edit modal prefills the existing photo (dishes
+    auto-created/linked from a Meta sync keep the image on the catalogue row, not the
+    dish row)."""
+    from app.catalog.models import CatalogProduct
+
+    rids = [
+        d.catalog_retailer_id
+        for d in out.dishes
+        if not (d.image_url or "").strip() and d.catalog_retailer_id
+    ]
+    if not rids:
+        return
+    rows = (
+        await session.scalars(
+            select(CatalogProduct).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.retailer_id.in_(rids),
+            )
+        )
+    ).all()
+    by_rid = {r.retailer_id: r.image_url for r in rows if (r.image_url or "").strip()}
+    for d in out.dishes:
+        if not (d.image_url or "").strip() and d.catalog_retailer_id in by_rid:
+            d.image_url = by_rid[d.catalog_retailer_id]
+
+
 async def _load_menu(
     menu_id: int,
     restaurant: Restaurant,
@@ -145,7 +175,9 @@ async def get_active_menu(
     if not menu:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No active menu")
     await session.refresh(menu)
-    return _menu_out(menu)
+    out = _menu_out(menu)
+    await _fill_catalog_images(session, restaurant.id, out)
+    return out
 
 
 @router.get("/menus/{menu_id}", response_model=MenuOut)
@@ -155,7 +187,9 @@ async def get_menu(
     session: AsyncSession = Depends(get_session),
 ):
     menu = await _load_menu(menu_id, restaurant, session)
-    return _menu_out(menu)
+    out = _menu_out(menu)
+    await _fill_catalog_images(session, restaurant.id, out)
+    return out
 
 
 @router.post("/dishes/image", status_code=201)

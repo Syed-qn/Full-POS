@@ -38,6 +38,6 @@ describe("DishCard", () => {
       ],
     };
     render(<DishCard dish={withVariants} onToggle={() => {}} />);
-    expect(screen.getByText("AED 18 – 60")).toBeInTheDocument();
+    expect(screen.getByText("AED 18 to 60")).toBeInTheDocument();
   });
 });

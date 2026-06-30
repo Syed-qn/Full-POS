@@ -23,4 +23,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Keep action buttons hugging the right edge even when they wrap below a long
+     title/subtitle (instead of dropping to the left). */
+  margin-left: auto;
 }

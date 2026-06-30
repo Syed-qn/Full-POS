@@ -186,8 +186,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
   const hasErrors = (pending?.diff_vs_active?.conflicts.length ?? 0) > 0;
 
-  const availableCount = dishes.filter((d) => d.is_available).length;
-
   // Next free dish number — assigned automatically to new dishes.
   const nextNumber = dishes.length
     ? Math.max(...dishes.map((d) => d.dish_number ?? 0)) + 1
@@ -242,7 +240,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   if (pending) {
     return (
       <div className={s.screen}>
-        <SectionBanner tone="info">New menu parsed — review and confirm before activating.</SectionBanner>
+        <SectionBanner tone="info">New menu parsed. Review and confirm before activating.</SectionBanner>
         {pending.diff_vs_active ? <DiffPanel diff={pending.diff_vs_active} /> : <p>No diff.</p>}
         <div className={s.actions}>
           <Button onClick={onConfirm} disabled={hasErrors}>Confirm &amp; Activate</Button>
@@ -258,7 +256,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
       <PageHeader
         title="Menu"
-        subtitle="One menu. Edit here and it publishes to WhatsApp automatically — customers who ask for the menu get tappable cards."
+        subtitle="One menu. Edit here and it publishes to WhatsApp automatically. Customers who ask for the menu get tappable cards."
         right={
           <>
             <input
@@ -288,24 +286,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
         </div>
       ) : (
         <>
-          <div className={s.stats}>
-            <span className={s.stat}>
-              <span className={s.statNum}>{dishes.length}</span> dishes
-            </span>
-            <span className={s.statDivider} />
-            <span className={s.stat}>
-              <span className={s.statDot} /> {availableCount} available
-            </span>
-            {availableCount < dishes.length && (
-              <span className={s.stat}>
-                <span className={`${s.statDot} ${s.statDotOff}`} /> {dishes.length - availableCount} unavailable
-              </span>
-            )}
-            <span className={s.stat}>
-              <span className={s.statNum}>{allCategories.length}</span> categories
-            </span>
-          </div>
-
           <div className={s.filterBar}>
             <div className={`${s.filterGroup} ${s.grow}`}>
               <span className={s.filterLabel}>Search</span>
@@ -404,16 +384,12 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   );
 }
 
-// Skeleton placeholder mirroring the menu layout (stats bar, filters, chips,
-// and category grids of dish cards) so the page keeps its shape while loading.
+// Skeleton placeholder mirroring the menu layout (filters, chips, and category
+// grids of dish cards) so the page keeps its shape while loading. Stats now live
+// in the WhatsApp menu panel above, which has its own loading state.
 function MenuSkeleton() {
   return (
     <div className={s.skWrap} aria-busy="true" aria-label="Loading menu">
-      <div className={s.stats}>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <span key={i} className={`${s.sk} ${s.skStat}`} />
-        ))}
-      </div>
       <div className={s.filterBar}>
         <div className={`${s.filterGroup} ${s.grow}`}>
           <span className={`${s.sk} ${s.skLabel}`} />

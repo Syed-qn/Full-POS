@@ -103,22 +103,27 @@ def _to_product(p: dict) -> MetaProduct:
 _IMAGE_READY = {"fetched", "direct_upload"}
 # Anything else (in_progress, outdated, partial_fetch, fetch_failed, no_status, "") means
 # Meta hasn't finished processing the image yet → not sendable in a product_list.
+# Review states where Meta has NOT cleared the product for WhatsApp yet. "pending" is the
+# Commerce-Manager "In review" state: the image may already be fetched, but the product is
+# still awaiting approval and CANNOT be sent — so it stays "in review" for us too.
+_REVIEW_BLOCKED = {"pending", "rejected", "outdated"}
 
 
 def is_product_sendable(product: "MetaProduct") -> bool:
     """True when WhatsApp can include this product in an interactive product_list.
 
-    Meta only serves a product card once it has FETCHED the image onto its own CDN and
-    the product is not rejected in review. Until then a product_list that contains it
-    fails entirely (#131009 "None of the products provided could be sent"), so we treat
-    such a product as still "in review" and exclude it from the catalogue message.
+    Meta only serves a product card once (a) it has FETCHED the image onto its own CDN AND
+    (b) the product has cleared review (not pending/rejected/outdated). Until BOTH hold, a
+    product_list that contains it fails entirely (#131009 "None of the products provided
+    could be sent"), so we treat it as still "in review" and exclude it.
 
     Falls back to inspecting the image_url host (``fbcdn.net`` == processed) when Meta
     omits ``image_fetch_status`` (older catalogues / partial field sets).
     """
     fetch = (product.image_fetch_status or "").strip().lower()
     review = (product.review_status or "").strip().lower()
-    if review == "rejected":
+    # Awaiting approval / rejected / needs re-review → keep it "in review".
+    if review in _REVIEW_BLOCKED:
         return False
     if fetch:
         return fetch in _IMAGE_READY

@@ -9,9 +9,30 @@
 .head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .title { margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary); }
 .sub { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; max-width: 60ch; }
-.stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.stats { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Loading skeleton — mirrors the panel layout (title, two subtitle lines, a button,
+   and a row of stat pills) with a shimmer sweep. */
+.sk {
+  display: block; position: relative; overflow: hidden;
+  background: var(--bg-surface-inset); border-radius: 6px;
+}
+.sk::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: panelSkShimmer 1.4s infinite;
+}
+@keyframes panelSkShimmer { 100% { transform: translateX(100%); } }
+.skHeadText { flex: 1; min-width: 200px; }
+.skTitle { height: 18px; width: 150px; }
+.skLine { height: 12px; width: 100%; max-width: 460px; margin-top: 10px; }
+.skLineShort { height: 12px; width: 55%; max-width: 280px; margin-top: 7px; }
+.skBtn { height: 36px; width: 124px; border-radius: 999px; }
+.skPill { height: 26px; border-radius: 999px; }
 .stat { font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--bg-surface-inset); padding: 5px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
 .statOn { color: var(--sla-safe); background: var(--sla-safe-dim); }
+.statReview { color: #b27300; background: rgba(245, 166, 35, 0.16); }
+.statDivider { width: 1px; align-self: stretch; background: var(--border-subtle); margin: 0 2px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .hint { margin: 0; font-size: 13px; color: var(--text-secondary); background: var(--bg-surface-inset); border-radius: 10px; padding: 10px 14px; line-height: 1.45; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

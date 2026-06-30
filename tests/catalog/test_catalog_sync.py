@@ -40,6 +40,12 @@ def test_is_product_sendable_logic():
     assert is_product_sendable(_mp("r", "X", 10, fetch="fetch_failed")) is False
     # Rejected always wins regardless of image state.
     assert is_product_sendable(_mp("r", "X", 10, fetch="fetched", review="rejected")) is False
+    # "In review" (pending approval) is NOT sendable even though the image is fetched —
+    # this is the Commerce-Manager "In review" state.
+    assert is_product_sendable(_mp("r", "X", 10, fetch="fetched", review="pending")) is False
+    assert is_product_sendable(_mp("r", "X", 10, fetch="fetched", review="outdated")) is False
+    # Approved + fetched → sendable.
+    assert is_product_sendable(_mp("r", "X", 10, fetch="fetched", review="approved")) is True
     # No status → infer from image host (Meta CDN == processed).
     assert is_product_sendable(
         _mp("r", "X", 10, image_url="https://scontent.fdxb.fbcdn.net/x.jpg")
