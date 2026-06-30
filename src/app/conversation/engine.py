@@ -2152,7 +2152,8 @@ async def _handle_modify_items(
     qty, dish_query = parse_qty_and_text(text)
     lower_q = dish_query.lower()
 
-    if lower_q in ("done", "checkout", "that's all", "thats all"):
+    from app.llm.factory import get_completion_detector
+    if await get_completion_detector().is_completion(text):
         mod_id = conv.state.get("modify_order_id")
         proposed = conv.state.get("modify_proposed", []) or []
         if not mod_id or not proposed:
@@ -3521,11 +3522,37 @@ async def _execute_ai_add_item(
                 )
                 return "awaiting_bundle"
 
+    if special_note and variant is None and await _apply_note_to_existing_cart_item(
+        session, conv, dish_id=dish.id, notes=special_note
+    ):
+        return "updated_note"
+
     await _add_dish_to_cart(
         session, conv, inbound, restaurant_id,
         dish=dish, qty=qty, notes=special_note or None, variant=variant,
     )
     return "added"
+
+
+async def _apply_note_to_existing_cart_item(
+    session: AsyncSession,
+    conv: Conversation,
+    *,
+    dish_id: int,
+    notes: str,
+    qty: int | None = None,
+) -> bool:
+    """Apply a kitchen note to an existing cart dish instead of charging for a
+    duplicate line. Returns True when an existing cart line was updated."""
+    from app.ordering.models import Order
+    from app.ordering.service import set_item_note
+
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None or str(order.status) != "draft":
+        return False
+    updated = await set_item_note(session, order=order, dish_id=dish_id, notes=notes, qty=qty)
+    return updated is not None
 
 
 async def _resolve_cart_dish(session: AsyncSession, *, order_id: int, candidates):
@@ -3605,6 +3632,7 @@ async def _execute_ai_remove_item(
 async def _execute_ai_update_qty(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, dish_query: str, qty: int, *, suppress_offers: bool = False,
+    special_note: str = "",
 ) -> tuple[str, str | None]:
     """Set a cart dish to an exact quantity (``qty <= 0`` removes it).
 
@@ -3640,6 +3668,10 @@ async def _execute_ai_update_qty(
     if qty <= 0:
         await set_item_qty(session, order=order, dish_id=dish.id, qty=0)
         return ("removed", dish.name)
+    if special_note and await _apply_note_to_existing_cart_item(
+        session, conv, dish_id=dish.id, notes=special_note, qty=qty
+    ):
+        return ("updated", dish.name)
 
     # If the new quantity matches a bundle, ask before pricing it differently.
     bundle = bundle_variant_for_qty(dish, qty)
@@ -3718,6 +3750,7 @@ async def _apply_confirmation_edit(
         outcome, _name = await _execute_ai_update_qty(
             session, conv, inbound, restaurant_id,
             data.get("dish_query", ""), int(data.get("qty") or 1),
+            special_note=data.get("special_note", ""),
         )
         if outcome == "awaiting_bundle":
             # A bundle question was sent; the answer re-enters the cart flow.
@@ -4198,7 +4231,7 @@ async def _dispatch_action(
                     session, conv, inbound, restaurant_id, iq, iqty,
                     it.get("special_note", ""), suppress_offers=True,
                 )
-                if status == "added":
+                if status in ("added", "updated_note"):
                     added.append(iq)
                 elif status == "no_match":
                     not_found.append(iq)
@@ -4281,7 +4314,7 @@ async def _dispatch_action(
             status = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty, special_note
             )
-            if status == "added" and reply:
+            if status in ("added", "updated_note") and reply:
                 await _send_text(session, conv=conv, inbound=inbound,
                                  restaurant_id=restaurant_id, prefix="ai-add", body=reply)
             elif status == "no_match":
@@ -4339,7 +4372,8 @@ async def _dispatch_action(
                     too_many.append(iq)
                     continue
                 outcome, dish_name = await _execute_ai_update_qty(
-                    session, conv, inbound, restaurant_id, iq, iqty, suppress_offers=True
+                    session, conv, inbound, restaurant_id, iq, iqty, suppress_offers=True,
+                    special_note=it.get("special_note", ""),
                 )
                 if outcome in ("updated", "removed"):
                     updated.append(dish_name or iq)
@@ -4368,7 +4402,8 @@ async def _dispatch_action(
             )
             return
         outcome, dish_name = await _execute_ai_update_qty(
-            session, conv, inbound, restaurant_id, dish_query, qty
+            session, conv, inbound, restaurant_id, dish_query, qty,
+            special_note=data.get("special_note", "") or (items[0].get("special_note", "") if items else ""),
         )
         if outcome == "awaiting_bundle":
             # The bundle question was already sent; wait for the yes/no reply.

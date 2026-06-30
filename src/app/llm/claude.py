@@ -328,6 +328,33 @@ class ClaudeSegmentCompiler:
         return dsl
 
 
+class ClaudeCompletionDetector:
+    """Production completion detector via Claude API (haiku, yes/no prompt)."""
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def is_completion(self, text: str) -> bool:
+        if not text or not text.strip():
+            return False
+        prompt = (
+            "A restaurant customer sent this WhatsApp message during an order: "
+            f"{text!r}\n\n"
+            "Does the message mean the customer is FINISHED ordering / wants to proceed "
+            "(in ANY language, any phrasing — 'done', 'khalas', 'bas', 'that\\'s all', "
+            "bare 'no', or equivalent)?\n"
+            "Answer with a single word: yes or no."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=4,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = _first_text(message).strip()
+        return raw.lower().startswith("y")
+
+
 _CONVERSATION_TOOL = {
     "name": "take_action",
     "description": "Record the structured action inferred from the customer message, plus your reply text.",

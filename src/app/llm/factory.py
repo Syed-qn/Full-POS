@@ -98,6 +98,18 @@ def get_conversation_agent():
     return FakeConversationAgent()
 
 
+def get_completion_detector():
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeCompletionDetector
+        return ClaudeCompletionDetector()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekCompletionDetector
+        return DeepSeekCompletionDetector()
+    from app.llm.fake import FakeCompletionDetector
+    return FakeCompletionDetector()
+
+
 def get_segment_compiler():
     settings = get_settings()
     if settings.llm_provider == "claude":

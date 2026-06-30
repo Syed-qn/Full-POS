@@ -55,6 +55,13 @@ class IntentClassifierPort(Protocol):
         ...
 
 
+class CompletionDetectorPort(Protocol):
+    async def is_completion(self, text: str) -> bool:
+        """True if the message means the customer is finished / wants to proceed,
+        in ANY language. NOT a completion if they name a dish or ask a question."""
+        ...
+
+
 class ArbiterPort(Protocol):
     async def arbitrate(self, query: str, candidates: list) -> object | None:
         """Given ambiguous matches, return the single best Dish or None."""

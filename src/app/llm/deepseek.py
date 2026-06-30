@@ -250,7 +250,11 @@ _DS_TOOL = {
                 },
                 "special_note": {
                     "type": "string",
-                    "description": "Kitchen note e.g. 'no onion', 'extra spicy' (for add_item).",
+                    "description": (
+                        "Kitchen note e.g. 'no onion', 'extra spicy'. Use for add_item, "
+                        "and also for update_qty when the customer is correcting an "
+                        "existing cart line to a specific noted version."
+                    ),
                 },
                 "items": {
                     "type": "array",
@@ -397,7 +401,10 @@ MENU / BROWSING
 ADDING — action="add_item" (dish_query + qty, default qty 1). Understand shorthand in ANY language:
     "1 mutton biryani"        → add_item dish_query="mutton biryani" qty=1
     "ek biryani dena bhai"    → add_item "biryani" qty=1
-    "no onion" / "extra spicy"→ add_item with special_note
+    "no onion" / "extra spicy"→ if that dish is already in CURRENT CART, update the
+                              existing cart line with special_note; do NOT add another
+                              paid copy of the dish. If the dish is not in cart, add_item
+                              with special_note.
   MULTIPLE dishes in ONE message → action="add_item" with the 'items' list, ONE entry per dish:
     "2 bry + karahi"          → add_item items=[{{dish_query:"biryani",qty:2}},{{dish_query:"karahi",qty:1}}]
     "1 chicken biryani, 1 mutton biryani and 2 parotta"
@@ -414,6 +421,8 @@ CHANGING QUANTITY — action="update_qty" (dish_query + qty = the NEW TOTAL, not
     "make it 4"               → update_qty qty=4  (4 in total)
     "change biryani to 2"     → update_qty dish_query="biryani" qty=2
     "actually 3 biryanis"     → update_qty dish_query="biryani" qty=3
+    "only 1 biryani with no onion"
+                              → update_qty dish_query="biryani" qty=1 special_note="no onion"
   "make it N" right after adding a dish refers to THAT dish.
   MULTIPLE dishes in ONE message → action="update_qty" with the 'items' list, ONE entry per dish:
     "make it 2 chicken biryani and 2 parotta"
@@ -661,6 +670,29 @@ class DeepSeekConversationAgent:
                 "receiver_name": inp.get("receiver_name", ""),
             },
         )
+
+
+class DeepSeekCompletionDetector:
+    """Production completion detector: one tiny async chat call, yes/no answer."""
+
+    async def is_completion(self, text: str) -> bool:
+        if not text or not text.strip():
+            return False
+        api_key, model = _get_deepseek_settings()
+        prompt = (
+            "A restaurant customer sent this WhatsApp message during an order: "
+            f"{text!r}\n\n"
+            "Does the message mean the customer is FINISHED ordering / wants to proceed "
+            "(in ANY language, any phrasing — 'done', 'khalas', 'bas', 'that\\'s all', "
+            "bare 'no', or equivalent)?\n"
+            "Answer with a single word: yes or no."
+        )
+        raw = await _async_chat(
+            api_key, model,
+            [{"role": "user", "content": prompt}],
+            max_tokens=4,
+        )
+        return raw.strip().lower().startswith("y")
 
 
 def _sanitise_effect(parsed: dict) -> dict:

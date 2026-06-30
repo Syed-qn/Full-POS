@@ -345,6 +345,50 @@ class FakeConversationAgent:
         )
 
 
+class FakeCompletionDetector:
+    """Test double: deterministic completion-intent detector.
+
+    Normalises curly/smart apostrophes, then checks whether the lowercased
+    text matches a known multilingual closing-token set.  Returns False for
+    empty/blank input, dish names, and questions.
+    """
+
+    # Token set mirrors FakeConversationAgent's closing logic + spec token list.
+    _COMPLETION_TOKENS = frozenset({
+        "done", "that's all", "thats all", "checkout", "proceed",
+        "finish", "no more", "nothing else",
+        # Arabic / Gulf
+        "bas", "khalas", "khalaas", "khallas",
+        # Bare declines that signal "I'm done, move on"
+        "no", "na", "nah", "np", "nope",
+    })
+
+    def _normalise(self, text: str) -> str:
+        # Unify curly / smart / modifier apostrophes → straight apostrophe.
+        return (
+            text
+            .replace("’", "'")   # RIGHT SINGLE QUOTATION MARK
+            .replace("‘", "'")   # LEFT SINGLE QUOTATION MARK
+            .replace("ʼ", "'")   # MODIFIER LETTER APOSTROPHE
+        )
+
+    async def is_completion(self, text: str) -> bool:
+        if not text or not text.strip():
+            return False
+        normalised = self._normalise(text).lower().strip()
+        # Bare token match (exact).
+        if normalised in self._COMPLETION_TOKENS:
+            return True
+        # Contains-match: a completion token appears as a sub-phrase (e.g. "no that's all").
+        for token in self._COMPLETION_TOKENS:
+            # Only multi-word tokens are safe to match as substrings; single
+            # words like "no" / "na" must be exact to avoid false positives
+            # (e.g. "no onion" contains "no" but is an item instruction).
+            if " " in token and token in normalised:
+                return True
+        return False
+
+
 class FakeSegmentCompiler:
     """Test double: rule-based plain-English -> validated segment DSL.
 
