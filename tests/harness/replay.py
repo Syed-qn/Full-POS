@@ -39,7 +39,9 @@ def _build_inbound(
         "order": MessageType.ORDER,
         "button_reply": MessageType.BUTTON_REPLY,
         "audio": MessageType.AUDIO,
-    }[ttype]
+        # Any unrecognised type (e.g. WhatsApp reactions, system events) maps to
+        # UNKNOWN so the engine's reaction/unknown path is exercised in evals.
+    }.get(ttype, MessageType.UNKNOWN)
     return InboundMessage(
         wa_message_id=f"harness-{phone}-{idx}",
         from_phone=phone,
