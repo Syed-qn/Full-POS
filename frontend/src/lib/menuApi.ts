@@ -33,10 +33,26 @@ export interface DishInput {
   price_aed: string;
   category?: string | null;
   description?: string | null;
+  // Meta Commerce catalogue product fields.
+  image_url?: string | null;
+  sale_price_aed?: string | null;
+  fb_product_category?: string | null;
+  condition?: string;
+  meta_status?: string;
+  brand?: string | null;
+  catalog_retailer_id?: string | null;
   variants?: VariantInput[];
 }
 
 export type DishPatchInput = Partial<DishInput>;
+
+/** Upload a dish photo (JPG/PNG, ≤5 MB) and get back its public URL to store on the
+ *  dish. Meta fetches this URL as the catalogue product image. */
+export async function uploadDishImage(file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiClient.postForm<{ url: string }>("/api/v1/dishes/image", form);
+}
 
 export async function addDish(menuId: number, body: DishInput): Promise<DishOut> {
   return apiClient.post<DishOut>(`/api/v1/menus/${menuId}/dishes`, body);

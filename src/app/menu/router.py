@@ -149,6 +149,31 @@ async def get_menu(
     return await _load_menu(menu_id, restaurant, session)
 
 
+@router.post("/dishes/image", status_code=201)
+async def upload_dish_image(
+    file: UploadFile,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Upload a dish photo for the Meta catalogue. Returns a public ``/media/<path>``
+    URL to store on the dish (``image_url``) — Meta fetches it as the product image."""
+    if (file.content_type or "") not in service.DISH_IMAGE_MIMES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Dish photo must be JPG or PNG"
+        )
+    content = await file.read()
+    if len(content) > service.MAX_DISH_IMAGE_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Image exceeds 5 MB")
+    url = await service.store_dish_image(
+        session,
+        restaurant_id=restaurant.id,
+        content=content,
+        content_type=file.content_type or "image/jpeg",
+    )
+    await session.commit()
+    return {"url": url}
+
+
 @router.post("/menus/{menu_id}/dishes", response_model=DishOut, status_code=201)
 async def add_dish(
     menu_id: int,

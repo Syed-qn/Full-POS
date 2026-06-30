@@ -9,11 +9,25 @@ vi.mock("./Toaster", () => ({ toast: vi.fn() }));
 describe("DishEditModal serving-size variants", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  // A new dish must carry a photo before it can go live on WhatsApp — upload one so
+  // the form is saveable. The image endpoint returns the stored URL.
+  const pngFile = new File([new Uint8Array([1, 2, 3])], "dish.png", { type: "image/png" });
+  async function uploadPhoto() {
+    await userEvent.upload(screen.getByTestId("dish-image-input"), pngFile);
+  }
+
   it("adds variant rows and submits them in the create body", async () => {
     let posted: any = null;
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string, init?: RequestInit) => {
+        if (typeof url === "string" && url.includes("/dishes/image")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ url: "https://cdn.test/media/dishes/1/p.png" }), {
+              status: 201,
+            }),
+          );
+        }
         if (init?.method === "POST") {
           posted = JSON.parse(init.body as string);
           return Promise.resolve(new Response(JSON.stringify({ id: 9 }), { status: 201 }));
@@ -35,15 +49,54 @@ describe("DishEditModal serving-size variants", () => {
 
     await userEvent.type(screen.getByPlaceholderText("Chicken Biryani"), "Chicken Biryani");
     await userEvent.type(screen.getByPlaceholderText("20.00"), "18.00");
+    await uploadPhoto();
 
     await userEvent.click(screen.getByRole("button", { name: /add serving size/i }));
     await userEvent.type(screen.getByLabelText("Serving size 1 name"), "4 serve");
     await userEvent.type(screen.getByLabelText("Serving size 1 price"), "60");
 
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Add dish" })).not.toBeDisabled(),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Add dish" }));
 
     await waitFor(() => expect(posted).not.toBeNull());
     expect(posted.variants).toEqual([{ name: "4 serve", price_aed: "60" }]);
+    expect(posted.image_url).toBe("https://cdn.test/media/dishes/1/p.png");
+  });
+
+  it("requires a photo before a new dish can be added", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (typeof url === "string" && url.includes("/dishes/image")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ url: "https://cdn.test/media/dishes/1/p.png" }), {
+              status: 201,
+            }),
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }),
+    );
+    render(
+      <DishEditModal
+        menuId={5}
+        dish="new"
+        categories={[]}
+        nextNumber={300}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    await userEvent.type(screen.getByPlaceholderText("Chicken Biryani"), "Falooda");
+    await userEvent.type(screen.getByPlaceholderText("20.00"), "12.00");
+    // Name + price filled but no photo yet → still blocked.
+    expect(screen.getByRole("button", { name: "Add dish" })).toBeDisabled();
+    await uploadPhoto();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Add dish" })).not.toBeDisabled(),
+    );
   });
 
   it("disables save while a variant row is partially filled", async () => {

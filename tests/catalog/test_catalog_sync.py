@@ -210,6 +210,100 @@ async def test_push_dishes_includes_required_meta_fields(db_session, restaurant,
     )["title"] == "X"
 
 
+async def test_items_batch_sends_retailer_id_as_data_id(monkeypatch):
+    """Regression: Meta's items_batch requires the Content ID as ``data.id`` — a top-level
+    ``retailer_id`` is rejected with 'Can not find required field id'. The wire payload
+    must move retailer_id into data.id and not leak the internal top-level key."""
+    import app.catalog.meta_client as mc
+
+    captured: dict = {}
+
+    class _FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {"handles": ["h1"], "validation_status": []}
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, params=None, json=None):  # noqa: A002
+            captured["json"] = json
+            return _FakeResp()
+
+    monkeypatch.setattr(mc.httpx, "AsyncClient", _FakeClient)
+
+    class _Tok:
+        @staticmethod
+        def get_secret_value():
+            return "TOK"
+
+    class _S:
+        graph_api_version = "v21.0"
+        wa_catalog_token = _Tok()
+
+    monkeypatch.setattr(mc, "get_settings", lambda: _S)
+
+    await mc.push_products_batch(
+        "CAT",
+        [{"method": "UPDATE", "retailer_id": "r1", "data": {"title": "X"}, "_was_linked": True}],
+        wait_for_ingest=False,
+    )
+    reqs = captured["json"]["requests"]
+    assert reqs == [{"method": "UPDATE", "data": {"title": "X", "id": "r1"}}]
+    assert "retailer_id" not in reqs[0]  # internal key never leaks to Meta
+    assert "_was_linked" not in reqs[0]
+
+
+async def test_push_uses_dish_image_and_sale_price(db_session, restaurant, monkeypatch):
+    """A dish with its own photo + sale price pushes them to Meta; a dish without a
+    photo falls back to the shared placeholder (Meta requires an image)."""
+    from app.catalog.sync_service import push_dishes_to_meta
+    from app.menu.models import Dish, Menu
+
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="WithPhoto",
+        price_aed=Decimal("30.00"), category="Rice", is_available=True,
+        name_normalized="withphoto", image_url="https://cdn.test/media/dishes/1/a.png",
+        sale_price_aed=Decimal("24.00"),
+    ))
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2, name="NoPhoto",
+        price_aed=Decimal("20.00"), category="Rice", is_available=True,
+        name_normalized="nophoto",
+    ))
+    await db_session.commit()
+
+    captured: list[dict] = []
+
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+        captured.extend(requests)
+        return {"handles": [], "validation_status": []}
+
+    monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
+    await push_dishes_to_meta(db_session, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    by_title = {r["data"]["title"]: r["data"] for r in captured}
+    assert by_title["WithPhoto"]["image_link"] == "https://cdn.test/media/dishes/1/a.png"
+    assert by_title["WithPhoto"]["sale_price"] == "24.00 AED"
+    # No photo → non-empty placeholder, and no sale_price key emitted.
+    assert by_title["NoPhoto"]["image_link"]
+    assert by_title["NoPhoto"]["image_link"] != "https://cdn.test/media/dishes/1/a.png"
+    assert "sale_price" not in by_title["NoPhoto"]
+
+
 async def test_push_mirrors_local_catalog_without_meta_pull(db_session, restaurant, monkeypatch):
     from app.catalog.models import CatalogProduct
     from app.catalog.sync_service import push_dishes_to_meta

@@ -1,3 +1,4 @@
+import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,11 +9,43 @@ from app.menu.models import Dish, Menu, MenuFile
 from app.menu.storage import FileBlobStore
 from app.ordering.matching import normalize_name
 
+# Dish photo upload limits (Meta catalogue images): JPG/PNG, 5 MB cap.
+DISH_IMAGE_MIMES = {"image/jpeg", "image/png"}
+MAX_DISH_IMAGE_BYTES = 5 * 1024 * 1024
+
 
 def _get_store() -> FileBlobStore:
     from app.config import get_settings
 
     return FileBlobStore(base_dir=get_settings().upload_dir)
+
+
+async def store_dish_image(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    content: bytes,
+    content_type: str,
+) -> str:
+    """Persist a dish photo in Postgres (``marketing_media``) and return its public
+    ``/media/<path>`` URL. Stored in the DB (not local disk) so the image survives
+    redeploys on ephemeral-disk hosts and is fetchable by Meta as the product
+    ``image_link``. Caller commits."""
+    from app.config import get_settings
+    from app.marketing.models import MarketingMedia
+
+    ext = "png" if content_type == "image/png" else "jpg"
+    rel = f"dishes/{restaurant_id}/{uuid.uuid4().hex}.{ext}"
+    session.add(
+        MarketingMedia(
+            restaurant_id=restaurant_id,
+            path=rel,
+            content_type=content_type or "image/jpeg",
+            data=content,
+        )
+    )
+    base = get_settings().public_base_url.rstrip("/")
+    return f"{base}/media/{rel}"
 
 
 async def upload_with_diff(

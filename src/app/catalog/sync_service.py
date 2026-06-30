@@ -126,6 +126,8 @@ async def _mirror_dishes_to_catalog(
         row.availability = "in stock" if dish.is_available else "out of stock"
         row.category = dish.category
         row.is_active = dish.is_available
+        if (getattr(dish, "image_url", None) or "").strip():
+            row.image_url = dish.image_url
         row.synced_at = now
         row.raw = {
             "retailer_id": rid,
@@ -281,6 +283,10 @@ async def push_dishes_to_meta(
         # "Duplicate retailer_id in batch api call". UPDATE/upsert never collides.
         method = "UPDATE"
         product_link = f"{base_url}/r/{restaurant_id}/menu#{rid}"
+        # Per-dish photo (Meta REQUIRES an image); fall back to the shared placeholder
+        # only when this dish has none, so a push never fails for a missing image.
+        dish_image = (getattr(dish, "image_url", None) or "").strip() or image_link
+        sale_price = getattr(dish, "sale_price_aed", None)
         data = build_catalog_item_data(
             name=dish.name,
             description=dish.description,
@@ -289,7 +295,12 @@ async def push_dishes_to_meta(
             is_available=dish.is_available,
             restaurant_name=brand,
             product_link=product_link,
-            image_link=image_link,
+            image_link=dish_image,
+            sale_price_aed=Decimal(str(sale_price)) if sale_price is not None else None,
+            fb_product_category=getattr(dish, "fb_product_category", None),
+            condition=getattr(dish, "condition", None),
+            meta_status=getattr(dish, "meta_status", None),
+            brand=getattr(dish, "brand", None),
         )
         # _was_linked: did this dish already have a Meta link before this push? Used only
         # for the UI toast (new vs updated); the wire method is always UPDATE/upsert.
