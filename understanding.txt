@@ -1765,3 +1765,12 @@
      filtered) and return new status "unavailable" (callers already only act on no_match/added, so it's handled).
   2. catalog/service.py tap path: also reject `not dish.is_available` directly (is_active alone unreliable post-pull).
   Tests: test_dish_unavailable.py (alt offered; genuine off-menu still declines). 165 ordering + conv + catalog pass.
+
+[2026-06-30 02:15 +04] fix(resale): second customer never got the resale offer — settings block missing.
+  Root cause: restaurant.settings is raw JSONB set at creation; NOT merged with DEFAULT_SETTINGS on read. The
+  Biryani Restaurant was created before the `resale` block existed, so settings["resale"] is absent →
+  _resale_cfg returned {} → cfg.get("enabled") falsy → resale_offer_for_customer returned None → no offer EVER,
+  regardless of which path B used. (My earlier "offer on any engagement" fix was necessary but not sufficient.)
+  Fix: _resale_cfg now merges DEFAULT_SETTINGS["resale"] under the restaurant's block (per-key), so missing/partial
+  resale config falls back to defaults (enabled, 30%, 30min). Reproduced with a no-resale-block restaurant (B got
+  no offer) → after fix B gets it. Test: test_resale_offered_even_when_settings_lack_resale_block. 14 resale tests pass.

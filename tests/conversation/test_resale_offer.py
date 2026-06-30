@@ -194,3 +194,42 @@ async def test_resale_offered_on_direct_typed_order(db_session):
     await db_session.commit()
     conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=phone, counterpart="customer")
     assert conv.state.get("resale_offer_id") is not None  # offer was pitched
+
+
+async def test_resale_offered_even_when_settings_lack_resale_block(db_session):
+    """Restaurants created BEFORE the resale settings block existed (raw JSONB, no merge
+    on read) must still offer resale — config falls back to defaults. Regression: the
+    second customer never received the resale message because resale was silently off."""
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import Customer, Order, OrderItem
+
+    # Restaurant with OLD settings — no 'resale' key at all.
+    r = Restaurant(name="Old", phone="+97140000402", password_hash="x", lat=25.2, lng=55.2,
+                   settings={"max_radius_km": 10})
+    db_session.add(r)
+    await db_session.flush()
+    menu = Menu(restaurant_id=r.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(menu_id=menu.id, restaurant_id=r.id, dish_number=1, name="Biryani",
+                price_aed=Decimal("40.00"), category="Rice", is_available=True, name_normalized="biryani")
+    db_session.add(dish)
+    await db_session.flush()
+    a = Customer(restaurant_id=r.id, phone="+971500402001", name="A")
+    db_session.add(a)
+    await db_session.flush()
+    o = Order(restaurant_id=r.id, customer_id=a.id, order_number="Y-1", status=OrderStatus.PREPARING,
+              subtotal=Decimal("40.00"), total=Decimal("40.00"))
+    db_session.add(o)
+    await db_session.flush()
+    db_session.add(OrderItem(order_id=o.id, dish_id=dish.id, dish_number=1, dish_name="Biryani",
+                             price_aed=Decimal("40.00"), qty=1))
+    await db_session.flush()
+    await ordering.cancel_order(db_session, order=o, actor="manager", reason="x")
+    await db_session.commit()
+
+    phone = "+971500402002"  # different customer B
+    await handle_inbound(db_session, _inb(r, phone, "hi"), restaurant_id=r.id)
+    await db_session.commit()
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=phone, counterpart="customer")
+    assert conv.state.get("resale_offer_id") is not None

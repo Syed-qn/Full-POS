@@ -29,7 +29,15 @@ _CENT = Decimal("0.01")
 
 
 def _resale_cfg(settings: dict | None) -> dict:
-    return (settings or {}).get("resale", {}) or {}
+    """Resale config, with DEFAULT_SETTINGS merged in. Restaurants created BEFORE the
+    `resale` block was added have no `settings["resale"]` (settings are raw JSONB, not
+    merged with defaults on read), so without this fallback resale would be silently OFF
+    for every existing restaurant. Per-key merge lets a partial block still get defaults."""
+    from app.identity.models import DEFAULT_SETTINGS
+
+    base = dict(DEFAULT_SETTINGS.get("resale", {}))
+    base.update((settings or {}).get("resale", {}) or {})
+    return base
 
 
 def discounted_total(settings: dict, subtotal: Decimal) -> tuple[Decimal, Decimal]:
