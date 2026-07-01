@@ -127,6 +127,15 @@ class Settings(BaseSettings):
     # Celery worker/beat runs — otherwise held/stuck orders are never re-dispatched.
     # Disabled in tests. Safe to leave on alongside Celery (dispatch is idempotent).
     dispatch_inprocess_sweep: bool = True
+    # Dashboard batch-preview labels (orders list + detail). Cached per tenant so
+    # list endpoints stay under the 400 ms budget on Render without skipping labels.
+    batch_preview_cache_enabled: bool = True
+    batch_preview_cache_ttl_seconds: int = 30
+    # LLM conversation history window (in Message rows fetched before merge/render).
+    # Kept at the pre-W7 default of 10 so the window itself doesn't change customer
+    # behaviour — W7a only makes what's already in the window render faithfully
+    # (R-080/F55).
+    conversation_history_limit: int = 10
 
     # Wallet store credit + complaint-refund abuse controls.
     # Credit older than this with unspent balance is expired by the sweep. 0 = never.

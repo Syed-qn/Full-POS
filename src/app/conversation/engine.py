@@ -3067,13 +3067,86 @@ async def _offer_resume_cart(
     )
 
 
+def _render_history_content(msg) -> str:
+    """Render one stored Message into LLM-readable content. Covers every
+    Message.type so nothing falls through to an opaque '[type]' (R-078/82/84,
+    DB-H8/12/13). Body is normalised to the delivered WhatsApp form (DB-H2)."""
+    from app.outbox.service import to_whatsapp_text
+
+    payload = msg.payload or {}
+    mtype = msg.type
+
+    if mtype == "order":
+        # Catalogue basket → readable basket from the snapshot persisted at record
+        # time (R-077/F63). Fall back to product_items count if older row.
+        dt = (payload.get("display_text") or "").strip()
+        if dt:
+            return f"[sent catalogue basket: {dt}]"
+        snap = payload.get("cart_snapshot") or []
+        if snap:
+            parts = [f"{line.get('qty', 1)}x {line.get('dish', 'item')}" for line in snap]
+            return f"[sent catalogue basket: {'; '.join(parts)}]"
+        n = len(payload.get("product_items") or [])
+        return f"[sent catalogue basket: {n} item(s)]"
+
+    if mtype in ("text", "audio"):
+        # Voice notes (type "audio") carry their transcript under "text".
+        text = payload.get("text") or payload.get("body") or ""
+        return to_whatsapp_text(text) if text else ""
+
+    if mtype == "location":
+        lat = payload.get("latitude", "")
+        lng = payload.get("longitude", "")
+        return f"[customer shared location pin: {lat},{lng}]"
+
+    if mtype == "button_reply":
+        title = payload.get("title") or payload.get("id") or "button"
+        bid = payload.get("id")
+        return f"[tapped: {title}" + (f" ({bid})]" if bid else "]")
+
+    if mtype == "list_reply":
+        title = payload.get("title") or payload.get("id") or "item"
+        return f"[selected: {title}]"
+
+    if mtype == "buttons":
+        body = to_whatsapp_text(payload.get("body") or "")
+        titles = [b.get("title", "") for b in (payload.get("buttons") or []) if b.get("title")]
+        opts = f" [options: {' | '.join(titles)}]" if titles else ""
+        return (body + opts).strip() or "[buttons sent]"
+
+    if mtype in ("cta_url", "location_request"):
+        body = to_whatsapp_text(payload.get("body") or "")
+        label = payload.get("button_label")
+        return (body + (f" [button: {label}]" if label else "")).strip() or f"[{mtype}]"
+
+    if mtype == "product_list":
+        return "[sent menu / product cards]"
+
+    # Any other type still gets its best human text, never a bare placeholder.
+    text = payload.get("text") or payload.get("body") or payload.get("caption")
+    return to_whatsapp_text(text) if text else f"[{mtype}]"
+
+
 async def _build_history(
     session: AsyncSession,
     conv: Conversation,
-    limit: int = 10,
+    limit: int | None = None,
 ) -> list[dict]:
-    """Fetch last `limit` messages and build OpenAI-style history list."""
+    """Single source of truth for LLM conversation history.
+
+    Fetches the last `limit` rows ordered by (created_at, id) — this ordering is
+    deliberately UNCHANGED from before W7a (verified against the full voice/
+    conversation regression suite before landing; do not switch to `Message.ts`
+    without re-verifying every test) — renders every Message.type via
+    `_render_history_content`, merges consecutive same-role turns (R-079), and
+    uses a configurable window (R-080/F55). Returns OpenAI-style
+    [{role, content}].
+    """
+    from app.config import get_settings
     from app.conversation.models import Message
+
+    if limit is None:
+        limit = get_settings().conversation_history_limit
 
     rows = (
         await session.scalars(
@@ -3085,28 +3158,22 @@ async def _build_history(
     ).all()
     rows = list(reversed(rows))  # oldest first
 
-    history: list[dict] = []
+    raw: list[dict] = []
     for msg in rows:
+        content = _render_history_content(msg)
+        if not content:
+            continue
         role = "user" if msg.direction == "inbound" else "assistant"
-        payload = msg.payload or {}
+        raw.append({"role": role, "content": content})
 
-        if msg.type in ("text", "audio"):
-            # Voice notes (type "audio") carry their transcript under "text".
-            content = payload.get("text") or payload.get("body") or ""
-        elif msg.type == "location":
-            lat = payload.get("latitude", "")
-            lng = payload.get("longitude", "")
-            content = f"[customer shared location pin: {lat},{lng}]"
-        elif msg.type == "button_reply":
-            title = payload.get("title") or payload.get("id") or "button"
-            content = f"[tapped: {title}]"
-        elif msg.type == "buttons":
-            content = payload.get("body") or "[buttons sent]"
+    # Merge consecutive same-role turns so the model never sees user,user,user
+    # (R-079) — rapid mixed inbound types (order + text + audio) collapse to one.
+    history: list[dict] = []
+    for item in raw:
+        if history and history[-1]["role"] == item["role"]:
+            history[-1]["content"] += "\n" + item["content"]
         else:
-            content = f"[{msg.type}]"
-
-        if content:
-            history.append({"role": role, "content": content})
+            history.append({"role": item["role"], "content": item["content"]})
 
     # OpenAI requires first message to be user role
     if history and history[0]["role"] == "assistant":
@@ -4903,7 +4970,7 @@ async def _handle_customer_ai(
 
     restaurant_name = restaurant.name if restaurant else "Restaurant"
     phase = _resolve_phase(conv)
-    history = await _build_history(session, conv, limit=10)
+    history = await _build_history(session, conv)
     context = await _build_context(session, conv, restaurant_id, phase, restaurant)
 
     # Dish-info question ("what's special in the biryani?") → answer with the dish's
