@@ -204,6 +204,21 @@ class FakeConversationAgent:
                     "Updated!",
                 )
 
+            # Qty-edit intent WITHOUT a number — e.g. "change the biryani" with no
+            # quantity stated.  Emits cart_set_qty(dish_query only, NO new_total).
+            # to_engine_result's required-field gate detects the missing new_total
+            # (requires_one_of includes ("new_total","items")) and returns
+            # no_action{needs_clarification:True} → engine sends a clarification
+            # reply and performs NO cart mutation (R-069).
+            # Checked AFTER m_set so "change 2 biryani" / "change to 2 biryani"
+            # (which carry a number) still reach the absolute-set path above.
+            m_no_qty = re.match(
+                r"^(?:change|update|modify)\s+(?:the\s+|my\s+)?(.+)$",
+                last_user,
+            )
+            if m_no_qty and m_no_qty.group(1).strip():
+                return _emit("cart_set_qty", {"dish_query": m_no_qty.group(1).strip()}, "")
+
             if "remove" in last_user:
                 dish = last_user.split("remove", 1)[1].strip()
                 if dish:

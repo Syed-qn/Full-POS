@@ -9,6 +9,13 @@ permanent regression suite.
 7 evals from the original 20-task list already passed with the Fake LLM on W0
 and were immediately converted to non-xfail regression tests (marked ✅ below).
 
+**W1 additions (Task 8):** One new regression eval (#21) added to cover the
+R-069 required-field-missing → clarification gate.  Eval #10 ("only 1 chicken
+biryani" absolute-set) remains xfail: the W1 schema layer (`cart_set_qty` +
+`requires_one_of`) is correct, but the upstream routing fix (stopping
+`_try_catalog_typed_order` from intercepting the phrase before AI runs) belongs
+to W2 + W4.
+
 ---
 
 | # | Test ID | Transcript / Finding | Grader(s) | Finding guarded | Workstream |
@@ -33,6 +40,7 @@ and were immediately converted to non-xfail regression tests (marked ✅ below).
 | 18 ✅ | `test_wallet_subtotal_math_regression` *(regression)* | "one chicken biryani" + "one lemon mint" | subtotal == AED 32 | RA-3 — price arithmetic must be exact | Already passing (AED arithmetic correct) |
 | 19 ✅ | `test_caps_insensitive_dish_match` *(regression)* | "CHICKEN BIRYANI" (all-caps) | cart has biryani | F99 — CAPS dish name must resolve | Already passing (engine normalises before lookup) |
 | 20 ✅ | `test_english_menu_request_updates_dialogue_state` + `test_no_hallucination_in_menu_state` *(regression)* | "menu" / "show me the full menu" | dialogue_state == "menu_sent", cart empty | F96 / F109 — menu request must route to send_catalog, never LLM fabrication | Already passing (catalog_id + CatalogProducts → menu_sent) |
+| 21 ✅ | `test_set_qty_missing_total_no_mutation` *(regression, added W1 Task 8)* | "2 chicken biryani" → "change the biryani" (no qty) | cart unchanged (qty == 2), reply contains clarification keyword | R-069 — missing `new_total` on `cart_set_qty` must trigger clarification, never mutate cart | Added W1 T8 (FakeConversationAgent `m_no_qty` branch + `to_engine_result` gate) |
 
 ---
 
@@ -42,12 +50,18 @@ and were immediately converted to non-xfail regression tests (marked ✅ below).
 |----------|--------------|----------------|
 | xfail capability evals (W0) | 11 | 11 |
 | regression evals (converted from xfail — already correct) | 9 | 10 |
-| **Total** | **20** | **21** |
+| regression evals (added W1 — new behaviours) | 1 | 1 |
+| **Total** | **21** | **22** |
 
 > Eval #20 covers two test functions (`test_english_menu_request_updates_dialogue_state`
 > + `test_no_hallucination_in_menu_state`), both guarding the same "menu keyword →
 > send_catalog" behaviour.  That is why the logical eval count (20) differs from the
-> test-function count (21).
+> test-function count (21) before W1.
+>
+> Eval #10 (`test_clear_cart_only_on_explicit_clear`) — W1 schema layer (`cart_set_qty`
+> with `requires_one_of`) is correct, but the routing fix (prevent
+> `_try_catalog_typed_order` from intercepting "only N X" before AI) is a W2+W4 concern;
+> xfail retained.
 
 ## Graduation rule
 

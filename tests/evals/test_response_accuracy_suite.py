@@ -355,6 +355,45 @@ async def test_idempotent_redelivery_same_wa_message_id(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# W1 acceptance evals — new regression guards added by Task 8.
+# These exercise W1 capabilities end-to-end through the real engine.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_set_qty_missing_total_no_mutation(db_session, restaurant, seed_biryani_menu):
+    """A set-qty intent without a quantity must not change the cart and must ask a
+    clarification (R-069).
+
+    Flow: customer orders 2 chicken biryani, then says "change the biryani" with no
+    number.  FakeConversationAgent emits cart_set_qty(dish_query="biryani", no new_total).
+    to_engine_result detects the missing required field (new_total) and returns
+    no_action{needs_clarification:True}.  The engine clarification gate (W1, engine.py)
+    sends a clarification reply WITHOUT touching the cart.
+
+    Driven via FakeConversationAgent → to_engine_result → real engine → real DB.
+    """
+    res = await drive_turns(
+        db_session,
+        restaurant_id=restaurant.id,
+        phone="+971500000051",
+        turns=[
+            {"type": "text", "text": "2 chicken biryani"},
+            {"type": "text", "text": "change the biryani"},  # no number → clarification
+        ],
+    )
+    final = res.final_cart()
+    biryani = [r for r in final if "biryani" in r["dish_name"].lower()]
+    assert len(biryani) == 1 and biryani[0]["qty"] == 2, (
+        f"cart must be unchanged after missing-qty edit, got {final}"
+    )
+    last = (res.turns[-1].outbounds[-1].body if res.turns[-1].outbounds else "").lower()
+    assert any(m in last for m in ("quantity", "how many", "didn't", "catch", "exact")), (
+        f"engine must send a clarification reply when qty is missing; got: {last!r}"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Regression tests — behaviours already correct with the Fake LLM today.
 # Converted from xfail because they XPASS (behaviour already correct).
 # ─────────────────────────────────────────────────────────────────────────────
