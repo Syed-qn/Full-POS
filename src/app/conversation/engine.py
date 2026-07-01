@@ -1936,8 +1936,9 @@ async def _redeem_coupon_at_checkout(
     so the customer sees the new total before confirming. Caller has verified the
     code belongs to this customer.
     """
-    from app.coupons.service import CouponError, validate_and_redeem
+    from app.coupons.service import CouponError
     from app.ordering.models import Order
+    from app.ordering.payments import apply_coupon
 
     order_id = conv.state.get("pending_order_id")
     order = await session.get(Order, order_id) if order_id else None
@@ -1949,15 +1950,10 @@ async def _redeem_coupon_at_checkout(
         )
         return
     try:
-        redemption = await validate_and_redeem(
-            session,
-            restaurant_id=restaurant_id,
-            code=code,
-            customer_id=order.customer_id,
-            order_id=order.id,
-            order_subtotal_aed=order.subtotal,
-            idempotency_key=f"order:{order.id}:coupon",
-        )
+        # Single money path (F41): apply_coupon validates/redeems, persists
+        # coupon_id + coupon_discount_aed, and recomputes the total — never mutate
+        # order.total here by hand.
+        result = await apply_coupon(session, order=order, coupon_code=code)
     except CouponError as e:
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -1965,13 +1961,11 @@ async def _redeem_coupon_at_checkout(
             body=f"Sorry, I couldn't apply that coupon ({e}). You can still confirm your order.",
         )
         return
-    discount = redemption.discount_applied_aed
-    order.coupon_id = redemption.coupon_id
-    order.total = max(order.total - discount, order.delivery_fee_aed)
+    discount = result["coupon_discount_aed"]
     await session.flush()
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix=f"coupon-applied-{redemption.id}",
+        prefix=f"coupon-applied-{order.coupon_id}",
         body=f"Coupon applied — AED {_aed(discount)} off! 🎉 Here's your updated order:",
     )
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
