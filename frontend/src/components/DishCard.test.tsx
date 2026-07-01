@@ -59,6 +59,37 @@ describe("DishCard", () => {
     expect(onToggle).toHaveBeenCalledWith(1, false);
   });
 
+  it("badge: enabled-but-not-live (pending, no mirror) reads 'In review'", () => {
+    // onWhatsapp=false + inReview=false = the post-toggle pending state → must NOT say
+    // "WhatsApp on"; it folds into "In review".
+    render(
+      <DishCard
+        dish={dish}
+        onToggle={() => {}}
+        onWhatsappToggle={() => {}}
+        onWhatsapp={false}
+        inReview={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /WhatsApp: In review/ })).toBeInTheDocument();
+    expect(screen.queryByText("WhatsApp on")).not.toBeInTheDocument();
+  });
+
+  it("badge: live dish reads 'On WhatsApp', off dish reads 'WhatsApp off'", () => {
+    const { rerender } = render(
+      <DishCard dish={dish} onToggle={() => {}} onWhatsappToggle={() => {}} onWhatsapp={true} />,
+    );
+    expect(screen.getByText("On WhatsApp")).toBeInTheDocument();
+    rerender(
+      <DishCard
+        dish={{ ...dish, whatsapp_enabled: false }}
+        onToggle={() => {}}
+        onWhatsappToggle={() => {}}
+      />,
+    );
+    expect(screen.getByText("WhatsApp off")).toBeInTheDocument();
+  });
+
   it("shows a price range when the dish has serving-size variants", () => {
     const withVariants: DishOut = {
       ...dish,
