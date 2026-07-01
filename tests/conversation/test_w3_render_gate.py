@@ -123,3 +123,25 @@ async def test_confirm_order_number_is_real(db_session, restaurant, seed_biryani
             f"confirmation used a fabricated order number; DB={order.order_number!r} "
             f"body={body!r}"
         )
+
+
+@pytest.mark.asyncio
+async def test_observation_turn_after_add(db_session, restaurant, seed_biryani_menu):
+    """After a single add, a cart_observation Message must exist in DB (F66/W3)."""
+    from app.conversation.models import Message
+    from sqlalchemy import select
+
+    await drive_turns(
+        db_session,
+        restaurant_id=restaurant.id,
+        phone="+971500000074",
+        turns=[{"type": "text", "text": "one chicken biryani"}],
+    )
+    msgs = (await db_session.scalars(
+        select(Message).where(Message.type == "cart_observation")
+    )).all()
+    assert msgs, "cart_observation Message must be recorded after a successful add"
+    body_text = msgs[-1].payload.get("text", "")
+    assert "biryani" in body_text.lower(), (
+        f"cart_observation payload must contain the dish name, got: {body_text!r}"
+    )
