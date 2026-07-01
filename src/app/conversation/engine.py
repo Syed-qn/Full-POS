@@ -5233,6 +5233,40 @@ async def _try_catalog_typed_order(
     return True
 
 
+async def _router_classify_intent(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage
+):
+    """W4 top-level multilingual router: classify the customer's latest text turn.
+
+    LLM-driven and language-agnostic (no English phrase tables on the live path).
+    Returns an ``IntentLabel``.  On any failure — or for non-text inbounds — it
+    returns ``UNKNOWN``, which is a MUTATING_INTENT, so the existing engine flow
+    is preserved exactly (the router only ever *diverts* clearly non-mutating
+    turns away from a silent cart change).
+    """
+    from app.llm.port import IntentLabel
+
+    if inbound.type != MessageType.TEXT:
+        return IntentLabel.UNKNOWN
+    text = (inbound.payload.get("text") or "").strip()
+    if not text:
+        return IntentLabel.UNKNOWN
+    phase = _resolve_phase(conv)
+    try:
+        cart = await _build_cart_summary(session, conv)
+    except Exception:  # cart summary is best-effort context only
+        cart = ""
+    try:
+        from app.llm.factory import get_router_classifier
+
+        clf = get_router_classifier()
+        return await clf.classify_intent(text, cart or "", phase)
+    except Exception:  # never let the router break the pipeline
+        _logger.warning("router intent classification failed; falling through",
+                        exc_info=True)
+        return IntentLabel.UNKNOWN
+
+
 async def handle_inbound(
     session: AsyncSession,
     inbound: InboundMessage,
@@ -5652,10 +5686,25 @@ async def handle_inbound(
     # we don't return, so their actual message is still processed right after.
     await _maybe_offer_resale(session, conv, inbound, restaurant_id)
 
+    # ── W4 top-level multilingual router ──────────────────────────────────────
+    # Classify the turn (LLM-driven, language-agnostic) BEFORE any cart mutation.
+    # A question / complaint / closing / reaction must NEVER reach the
+    # deterministic catalogue fast-path (which mutates the cart) — only a genuine
+    # mutation (or an UNKNOWN turn, which preserves the legacy flow) may. This
+    # closes F49 / F20-A / RA-5: a rhetorical "why did you add 2" or a closing
+    # can no longer be silently misread as an add. (Global navigation intents —
+    # menu / cart / cancel / clear / tracking — are already intercepted by the
+    # deterministic guards above, in every phase.)
+    from app.llm.port import MUTATING_INTENTS
+
+    _router_intent = await _router_classify_intent(session, conv, inbound)
+
     # Catalogue mode: a clearly-typed single dish is ADDED deterministically here, so a
     # plain "one chicken biryani" reliably goes to the cart instead of the model
     # sometimes re-sending the catalogue cards. Anything else falls through to the AI.
-    if await _try_catalog_typed_order(session, conv, inbound, restaurant_id, restaurant):
+    if _router_intent in MUTATING_INTENTS and await _try_catalog_typed_order(
+        session, conv, inbound, restaurant_id, restaurant
+    ):
         return
 
     # A clear order for an OFF-MENU dish always gets the warm decline here, so the
