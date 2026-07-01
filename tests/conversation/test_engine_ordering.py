@@ -68,6 +68,40 @@ async def _conv(db_session) -> Conversation:
     )).scalar_one()
 
 
+def test_is_restaurant_location_request_abbreviations():
+    """Catches "share ur/u location" and typo'd forms — asking the RESTAURANT for its
+    location — without firing on unrelated messages."""
+    from app.conversation.engine import _is_restaurant_location_request
+
+    for p in ["share ur location", "Share u location", "send your location",
+              "whats ur address", "drop ur pin", "share location", "where are you located"]:
+        assert _is_restaurant_location_request(p) is True, p
+    for p in ["one biryani", "clear cart", "where is my order", "share my order status", ""]:
+        assert _is_restaurant_location_request(p) is False, p
+
+
+async def test_share_your_location_sends_restaurant_pin(db_session, restaurant):
+    """"Share ur location" sends the RESTAURANT's location pin, not a request for the
+    customer's own location."""
+    restaurant.lat = 25.2048
+    restaurant.lng = 55.2708
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.loc_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _msg("share ur location", "wamid.loc_q"), restaurant_id=restaurant.id
+    )
+    await db_session.commit()
+
+    msgs = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    locs = [m for m in msgs if m.payload.get("type") == "location"]
+    assert locs, "expected a restaurant location pin to be sent"
+    assert float(locs[-1].payload["latitude"]) == 25.2048
+
+
 async def test_item_collection_direct_match_adds_item(db_session, restaurant):
     """After menu_sent, typing a dish name direct-matches and adds the item."""
     await _seed_menu(db_session, restaurant.id)

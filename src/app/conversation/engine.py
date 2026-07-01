@@ -182,7 +182,16 @@ def _is_restaurant_location_request(text: str | None) -> bool:
         "i will come", "i'll come", "ill come", "come direct", "come and collect",
         "collect myself", "collect it myself", "pick it up myself", "pick up myself",
     )
-    return any(p in t for p in phrases)
+    if any(p in t for p in phrases):
+        return True
+    # Abbreviated / typo'd forms the phrase list misses — "share ur location", "send u
+    # location", "drop ur pin", "whats ur address". The customer is asking the RESTAURANT
+    # to share where it is (not offering to share their own).
+    if _re.search(r"\b(share|send|sent|drop|give|show)\b[\w ]{0,15}\b(location|address|pin|spot|map)\b", t):
+        return True
+    if _re.search(r"\b(ur|your)\s+(exact\s+)?(location|address|pin|spot)\b", t):
+        return True
+    return False
 
 
 def _is_complaint(text: str | None) -> bool:
