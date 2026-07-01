@@ -5482,6 +5482,39 @@ async def handle_inbound(
         if _cancel_btn or _cancel_txt:
             await _handle_cancel_during_modify(session, conv, inbound, restaurant_id)
             return
+        # GLOBAL READ-ONLY INTENTS during a modify sub-flow (F103/TX-28/TX-39):
+        # 'show menu' and 'what's in my cart' must be answered even mid-modify,
+        # instead of being misread as a dish to add/remove. Both are read-only —
+        # they reply and RETURN, leaving the modify FSM state untouched so the
+        # customer resumes their edit exactly where they left off.
+        if inbound.type == MessageType.TEXT:
+            _mod_text = (inbound.payload.get("text") or "").strip().lower()
+            if _is_menu_request(_mod_text):
+                # _send_menu_or_catalog flips dialogue_state to "menu_sent"; the
+                # menu is read-only mid-modify, so restore the modify FSM keys
+                # afterwards and the customer resumes their edit uninterrupted.
+                _mod_snapshot = {
+                    k: conv.state.get(k) for k in (
+                        "dialogue_phase", "dialogue_state", "modify_order_id",
+                        "modify_proposed", "pending_order_id", "draft_order_id",
+                    )
+                }
+                await _send_menu_or_catalog(
+                    session, conv, inbound, restaurant_id, prefix="modify-menu",
+                )
+                _set_state(conv, **_mod_snapshot)
+                return
+            if _is_cart_query(_mod_text):
+                cart = await _build_cart_summary(session, conv)
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="modify-cart-query",
+                    body=(f"🛒 Here's your cart:\n\n{cart}\n\nTell me what to change, "
+                          "or send 'done' when you're happy 😊")
+                    if cart else
+                    "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+                )
+                return
     if state_key == "modify_items":
         await _handle_modify_items(session, conv, inbound, restaurant_id)
         return
