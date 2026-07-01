@@ -1,14 +1,14 @@
 """dashboard_perf_indexes_and_usual_order_time
 
 Revision ID: n7g8h9i0j1k2
-Revises: m6f7a8b9c0d1
+Revises: q7r8s9t0u1v2
 Create Date: 2026-07-01
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "n7g8h9i0j1k2"
-down_revision = "m6f7a8b9c0d1"
+down_revision = "q7r8s9t0u1v2"
 branch_labels = None
 depends_on = None
 
