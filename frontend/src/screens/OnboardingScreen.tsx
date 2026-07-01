@@ -5,6 +5,7 @@ import { SectionBanner } from "../components/SectionBanner";
 import { UnifiedMenuPanel } from "../components/UnifiedMenuPanel";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
+import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import { completeOnboarding, fetchOnboardingStatus } from "../lib/onboardingApi";
 import { activateMenu, uploadMenu } from "../lib/menuApi";
 import type { MenuWithDiffOut, RestaurantOut } from "../lib/types";
@@ -91,6 +92,7 @@ export function OnboardingScreen() {
     setError(null);
     try {
       await completeOnboarding();
+      writeCachedOnboardingComplete(true);
       toast("You're all set — customers will get your catalogue on WhatsApp");
       nav("/menu", { replace: true });
     } catch (e) {

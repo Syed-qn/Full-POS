@@ -1,6 +1,7 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
+import { renderWithProviders } from "../test/render";
 import { CustomerProfileScreen } from "./CustomerProfileScreen";
 
 vi.mock("../lib/customerApi");
@@ -16,12 +17,11 @@ const profile = {
 };
 
 function renderScreen() {
-  return render(
-    <MemoryRouter initialEntries={["/customers/5"]}>
-      <Routes>
-        <Route path="/customers/:id" element={<CustomerProfileScreen />} />
-      </Routes>
-    </MemoryRouter>,
+  return renderWithProviders(
+    <Routes>
+      <Route path="/customers/:id" element={<CustomerProfileScreen />} />
+    </Routes>,
+    { initialEntries: ["/customers/5"] },
   );
 }
 

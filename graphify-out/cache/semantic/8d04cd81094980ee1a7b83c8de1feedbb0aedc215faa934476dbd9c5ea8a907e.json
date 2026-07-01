@@ -1,0 +1,1 @@
+{"nodes": [{"id": "scripts_dev_db_bootstrap", "label": "DB bootstrap script", "file_type": "code", "source_file": "scripts/dev_db_bootstrap.sh", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

@@ -1,16 +1,20 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
+import { renderWithProviders } from "../test/render";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OrdersScreen } from "./OrdersScreen";
 import type { OrderOut } from "../lib/types";
 
 // Mock the orders API so we control the batch fields precisely.
 vi.mock("../lib/ordersApi", () => ({ fetchOrders: vi.fn() }));
-vi.mock("../lib/orderDetailApi", () => ({
-  fetchOrderDetail: vi.fn(),
-  patchCustomer: vi.fn(),
-  patchAddress: vi.fn(),
-}));
+vi.mock("../lib/orderDetailApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/orderDetailApi")>();
+  return {
+    ...actual,
+    fetchOrderDetail: vi.fn(),
+    patchCustomer: vi.fn(),
+    patchAddress: vi.fn(),
+  };
+});
 
 import { fetchOrders } from "../lib/ordersApi";
 
@@ -36,7 +40,7 @@ describe("OrdersScreen batching badge", () => {
       order({ id: 33, customer_name: "Omar", batch_id: 26, batch_size: 2,
         batch_order_numbers: ["R1-0021", "R1-0022"] }),
     ]);
-    render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
+    renderWithProviders(<OrdersScreen />);
     await waitFor(() => expect(screen.getByText("Sara")).toBeInTheDocument());
     const badges = screen.getAllByText(/2 together/i);
     expect(badges).toHaveLength(2);
@@ -49,7 +53,7 @@ describe("OrdersScreen batching badge", () => {
       order({ id: 40, customer_name: "Lone", batch_id: 30, batch_size: 1,
         batch_order_numbers: ["R1-0040"] }),
     ]);
-    render(<MemoryRouter><OrdersScreen /></MemoryRouter>);
+    renderWithProviders(<OrdersScreen />);
     await waitFor(() => expect(screen.getByText("Lone")).toBeInTheDocument());
     expect(screen.queryByText(/together/i)).not.toBeInTheDocument();
   });

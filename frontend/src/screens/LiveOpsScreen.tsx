@@ -6,10 +6,9 @@ import { LiveOpsMap } from "../components/LiveOpsMap";
 import { SectionBanner } from "../components/SectionBanner";
 import { SLAOrderCard } from "../components/SLAOrderCard";
 import { StatusPill } from "../components/StatusPill";
-import { fetchOrders } from "../lib/ordersApi";
+import { useLiveOpsOrdersQuery } from "../lib/queries/dashboard";
 import { remainingMs } from "../lib/sla";
 import type { OrderOut } from "../lib/types";
-import { usePoll } from "../lib/usePoll";
 import s from "./LiveOpsScreen.module.css";
 
 const ACTIVE: OrderOut["status"][] = [
@@ -116,12 +115,8 @@ function StatCard({
 }
 
 export function LiveOpsScreen() {
-  const { data, error } = usePoll<OrderOut[]>(
-    () => fetchOrders({ previewBatch: false }),
-    4000,
-  );
-  // First paint, before the initial poll resolves — show the skeleton.
-  const loading = data === null && error == null;
+  const { data, error, isPending } = useLiveOpsOrdersQuery();
+  const loading = isPending && data == null;
   const orders = data ?? [];
   const nav = useNavigate();
   const [filter, setFilter] = useState<OrderOut["status"] | "all">("all");

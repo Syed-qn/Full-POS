@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useNavigate } from "react-router-dom";
 import { logout } from "../lib/auth";
+import { fetchConversations } from "../lib/conversationsApi";
+import { listCustomers } from "../lib/customerApi";
+import { fetchOrders } from "../lib/ordersApi";
+import { fetchRiders } from "../lib/ridersApi";
 import { listTickets } from "../lib/ticketsApi";
+import { useOpenTicketsCountQuery } from "../lib/queries/dashboard";
 import s from "./NavSidebar.module.css";
 
 const ITEMS: Array<{ to: string; label: string; icon: string }> = [
@@ -19,25 +24,39 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
   { to: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
+const PREFETCH: Record<string, { queryKey: readonly unknown[]; queryFn: () => Promise<unknown> }> = {
+  "/orders": {
+    queryKey: ["orders", "list", { previewBatch: true, page: 1, limit: 20 }],
+    queryFn: () => fetchOrders({ limit: 20, offset: 0 }),
+  },
+  "/customers": {
+    queryKey: ["customers", "list", 1, ""],
+    queryFn: () => listCustomers({ limit: 20, offset: 0 }),
+  },
+  "/riders": {
+    queryKey: ["riders", "list"],
+    queryFn: fetchRiders,
+  },
+  "/conversations": {
+    queryKey: ["conversations", "list"],
+    queryFn: fetchConversations,
+  },
+  "/tickets": {
+    queryKey: ["tickets", "list", ""],
+    queryFn: () => listTickets(undefined, undefined),
+  },
+};
+
 export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const navigate = useNavigate();
-  const [openTickets, setOpenTickets] = useState(0);
+  const queryClient = useQueryClient();
+  const { data: openTickets = 0 } = useOpenTicketsCountQuery();
 
-  // Live open-complaint count for the nav badge — polls every 30s so a complaint
-  // raised while the manager is on another page surfaces without a reload.
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () =>
-      listTickets("open")
-        .then((t) => !cancelled && setOpenTickets(t.length))
-        .catch(() => {});
-    refresh();
-    const id = setInterval(refresh, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+  function prefetchRoute(to: string) {
+    const entry = PREFETCH[to];
+    if (!entry) return;
+    void queryClient.prefetchQuery(entry);
+  }
 
   function handleLogout() {
     logout();
@@ -53,6 +72,7 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
           to={it.to}
           end={it.to === "/"}
           className={({ isActive }) => `${s.item} ${isActive ? s.active : ""}`}
+          onMouseEnter={() => prefetchRoute(it.to)}
         >
           <span className={s.icon}>{it.icon}</span>
           {it.label}

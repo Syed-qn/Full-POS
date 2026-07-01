@@ -315,3 +315,34 @@ async def test_greeting_after_confirm_does_not_advance_delivery_state(db_session
     assert order.status == "confirmed", (
         "a greeting must never advance/close order status — only dispatch/FSM events may"
     )
+
+
+async def test_conversation_lock_serializes_concurrent_turns(db_session, restaurant):
+    """TX-22/TX-46/F94/F115: two 'simultaneous' inbound messages for the same
+    conversation must be processed one at a time (never interleaved) so cart
+    mutations from one turn can't race the other's read-modify-write of
+    conv.state. We can't fork a second real connection inside this savepoint-
+    isolated test session, so we assert the lock helper itself is callable
+    twice in a row on the same session without deadlocking/erroring (Postgres
+    advisory locks are re-entrant per session) and that handle_inbound still
+    completes normally when the lock is engaged."""
+    from app.conversation.engine import _acquire_conversation_lock
+
+    await _seed_menu(db_session, restaurant.id)
+
+    await _acquire_conversation_lock(db_session, restaurant.id, "+971501110099")
+    await _acquire_conversation_lock(db_session, restaurant.id, "+971501110099")
+
+    msg = InboundMessage(
+        wa_message_id="wamid.lock1",
+        from_phone="+971501110099",
+        type=MessageType.TEXT,
+        payload={"text": "hi"},
+        restaurant_phone="+97141234567",
+        timestamp=1717660900,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    assert len(rows) >= 1

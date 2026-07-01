@@ -325,6 +325,7 @@ export interface OrderDetailOut {
   created_at: string;
   delivered_at: string | null;
   sla_deadline: string | null;
+  sla_started_at: string | null;
   prep_deadline: string | null;
   cook_estimate_minutes: number | null;
   timeline: TimelineEventOut[];

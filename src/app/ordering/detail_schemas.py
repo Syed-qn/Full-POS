@@ -87,6 +87,7 @@ class OrderDetailOut(BaseModel):
     created_at: datetime
     delivered_at: datetime | None
     sla_deadline: datetime | None
+    sla_started_at: datetime | None = None
     prep_deadline: datetime | None
     cook_estimate_minutes: int | None
     timeline: list[TimelineEventOut]

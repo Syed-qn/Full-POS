@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { RiderCard } from "../components/RiderCard";
 import { RiderAddModal } from "../components/RiderAddModal";
@@ -7,8 +8,8 @@ import { PageHeader } from "../components/PageHeader";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { ApiError, apiClient } from "../lib/apiClient";
-import { deleteRider, fetchRiders, setRiderDuty, setRiderStatus } from "../lib/ridersApi";
-import { usePollingRefresh } from "../lib/usePollingRefresh";
+import { useRidersQuery } from "../lib/queries/dashboard";
+import { deleteRider, setRiderDuty, setRiderStatus } from "../lib/ridersApi";
 import type { RestaurantOut, RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
 
@@ -17,8 +18,13 @@ type RemoveFlow =
   | { step: "deactivate-instead"; id: number; name: string };
 
 export function RidersScreen() {
-  const [riders, setRiders] = useState<RiderOut[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: riders = [], isLoading } = useRidersQuery();
+  const loaded = !isLoading || riders.length > 0;
+
+  function patchRiders(patch: (rs: RiderOut[]) => RiderOut[]) {
+    queryClient.setQueryData<RiderOut[]>(["riders", "list"], (prev) => patch(prev ?? []));
+  }
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<RiderOut | null>(null);
   const [inviteFor, setInviteFor] = useState<RiderOut | null>(null);
@@ -27,19 +33,11 @@ export function RidersScreen() {
   const [removeBusy, setRemoveBusy] = useState(false);
 
   useEffect(() => {
-    fetchRiders()
-      .then(setRiders)
-      .finally(() => setLoaded(true));
     apiClient
       .get<RestaurantOut>("/api/v1/me")
       .then((me) => setRestaurantPhone(me.phone))
       .catch(() => {});
   }, []);
-
-  // Live updates: refresh rider list/status in the background (no skeleton flash).
-  usePollingRefresh(() => {
-    fetchRiders().then(setRiders).catch(() => {});
-  });
 
   const counts = useMemo(() => {
     const c = { available: 0, on_delivery: 0, off_shift: 0, deactivated: 0 };
@@ -49,12 +47,12 @@ export function RidersScreen() {
 
   async function onStatusChange(id: number, status: RiderStatus) {
     const updated = await setRiderStatus(id, status);
-    setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
+    patchRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
   }
 
   async function onDutyChange(id: number, on_duty: boolean) {
     const updated = await setRiderDuty(id, on_duty);
-    setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
+    patchRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
   }
 
   function onInviteApp(id: number) {
@@ -76,7 +74,7 @@ export function RidersScreen() {
     setRemoveBusy(true);
     try {
       await deleteRider(id);
-      setRiders((rs) => rs.filter((r) => r.id !== id));
+      patchRiders((rs) => rs.filter((r) => r.id !== id));
       toast(`${name} removed.`);
       setRemoveFlow(null);
     } catch (e) {
@@ -99,7 +97,7 @@ export function RidersScreen() {
     setRemoveBusy(true);
     try {
       const updated = await setRiderStatus(id, "deactivated");
-      setRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
+      patchRiders((rs) => rs.map((r) => (r.id === id ? updated : r)));
       toast(`${name} deactivated. Payment records stay on file.`);
       setRemoveFlow(null);
     } catch (e) {
@@ -164,7 +162,7 @@ export function RidersScreen() {
       {showAdd && (
         <RiderAddModal
           onClose={() => setShowAdd(false)}
-          onSaved={(rider) => setRiders((rs) => [...rs, rider])}
+          onSaved={(rider) => patchRiders((rs) => [...rs, rider])}
         />
       )}
 
@@ -173,7 +171,7 @@ export function RidersScreen() {
           rider={editing}
           onClose={() => setEditing(null)}
           onSaved={(rider) =>
-            setRiders((rs) => rs.map((r) => (r.id === rider.id ? rider : r)))
+            patchRiders((rs) => rs.map((r) => (r.id === rider.id ? rider : r)))
           }
         />
       )}

@@ -6,17 +6,60 @@ import type { OrderOut } from "./types";
 // In production we rethrow so failures surface instead of masking with stale data.
 // NOTE: vitest runs with import.meta.env.DEV === true, so existing tests still
 // exercise the fixture fallback path.
+function toYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Dev fixture path mirrors server filters so local UI matches production behaviour. */
+function applyFixtureFilters(orders: OrderOut[], opts?: FetchOrdersOpts): OrderOut[] {
+  let rows = [...orders];
+  if (opts?.status) rows = rows.filter((o) => o.status === opts.status);
+  if (opts?.fromDate || opts?.toDate) {
+    rows = rows.filter((o) => {
+      const day = o.created_at ? toYMD(new Date(o.created_at)) : "";
+      if (!day) return false;
+      if (opts.fromDate && day < opts.fromDate) return false;
+      if (opts.toDate && day > opts.toDate) return false;
+      return true;
+    });
+  }
+  if (opts?.q) {
+    const q = opts.q.trim().replace(/^#/, "").toLowerCase();
+    rows = rows.filter(
+      (o) =>
+        String(o.id).includes(q) ||
+        o.customer_name.toLowerCase().includes(q) ||
+        o.customer_phone.includes(q),
+    );
+  }
+  rows.sort((a, b) => b.id - a.id);
+  const offset = opts?.offset ?? 0;
+  const limit = opts?.limit ?? 50;
+  return rows.slice(offset, offset + limit);
+}
+
 export type FetchOrdersOpts = {
   /** Skip batch-preview grouping on list (faster for live-ops polls). */
   previewBatch?: boolean;
   status?: string;
   limit?: number;
+  offset?: number;
+  fromDate?: string;
+  toDate?: string;
+  q?: string;
 };
 
 export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
   const params = new URLSearchParams();
   if (opts?.status) params.set("status", opts.status);
   if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null && opts.offset > 0) params.set("offset", String(opts.offset));
+  if (opts?.fromDate) params.set("from_date", opts.fromDate);
+  if (opts?.toDate) params.set("to_date", opts.toDate);
+  if (opts?.q) params.set("q", opts.q);
   if (opts?.previewBatch === false) params.set("preview_batch", "false");
   const qs = params.toString();
   const path = qs ? `/api/v1/orders?${qs}` : "/api/v1/orders";
@@ -26,7 +69,7 @@ export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
     if (!import.meta.env.DEV) throw err;
     // Endpoint not yet deployed (404) or backend unreachable → recorded fixtures.
     if (err instanceof ApiError && err.status !== 404) throw err;
-    return fixtureOrders as OrderOut[];
+    return applyFixtureFilters(fixtureOrders as OrderOut[], opts);
   }
 }
 

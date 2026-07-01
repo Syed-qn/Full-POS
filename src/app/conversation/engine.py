@@ -5420,21 +5420,62 @@ async def _router_classify_intent(
         return IntentLabel.UNKNOWN
 
 
+# Namespace for the per-conversation advisory lock (arbitrary constant, distinct
+# from the dispatch/order-number lock namespaces so keys never collide).
+_CONV_LOCK_NAMESPACE = 4_919_003
+
+
+async def _acquire_conversation_lock(
+    session: AsyncSession, restaurant_id: int, phone: str
+) -> None:
+    """Serialize inbound processing per (restaurant, phone) thread (TX-22/TX-46/F94/F115).
+
+    Two near-simultaneous webhook deliveries for the SAME customer (a duplicate
+    delivery, a client double-send, or two genuinely separate messages arriving a
+    few ms apart — e.g. "No" then "confirm order") must be processed one at a time,
+    never interleaved, so cart/state mutations from one turn can never race the
+    other's read-modify-write of ``conv.state``. A transaction-scoped Postgres
+    advisory lock blocks the second call until the first commits/rolls back;
+    auto-released, no extra infra. Best effort — a non-Postgres backend (e.g. a
+    narrow unit test against SQLite) just proceeds unserialized.
+    """
+    import hashlib
+
+    from sqlalchemy import text
+
+    key_bytes = hashlib.blake2b(f"{restaurant_id}:{phone}".encode(), digest_size=4).digest()
+    key = int.from_bytes(key_bytes, byteorder="big", signed=True)
+    try:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:c, :k)"),
+            {"c": _CONV_LOCK_NAMESPACE, "k": key},
+        )
+    except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
+        _logger.debug("advisory conversation lock unavailable; proceeding unserialized")
+
+
 async def handle_inbound(
     session: AsyncSession,
     inbound: InboundMessage,
     restaurant_id: int,
 ) -> None:
     """Main entry point: load conversation → record message → dispatch state handler."""
+    from app.identity.phones import normalize_phone
+
+    _normalized_phone = normalize_phone(inbound.from_phone)
+    # Acquire the per-conversation lock BEFORE any read of conv/customer/order state,
+    # so a concurrent inbound message for the same phone blocks here until the first
+    # message's whole turn (including its commit) has completed (TX-22/TX-46).
+    await _acquire_conversation_lock(session, restaurant_id, _normalized_phone)
+
     counterpart, rider = await _resolve_counterpart(
         session, restaurant_id, inbound.from_phone
     )
-    from app.identity.phones import normalize_phone
 
     conv = await get_or_create_conversation(
         session,
         restaurant_id=restaurant_id,
-        phone=normalize_phone(inbound.from_phone),
+        phone=_normalized_phone,
         counterpart=counterpart,
     )
     # Heal stale counterpart — phone may have been registered as a rider after

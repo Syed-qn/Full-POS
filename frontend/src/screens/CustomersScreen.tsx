@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CompactTable, type Column } from "../components/CompactTable";
-import { listCustomers } from "../lib/customerApi";
-import { usePollingRefresh } from "../lib/usePollingRefresh";
+import { QueryRefreshNote } from "../components/QueryRefreshNote";
+import { perfMark, perfNow } from "../lib/perf";
+import { useCustomersQuery } from "../lib/queries/dashboard";
 import type { CustomerDetailOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import s from "./OrdersScreen.module.css";
@@ -27,30 +28,42 @@ const ACTIVITY_TABS: { key: Activity; label: string }[] = [
 ];
 
 export function CustomersScreen() {
-  const [customers, setCustomers] = useState<CustomerDetailOut[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [marketing, setMarketing] = useState<Marketing>("all");
   const [activity, setActivity] = useState<Activity>("all");
   const [minSpend, setMinSpend] = useState("");
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  usePollingRefresh(() => {
-    listCustomers().then((r) => setCustomers(r.items)).catch(() => {});
-  });
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   useEffect(() => {
-    listCustomers()
-      .then((r) => setCustomers(r.items))
-      .finally(() => setLoading(false));
-  }, []);
+    setPage(1);
+  }, [debouncedSearch, marketing, activity, minSpend]);
+
+  const { data, isLoading, isFetching, isError } = useCustomersQuery(page, debouncedSearch);
+  const customers = data?.items ?? [];
+  const loading = isLoading && customers.length === 0;
+  const paintMark = useRef<number | null>(null);
+
+  useEffect(() => {
+    paintMark.current = perfNow();
+  }, [page, debouncedSearch]);
+
+  useEffect(() => {
+    if (!loading && customers.length > 0 && paintMark.current != null) {
+      perfMark("customers-first-paint", paintMark.current);
+      paintMark.current = null;
+    }
+  }, [loading, customers.length]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const min = parseFloat(minSpend);
     return customers.filter((c) => {
-      if (q && !((c.name ?? "").toLowerCase().includes(q) || c.phone.includes(q))) return false;
       if (marketing === "in" && !c.marketing_opted_in) return false;
       if (marketing === "out" && c.marketing_opted_in) return false;
       if (activity === "none" && c.total_orders !== 0) return false;
@@ -59,14 +72,10 @@ export function CustomersScreen() {
       if (!Number.isNaN(min) && parseFloat(c.total_spend) < min) return false;
       return true;
     });
-  }, [customers, search, marketing, activity, minSpend]);
+  }, [customers, marketing, activity, minSpend]);
 
-  // Reset to the first page whenever any filter changes.
-  useEffect(() => { setPage(1); }, [search, marketing, activity, minSpend]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const hasNextPage = customers.length === PAGE_SIZE;
+  const showPagination = page > 1 || hasNextPage;
 
   const columns: Column<CustomerDetailOut>[] = [
     { key: "name", header: "Name", render: (c) => c.name ?? "—" },
@@ -145,28 +154,34 @@ export function CustomersScreen() {
       <div className={s.tableCard}>
         <div className={s.tableHead}>
           <span className={s.tableTitle}>Customer list</span>
-          <span className={s.tableCount}>{filtered.length} {filtered.length === 1 ? "customer" : "customers"}</span>
+          <span className={s.tableCount}>
+            {filtered.length} on this page{isFetching && !loading ? " · refreshing…" : ""}{" "}
+            <QueryRefreshNote show={isError && customers.length > 0} />
+          </span>
         </div>
         <CompactTable<CustomerDetailOut>
           columns={columns}
-          rows={pageRows}
+          rows={filtered}
           rowKey={(c) => c.id}
           onRowClick={(c) => navigate(`/customers/${c.id}`)}
           emptyText="No customers found"
           loading={loading}
         />
       </div>
-      {filtered.length > PAGE_SIZE && (
+      {showPagination && (
         <div className={s.pagination}>
           <span className={s.pageInfo}>
-            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
+            Page {page}
+            {filtered.length > 0
+              ? ` · ${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + filtered.length}`
+              : ""}
           </span>
           <div className={s.pageBtns}>
-            <button className={s.pageBtn} disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
+            <button className={s.pageBtn} disabled={page <= 1} onClick={() => setPage(page - 1)}>
               ‹ Prev
             </button>
-            <span className={s.pageNum}>Page {safePage} / {totalPages}</span>
-            <button className={s.pageBtn} disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>
+            <span className={s.pageNum}>Page {page}</span>
+            <button className={s.pageBtn} disabled={!hasNextPage} onClick={() => setPage(page + 1)}>
               Next ›
             </button>
           </div>

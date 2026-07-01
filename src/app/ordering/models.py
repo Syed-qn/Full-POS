@@ -35,6 +35,8 @@ class Customer(Base, TimestampMixin):
     tags: Mapped[dict] = mapped_column(JSONB, default=dict)
     total_orders: Mapped[int] = mapped_column(Integer, default=0)
     total_spend: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    # Denormalized typical order time label (recomputed from orders on stat refresh).
+    usual_order_time: Mapped[str | None] = mapped_column(String(64))
     # Loyalty (Phase 1). tier is a denormalized cache of the nightly/on-delivery
     # RFM+Monetary computation; locked = manager manually set it (recompute skips).
     # reward_anchor = total_orders at tier entry, for "every N orders" reward counting.
@@ -65,6 +67,7 @@ class Order(Base, TimestampMixin):
     # open-orders-for-restaurant is the hot dispatch/SLA query path
     __table_args__ = (
         Index("ix_orders_restaurant_status", "restaurant_id", "status"),
+        Index("ix_orders_restaurant_created_at", "restaurant_id", "created_at"),
         # TX-13/F114: order numbers must be unique per tenant — a racy allocation
         # (or a reset) must never silently produce a duplicate #R1-0001.
         UniqueConstraint("restaurant_id", "order_number", name="uq_orders_restaurant_order_number"),

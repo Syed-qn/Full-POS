@@ -283,6 +283,14 @@ async def preview_batch_groups(
 
     Uses the SAME dry planner as dispatch (greedy or OR-Tools per tenant setting).
     Only groups of 2+ get a label; a lone order returns nothing. Forecast only."""
+    from app.config import get_settings
+    from app.dispatch.preview_cache import get_cached_preview, set_cached_preview
+
+    if get_settings().batch_preview_cache_enabled:
+        cached = await get_cached_preview(restaurant_id)
+        if cached is not None:
+            return cached
+
     restaurant = await session.get(Restaurant, restaurant_id)
     candidates = await _build_preview_candidates(session, restaurant_id)
     if len(candidates) < 2:
@@ -306,7 +314,10 @@ async def preview_batch_groups(
         geo=geo,
         origin=origin,
     )
-    return labels_from_batches(batches)
+    result = labels_from_batches(batches)
+    if get_settings().batch_preview_cache_enabled:
+        await set_cached_preview(restaurant_id, result)
+    return result
 
 
 async def sweep_ready_once() -> int:
@@ -1739,4 +1750,7 @@ async def reassign_order(
         await notify_rider_assigned(session, rider=new_rider, order_count=1)
     except Exception:  # noqa: BLE001 - push is best-effort
         _logger.exception("reassignment push failed for rider %s", new_rider.id)
+    from app.dispatch.preview_cache import invalidate_preview_cache
+
+    await invalidate_preview_cache(restaurant_id)
     return order

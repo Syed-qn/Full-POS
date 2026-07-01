@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
+import { renderWithProviders } from "../test/render";
 import { CustomerProfileScreen } from "./CustomerProfileScreen";
 import type { CustomerProfileOut } from "../lib/types";
 
@@ -48,12 +49,11 @@ const mockProfile: CustomerProfileOut = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function renderProfile() {
-  return render(
-    <MemoryRouter initialEntries={["/customers/1"]}>
-      <Routes>
-        <Route path="/customers/:id" element={<CustomerProfileScreen />} />
-      </Routes>
-    </MemoryRouter>,
+  return renderWithProviders(
+    <Routes>
+      <Route path="/customers/:id" element={<CustomerProfileScreen />} />
+    </Routes>,
+    { initialEntries: ["/customers/1"] },
   );
 }
 

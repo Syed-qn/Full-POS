@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -9,8 +10,17 @@ import { CountdownTimer } from "../components/CountdownTimer";
 import { DispatchExplainSection } from "../components/DispatchExplainSection";
 import { PrepCountdown } from "../components/PrepCountdown";
 import { apiClient } from "../lib/apiClient";
-import { fetchOrderDetail, patchAddress, patchCustomer } from "../lib/orderDetailApi";
-import { cancelOrder, fetchOrder, reassignOrder } from "../lib/ordersApi";
+import {
+  DETAIL_INCLUDE_BY_TAB,
+  fetchOrderDetail,
+  mergeOrderDetail,
+  orderOutFromDetail,
+  patchAddress,
+  patchCustomer,
+} from "../lib/orderDetailApi";
+import { perfMark, perfNow } from "../lib/perf";
+import { useOrderDetailQuery } from "../lib/queries/dashboard";
+import { cancelOrder, reassignOrder } from "../lib/ordersApi";
 import { fetchRiders } from "../lib/ridersApi";
 import type {
   AddressDetailOut,
@@ -58,11 +68,13 @@ export function OrderDetailDrawer({
   orderId: number | null;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [detail, setDetail] = useState<OrderDetailOut | null>(null);
   const [basicOrder, setBasicOrder] = useState<OrderOut | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+  const paintMark = useRef<number | null>(null);
+  const include = DETAIL_INCLUDE_BY_TAB[tab];
+  const { data: queryDetail, isPending, isError } = useOrderDetailQuery(orderId, tab);
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -77,22 +89,35 @@ export function OrderDetailDrawer({
       setBasicOrder(null);
       return;
     }
-    setLoading(true);
     setTab("overview");
-    setError(null);
+    setDetail(null);
+    setBasicOrder(null);
     setReassignTo("");
-    Promise.all([fetchOrderDetail(orderId), fetchOrder(orderId)])
-      .then(([d, b]) => {
-        setDetail(d);
-        setBasicOrder(b);
-        // Riders are only needed for the reassign control on an assigned order.
-        if (d.status === "assigned") {
-          fetchRiders().then(setRiders).catch(() => setRiders([]));
-        }
-      })
-      .catch(() => setError("Failed to load order details"))
-      .finally(() => setLoading(false));
+    paintMark.current = perfNow();
   }, [orderId]);
+
+  useEffect(() => {
+    if (!queryDetail) return;
+    setDetail((prev) => mergeOrderDetail(prev, queryDetail, include));
+    setBasicOrder(orderOutFromDetail(queryDetail));
+    if (queryDetail.status === "assigned") {
+      fetchRiders().then(setRiders).catch(() => setRiders([]));
+    }
+    if (paintMark.current != null && tab === "overview") {
+      perfMark("order-detail-overview", paintMark.current);
+      paintMark.current = null;
+    }
+  }, [queryDetail, include, tab]);
+
+  async function refreshDetail(id: number) {
+    await queryClient.invalidateQueries({ queryKey: ["orders", "detail", id] });
+    const d = await fetchOrderDetail(id, { include: DETAIL_INCLUDE_BY_TAB[tab] });
+    setDetail((prev) => mergeOrderDetail(prev, d, include));
+    setBasicOrder(orderOutFromDetail(d));
+  }
+
+  const loading = isPending && detail === null;
+  const error = isError && detail === null ? "Failed to load order details" : null;
 
   async function reassignAction() {
     if (!basicOrder || reassignTo === "") return;
@@ -101,7 +126,7 @@ export function OrderDetailDrawer({
     try {
       const updated = await reassignOrder(basicOrder.id, Number(reassignTo));
       setBasicOrder(updated);
-      setDetail(await fetchOrderDetail(basicOrder.id));
+      await refreshDetail(basicOrder.id);
       setReassignTo("");
       fetchRiders().then(setRiders).catch(() => {});
     } catch (e) {
@@ -117,8 +142,7 @@ export function OrderDetailDrawer({
     try {
       const updated = await apiClient.post<OrderOut>(`/api/v1/orders/${basicOrder.id}/advance`);
       setBasicOrder(updated);
-      const d = await fetchOrderDetail(basicOrder.id);
-      setDetail(d);
+      await refreshDetail(basicOrder.id);
     } finally {
       setAdvancing(false);
     }
@@ -131,8 +155,7 @@ export function OrderDetailDrawer({
     try {
       const updated = await cancelOrder(basicOrder.id);
       setBasicOrder(updated);
-      const d = await fetchOrderDetail(basicOrder.id);
-      setDetail(d);
+      await refreshDetail(basicOrder.id);
       setConfirmCancel(false);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Failed to cancel order");
@@ -157,7 +180,9 @@ export function OrderDetailDrawer({
 
   return (
     <SideDrawer open={orderId !== null} title={title} onClose={onClose} wide>
-      {loading || !detail || !basicOrder ? (
+      {loading && !detail ? (
+        error ? <p style={{ color: "var(--text-secondary)", padding: "16px" }}>{error}</p> : <DrawerSkeleton />
+      ) : !detail || !basicOrder ? (
         error ? <p style={{ color: "var(--text-secondary)", padding: "16px" }}>{error}</p> : <DrawerSkeleton />
       ) : (
         <div className={s.detail}>

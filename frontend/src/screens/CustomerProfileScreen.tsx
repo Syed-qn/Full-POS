@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/Button";
@@ -6,54 +7,53 @@ import { orderStatusLabel } from "../lib/orderDisplay";
 import { Spinner } from "../components/Spinner";
 import {
   deleteCustomerAddress,
-  getCustomerProfile,
   patchCustomerAddress,
   patchCustomerProfile,
   setCustomerLoyaltyTier,
 } from "../lib/customerApi";
-import { creditWallet, debitWallet, getWallet, getWalletEntries } from "../lib/walletApi";
-import { listCoupons } from "../lib/couponsApi";
+import {
+  useCustomerCouponsQuery,
+  useCustomerProfileQuery,
+  useCustomerWalletQuery,
+} from "../lib/queries/dashboard";
+import { creditWallet, debitWallet } from "../lib/walletApi";
 import type {
   AddressDetailOut,
   AddressPatchIn,
-  Coupon,
   CustomerProfileOut,
-  WalletBalance,
-  WalletEntry,
 } from "../lib/types";
 import s from "./CustomerProfileScreen.module.css";
 
 export function CustomerProfileScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<CustomerProfileOut | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const customerId = id ? Number(id) : null;
+  const { data: profile, isPending: loading } = useCustomerProfileQuery(customerId);
+  const { data: walletData } = useCustomerWalletQuery(customerId);
+  const { data: couponRows = [] } = useCustomerCouponsQuery(profile?.phone);
   const [saving, setSaving] = useState(false);
+
+  function patchProfileCache(next: CustomerProfileOut) {
+    if (customerId == null) return;
+    queryClient.setQueryData(["customers", "profile", customerId], next);
+  }
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [optIn, setOptIn] = useState(false);
 
-  const [wallet, setWallet] = useState<WalletBalance | null>(null);
-  const [walletEntries, setWalletEntries] = useState<WalletEntry[]>([]);
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const wallet = walletData?.balance ?? null;
+  const walletEntries = walletData?.entries ?? [];
+  const coupons = couponRows;
   const [creditAmt, setCreditAmt] = useState("");
   const [creditReason, setCreditReason] = useState("");
   const [creditBusy, setCreditBusy] = useState(false);
   const [creditMsg, setCreditMsg] = useState<string | null>(null);
 
   async function reloadWallet() {
-    if (!id) return;
-    try {
-      const [balance, entries] = await Promise.all([
-        getWallet(Number(id)),
-        getWalletEntries(Number(id)),
-      ]);
-      setWallet(balance);
-      setWalletEntries(entries);
-    } catch {
-      /* best-effort */
-    }
+    if (customerId == null) return;
+    await queryClient.invalidateQueries({ queryKey: ["customers", "wallet", customerId] });
   }
 
   async function adjustWallet(kind: "credit" | "debit") {
@@ -76,52 +76,11 @@ export function CustomerProfileScreen() {
   }
 
   useEffect(() => {
-    if (!id) return;
-    getCustomerProfile(Number(id))
-      .then((p) => {
-        setProfile(p);
-        setName(p.name ?? "");
-        setPhone(p.phone);
-        setOptIn(p.marketing_opted_in);
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  // Wallet is optional/best-effort: if the endpoint is unavailable we simply
-  // skip rendering the section rather than failing the whole profile page.
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [balance, entries] = await Promise.all([
-          getWallet(Number(id)),
-          getWalletEntries(Number(id)),
-        ]);
-        if (!cancelled) {
-          setWallet(balance);
-          setWalletEntries(entries);
-        }
-      } catch {
-        /* wallet feature unavailable for this customer/backend — hide section */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  // Coupons issued to this customer (best-effort; hidden if unavailable).
-  useEffect(() => {
-    if (!profile?.phone) return;
-    let cancelled = false;
-    listCoupons(profile.phone)
-      .then((cs) => !cancelled && setCoupons(cs))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [profile?.phone]);
+    if (!profile) return;
+    setName(profile.name ?? "");
+    setPhone(profile.phone);
+    setOptIn(profile.marketing_opted_in);
+  }, [profile]);
 
   if (loading) return <Spinner />;
   if (!profile) return <p className={s.error}>Customer not found</p>;
@@ -140,7 +99,7 @@ export function CustomerProfileScreen() {
         phone: phone || null,
         marketing_opted_in: optIn,
       });
-      setProfile({ ...profile, ...updated });
+      patchProfileCache({ ...profile, ...updated });
     } finally {
       setSaving(false);
     }
@@ -150,7 +109,7 @@ export function CustomerProfileScreen() {
     if (!profile) return;
     if (!window.confirm(`Delete address "${addr.building ?? addr.room_apartment}"?`)) return;
     await deleteCustomerAddress(profile.id, addr.id);
-    setProfile({
+    patchProfileCache({
       ...profile,
       addresses: profile.addresses.filter((a) => a.id !== addr.id),
     });
@@ -159,7 +118,7 @@ export function CustomerProfileScreen() {
   async function handleSaveAddress(addr: AddressDetailOut, patch: AddressPatchIn) {
     if (!profile) return;
     const updated = await patchCustomerAddress(profile.id, addr.id, patch);
-    setProfile({
+    patchProfileCache({
       ...profile,
       addresses: profile.addresses.map((a) => (a.id === updated.id ? updated : a)),
     });
@@ -295,7 +254,7 @@ export function CustomerProfileScreen() {
                   const v = e.target.value;
                   const tier = (v === "" ? null : v) as "gold" | "silver" | "bronze" | null;
                   const updated = await setCustomerLoyaltyTier(Number(id), { tier });
-                  setProfile(updated);
+                  patchProfileCache(updated);
                 }}
               >
                 <option value="">None</option>
@@ -308,7 +267,7 @@ export function CustomerProfileScreen() {
                   variant="ghost"
                   onClick={async () => {
                     const updated = await setCustomerLoyaltyTier(Number(id), { unlock: true });
-                    setProfile(updated);
+                    patchProfileCache(updated);
                   }}
                 >
                   Unlock (auto)

@@ -31,6 +31,7 @@ from app.ordering.service import (
     get_order_detail,
     get_order_for_tenant,
     list_orders_for_tenant,
+    parse_detail_includes,
 )
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
@@ -375,11 +376,17 @@ async def delete_order_endpoint(
 @router.get("/{order_id}/detail", response_model=OrderDetailOut)
 async def get_order_detail_endpoint(
     order_id: int,
+    include: str | None = Query(default="overview"),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> OrderDetailOut:
     try:
-        return await get_order_detail(session, restaurant_id=restaurant.id, order_id=order_id)
+        return await get_order_detail(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            includes=parse_detail_includes(include),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -402,12 +409,23 @@ async def get_order(
 async def list_orders(
     status: str | None = None,
     limit: int = 50,
+    offset: int = 0,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    q: str | None = None,
     preview_batch: bool = Query(default=True),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
     orders = await list_orders_for_tenant(
-        session, restaurant_id=restaurant.id, status=status, limit=limit
+        session,
+        restaurant_id=restaurant.id,
+        status=status,
+        limit=limit,
+        offset=offset,
+        from_date=from_date,
+        to_date=to_date,
+        q=q,
     )
     preview: dict[int, str] = {}
     if preview_batch:

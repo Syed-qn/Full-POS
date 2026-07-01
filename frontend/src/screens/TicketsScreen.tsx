@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { TicketDetailDrawer } from "../components/TicketDetailDrawer";
-import { listTickets } from "../lib/ticketsApi";
+import { useTicketsQuery } from "../lib/queries/dashboard";
 import type { Ticket } from "../lib/types";
 import s from "./TicketsScreen.module.css";
 
@@ -12,22 +13,12 @@ const STATUS_ORDER: Record<Ticket["status"], number> = {
 };
 
 export function TicketsScreen() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const queryClient = useQueryClient();
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneFilter, setPhoneFilter] = useState("");
   const [selected, setSelected] = useState<Ticket | null>(null);
-  const [phone, setPhone] = useState("");
 
-  function reload() {
-    listTickets(undefined, phone.trim() || undefined)
-      .then(setTickets)
-      .catch(() => setTickets([]))
-      .finally(() => setLoaded(true));
-  }
-
-  useEffect(() => {
-    reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { data: tickets = [], isPending } = useTicketsQuery(phoneFilter);
 
   const ordered = useMemo(
     () =>
@@ -41,7 +32,7 @@ export function TicketsScreen() {
 
   function onResolved() {
     setSelected(null);
-    reload();
+    void queryClient.invalidateQueries({ queryKey: ["tickets", "list"] });
   }
 
   return (
@@ -55,27 +46,26 @@ export function TicketsScreen() {
         className={s.search}
         onSubmit={(e) => {
           e.preventDefault();
-          setLoaded(false);
-          reload();
+          setPhoneFilter(phoneInput.trim());
         }}
       >
         <input
           type="search"
           placeholder="Search by phone number"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          value={phoneInput}
+          onChange={(e) => setPhoneInput(e.target.value)}
           aria-label="search complaints by phone"
         />
         <button type="submit">Search</button>
       </form>
 
-      {!loaded && <TicketsSkeleton />}
+      {isPending && <TicketsSkeleton />}
 
-      {loaded && ordered.length === 0 && (
+      {!isPending && ordered.length === 0 && (
         <div className={s.empty}>No open complaints — you're all caught up.</div>
       )}
 
-      {loaded && ordered.length > 0 && (
+      {!isPending && ordered.length > 0 && (
         <div className={s.list}>
           {ordered.map((t) => (
             <button

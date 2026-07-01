@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { renderWithProviders } from "../test/render";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiClient";
@@ -36,20 +37,20 @@ describe("RidersScreen", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("renders rider cards from API", async () => {
-    render(<RidersScreen />);
+    renderWithProviders(<RidersScreen />);
     await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
     expect(screen.getByText("Omar Farouq")).toBeInTheDocument();
   });
 
   it("shows empty state when no riders", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("[]", { status: 200 }));
-    render(<RidersScreen />);
+    renderWithProviders(<RidersScreen />);
     await waitFor(() => expect(screen.getByText(/register your first rider/i)).toBeInTheDocument());
   });
 
   it("shows a loading skeleton until riders resolve", () => {
     vi.mocked(fetch).mockReturnValue(new Promise(() => {})); // never resolves
-    const { container } = render(<RidersScreen />);
+    const { container } = renderWithProviders(<RidersScreen />);
     expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
     expect(screen.queryByText(/register your first rider/i)).not.toBeInTheDocument();
   });
@@ -67,7 +68,7 @@ describe("RidersScreen", () => {
       status: "deactivated",
     });
 
-    render(<RidersScreen />);
+    renderWithProviders(<RidersScreen />);
     await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
 
     await user.click(screen.getAllByRole("button", { name: /remove/i })[0]);
