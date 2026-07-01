@@ -3030,6 +3030,29 @@ async def _build_context(
         ctx["menu_text"] = await _render_menu(session, restaurant_id)
         ctx["cart_summary"] = await _build_cart_summary(session, conv)
 
+        from app.ordering.cart_service import CartService
+        from app.ordering.models import Order as _Order
+
+        _draft_oid = conv.state.get("draft_order_id")
+        _draft_order = await session.get(_Order, _draft_oid) if _draft_oid else None
+        if _draft_order is not None and str(_draft_order.status) == "draft":
+            _svc = CartService(session)
+            _lines = await _svc.build_structured_context(_draft_order)
+            ctx["cart_lines"] = [
+                {
+                    "cart_item_id": ln.cart_item_id,
+                    "dish_id": ln.dish_id,
+                    "dish_name": ln.dish_name,
+                    "variant_name": ln.variant_name,
+                    "notes": ln.notes,
+                    "qty": ln.qty,
+                    "price_aed": str(ln.price_aed),
+                }
+                for ln in _lines
+            ]
+        else:
+            ctx["cart_lines"] = []
+
     elif phase == "address_capture":
         ctx["cart_summary"] = await _build_cart_summary(session, conv)
         ctx["location_received"] = conv.state.get("pin_lat") is not None

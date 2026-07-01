@@ -119,3 +119,25 @@ async def test_cart_service_build_structured_context(db_session, restaurant, see
     assert line.dish_id == dish.id
     assert line.qty == 2
     assert line.notes == "spicy"
+
+
+@pytest.mark.asyncio
+async def test_build_context_includes_cart_lines(db_session, restaurant, seed_biryani_menu):
+    """_build_context must inject cart_lines (CartLineContext list) in ordering phase (F64)."""
+    from app.conversation.engine import _build_context, _set_state
+    from app.conversation.service import get_or_create_conversation
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.menu.models import Dish
+
+    customer = await get_or_create_customer(db_session, restaurant_id=restaurant.id, phone="+97150000007")
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
+    dish = (await db_session.scalars(select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.name == "Chicken Biryani"))).first()
+    await add_item(db_session, order=order, dish=dish, qty=1, notes="spicy")
+    conv = await get_or_create_conversation(db_session, restaurant_id=restaurant.id, phone="+97150000007", counterpart="customer")
+    _set_state(conv, draft_order_id=order.id, dialogue_phase="ordering")
+    ctx = await _build_context(db_session, conv, restaurant.id, "ordering", restaurant)
+    assert "cart_lines" in ctx, "cart_lines missing from context"
+    lines = ctx["cart_lines"]
+    assert len(lines) == 1
+    assert lines[0]["cart_item_id"] > 0
+    assert lines[0]["notes"] == "spicy"
