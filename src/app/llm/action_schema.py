@@ -52,6 +52,20 @@ ACTION_SPECS: dict[str, ActionSpec] = {
         qty_field="remove_qty",
         requires_one_of=(("dish_query", "items"),),
     ),
+    # Post-confirm line edits (Option B/C) — same semantics as cart_*, scoped to placed orders.
+    "order_line_remove": ActionSpec(
+        phases=("post_order",),
+        optional=("dish_query", "remove_qty", "items"),
+        qty_field="remove_qty",
+        requires_one_of=(("dish_query", "items"),),
+    ),
+    "order_line_set_qty": ActionSpec(
+        phases=("post_order",),
+        optional=("dish_query", "new_total", "items"),
+        qty_field="new_total",
+        requires_one_of=(("dish_query", "items"), ("new_total", "items")),
+    ),
+    "order_modify_confirm": ActionSpec(phases=("post_order",)),
     "cart_clear": ActionSpec(phases=("ordering",)),
     "checkout_proceed": ActionSpec(phases=("ordering",)),
     "address_save": ActionSpec(
@@ -81,6 +95,9 @@ CANON_TO_LEGACY: dict[str, str] = {
     "cart_set_qty": "update_qty",
     "cart_set_note": "update_qty",
     "cart_remove": "remove_item",
+    "order_line_remove": "remove_item",
+    "order_line_set_qty": "update_qty",
+    "order_modify_confirm": "confirm_line_edit",
     "cart_clear": "clear_cart",
     "checkout_proceed": "proceed_to_address",
     "address_save": "save_address_text",
@@ -307,10 +324,14 @@ def to_engine_result(action: str, payload: dict, *, message: str = "") -> tuple[
     elif action == "cart_set_note":
         data["special_note"] = str(payload.get("note") or "")
         data["qty"] = None  # note-only edit; engine keeps existing qty
-    elif action == "cart_remove":
+    elif action in ("cart_remove", "order_line_remove"):
         q = payload.get("remove_qty")
         data["qty"] = int(q) if isinstance(q, (int, float)) and not isinstance(q, bool) else None
         data["items"] = _norm_items(payload, "remove_delta")
+    elif action == "order_line_set_qty":
+        q = payload.get("new_total")
+        data["qty"] = int(q) if isinstance(q, (int, float)) and not isinstance(q, bool) else None
+        data["items"] = _norm_items(payload, "set_total")
     elif action == "address_save":
         data["apt_room"] = str(payload.get("apt_room") or "")
         data["building"] = str(payload.get("building") or "")

@@ -314,8 +314,17 @@ class FakeConversationAgent:
 
         # post_order phase
         if dialogue_phase == "post_order":
-            if "cancel" in last_user:
+            if last_user in ("cancel", "cancel order", "cancel my order"):
                 return _emit("cancel_order", {}, "Order cancelled.")
+            if "remove" in last_user:
+                dish = last_user.split("remove", 1)[1].strip()
+                return _emit("order_line_remove", {"dish_query": dish}, "Sure, removing that.")
+            if last_user.startswith("cancel ") and len(last_user) > 8:
+                return _emit(
+                    "order_line_remove",
+                    {"dish_query": last_user[7:].strip()},
+                    "Sure, removing that.",
+                )
             if any(w in last_user for w in ("modify", "change", "update", "edit")):
                 return _emit("request_modification", {}, "Sure! Let me help you modify your order.")
             return _emit("status_query", {}, "Your order is being prepared! 🛵")

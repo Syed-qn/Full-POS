@@ -148,6 +148,7 @@ def test_fake_only_emits_known_legacy_actions():
         ("awaiting_confirmation", "add extra biryani", {}),
         ("post_order", "cancel", {}),
         ("post_order", "modify order", {}),
+        ("post_order", "remove lemon mint", {}),
         ("post_order", "where is my order", {}),
     ]
 

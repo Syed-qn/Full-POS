@@ -7,6 +7,7 @@ from app.llm import action_schema as A
 def test_specs_cover_every_canonical_action():
     expected = {
         "cart_add", "cart_set_qty", "cart_set_note", "cart_remove", "cart_clear",
+        "order_line_remove", "order_line_set_qty", "order_modify_confirm",
         "checkout_proceed", "address_save", "address_location", "address_use_saved",
         "address_confirm", "confirm_order", "cancel_order", "request_modification",
         "status_query", "menu_show", "info_answer", "complaint_explain", "no_action",
@@ -20,6 +21,7 @@ def test_every_action_maps_to_a_known_engine_action():
         "save_address_text", "send_location_request", "use_saved_address",
         "proceed_to_confirmation", "confirm_order", "cancel_order",
         "request_modification", "status_query", "show_menu", "no_action",
+        "confirm_line_edit",
     }
     for canon in A.ACTION_SPECS:
         assert A.CANON_TO_LEGACY[canon] in legacy, canon
@@ -37,6 +39,8 @@ def test_qty_semantics_are_explicit_never_overloaded():
     assert A.ACTION_SPECS["cart_add"].qty_field == "add_qty"
     assert A.ACTION_SPECS["cart_set_qty"].qty_field == "new_total"
     assert A.ACTION_SPECS["cart_remove"].qty_field == "remove_qty"
+    assert A.ACTION_SPECS["order_line_remove"].qty_field == "remove_qty"
+    assert A.ACTION_SPECS["order_line_set_qty"].qty_field == "new_total"
     for spec in A.ACTION_SPECS.values():
         assert "qty" not in spec.required
         assert "qty" not in spec.optional
@@ -75,6 +79,14 @@ def test_to_engine_result_missing_required_yields_clarification_no_mutation():
     assert action == "no_action"
     assert data["needs_clarification"] is True
     assert data["clarify_action"] == "cart_set_qty"
+
+
+def test_to_engine_result_order_line_remove_maps_to_remove_item():
+    action, data = A.to_engine_result(
+        "order_line_remove", {"dish_query": "lemon mint", "remove_qty": 1},
+    )
+    assert action == "remove_item"
+    assert data["qty"] == 1
 
 
 def test_to_engine_result_splits_items_by_op():

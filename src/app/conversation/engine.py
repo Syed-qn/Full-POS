@@ -2077,10 +2077,12 @@ _REMOVE_ITEM_PATTERNS: tuple[str, ...] = (
     r"^(?:take off|take out) (\d+)\s+(.+)$",
     r"^drop (\d+)\s+(.+)$",
     r"^minus (\d+)\s+(.+)$",
+    r"^cancel (\d+)\s+(.+)$",
     r"^remove (.+)$",
     r"^delete (.+)$",
     r"^(?:take off|take out) (.+)$",
     r"^drop (.+)$",
+    r"^cancel (.+)$",
 )
 
 
@@ -2091,7 +2093,7 @@ def _parse_remove_item(text: str) -> tuple[int | None, str] | None:
     t = (text or "").strip().lower()
     if not t:
         return None
-    if _is_explicit_clear(t) or _is_clear_cart_command(t):
+    if _is_explicit_clear(t) or _is_clear_cart_command(t) or _is_cancel_intent(text):
         return None
     for pat in _REMOVE_ITEM_PATTERNS:
         m = _re.match(pat, t)
@@ -2857,6 +2859,332 @@ async def _redeem_coupon_at_checkout(
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
+async def _resolve_order_for_modify(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+):
+    """Find the placed order the customer is editing.
+
+    Prefer an in-flight modify target, then the order just confirmed
+    (``last_placed_order_id``), then the latest non-draft placed order for this
+    phone. Draft carts and stale ``pending_order_id`` pointers must never win over
+    a freshly confirmed order (regression: modify #R1-0100 after confirm #R1-0118).
+    """
+    from app.ordering.fsm import OrderStatus
+    from app.ordering.models import Customer, Order
+
+    mod_id = conv.state.get("modify_order_id")
+    if mod_id:
+        order = await session.get(Order, mod_id)
+        if order is not None:
+            return order
+
+    last_id = conv.state.get("last_placed_order_id")
+    if last_id:
+        order = await session.get(Order, last_id)
+        if order is not None:
+            _terminal = {
+                str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
+                str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
+                str(OrderStatus.WRITTEN_OFF), str(OrderStatus.ON_RESALE),
+            }
+            if str(order.status) not in _terminal and str(order.status) != str(OrderStatus.DRAFT):
+                return order
+
+    customer = await session.scalar(
+        select(Customer).where(
+            Customer.restaurant_id == restaurant_id,
+            Customer.phone == inbound.from_phone,
+        )
+    )
+    if customer is None:
+        return None
+
+    _terminal = {
+        str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
+        str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
+        str(OrderStatus.WRITTEN_OFF), str(OrderStatus.ON_RESALE),
+    }
+    return await session.scalar(
+        select(Order)
+        .where(
+            Order.restaurant_id == restaurant_id,
+            Order.customer_id == customer.id,
+            Order.status != str(OrderStatus.DRAFT),
+            Order.status.notin_(_terminal),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+
+
+def _clear_modify_state(conv: Conversation) -> None:
+    """Drop all modify FSM keys when leaving the edit sub-flow."""
+    _set_state(
+        conv,
+        modify_order_id=None,
+        modify_proposed=None,
+        modify_proposed_initialized=None,
+    )
+
+
+async def _proposed_from_order(session: AsyncSession, order_id: int) -> list[dict]:
+    """Serialize current order lines into modify_proposed entries."""
+    from app.ordering.models import OrderItem
+
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))
+    ).all()
+    return [
+        {
+            "dish_id": it.dish_id,
+            "dish_number": it.dish_number,
+            "name": it.dish_name,
+            "price_aed": str(it.price_aed),
+            "qty": it.qty,
+        }
+        for it in items
+    ]
+
+
+async def _modify_remove_from_proposed(
+    session: AsyncSession,
+    restaurant_id: int,
+    proposed: list[dict],
+    dish_query: str,
+) -> tuple[list[dict], str | None]:
+    """Drop matching lines from modify_proposed. Returns (new_list, removed_name)."""
+    if not proposed or not dish_query:
+        return proposed, None
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence != MatchConfidence.NO_MATCH and result.candidates:
+        cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+        if cands:
+            drop_ids = {c.id for c in cands}
+            removed_names = [p["name"] for p in proposed if p.get("dish_id") in drop_ids]
+            new_list = [p for p in proposed if p.get("dish_id") not in drop_ids]
+            if removed_names:
+                return new_list, removed_names[0]
+
+    q = dish_query.lower()
+    removed_names = [
+        p.get("name", "") for p in proposed
+        if q in (p.get("name") or "").lower()
+    ]
+    if removed_names:
+        new_list = [p for p in proposed if q not in (p.get("name") or "").lower()]
+        return new_list, removed_names[0]
+    return proposed, None
+
+
+async def _modify_keep_only_proposed(
+    session: AsyncSession,
+    restaurant_id: int,
+    proposed: list[dict],
+    dish_query: str,
+) -> tuple[list[dict], str | None]:
+    """Keep/replace modify_proposed with only the named dish (menu substitution allowed)."""
+    if not dish_query:
+        return proposed, None
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return proposed, None
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return proposed, None
+
+    # Prefer the candidate already on the order; else take the best menu match (e.g.
+    # combo on the order → customer says "only lemon mint" → standalone Lemon Mint).
+    dish = None
+    proposed_ids = {p.get("dish_id") for p in proposed}
+    for c in cands:
+        if c.id in proposed_ids:
+            dish = c
+            break
+    if dish is None:
+        dish = cands[0]
+
+    kept = next((p for p in proposed if p.get("dish_id") == dish.id), None)
+    qty = kept.get("qty", 1) if kept else 1
+    return ([{
+        "dish_id": dish.id,
+        "dish_number": dish.dish_number,
+        "name": dish.name,
+        "price_aed": str(dish.price_aed),
+        "qty": qty,
+    }], dish.name)
+
+
+_MODIFY_BLOCKED_STATUSES = frozenset({
+    "ready", "assigned", "picked_up", "arriving", "delivered", "cancelled",
+    "undeliverable", "on_resale", "resold", "written_off",
+})
+
+
+def _order_is_modifiable(order) -> bool:
+    return str(order.status) not in _MODIFY_BLOCKED_STATUSES
+
+
+async def _modify_update_qty_in_proposed(
+    session: AsyncSession,
+    restaurant_id: int,
+    proposed: list[dict],
+    dish_query: str,
+    qty: int,
+) -> tuple[list[dict], str | None]:
+    """Set absolute qty on a proposed line (qty <= 0 removes the line)."""
+    if not dish_query:
+        return proposed, None
+    if qty <= 0:
+        return await _modify_remove_from_proposed(session, restaurant_id, proposed, dish_query)
+
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return proposed, None
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return proposed, None
+    dish = cands[0]
+    entry = {
+        "dish_id": dish.id,
+        "dish_number": dish.dish_number,
+        "name": dish.name,
+        "price_aed": str(dish.price_aed),
+        "qty": qty,
+    }
+    new_list = list(proposed)
+    idx = next((i for i, p in enumerate(new_list) if p.get("dish_id") == dish.id), None)
+    if idx is not None:
+        new_list[idx] = entry
+    else:
+        new_list.append(entry)
+    return new_list, dish.name
+
+
+async def _proposed_differs_from_order(
+    session: AsyncSession, order_id: int, proposed: list[dict],
+) -> bool:
+    """True when proposed lines differ from persisted order_items."""
+    from app.ordering.models import OrderItem
+
+    current = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))
+    ).all()
+    cur_map = {(it.dish_id, it.dish_name): it.qty for it in current}
+    prop_map = {(p.get("dish_id"), p.get("name")): p.get("qty", 0) for p in proposed}
+    return cur_map != prop_map
+
+
+async def _offer_full_cancel_from_empty_modify(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    order_id: int,
+) -> None:
+    """Option A T6: empty proposed → offer whole-order cancel, not a zero-item modify."""
+    from app.ordering.models import Order
+
+    order = await session.get(Order, order_id)
+    num = order.order_number if order else "?"
+    _set_state(conv, dialogue_state="modify_confirm", modify_order_id=order_id, modify_proposed=[])
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="modify-empty-offer",
+        body=(
+            f"That would remove everything from order #{num}. "
+            "Would you like to cancel the whole order instead?"
+        ),
+        buttons=[
+            {"id": "cancel_order", "title": "Cancel order"},
+            {"id": "cancel_modify", "title": "Keep original"},
+        ],
+    )
+
+
+async def _advance_modify_to_confirm(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    mod_id: int,
+    proposed: list[dict],
+) -> None:
+    """Move to modify_confirm with summary, or offer full cancel when proposed is empty."""
+    if not proposed:
+        await _offer_full_cancel_from_empty_modify(
+            session, conv, inbound, restaurant_id, mod_id,
+        )
+        return
+    _set_state(conv, dialogue_state="modify_confirm", modify_proposed=proposed)
+    await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
+
+
+async def _apply_post_confirm_line_edit(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    action: str,
+    data: dict,
+) -> None:
+    """Option B: post-confirm remove/set_qty via AI schema → pending confirm summary."""
+    order = await _resolve_order_for_modify(session, conv, inbound, restaurant_id)
+    if order is None or not _order_is_modifiable(order):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="post-edit-blocked",
+            body="That order can't be changed right now. Send 'hi' if you need help.",
+        )
+        return
+
+    proposed = list(conv.state.get("modify_proposed", []) or [])
+    if not proposed:
+        proposed = await _proposed_from_order(session, order.id)
+
+    label: str | None = None
+    if action == "remove_item":
+        dish_query = (data.get("dish_query") or "").strip()
+        if not dish_query and data.get("items"):
+            dish_query = str(data["items"][0].get("dish_query") or "").strip()
+        proposed, label = await _modify_remove_from_proposed(
+            session, restaurant_id, proposed, dish_query,
+        )
+    elif action == "update_qty":
+        dish_query = (data.get("dish_query") or "").strip()
+        qty = data.get("qty")
+        if not dish_query and data.get("items"):
+            it = data["items"][0]
+            dish_query = str(it.get("dish_query") or "").strip()
+            qty = it.get("qty") if qty is None else qty
+        if dish_query and qty is not None:
+            proposed, label = await _modify_update_qty_in_proposed(
+                session, restaurant_id, proposed, dish_query, int(qty),
+            )
+
+    if label is None:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="post-edit-nomatch",
+            body="I couldn't match that dish on your order. Try the exact name from your summary.",
+        )
+        return
+
+    _set_state(
+        conv,
+        modify_order_id=order.id,
+        modify_proposed=proposed,
+        modify_proposed_initialized=True,
+    )
+    await _advance_modify_to_confirm(
+        session, conv, inbound, restaurant_id, order.id, proposed,
+    )
+
+
 async def _handle_modify_intent(
     session: AsyncSession,
     conv: Conversation,
@@ -2866,37 +3194,9 @@ async def _handle_modify_intent(
     """Start modify flow: lookup recent modifiable order (conv.state pending/ modify_order_id or by phone like status query).
     If before ready, set modify_items + empty proposed; prompt for new items (SLA restart noted).
     """
-    from app.ordering.fsm import OrderStatus
-    from app.ordering.models import Customer, Order, OrderItem
+    from app.ordering.models import OrderItem
 
-    order = None
-    mod_id = conv.state.get("modify_order_id") or conv.state.get("pending_order_id")
-    if mod_id:
-        order = await session.get(Order, mod_id)
-
-    if order is None:
-        customer = await session.scalar(
-            select(Customer).where(
-                Customer.restaurant_id == restaurant_id,
-                Customer.phone == inbound.from_phone,
-            )
-        )
-        if customer:
-            terminal = {
-                str(OrderStatus.DELIVERED), str(OrderStatus.CANCELLED),
-                str(OrderStatus.UNDELIVERABLE), str(OrderStatus.RESOLD),
-                str(OrderStatus.WRITTEN_OFF),
-            }
-            order = await session.scalar(
-                select(Order)
-                .where(
-                    Order.restaurant_id == restaurant_id,
-                    Order.customer_id == customer.id,
-                    Order.status.notin_(terminal),
-                )
-                .order_by(Order.created_at.desc())
-                .limit(1)
-            )
+    order = await _resolve_order_for_modify(session, conv, inbound, restaurant_id)
 
     if order is None:
         await _send_text(
@@ -2906,12 +3206,7 @@ async def _handle_modify_intent(
         )
         return
 
-    # Mirror service _NON_MODIFIABLE_STATUSES (strings for safety, no private cross)
-    non_mod_strs = {
-        "ready", "assigned", "picked_up", "arriving", "delivered", "cancelled",
-        "undeliverable", "on_resale", "resold", "written_off",
-    }
-    if str(order.status) in non_mod_strs:
+    if not _order_is_modifiable(order):
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="modify-blocked",
@@ -2919,22 +3214,89 @@ async def _handle_modify_intent(
         )
         return
 
-    _set_state(conv, dialogue_state="modify_items", modify_order_id=order.id, modify_proposed=[])
+    seeded = await _proposed_from_order(session, order.id)
+    _set_state(
+        conv,
+        dialogue_state="modify_items",
+        modify_order_id=order.id,
+        modify_proposed=seeded,
+        modify_proposed_initialized=True,
+    )
     # Use a real dish from this order as the example so the hint is never a
     # dish the restaurant doesn't serve (multi-tenant: no hardcoded dish names).
     example_dish = await session.scalar(
         select(OrderItem.dish_name).where(OrderItem.order_id == order.id).limit(1)
     )
-    example = f"'2x {example_dish}'" if example_dish else "the dish name and quantity"
+    example = f"'remove {example_dish}'" if example_dish else "the dish to change"
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="modify-start",
         body=(
             f"Sure, let's modify order #{order.order_number}. "
-            f"Reply with updated dishes (e.g. {example}), or 'done' when ready to review changes. "
+            f"Tell me what to change (e.g. {example}, 'only <dish>'), or 'done' when ready to review. "
             f"After you confirm, the 40-min SLA clock restarts."
         ),
     )
+
+
+async def _try_post_order_item_edit(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> bool:
+    """Deterministic post-confirm edits: 'cancel/remove <dish>' or 'only <dish>'.
+
+    Starts (or continues) the modify FSM with the current order seeded as proposed,
+    applies the edit immediately, and never misroutes to whole-order cancel or an
+    empty modify loop."""
+    if conv.state.get("dialogue_phase") != "post_order":
+        return False
+    if conv.state.get("dialogue_state") not in ("order_placed", "", "modify_confirm"):
+        return False
+    if inbound.type != MessageType.TEXT:
+        return False
+
+    text = (inbound.payload.get("text") or "").strip()
+    keep_q = _parse_keep_only(text)
+    remove_parsed = _parse_remove_item(text)
+    if not keep_q and remove_parsed is None:
+        return False
+
+    order = await _resolve_order_for_modify(session, conv, inbound, restaurant_id)
+    if order is None:
+        return False
+
+    if not _order_is_modifiable(order):
+        return False
+
+    proposed = list(conv.state.get("modify_proposed", []) or [])
+    if not proposed:
+        proposed = await _proposed_from_order(session, order.id)
+    if keep_q:
+        proposed, label = await _modify_keep_only_proposed(
+            session, restaurant_id, proposed, keep_q,
+        )
+        if label is None:
+            return False
+    else:
+        _rm_qty, rm_query = remove_parsed
+        proposed, label = await _modify_remove_from_proposed(
+            session, restaurant_id, proposed, rm_query,
+        )
+        if label is None:
+            return False
+
+    _set_state(
+        conv,
+        modify_order_id=order.id,
+        modify_proposed=proposed,
+        modify_proposed_initialized=True,
+    )
+    await _advance_modify_to_confirm(
+        session, conv, inbound, restaurant_id, order.id, proposed,
+    )
+    return True
 
 
 async def _handle_modify_items(
@@ -2958,22 +3320,90 @@ async def _handle_modify_items(
         return
 
     text = (inbound.payload.get("text") or "").strip()
+    mod_id = conv.state.get("modify_order_id")
+    proposed = list(conv.state.get("modify_proposed", []) or [])
+    if not proposed and mod_id and not conv.state.get("modify_proposed_initialized"):
+        proposed = await _proposed_from_order(session, mod_id)
+        _set_state(conv, modify_proposed=proposed, modify_proposed_initialized=True)
+
+    keep_q = _parse_keep_only(text)
+    if keep_q:
+        new_prop, kept = await _modify_keep_only_proposed(
+            session, restaurant_id, proposed, keep_q,
+        )
+        if kept is not None:
+            _set_state(conv, dialogue_state="modify_items", modify_proposed=new_prop)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="modify-keep-only",
+                body=(
+                    f"Got it — your order will have only {kept}.\n"
+                    "Reply with more changes, or send 'done' to review (SLA restarts on confirm)."
+                ),
+            )
+            return
+
+    remove_parsed = _parse_remove_item(text)
+    if remove_parsed is not None:
+        _rm_qty, rm_query = remove_parsed
+        new_prop, removed = await _modify_remove_from_proposed(
+            session, restaurant_id, proposed, rm_query,
+        )
+        if removed is not None:
+            _set_state(conv, dialogue_state="modify_items", modify_proposed=new_prop)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="modify-removed",
+                body=(
+                    f"Removed {removed} from your order.\n"
+                    "Reply with more changes, or send 'done' to review (SLA restarts on confirm)."
+                ),
+            )
+            return
+
+    setq_items = _parse_set_quantity_items(text)
+    if setq_items is not None:
+        new_prop = proposed
+        changed: list[str] = []
+        for sqty, sdish in setq_items:
+            if not sdish:
+                continue
+            new_prop, name = await _modify_update_qty_in_proposed(
+                session, restaurant_id, new_prop, sdish, sqty,
+            )
+            if name:
+                changed.append(name)
+        if changed:
+            _set_state(conv, dialogue_state="modify_items", modify_proposed=new_prop)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="modify-qty",
+                body=(
+                    f"Updated {', '.join(changed)} ✅\n"
+                    "Reply with more changes, or send 'done' to review (SLA restarts on confirm)."
+                ),
+            )
+            return
+
     qty, dish_query = parse_qty_and_text(text)
     lower_q = dish_query.lower()
 
     from app.llm.factory import get_completion_detector
-    if await get_completion_detector().is_completion(text):
-        mod_id = conv.state.get("modify_order_id")
-        proposed = conv.state.get("modify_proposed", []) or []
-        if not mod_id or not proposed:
+    _mod_done = _is_done_intent(text) or (
+        not keep_q and remove_parsed is None and setq_items is None
+        and await get_completion_detector().is_completion(text)
+    )
+    if _mod_done:
+        if not mod_id:
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="modify-no-proposed",
-                body="No changes proposed yet. Reply with dishes or send 'hi' to start over.",
+                body="No modification in progress. Send 'hi' to start a new order.",
             )
             return
-        _set_state(conv, dialogue_state="modify_confirm")
-        await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
+        await _advance_modify_to_confirm(
+            session, conv, inbound, restaurant_id, mod_id, proposed,
+        )
         return
 
     if lower_q.startswith("what is "):
@@ -3043,13 +3473,23 @@ async def _handle_modify_items(
         )
         return
     proposed = list(conv.state.get("modify_proposed", []) or [])
-    proposed.append({
+    entry = {
         "dish_id": dish.id,
         "dish_number": dish.dish_number,
         "name": dish.name,
         "price_aed": str(dish.price_aed),
         "qty": qty,
-    })
+    }
+    existing_idx = next(
+        (i for i, p in enumerate(proposed) if p.get("dish_id") == dish.id),
+        None,
+    )
+    if existing_idx is not None:
+        proposed[existing_idx] = entry
+        action = f"Updated to {qty}x {dish.name}"
+    else:
+        proposed.append(entry)
+        action = f"Added {qty}x {dish.name}"
     _set_state(conv, dialogue_state="modify_items", modify_proposed=proposed)
 
     price = _aed(dish.price_aed)
@@ -3057,7 +3497,7 @@ async def _handle_modify_items(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="item-proposed",
         body=(
-            f"Added {qty}x {dish.name} (AED {price}) to your modification.\n"
+            f"{action} (AED {price}).\n"
             f"Reply with more items, or send 'done' to review and confirm (SLA restarts on confirm)."
         ),
     )
@@ -3100,14 +3540,24 @@ async def _send_modify_summary(
     new_sub = sum(Decimal(str(p["price_aed"])) * p["qty"] for p in proposed)
     new_total = new_sub + (order.delivery_fee_aed or Decimal("0"))
 
-    body = (
-        f"Current order #{order.order_number}:\n{curr_lines}\n\n"
-        f"Proposed new items:\n{prop_lines}\n\n"
-        f"New subtotal: AED {_aed(new_sub)}\n"
-        f"Delivery: AED {_aed(order.delivery_fee_aed or 0)}\n"
-        f"New total: AED {_aed(new_total)}\n\n"
-        f"Confirm these changes? (COD, 40-min SLA restarts after your confirm)"
-    )
+    differs = await _proposed_differs_from_order(session, order.id, proposed)
+    if differs:
+        body = (
+            f"Order #{order.order_number} — your updated items:\n{prop_lines}\n\n"
+            f"Was:\n{curr_lines}\n\n"
+            f"Subtotal: AED {_aed(new_sub)}\n"
+            f"Delivery: AED {_aed(order.delivery_fee_aed or 0)}\n"
+            f"Total: AED {_aed(new_total)} (COD)\n\n"
+            f"Confirm these changes? The 40-minute delivery window restarts after you confirm."
+        )
+    else:
+        body = (
+            f"Order #{order.order_number}:\n{prop_lines}\n\n"
+            f"Subtotal: AED {_aed(new_sub)}\n"
+            f"Delivery: AED {_aed(order.delivery_fee_aed or 0)}\n"
+            f"Total: AED {_aed(new_total)} (COD)\n\n"
+            f"No changes yet — tell me what to update, or tap Keep original."
+        )
     await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="modify-summary",
@@ -3153,16 +3603,27 @@ async def _handle_modify_confirm(
         return
 
     btn_id = inbound.payload.get("id", "") if inbound.type == MessageType.BUTTON_REPLY else ""
+    if (
+        not btn_id
+        and inbound.type == MessageType.TEXT
+        and _is_ack_proceed_intent(inbound.payload.get("text") or "")
+    ):
+        btn_id = "confirm_modify"
+
+    if btn_id == "cancel_order":
+        proposed = conv.state.get("modify_proposed", []) or []
+        if not proposed:
+            _clear_modify_state(conv)
+            _set_state(conv, dialogue_state="order_placed")
+            await _execute_cancel_order(session, conv, inbound, restaurant_id)
+            return
 
     if btn_id == "confirm_modify":
         proposed = conv.state.get("modify_proposed", []) or []
         if not proposed:
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="modify-empty",
-                body="No proposed changes. Modification cancelled.",
+            await _offer_full_cancel_from_empty_modify(
+                session, conv, inbound, restaurant_id, mod_id,
             )
-            _set_state(conv, dialogue_state="order_placed", modify_order_id=None, modify_proposed=None)
             return
 
         new_items: list[dict] = []
@@ -3175,7 +3636,8 @@ async def _handle_modify_confirm(
         # menu), the modify cannot run. Don't claim the order was "updated" — that's a
         # silent no-op that misleads the customer. Keep the original order and say so.
         if not new_items:
-            _set_state(conv, dialogue_state="order_placed", modify_order_id=None, modify_proposed=None)
+            _clear_modify_state(conv)
+            _set_state(conv, dialogue_state="order_placed")
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="modify-unavailable",
@@ -3187,12 +3649,8 @@ async def _handle_modify_confirm(
         await modify_order(session, order=order, new_items=new_items, actor="customer")
         # commit by caller (webhook/router)
 
-        _set_state(
-            conv,
-            dialogue_state="order_placed",
-            modify_order_id=None,
-            modify_proposed=None,
-        )
+        _clear_modify_state(conv)
+        _set_state(conv, dialogue_state="order_placed")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="modify-confirmed",
@@ -3205,7 +3663,8 @@ async def _handle_modify_confirm(
         return
 
     if btn_id == "cancel_modify":
-        _set_state(conv, dialogue_state="order_placed", modify_order_id=None, modify_proposed=None)
+        _clear_modify_state(conv)
+        _set_state(conv, dialogue_state="order_placed")
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="modify-cancelled",
@@ -3239,7 +3698,7 @@ async def _handle_cancel_during_modify(
     oid = conv.state.get("modify_order_id") or conv.state.get("pending_order_id")
     order = await session.get(Order, oid) if oid else None
     # Drop out of the modify flow no matter what (the trap is the bug we're fixing).
-    _set_state(conv, modify_order_id=None, modify_proposed=None)
+    _clear_modify_state(conv)
 
     if order is None:
         _set_state(conv, dialogue_state="cancelled",
@@ -5053,7 +5512,7 @@ async def _execute_confirm_order(
     # Drop the cart pointers now the order is placed — a later order must start a
     # fresh draft, not reuse this (now confirmed) order's id.
     _set_state(conv, dialogue_phase="post_order", dialogue_state="order_placed",
-               draft_order_id=None, pending_order_id=None)
+               draft_order_id=None, pending_order_id=None, last_placed_order_id=order.id)
     from app.ordering.payments import cod_due_aed
 
     due = cod_due_aed(order)
@@ -5780,6 +6239,16 @@ async def _dispatch_action(
         return
 
     # ── post_order actions ────────────────────────────────────────────────
+    if phase == "post_order" and action in ("remove_item", "update_qty"):
+        await _apply_post_confirm_line_edit(
+            session, conv, inbound, restaurant_id, action, data,
+        )
+        return
+
+    if phase == "post_order" and action == "confirm_line_edit":
+        await _handle_modify_confirm(session, conv, inbound, restaurant_id)
+        return
+
     if action == "status_query":
         await _handle_status_query(session, conv, inbound, restaurant_id)
         return
@@ -7361,6 +7830,11 @@ async def handle_inbound(
     # LLM can't sometimes mis-route it to clear_cart / modify (a valid dish is never
     # intercepted — it falls through to the AI unchanged).
     if await _maybe_decline_off_menu_order(session, conv, inbound, restaurant_id):
+        return
+
+    # Post-confirm item edits ("cancel chicken biriyani", "only lemon mint") — deterministic
+    # so the LLM can't start modify on a stale order id or treat "only X" as checkout done.
+    if await _try_post_order_item_edit(session, conv, inbound, restaurant_id):
         return
 
     # All remaining text + button_reply → AI
