@@ -92,9 +92,12 @@ def _strip_money_claims(text: str) -> str:
 # widely borrowed across all of these, but we add native words too so a menu request in
 # any served language is recognised deterministically.
 _MENU_KEYWORDS: tuple[str, ...] = (
-    # English
+    # English — canonical + catalogue variants (F109 / R-028 misspellings)
     "menu", "full menu", "show menu", "see menu", "the list",
     "what do you have", "what do you serve", "what's available", "options",
+    "catalog", "catalogue", "show catalog", "show catalogue",
+    # catalogue misspellings (F109): catlog / catlogue / catalouge / cataloge
+    "catlog", "catlogue", "catalouge", "cataloge",
     # Hindi / Urdu (roman + script) — menu-intent phrases, not generic "what is"
     "menu dikhao", "menu bhejo", "menu dikha", "kya kya hai", "kya milega", "list bhejo",
     "मेनू", "सूची",
