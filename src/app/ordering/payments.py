@@ -59,10 +59,16 @@ async def recompute_order_total(session: "AsyncSession", *, order: "Order") -> D
     items = (
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all()
-    subtotal = sum(
-        (Decimal(i.price_aed) * i.qty for i in items), _ZERO
-    ).quantize(_CENT)
-    order.subtotal = subtotal
+    if items:
+        # Items are the source of truth when they exist.
+        subtotal = sum(
+            (Decimal(i.price_aed) * i.qty for i in items), _ZERO
+        ).quantize(_CENT)
+        order.subtotal = subtotal
+    else:
+        # No line rows persisted (e.g. an order whose subtotal was set directly) —
+        # trust the stored subtotal rather than zeroing the order.
+        subtotal = Decimal(order.subtotal or _ZERO).quantize(_CENT)
 
     fee = Decimal(order.delivery_fee_aed or _ZERO)
     discount = max(Decimal(order.coupon_discount_aed or _ZERO), _ZERO)

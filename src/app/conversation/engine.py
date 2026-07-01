@@ -830,6 +830,7 @@ async def _finalize_resale_accept(
     distance_km: float | None,
     delivery_fee_aed: Decimal,
     settings: dict,
+    distance_source: str | None = None,
 ) -> None:
     """Mark resale sold, spawn the discounted READY order, dispatch (+ batch companion)."""
     from app.ordering.resale import accept_resale
@@ -866,6 +867,10 @@ async def _finalize_resale_accept(
         delivery_fee_aed=delivery_fee_aed,
         companion_order=companion,
     )
+    # Record how the distance/fee was derived on the spawned order (F112/F31).
+    if new_order is not None and distance_source is not None:
+        new_order.distance_source = distance_source
+        await session.flush()
     _set_state(
         conv,
         resale_offer_id=None,
@@ -919,7 +924,7 @@ async def _handle_resale_location_pin(
     lon = float(inbound.payload["longitude"])
     rest_lat = restaurant.lat if restaurant else 25.2048
     rest_lng = restaurant.lng if restaurant else 55.2708
-    dist = await _road_distance_km(rest_lat, rest_lng, lat, lon)
+    dist, dist_source = await _road_distance_km(rest_lat, rest_lng, lat, lon)
     fee_settings = await _fee_settings_for(session, restaurant_id)
     try:
         fee = calculate_fee(dist, fee_settings)
@@ -952,6 +957,7 @@ async def _handle_resale_location_pin(
         customer=customer,
         addr=addr,
         distance_km=dist,
+        distance_source=dist_source,
         delivery_fee_aed=fee,
         settings=settings,
     )
@@ -992,11 +998,12 @@ async def _handle_resale_accept(
     restaurant = await session.get(Restaurant, restaurant_id)
     settings = (restaurant.settings or {}) if restaurant else {}
     dist = None
+    dist_source = None
     fee = Decimal("0.00")
     if addr.latitude is not None and addr.longitude is not None:
         rest_lat = restaurant.lat if restaurant else 25.2048
         rest_lng = restaurant.lng if restaurant else 55.2708
-        dist = await _road_distance_km(rest_lat, rest_lng, addr.latitude, addr.longitude)
+        dist, dist_source = await _road_distance_km(rest_lat, rest_lng, addr.latitude, addr.longitude)
         fee_settings = await _fee_settings_for(session, restaurant_id)
         try:
             fee = calculate_fee(dist, fee_settings)
@@ -1014,6 +1021,7 @@ async def _handle_resale_accept(
         customer=customer,
         addr=addr,
         distance_km=dist,
+        distance_source=dist_source,
         delivery_fee_aed=fee,
         settings=settings,
     )
@@ -1500,15 +1508,19 @@ async def _fee_settings_for(session: AsyncSession, restaurant_id: int) -> dict |
 
 async def _road_distance_km(
     lat1: float, lng1: float, lat2: float, lng2: float
-) -> float:
-    """Distance (km) restaurant → customer via the configured geo provider.
+) -> tuple[float, str]:
+    """Distance (km) restaurant → customer + the SOURCE it was derived from.
 
-    Uses the GeoPort (``google_maps`` → traffic-aware road distance) so the fee
-    and radius the customer is quoted match real driving distance, not a
-    straight line. The provider's HTTP client is sync, so it's run in a thread
-    to avoid blocking the event loop. The provider already degrades to haversine
-    internally on any API failure; this wrapper adds a final haversine fallback
-    so a provider/config error can never break ordering.
+    Returns ``(distance_km, source)`` where ``source`` is ``"road"`` (the configured
+    geo provider answered) or ``"haversine_fallback"`` (the provider raised and we
+    degraded to a straight-line estimate). Persisting the source makes the fee basis
+    auditable and a degraded quote visible to ops (F112/F31).
+
+    Uses the GeoPort (``google_maps`` → traffic-aware road distance) so the fee and
+    radius the customer is quoted match real driving distance. The provider's HTTP
+    client is sync, so it's run in a thread to avoid blocking the event loop. This
+    wrapper's haversine fallback ensures a provider/config error can never break
+    ordering.
     """
     import asyncio
 
@@ -1516,11 +1528,12 @@ async def _road_distance_km(
     from app.geo.haversine import distance_km as _haversine
 
     try:
-        return await asyncio.to_thread(
+        dist = await asyncio.to_thread(
             get_geo_provider().distance_km, lat1, lng1, lat2, lng2
         )
+        return dist, "road"
     except Exception:  # noqa: BLE001 - never let geo break ordering
-        return _haversine(lat1, lng1, lat2, lng2)
+        return _haversine(lat1, lng1, lat2, lng2), "haversine_fallback"
 
 
 def _hours_info(restaurant) -> str:
@@ -1592,9 +1605,10 @@ async def _finalize_with_stored_address(
         return
 
     dist = None
+    dist_source = None
     fee = Decimal("0.00")
     if stored.latitude is not None and stored.longitude is not None:
-        dist = await _road_distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
+        dist, dist_source = await _road_distance_km(rest_lat, rest_lng, stored.latitude, stored.longitude)
         settings = await _fee_settings_for(session, restaurant_id)
         try:
             fee = calculate_fee(dist, settings)
@@ -1609,6 +1623,7 @@ async def _finalize_with_stored_address(
 
     order.address_id = stored.id
     order.distance_km = dist
+    order.distance_source = dist_source
     order.delivery_fee_aed = fee
     order.total = order.subtotal + fee
     stored.last_used_at = datetime.now(timezone.utc)
@@ -1679,7 +1694,7 @@ async def _handle_address_capture(
     if inbound.type == MessageType.LOCATION:
         lat = inbound.payload["latitude"]
         lon = inbound.payload["longitude"]
-        dist = await _road_distance_km(rest_lat, rest_lng, lat, lon)
+        dist, dist_source = await _road_distance_km(rest_lat, rest_lng, lat, lon)
         settings = await _fee_settings_for(session, restaurant_id)
         try:
             fee = calculate_fee(dist, settings)
@@ -1698,7 +1713,7 @@ async def _handle_address_capture(
         _set_state(
             conv,
             pin_lat=lat, pin_lon=lon,
-            distance_km=dist, delivery_fee=str(fee),
+            distance_km=dist, distance_source=dist_source, delivery_fee=str(fee),
             dialogue_state="address_text_pending",
         )
         await _send_text(
@@ -1789,6 +1804,7 @@ async def _handle_receiver_details(
         )
     order.address_id = addr.id
     order.distance_km = dist
+    order.distance_source = conv.state.get("distance_source")
     order.delivery_fee_aed = fee
     order.total = order.subtotal + fee
     await session.flush()
@@ -3222,7 +3238,7 @@ async def _ensure_draft_order(
         _set_state(
             conv, draft_order_id=order.id, address_offer_made=None,
             saved_address_declined=None, saved_address_id=None,
-            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
+            pin_lat=None, pin_lon=None, distance_km=None, distance_source=None, delivery_fee=None,
         )
     return order
 
@@ -3931,13 +3947,14 @@ async def _attach_saved_address_to_order(
             body="Your cart is empty. Send 'hi' to start a new order.",
         )
         return
-    dist_km = await _road_distance_km(
+    dist_km, dist_source = await _road_distance_km(
         restaurant.lat, restaurant.lng, addr.latitude, addr.longitude
     )
     from app.ordering.fees import fee_settings_from_restaurant
     fee = calculate_fee(dist_km, fee_settings_from_restaurant(restaurant.settings))
     order.address_id = addr.id
     order.distance_km = dist_km
+    order.distance_source = dist_source
     order.delivery_fee_aed = fee
     order.total = order.subtotal + fee
     await session.flush()
@@ -4669,7 +4686,7 @@ async def _handle_location_pin(
     settings = await _fee_settings_for(session, restaurant_id)
     max_km = radius_km(settings)
 
-    dist_km = await _road_distance_km(restaurant.lat, restaurant.lng, lat, lng)
+    dist_km, dist_source = await _road_distance_km(restaurant.lat, restaurant.lng, lat, lng)
 
     async def _send_out_of_range() -> None:
         await _send_text(
@@ -4700,6 +4717,7 @@ async def _handle_location_pin(
         pin_lat=lat,
         pin_lon=lng,
         distance_km=dist_km,
+        distance_source=dist_source,
         delivery_fee=str(fee),
         dialogue_phase="address_capture",
         dialogue_state="address_capture",
@@ -5204,7 +5222,7 @@ async def _try_catalog_typed_order(
         _set_state(
             conv, draft_order_id=order.id, address_offer_made=None,
             saved_address_declined=None, saved_address_id=None,
-            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
+            pin_lat=None, pin_lon=None, distance_km=None, distance_source=None, delivery_fee=None,
         )
     # W2/T6: check whether this dish is already in the cart so we can branch correctly.
     from app.ordering.models import OrderItem as _OI_ck

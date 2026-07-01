@@ -260,7 +260,7 @@ async def handle_catalog_order(
         _set_state(
             conv, draft_order_id=order.id, address_offer_made=None,
             saved_address_declined=None, saved_address_id=None,
-            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
+            pin_lat=None, pin_lon=None, distance_km=None, distance_source=None, delivery_fee=None,
         )
 
     from app.identity.models import Restaurant
