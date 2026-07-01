@@ -817,8 +817,12 @@ async def modify_order(
         session.add(item)
         subtotal += price_aed * qty
 
-    order.subtotal = subtotal
-    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+    # Re-derive subtotal/total from the persisted items and RE-APPLY the coupon
+    # discount + wallet hold (F26) — never a bare subtotal+fee that drops payments.
+    from app.ordering.payments import recompute_order_total
+
+    await recompute_order_total(session, order=order)
 
     # Restart the SLA clock after the customer confirms the modification.
     now = datetime.now(timezone.utc)
