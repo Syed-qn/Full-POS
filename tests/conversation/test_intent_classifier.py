@@ -130,6 +130,28 @@ async def test_non_english_question_is_question(clf):
 
 
 @pytest.mark.asyncio
+async def test_correction_before_completion_is_mutation_not_checkout(clf):
+    # A correction naming an in-cart dish/qty during the confirm phase is a
+    # mutation the flow must apply — NEVER a checkout, NEVER a silent add-on-top
+    # (R-071/RA-5/R-075).  It must be in MUTATING_INTENTS so it reaches the edit path.
+    for phase in ("ordering", "awaiting_confirmation"):
+        label = await clf.classify_intent("only 1 biriyani", "2x Biryani", phase)
+        assert label != IntentLabel.CHECKOUT
+        assert label != IntentLabel.CLEAR
+        assert label in MUTATING_INTENTS, (phase, label)
+
+
+@pytest.mark.asyncio
+async def test_complaint_naming_qty_is_never_checkout_or_mutation(clf):
+    # "why did you add 2" names a quantity but is a complaint — must not be read
+    # as a checkout or an add.
+    label = await clf.classify_intent("why did you add 2", "2x Biryani", "ordering")
+    assert label == IntentLabel.COMPLAINT
+    assert label not in MUTATING_INTENTS
+    assert label != IntentLabel.CHECKOUT
+
+
+@pytest.mark.asyncio
 async def test_unknown_outside_ordering_defaults_safe(clf):
     # An unrecognised phrase outside ordering falls through as UNKNOWN (which is
     # a MUTATING_INTENT → existing engine flow is preserved, nothing diverted).
