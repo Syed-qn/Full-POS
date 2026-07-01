@@ -203,6 +203,91 @@ _MENU_KEYWORDS: tuple[str, ...] = (
 )
 
 
+async def _text_is_exact_catalogue_dish(
+    session: AsyncSession,
+    restaurant_id: int,
+    text: str,
+) -> bool:
+    """True when ``text`` is an unambiguous exact dish name (not a note fragment)."""
+    q = (text or "").strip()
+    if not q:
+        return False
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=q)
+    if result.confidence != MatchConfidence.DIRECT or not result.candidates:
+        return False
+    return result.candidates[0].name_normalized == normalize_name(q)
+
+
+def _dish_ref_matches_cart_name(dish_ref: str, cart_name: str) -> bool:
+    """True when a partial customer dish reference targets an in-cart line name."""
+    skip = frozenset({"with", "and", "the", "a", "an", "in", "for", "on", "please", "need"})
+    ref_tokens = [
+        t for t in normalize_name(dish_ref).split()
+        if t not in skip and len(t) > 2
+    ]
+    if not ref_tokens:
+        return False
+    name_norm = normalize_name(cart_name)
+    hits = sum(1 for t in ref_tokens if t in name_norm)
+    return hits >= max(1, len(ref_tokens) - 1)
+
+
+def _pick_in_cart_dish_id(
+    matches: list,
+    dish_ref: str,
+) -> int | None:
+    if len(matches) == 1:
+        return matches[0].dish_id
+    if len(matches) > 1:
+        best = max(
+            matches,
+            key=lambda it: sum(
+                1 for t in normalize_name(dish_ref).split()
+                if t in normalize_name(it.dish_name)
+            ),
+        )
+        return best.dish_id
+    return None
+
+
+async def _resolve_in_cart_dish_id(
+    session: AsyncSession,
+    order_id: int,
+    dish_ref: str | None,
+) -> int | None:
+    """Map a partial dish reference to a dish_id already in the draft cart."""
+    from app.ordering.models import OrderItem
+
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))
+    ).all()
+    if not items:
+        return None
+    if not (dish_ref or "").strip():
+        return items[0].dish_id if len(items) == 1 else None
+    matches = [
+        it for it in items
+        if _dish_ref_matches_cart_name(dish_ref, it.dish_name)
+    ]
+    hit = _pick_in_cart_dish_id(matches, dish_ref)
+    if hit is not None:
+        return hit
+    # dish_ref may embed kitchen instructions after the dish name
+    # ("chicken biriyani chest piece double masala" → in-cart "Chicken Biryani").
+    skip = frozenset({"with", "and", "the", "a", "an", "in", "for", "on", "please", "need"})
+    words = [
+        t for t in normalize_name(dish_ref).split()
+        if t not in skip and len(t) > 2
+    ]
+    for cut in range(len(words) - 1, 0, -1):
+        prefix = " ".join(words[:cut])
+        pm = [it for it in items if _dish_ref_matches_cart_name(prefix, it.dish_name)]
+        hit = _pick_in_cart_dish_id(pm, prefix)
+        if hit is not None:
+            return hit
+    return None
+
+
 def _is_menu_request(text: str) -> bool:
     """True for short, explicit 'show me the menu' messages, in ANY served language.
 
@@ -212,7 +297,18 @@ def _is_menu_request(text: str) -> bool:
     t = text.strip().lower()
     if not t or len(t) > 40:
         return False
-    return any(k in t for k in _MENU_KEYWORDS)
+    if not any(k in t for k in _MENU_KEYWORDS):
+        return False
+    # Structural negation: substantial non-menu content means ordering, not catalogue.
+    remainder = t
+    for k in sorted(_MENU_KEYWORDS, key=len, reverse=True):
+        remainder = remainder.replace(k, " ")
+    remainder = _re.sub(r"[^\w\s]", " ", remainder, flags=_re.UNICODE)
+    remainder = _re.sub(r"\s+", " ", remainder).strip()
+    r_tokens = [w for w in remainder.split() if w]
+    if len(r_tokens) >= 3 or len(remainder.replace(" ", "")) > 12:
+        return False
+    return True
 
 
 def _is_cart_query(text: str) -> bool:
@@ -3613,6 +3709,14 @@ async def _execute_ai_add_item(
     adjust than to silently drop them."""
     result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
     if result.confidence == MatchConfidence.NO_MATCH:
+        if special_note and await _apply_note_to_existing_cart_item(
+            session,
+            conv,
+            dish_id=-1,
+            notes=special_note,
+            dish_query=dish_query,
+        ):
+            return "updated_note"
         # Distinguish "we have it but it's off today" from "we don't have it at all".
         # The matcher only searches AVAILABLE dishes, so a real dish the manager turned
         # off (e.g. Chicken Biryani sold out today) lands here. Tell the customer it's
@@ -3666,7 +3770,7 @@ async def _execute_ai_add_item(
                 return "awaiting_bundle"
 
     if special_note and variant is None and await _apply_note_to_existing_cart_item(
-        session, conv, dish_id=dish.id, notes=special_note
+        session, conv, dish_id=dish.id, notes=special_note, dish_query=dish_query,
     ):
         return "updated_note"
 
@@ -3684,6 +3788,7 @@ async def _apply_note_to_existing_cart_item(
     dish_id: int,
     notes: str,
     qty: int | None = None,
+    dish_query: str | None = None,
 ) -> bool:
     """Apply a kitchen note to an existing cart dish instead of charging for a
     duplicate line. Returns True when an existing cart line was updated."""
@@ -3694,8 +3799,123 @@ async def _apply_note_to_existing_cart_item(
     order = await session.get(Order, draft_order_id) if draft_order_id else None
     if order is None or str(order.status) != "draft":
         return False
-    updated = await set_item_note(session, order=order, dish_id=dish_id, notes=notes, qty=qty)
-    return updated is not None
+    if dish_id >= 0:
+        updated = await set_item_note(session, order=order, dish_id=dish_id, notes=notes, qty=qty)
+        if updated is not None:
+            return True
+    if dish_query:
+        alt_id = await _resolve_in_cart_dish_id(session, order.id, dish_query)
+        if alt_id is not None:
+            updated = await set_item_note(
+                session, order=order, dish_id=alt_id, notes=notes, qty=qty,
+            )
+            return updated is not None
+    return False
+
+
+async def _try_apply_kitchen_note_to_cart(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> bool:
+    """Deterministic path: dish-in-cart + prep modifiers → set kitchen note, no menu dump."""
+    from app.ordering.cart_service import CartService, normalize_note
+    from app.ordering.models import Order
+    from app.ordering.service import parse_qty_and_text
+
+    if inbound.type != MessageType.TEXT:
+        return False
+    text = (inbound.payload.get("text") or "").strip()
+    if not text or "?" in text or _is_menu_request(text.lower()):
+        return False
+    # Quantity corrections ("only 1 biryani with …") must reach update_qty, not note-only.
+    if _re.search(r"\b(?:only|just)\s+\d+\b", text, _re.IGNORECASE) or _re.search(
+        r"\b(?:only|just)\s+(?:one|two|three|four|five|six|seven|eight|nine|ten)\b",
+        text,
+        _re.IGNORECASE,
+    ) or _re.match(r"^(\d+)\s*[xX]\s*\S", text) or _re.search(
+        r"\b([1-9]|1[0-9]|20)\s+\D", text
+    ):
+        return False
+
+    draft_order_id = conv.state.get("draft_order_id")
+    order = await session.get(Order, draft_order_id) if draft_order_id else None
+    if order is None or str(order.status) != "draft":
+        return False
+    if not await _order_has_items(session, order.id):
+        return False
+
+    dish_ref: str | None = None
+    note: str | None = None
+    with_match = _re.match(r"^(.+?)\s+with\s+(.+)$", text, _re.IGNORECASE)
+    if with_match:
+        dish_ref = with_match.group(1).strip()
+        note = with_match.group(2).strip()
+    else:
+        qty, dish_query = parse_qty_and_text(text)
+        words = dish_query.split()
+        for cut in range(len(words), 0, -1):
+            cand = " ".join(words[:cut])
+            pref = await find_dish_matches(session, restaurant_id=restaurant_id, query=cand)
+            if (pref.confidence == MatchConfidence.DIRECT and pref.candidates
+                    and pref.candidates[0].name_normalized == normalize_name(cand)):
+                dish_ref = cand
+                note = (" ".join(words[cut:]).strip() or None)
+                break
+        if note is None and qty is None:
+            note = text
+            dish_ref = None
+
+    if not note or not normalize_note(note):
+        return False
+
+    if await _text_is_exact_catalogue_dish(session, restaurant_id, note):
+        return False
+
+    dish_id = await _resolve_in_cart_dish_id(session, order.id, dish_ref)
+    if dish_id is None:
+        from app.ordering.models import OrderItem as _OI_fb
+
+        _cart_lines = (
+            await session.scalars(select(_OI_fb).where(_OI_fb.order_id == order.id))
+        ).all()
+        if len(_cart_lines) == 1:
+            dish_id = _cart_lines[0].dish_id
+        elif dish_ref:
+            _best = max(
+                _cart_lines,
+                key=lambda it: sum(
+                    1 for t in normalize_name(dish_ref).split()
+                    if t in normalize_name(it.dish_name)
+                ),
+                default=None,
+            )
+            if _best is not None and _dish_ref_matches_cart_name(dish_ref, _best.dish_name):
+                dish_id = _best.dish_id
+    if dish_id is None:
+        return False
+
+    updated = await CartService(session).set_note(
+        order=order, dish_id=dish_id, raw_note=note,
+    )
+    if updated is None:
+        return False
+
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+    cart = await _build_cart_summary(session, conv)
+    await _record_cart_observation(session, conv)
+    clean = normalize_note(note)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="kitchen-note",
+        body=(
+            f"Sorry about that! I've added 1 {updated.dish_name} with a note for "
+            f"{clean}. I'll pass that to the kitchen and they'll do their best to "
+            f"accommodate it 😊{_cart_tail(cart)}"
+        ),
+    )
+    return True
 
 
 async def _resolve_cart_dish(session: AsyncSession, *, order_id: int, candidates):
@@ -4363,11 +4583,28 @@ async def _dispatch_action(
     # menu from history (in catalogue mode that history may hold the old text menu).
     # _render_menu is catalogue-bounded when catalogue mode is on, so this can never
     # leak a text-menu item.
+    _raw_inbound_text = (
+        inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+    )
     if _looks_like_menu(reply):
-        reply = await _render_menu(session, restaurant_id)
+        _draft_for_menu = conv.state.get("draft_order_id")
+        if (
+            _draft_for_menu
+            and await _order_has_items(session, _draft_for_menu)
+            and not _is_menu_request(_raw_inbound_text.lower())
+        ):
+            reply = (
+                "Sorry about the mix-up! I've noted your request for the kitchen. 😊"
+            )
+        else:
+            reply = await _render_menu(session, restaurant_id)
 
     # ── ordering actions ──────────────────────────────────────────────────
     if action == "show_menu":
+        if await _try_apply_kitchen_note_to_cart(
+            session, conv, inbound, restaurant_id,
+        ):
+            return
         # Catalogue first (when enabled), else the REAL text menu from the DB — never
         # let the LLM reproduce it (it hallucinated entire fake menus). Ignore message.
         await _send_menu_or_catalog(
@@ -4499,6 +4736,10 @@ async def _dispatch_action(
                 await _send_text(session, conv=conv, inbound=inbound,
                                  restaurant_id=restaurant_id, prefix="ai-add", body=body)
             elif status == "no_match":
+                if await _try_apply_kitchen_note_to_cart(
+                    session, conv, inbound, restaurant_id,
+                ):
+                    return
                 await _send_text(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                     prefix="ai-no-match",
@@ -4577,7 +4818,32 @@ async def _dispatch_action(
             return
 
         dish_query = data.get("dish_query", "") or (items[0].get("dish_query", "") if items else "")
-        qty = int((data.get("qty") if data.get("qty") is not None else (items[0].get("qty") if items else None)) or 1)
+        raw_qty = data.get("qty") if data.get("qty") is not None else (items[0].get("qty") if items else None)
+        special_note = (
+            data.get("special_note", "")
+            or (items[0].get("special_note", "") if items else "")
+        )
+        # cart_set_note → update_qty with note only (qty omitted).
+        if raw_qty is None and special_note and dish_query:
+            if await _apply_note_to_existing_cart_item(
+                session,
+                conv,
+                dish_id=-1,
+                notes=special_note,
+                dish_query=dish_query,
+            ):
+                cart = await _build_cart_summary(session, conv)
+                await _record_cart_observation(session, conv)
+                clean = special_note.strip()
+                body = (
+                    f"Got it! I've noted {clean} for your order 😊{_cart_tail(cart)}"
+                )
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="ai-set-note", body=body,
+                )
+                return
+        qty = int(raw_qty or 1)
         if dish_query and qty > _max_item_qty(restaurant):
             await _escalate_large_qty(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -4586,7 +4852,7 @@ async def _dispatch_action(
             return
         outcome, dish_name = await _execute_ai_update_qty(
             session, conv, inbound, restaurant_id, dish_query, qty,
-            special_note=data.get("special_note", "") or (items[0].get("special_note", "") if items else ""),
+            special_note=special_note,
         )
         if outcome == "awaiting_bundle":
             # The bundle question was already sent; wait for the yes/no reply.
@@ -5372,6 +5638,29 @@ async def _try_catalog_typed_order(
         )
         return True
 
+    # Branch B2: note + partial in-cart match (e.g. combo line "Chicken Biriyani + Lemon Mint"
+    # when customer says "chicken biriyani with double masala").
+    if note:
+        _alt_dish_id = await _resolve_in_cart_dish_id(session, order.id, dish.name)
+        if _alt_dish_id is not None:
+            await _cs.set_note(order=order, dish_id=_alt_dish_id, raw_note=note)
+            _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+            cart = await _build_cart_summary(session, conv)
+            await _record_cart_observation(session, conv)  # F66/W3
+            _alt_line = await session.scalar(
+                select(_OI_ck.dish_name).where(
+                    _OI_ck.order_id == order.id,
+                    _OI_ck.dish_id == _alt_dish_id,
+                ).limit(1)
+            )
+            _line_name = _alt_line or dish.name
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="catalog-typed-note-partial",
+                body=f"Updated {_line_name}: {normalize_note(note)} ✅{_cart_tail(cart)}",
+            )
+            return True
+
     # Default: plain delta-add (existing behaviour).
     await add_item(session, order=order, dish=dish, qty=add_qty, notes=note)
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
@@ -5577,6 +5866,13 @@ async def handle_inbound(
     # ── Customer conversation (full AI) ────────────────────────────────────
     from app.identity.models import Restaurant as RestaurantModel
     restaurant = await session.get(RestaurantModel, restaurant_id)
+
+    # Kitchen-note clarifications (e.g. "biryani with double masala and chest piece")
+    # must run before menu / AI paths so modifiers are never misread as menu requests
+    # or split into bogus multi-dish adds (RA-4 / biryani transcript).
+    if inbound.type == MessageType.TEXT:
+        if await _try_apply_kitchen_note_to_cart(session, conv, inbound, restaurant_id):
+            return
 
     # "Don't call me" — capture as a persistent contact preference on the customer so
     # every rider stop shows a "do not call, message only" flag. Saying calling is OK
@@ -5948,6 +6244,9 @@ async def handle_inbound(
     # mutating intent. Outside ordering (address_capture / awaiting_confirmation /
     # post_order) a typed dish is a correction/edit that the phase-aware AI flow
     # must own, not a silent catalogue add (F49/F20-A/RA-5).
+    if await _try_apply_kitchen_note_to_cart(session, conv, inbound, restaurant_id):
+        return
+
     if (
         _router_phase == "ordering"
         and _router_intent in MUTATING_INTENTS

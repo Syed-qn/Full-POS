@@ -113,6 +113,20 @@ class CompletionDetectorPort(Protocol):
         ...
 
 
+class KitchenSummarizerPort(Protocol):
+    """Tier-2 kitchen digest: LLM compresses inbound chat into net-new lines only.
+
+    Tier 1 (structured cart/notes) is rendered in code — this port NEVER rewrites
+    the authoritative block.  Language-agnostic; no phrase tables on the live path.
+    """
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        """Return 0–2 additional kitchen/delivery lines not in ``structured_block``."""
+        ...
+
+
 class ArbiterPort(Protocol):
     async def arbitrate(self, query: str, candidates: list) -> object | None:
         """Given ambiguous matches, return the single best Dish or None."""

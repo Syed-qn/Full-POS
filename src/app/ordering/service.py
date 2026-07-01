@@ -1394,27 +1394,6 @@ async def create_manual_order(
     return order
 
 
-# Greetings / control words / button taps that carry no kitchen info — kept
-# MULTILINGUAL because this is a multi-language SaaS (the bot is used in English,
-# Hindi/Urdu, Arabic, Telugu, etc.). We can't keyword-match instructions across every
-# language, so instead of an English keep-list we INCLUDE every substantive customer
-# line and only skip these short greeting/confirmation tokens.
-_SUMMARY_SKIP = {
-    # English
-    "hi", "hello", "hey", "yo", "hii", "hlo", "start", "menu", "done", "yes", "no",
-    "ok", "okay", "okey", "confirm", "confirm order", "start new", "new", "continue",
-    "that's all", "thats all", "checkout", "nothing", "thanks", "thank you", "yep", "nope",
-    # Hindi / Urdu (roman + script)
-    "namaste", "namaskar", "salam", "assalam", "assalam o alaikum", "haan", " haan",
-    "nahi", "theek", "theek hai", "accha", "ji", "shukriya", "bas", "हाँ", "नहीं", "ठीक",
-    "नमस्ते", "हाय", "हेलो",
-    # Arabic
-    "مرحبا", "السلام عليكم", "نعم", "لا", "شكرا", "تمام", "اهلا",
-    # Telugu
-    "నమస్తే", "అవును", "కాదు", "సరే",
-}
-
-
 def _chat_for_this_order(chat: list, order) -> list:
     """Restrict the chat to THIS order's session window. The conversation is per-phone
     and spans every past order, so the summary must not bleed in lines from other
@@ -1436,30 +1415,52 @@ def _chat_for_this_order(chat: list, order) -> list:
     return [m for m in chat if lo <= getattr(m, "ts", 0) <= hi]
 
 
-def _kitchen_convo_summary(chat: list, items_rows: list) -> str | None:
-    """A short kitchen-facing digest: every item's special request (note) plus the
-    customer's own substantive lines from the chat — in WHATEVER language they wrote.
-    Only short greeting/confirm tokens are dropped (language-agnostic by design); we
-    never keyword-filter, so a Hindi/Arabic/Telugu instruction is never lost."""
-    lines: list[str] = []
-    for it in items_rows:
-        note = (getattr(it, "notes", None) or "").strip()
-        if note:
-            lines.append(f"• {it.qty}x {it.dish_name}: {note}")
-    seen: set[str] = set()
-    for m in chat:
-        if getattr(m, "direction", None) != "inbound":
-            continue
-        t = (getattr(m, "text", None) or "").strip()
-        low = t.lower()
-        # Skip empties, very short tokens, greetings/confirms, and exact duplicates.
-        if len(t) < 2 or len(t) > 200 or low in _SUMMARY_SKIP or low in seen:
-            continue
-        seen.add(low)
-        lines.append(f"• “{t}”")
-    if not lines:
-        return None
-    return "\n".join(lines[:10])
+async def _kitchen_convo_summary(
+    items_rows: list,
+    *,
+    order_details: str | None = None,
+    delivery_details: str | None = None,
+    chat: list | None = None,
+) -> str | None:
+    """Kitchen digest — max 3 lines.
+
+    Tier 1 (code): item notes + persisted order/address details — authoritative.
+    Tier 2 (LLM port): compress inbound chat into 0–2 net-new lines only.
+    Multilingual; no phrase tables on the live path (see kitchen_summary.py)."""
+    from app.llm.kitchen_summary import clamp_summary_lines, render_structured_lines
+
+    lines = render_structured_lines(
+        items_rows,
+        order_details=order_details,
+        delivery_details=delivery_details,
+    )
+    structured_block = "\n".join(lines)
+
+    inbound = [
+        (getattr(m, "text", None) or "").strip()
+        for m in (chat or [])
+        if getattr(m, "direction", None) == "inbound"
+    ]
+    inbound = [t for t in inbound if t]
+
+    if inbound:
+        try:
+            from app.llm.factory import get_kitchen_summarizer
+
+            extras = await get_kitchen_summarizer().supplement_from_chat(
+                structured_block, inbound
+            )
+        except Exception:
+            _logger.exception("kitchen summary tier-2 failed; using structured only")
+            extras = []
+        blob = structured_block.lower()
+        for extra in extras:
+            e = extra.strip()
+            if e and e.lower() not in blob:
+                lines.append(e)
+                blob += f" {e.lower()}"
+
+    return clamp_summary_lines(lines)
 
 
 def parse_detail_includes(include: str | None) -> frozenset[str] | None:
@@ -1712,7 +1713,12 @@ async def get_order_detail(
         timeline=timeline,
         chat=chat,
         convo_summary=(
-            _kitchen_convo_summary(_chat_for_this_order(chat, order), items_rows)
+            await _kitchen_convo_summary(
+                items_rows,
+                order_details=order.additional_details,
+                delivery_details=address.additional_details if address else None,
+                chat=_chat_for_this_order(chat, order) if chat else None,
+            )
             if _detail_wants("chat", includes)
             else None
         ),

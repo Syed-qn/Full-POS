@@ -643,3 +643,32 @@ class DeepSeekSegmentCompiler:
             raise RuntimeError(f"DeepSeekSegmentCompiler returned non-JSON: {exc}") from exc
         validate_dsl(dsl)
         return dsl
+
+
+class DeepSeekKitchenSummarizer:
+    """Tier-2 kitchen chat compressor — multilingual, no phrase tables."""
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        from app.llm.kitchen_summary import (
+            _TIER2_SYSTEM,
+            build_tier2_prompt,
+            parse_tier2_response,
+        )
+
+        if not inbound_messages:
+            return []
+        api_key, model = _get_deepseek_settings()
+        prompt = build_tier2_prompt(structured_block, inbound_messages)
+        raw = await _async_chat(
+            api_key,
+            model,
+            [
+                {"role": "system", "content": _TIER2_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=120,
+            temperature=0.0,
+        )
+        return parse_tier2_response(raw)

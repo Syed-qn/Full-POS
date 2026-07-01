@@ -230,8 +230,21 @@ class FakeConversationAgent:
             if any(w in last_user for w in ("where", "status", "track", "eta", "when")):
                 return _emit("status_query", {}, "Let me check your order status.")
 
-            # Multi-dish add (delta).
-            if re.search(r",|\band\b|\+", last_user):
+            # Multi-dish add (delta). Skip when the message is a kitchen-note clarification
+            # ("biryani with double masala and chest piece") — those are one dish + note.
+            if (
+                re.search(r",|\band\b|\+", last_user)
+                and not (
+                    " with " in last_user
+                    and any(
+                        w in last_user
+                        for w in (
+                            "masala", "spicy", "piece", "chest", "extra", "double",
+                            "without", "onion", "garlic",
+                        )
+                    )
+                )
+            ):
                 clauses = re.split(r"\s*(?:,|\band\b|\+)\s*", last_user)
                 parsed = []
                 for c in clauses:
@@ -345,6 +358,15 @@ class FakeCompletionDetector:
             if " " in token and token in normalised:
                 return True
         return False
+
+
+class FakeKitchenSummarizer:
+    """Test double: tier-1 structured lines only — no LLM chat mining in tests."""
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        return []
 
 
 class FakeSegmentCompiler:

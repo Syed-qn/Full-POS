@@ -92,7 +92,7 @@ class OrderDetailOut(BaseModel):
     cook_estimate_minutes: int | None
     timeline: list[TimelineEventOut]
     chat: list[ChatMessageOut]
-    convo_summary: str | None = None  # kitchen-facing digest: special requests + customer asks
+    convo_summary: str | None = None  # kitchen digest: item notes + persisted order/address details
     route: list[GpsPingOut]
     batch_preview_label: str | None = None
     dispatch_explain: dict | None = None

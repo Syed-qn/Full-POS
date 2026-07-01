@@ -23,6 +23,7 @@ _NOTE_PREFIX_RE = re.compile(
     r"|i'd\s+like|id\s+like)\s+",
     re.IGNORECASE,
 )
+_WITH_PREFIX_RE = re.compile(r"^with\s+", re.IGNORECASE)
 
 
 def normalize_note(raw: str) -> str:
@@ -33,6 +34,7 @@ def normalize_note(raw: str) -> str:
     Empty / whitespace input -> empty string.
     """
     text = (raw or "").strip()
+    text = _WITH_PREFIX_RE.sub("", text).strip()
     changed = True
     while changed and text:
         new_text = _NOTE_PREFIX_RE.sub("", text, count=1).strip()

@@ -532,3 +532,32 @@ class ClaudeConversationAgent:
                     action_data=action_data,
                 )
         raise RuntimeError("ClaudeConversationAgent: no take_action block in response")
+
+
+class ClaudeKitchenSummarizer:
+    """Tier-2 kitchen chat compressor — parity with DeepSeekKitchenSummarizer."""
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        from app.llm.kitchen_summary import (
+            _TIER2_SYSTEM,
+            build_tier2_prompt,
+            parse_tier2_response,
+        )
+
+        if not inbound_messages:
+            return []
+        prompt = build_tier2_prompt(structured_block, inbound_messages)
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=120,
+            system=_TIER2_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = _first_text(message).strip()
+        return parse_tier2_response(raw)

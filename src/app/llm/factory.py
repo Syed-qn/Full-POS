@@ -138,3 +138,16 @@ def get_segment_compiler():
         return DeepSeekSegmentCompiler()
     from app.llm.fake import FakeSegmentCompiler
     return FakeSegmentCompiler()
+
+
+def get_kitchen_summarizer():
+    """Tier-2 kitchen chat compressor (LLM-driven; Fake returns [] in tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeKitchenSummarizer
+        return ClaudeKitchenSummarizer()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekKitchenSummarizer
+        return DeepSeekKitchenSummarizer()
+    from app.llm.fake import FakeKitchenSummarizer
+    return FakeKitchenSummarizer()
