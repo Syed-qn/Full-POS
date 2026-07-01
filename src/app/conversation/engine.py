@@ -4826,9 +4826,9 @@ async def _dispatch_action(
     if action == "proceed_to_confirmation":
         _set_state(conv, dialogue_phase="awaiting_confirmation",
                    dialogue_state="order_confirmation")
-        if reply:
-            await _send_text(session, conv=conv, inbound=inbound,
-                             restaurant_id=restaurant_id, prefix="ai-confirm", body=reply)
+        # W3: Do NOT forward LLM reply — the address-capture path already sends
+        # _send_order_summary with DB-backed totals. A bare LLM reply here would
+        # carry stale/hallucinated money facts without a DB summary (F104/TX-17).
         return
 
     # ── awaiting_confirmation actions ─────────────────────────────────────
