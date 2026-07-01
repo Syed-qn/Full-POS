@@ -34,10 +34,6 @@ from tests.harness.replay import drive_turns
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W2 notes + W3 render: catalog basket + note request must yield one noted line",
-)
 async def test_catalogue_basket_double_masala_one_noted_line(
     db_session, restaurant, seed_biryani_menu
 ):
@@ -269,10 +265,6 @@ async def test_multilingual_catalog_request_sends_catalog(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W2 notes: 'PLS' prefix must not be captured as part of the dish note",
-)
 async def test_pls_not_a_note(db_session, restaurant, seed_biryani_menu):
     """'pls add extra masala' after ordering biryani.  The engine today either
     stores 'pls' as part of the note, or treats the phrase as a new dish lookup
@@ -297,10 +289,6 @@ async def test_pls_not_a_note(db_session, restaurant, seed_biryani_menu):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W2/W4 clear_cart: 'only X' must update qty, never drop other cart items",
-)
 async def test_clear_cart_only_on_explicit_clear(db_session, restaurant, seed_biryani_menu):
     """Cart has biryani + lemon mint. 'only 1 biryani' means set biryani qty to 1;
     the lemon mint must survive.  Today the engine adds a duplicate biryani or
