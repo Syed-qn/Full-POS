@@ -798,17 +798,24 @@ async def modify_order(
         dish = entry["dish"]
         qty = entry.get("qty", 1)
         notes = entry.get("notes")
+        variant_name = entry.get("variant_name")
+        price_aed = (
+            Decimal(str(entry["price_aed"]))
+            if entry.get("price_aed") is not None
+            else dish.price_aed
+        )
         item = OrderItem(
             order_id=order.id,
             dish_id=dish.id,
             dish_number=dish.dish_number,
             dish_name=dish.name,
-            price_aed=dish.price_aed,
+            variant_name=variant_name,
+            price_aed=price_aed,
             qty=qty,
             notes=notes,
         )
         session.add(item)
-        subtotal += dish.price_aed * qty
+        subtotal += price_aed * qty
 
     order.subtotal = subtotal
     order.total = subtotal + order.delivery_fee_aed
