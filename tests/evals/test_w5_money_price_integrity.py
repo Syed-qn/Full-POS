@@ -14,7 +14,9 @@ R-050, R-051, F26, F41, F112, RA-3):
   (e) The delivery ``distance_source`` is persisted, flagging the haversine
       fallback when the geo provider fails (F112).
 
-Each test is ``xfail(strict=True)`` until W5 lands; then the markers are removed.
+These graduated from ``xfail(strict=True)`` to permanent regression tests once W5
+landed (columns + recompute_order_total + apply_coupon + catalogue snapshot +
+QuantityPolicy + distance_source).
 """
 from decimal import Decimal
 
@@ -49,7 +51,6 @@ async def _latest_draft_order(db_session, restaurant_id) -> Order | None:
 
 # ── (a) catalogue snapshots Meta item_price, not stale Dish.price_aed ──────────
 
-@pytest.mark.xfail(strict=True, reason="W5: catalogue must snapshot Meta item_price")
 async def test_catalogue_snapshots_meta_item_price(db_session, restaurant, seed_biryani_menu):
     from app.catalog.models import CatalogProduct
     from app.catalog.service import handle_catalog_order
@@ -84,7 +85,6 @@ async def test_catalogue_snapshots_meta_item_price(db_session, restaurant, seed_
 
 # ── (b) price drift > 0.01 blocks the item + price-mismatch reply ──────────────
 
-@pytest.mark.xfail(strict=True, reason="W5: price drift must block the item")
 async def test_catalogue_price_drift_blocks_item(db_session, restaurant, seed_biryani_menu):
     from app.catalog.service import handle_catalog_order
 
@@ -114,7 +114,6 @@ async def test_catalogue_price_drift_blocks_item(db_session, restaurant, seed_bi
 
 # ── (c) pre-confirm summary: wallet credit + COD due (R-049 / RA-3) ────────────
 
-@pytest.mark.xfail(strict=True, reason="W5: summary must show wallet credit + COD due")
 async def test_summary_shows_wallet_credit_and_cod_due(db_session, restaurant, seed_biryani_menu):
     from app.conversation.renderer import render_cart_state
     from app.ordering.service import add_item, create_draft_order, get_or_create_customer
@@ -150,7 +149,6 @@ async def test_summary_shows_wallet_credit_and_cod_due(db_session, restaurant, s
 
 # ── (d) modify_order preserves coupon discount + wallet hold (F26) ─────────────
 
-@pytest.mark.xfail(strict=True, reason="W5: modify_order must preserve coupon + wallet")
 async def test_modify_order_preserves_coupon_and_wallet(db_session, restaurant, seed_biryani_menu):
     from app.coupons.service import create_coupon
     from app.ordering.payments import apply_coupon
@@ -197,7 +195,6 @@ async def test_modify_order_preserves_coupon_and_wallet(db_session, restaurant, 
 
 # ── (e) distance_source persisted on haversine fallback (F112) ─────────────────
 
-@pytest.mark.xfail(strict=True, reason="W5: distance_source must flag haversine fallback")
 async def test_distance_source_flags_haversine_fallback(db_session, restaurant, monkeypatch):
     from app.conversation import engine
     from app.ordering.service import create_draft_order, get_or_create_customer

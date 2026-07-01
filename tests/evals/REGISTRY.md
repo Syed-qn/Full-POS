@@ -88,6 +88,25 @@ rather than the Fake path alone.
 > fix (`is_only_intent` detection + `CartService.set_qty` Branch A in
 > `_try_catalog_typed_order`) is landed; lemon mint now survives "only 1 biryani".
 
+## W5 additions (money & catalogue price integrity)
+
+A new eval file `test_w5_money_price_integrity.py` was added and immediately
+**graduated** (all 5 pass on the W5 branch — no residual xfail):
+
+| # | Test ID | Finding guarded | Workstream |
+|---|---------|-----------------|------------|
+| W5-a | `test_catalogue_snapshots_meta_item_price` | R-051 — catalogue basket must snapshot the tapped Meta `item_price` onto `OrderItem.price_aed`, not the stale `Dish.price_aed` | W5 (catalog snapshot + `add_item(price_aed_override=)`) |
+| W5-b | `test_catalogue_price_drift_blocks_item` | R-019 — tapped price drifting >0.01 from the tenant catalogue price blocks the item + price-mismatch reply (no silent under/overcharge) | W5 |
+| W5-c | `test_summary_shows_wallet_credit_and_cod_due` | R-049 / RA-3 — pre-confirm summary shows wallet credit = min(balance, total) and COD due = total − applied; summary math == door cash | W5 (renderer + `_send_order_summary`) |
+| W5-d | `test_modify_order_preserves_coupon_and_wallet` | F26 — `modify_order` re-applies the coupon discount and keeps the wallet hold consistent via `recompute_order_total` | W5 (payments + modify_order) |
+| W5-e | `test_distance_source_flags_haversine_fallback` | F112 / F31 — `_road_distance_km` returns a source; `order.distance_source` persists the haversine fallback flag | W5 (geo tuple + column) |
+
+Supporting money path (F41): `_redeem_coupon_at_checkout` now routes through
+`payments.apply_coupon` (validate/redeem → set `coupon_id` + `coupon_discount_aed`
+→ `recompute_order_total`), so checkout-coupon math == confirm math. New standalone
+`app.ordering.quantity_policy.QuantityPolicy` enforces the per-line max-qty guard on
+catalogue baskets at parity with the typed path (R-050); W8 reuses it.
+
 ## Graduation rule
 
 An eval graduates from xfail to regression when:
