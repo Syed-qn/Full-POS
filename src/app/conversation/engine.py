@@ -119,12 +119,21 @@ async def _canonical_dish_names(
     return frozenset(n.strip().lower() for n in rows if n)
 
 
-# Regex: a word sequence likely to be a dish name — ≥2 title-case words, or
-# a known food-adjacent pattern.  We match runs of 1-4 capitalised words
-# (allowing "and") as candidate dish names in LLM prose.
+# A dish 'name' that is actually an internal/dev slug (e.g. 'chicken_biryani') rather
+# than a real customer-facing title (F74/F97). Dish.name has no dedicated slug column
+# (see model), so this pattern match is the only signal: all-lowercase, snake_case-ish.
+_SLUG_NAME = _re.compile(r"^[a-z][a-z0-9_]*$")
+
+# Regex: a word sequence likely to be a dish name — a run of 2-4 consecutive
+# title-case words. Deliberately does NOT span "and"/"&"/"," — a list like "Lamb
+# Ouzi and Seafood Platter" must yield TWO candidates ("Lamb Ouzi", "Seafood
+# Platter"), not one glued-together non-match, so each fabricated name is counted.
 _DISH_NAME_CANDIDATE = _re.compile(
-    r"\b([A-Z][a-zA-Z]+(?:\s+(?:and|&|[A-Z][a-zA-Z]+)){1,3})\b"
+    r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){1,3})\b"
 )
+# Splits a reply into dish-name-candidate segments at conjunctions/commas so the
+# title-case run regex above never crosses "and"/"&" into the next dish name.
+_CONJUNCTION_SPLIT = _re.compile(r"\s*(?:,|&|\band\b)\s*", _re.IGNORECASE)
 
 
 async def _looks_like_hallucinated_menu(
@@ -153,7 +162,9 @@ async def _looks_like_hallucinated_menu(
         # No catalogue data yet — skip cross-check to avoid false positives
         return False
 
-    candidates = _DISH_NAME_CANDIDATE.findall(reply)
+    candidates: list[str] = []
+    for segment in _CONJUNCTION_SPLIT.split(reply):
+        candidates.extend(_DISH_NAME_CANDIDATE.findall(segment))
     unknown = sum(1 for c in candidates if c.strip().lower() not in canonical)
     return unknown >= 2
 
@@ -584,12 +595,20 @@ async def _catalog_mode_on(session: AsyncSession, restaurant_id: int) -> bool:
 
 
 async def _catalog_excludes_dish(session: AsyncSession, restaurant_id: int, dish) -> bool:
-    """In CATALOGUE mode, True when ``dish`` is NOT part of the synced Meta catalogue —
-    so the bot won't describe, recommend, or let a customer type-order a text-menu item
-    that isn't actually orderable. Always False in text mode (no restriction)."""
+    """True when ``dish`` must never be shown/ordered on WhatsApp.
+
+    Two independent gates:
+    - ``whatsapp_enabled=False`` (manager's per-dish WhatsApp switch, TX-45) excludes the
+      dish in EVERY mode — text or catalogue.
+    - In CATALOGUE mode, True when ``dish`` is additionally NOT part of the synced Meta
+      catalogue — so the bot won't describe, recommend, or let a customer type-order a
+      text-menu item that isn't actually orderable. Always False (for this gate) in text
+      mode (no restriction)."""
     from app.identity.models import Restaurant, catalog_mode_enabled
 
     if getattr(dish, "meta_status", "active") == "archived":
+        return True
+    if not getattr(dish, "whatsapp_enabled", True):
         return True
     rest = await session.get(Restaurant, restaurant_id)
     if rest is None or not catalog_mode_enabled(rest.settings):
@@ -652,10 +671,13 @@ async def _render_menu(
             Dish.menu_id == menu.id,
             Dish.is_available == True,  # noqa: E712
             Dish.meta_status == "active",
+            Dish.whatsapp_enabled == True,  # noqa: E712 — manager's per-dish WA switch (TX-45)
         )
         .order_by(Dish.category, Dish.dish_number)
     )
-    dish_list = list(dishes)
+    # Slug-named dishes (e.g. 'chicken_biryani') are internal identifiers that leaked
+    # into the name column — never customer-facing (F74/F97).
+    dish_list = [d for d in dishes if not _SLUG_NAME.match(d.name or "")]
     if not dish_list:
         return "Our menu is currently unavailable. Please try again later."
 
@@ -5279,11 +5301,15 @@ async def _try_catalog_typed_order(
         # Typed an item that isn't in the catalogue → answer honestly and
         # deterministically here (never let it fall to the AI, which sometimes
         # re-sends the whole catalogue instead of saying we don't have it).
+        # Honest demotion (TX-06, R-023): the dish exists in our records but isn't on
+        # the active WhatsApp catalogue — say so plainly and point to the phone, never
+        # inject a fake mini-menu or silently drop the request.
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="catalog-typed-unavailable",
-            body=(f"Sorry, we don't have {dish.name} on our menu 🙏 "
-                  "Tap the catalogue to see what's available, or tell me another dish 😊"),
+            body=(f"Sorry, we don't have {dish.name} on our WhatsApp catalogue right now 🙏 "
+                  "It's available by phone — please call us to order it, or tell me "
+                  "another dish from our catalogue 😊"),
         )
         return True
 
