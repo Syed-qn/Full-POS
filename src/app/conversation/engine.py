@@ -1349,6 +1349,24 @@ def _looks_like_order_question(text: str) -> bool:
     return any(p in t for p in _ORDER_QUESTION_CONTAINS)
 
 
+# Phrases that genuinely mean "empty my cart / start over". Used to protect the
+# destructive clear_cart action: if the LLM tagged a message clear_cart but it says NONE
+# of these AND names a dish, it's an order that was misclassified ("one beef curry" read
+# as "clear") — so we add the dish instead of silently wiping the cart.
+_CLEAR_CART_PHRASES: tuple[str, ...] = (
+    "clear", "empty", "start over", "start again", "reset", "wipe", "scrap", "restart",
+    "remove all", "remove everything", "delete all", "delete everything",
+    "cancel all", "cancel everything", "fresh start", "start fresh", "start new",
+    "new order",
+)
+
+
+def _is_explicit_clear(text: str) -> bool:
+    """True when the message explicitly asks to empty the cart / start over."""
+    t = (text or "").strip().lower()
+    return any(p in t for p in _CLEAR_CART_PHRASES)
+
+
 async def _handle_done_checkout(
     session: AsyncSession,
     conv: Conversation,
@@ -4444,6 +4462,19 @@ async def _dispatch_action(
         return
 
     if action == "clear_cart":
+        # Guard: a destructive cart-wipe must LOSE to an actual order. The LLM sometimes
+        # tags an order ("one beef curry") as clear_cart; if the message isn't an explicit
+        # "empty/start over" AND parses to a dish query, route it to the add path so the
+        # item is added (or honestly declined) instead of the cart being silently emptied.
+        raw_text = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+        if raw_text.strip() and not _is_explicit_clear(raw_text):
+            from app.ordering.service import parse_qty_and_text
+
+            _q, _dq = parse_qty_and_text(raw_text)
+            if _dq and not _is_checkout_intent(_dq):
+                await _handle_collecting_items(session, conv, inbound, restaurant_id)
+                return
+
         # Empty the WHOLE draft cart (not a single remove) so the customer can start
         # over. Keeps the same draft order, just drops every line + zeroes the totals.
         from sqlalchemy import delete as sa_delete

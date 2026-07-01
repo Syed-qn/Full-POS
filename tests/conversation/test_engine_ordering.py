@@ -140,6 +140,106 @@ async def test_complaint_question_does_not_add_items(db_session, restaurant):
     assert "Added" not in last  # it did not confirm an add
 
 
+async def test_clear_cart_action_with_a_dish_adds_instead_of_wiping(db_session, restaurant):
+    """An order the LLM mis-tags as clear_cart ("one beef curry") must ADD the dish, not
+    empty the cart. Reproduces the chat where "One beef curry" returned "Cleared your
+    cart 🧹" and the order was silently dropped."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    beef = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=150,
+        name="Beef Curry", price_aed=Decimal("30.00"), category="Curry",
+        is_available=True, name_normalized="beef curry",
+    )
+    db_session.add_all([biryani, beef])
+    await db_session.commit()
+
+    # Existing cart holds 1x Chicken Biryani.
+    await handle_inbound(db_session, _msg("hi", "wamid.bc_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # LLM mis-classifies "one beef curry" as clear_cart.
+    result = SimpleNamespace(action="clear_cart", action_data={}, message="")
+    await _dispatch_action(
+        db_session, conv, _msg("one beef curry", "wamid.bc"), restaurant.id,
+        result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    numbers = {i.dish_number for i in items}
+    # Cart was NOT wiped: the biryani stayed AND beef curry was added.
+    assert 110 in numbers and 150 in numbers
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" not in last
+
+
+async def test_explicit_clear_still_empties_cart(db_session, restaurant):
+    """A genuine "clear my cart" must still empty the cart (guard doesn't over-fire)."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.cc_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    from app.menu.models import Dish
+    biryani = (await db_session.execute(
+        select(Dish).where(Dish.dish_number == 110)
+    )).scalar_one()
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    result = SimpleNamespace(action="clear_cart", action_data={}, message="")
+    await _dispatch_action(
+        db_session, conv, _msg("clear my cart", "wamid.cc"), restaurant.id,
+        result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert items == []  # genuinely emptied
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" in last
+
+
 async def test_item_collection_no_match_polite_retry(db_session, restaurant):
     """An unmatched dish query yields a polite retry asking for the dish name."""
     await _seed_menu(db_session, restaurant.id)
