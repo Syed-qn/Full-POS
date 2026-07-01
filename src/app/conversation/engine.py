@@ -1903,6 +1903,41 @@ def _parse_keep_only(text: str) -> str | None:
     return None
 
 
+async def _handle_confirmation_done(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    restaurant=None,
+) -> None:
+    """'Done' at the confirm step — re-show the summary or capture address, never both.
+
+    Regression: at awaiting_confirmation with an address already on the order, 'done'
+    fell through to the LLM which asked for the address AGAIN and then re-showed the
+    summary (ordering-phase checkout logic misfiring at the wrong time)."""
+    from app.ordering.models import Order
+
+    oid = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+    order = await session.get(Order, oid) if oid else None
+    if order is None or not await _order_has_items(session, order.id):
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="confirm-done-empty",
+            body="Your cart is empty. Please add a dish before checking out 😊",
+        )
+        return
+    if order.address_id is not None:
+        _set_state(conv, dialogue_phase="awaiting_confirmation",
+                   dialogue_state="order_confirmation")
+        await _send_order_summary(session, conv, inbound, restaurant_id, order)
+        return
+    await _begin_address_capture(
+        session, conv, inbound, restaurant_id, restaurant=restaurant,
+    )
+
+
 async def _handle_done_checkout(
     session: AsyncSession,
     conv: Conversation,
@@ -6348,6 +6383,15 @@ async def handle_inbound(
                       "or send 'done' to check out 😊")
                 if cart else
                 "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+            )
+            return
+        # "Done" at the confirm step must NOT re-ask for an address that's already on
+        # the order (ordering-phase checkout was leaking through the LLM).
+        if _resolve_phase(conv) == "awaiting_confirmation" and _is_done_intent(
+            (inbound.payload.get("text") or "").strip()
+        ):
+            await _handle_confirmation_done(
+                session, conv, inbound, restaurant_id, restaurant=restaurant,
             )
             return
         # "Where is my order / can I see the live location" → answer with the
