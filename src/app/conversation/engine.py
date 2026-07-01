@@ -2962,12 +2962,22 @@ def _cart_expired(order, restaurant) -> bool:
 
 
 async def _offer_resume_cart(
-    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int,
+    draft_order_id: int | None = None,
 ) -> None:
     """Returning customer still has an in-progress cart → show it and ask whether to
-    continue it or start a new order, instead of silently wiping or appending."""
+    continue it or start a new order, instead of silently wiping or appending.
+
+    TX-02/R-DB-15: ``draft_order_id`` is re-pinned into ``conv.state`` here (not
+    merely left as-is) so a reordered/replayed webhook or a fresh session load
+    can never process the NEXT turn ("Continue order" → "that's all") against a
+    stale/missing pointer and read the cart as empty.
+    """
     cart = await _build_cart_summary(session, conv)
-    _set_state(conv, dialogue_phase="ordering", dialogue_state="resume_offer")
+    _set_state(
+        conv, dialogue_phase="ordering", dialogue_state="resume_offer",
+        **({"draft_order_id": draft_order_id} if draft_order_id is not None else {}),
+    )
     await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="resume-cart",
@@ -4789,8 +4799,12 @@ async def _handle_location_pin(
                 "Unfortunately we can't deliver to you at this time 😔"
             ),
         )
-        _set_state(conv, dialogue_phase="ordering", dialogue_state="greeting",
-                   draft_order_id=None)
+        # R-008: an undeliverable pin must NEVER wipe the cart — only clear the
+        # pin/fee/address-capture state so the customer can retry with a new pin
+        # or call the restaurant, without re-building the whole order from scratch.
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items",
+                   pin_lat=None, pin_lon=None, distance_km=None, distance_source=None,
+                   delivery_fee=None)
 
     if dist_km > max_km:
         await _send_out_of_range()
@@ -5565,7 +5579,7 @@ async def handle_inbound(
             and await _order_has_items(session, _draft.id)
             and not _cart_expired(_draft, restaurant)
         ):
-            await _offer_resume_cart(session, conv, inbound, restaurant_id)
+            await _offer_resume_cart(session, conv, inbound, restaurant_id, draft_order_id=_draft.id)
             return
         if _draft_id is not None:
             _logger.info("greeting reset abandoned draft for conv=%s", conv.id)

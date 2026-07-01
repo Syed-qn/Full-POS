@@ -38,6 +38,17 @@ def _btn(btn_id: str, wa_id: str = "wamid.btn1") -> InboundMessage:
     )
 
 
+def _loc_msg(lat: float, lon: float, wa_id: str = "wamid.loc1") -> InboundMessage:
+    return InboundMessage(
+        wa_message_id=wa_id,
+        from_phone="+971501110002",
+        type=MessageType.LOCATION,
+        payload={"latitude": lat, "longitude": lon},
+        restaurant_phone="+97141234567",
+        timestamp=1717660801,
+    )
+
+
 async def _seed_menu(db_session, restaurant_id):
     from app.menu.models import Dish, Menu
 
@@ -183,3 +194,73 @@ async def test_cancel_button_no_llm_round_trip(db_session, restaurant, monkeypat
 
     await db_session.refresh(order)
     assert order.status == "cancelled"
+
+
+async def test_out_of_range_pin_retains_cart(db_session, restaurant):
+    """R-008: an out-of-range pin clears only pin/fee state, never the cart."""
+    await _seed_menu(db_session, restaurant.id)
+
+    await handle_inbound(db_session, _msg("hi", "wamid.greet3"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("chicken biryani", "wamid.item3"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    draft_id_before = conv.state.get("draft_order_id")
+    assert draft_id_before is not None
+
+    conv.state = {**conv.state, "dialogue_phase": "address_capture",
+                  "dialogue_state": "address_capture"}
+    await db_session.commit()
+
+    # Abu Dhabi pin — far from Dubai restaurant (25.2048, 55.2708)
+    await handle_inbound(db_session, _loc_msg(24.4539, 54.3773, "wamid.far3"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    assert conv.state.get("draft_order_id") == draft_id_before
+
+    from app.ordering.models import OrderItem
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == draft_id_before)
+    )).scalars().all()
+    assert len(items) == 1
+
+
+async def test_resume_continue_then_done_advances_to_address_not_empty(db_session, restaurant):
+    """TX-02: resume → continue → 'that's all' must advance to checkout, never
+    read the cart as empty (draft_order_id must be restored into conv.state
+    before the next turn is processed)."""
+    await _seed_menu(db_session, restaurant.id)
+
+    await handle_inbound(db_session, _msg("hi", "wamid.greet4"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(db_session, _msg("chicken biryani", "wamid.item4"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    conv = await _conv(db_session)
+    draft_id = conv.state.get("draft_order_id")
+    assert draft_id is not None
+
+    # Simulate a fresh session (e.g. a redeploy or resumed conversation) via a
+    # pure greeting — the draft still has items so this offers resume, not a wipe.
+    await handle_inbound(db_session, _msg("hi", "wamid.greet5"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    assert conv.state.get("dialogue_state") == "resume_offer"
+    assert conv.state.get("draft_order_id") == draft_id
+
+    await handle_inbound(db_session, _btn("resume_cart", "wamid.resume4"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    # draft_order_id must be restored/pinned into state as part of resuming —
+    # not merely left untouched by accident.
+    assert conv.state.get("draft_order_id") == draft_id
+
+    await handle_inbound(db_session, _msg("that's all", "wamid.done4"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    last = rows[-1].payload["body"].lower()
+    assert "empty" not in last
+    assert "location" in last or "address" in last or "apartment" in last or "pin" in last or "📍" in rows[-1].payload["body"]
