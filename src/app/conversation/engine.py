@@ -1427,6 +1427,36 @@ def _parse_set_quantity(text: str) -> tuple[int, str] | None:
     return None
 
 
+# KEEP-ONLY phrasing — "only mandi", "just the biryani", "keep only mandi", "i only want
+# mandi" means: the cart should hold ONLY that dish (prune the rest). A digit after the
+# keyword ("only 2 mandi") is a SET-quantity, not keep-only, so those are excluded.
+_KEEP_ONLY_PATTERNS: tuple[str, ...] = (
+    r"^keep only (.+)$",
+    r"^(?:i )?(?:just |only )?want only (.+)$",
+    r"^(?:i )?only want (.+)$",
+    r"^(?:i )?just want (.+)$",
+    r"^only (.+)$",
+    r"^just (.+)$",
+)
+
+
+def _parse_keep_only(text: str) -> str | None:
+    """Detect a KEEP-ONLY instruction → the dish query to keep (others get pruned).
+    Returns None when it isn't keep-only or names a quantity ("only 2 mandi")."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    for pat in _KEEP_ONLY_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            dish = (m.group(1) or "").strip()
+            # strip a trailing "please/thanks" and drop set-quantity ("only 2 mandi").
+            dish = _re.sub(r"\b(please|pls|thanks|thank you)\b", "", dish).strip()
+            if dish and not dish[0].isdigit():
+                return dish
+    return None
+
+
 async def _handle_done_checkout(
     session: AsyncSession,
     conv: Conversation,
@@ -3786,6 +3816,41 @@ async def _execute_ai_update_qty(
     return ("updated", dish.name)
 
 
+async def _keep_only_dish(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, dish_query: str
+) -> tuple[int | None, str | None]:
+    """Prune the draft cart down to ONLY the dish matching ``dish_query`` ("only mandi").
+
+    Removes every OTHER line (via set_item_qty(0) so totals recompute), keeping the named
+    dish. Returns ``(removed_count, kept_name)``; ``(None, None)`` when there's no draft,
+    the dish doesn't match, or it isn't in the cart (caller then treats it as an order)."""
+    from app.ordering.models import Order, OrderItem
+    from app.ordering.service import set_item_qty
+
+    draft_order_id = conv.state.get("draft_order_id")
+    if not draft_order_id or not dish_query:
+        return (None, None)
+    order = await session.get(Order, draft_order_id)
+    if order is None or str(order.status) != "draft":
+        return (None, None)
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return (None, None)
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return (None, None)
+    target = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
+    if target is None:
+        return (None, None)  # the "only" dish isn't in the cart → not a keep-only
+    items = (await session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).all()
+    other_dish_ids = {it.dish_id for it in items if it.dish_id != target.id}
+    for other_id in other_dish_ids:
+        await set_item_qty(session, order=order, dish_id=other_id, qty=0)
+    return (len(other_dish_ids), target.name)
+
+
 async def _apply_confirmation_edit(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, restaurant, action: str, data: dict,
@@ -4894,6 +4959,30 @@ async def _handle_customer_ai(
                 session, conv, inbound, restaurant_id, restaurant=restaurant
             )
             return
+
+    # Keep-only: "only mandi" / "just the biryani" means prune the cart to that dish, NOT
+    # wipe it (the LLM tagged "only mandi" as clear_cart and emptied everything). Handle
+    # deterministically when the named dish is actually in the cart; else fall through.
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+    ):
+        _keep_q = _parse_keep_only(inbound.payload.get("text") or "")
+        if _keep_q:
+            _removed, _kept = await _keep_only_dish(session, conv, restaurant_id, _keep_q)
+            if _kept is not None:
+                cart = await _build_cart_summary(session, conv)
+                body = (
+                    f"Done! Kept only {_kept}, removed the rest ✅{_cart_tail(cart)}"
+                    if _removed
+                    else f"You've got just {_kept} 😊{_cart_tail(cart)}\n\n"
+                    "Add more, or say 'done' to check out."
+                )
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="keep-only", body=body,
+                )
+                return
 
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:

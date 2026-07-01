@@ -210,6 +210,68 @@ async def test_thats_all_checks_out_without_calling_llm(db_session, restaurant):
     assert conv.state["dialogue_state"] == "address_capture"
 
 
+async def test_only_dish_keeps_that_dish_and_prunes_the_rest(db_session, restaurant):
+    """"Only mandi" with [Mandi, Lemon Mint] in the cart keeps Mandi and removes the rest
+    — it must NOT wipe the whole cart (the old behaviour said "Cleared your cart")."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    mandi = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=8, name="Mandi",
+        price_aed=Decimal("40.00"), category="Rice", is_available=True,
+        name_normalized="mandi",
+    )
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=9, name="Lemon Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="lemon mint",
+    )
+    db_session.add_all([mandi, mint])
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=mandi, qty=1)
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for keep-only")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg("only mandi", "wamid.only"), restaurant.id, restaurant
+        )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    active = {i.dish_number for i in items if i.qty > 0}
+    assert active == {8}  # Mandi kept, Lemon Mint pruned — cart NOT wiped
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" not in last and "Kept only" in last
+
+
 async def test_clear_cart_action_with_a_dish_adds_instead_of_wiping(db_session, restaurant):
     """An order the LLM mis-tags as clear_cart ("one beef curry") must ADD the dish, not
     empty the cart. Reproduces the chat where "One beef curry" returned "Cleared your
