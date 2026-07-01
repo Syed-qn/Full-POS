@@ -261,12 +261,17 @@ async def handle_catalog_order(
     # the engine's helpers (lazy import) so behaviour cannot drift from the text path.
     from app.conversation.engine import _build_cart_summary, _send_text, _set_state
     from app.conversation.service import get_or_create_conversation, record_message
+    from app.identity.phones import normalize_phone
 
+    # Normalize so the catalogue basket lands on the SAME conversation thread the
+    # text bot uses (F71/R-027) — handle_inbound already normalizes; without this
+    # the raw Meta digits-only phone (no leading '+') splits into a second row.
+    _phone = normalize_phone(inbound.from_phone)
     conv = await get_or_create_conversation(
-        session, restaurant_id=restaurant_id, phone=inbound.from_phone, counterpart="customer",
+        session, restaurant_id=restaurant_id, phone=_phone, counterpart="customer",
     )
     customer = await get_or_create_customer(
-        session, restaurant_id=restaurant_id, phone=inbound.from_phone
+        session, restaurant_id=restaurant_id, phone=_phone
     )
 
     # Reuse the engine's draft order (the live cart pointed to by conv.state), exactly
