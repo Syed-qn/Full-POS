@@ -15,7 +15,9 @@ F99, F74, R-026, R-028, TX-06, TX-26, TX-27, TX-45, TX-48, TX-49, R-023):
   (e) Slug-named dish ('chicken_biryani') is absent from _render_menu output
       (F74, F97).
 
-All five are xfail(strict=True) until the W6 implementation lands.
+GRADUATED (W6 tasks 4-6): all 6 evals (a-e, with (c) split across two tests) now
+PASS against the implementation and no longer carry xfail. See
+tests/evals/REGISTRY.md for the graduation record.
 """
 from __future__ import annotations
 
@@ -151,7 +153,6 @@ async def _seed_one_dish_restaurant(session: AsyncSession, restaurant) -> None:
 
 # ── (a) Anti-hallucination dish-name cross-check (no prices needed) ──────────
 
-@pytest.mark.xfail(strict=True, reason="W6 anti-hallucination cross-check not yet implemented")
 async def test_antihallucination_catches_non_catalogue_dish_names(db_session, restaurant, seed_biryani_menu):
     """A model reply listing >=2 dish-like names NOT in the catalogue must be replaced.
 
@@ -174,7 +175,6 @@ async def test_antihallucination_catches_non_catalogue_dish_names(db_session, re
 
 # ── (b) One-dish tenant: reply must not name dishes that don't exist ──────────
 
-@pytest.mark.xfail(strict=True, reason="W6 one-dish cross-check not yet implemented")
 async def test_one_dish_tenant_names_no_other_dish(db_session, restaurant):
     """In a single-dish restaurant, the cross-check must flag a reply that names
     dishes not in the (one-item) catalogue.
@@ -202,7 +202,6 @@ async def test_one_dish_tenant_names_no_other_dish(db_session, restaurant):
 
 # ── (c) whatsapp_enabled=False dish not rendered and not orderable ─────────────
 
-@pytest.mark.xfail(strict=True, reason="W6 whatsapp_enabled filter in _render_menu not yet implemented")
 async def test_whatsapp_disabled_dish_not_in_menu_render(db_session, restaurant):
     """A dish with whatsapp_enabled=False must not appear in _render_menu output.
 
@@ -253,7 +252,6 @@ async def test_whatsapp_disabled_dish_not_in_menu_render(db_session, restaurant)
     assert "Chicken Biryani" in rendered, "Public dish must still appear"
 
 
-@pytest.mark.xfail(strict=True, reason="W6 whatsapp_enabled guard in ordering not yet implemented")
 async def test_whatsapp_disabled_dish_not_orderable(db_session, restaurant):
     """A customer cannot order a whatsapp_enabled=False dish via text.
 
@@ -312,7 +310,6 @@ async def test_whatsapp_disabled_dish_not_orderable(db_session, restaurant):
 
 # ── (d) Off-catalogue dish → "available by phone", cart empty ─────────────────
 
-@pytest.mark.xfail(strict=True, reason="W6 off-catalogue honest demotion not yet implemented")
 async def test_off_catalogue_dish_available_by_phone(db_session, restaurant):
     """In catalogue mode, ordering a text-menu dish with no active CatalogProduct must
     produce 'available by phone', leave the cart empty, and not inject a fake mini-menu.
@@ -383,7 +380,6 @@ async def test_off_catalogue_dish_available_by_phone(db_session, restaurant):
 
 # ── (e) Slug-named dish absent from _render_menu ─────────────────────────────
 
-@pytest.mark.xfail(strict=True, reason="W6 slug-name filter in _render_menu not yet implemented")
 async def test_slug_named_dish_absent_from_render_menu(db_session, restaurant):
     """A dish whose name matches ^[a-z][a-z0-9_]*$ (slug pattern) must not appear in
     the rendered menu — it is a developer/internal identifier, not a customer-facing name.

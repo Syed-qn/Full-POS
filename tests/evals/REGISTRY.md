@@ -107,6 +107,36 @@ Supporting money path (F41): `_redeem_coupon_at_checkout` now routes through
 `app.ordering.quantity_policy.QuantityPolicy` enforces the per-line max-qty guard on
 catalogue baskets at parity with the typed path (R-050); W8 reuses it.
 
+## W6 additions (menu / availability single source of truth)
+
+A new eval file `test_w6_menu_sot_evals.py` was added (6 xfail(strict=True) test
+functions covering 5 logical behaviours) and **fully graduated** across W6 tasks
+2-6 — all 6 pass, xfail markers removed, 0 unexpected xpass:
+
+| # | Test ID | Finding guarded | Workstream |
+|---|---------|-----------------|------------|
+| W6-a | `test_antihallucination_catches_non_catalogue_dish_names` | R-026 / F96 — `_looks_like_hallucinated_menu` must flag an LLM reply naming ≥2 non-catalogue dish-like names even with no AED prices | W6 T3 (helper added) + T5 (candidate-extraction fix: split on and/&/, so a list like "Lamb Ouzi and Seafood Platter" yields 2 separate unknown candidates instead of 1 unmatched glued string) |
+| W6-b | `test_one_dish_tenant_names_no_other_dish` | F98 — the cross-check must catch fabricated names relative to a ONE-dish tenant catalogue, not just multi-dish tenants | W6 T5 (same candidate-extraction fix) |
+| W6-c1 | `test_whatsapp_disabled_dish_not_in_menu_render` | TX-45 — a `whatsapp_enabled=False` dish must never appear in `_render_menu`, even if `is_available=True` | W6 T4 (`_render_menu` query filter) |
+| W6-c2 | `test_whatsapp_disabled_dish_not_orderable` | TX-45 — a `whatsapp_enabled=False` dish must be rejected at the ordering gate, cart stays empty | W6 T4 (`_catalog_excludes_dish` now checks `whatsapp_enabled` in every mode, not just catalogue mode) |
+| W6-d | `test_off_catalogue_dish_available_by_phone` | TX-06 / R-023 — a text-DB dish with no active `CatalogProduct` link, ordered in catalogue mode, must get an honest "available by phone" decline, empty cart, no fake mini-menu | W6 T5 (`_try_catalog_typed_order`'s off-catalogue reply reworded to mention phone/call, kept "don't have" phrasing for regression parity with `test_catalog_mode_isolation.py`) |
+| W6-e | `test_slug_named_dish_absent_from_render_menu` | F74 / F97 — a slug-named dish (e.g. `chicken_biryani`, matching `^[a-z][a-z0-9_]*$`) must never render on WhatsApp; Dish has no dedicated slug column so this is a name-pattern filter | W6 T4 (`_render_menu` slug-name filter via `_SLUG_NAME` regex) |
+
+`whatsapp_enabled` (manager's per-dish WhatsApp on/off switch) and its Alembic
+migration (`l5e6f7a8b9c0_add_dish_whatsapp_enabled.py`) already existed on
+`Dish` prior to W6 T4 — no new column/migration was needed; only the read paths
+(`_render_menu`, `_catalog_excludes_dish`) and the catalogue-basket write path
+(`catalog/service.py:handle_catalog_order`) were missing the filter.
+
+R-023 (single-token off-menu query, e.g. "beef", must not be silently dropped)
+was audited and found already satisfied on the live path: `_handle_collecting_items`
+(the function with the ≥2-token requirement) is dead code, never called from
+`handle_inbound`. The live path (deterministic guard → AI) routes a single-token
+query through `_execute_ai_add_item`, which returns `"no_match"` and triggers the
+existing "Sorry, we don't have X on our menu" decline — not a silent drop. No code
+change was required for R-023; left as an observation for future cleanup (the dead
+`_handle_collecting_items` function could be removed in a later workstream).
+
 ## Graduation rule
 
 An eval graduates from xfail to regression when:
