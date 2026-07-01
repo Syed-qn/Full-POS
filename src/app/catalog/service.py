@@ -24,6 +24,16 @@ from app.whatsapp.port import InboundMessage, OutboundMessageType
 
 logger = logging.getLogger(__name__)
 
+# WhatsApp per-message caps: a product_list shows at most 30 products; an interactive
+# list shows at most 10 rows. Past these the customer can't reach the rest of the menu,
+# which is what browse-by-category solves.
+_PRODUCT_LIST_MAX = 30
+_LIST_MAX_ROWS = 10
+# One list row is reserved for a "More categories" link when more pages exist, so each
+# category page shows up to 9 categories. Paginating this way makes EVERY category
+# reachable by tapping no matter how many there are (e.g. 31 categories -> 4 pages).
+_CAT_PAGE_SIZE = _LIST_MAX_ROWS - 1
+
 
 def _aed(value) -> str:
     """Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5").
@@ -110,6 +120,10 @@ async def send_catalog(
         )
         return False
 
+    # The mirror's category column is NULL (Meta doesn't echo it), so resolve each
+    # product's real category from its dish for grouping and the text fallback.
+    _apply_category_map(synced, await _load_category_map(session, restaurant_id))
+
     # Only products Meta has finished processing (image on its CDN + approved) can be
     # sent in a product_list — including a still-"in review" product makes the WHOLE
     # message fail with #131009 "None of the products provided could be sent". So we
@@ -132,6 +146,43 @@ async def send_catalog(
         )
         return True
 
+    # Native catalogue view (the market-standard way to show a big menu): instead of
+    # paginating cards 30 at a time, send ONE "View full menu" button that opens
+    # WhatsApp's built-in catalogue UI. The customer browses EVERY product there — no
+    # 30-card cap, no "Show more" — and Meta collections show as categories. Preferred
+    # when enabled; the product_list / category-picker paths below stay as fallbacks for
+    # clients where the catalogue button doesn't render. Default off → unchanged.
+    if settings.get("catalog_native_view"):
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=to_phone,
+            msg_type=OutboundMessageType.CATALOG_MESSAGE,
+            payload={
+                "body": "Here's our full menu 😊 Tap *View full menu* to browse "
+                        "everything, or just tell me what you'd like.",
+                "footer": "Add dishes to your basket, then send it to order.",
+                "thumbnail_product_retailer_id": sendable[0].retailer_id,
+            },
+            idempotency_key=idempotency_key or f"catalog-view-{restaurant_id}-{to_phone}-{uuid4().hex}",
+        )
+        logger.info(
+            "sent native catalog view to %s for restaurant %s (%d sendable, thumb=%s)",
+            to_phone, restaurant_id, len(sendable), sendable[0].retailer_id,
+        )
+        return True
+
+    # Browse-by-category: a single product_list maxes out at 30 cards, so a big menu
+    # (e.g. a POS pull of hundreds of dishes) would silently hide everything past the
+    # first 30. When the manager turns this on AND there's more than one message worth
+    # of dishes, send a tappable category picker instead; the customer taps a category
+    # and gets that category's cards. Default off → unchanged single-list behaviour.
+    if settings.get("catalog_browse_by_category") and len(sendable) > _PRODUCT_LIST_MAX:
+        return await _render_category_page(
+            session, restaurant_id=restaurant_id, to_phone=to_phone,
+            products=sendable, page=0, idempotency_key=idempotency_key,
+        )
+
     # Group into sections by category (WhatsApp limits: <=10 sections, <=30
     # products total, section title <=24 chars). Stable, readable order.
     sections: dict[str, list[dict]] = {}
@@ -139,7 +190,7 @@ async def send_catalog(
     for p in sendable:
         if total >= 30:
             break
-        cat = (p.category or "Menu")[:24]
+        cat = _category_of(p)[:24]
         sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
         total += 1
 
@@ -183,7 +234,7 @@ async def _send_catalog_text_fallback(
     lines: list[str] = ["Here's our menu 😊 Reply with what you'd like and we'll add it:"]
     current_cat: str | None = None
     for p in products[:40]:
-        cat = (p.category or "Menu").strip()
+        cat = _category_of(p)
         if cat != current_cat:
             lines.append(f"\n*{cat}*")
             current_cat = cat
@@ -231,6 +282,234 @@ async def _order_cart_snapshot(session, order_id: int) -> tuple[str, list[dict]]
             label += f" — {it.notes}"
         parts.append(label)
     return "; ".join(parts), snapshot
+
+
+def _category_of(product: CatalogProduct) -> str:
+    """Display category for a catalogue product; products with none bucket into "Menu".
+
+    Prefers the category resolved from the linked dish (stashed on ``_resolved_category``
+    by :func:`_apply_category_map`) because the Meta catalogue mirror
+    (``catalog_products.category``) comes back NULL — Meta doesn't echo our category. The
+    real category lives on the dish, so we resolve it at send time and fall back to the
+    mirror column, then to "Menu"."""
+    resolved = getattr(product, "_resolved_category", None)
+    return ((resolved or product.category or "").strip()) or "Menu"
+
+
+async def _load_category_map(session: AsyncSession, restaurant_id: int) -> dict[str, str]:
+    """Map ``retailer_id -> dish category`` for a restaurant. The catalogue mirror
+    doesn't carry category back from Meta, so the source of truth is the dish, linked by
+    ``dishes.catalog_retailer_id == catalog_products.retailer_id``."""
+    rows = (
+        await session.execute(
+            select(Dish.catalog_retailer_id, Dish.category).where(
+                Dish.restaurant_id == restaurant_id,
+                Dish.catalog_retailer_id.is_not(None),
+            )
+        )
+    ).all()
+    return {rid: cat for rid, cat in rows if rid and cat}
+
+
+def _apply_category_map(products: list[CatalogProduct], cat_map: dict[str, str]) -> None:
+    """Stash each product's dish category on a transient ``_resolved_category`` attribute
+    (not a mapped column, so it never persists) for :func:`_category_of` to pick up."""
+    for p in products:
+        cat = cat_map.get(p.retailer_id)
+        if cat:
+            p._resolved_category = cat
+
+
+async def _load_sendable_products(
+    session: AsyncSession, restaurant_id: int
+) -> tuple[str | None, list[CatalogProduct]]:
+    """Return (catalog_id, sendable synced products) for browse-by-category helpers.
+    catalog_id is None when the catalogue isn't configured."""
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    settings = (rest.settings or {}) if rest is not None else {}
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    if not catalog_id:
+        return None, []
+    synced = (
+        await session.scalars(
+            select(CatalogProduct).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.is_active.is_(True),
+            ).order_by(CatalogProduct.name)
+        )
+    ).all()
+    sendable = [p for p in synced if p.is_sendable]
+    _apply_category_map(sendable, await _load_category_map(session, restaurant_id))
+    return catalog_id, sendable
+
+
+def _ordered_categories(products: list[CatalogProduct]) -> list[tuple[str, int]]:
+    """(category, count) pairs, largest category first then alphabetical — a stable
+    order so pagination is deterministic across taps."""
+    counts: dict[str, int] = {}
+    for p in products:
+        cat = _category_of(p)
+        counts[cat] = counts.get(cat, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+async def _render_category_page(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    to_phone: str,
+    products: list[CatalogProduct],
+    page: int = 0,
+    idempotency_key: str | None = None,
+) -> bool:
+    """Send ONE page of the tappable category list. Each page holds up to 9 categories
+    plus a "More categories" row (id ``catpage:<next>``) when further pages exist, so
+    every category is reachable by tapping. Tapping a category replies ``cat:<name>``.
+    Caller commits."""
+    ordered = _ordered_categories(products)
+    page = max(page, 0)
+    start = page * _CAT_PAGE_SIZE
+    page_cats = ordered[start:start + _CAT_PAGE_SIZE]
+    if not page_cats:  # page past the end — nothing to show
+        return False
+
+    rows = [
+        {
+            "id": f"cat:{cat}"[:200],
+            "title": cat[:24],
+            "description": (f"{n} item" + ("s" if n != 1 else ""))[:72],
+        }
+        for cat, n in page_cats
+    ]
+    has_more = start + _CAT_PAGE_SIZE < len(ordered)
+    if has_more:
+        rows.append({
+            "id": f"catpage:{page + 1}",
+            "title": "More categories",
+            "description": "See the rest of the menu",
+        })
+
+    body = (
+        "Browse our menu by category 😊 Tap a category to see the dishes."
+        if page == 0 else "More categories 😊 Tap one to see the dishes."
+    )
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=to_phone,
+        msg_type=OutboundMessageType.LIST,
+        payload={
+            "body": body[:1024],
+            "button_label": "Categories",
+            "sections": [{"title": "Categories", "rows": rows}],
+        },
+        idempotency_key=idempotency_key or f"catalog-cats-{restaurant_id}-{to_phone}-p{page}-{uuid4().hex}",
+    )
+    logger.info(
+        "sent category page %d to %s for restaurant %s: %d categories (%d total, more=%s)",
+        page, to_phone, restaurant_id, len(page_cats), len(ordered), has_more,
+    )
+    return True
+
+
+async def send_catalog_categories(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    to_phone: str,
+    page: int = 0,
+    idempotency_key: str | None = None,
+) -> bool:
+    """Send a page of the category picker (used by the "More categories" tap). Caller commits."""
+    _catalog_id, sendable = await _load_sendable_products(session, restaurant_id)
+    if not sendable:
+        return False
+    return await _render_category_page(
+        session, restaurant_id=restaurant_id, to_phone=to_phone,
+        products=sendable, page=page, idempotency_key=idempotency_key,
+    )
+
+
+async def send_catalog_category(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    to_phone: str,
+    category: str,
+    offset: int = 0,
+    idempotency_key: str | None = None,
+) -> bool:
+    """Send the product cards for ONE category (a browse-by-category tap), paginated 30
+    at a time. When more than 30 remain a "More <category>" quick-reply (id
+    ``catmore:<next_offset>:<category>``) follows so the whole category is reachable.
+    Returns False if the catalogue isn't configured or the category has nothing sendable.
+    Caller commits."""
+    catalog_id, sendable = await _load_sendable_products(session, restaurant_id)
+    if not catalog_id:
+        return False
+
+    wanted = (category or "").strip().lower()
+    chosen = [p for p in sendable if _category_of(p).lower() == wanted]
+    offset = max(offset, 0)
+    window = chosen[offset:offset + _PRODUCT_LIST_MAX]
+    if not window:
+        if offset == 0:
+            await enqueue_message(
+                session,
+                restaurant_id=restaurant_id,
+                to_phone=to_phone,
+                msg_type=OutboundMessageType.TEXT,
+                payload={"body": "Nothing's available in that category right now 🙏 "
+                                 "Type a dish name and I'll add it for you 😊"},
+                idempotency_key=(
+                    f"{idempotency_key}-empty" if idempotency_key
+                    else f"catalog-cat-empty-{restaurant_id}-{to_phone}-{uuid4().hex}"
+                ),
+            )
+        return False
+
+    title = _category_of(window[0])[:24]
+    items = [{"product_retailer_id": p.retailer_id} for p in window]
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=to_phone,
+        msg_type=OutboundMessageType.PRODUCT_LIST,
+        payload={
+            "header": title[:60],
+            "body": "Tap an item to add it to your basket, then send the basket to order 😊",
+            "catalog_id": catalog_id,
+            "sections": [{"title": title, "product_items": items}],
+        },
+        idempotency_key=idempotency_key or f"catalog-cat-{restaurant_id}-{to_phone}-o{offset}-{uuid4().hex}",
+    )
+
+    # A product_list can't carry a navigation row, so when the category has more than 30
+    # dishes we follow up with a quick-reply that loads the next 30.
+    next_offset = offset + _PRODUCT_LIST_MAX
+    if next_offset < len(chosen):
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=to_phone,
+            msg_type=OutboundMessageType.BUTTONS,
+            payload={
+                "body": f"More dishes in {title}? Tap below to see the next {min(_PRODUCT_LIST_MAX, len(chosen) - next_offset)}."[:1024],
+                "buttons": [{"id": f"catmore:{next_offset}:{category}"[:256], "title": "Show more"}],
+            },
+            idempotency_key=(
+                f"{idempotency_key}-more" if idempotency_key
+                else f"catalog-cat-more-{restaurant_id}-{to_phone}-o{next_offset}-{uuid4().hex}"
+            ),
+        )
+
+    logger.info(
+        "sent category '%s' (offset %d) to %s for restaurant %s: %d product(s), more=%s",
+        title, offset, to_phone, restaurant_id, len(items), next_offset < len(chosen),
+    )
+    return True
 
 
 async def handle_catalog_order(

@@ -200,3 +200,57 @@ async def test_confirmation_add_item_actually_applies_and_reshows(db_session, re
     assert "Order summary:" in body
     assert "Lemon Mint" in body
     assert "Subtotal: AED 32" in body  # 20 + 12
+
+
+async def test_done_at_confirmation_with_address_reshows_summary_not_address(db_session, restaurant):
+    """Regression (real chat): 'done' at confirm with address on file must NOT ask for
+    the address again — only re-show the order summary once."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.ordering.models import CustomerAddress, OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    cust = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    addr = CustomerAddress(
+        customer_id=cust.id, latitude=25.2050, longitude=55.2710,
+        room_apartment="123", building="Towerb", receiver_name="asfer", confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
+    from app.menu.models import Dish
+    chicken = (await db_session.execute(
+        select(Dish).where(Dish.dish_number == 110, Dish.restaurant_id == restaurant.id)
+    )).scalar_one()
+    await add_item(db_session, order=order, dish=chicken, qty=1)
+    order.address_id = addr.id
+
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+        state={"dialogue_phase": "awaiting_confirmation",
+               "pending_order_id": order.id, "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    before = (await db_session.execute(select(OutboxMessage.id))).scalars().all()
+
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(side_effect=AssertionError("LLM must not run"))):
+        await handle_inbound(
+            db_session, _msg("done", "wamid.cf-done"), restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    new_rows = (await db_session.execute(
+        select(OutboxMessage).where(OutboxMessage.id.notin_(before or [0])).order_by(OutboxMessage.id)
+    )).scalars().all()
+    bodies = [r.payload.get("body", "") or "" for r in new_rows]
+    assert len(bodies) == 1
+    assert "Order summary:" in bodies[0]
+    assert "Towerb" in bodies[0]
+    assert "share your delivery address" not in bodies[0].lower()
+    assert "apartment" not in bodies[0].lower()

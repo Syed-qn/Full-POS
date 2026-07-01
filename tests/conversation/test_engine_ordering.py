@@ -68,6 +68,59 @@ async def _conv(db_session) -> Conversation:
     )).scalar_one()
 
 
+def test_is_restaurant_location_request_abbreviations():
+    """Catches "share ur/u location" and typo'd forms — asking the RESTAURANT for its
+    location — without firing on unrelated messages."""
+    from app.conversation.engine import _is_restaurant_location_request
+
+    for p in ["share ur location", "Share u location", "send your location",
+              "whats ur address", "drop ur pin", "share location", "where are you located"]:
+        assert _is_restaurant_location_request(p) is True, p
+    for p in ["one biryani", "clear cart", "where is my order", "share my order status", ""]:
+        assert _is_restaurant_location_request(p) is False, p
+
+
+async def test_share_your_location_sends_restaurant_pin(db_session, restaurant):
+    """"Share ur location" sends the RESTAURANT's location pin, not a request for the
+    customer's own location."""
+    restaurant.lat = 25.2048
+    restaurant.lng = 55.2708
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.loc_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _msg("share ur location", "wamid.loc_q"), restaurant_id=restaurant.id
+    )
+    await db_session.commit()
+
+    msgs = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    locs = [m for m in msgs if m.payload.get("type") == "location"]
+    assert locs, "expected a restaurant location pin to be sent"
+    assert float(locs[-1].payload["latitude"]) == 25.2048
+
+
+async def test_location_pin_without_cart_is_acknowledged(db_session, restaurant):
+    """A pin shared with no cart is acknowledged (not silently dropped) and does NOT jump
+    into address capture — fixes the flow where the pin got no reply and the LLM later
+    faked "let me check the distance"."""
+    await handle_inbound(db_session, _msg("hi", "wamid.lp_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _loc_msg(25.2050, 55.2710, "wamid.lp"), restaurant_id=restaurant.id
+    )
+    await db_session.commit()
+
+    last = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()[-1]
+    assert "location" in last.payload["body"].lower()  # acknowledged, not dropped
+    conv = await _conv(db_session)
+    assert conv.state.get("dialogue_state") != "address_capture"
+
+
 async def test_item_collection_direct_match_adds_item(db_session, restaurant):
     """After menu_sent, typing a dish name direct-matches and adds the item."""
     await _seed_menu(db_session, restaurant.id)
@@ -106,6 +159,455 @@ async def test_item_collection_qty_parsing(db_session, restaurant):
     items = (await db_session.execute(select(OrderItem))).scalars().all()
     assert len(items) == 1
     assert items[0].qty == 2
+
+
+async def test_complaint_question_does_not_add_items(db_session, restaurant):
+    """A complaint/question ("why did you add 2 biryani") must NOT be mined for a stray
+    quantity and silently added to the cart. Reproduces the bug where asking why an item
+    was added ADDED more of it."""
+    from app.ordering.models import OrderItem
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.greet_q"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": None}
+    await db_session.commit()
+
+    # A genuine order first: 2x Chicken Biryani.
+    await handle_inbound(db_session, _msg("2x chicken biryani", "wamid.q_add"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    before = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert len(before) == 1 and before[0].qty == 2
+
+    # The complaint must leave the cart untouched (no 3rd/4th biryani).
+    await handle_inbound(
+        db_session, _msg("why did you add 2 biryani", "wamid.q_complaint"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    after = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert len(after) == 1 and after[0].qty == 2  # unchanged
+
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Added" not in last  # it did not confirm an add
+
+
+def test_is_done_intent_variants():
+    """The checkout detector accepts real "finished" phrasings (incl. a leading 'no' and
+    angry/trailing filler) but not orders or the ambiguous bare 'no'."""
+    from app.conversation.engine import _is_done_intent
+
+    for p in [
+        "that's all", "No that's all", "thats all", "Thats all can't you understand",
+        "Motherfucker that's all", "done", "nothing else", "no more thanks", "I'm done",
+        "that's it", "proceed",
+    ]:
+        assert _is_done_intent(p) is True, p
+    for p in ["chicken biryani", "2 mandi", "is that all you have", "add more", "no", ""]:
+        assert _is_done_intent(p) is False, p
+
+
+async def test_thats_all_checks_out_without_calling_llm(db_session, restaurant):
+    """"No that's all" with a cart proceeds to checkout deterministically — the LLM is
+    never called (it used to loop re-adding the item / sent a welcome mid-order)."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    db_session.add(dish)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=dish, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for an explicit checkout phrase")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg("no that's all", "wamid.done"), restaurant.id, restaurant
+        )
+    await db_session.commit()
+
+    # Cart unchanged (not re-added) and we advanced to address capture.
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1 and items[0].qty == 1
+    assert conv.state["dialogue_state"] == "address_capture"
+
+
+def test_is_clear_cart_command_precise():
+    """Clear detector fires on real clear commands but NOT on the dish 'clear soup'."""
+    from app.conversation.engine import _is_clear_cart_command
+
+    for p in ["clear cart", "Clear the cart", "empty cart", "start over", "reset cart",
+              "clear all", "clear", "clear my basket", "remove everything"]:
+        assert _is_clear_cart_command(p) is True, p
+    for p in ["clear soup", "one clear soup", "chicken biryani", "clearance", "", "2 mandi"]:
+        assert _is_clear_cart_command(p) is False, p
+
+
+async def test_clear_cart_command_empties_without_llm(db_session, restaurant):
+    """"Clear cart" empties the cart deterministically — the LLM never runs, so it can't
+    fuzzy-match "clear" to the dish "Clear Soup" and add it."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    # A "Clear Soup" dish exists — the exact thing the LLM used to add on "clear cart".
+    soup = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=300,
+        name="Clear Soup", price_aed=Decimal("10.00"), category="Soup",
+        is_available=True, name_normalized="clear soup",
+    )
+    db_session.add_all([biryani, soup])
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for an explicit clear command")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg("clear cart", "wamid.clr"), restaurant.id, restaurant
+        )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert items == []  # emptied, and NO "Clear Soup" added
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" in last and "Clear Soup" not in last
+
+
+async def test_only_dish_keeps_that_dish_and_prunes_the_rest(db_session, restaurant):
+    """"Only mandi" with [Mandi, Lemon Mint] in the cart keeps Mandi and removes the rest
+    — it must NOT wipe the whole cart (the old behaviour said "Cleared your cart")."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    mandi = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=8, name="Mandi",
+        price_aed=Decimal("40.00"), category="Rice", is_available=True,
+        name_normalized="mandi",
+    )
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=9, name="Lemon Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="lemon mint",
+    )
+    db_session.add_all([mandi, mint])
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=mandi, qty=1)
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for keep-only")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg("only mandi", "wamid.only"), restaurant.id, restaurant
+        )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    active = {i.dish_number for i in items if i.qty > 0}
+    assert active == {8}  # Mandi kept, Lemon Mint pruned — cart NOT wiped
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" not in last and "Kept only" in last
+
+
+async def test_clear_cart_action_with_a_dish_adds_instead_of_wiping(db_session, restaurant):
+    """An order the LLM mis-tags as clear_cart ("one beef curry") must ADD the dish, not
+    empty the cart. Reproduces the chat where "One beef curry" returned "Cleared your
+    cart 🧹" and the order was silently dropped."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    beef = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=150,
+        name="Beef Curry", price_aed=Decimal("30.00"), category="Curry",
+        is_available=True, name_normalized="beef curry",
+    )
+    db_session.add_all([biryani, beef])
+    await db_session.commit()
+
+    # Existing cart holds 1x Chicken Biryani.
+    await handle_inbound(db_session, _msg("hi", "wamid.bc_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # LLM mis-classifies "one beef curry" as clear_cart.
+    result = SimpleNamespace(action="clear_cart", action_data={}, message="")
+    await _dispatch_action(
+        db_session, conv, _msg("one beef curry", "wamid.bc"), restaurant.id,
+        result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    numbers = {i.dish_number for i in items}
+    # Cart was NOT wiped: the biryani stayed AND beef curry was added.
+    assert 110 in numbers and 150 in numbers
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" not in last
+
+
+async def test_make_it_n_sets_quantity_instead_of_adding(db_session, restaurant):
+    """"Make it 5 lemon mint" with 1 already in the cart must SET the quantity to 5, not
+    add 5 (=6). Reproduces the chat where "make it 5" produced 6x."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=210,
+        name="Lemon Mint", price_aed=Decimal("12.00"), category="Drinks",
+        is_available=True, name_normalized="lemon mint",
+    )
+    db_session.add(mint)
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.mi_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # LLM tags "make it 5 lemon mint" as add_item(qty=5).
+    result = SimpleNamespace(
+        action="add_item", action_data={"dish_query": "lemon mint", "qty": 5}, message="",
+    )
+    await _dispatch_action(
+        db_session, conv, _msg("make it 5 lemon mint", "wamid.mi"), restaurant.id,
+        result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1
+    assert items[0].qty == 5  # SET to 5, not 1 + 5 = 6
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Updated" in last and "Added" not in last
+
+
+async def test_multi_dish_make_it_sets_each_no_phantom(db_session, restaurant):
+    """"Make it 5 lemon mint and 2 grill mandi" sets EACH dish and never creates a phantom
+    line named "lemon mint and 2 grill mandi"."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=9, name="Lemon Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="lemon mint",
+    )
+    mandi = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=8, name="Grill Mandi",
+        price_aed=Decimal("40.00"), category="Rice", is_available=True,
+        name_normalized="grill mandi",
+    )
+    db_session.add_all([mint, mandi])
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.md_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    await add_item(db_session, order=order, dish=mandi, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # LLM mis-tags the multi-dish set as a single add_item with the whole phrase.
+    result = SimpleNamespace(
+        action="add_item",
+        action_data={"dish_query": "lemon mint and 2 grill mandi", "qty": 5}, message="",
+    )
+    await _dispatch_action(
+        db_session, conv, _msg("make it 5 lemon mint and 2 grill mandi", "wamid.md"),
+        restaurant.id, result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    by_num = {i.dish_number: i.qty for i in items if i.qty > 0}
+    assert by_num == {9: 5, 8: 2}  # Lemon Mint→5, Grill Mandi→2, no phantom line
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Updated" in last and "and 2 grill mandi" not in last
+
+
+async def test_explicit_clear_still_empties_cart(db_session, restaurant):
+    """A genuine "clear my cart" must still empty the cart (guard doesn't over-fire)."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.cc_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    from app.menu.models import Dish
+    biryani = (await db_session.execute(
+        select(Dish).where(Dish.dish_number == 110)
+    )).scalar_one()
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    result = SimpleNamespace(action="clear_cart", action_data={}, message="")
+    await _dispatch_action(
+        db_session, conv, _msg("clear my cart", "wamid.cc"), restaurant.id,
+        result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert items == []  # genuinely emptied
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Cleared your cart" in last
 
 
 async def test_item_collection_no_match_polite_retry(db_session, restaurant):
@@ -991,3 +1493,98 @@ async def test_frustration_closing_advances_no_inflation(db_session, restaurant)
         select(OrderItem).where(OrderItem.order_id == order_id))).all()
     assert sum(it.qty for it in items) == qty_before
     assert conv.state["dialogue_state"] == "address_capture"
+
+
+def test_off_topic_classification():
+    """Health / general off-topic is detected; restaurant + ordering questions are not."""
+    from app.conversation.engine import _classify_off_topic, _is_restaurant_on_topic
+
+    assert _classify_off_topic("I have fever what can I do") == "medical"
+    assert _classify_off_topic("help me with my homework") == "general"
+    assert _classify_off_topic("what restaurant name") is None
+    assert _classify_off_topic("can you save my data") is None
+    assert _classify_off_topic("are u save anything apart from address") is None
+    assert _classify_off_topic("what ur location") is None
+    assert _classify_off_topic("one chicken biryani") is None
+    assert _classify_off_topic("chicken soup for my cold please") is None
+    assert _is_restaurant_on_topic("can you save my data") is True
+    assert _is_restaurant_on_topic("menu") is True
+
+
+async def test_any_drink_query_returns_short_list_not_full_menu(db_session, restaurant):
+    """Regression: 'u have any drink' must NOT dump the entire menu."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    for num, name, cat, price in (
+        (1, "Lemon Mint", "Cold Beverages", Decimal("12.00")),
+        (2, "Mango Shake", "Cold Beverages", Decimal("15.00")),
+        (3, "Karak Tea", "Hot Beverages", Decimal("10.00")),
+        (4, "Chicken Biryani", "Rice", Decimal("22.00")),
+    ):
+        db_session.add(Dish(
+            menu_id=menu.id, restaurant_id=restaurant.id, dish_number=num,
+            name=name, price_aed=price, category=cat, is_available=True,
+            name_normalized=name.lower(),
+        ))
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.dq-hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(side_effect=AssertionError("LLM must not run for category query"))):
+        await handle_inbound(
+            db_session, _msg("u have any drink", "wamid.dq-drink"),
+            restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload["body"]
+    assert "Yes!" in body or "yes" in body.lower()
+    assert "Lemon Mint" in body or "Mango Shake" in body or "Karak Tea" in body
+    assert "Chicken Biryani" not in body
+    assert "Welcome! Here's our menu" not in body
+    assert body.count("•") <= 15
+
+
+def test_category_availability_query_parsing():
+    from app.conversation.engine import _parse_category_availability_query
+
+    assert _parse_category_availability_query("u have any drink") == "drink"
+    assert _parse_category_availability_query("do you have any soup?") == "soup"
+    assert _parse_category_availability_query("any desserts") == "dessert"
+    assert _parse_category_availability_query("menu") is None
+    assert _parse_category_availability_query("one lemon mint") is None
+
+
+async def test_fever_question_gets_warm_decline_not_menu(db_session, restaurant):
+    """Regression (real chat): 'I have fever what can I do' must NOT dump the menu."""
+    from unittest.mock import AsyncMock, patch
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.ot-hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(side_effect=AssertionError("LLM must not run for off-topic"))):
+        await handle_inbound(
+            db_session, _msg("I have fever what can I do", "wamid.ot-fever"),
+            restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload["body"]
+    assert "medical" in body.lower() or "doctor" in body.lower() or "feeling well" in body.lower()
+    assert "Welcome! Here's our menu" not in body
+    assert "• " not in body  # no menu bullet dump

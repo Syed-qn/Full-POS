@@ -82,6 +82,10 @@ class Dish(Base, TimestampMixin):
     whatsapp_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true"
     )
+    # External POS product id (e.g. Cratis posProductId) when this dish is mirrored from a
+    # POS. Null for manually-managed dishes. The POS sync owns ONLY dishes with this set;
+    # it never touches manual dishes. Stable match key across syncs.
+    pos_product_id: Mapped[str | None] = mapped_column(String(64), index=True)
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
 

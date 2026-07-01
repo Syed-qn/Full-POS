@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
+import { PosSyncButton } from "./PosSyncButton";
 import { toast } from "./Toaster";
 import { apiClient } from "../lib/apiClient";
 import { syncCatalog } from "../lib/catalogApi";
@@ -141,6 +142,7 @@ export function UnifiedMenuPanel({
           )}
         </div>
         <div className={s.actions}>
+          {!setupMode && <PosSyncButton onSynced={() => { load(); onChanged?.(); }} />}
           <Button onClick={doPullOnly} disabled={syncing || !catalogId.trim()}>
             {syncing ? "Pulling…" : "Pull from Meta"}
           </Button>

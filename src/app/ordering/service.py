@@ -565,6 +565,25 @@ async def create_draft_order(
     ) from last_error
 
 
+def _effective_unit_price(dish: "Dish", variant: dict | None = None) -> Decimal:
+    """Price charged for one unit of a cart line.
+
+    A chosen serving-size variant carries its own price. Otherwise the flat dish is
+    charged at its SALE price when one is set and valid (0 < sale < base) — so a dish
+    on sale (e.g. Mojito base 40 / sale 20) is added to the cart at 20, not 40. Falls
+    back to the base price when there's no sale price.
+    """
+    if variant:
+        return Decimal(str(variant["price_aed"]))
+    base = dish.price_aed
+    sale = getattr(dish, "sale_price_aed", None)
+    if sale is not None:
+        sale_dec = Decimal(str(sale))
+        if sale_dec > 0 and (base is None or sale_dec < base):
+            return sale_dec
+    return base
+
+
 async def add_item(
     session: "AsyncSession",
     *,
@@ -576,16 +595,14 @@ async def add_item(
     price_aed_override: Decimal | None = None,
 ) -> OrderItem:
     # When a serving-size variant is chosen, snapshot its name + price; otherwise the
-    # dish behaves exactly as before (base price, no variant label). A caller may pass
+    # dish is charged at its sale price when set (else base price). A caller may pass
     # ``price_aed_override`` to snapshot an externally-authoritative unit price (e.g. the
     # tapped Meta catalogue ``item_price``) instead of the local Dish.price_aed (R-051).
     variant_name = variant.get("name") if variant else None
-    if variant:
-        unit_price = Decimal(str(variant["price_aed"]))
-    elif price_aed_override is not None:
+    if price_aed_override is not None and variant is None:
         unit_price = Decimal(str(price_aed_override))
     else:
-        unit_price = dish.price_aed
+        unit_price = _effective_unit_price(dish, variant)
 
     # Merge into an existing line for the same dish + variant + notes so the cart shows
     # "2x Mango Lassi" instead of two separate "1x" lines (matches how real ordering
@@ -892,23 +909,22 @@ async def modify_order(
         qty = entry.get("qty", 1)
         notes = entry.get("notes")
         variant_name = entry.get("variant_name")
-        price_aed = (
-            Decimal(str(entry["price_aed"]))
-            if entry.get("price_aed") is not None
-            else dish.price_aed
-        )
+        if entry.get("price_aed") is not None:
+            unit_price = Decimal(str(entry["price_aed"]))
+        else:
+            unit_price = _effective_unit_price(dish)
         item = OrderItem(
             order_id=order.id,
             dish_id=dish.id,
             dish_number=dish.dish_number,
             dish_name=dish.name,
             variant_name=variant_name,
-            price_aed=price_aed,
+            price_aed=unit_price,
             qty=qty,
             notes=notes,
         )
         session.add(item)
-        subtotal += price_aed * qty
+        subtotal += unit_price * qty
 
     await session.flush()
     # Re-derive subtotal/total from the persisted items and RE-APPLY the coupon

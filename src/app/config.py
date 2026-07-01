@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # Placeholder image for dishes pushed to Meta without a photo (items_batch
     # requires image_link). Must be a public JPEG/PNG URL, ≥500×500 px.
     catalog_placeholder_image_url: str = "https://placehold.co/500x500/png?text=Menu"
+    # External POS integration (e.g. Cratis). Provider chosen by APP_POS_PROVIDER
+    # (cratis | fake); per-restaurant account/location live in restaurant.settings.
+    pos_provider: str = "cratis"
+    pos_base_url: str = "https://online.cratis.live/hnc_test/pos/"
     # Rider assignment is a business-INITIATED message; outside WhatsApp's 24h
     # window only an approved template delivers. Set this to the approved template
     # name (e.g. "rider_assignment") to send assignments as a template; leave empty

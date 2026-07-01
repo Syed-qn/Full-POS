@@ -23,6 +23,8 @@ import app.coupons.models  # noqa: F401,E402
 import app.cod.models  # noqa: F401,E402
 import app.marketing.models  # noqa: F401,E402
 import app.predictions.models  # noqa: F401,E402
+import app.catalog.models  # noqa: F401,E402  (POS sync pushes to the Meta catalogue)
+import app.okf.models  # noqa: F401,E402  (POS sync refreshes the bot grounding)
 
 settings = get_settings()
 celery_app = Celery(
@@ -43,6 +45,7 @@ celery_app.conf.update(
         "marketing.*": {"queue": "marketing"},
         "wallet.*": {"queue": "maintenance"},
         "loyalty.*": {"queue": "maintenance"},
+        "pos.*": {"queue": "maintenance"},
     },
     beat_schedule={
         "sla-monitor-tick": {
@@ -108,6 +111,6 @@ celery_app.conf.update(
 )
 celery_app.autodiscover_tasks(
     ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation",
-     "app.dispatch", "app.wallet", "app.loyalty"],
+     "app.dispatch", "app.wallet", "app.loyalty", "app.pos"],
     related_name="worker",
 )

@@ -54,6 +54,9 @@ export interface DishOut {
   description: string | null;
   is_available: boolean;
   catalog_retailer_id?: string | null;
+  /** Set when the dish came from a POS sync (Cratis). When present the manager UI locks
+   *  editing — POS owns name/price/category and would overwrite any edit on next sync. */
+  pos_product_id?: string | null;
   // Meta Commerce catalogue product fields.
   image_url?: string | null;
   sale_price_aed?: string | null;

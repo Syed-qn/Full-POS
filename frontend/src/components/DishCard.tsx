@@ -25,28 +25,29 @@ export function DishCard({
 }) {
   // Manager's WhatsApp switch (default on for older backends).
   const waEnabled = dish.whatsapp_enabled !== false;
-  const waLabel = !waEnabled
-    ? "WhatsApp off"
-    : onWhatsapp
-      ? "On WhatsApp"
-      : inReview
-        ? "In review"
-        : "WhatsApp on";
-  const waClass = !waEnabled
-    ? s.waOff
-    : onWhatsapp
-      ? s.waOn
-      : inReview
-        ? s.waReview
-        : s.waPending;
+  // Three states only: OFF (hidden), On WhatsApp (live), or In review (enabled but not
+  // confirmed live yet). "Enabled but not live" covers both a fresh publish Meta is still
+  // processing AND a just-toggled-on dish whose catalogue mirror hasn't been pulled back
+  // — both mean "not live yet", so they share the amber "In review" badge rather than a
+  // separate, confusingly-similar "WhatsApp on".
+  const waLabel = !waEnabled ? "WhatsApp off" : onWhatsapp ? "On WhatsApp" : "In review";
+  const waClass = !waEnabled ? s.waOff : onWhatsapp ? s.waOn : s.waReview;
   const waTitle = !waEnabled
     ? "Turned off, so it is hidden from your WhatsApp catalogue. Tap to turn on."
     : onWhatsapp
       ? "Live on your WhatsApp catalogue. Tap to turn off."
       : inReview
         ? "Meta is still processing this dish's image. It goes live automatically once ready. Tap to turn off."
-        : "On for WhatsApp and publishes automatically. Tap to turn off.";
+        : "Turned on — Meta is still processing it, so it isn't live yet. It goes live automatically; click Pull from Meta to check. Tap to turn off.";
   const hasError = dish.dish_number === null || dish.price_aed === null;
+  // POS-owned dishes are read-only: POS is the source of truth for name/price/category, so
+  // editing here would drift from (and be overwritten by) the next sync. Lock the Edit
+  // button and the click-to-edit card; the WhatsApp + availability toggles still work.
+  const fromPos = dish.pos_product_id != null;
+  const canEdit = onEdit && !fromPos;
+  // Delete is locked too: a deleted POS dish just reappears on the next sync, so removing
+  // it here only causes confusion. Manage removals in the POS.
+  const canDelete = onDelete && !fromPos;
   // When a dish offers serving sizes, show the price span (e.g. "AED 18 to 60")
   // instead of a single base price, so the manager sees the range at a glance.
   const variants = dish.variants ?? [];
@@ -62,15 +63,16 @@ export function DishCard({
   return (
     <div
       data-testid="dish-card"
-      className={`${s.card} ${hasError ? s.error : ""} ${dish.is_available ? "" : s.dim} ${onEdit ? s.clickable : ""}`}
-      onClick={onEdit ? () => onEdit(dish) : undefined}
+      className={`${s.card} ${hasError ? s.error : ""} ${dish.is_available ? "" : s.dim} ${canEdit ? s.clickable : ""}`}
+      onClick={canEdit ? () => onEdit(dish) : undefined}
     >
       {/* Dish number is kept in the backend (ordering/FSM) but hidden from the
           manager UI — it's an internal identifier, not customer-facing. */}
       <div className={s.top}>
-        {/* WhatsApp on/off switch. State reflects "On WhatsApp" (live), "In review" (Meta
-            still processing), "WhatsApp on" (queued), or "WhatsApp off" (manager turned it
-            off → unlinked & hidden). Tapping flips it. Static badge when no toggle handler. */}
+        {/* WhatsApp on/off switch. State reflects "On WhatsApp" (live), "In review"
+            (enabled but not live yet — Meta still processing or awaiting a Pull), or
+            "WhatsApp off" (manager turned it off → unlinked & hidden). Tapping flips it.
+            Static badge when no toggle handler. */}
         {onWhatsappToggle ? (
           <button
             type="button"
@@ -85,7 +87,7 @@ export function DishCard({
           >
             {waLabel}
           </button>
-        ) : waEnabled && (onWhatsapp || inReview) ? (
+        ) : waEnabled ? (
           <span className={`${s.wa} ${waClass}`} title={waTitle}>
             {waLabel}
           </span>
@@ -111,7 +113,15 @@ export function DishCard({
         <span className={s.price}>{priceLabel}</span>
         <div className={s.actions}>
           {hasError && <span className={s.warn}>Needs number & price</span>}
-          {onDelete && (
+          {fromPos && (
+            <span
+              className={s.posTag}
+              title="Synced from your POS. Name, price and category are managed in the POS and refresh on every sync, so editing is locked here."
+            >
+              From POS
+            </span>
+          )}
+          {canDelete && (
             <button
               type="button"
               className={s.deleteBtn}
@@ -123,7 +133,7 @@ export function DishCard({
               Delete
             </button>
           )}
-          {onEdit && (
+          {canEdit && (
             <button
               type="button"
               className={s.editBtn}

@@ -317,6 +317,180 @@ async def test_catalog_typed_noncatalogue_item_answered_not_catalogue(db_session
         assert handled is False, f"{text!r} should fall through to the AI"
 
 
+async def _seed_soup_cart(db_session, restaurant):
+    """Catalogue with Chicken Soup (reproduces the live chat bug)."""
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "CAT1",
+        "catalog_ordering_enabled": True,
+    }
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="soup01", name="Chicken Soup",
+        price_aed=Decimal("15.00"), currency="AED", availability="in stock",
+        category="Soup", is_active=True, raw={},
+    ))
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    soup = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=301,
+        name="Chicken Soup", price_aed=Decimal("15.00"), category="Soup",
+        is_available=True, name_normalized="chicken soup", catalog_retailer_id="soup01",
+    )
+    db_session.add(soup)
+    await db_session.commit()
+    return soup
+
+
+async def test_catalog_remove_does_not_add(db_session, restaurant):
+    """Regression (real chat): 'Remove 3 chicken soup' must REDUCE the cart, not ADD 3."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.outbox.models import OutboxMessage
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    soup = await _seed_soup_cart(db_session, restaurant)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110020"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=soup, qty=6)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110020", counterpart="customer",
+        state={"dialogue_phase": "ordering", "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.rm3", from_phone="+971501110020", type=MessageType.TEXT,
+        payload={"text": "Remove 3 chicken soup"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    item = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).one()
+    assert item.qty == 3
+    body = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110020")
+    )).all()[-1].payload["body"]
+    assert "Removed" in body
+    assert "Added" not in body
+
+
+async def test_catalog_make_it_n_sets_not_adds(db_session, restaurant):
+    """Regression (real chat): 'Make it 5 chicken soup' with 1 in cart → qty 5, not 6."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.outbox.models import OutboxMessage
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    soup = await _seed_soup_cart(db_session, restaurant)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110021"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=soup, qty=1)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110021", counterpart="customer",
+        state={"dialogue_phase": "ordering", "draft_order_id": order.id},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.mk5", from_phone="+971501110021", type=MessageType.TEXT,
+        payload={"text": "Make it 5 chicken soup"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    item = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).one()
+    assert item.qty == 5
+    body = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110021")
+    )).all()[-1].payload["body"]
+    assert "Updated" in body
+    assert "Added" not in body
+
+
+async def test_catalog_cart_edit_at_confirmation_reshows_summary(db_session, restaurant):
+    """At confirm step, set-qty must edit in place and re-show the order summary."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.outbox.models import OutboxMessage
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    soup = await _seed_soup_cart(db_session, restaurant)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110022"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=soup, qty=1)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110022", counterpart="customer",
+        state={
+            "dialogue_phase": "awaiting_confirmation",
+            "dialogue_state": "order_confirmation",
+            "pending_order_id": order.id,
+            "draft_order_id": order.id,
+        },
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.cf5", from_phone="+971501110022", type=MessageType.TEXT,
+        payload={"text": "Make it 5 chicken soup"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    item = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).one()
+    assert item.qty == 5
+    body = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110022")
+    )).all()[-1].payload["body"]
+    assert "Order summary:" in body
+    assert "5x Chicken Soup" in body
+    assert conv.state.get("dialogue_phase") == "awaiting_confirmation"
+
+
+def test_cart_edit_intent_detection():
+    from app.conversation.engine import _is_cart_edit_intent, _parse_remove_item
+
+    assert _parse_remove_item("Remove 3 chicken soup") == (3, "chicken soup")
+    assert _parse_remove_item("remove chicken soup") == (None, "chicken soup")
+    assert _parse_remove_item("one clear soup") is None
+    assert _parse_remove_item("clear cart") is None
+    assert _is_cart_edit_intent("Make it 5 chicken soup") is True
+    assert _is_cart_edit_intent("one chicken soup") is False
+
+
 def test_is_cart_query_detection():
     """Cart queries are detected; edits/cancels/menu are NOT (they are real actions)."""
     from app.conversation.engine import _is_cart_query

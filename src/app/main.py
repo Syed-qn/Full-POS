@@ -182,6 +182,10 @@ def create_app() -> FastAPI:
 
     app.include_router(catalog_router)
 
+    from app.pos.router import router as pos_router
+
+    app.include_router(pos_router)
+
     from app.wallet.router import router as wallet_router
 
     app.include_router(wallet_router)

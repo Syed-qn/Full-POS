@@ -390,7 +390,16 @@ def _is_restaurant_location_request(text: str | None) -> bool:
         "i will come", "i'll come", "ill come", "come direct", "come and collect",
         "collect myself", "collect it myself", "pick it up myself", "pick up myself",
     )
-    return any(p in t for p in phrases)
+    if any(p in t for p in phrases):
+        return True
+    # Abbreviated / typo'd forms the phrase list misses — "share ur location", "send u
+    # location", "drop ur pin", "whats ur address". The customer is asking the RESTAURANT
+    # to share where it is (not offering to share their own).
+    if _re.search(r"\b(share|send|sent|drop|give|show)\b[\w ]{0,15}\b(location|address|pin|spot|map)\b", t):
+        return True
+    if _re.search(r"\b(ur|your)\s+(exact\s+)?(location|address|pin|spot)\b", t):
+        return True
+    return False
 
 
 def _is_complaint(text: str | None) -> bool:
@@ -648,6 +657,195 @@ def _category_emoji(category: str) -> str:
     return "🍽️"
 
 
+# Category availability questions — "do you have any drinks?", "u have any soup".
+# Regression: the LLM (or _looks_like_menu anti-hallucination guard) dumped the ENTIRE
+# catalogue (500+ lines). These get a SHORT filtered list or catalogue cards for ONE
+# category — never the full menu.
+_CATEGORY_AVAIL_PATTERNS: tuple[str, ...] = (
+    r"^(?:do you|you|u|have you|got)\s+(?:have|got|serve|sell)\s+(?:any\s+)?(.+?)[\?\.!]*$",
+    r"^(?:any|some)\s+(.+?)[\?\.!]*$",
+    r"^what\s+(.+?)\s+(?:do you have|you have|u have|are there|are available|available)[\?\.!]*$",
+)
+_CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
+    "drink": (
+        "drink", "beverage", "juice", "coffee", "tea", "mojito", "shake", "lassi",
+        "soda", "cola", "smoothie", "mocktail", "latte", "espresso", "cappuccino",
+    ),
+    "soup": ("soup", "soups", "broth"),
+    "biryani": ("biryani", "biriyani", "mandi"),
+    "dessert": ("dessert", "sweet", "falooda", "ice cream", "cake"),
+    "pizza": ("pizza",),
+    "burger": ("burger",),
+    "sandwich": ("sandwich",),
+    "shawarma": ("shawarma",),
+    "starter": ("starter", "appetizer", "appetiser", "snack"),
+    "salad": ("salad",),
+}
+_CATEGORY_QUERY_BROAD: frozenset[str] = frozenset({
+    "menu", "food", "anything", "something", "item", "items", "dish", "dishes",
+    "everything", "stuff", "option", "options",
+})
+_CATEGORY_REPLY_MAX = 15
+_FULL_MENU_TEXT_CAP = 40
+
+
+def _normalize_category_keyword(raw: str) -> str:
+    """Strip filler and simple plurals from a parsed category phrase."""
+    t = _re.sub(r"\s+", " ", (raw or "").strip().lower()).strip("?.! ")
+    for lead in ("the ", "a ", "an ", "any ", "some "):
+        if t.startswith(lead):
+            t = t[len(lead):].strip()
+    if t.endswith("s") and t[:-1] in _CATEGORY_ALIASES:
+        t = t[:-1]
+    return t
+
+
+def _category_match_needles(keyword: str) -> tuple[str, ...]:
+    """Expand a customer keyword into substrings to match category or product names."""
+    base = _normalize_category_keyword(keyword)
+    if not base:
+        return ()
+    if base in _CATEGORY_ALIASES:
+        return _CATEGORY_ALIASES[base]
+    return (base,)
+
+
+def _parse_category_availability_query(text: str | None) -> str | None:
+    """If the message asks whether we have a category ('any drinks?'), return the keyword."""
+    if not text:
+        return None
+    if _is_menu_request(text) or _dish_info_question(text):
+        return None
+    t = _re.sub(r"\s+", " ", text.strip().lower()).replace("'", "'")
+    if not t or len(t) > 80:
+        return None
+    for pat in _CATEGORY_AVAIL_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            kw = _normalize_category_keyword(m.group(1))
+            if kw and kw not in _CATEGORY_QUERY_BROAD:
+                return kw
+    return None
+
+
+def _item_matches_category_query(
+    *, name: str, category: str, needles: tuple[str, ...],
+) -> bool:
+    """True when a menu row matches a category-availability keyword."""
+    blob = f"{(category or '').lower()} {(name or '').lower()}"
+    return any(n in blob for n in needles)
+
+
+async def _handle_category_availability_query(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    keyword: str,
+) -> None:
+    """Answer 'do you have drinks?' with a capped list or ONE category's catalogue cards."""
+    needles = _category_match_needles(keyword)
+    if not needles:
+        return
+
+    label = keyword.strip().title() or "that"
+    matched: list[tuple[str, str, object]] = []  # (name, category, price)
+    matched_cat_names: list[str] = []
+
+    if await _catalog_mode_on(session, restaurant_id):
+        from app.catalog.service import _category_of, _load_sendable_products, send_catalog_category
+
+        _cid, sendable = await _load_sendable_products(session, restaurant_id)
+        if sendable:
+            cat_counts: dict[str, int] = {}
+            for p in sendable:
+                cat = _category_of(p)
+                if _item_matches_category_query(name=p.name, category=cat, needles=needles):
+                    matched.append((p.name, cat, p.price_aed))
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            matched_cat_names = [c for c, _ in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )]
+
+            if len(matched_cat_names) == 1 and _cid:
+                intro = (
+                    f"Yes! We have {label} 😊 Tap below to pick one, "
+                    "then send your basket to order."
+                )
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="category-query-intro",
+                    body=intro,
+                )
+                sent = await send_catalog_category(
+                    session,
+                    restaurant_id=restaurant_id,
+                    to_phone=inbound.from_phone,
+                    category=matched_cat_names[0],
+                    idempotency_key=f"catq-{conv.id}-{inbound.wa_message_id}",
+                )
+                if sent:
+                    return
+    else:
+        from app.menu.models import Dish, Menu
+
+        menu = await session.scalar(
+            select(Menu).where(
+                Menu.restaurant_id == restaurant_id, Menu.status == "active",
+            )
+        )
+        if menu is not None:
+            dishes = (
+                await session.scalars(
+                    select(Dish).where(
+                        Dish.menu_id == menu.id,
+                        Dish.is_available == True,  # noqa: E712
+                        Dish.meta_status == "active",
+                    ).order_by(Dish.category, Dish.name)
+                )
+            ).all()
+            cat_counts: dict[str, int] = {}
+            for d in dishes:
+                if await _catalog_excludes_dish(session, restaurant_id, d):
+                    continue
+                cat = d.category or "Menu"
+                if _item_matches_category_query(name=d.name, category=cat, needles=needles):
+                    matched.append((d.name, cat, d.price_aed))
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            matched_cat_names = [c for c, _ in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )]
+
+    if not matched:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="category-query-none",
+            body=(
+                f"We don't have {label.lower()} on the menu right now 🙏 "
+                "Say 'menu' to see what we do have, or tell me another dish 😊"
+            ),
+        )
+        return
+
+    emoji = _category_emoji(matched_cat_names[0] if matched_cat_names else label)
+    lines = [f"Yes! We have {label} {emoji} Here's a selection:"]
+    for name, _cat, price in matched[:_CATEGORY_REPLY_MAX]:
+        lines.append(f"• {name}: AED {_aed(price)}")
+    extra = len(matched) - _CATEGORY_REPLY_MAX
+    if extra > 0:
+        lines.append(
+            f"\n…and {extra} more. Tell me what you'd like, "
+            "or say 'menu' to browse everything 🍛"
+        )
+    else:
+        lines.append("\nTell me what you'd like and I'll add it 😊")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="category-query-list",
+        body="\n".join(lines),
+    )
+
+
 async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str:
     """Render the SYNCED Meta catalogue as categorized text.
 
@@ -669,16 +867,30 @@ async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str
     if not products:
         return "Our catalogue is currently empty. Please try again later."
 
+    from app.catalog.service import _apply_category_map, _category_of, _load_category_map
+
+    _apply_category_map(products, await _load_category_map(session, restaurant_id))
     lines: list[str] = ["👋 *Welcome! Here's our menu*"]
     current_category: str | None = None
+    shown = 0
     for p in products:
-        if p.category != current_category:
-            current_category = p.category
+        if shown >= _FULL_MENU_TEXT_CAP:
+            break
+        cat = _category_of(p)
+        if cat != current_category:
+            current_category = cat
             if current_category:
                 lines.append(f"\n{_category_emoji(current_category)} *{current_category}*")
         price = _aed(p.price_aed) if p.price_aed is not None else "?"
         lines.append(f"• {p.name}: AED {price}")
-    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
+        shown += 1
+    if len(products) > _FULL_MENU_TEXT_CAP:
+        lines.append(
+            f"\n…and {len(products) - _FULL_MENU_TEXT_CAP} more items. "
+            "Say 'menu' to open the catalogue, or tell me what you'd like 😊"
+        )
+    else:
+        lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
     return "\n".join(lines)
 
 
@@ -779,7 +991,7 @@ async def _render_menu(
 
     lines: list[str] = ["👋 *Welcome! Here's our menu*"]
     current_category: str | None = None
-    for dish in dish_list:
+    for dish in dish_list[:_FULL_MENU_TEXT_CAP]:
         if dish.category != current_category:
             current_category = dish.category
             if current_category:
@@ -787,7 +999,13 @@ async def _render_menu(
         price = _aed(dish.price_aed)
         lines.append(f"• {dish.name}: AED {price}")
 
-    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
+    if len(dish_list) > _FULL_MENU_TEXT_CAP:
+        lines.append(
+            f"\n…and {len(dish_list) - _FULL_MENU_TEXT_CAP} more items. "
+            "Tell me what you'd like, or say 'menu' to browse 😊"
+        )
+    else:
+        lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
     return "\n".join(lines)
 
 
@@ -1545,6 +1763,408 @@ def _is_checkout_intent(text: str) -> bool:
     return t in ("done", "checkout", "that's all", "thats all")
 
 
+# Broader "I'm finished adding items" detector for the AI path, where the LLM was
+# unreliable — it looped re-adding the same dish on "that's all" and once bounced to a
+# greeting. Tolerates a leading "no" ("no that's all") and trailing filler ("thats all
+# thanks", "thats all can't you understand", "motherf*** that's all").
+_DONE_PHRASES: frozenset[str] = frozenset({
+    "done", "checkout", "check out", "proceed", "proceed to checkout", "finish",
+    "finished", "im done", "i am done", "that will be all", "thats all", "that is all",
+    "thats it", "that is it", "thats everything", "that is everything", "nothing else",
+    "no more", "no more thanks", "complete order", "place order", "im good", "no thats all",
+})
+_DONE_EDGES: tuple[str, ...] = (
+    "thats all", "that is all", "thats it", "that is it", "thats everything",
+    "that is everything", "nothing else", "im done", "i am done", "that will be all",
+)
+
+
+def _is_done_intent(text: str) -> bool:
+    """True for a 'that's all / done / nothing else' checkout phrase (AI path)."""
+    # Drop apostrophes FIRST so "that's" → "thats" (else the apostrophe becomes a space
+    # and "that s all" never matches "thats all"), then punctuation → space, collapse.
+    t = _re.sub(r"[’'`]", "", (text or "").lower())
+    t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    if not t:
+        return False
+    stripped = t[3:].strip() if t.startswith("no ") else t
+    if t in _DONE_PHRASES or stripped in _DONE_PHRASES:
+        return True
+    # A clear done-phrase at the START or END of the message (e.g. angry prefix) counts;
+    # matching only at the edges avoids false hits like the question "is that all you have".
+    return stripped.startswith(_DONE_EDGES) or stripped.endswith(_DONE_EDGES)
+
+
+# Leading phrases that mark a QUESTION / COMPLAINT / aside rather than a request to add a
+# dish. The item parser strips filler words ("add", "you") and would otherwise mine a
+# stray "2 biryani" out of "why did you add 2 biryani" and silently grow the cart. Kept
+# deliberately narrow — only leading interrogatives/complaint openers — so a real order
+# ("2 biryani", "chicken biryani please") is never blocked.
+_ORDER_QUESTION_LEADS: tuple[str, ...] = (
+    "why", "how come", "how much", "how many", "who ", "whom", "whose", "when ",
+    "where ", "did you", "didn't you", "didnt you", "you add", "you added", "you put",
+    "i didn't", "i didnt", "i did not", "i never", "i already", "you do it",
+    "do it your", "do it yourself", "you handle", "you cancel", "cancel it your",
+)
+_ORDER_QUESTION_CONTAINS: tuple[str, ...] = (
+    "why did you", "that's wrong", "thats wrong", "that is wrong", "not what i",
+    "wrong order", "by mistake", "by your self", "by yourself",
+)
+
+
+def _looks_like_order_question(text: str) -> bool:
+    """True when a message is a question/complaint/aside, not a dish request.
+
+    Guards the item-collection parsers so a complaint like "why did you add 2 biryani" or
+    an instruction like "you do it yourself" is NOT mined for a stray quantity and added
+    to the cart (or matched as a bogus dish). Conservative on purpose."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if t.startswith(_ORDER_QUESTION_LEADS):
+        return True
+    return any(p in t for p in _ORDER_QUESTION_CONTAINS)
+
+
+# Off-topic categories — health, homework, etc. NOT food ordering or restaurant service.
+# Regression: "I have fever what can I do" dumped the entire menu via the LLM / anti-menu
+# guard. These get a warm decline and NEVER a menu.
+_OFF_TOPIC_MEDICAL: tuple[str, ...] = (
+    "fever", "sick", "illness", " i am ill", " i'm ill", " im ill", "not feeling well",
+    "feeling unwell", "doctor", "hospital", "medicine", "medication", "tablet", "tablets",
+    "pain", "cough", " flu ", "vomit", "headache", "temperature", "nausea", "diarrhea",
+    "diarrhoea", "injured", "injury", "ambulance", "prescription", "symptom", "symptoms",
+    "covid", "corona", "infection", "bp ", "blood pressure",
+)
+_OFF_TOPIC_GENERAL: tuple[str, ...] = (
+    "homework", "assignment", "exam ", "tell me a joke", "joke ", "weather forecast",
+    "politics", "election", "visa ", "job interview", "fix my phone", "wifi password",
+    "relationship advice", "capital of", "who is the president", "write me a",
+)
+# Keywords that keep a message on-topic even when it also mentions health (ordering soup
+# while sick) or is clearly about this restaurant / an order.
+_RESTAURANT_ON_TOPIC: tuple[str, ...] = (
+    "menu", "order", "cart", "deliver", "delivery", "address", "restaurant", "food",
+    "dish", "dishes", "price", "fee", "eta", "track", "coupon", "discount", "biryani",
+    "burger", "pizza", "shawarma", "mandi", "soup", "juice", "shake", "save", "data",
+    "privacy", "stored", "remember", "hours", "open", "close", "location", "cod", "cash",
+    "payment", "total", "subtotal", "confirm", "takeaway", "pickup", "loyalty", "tier",
+    "catalogue", "catalog", "complaint", "refund", "rider",
+)
+_FOOD_ORDER_INTENT: tuple[str, ...] = (
+    "order", "get me", "i want", "i'd like", "id like", "give me", "add ", "one ",
+    "2 ", "3 ", "something light", "easy to digest", "recommend", "suggest",
+)
+
+
+def _has_food_order_intent(text: str) -> bool:
+    """True when the customer is trying to order food, even if they mention being unwell."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if any(p in t for p in _FOOD_ORDER_INTENT):
+        return True
+    from app.ordering.service import parse_qty_and_text
+
+    qty, rest = parse_qty_and_text(t)
+    if qty > 1 or (rest and rest.strip().lower() != t):
+        return True
+    return False
+
+
+def _is_restaurant_on_topic(text: str | None) -> bool:
+    """True when the message is about ordering, this restaurant, or delivery service."""
+    if not text or not text.strip():
+        return True
+    if (
+        _is_menu_request(text)
+        or _is_restaurant_location_request(text)
+        or _is_tier_query(text)
+        or _is_tracking_query(text)
+        or _dish_info_question(text)
+        or _looks_like_order_question(text)
+        or _is_complaint(text)
+        or _is_cancel_intent(text)
+        or _is_done_intent(text)
+        or _is_clear_cart_command(text)
+        or _is_cart_query(text)
+    ):
+        return True
+    t = text.strip().lower()
+    if any(p in t for p in _RESTAURANT_ON_TOPIC):
+        return True
+    if any(p in t for p in (
+        "who are you", "what are you", "restaurant name", "your name", "shop name",
+        "store name", "what do you save", "what do you store", "anything apart from",
+    )):
+        return True
+    if _has_food_order_intent(t):
+        return True
+    if _extract_order_dish_query(text):
+        return True
+    return False
+
+
+def _classify_off_topic(text: str | None) -> str | None:
+    """Return an off-topic category ('medical', 'general') or None when on-topic / ambiguous.
+
+    Conservative: only fires on clear non-restaurant topics so normal chat still reaches
+    the AI. Never returns a category for ordering or restaurant-service questions."""
+    if not text or _is_restaurant_on_topic(text):
+        return None
+    t = text.strip().lower()
+    if any(w in t for w in _OFF_TOPIC_MEDICAL):
+        return "medical"
+    if any(p in t for p in _OFF_TOPIC_GENERAL):
+        return "general"
+    return None
+
+
+def _off_topic_reply(category: str, restaurant_name: str) -> str:
+    """Warm decline for off-topic messages — never offers a menu."""
+    if category == "medical":
+        return (
+            f"I'm sorry you're not feeling well 🙏 {restaurant_name} is a food-ordering "
+            "service — we can't give medical advice. Please rest and speak to a doctor "
+            "if you need help with your health. When you're ready to order, just tell me "
+            "what you'd like 😊"
+        )
+    return (
+        f"Thanks for reaching out 😊 {restaurant_name} can only help with food orders, "
+        "our menu, delivery, and your order — not general questions like that. "
+        "Tell me what you'd like to eat, or say 'menu' to see what we have 🍛"
+    )
+
+
+# Phrases that genuinely mean "empty my cart / start over". Used to protect the
+# destructive clear_cart action: if the LLM tagged a message clear_cart but it says NONE
+# of these AND names a dish, it's an order that was misclassified ("one beef curry" read
+# as "clear") — so we add the dish instead of silently wiping the cart.
+_CLEAR_CART_PHRASES: tuple[str, ...] = (
+    "clear", "empty", "start over", "start again", "reset", "wipe", "scrap", "restart",
+    "remove all", "remove everything", "delete all", "delete everything",
+    "cancel all", "cancel everything", "fresh start", "start fresh", "start new",
+    "new order",
+)
+
+
+def _is_explicit_clear(text: str) -> bool:
+    """True when the message explicitly asks to empty the cart / start over."""
+    t = (text or "").strip().lower()
+    return any(p in t for p in _CLEAR_CART_PHRASES)
+
+
+# PRECISE clear-cart commands for the pre-LLM guard. The clear word is PAIRED with
+# cart/order/basket/all/everything (or is a standalone "start over"/"reset"), so this
+# never fires on a dish like "clear soup" — where the LLM previously fuzzy-matched
+# "clear" → the dish "Clear Soup" and ADDED it instead of clearing.
+_CLEAR_CART_COMMANDS: tuple[str, ...] = (
+    "clear cart", "clear the cart", "clear my cart", "clear this cart", "clear your cart",
+    "clear basket", "clear the basket", "clear my basket", "clear all", "clear everything",
+    "clear order", "clear the order", "clear my order", "clear it all",
+    "empty cart", "empty the cart", "empty my cart", "empty basket", "empty the basket",
+    "empty everything", "start over", "start again", "start fresh", "start a new order",
+    "reset cart", "reset the cart", "reset my cart", "remove everything", "remove all",
+    "delete everything", "delete all", "cancel all", "cancel everything", "cancel the cart",
+    "wipe cart", "wipe the cart", "scrap the order", "clear my basket",
+)
+_CLEAR_CART_EXACT: frozenset[str] = frozenset({
+    "clear", "reset", "empty", "clear cart", "empty cart", "start over", "reset cart",
+})
+
+
+def _is_clear_cart_command(text: str) -> bool:
+    """True for an explicit 'empty the whole cart' command. PAIRED phrasing only, so a
+    dish order like 'clear soup' is never mistaken for a clear."""
+    t = _re.sub(r"[’'`]", "", (text or "").lower())
+    t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    if not t:
+        return False
+    return t in _CLEAR_CART_EXACT or any(p in t for p in _CLEAR_CART_COMMANDS)
+
+
+# SET-quantity phrasings — "make it 5", "only 1 biryani", "change to 3", "set it to 2".
+# These REPLACE the cart quantity, they don't add to it. The LLM often mis-tags them as
+# add_item, so "make it 5" with 1 already in the cart wrongly became 6. Detect them
+# deterministically. Kept to unambiguous SET openers (no bare "i want N", which can mean
+# "add N").
+_SET_QTY_PATTERNS: tuple[str, ...] = (
+    r"^make it (\d+)\s*(.*)$",
+    r"^change (?:it |them |that )?to (\d+)\s*(.*)$",
+    r"^set (?:it |them |that )?(?:to )?(\d+)\s*(.*)$",
+    r"^(?:i )?(?:want|need) only (\d+)\s*(.*)$",
+    r"^only (\d+)\s+(.*)$",
+    r"^just (\d+)\s+(.*)$",
+)
+
+
+def _parse_set_quantity(text: str) -> tuple[int, str] | None:
+    """Detect a SET-quantity instruction → (qty, dish_query). dish_query may be '' when
+    no dish is named ("make it 5"). Returns None when it isn't a set-quantity message."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    for pat in _SET_QTY_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            return int(m.group(1)), (m.group(2) or "").strip()
+    return None
+
+
+# Leading SET-quantity verb, so "make it 5 lemon mint and 2 grill mandi" can be split into
+# per-dish targets instead of the whole tail becoming one phantom dish.
+_SET_QTY_PREFIX = _re.compile(
+    r"^(?:make it|change (?:it |them |that )?to|set (?:it |them |that )?(?:to )?|"
+    r"(?:i )?(?:want|need) only|only|just)\s+"
+)
+
+
+def _parse_set_quantity_items(text: str) -> list[tuple[int, str]] | None:
+    """Split a SET-quantity instruction into one or more (qty, dish_query) pairs.
+
+    "make it 5 lemon mint and 2 grill mandi" → [(5, "lemon mint"), (2, "grill mandi")].
+    "make it 5" → [(5, "")] (dish resolved by the caller). Returns None when it isn't a
+    set-quantity, or a multi-segment can't be parsed cleanly (so we never invent a dish
+    named "lemon mint and 2 grill mandi")."""
+    t = (text or "").strip().lower()
+    m = _SET_QTY_PREFIX.match(t)
+    if not m:
+        return None
+    rest = t[m.end():].strip()
+    if not rest:
+        return None
+    segments = [s.strip() for s in _re.split(r"\s*(?:,|&|\+|\band\b)\s*", rest) if s.strip()]
+    if not segments:
+        return None
+    out: list[tuple[int, str]] = []
+    for seg in segments:
+        sm = _re.match(r"^(\d+)\s+(.+)$", seg)
+        if sm:
+            out.append((int(sm.group(1)), sm.group(2).strip()))
+        elif len(segments) == 1 and _re.fullmatch(r"\d+", seg):
+            out.append((int(seg), ""))  # "make it 5" — dish supplied by the caller
+        else:
+            return None  # "make it spicy", or a list segment with no quantity
+    return out or None
+
+
+# REMOVE phrasing — "remove 3 chicken soup", "delete biryani", "take off 2 mint".
+# Catalogue typed-order used to strip the leading verb and parse_qty_and_text the rest,
+# turning "remove 3 soup" into ADD 3. Detect these before the add-only typed-order path.
+_REMOVE_ITEM_PATTERNS: tuple[str, ...] = (
+    r"^remove (\d+)\s+(.+)$",
+    r"^delete (\d+)\s+(.+)$",
+    r"^(?:take off|take out) (\d+)\s+(.+)$",
+    r"^drop (\d+)\s+(.+)$",
+    r"^minus (\d+)\s+(.+)$",
+    r"^remove (.+)$",
+    r"^delete (.+)$",
+    r"^(?:take off|take out) (.+)$",
+    r"^drop (.+)$",
+)
+
+
+def _parse_remove_item(text: str) -> tuple[int | None, str] | None:
+    """Detect a REMOVE instruction → (qty, dish_query). ``qty=None`` removes all units
+    of the dish. Returns None when it isn't a single-item remove (whole-cart clears are
+    excluded)."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    if _is_explicit_clear(t) or _is_clear_cart_command(t):
+        return None
+    for pat in _REMOVE_ITEM_PATTERNS:
+        m = _re.match(pat, t)
+        if not m:
+            continue
+        if m.lastindex == 2:
+            qty = int(m.group(1))
+            dish = (m.group(2) or "").strip()
+        else:
+            qty = None
+            dish = (m.group(1) or "").strip()
+        dish = _re.sub(r"\b(please|pls|thanks|thank you)\b", "", dish).strip()
+        if not dish or dish in {"all", "everything", "it", "them", "that"}:
+            return None
+        if dish.startswith(("all ", "everything ")):
+            return None
+        return qty, dish
+    return None
+
+
+def _is_cart_edit_intent(text: str) -> bool:
+    """True when the message is a cart edit (set quantity or remove), not a new add."""
+    return (
+        _parse_set_quantity_items(text) is not None
+        or _parse_remove_item(text) is not None
+    )
+
+
+# KEEP-ONLY phrasing — "only mandi", "just the biryani", "keep only mandi", "i only want
+# mandi" means: the cart should hold ONLY that dish (prune the rest). A digit after the
+# keyword ("only 2 mandi") is a SET-quantity, not keep-only, so those are excluded.
+_KEEP_ONLY_PATTERNS: tuple[str, ...] = (
+    r"^keep only (.+)$",
+    r"^(?:i )?(?:just |only )?want only (.+)$",
+    r"^(?:i )?only want (.+)$",
+    r"^(?:i )?just want (.+)$",
+    r"^only (.+)$",
+    r"^just (.+)$",
+)
+
+
+def _parse_keep_only(text: str) -> str | None:
+    """Detect a KEEP-ONLY instruction → the dish query to keep (others get pruned).
+    Returns None when it isn't keep-only or names a quantity ("only 2 mandi")."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    for pat in _KEEP_ONLY_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            dish = (m.group(1) or "").strip()
+            # strip a trailing "please/thanks" and drop set-quantity ("only 2 mandi").
+            dish = _re.sub(r"\b(please|pls|thanks|thank you)\b", "", dish).strip()
+            if dish and not dish[0].isdigit():
+                return dish
+    return None
+
+
+async def _handle_confirmation_done(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    restaurant=None,
+) -> None:
+    """'Done' at the confirm step — re-show the summary or capture address, never both.
+
+    Regression: at awaiting_confirmation with an address already on the order, 'done'
+    fell through to the LLM which asked for the address AGAIN and then re-showed the
+    summary (ordering-phase checkout logic misfiring at the wrong time)."""
+    from app.ordering.models import Order
+
+    oid = conv.state.get("pending_order_id") or conv.state.get("draft_order_id")
+    order = await session.get(Order, oid) if oid else None
+    if order is None or not await _order_has_items(session, order.id):
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="confirm-done-empty",
+            body="Your cart is empty. Please add a dish before checking out 😊",
+        )
+        return
+    if order.address_id is not None:
+        _set_state(conv, dialogue_phase="awaiting_confirmation",
+                   dialogue_state="order_confirmation")
+        await _send_order_summary(session, conv, inbound, restaurant_id, order)
+        return
+    await _begin_address_capture(
+        session, conv, inbound, restaurant_id, restaurant=restaurant,
+    )
+
+
 async def _handle_done_checkout(
     session: AsyncSession,
     conv: Conversation,
@@ -1619,6 +2239,18 @@ async def _handle_collecting_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc", body=desc,
+        )
+        return
+
+    # A question/complaint/aside ("why did you add 2 biryani", "you do it yourself") must
+    # NOT be mined for a stray quantity and silently added to the cart. Acknowledge and
+    # ask the customer to state the dish + quantity instead of adding anything.
+    if _looks_like_order_question(text):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="order-question",
+            body=("Sorry if that got mixed up 🙂 Tell me the dish and how many you'd like "
+                  "(e.g. '1 Chicken Biryani') and I'll add exactly that."),
         )
         return
 
@@ -2336,6 +2968,17 @@ async def _handle_modify_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc-mod", body=desc,
+        )
+        return
+
+    # Same guard as the ordering collector: a question/complaint/aside ("you do it
+    # yourself") must not be parsed as a replacement dish or mined for a quantity.
+    if _looks_like_order_question(text):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="order-question-mod",
+            body=("No problem — tell me the change as a dish and quantity (e.g. "
+                  "'1 Chicken Biryani'), or 'remove <dish>', and I'll update it."),
         )
         return
 
@@ -4055,6 +4698,41 @@ async def _execute_ai_update_qty(
     return ("updated", dish.name)
 
 
+async def _keep_only_dish(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, dish_query: str
+) -> tuple[int | None, str | None]:
+    """Prune the draft cart down to ONLY the dish matching ``dish_query`` ("only mandi").
+
+    Removes every OTHER line (via set_item_qty(0) so totals recompute), keeping the named
+    dish. Returns ``(removed_count, kept_name)``; ``(None, None)`` when there's no draft,
+    the dish doesn't match, or it isn't in the cart (caller then treats it as an order)."""
+    from app.ordering.models import Order, OrderItem
+    from app.ordering.service import set_item_qty
+
+    draft_order_id = conv.state.get("draft_order_id")
+    if not draft_order_id or not dish_query:
+        return (None, None)
+    order = await session.get(Order, draft_order_id)
+    if order is None or str(order.status) != "draft":
+        return (None, None)
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return (None, None)
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return (None, None)
+    target = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
+    if target is None:
+        return (None, None)  # the "only" dish isn't in the cart → not a keep-only
+    items = (await session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).all()
+    other_dish_ids = {it.dish_id for it in items if it.dish_id != target.id}
+    for other_id in other_dish_ids:
+        await set_item_qty(session, order=order, dish_id=other_id, qty=0)
+    return (len(other_dish_ids), target.name)
+
+
 async def _apply_confirmation_edit(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, restaurant, action: str, data: dict,
@@ -4083,6 +4761,35 @@ async def _apply_confirmation_edit(
 
     note: str | None = None
     if action == "add_item":
+        # SET-quantity at confirm ("make it 5 soup") must REPLACE qty, not add — the
+        # ordering-phase guard in _dispatch_action never runs here because confirm edits
+        # short-circuit earlier.
+        _raw = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+        _setq_items = _parse_set_quantity_items(_raw)
+        if _setq_items is not None:
+            _changed: list[str] = []
+            for _sqty, _sdish in _setq_items:
+                if not _sdish:
+                    continue
+                _outcome, _dname = await _execute_ai_update_qty(
+                    session, conv, inbound, restaurant_id, _sdish, _sqty,
+                    suppress_offers=len(_setq_items) > 1,
+                )
+                if _outcome == "awaiting_bundle":
+                    return
+                if _outcome in ("updated", "removed"):
+                    _changed.append(_dname or _sdish)
+                elif _outcome == "not_in_cart":
+                    if await _execute_ai_add_item(
+                        session, conv, inbound, restaurant_id, _sdish, _sqty, "",
+                        suppress_offers=True,
+                    ) == "added":
+                        _changed.append(_sdish)
+            if _changed:
+                _set_state(conv, dialogue_phase="awaiting_confirmation",
+                           dialogue_state="order_confirmation")
+                await _send_order_summary(session, conv, inbound, restaurant_id, order)
+                return
         items = data.get("items") or []
         if not items and data.get("dish_query"):
             items = [{"dish_query": data.get("dish_query", ""),
@@ -4614,6 +5321,51 @@ async def _dispatch_action(
 
     if action == "add_item":
         items = data.get("items") or []
+        # SET-quantity guard: "make it 5 lemon mint" / "only 1 biryani" REPLACE the cart
+        # quantity, they don't add. The LLM mis-tags these as add_item, so "make it 5"
+        # with 1 in the cart wrongly became 6. When the phrasing is a set AND the dish is
+        # already in the cart, route to the set path; otherwise ("make it 5" for a dish
+        # not in the cart) fall through and add.
+        _raw = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+        _setq_items = _parse_set_quantity_items(_raw)
+        if _setq_items is not None:
+            # Lone "make it 5" (no dish) → take the dish the LLM parsed.
+            if len(_setq_items) == 1 and not _setq_items[0][1]:
+                _fill = (
+                    data.get("dish_query")
+                    or (items[0].get("dish_query", "") if items else "")
+                    or ""
+                ).strip()
+                _setq_items = [(_setq_items[0][0], _fill)] if _fill else []
+            _multi = len(_setq_items) > 1
+            _changed: list[str] = []
+            for _sqty, _sdish in _setq_items:
+                if not _sdish:
+                    continue
+                _outcome, _dname = await _execute_ai_update_qty(
+                    session, conv, inbound, restaurant_id, _sdish, _sqty,
+                    suppress_offers=_multi,
+                )
+                if _outcome == "awaiting_bundle":
+                    return  # single-dish bundle question already sent
+                if _outcome in ("updated", "removed"):
+                    _changed.append(_dname or _sdish)
+                elif _outcome == "not_in_cart":
+                    # set-to-N for a dish not in the cart yet == add N of it.
+                    if await _execute_ai_add_item(
+                        session, conv, inbound, restaurant_id, _sdish, _sqty, "",
+                        suppress_offers=True,
+                    ) == "added":
+                        _changed.append(_sdish)
+                # no_match → leave it for the normal add path below
+            if _changed:
+                cart = await _build_cart_summary(session, conv)
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="ai-set-qty", body=f"Updated! ✅{_cart_tail(cart)}",
+                )
+                return
+            # nothing changed → fall through: treat as a normal add.
         # Multi-dish message: add EVERY dish the customer named in one message. A
         # single add_item used to add one dish and silently drop the rest, while the
         # LLM's reply narrated a full cart that the DB never held. We add each dish
@@ -4876,6 +5628,19 @@ async def _dispatch_action(
         return
 
     if action == "clear_cart":
+        # Guard: a destructive cart-wipe must LOSE to an actual order. The LLM sometimes
+        # tags an order ("one beef curry") as clear_cart; if the message isn't an explicit
+        # "empty/start over" AND parses to a dish query, route it to the add path so the
+        # item is added (or honestly declined) instead of the cart being silently emptied.
+        raw_text = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+        if raw_text.strip() and not _is_explicit_clear(raw_text):
+            from app.ordering.service import parse_qty_and_text
+
+            _q, _dq = parse_qty_and_text(raw_text)
+            if _dq and not _is_checkout_intent(_dq):
+                await _handle_collecting_items(session, conv, inbound, restaurant_id)
+                return
+
         # Empty the WHOLE draft cart (not a single remove) so the customer can start
         # over. Keeps the same draft order, just drops every line + zeroes the totals.
         from sqlalchemy import delete as sa_delete
@@ -5168,6 +5933,18 @@ async def _handle_customer_ai(
     history = await _build_history(session, conv)
     context = await _build_context(session, conv, restaurant_id, phase, restaurant)
 
+    # Off-topic (health, homework, etc.) → warm decline, NEVER the menu. The LLM used to
+    # reply with a fabricated menu or trigger show_menu on "I have fever what can I do".
+    if inbound.type == MessageType.TEXT:
+        _off_cat = _classify_off_topic(inbound.payload.get("text"))
+        if _off_cat:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix=f"off-topic-{_off_cat}",
+                body=_off_topic_reply(_off_cat, restaurant_name),
+            )
+            return
+
     # Dish-info question ("what's special in the biryani?") → answer with the dish's
     # menu description (verbatim) when present, else a short human line. Deterministic
     # so the manager's wording shows exactly. Only fires when it resolves to a real
@@ -5186,6 +5963,83 @@ async def _handle_customer_ai(
                     prefix="dish-info", body=_info_reply,
                 )
                 return
+
+    # Deterministic checkout: a clear "that's all / no that's all / done / nothing else"
+    # with items in the cart goes STRAIGHT to the summary/address — never loop on
+    # "anything else?" or bounce to a greeting. The LLM was unreliable here (it re-added
+    # the same dish repeatedly and once sent a welcome mid-order), so short-circuit before
+    # it runs. Empty cart → fall through to the AI (a bare "done" may mean something else).
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and _is_done_intent(inbound.payload.get("text") or "")
+    ):
+        from app.ordering.models import Order
+
+        _did = conv.state.get("draft_order_id")
+        _order = await session.get(Order, _did) if _did else None
+        if (
+            _order is not None
+            and str(_order.status) == "draft"
+            and await _order_has_items(session, _order.id)
+        ):
+            await _handle_done_checkout(
+                session, conv, inbound, restaurant_id, restaurant=restaurant
+            )
+            return
+
+    # Keep-only: "only mandi" / "just the biryani" means prune the cart to that dish, NOT
+    # wipe it (the LLM tagged "only mandi" as clear_cart and emptied everything). Handle
+    # deterministically when the named dish is actually in the cart; else fall through.
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+    ):
+        _keep_q = _parse_keep_only(inbound.payload.get("text") or "")
+        if _keep_q:
+            _removed, _kept = await _keep_only_dish(session, conv, restaurant_id, _keep_q)
+            if _kept is not None:
+                cart = await _build_cart_summary(session, conv)
+                body = (
+                    f"Done! Kept only {_kept}, removed the rest ✅{_cart_tail(cart)}"
+                    if _removed
+                    else f"You've got just {_kept} 😊{_cart_tail(cart)}\n\n"
+                    "Add more, or say 'done' to check out."
+                )
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="keep-only", body=body,
+                )
+                return
+
+    # Deterministic clear: "clear cart" / "empty the cart" / "start over" must empty the
+    # cart — never reach the LLM, which fuzzy-matched "clear" to the dish "Clear Soup" and
+    # ADDED it. Precise paired phrasing only, so ordering "clear soup" still works.
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and _is_clear_cart_command(inbound.payload.get("text") or "")
+    ):
+        from sqlalchemy import delete as sa_delete
+
+        from app.ordering.models import Order, OrderItem
+
+        _did = conv.state.get("draft_order_id")
+        _order = await session.get(Order, _did) if _did else None
+        if _order is not None and str(_order.status) == "draft":
+            await session.execute(
+                sa_delete(OrderItem).where(OrderItem.order_id == _order.id)
+            )
+            _order.subtotal = Decimal("0.00")
+            _order.total = _order.delivery_fee_aed
+            await session.flush()
+            _set_state(conv, dialogue_state="collecting_items", abandoned_nudged=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="clear-cart-cmd",
+            body="Cleared your cart 🧹 What would you like to order?",
+        )
+        return
 
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:
@@ -5360,6 +6214,107 @@ async def _download_and_transcribe_voice(
         return None, None, None
 
 
+async def _try_catalog_cart_edit(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> bool:
+    """In catalogue mode, handle remove / set-quantity edits BEFORE the add-only
+    typed-order path. Regression: "Remove 3 chicken soup" and "Make it 5 chicken soup"
+    were parsed as adds via parse_qty_and_text inside _try_catalog_typed_order."""
+    if inbound.type != MessageType.TEXT:
+        return False
+    if not await _catalog_mode_on(session, restaurant_id):
+        return False
+    text = (inbound.payload.get("text") or "").strip()
+    if not text:
+        return False
+
+    remove_parsed = _parse_remove_item(text)
+    setq_items = None if remove_parsed is not None else _parse_set_quantity_items(text)
+    if remove_parsed is None and setq_items is None:
+        return False
+
+    draft_order_id = conv.state.get("draft_order_id") or conv.state.get("pending_order_id")
+    if not draft_order_id:
+        return False
+
+    from app.ordering.models import Order
+
+    order = await session.get(Order, draft_order_id)
+    if order is None or str(order.status) != "draft":
+        return False
+
+    if conv.state.get("draft_order_id") != order.id:
+        _set_state(conv, draft_order_id=order.id)
+
+    phase = _resolve_phase(conv)
+    prefix = "catalog-cart-edit"
+    body: str
+
+    if remove_parsed is not None:
+        rm_qty, dish_query = remove_parsed
+        outcome, dish_name = await _execute_ai_remove_item(
+            session, conv, restaurant_id, dish_query, rm_qty,
+        )
+        if phase == "awaiting_confirmation":
+            _set_state(conv, dialogue_phase="awaiting_confirmation",
+                       dialogue_state="order_confirmation")
+            await _send_order_summary(session, conv, inbound, restaurant_id, order)
+            return True
+        cart = await _build_cart_summary(session, conv)
+        if outcome == "removed":
+            body = f"Done! Removed {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "reduced":
+            body = f"Done! Removed {rm_qty}x {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "not_in_cart":
+            body = f"{dish_name} isn't in your cart.{_cart_tail(cart)}"
+        else:
+            body = (
+                f"I couldn't find '{dish_query}' to remove. Tell me the dish name "
+                "and I'll take it off 😊"
+            )
+        prefix = "catalog-cart-remove"
+    else:
+        assert setq_items is not None
+        changed: list[str] = []
+        for sqty, sdish in setq_items:
+            if not sdish:
+                return False  # lone "make it 5" — dish name needed; let the AI resolve
+            outcome, dname = await _execute_ai_update_qty(
+                session, conv, inbound, restaurant_id, sdish, sqty,
+                suppress_offers=len(setq_items) > 1,
+            )
+            if outcome == "awaiting_bundle":
+                return True
+            if outcome in ("updated", "removed"):
+                changed.append(dname or sdish)
+            elif outcome == "not_in_cart":
+                if await _execute_ai_add_item(
+                    session, conv, inbound, restaurant_id, sdish, sqty, "",
+                    suppress_offers=True,
+                ) == "added":
+                    changed.append(sdish)
+        if not changed:
+            return False
+        if phase == "awaiting_confirmation":
+            _set_state(conv, dialogue_phase="awaiting_confirmation",
+                       dialogue_state="order_confirmation")
+            await _send_order_summary(session, conv, inbound, restaurant_id, order)
+            return True
+        cart = await _build_cart_summary(session, conv)
+        body = f"Updated! ✅{_cart_tail(cart)}"
+        prefix = "catalog-cart-set-qty"
+
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=prefix, body=body,
+    )
+    return True
+
+
 async def _try_catalog_typed_order(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, restaurant,
@@ -5390,6 +6345,8 @@ async def _try_catalog_typed_order(
     text = (inbound.payload.get("text") or "").strip()
     if not text or "?" in text or _is_menu_request(text.lower()):
         return False  # questions / menu requests → AI
+    if _is_cart_edit_intent(text):
+        return False  # remove / set-qty — handled by _try_catalog_cart_edit
 
     # "only/just N <dish>" signals an absolute-set intent — detect BEFORE stripping so
     # the signal survives filler removal (we strip them below but the flag is preserved).
@@ -5863,6 +6820,43 @@ async def handle_inbound(
     if conv.manual_takeover:
         return
 
+    # Browse-by-category: taps on the category picker are self-identifying interactive
+    # ids, so they work in any dialogue state. Three shapes, all paginated so EVERY dish
+    # is reachable by tapping:
+    #   cat:<name>            -> first 30 cards of that category
+    #   catmore:<offset>:<name> -> next 30 cards of that category ("Show more")
+    #   catpage:<n>           -> next page of the category list ("More categories")
+    # Only ever fires when the manager enabled the picker (that's how the customer got
+    # the list in the first place), so it stays fully revertable.
+    if inbound.type in (MessageType.LIST_REPLY, MessageType.BUTTON_REPLY):
+        _iid = inbound.payload.get("id") or inbound.payload.get("button_id") or ""
+        if _iid.startswith(("cat:", "catmore:", "catpage:")):
+            from app.catalog.service import send_catalog_categories, send_catalog_category
+
+            _ik = f"catbrowse-{conv.id}-{inbound.wa_message_id}"
+            if _iid.startswith("catpage:"):
+                _pg = _iid[len("catpage:"):]
+                await send_catalog_categories(
+                    session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                    page=int(_pg) if _pg.isdigit() else 0, idempotency_key=_ik,
+                )
+            elif _iid.startswith("catmore:"):
+                _parts = _iid.split(":", 2)  # ["catmore", offset, name]
+                _off = _parts[1] if len(_parts) > 1 else "0"
+                _cat = _parts[2] if len(_parts) > 2 else ""
+                await send_catalog_category(
+                    session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                    category=_cat, offset=int(_off) if _off.isdigit() else 0,
+                    idempotency_key=_ik,
+                )
+            else:  # cat:<name>
+                await send_catalog_category(
+                    session, restaurant_id=restaurant_id, to_phone=inbound.from_phone,
+                    category=_iid[len("cat:"):], offset=0, idempotency_key=_ik,
+                )
+            _set_state(conv, dialogue_state="menu_sent")
+            return
+
     # ── Customer conversation (full AI) ────────────────────────────────────
     from app.identity.models import Restaurant as RestaurantModel
     restaurant = await session.get(RestaurantModel, restaurant_id)
@@ -5940,8 +6934,6 @@ async def handle_inbound(
             return
 
     # Location pin → resale claim (pending fast-deal) or address capture.
-    # Pings outside those flows (e.g. repeated live-location updates after
-    # address is confirmed) are silently dropped — no AI call, no reply.
     if inbound.type == MessageType.LOCATION:
         if conv.state.get("resale_offer_id"):
             await _handle_resale_location_pin(
@@ -5951,6 +6943,43 @@ async def handle_inbound(
         phase = _resolve_phase(conv)
         if phase == "address_capture":
             await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
+            return
+        # Pin shared during ordering (before checkout): don't silently drop it (the
+        # customer got no reply, then the LLM faked "let me check the distance"). If there
+        # is a cart, treat the pin as the delivery location and proceed; otherwise
+        # acknowledge honestly and invite an order — deterministic, no LLM improvisation.
+        # Other phases (awaiting_confirmation / post_order — e.g. repeated live-location
+        # updates after the order is placed) stay silently dropped as before.
+        if phase == "ordering":
+            from app.ordering.models import Order
+
+            _did = conv.state.get("draft_order_id")
+            _order = await session.get(Order, _did) if _did else None
+            _has_cart = (
+                _order is not None
+                and str(_order.status) == "draft"
+                and await _order_has_items(session, _order.id)
+            )
+            _has_coords = (
+                restaurant is not None
+                and restaurant.lat is not None
+                and restaurant.lng is not None
+            )
+            if _has_cart and _has_coords:
+                await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
+                return
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="loc-ack",
+                body=(
+                    "Thanks for sharing your location 📍 "
+                    + (
+                        "Say 'done' when you're ready and I'll use it for delivery 😊"
+                        if _has_cart
+                        else "Tell me what you'd like to order and I'll work out delivery to you 😊"
+                    )
+                ),
+            )
         return
 
     # Modify FSM states: route to dedicated handlers (preserves SLA-restart and audit logic)
@@ -6128,6 +7157,16 @@ async def handle_inbound(
                 session, conv, inbound, restaurant_id, prefix="menu-request",
             )
             return
+        # "Do you have any drinks?" → short filtered list or ONE category's catalogue
+        # cards — never the full 500-line text menu (LLM / anti-menu guard used to dump it).
+        _cat_kw = _parse_category_availability_query(
+            (inbound.payload.get("text") or "").strip()
+        )
+        if _cat_kw:
+            await _handle_category_availability_query(
+                session, conv, inbound, restaurant_id, _cat_kw,
+            )
+            return
         # "What's in my cart / show my order" → show the REAL cart deterministically,
         # in ANY mode, so the model can never mishandle it (e.g. re-send the catalogue).
         if _is_cart_query(text):
@@ -6139,6 +7178,15 @@ async def handle_inbound(
                       "or send 'done' to check out 😊")
                 if cart else
                 "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+            )
+            return
+        # "Done" at the confirm step must NOT re-ask for an address that's already on
+        # the order (ordering-phase checkout was leaking through the LLM).
+        if _resolve_phase(conv) == "awaiting_confirmation" and _is_done_intent(
+            (inbound.payload.get("text") or "").strip()
+        ):
+            await _handle_confirmation_done(
+                session, conv, inbound, restaurant_id, restaurant=restaurant,
             )
             return
         # "Where is my order / can I see the live location" → answer with the
@@ -6236,15 +7284,18 @@ async def handle_inbound(
     _router_intent = await _router_classify_intent(session, conv, inbound)
     _router_phase = _resolve_phase(conv)
 
-    # Catalogue mode: a clearly-typed single dish is ADDED deterministically here, so a
-    # plain "one chicken biryani" reliably goes to the cart instead of the model
-    # sometimes re-sending the catalogue cards. Anything else falls through to the AI.
+    # Catalogue mode: remove / set-qty edits first (typed-order only ADDS), then a
+    # clearly-typed single dish is ADDED deterministically so "one chicken biryani"
+    # reliably goes to the cart instead of the model re-sending catalogue cards.
     #
-    # W4 phase-gate: the fast-path only runs in the ORDERING phase AND only for a
-    # mutating intent. Outside ordering (address_capture / awaiting_confirmation /
-    # post_order) a typed dish is a correction/edit that the phase-aware AI flow
-    # must own, not a silent catalogue add (F49/F20-A/RA-5).
+    # W4 phase-gate: the typed-add fast-path only runs in the ORDERING phase AND
+    # only for a mutating intent. Outside ordering (address_capture /
+    # awaiting_confirmation / post_order) a typed dish is a correction/edit that
+    # the phase-aware AI flow must own, not a silent catalogue add (F49/F20-A/RA-5).
     if await _try_apply_kitchen_note_to_cart(session, conv, inbound, restaurant_id):
+        return
+
+    if await _try_catalog_cart_edit(session, conv, inbound, restaurant_id, restaurant):
         return
 
     if (
