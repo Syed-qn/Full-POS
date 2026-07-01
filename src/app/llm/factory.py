@@ -103,6 +103,19 @@ def get_conversation_agent():
     return FakeConversationAgent()
 
 
+def get_router_classifier():
+    """W4 top-level multilingual intent router (LLM-driven; Fake for tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeRouterClassifier
+        return ClaudeRouterClassifier()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekRouterClassifier
+        return DeepSeekRouterClassifier()
+    from app.llm.router_fake import FakeRouterClassifier
+    return FakeRouterClassifier()
+
+
 def get_completion_detector():
     settings = get_settings()
     if settings.llm_provider == "claude":

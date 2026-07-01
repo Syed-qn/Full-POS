@@ -547,6 +547,48 @@ class DeepSeekCompletionDetector:
         return raw.strip().lower().startswith("y")
 
 
+class DeepSeekRouterClassifier:
+    """Production W4 top-level router: one async chat call, single enum answer.
+
+    LLM-driven and multilingual — no English phrase tables on the live path.
+    """
+
+    async def classify_intent(self, text: str, cart_context: str, phase: str):
+        from app.llm.port import IntentLabel
+
+        if not text or not text.strip():
+            return IntentLabel.NON_ACTIONABLE
+        api_key, model = _get_deepseek_settings()
+        labels = ", ".join(label.value for label in IntentLabel)
+        prompt = (
+            "You are the intent router for a restaurant WhatsApp ordering bot.\n"
+            f"Dialogue phase: {phase}\n"
+            f"Current cart: {cart_context or '(empty)'}\n"
+            f"Customer message (ANY language): {text!r}\n\n"
+            "Classify the message into EXACTLY ONE of these intents:\n"
+            f"{labels}\n\n"
+            "Rules:\n"
+            "- 'mutation' = actually change the cart (add/remove/set quantity/note).\n"
+            "- A question, even one naming a dish or quantity ('why did you add 2'), is "
+            "'question' or 'complaint' — NEVER 'mutation'.\n"
+            "- 'checkout' = done/that's all/proceed, in any language.\n"
+            "- 'clear' ONLY for an explicit empty-cart/fresh-start request, never 'only X'.\n"
+            "- 'non_actionable' = reactions/emoji/system noise.\n"
+            "- Use 'unknown' if genuinely unclear.\n"
+            "Answer with the single intent word only."
+        )
+        raw = await _async_chat(
+            api_key, model,
+            [{"role": "user", "content": prompt}],
+            max_tokens=8,
+        )
+        token = raw.strip().lower().split()[0] if raw.strip() else ""
+        try:
+            return IntentLabel(token)
+        except ValueError:
+            return IntentLabel.UNKNOWN
+
+
 def _sanitise_effect(parsed: dict) -> dict:
     effect: dict = {}
     horizon = parsed.get("horizon")

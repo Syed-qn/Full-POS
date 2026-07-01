@@ -356,6 +356,54 @@ class ClaudeCompletionDetector:
         return raw.lower().startswith("y")
 
 
+class ClaudeRouterClassifier:
+    """Production W4 top-level router via Claude API (single enum, multilingual).
+
+    LLM-driven: no English phrase tables.  The model receives the raw message in
+    ANY language plus the current cart + phase, and returns exactly one
+    ``IntentLabel`` value that decides whether the turn may mutate the cart.
+    """
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def classify_intent(self, text: str, cart_context: str, phase: str):
+        from app.llm.port import IntentLabel
+
+        if not text or not text.strip():
+            return IntentLabel.NON_ACTIONABLE
+        labels = ", ".join(label.value for label in IntentLabel)
+        prompt = (
+            "You are the intent router for a restaurant WhatsApp ordering bot.\n"
+            f"Dialogue phase: {phase}\n"
+            f"Current cart: {cart_context or '(empty)'}\n"
+            f"Customer message (ANY language): {text!r}\n\n"
+            "Classify the message into EXACTLY ONE of these intents:\n"
+            f"{labels}\n\n"
+            "Rules:\n"
+            "- 'mutation' = actually change the cart (add/remove/set quantity/note).\n"
+            "- A question, even one naming a dish or quantity ('why did you add 2'), is "
+            "'question' or 'complaint' — NEVER 'mutation'.\n"
+            "- 'checkout' = done/that's all/proceed, in any language.\n"
+            "- 'clear' ONLY for an explicit empty-cart/fresh-start request, never 'only X'.\n"
+            "- 'non_actionable' = reactions/emoji/system noise.\n"
+            "- Use 'unknown' if genuinely unclear.\n"
+            "Answer with the single intent word only."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=8,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = _first_text(message).strip().lower()
+        raw = raw_text.split()[0] if raw_text else ""
+        try:
+            return IntentLabel(raw)
+        except ValueError:
+            return IntentLabel.UNKNOWN
+
+
 # Tool definition is derived from the single-source-of-truth schema so providers
 # can never drift from the canonical action vocabulary (W1 Task 3).
 _CONVERSATION_TOOL = build_anthropic_tool("take_action")
