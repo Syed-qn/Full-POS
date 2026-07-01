@@ -5698,12 +5698,22 @@ async def handle_inbound(
     from app.llm.port import MUTATING_INTENTS
 
     _router_intent = await _router_classify_intent(session, conv, inbound)
+    _router_phase = _resolve_phase(conv)
 
     # Catalogue mode: a clearly-typed single dish is ADDED deterministically here, so a
     # plain "one chicken biryani" reliably goes to the cart instead of the model
     # sometimes re-sending the catalogue cards. Anything else falls through to the AI.
-    if _router_intent in MUTATING_INTENTS and await _try_catalog_typed_order(
-        session, conv, inbound, restaurant_id, restaurant
+    #
+    # W4 phase-gate: the fast-path only runs in the ORDERING phase AND only for a
+    # mutating intent. Outside ordering (address_capture / awaiting_confirmation /
+    # post_order) a typed dish is a correction/edit that the phase-aware AI flow
+    # must own, not a silent catalogue add (F49/F20-A/RA-5).
+    if (
+        _router_phase == "ordering"
+        and _router_intent in MUTATING_INTENTS
+        and await _try_catalog_typed_order(
+            session, conv, inbound, restaurant_id, restaurant
+        )
     ):
         return
 
