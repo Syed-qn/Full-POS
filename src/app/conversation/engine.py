@@ -74,6 +74,90 @@ def _looks_like_menu(text: str) -> bool:
     return False
 
 
+async def _canonical_dish_names(
+    session: AsyncSession, restaurant_id: int
+) -> frozenset[str]:
+    """Return the normalised canonical dish names for the tenant.
+
+    In catalogue mode: names of active CatalogProduct rows (what the customer can
+    actually order). In text mode: names of active, available Dish rows.
+
+    Used by the anti-hallucination cross-check to distinguish real dishes from
+    LLM-fabricated names (R-026, F96, F98).
+    """
+    from app.identity.models import Restaurant, catalog_mode_enabled
+    from app.menu.models import Dish, Menu
+
+    rest = await session.get(Restaurant, restaurant_id)
+    if rest is not None and catalog_mode_enabled(rest.settings):
+        from app.catalog.models import CatalogProduct
+
+        rows = await session.scalars(
+            select(CatalogProduct.name).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.is_active.is_(True),
+            )
+        )
+        return frozenset(n.strip().lower() for n in rows if n)
+
+    # Text mode — active dishes on the active menu
+    menu = await session.scalar(
+        select(Menu).where(
+            Menu.restaurant_id == restaurant_id,
+            Menu.status == "active",
+        )
+    )
+    if menu is None:
+        return frozenset()
+    rows = await session.scalars(
+        select(Dish.name).where(
+            Dish.menu_id == menu.id,
+            Dish.is_available.is_(True),
+            Dish.meta_status == "active",
+        )
+    )
+    return frozenset(n.strip().lower() for n in rows if n)
+
+
+# Regex: a word sequence likely to be a dish name — ≥2 title-case words, or
+# a known food-adjacent pattern.  We match runs of 1-4 capitalised words
+# (allowing "and") as candidate dish names in LLM prose.
+_DISH_NAME_CANDIDATE = _re.compile(
+    r"\b([A-Z][a-zA-Z]+(?:\s+(?:and|&|[A-Z][a-zA-Z]+)){1,3})\b"
+)
+
+
+async def _looks_like_hallucinated_menu(
+    session: AsyncSession,
+    reply: str,
+    restaurant_id: int,
+) -> bool:
+    """True if the LLM reply appears to list dishes NOT in the tenant's catalogue.
+
+    Extends the shape-only `_looks_like_menu` with a dish-name cross-check:
+    extract title-case word-runs from the reply, count how many are NOT in the
+    canonical dish set.  ≥2 such unknown names → hallucinated menu.
+
+    This catches hallucinations that omit prices (which `_looks_like_menu` misses).
+    Safe: single-dish answers or polite "we have X" replies with one matching name
+    are never flagged (R-026, F96, F98, TX-27).
+    """
+    if not reply:
+        return False
+    # Fast path: price-shape check already catches the common case
+    if _looks_like_menu(reply):
+        return True
+
+    canonical = await _canonical_dish_names(session, restaurant_id)
+    if not canonical:
+        # No catalogue data yet — skip cross-check to avoid false positives
+        return False
+
+    candidates = _DISH_NAME_CANDIDATE.findall(reply)
+    unknown = sum(1 for c in candidates if c.strip().lower() not in canonical)
+    return unknown >= 2
+
+
 def _strip_money_claims(text: str) -> str:
     """Remove lines that contain an AED amount from LLM free text on mutating turns.
 
