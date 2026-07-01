@@ -449,6 +449,195 @@ def _category_emoji(category: str) -> str:
     return "🍽️"
 
 
+# Category availability questions — "do you have any drinks?", "u have any soup".
+# Regression: the LLM (or _looks_like_menu anti-hallucination guard) dumped the ENTIRE
+# catalogue (500+ lines). These get a SHORT filtered list or catalogue cards for ONE
+# category — never the full menu.
+_CATEGORY_AVAIL_PATTERNS: tuple[str, ...] = (
+    r"^(?:do you|you|u|have you|got)\s+(?:have|got|serve|sell)\s+(?:any\s+)?(.+?)[\?\.!]*$",
+    r"^(?:any|some)\s+(.+?)[\?\.!]*$",
+    r"^what\s+(.+?)\s+(?:do you have|you have|u have|are there|are available|available)[\?\.!]*$",
+)
+_CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
+    "drink": (
+        "drink", "beverage", "juice", "coffee", "tea", "mojito", "shake", "lassi",
+        "soda", "cola", "smoothie", "mocktail", "latte", "espresso", "cappuccino",
+    ),
+    "soup": ("soup", "soups", "broth"),
+    "biryani": ("biryani", "biriyani", "mandi"),
+    "dessert": ("dessert", "sweet", "falooda", "ice cream", "cake"),
+    "pizza": ("pizza",),
+    "burger": ("burger",),
+    "sandwich": ("sandwich",),
+    "shawarma": ("shawarma",),
+    "starter": ("starter", "appetizer", "appetiser", "snack"),
+    "salad": ("salad",),
+}
+_CATEGORY_QUERY_BROAD: frozenset[str] = frozenset({
+    "menu", "food", "anything", "something", "item", "items", "dish", "dishes",
+    "everything", "stuff", "option", "options",
+})
+_CATEGORY_REPLY_MAX = 15
+_FULL_MENU_TEXT_CAP = 40
+
+
+def _normalize_category_keyword(raw: str) -> str:
+    """Strip filler and simple plurals from a parsed category phrase."""
+    t = _re.sub(r"\s+", " ", (raw or "").strip().lower()).strip("?.! ")
+    for lead in ("the ", "a ", "an ", "any ", "some "):
+        if t.startswith(lead):
+            t = t[len(lead):].strip()
+    if t.endswith("s") and t[:-1] in _CATEGORY_ALIASES:
+        t = t[:-1]
+    return t
+
+
+def _category_match_needles(keyword: str) -> tuple[str, ...]:
+    """Expand a customer keyword into substrings to match category or product names."""
+    base = _normalize_category_keyword(keyword)
+    if not base:
+        return ()
+    if base in _CATEGORY_ALIASES:
+        return _CATEGORY_ALIASES[base]
+    return (base,)
+
+
+def _parse_category_availability_query(text: str | None) -> str | None:
+    """If the message asks whether we have a category ('any drinks?'), return the keyword."""
+    if not text:
+        return None
+    if _is_menu_request(text) or _dish_info_question(text):
+        return None
+    t = _re.sub(r"\s+", " ", text.strip().lower()).replace("'", "'")
+    if not t or len(t) > 80:
+        return None
+    for pat in _CATEGORY_AVAIL_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            kw = _normalize_category_keyword(m.group(1))
+            if kw and kw not in _CATEGORY_QUERY_BROAD:
+                return kw
+    return None
+
+
+def _item_matches_category_query(
+    *, name: str, category: str, needles: tuple[str, ...],
+) -> bool:
+    """True when a menu row matches a category-availability keyword."""
+    blob = f"{(category or '').lower()} {(name or '').lower()}"
+    return any(n in blob for n in needles)
+
+
+async def _handle_category_availability_query(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    keyword: str,
+) -> None:
+    """Answer 'do you have drinks?' with a capped list or ONE category's catalogue cards."""
+    needles = _category_match_needles(keyword)
+    if not needles:
+        return
+
+    label = keyword.strip().title() or "that"
+    matched: list[tuple[str, str, object]] = []  # (name, category, price)
+    matched_cat_names: list[str] = []
+
+    if await _catalog_mode_on(session, restaurant_id):
+        from app.catalog.service import _category_of, _load_sendable_products, send_catalog_category
+
+        _cid, sendable = await _load_sendable_products(session, restaurant_id)
+        if sendable:
+            cat_counts: dict[str, int] = {}
+            for p in sendable:
+                cat = _category_of(p)
+                if _item_matches_category_query(name=p.name, category=cat, needles=needles):
+                    matched.append((p.name, cat, p.price_aed))
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            matched_cat_names = [c for c, _ in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )]
+
+            if len(matched_cat_names) == 1 and _cid:
+                intro = (
+                    f"Yes! We have {label} 😊 Tap below to pick one, "
+                    "then send your basket to order."
+                )
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="category-query-intro",
+                    body=intro,
+                )
+                sent = await send_catalog_category(
+                    session,
+                    restaurant_id=restaurant_id,
+                    to_phone=inbound.from_phone,
+                    category=matched_cat_names[0],
+                    idempotency_key=f"catq-{conv.id}-{inbound.wa_message_id}",
+                )
+                if sent:
+                    return
+    else:
+        from app.menu.models import Dish, Menu
+
+        menu = await session.scalar(
+            select(Menu).where(
+                Menu.restaurant_id == restaurant_id, Menu.status == "active",
+            )
+        )
+        if menu is not None:
+            dishes = (
+                await session.scalars(
+                    select(Dish).where(
+                        Dish.menu_id == menu.id,
+                        Dish.is_available == True,  # noqa: E712
+                        Dish.meta_status == "active",
+                    ).order_by(Dish.category, Dish.name)
+                )
+            ).all()
+            cat_counts: dict[str, int] = {}
+            for d in dishes:
+                if await _catalog_excludes_dish(session, restaurant_id, d):
+                    continue
+                cat = d.category or "Menu"
+                if _item_matches_category_query(name=d.name, category=cat, needles=needles):
+                    matched.append((d.name, cat, d.price_aed))
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            matched_cat_names = [c for c, _ in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )]
+
+    if not matched:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="category-query-none",
+            body=(
+                f"We don't have {label.lower()} on the menu right now 🙏 "
+                "Say 'menu' to see what we do have, or tell me another dish 😊"
+            ),
+        )
+        return
+
+    emoji = _category_emoji(matched_cat_names[0] if matched_cat_names else label)
+    lines = [f"Yes! We have {label} {emoji} Here's a selection:"]
+    for name, _cat, price in matched[:_CATEGORY_REPLY_MAX]:
+        lines.append(f"• {name}: AED {_aed(price)}")
+    extra = len(matched) - _CATEGORY_REPLY_MAX
+    if extra > 0:
+        lines.append(
+            f"\n…and {extra} more. Tell me what you'd like, "
+            "or say 'menu' to browse everything 🍛"
+        )
+    else:
+        lines.append("\nTell me what you'd like and I'll add it 😊")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="category-query-list",
+        body="\n".join(lines),
+    )
+
+
 async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str:
     """Render the SYNCED Meta catalogue as categorized text.
 
@@ -470,16 +659,30 @@ async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str
     if not products:
         return "Our catalogue is currently empty. Please try again later."
 
+    from app.catalog.service import _apply_category_map, _category_of, _load_category_map
+
+    _apply_category_map(products, await _load_category_map(session, restaurant_id))
     lines: list[str] = ["👋 *Welcome! Here's our menu*"]
     current_category: str | None = None
+    shown = 0
     for p in products:
-        if p.category != current_category:
-            current_category = p.category
+        if shown >= _FULL_MENU_TEXT_CAP:
+            break
+        cat = _category_of(p)
+        if cat != current_category:
+            current_category = cat
             if current_category:
                 lines.append(f"\n{_category_emoji(current_category)} *{current_category}*")
         price = _aed(p.price_aed) if p.price_aed is not None else "?"
         lines.append(f"• {p.name}: AED {price}")
-    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
+        shown += 1
+    if len(products) > _FULL_MENU_TEXT_CAP:
+        lines.append(
+            f"\n…and {len(products) - _FULL_MENU_TEXT_CAP} more items. "
+            "Say 'menu' to open the catalogue, or tell me what you'd like 😊"
+        )
+    else:
+        lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
     return "\n".join(lines)
 
 
@@ -569,7 +772,7 @@ async def _render_menu(
 
     lines: list[str] = ["👋 *Welcome! Here's our menu*"]
     current_category: str | None = None
-    for dish in dish_list:
+    for dish in dish_list[:_FULL_MENU_TEXT_CAP]:
         if dish.category != current_category:
             current_category = dish.category
             if current_category:
@@ -577,7 +780,13 @@ async def _render_menu(
         price = _aed(dish.price_aed)
         lines.append(f"• {dish.name}: AED {price}")
 
-    lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
+    if len(dish_list) > _FULL_MENU_TEXT_CAP:
+        lines.append(
+            f"\n…and {len(dish_list) - _FULL_MENU_TEXT_CAP} more items. "
+            "Tell me what you'd like, or say 'menu' to browse 😊"
+        )
+    else:
+        lines.append("\nJust tell me what you'd like and I'll add it to your order 😊")
     return "\n".join(lines)
 
 
@@ -1388,6 +1597,116 @@ def _looks_like_order_question(text: str) -> bool:
     if t.startswith(_ORDER_QUESTION_LEADS):
         return True
     return any(p in t for p in _ORDER_QUESTION_CONTAINS)
+
+
+# Off-topic categories — health, homework, etc. NOT food ordering or restaurant service.
+# Regression: "I have fever what can I do" dumped the entire menu via the LLM / anti-menu
+# guard. These get a warm decline and NEVER a menu.
+_OFF_TOPIC_MEDICAL: tuple[str, ...] = (
+    "fever", "sick", "illness", " i am ill", " i'm ill", " im ill", "not feeling well",
+    "feeling unwell", "doctor", "hospital", "medicine", "medication", "tablet", "tablets",
+    "pain", "cough", " flu ", "vomit", "headache", "temperature", "nausea", "diarrhea",
+    "diarrhoea", "injured", "injury", "ambulance", "prescription", "symptom", "symptoms",
+    "covid", "corona", "infection", "bp ", "blood pressure",
+)
+_OFF_TOPIC_GENERAL: tuple[str, ...] = (
+    "homework", "assignment", "exam ", "tell me a joke", "joke ", "weather forecast",
+    "politics", "election", "visa ", "job interview", "fix my phone", "wifi password",
+    "relationship advice", "capital of", "who is the president", "write me a",
+)
+# Keywords that keep a message on-topic even when it also mentions health (ordering soup
+# while sick) or is clearly about this restaurant / an order.
+_RESTAURANT_ON_TOPIC: tuple[str, ...] = (
+    "menu", "order", "cart", "deliver", "delivery", "address", "restaurant", "food",
+    "dish", "dishes", "price", "fee", "eta", "track", "coupon", "discount", "biryani",
+    "burger", "pizza", "shawarma", "mandi", "soup", "juice", "shake", "save", "data",
+    "privacy", "stored", "remember", "hours", "open", "close", "location", "cod", "cash",
+    "payment", "total", "subtotal", "confirm", "takeaway", "pickup", "loyalty", "tier",
+    "catalogue", "catalog", "complaint", "refund", "rider",
+)
+_FOOD_ORDER_INTENT: tuple[str, ...] = (
+    "order", "get me", "i want", "i'd like", "id like", "give me", "add ", "one ",
+    "2 ", "3 ", "something light", "easy to digest", "recommend", "suggest",
+)
+
+
+def _has_food_order_intent(text: str) -> bool:
+    """True when the customer is trying to order food, even if they mention being unwell."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if any(p in t for p in _FOOD_ORDER_INTENT):
+        return True
+    from app.ordering.service import parse_qty_and_text
+
+    qty, rest = parse_qty_and_text(t)
+    if qty > 1 or (rest and rest.strip().lower() != t):
+        return True
+    return False
+
+
+def _is_restaurant_on_topic(text: str | None) -> bool:
+    """True when the message is about ordering, this restaurant, or delivery service."""
+    if not text or not text.strip():
+        return True
+    if (
+        _is_menu_request(text)
+        or _is_restaurant_location_request(text)
+        or _is_tier_query(text)
+        or _is_tracking_query(text)
+        or _dish_info_question(text)
+        or _looks_like_order_question(text)
+        or _is_complaint(text)
+        or _is_cancel_intent(text)
+        or _is_done_intent(text)
+        or _is_clear_cart_command(text)
+        or _is_cart_query(text)
+    ):
+        return True
+    t = text.strip().lower()
+    if any(p in t for p in _RESTAURANT_ON_TOPIC):
+        return True
+    if any(p in t for p in (
+        "who are you", "what are you", "restaurant name", "your name", "shop name",
+        "store name", "what do you save", "what do you store", "anything apart from",
+    )):
+        return True
+    if _has_food_order_intent(t):
+        return True
+    if _extract_order_dish_query(text):
+        return True
+    return False
+
+
+def _classify_off_topic(text: str | None) -> str | None:
+    """Return an off-topic category ('medical', 'general') or None when on-topic / ambiguous.
+
+    Conservative: only fires on clear non-restaurant topics so normal chat still reaches
+    the AI. Never returns a category for ordering or restaurant-service questions."""
+    if not text or _is_restaurant_on_topic(text):
+        return None
+    t = text.strip().lower()
+    if any(w in t for w in _OFF_TOPIC_MEDICAL):
+        return "medical"
+    if any(p in t for p in _OFF_TOPIC_GENERAL):
+        return "general"
+    return None
+
+
+def _off_topic_reply(category: str, restaurant_name: str) -> str:
+    """Warm decline for off-topic messages — never offers a menu."""
+    if category == "medical":
+        return (
+            f"I'm sorry you're not feeling well 🙏 {restaurant_name} is a food-ordering "
+            "service — we can't give medical advice. Please rest and speak to a doctor "
+            "if you need help with your health. When you're ready to order, just tell me "
+            "what you'd like 😊"
+        )
+    return (
+        f"Thanks for reaching out 😊 {restaurant_name} can only help with food orders, "
+        "our menu, delivery, and your order — not general questions like that. "
+        "Tell me what you'd like to eat, or say 'menu' to see what we have 🍛"
+    )
 
 
 # Phrases that genuinely mean "empty my cart / start over". Used to protect the
@@ -5087,6 +5406,18 @@ async def _handle_customer_ai(
     history = await _build_history(session, conv, limit=10)
     context = await _build_context(session, conv, restaurant_id, phase, restaurant)
 
+    # Off-topic (health, homework, etc.) → warm decline, NEVER the menu. The LLM used to
+    # reply with a fabricated menu or trigger show_menu on "I have fever what can I do".
+    if inbound.type == MessageType.TEXT:
+        _off_cat = _classify_off_topic(inbound.payload.get("text"))
+        if _off_cat:
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix=f"off-topic-{_off_cat}",
+                body=_off_topic_reply(_off_cat, restaurant_name),
+            )
+            return
+
     # Dish-info question ("what's special in the biryani?") → answer with the dish's
     # menu description (verbatim) when present, else a short human line. Deterministic
     # so the manager's wording shows exactly. Only fires when it resolves to a real
@@ -5994,6 +6325,16 @@ async def handle_inbound(
             # Catalogue first (when enabled), text menu otherwise.
             await _send_menu_or_catalog(
                 session, conv, inbound, restaurant_id, prefix="menu-request",
+            )
+            return
+        # "Do you have any drinks?" → short filtered list or ONE category's catalogue
+        # cards — never the full 500-line text menu (LLM / anti-menu guard used to dump it).
+        _cat_kw = _parse_category_availability_query(
+            (inbound.payload.get("text") or "").strip()
+        )
+        if _cat_kw:
+            await _handle_category_availability_query(
+                session, conv, inbound, restaurant_id, _cat_kw,
             )
             return
         # "What's in my cart / show my order" → show the REAL cart deterministically,

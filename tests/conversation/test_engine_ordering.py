@@ -1493,3 +1493,98 @@ async def test_frustration_closing_advances_no_inflation(db_session, restaurant)
         select(OrderItem).where(OrderItem.order_id == order_id))).all()
     assert sum(it.qty for it in items) == qty_before
     assert conv.state["dialogue_state"] == "address_capture"
+
+
+def test_off_topic_classification():
+    """Health / general off-topic is detected; restaurant + ordering questions are not."""
+    from app.conversation.engine import _classify_off_topic, _is_restaurant_on_topic
+
+    assert _classify_off_topic("I have fever what can I do") == "medical"
+    assert _classify_off_topic("help me with my homework") == "general"
+    assert _classify_off_topic("what restaurant name") is None
+    assert _classify_off_topic("can you save my data") is None
+    assert _classify_off_topic("are u save anything apart from address") is None
+    assert _classify_off_topic("what ur location") is None
+    assert _classify_off_topic("one chicken biryani") is None
+    assert _classify_off_topic("chicken soup for my cold please") is None
+    assert _is_restaurant_on_topic("can you save my data") is True
+    assert _is_restaurant_on_topic("menu") is True
+
+
+async def test_any_drink_query_returns_short_list_not_full_menu(db_session, restaurant):
+    """Regression: 'u have any drink' must NOT dump the entire menu."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.menu.models import Dish, Menu
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    for num, name, cat, price in (
+        (1, "Lemon Mint", "Cold Beverages", Decimal("12.00")),
+        (2, "Mango Shake", "Cold Beverages", Decimal("15.00")),
+        (3, "Karak Tea", "Hot Beverages", Decimal("10.00")),
+        (4, "Chicken Biryani", "Rice", Decimal("22.00")),
+    ):
+        db_session.add(Dish(
+            menu_id=menu.id, restaurant_id=restaurant.id, dish_number=num,
+            name=name, price_aed=price, category=cat, is_available=True,
+            name_normalized=name.lower(),
+        ))
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.dq-hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(side_effect=AssertionError("LLM must not run for category query"))):
+        await handle_inbound(
+            db_session, _msg("u have any drink", "wamid.dq-drink"),
+            restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload["body"]
+    assert "Yes!" in body or "yes" in body.lower()
+    assert "Lemon Mint" in body or "Mango Shake" in body or "Karak Tea" in body
+    assert "Chicken Biryani" not in body
+    assert "Welcome! Here's our menu" not in body
+    assert body.count("•") <= 15
+
+
+def test_category_availability_query_parsing():
+    from app.conversation.engine import _parse_category_availability_query
+
+    assert _parse_category_availability_query("u have any drink") == "drink"
+    assert _parse_category_availability_query("do you have any soup?") == "soup"
+    assert _parse_category_availability_query("any desserts") == "dessert"
+    assert _parse_category_availability_query("menu") is None
+    assert _parse_category_availability_query("one lemon mint") is None
+
+
+async def test_fever_question_gets_warm_decline_not_menu(db_session, restaurant):
+    """Regression (real chat): 'I have fever what can I do' must NOT dump the menu."""
+    from unittest.mock import AsyncMock, patch
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.ot-hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    with patch("app.llm.fake.FakeConversationAgent.respond",
+               new=AsyncMock(side_effect=AssertionError("LLM must not run for off-topic"))):
+        await handle_inbound(
+            db_session, _msg("I have fever what can I do", "wamid.ot-fever"),
+            restaurant_id=restaurant.id,
+        )
+    await db_session.commit()
+
+    rows = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()
+    body = rows[-1].payload["body"]
+    assert "medical" in body.lower() or "doctor" in body.lower() or "feeling well" in body.lower()
+    assert "Welcome! Here's our menu" not in body
+    assert "• " not in body  # no menu bullet dump
