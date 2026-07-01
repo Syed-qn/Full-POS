@@ -125,10 +125,17 @@ async def test_resolver_refuses_a_confirmed_order_as_cart(db_session, restaurant
     assert resolved is None
 
 
-async def test_cart_summary_shows_special_note_to_distinguish_duplicate_lines(db_session, restaurant):
-    """Same dish with a DIFFERENT special note is a separate prep line — the summary must
-    show the note so it doesn't look like an accidental duplicate ('2x Chicken Biryani' twice).
-    Regression: notes were stored but hidden, so two lines looked identical on WhatsApp."""
+async def test_cart_summary_merges_same_dish_into_one_noted_line(db_session, restaurant):
+    """W2 contract (R-002 / RA-4): a dish merges to ONE line per (dish_id, variant_name);
+    a note applied to that dish updates the single line rather than creating a duplicate
+    paid line. This kills the biryani incident (plain + 'double masala' showed as two
+    biryani lines and doubled the price).
+
+    NOTE (product consequence, W2 design 'one line per (dish, variant); notes accumulate'):
+    two DELIBERATE separate-prep orders for the same dish (e.g. '2 no onion' + '2 extra
+    spicy') also collapse to one line with the surviving note — the kitchen loses the
+    per-unit distinction. Accepted under the approved W2 design; revisit if per-unit prep
+    tickets are needed."""
     from app.conversation.engine import _build_cart_summary
     from app.ordering.service import add_item, create_draft_order, get_or_create_customer
 
@@ -137,7 +144,7 @@ async def test_cart_summary_shows_special_note_to_distinguish_duplicate_lines(db
     order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=cust.id)
     chicken = await _chicken(db_session, restaurant.id)
     await add_item(db_session, order=order, dish=chicken, qty=2)  # plain
-    await add_item(db_session, order=order, dish=chicken, qty=2, notes="double masala")  # different prep
+    await add_item(db_session, order=order, dish=chicken, qty=2, notes="double masala")  # note wins, merges
     await db_session.commit()
 
     conv = Conversation(
@@ -148,9 +155,10 @@ async def test_cart_summary_shows_special_note_to_distinguish_duplicate_lines(db
     await db_session.commit()
 
     summary = await _build_cart_summary(db_session, conv)
-    assert "double masala" in summary  # the note is visible
-    # Two distinct lines (plain + double masala), not silently merged into one.
-    assert summary.count("Chicken Biryani") == 2
+    assert "double masala" in summary  # the note is visible on the merged line
+    # ONE merged biryani line (no accidental duplicate) — the W2 fix.
+    assert summary.count("Chicken Biryani") == 1
+    assert "4x" in summary  # qty accumulated onto the single line
 
 
 async def test_special_note_for_existing_cart_item_updates_line_not_duplicate(db_session, restaurant):
