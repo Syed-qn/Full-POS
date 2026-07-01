@@ -82,6 +82,10 @@ class Order(Base, TimestampMixin):
     delivery_fee_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     total: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     distance_km: Mapped[float | None] = mapped_column()
+    # How ``distance_km`` was derived: "road" (geo provider) or "haversine_fallback"
+    # (provider failed / unconfigured). Persisted so fee basis is auditable and a
+    # degraded quote is visible to ops (F112/F31). Null on legacy rows.
+    distance_source: Mapped[str | None] = mapped_column(String(32))
 
     weather_delay_disclosed: Mapped[bool] = mapped_column(Boolean, default=False)
     sla_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -98,6 +102,12 @@ class Order(Base, TimestampMixin):
     late: Mapped[bool | None] = mapped_column(Boolean)
 
     coupon_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Coupon discount applied to this order (AED). Persisted so ``recompute_order_total``
+    # can re-apply it verbatim on every modify/redeem without re-deriving from the coupon
+    # row, keeping summary math == confirm math == door cash (F26/F41).
+    coupon_discount_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
     # Wallet store-credit applied to this order (held at confirm, captured on
     # delivery, released on cancel). COD due = total - wallet_applied_aed.
     wallet_applied_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
