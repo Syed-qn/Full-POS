@@ -5635,8 +5635,6 @@ async def handle_inbound(
             return
 
     # Location pin → resale claim (pending fast-deal) or address capture.
-    # Pings outside those flows (e.g. repeated live-location updates after
-    # address is confirmed) are silently dropped — no AI call, no reply.
     if inbound.type == MessageType.LOCATION:
         if conv.state.get("resale_offer_id"):
             await _handle_resale_location_pin(
@@ -5646,6 +5644,43 @@ async def handle_inbound(
         phase = _resolve_phase(conv)
         if phase == "address_capture":
             await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
+            return
+        # Pin shared during ordering (before checkout): don't silently drop it (the
+        # customer got no reply, then the LLM faked "let me check the distance"). If there
+        # is a cart, treat the pin as the delivery location and proceed; otherwise
+        # acknowledge honestly and invite an order — deterministic, no LLM improvisation.
+        # Other phases (awaiting_confirmation / post_order — e.g. repeated live-location
+        # updates after the order is placed) stay silently dropped as before.
+        if phase == "ordering":
+            from app.ordering.models import Order
+
+            _did = conv.state.get("draft_order_id")
+            _order = await session.get(Order, _did) if _did else None
+            _has_cart = (
+                _order is not None
+                and str(_order.status) == "draft"
+                and await _order_has_items(session, _order.id)
+            )
+            _has_coords = (
+                restaurant is not None
+                and restaurant.lat is not None
+                and restaurant.lng is not None
+            )
+            if _has_cart and _has_coords:
+                await _handle_location_pin(session, conv, inbound, restaurant_id, restaurant)
+                return
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="loc-ack",
+                body=(
+                    "Thanks for sharing your location 📍 "
+                    + (
+                        "Say 'done' when you're ready and I'll use it for delivery 😊"
+                        if _has_cart
+                        else "Tell me what you'd like to order and I'll work out delivery to you 😊"
+                    )
+                ),
+            )
         return
 
     # Modify FSM states: route to dedicated handlers (preserves SLA-restart and audit logic)

@@ -102,6 +102,25 @@ async def test_share_your_location_sends_restaurant_pin(db_session, restaurant):
     assert float(locs[-1].payload["latitude"]) == 25.2048
 
 
+async def test_location_pin_without_cart_is_acknowledged(db_session, restaurant):
+    """A pin shared with no cart is acknowledged (not silently dropped) and does NOT jump
+    into address capture — fixes the flow where the pin got no reply and the LLM later
+    faked "let me check the distance"."""
+    await handle_inbound(db_session, _msg("hi", "wamid.lp_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _loc_msg(25.2050, 55.2710, "wamid.lp"), restaurant_id=restaurant.id
+    )
+    await db_session.commit()
+
+    last = (await db_session.execute(
+        select(OutboxMessage).order_by(OutboxMessage.id)
+    )).scalars().all()[-1]
+    assert "location" in last.payload["body"].lower()  # acknowledged, not dropped
+    conv = await _conv(db_session)
+    assert conv.state.get("dialogue_state") != "address_capture"
+
+
 async def test_item_collection_direct_match_adds_item(db_session, restaurant):
     """After menu_sent, typing a dish name direct-matches and adds the item."""
     await _seed_menu(db_session, restaurant.id)
