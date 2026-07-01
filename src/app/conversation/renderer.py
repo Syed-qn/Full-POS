@@ -113,14 +113,40 @@ async def _render_confirmation_body(session: AsyncSession, items, order) -> str:
             if addr_line:
                 address_block = f"Deliver to: {addr_line}\n"
 
-    # TODO(W5): wallet/coupon composition — insert the COD-due breakdown / redeem_block
-    # here once W5 lands (wallet credit applied, pay-on-delivery line).
+    # Payment composition (W5 / R-049 / RA-3): coupon discount, wallet credit applied,
+    # and COD due. Summary math == confirm math == door cash. Wallet credit shown is
+    # the projected application = min(available balance, order total).
+    from app.wallet import service as wallet
+
+    _cent = Decimal("0.01")
+    coupon_line = ""
+    if Decimal(order.coupon_discount_aed or 0) > 0:
+        coupon_line = f"Coupon discount: -AED {_aed(order.coupon_discount_aed)}\n"
+
+    acc = await wallet.get_or_create_account(
+        session, restaurant_id=order.restaurant_id, customer_id=order.customer_id
+    )
+    wallet_available = await wallet.available(session, account_id=acc.id)
+    # Add back anything already held for this order so the figure is stable pre/post confirm.
+    applied = min(
+        wallet_available + Decimal(order.wallet_applied_aed or 0), Decimal(order.total)
+    ).quantize(_cent)
+    if applied > 0:
+        cod_due = (Decimal(order.total) - applied).quantize(_cent)
+        payment_block = (
+            f"💳 Wallet credit: -AED {_aed(applied)}\n"
+            f"COD due (cash on delivery): AED {_aed(cod_due)}\n"
+        )
+    else:
+        payment_block = "Payment: COD (cash on delivery)\n"
+
     return (
         f"Order summary:\n{item_lines}\n\n"
         f"Subtotal: AED {_aed(order.subtotal)}\n"
         f"Delivery fee: AED {_aed(order.delivery_fee_aed)}\n"
+        f"{coupon_line}"
         f"Total: AED {_aed(order.total)}\n"
-        f"Payment: COD (cash on delivery)\n"
+        f"{payment_block}"
         f"{address_block}"
         f"ETA: 40 minutes\n"
         f"\nConfirm your order?"

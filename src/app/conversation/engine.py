@@ -1889,23 +1889,36 @@ async def _send_order_summary(
     wallet_available, active_coupons = await _redeem_context(
         session, restaurant_id=restaurant_id, customer_id=order.customer_id
     )
-    redeem_lines = []
-    if wallet_available > Decimal("0.00"):
-        redeem_lines.append(
-            f"💳 You have AED {_aed(wallet_available)} wallet credit — "
-            f"it'll be applied automatically."
+    # Payment composition (W5 / R-049 / RA-3): coupon discount, wallet credit applied,
+    # and COD due. Summary math == confirm math == door cash. Wallet credit shown is the
+    # projected application = min(available balance [+ any existing hold], order total).
+    _cent = Decimal("0.01")
+    coupon_line = ""
+    if Decimal(order.coupon_discount_aed or 0) > 0:
+        coupon_line = f"Coupon discount: -AED {_aed(order.coupon_discount_aed)}\n"
+    applied = min(
+        wallet_available + Decimal(order.wallet_applied_aed or 0), Decimal(order.total)
+    ).quantize(_cent)
+    if applied > 0:
+        cod_due = (Decimal(order.total) - applied).quantize(_cent)
+        payment_block = (
+            f"💳 Wallet credit: -AED {_aed(applied)}\n"
+            f"COD due (cash on delivery): AED {_aed(cod_due)}\n"
         )
-    if active_coupons:
-        redeem_lines.append("🏷️ Have a coupon? Send the code to apply it.")
-    if redeem_lines:
-        redeem_block = "\n" + "\n".join(redeem_lines) + "\n"
+    else:
+        payment_block = "Payment: COD (cash on delivery)\n"
+
+    # Only prompt for a coupon when the customer still has an unapplied one.
+    if active_coupons and Decimal(order.coupon_discount_aed or 0) <= 0:
+        redeem_block = "\n🏷️ Have a coupon? Send the code to apply it.\n"
 
     summary = (
         f"Order summary:\n{item_lines}\n\n"
         f"Subtotal: AED {_aed(order.subtotal)}\n"
         f"Delivery fee: AED {_aed(order.delivery_fee_aed)}\n"
+        f"{coupon_line}"
         f"Total: AED {_aed(order.total)}\n"
-        f"Payment: COD (cash on delivery)\n"
+        f"{payment_block}"
         f"{address_block}"
         f"ETA: 40 minutes{weather_note}\n"
         f"{redeem_block}\n"
