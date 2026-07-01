@@ -1399,6 +1399,35 @@ def _is_explicit_clear(text: str) -> bool:
     return any(p in t for p in _CLEAR_CART_PHRASES)
 
 
+# PRECISE clear-cart commands for the pre-LLM guard. The clear word is PAIRED with
+# cart/order/basket/all/everything (or is a standalone "start over"/"reset"), so this
+# never fires on a dish like "clear soup" — where the LLM previously fuzzy-matched
+# "clear" → the dish "Clear Soup" and ADDED it instead of clearing.
+_CLEAR_CART_COMMANDS: tuple[str, ...] = (
+    "clear cart", "clear the cart", "clear my cart", "clear this cart", "clear your cart",
+    "clear basket", "clear the basket", "clear my basket", "clear all", "clear everything",
+    "clear order", "clear the order", "clear my order", "clear it all",
+    "empty cart", "empty the cart", "empty my cart", "empty basket", "empty the basket",
+    "empty everything", "start over", "start again", "start fresh", "start a new order",
+    "reset cart", "reset the cart", "reset my cart", "remove everything", "remove all",
+    "delete everything", "delete all", "cancel all", "cancel everything", "cancel the cart",
+    "wipe cart", "wipe the cart", "scrap the order", "clear my basket",
+)
+_CLEAR_CART_EXACT: frozenset[str] = frozenset({
+    "clear", "reset", "empty", "clear cart", "empty cart", "start over", "reset cart",
+})
+
+
+def _is_clear_cart_command(text: str) -> bool:
+    """True for an explicit 'empty the whole cart' command. PAIRED phrasing only, so a
+    dish order like 'clear soup' is never mistaken for a clear."""
+    t = _re.sub(r"[’'`]", "", (text or "").lower())
+    t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    if not t:
+        return False
+    return t in _CLEAR_CART_EXACT or any(p in t for p in _CLEAR_CART_COMMANDS)
+
+
 # SET-quantity phrasings — "make it 5", "only 1 biryani", "change to 3", "set it to 2".
 # These REPLACE the cart quantity, they don't add to it. The LLM often mis-tags them as
 # add_item, so "make it 5" with 1 already in the cart wrongly became 6. Detect them
@@ -4983,6 +5012,35 @@ async def _handle_customer_ai(
                     prefix="keep-only", body=body,
                 )
                 return
+
+    # Deterministic clear: "clear cart" / "empty the cart" / "start over" must empty the
+    # cart — never reach the LLM, which fuzzy-matched "clear" to the dish "Clear Soup" and
+    # ADDED it. Precise paired phrasing only, so ordering "clear soup" still works.
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and _is_clear_cart_command(inbound.payload.get("text") or "")
+    ):
+        from sqlalchemy import delete as sa_delete
+
+        from app.ordering.models import Order, OrderItem
+
+        _did = conv.state.get("draft_order_id")
+        _order = await session.get(Order, _did) if _did else None
+        if _order is not None and str(_order.status) == "draft":
+            await session.execute(
+                sa_delete(OrderItem).where(OrderItem.order_id == _order.id)
+            )
+            _order.subtotal = Decimal("0.00")
+            _order.total = _order.delivery_fee_aed
+            await session.flush()
+            _set_state(conv, dialogue_state="collecting_items", abandoned_nudged=None)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="clear-cart-cmd",
+            body="Cleared your cart 🧹 What would you like to order?",
+        )
+        return
 
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:
