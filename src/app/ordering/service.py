@@ -505,12 +505,14 @@ async def add_item(
                 OrderItem.variant_name.is_(variant_name)
                 if variant_name is None
                 else OrderItem.variant_name == variant_name,
-                OrderItem.notes.is_(notes) if notes is None else OrderItem.notes == notes,
             )
         )
     ).first()
     if existing_line is not None:
         existing_line.qty += qty
+        # Non-empty incoming note wins; empty preserves existing (R-002)
+        if notes:
+            existing_line.notes = notes
         item = existing_line
     else:
         item = OrderItem(
