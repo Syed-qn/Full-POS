@@ -163,8 +163,15 @@ class FakeConversationAgent:
                 "done", "that's all", "thats all", "bas", "khalaas", "khalas",
                 "proceed", "checkout", "no more", "nothing else", "nope",
             )
+            _ack_proceed = {
+                "ok", "okay", "okey", "k", "sure", "yes", "yep", "yeah", "fine", "good", "great",
+            }
             _cart = (context.get("cart_summary") or "").strip()
-            if last_user in {"no", "na", "nah", "np"} or any(w in last_user for w in _closing):
+            if (
+                last_user in {"no", "na", "nah", "np"}
+                or last_user in _ack_proceed
+                or any(w in last_user for w in _closing)
+            ):
                 if not _cart:
                     return _emit("no_action", {}, "Your cart is empty 😊 What would you like to order?")
                 return _emit("checkout_proceed", {}, "Great! Let me get your delivery details.")
@@ -260,12 +267,12 @@ class FakeConversationAgent:
                 if len(parsed) >= 2:
                     return _emit("cart_add", {"items": parsed}, "Got it! Added everything to your cart 🛒")
 
-            # Single add (delta) -- explicit "N X" or bare dish name.
+            # Single add (delta) -- explicit "N X" or bare dish name (never bare acks).
             qty, dish = 1, last_user
             mq = re.match(r"^(\d+)\s*[xX]?\s+(.*)$", last_user)
             if mq:
                 qty, dish = int(mq.group(1)), mq.group(2).strip()
-            if dish:
+            if dish and dish not in _ack_proceed:
                 return _emit("cart_add", {"dish_query": dish, "add_qty": qty},
                              f"Added {dish} to your cart! 🛒")
             return _emit("no_action", {}, context.get("menu_text", "Welcome! Here is our menu."))

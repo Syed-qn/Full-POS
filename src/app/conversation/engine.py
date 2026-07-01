@@ -1795,6 +1795,26 @@ def _is_done_intent(text: str) -> bool:
     return stripped.startswith(_DONE_EDGES) or stripped.endswith(_DONE_EDGES)
 
 
+# Bare acknowledgments after a cart edit ("Updated … ✅" → customer "Ok") mean proceed to
+# checkout — NOT a new order line. Must be whole-message only so "ok add biryani" still
+# routes to the typed-add path (leading "ok" is stripped there as filler).
+_ACK_PROCEED_PHRASES: frozenset[str] = frozenset({
+    "ok", "okay", "okey", "k", "sure", "yes", "yep", "yeah", "fine", "good", "great",
+})
+
+
+def _is_ack_proceed_intent(text: str) -> bool:
+    """True when the customer sends only a short ack meaning 'proceed / that's fine'."""
+    t = _re.sub(r"[’'`]", "", (text or "").lower())
+    t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    return bool(t) and t in _ACK_PROCEED_PHRASES
+
+
+def _is_checkout_shortcut(text: str) -> bool:
+    """Done-phrases OR bare acks that should advance checkout when the cart has items."""
+    return _is_done_intent(text) or _is_ack_proceed_intent(text)
+
+
 # Leading phrases that mark a QUESTION / COMPLAINT / aside rather than a request to add a
 # dish. The item parser strips filler words ("add", "you") and would otherwise mine a
 # stray "2 biryani" out of "why did you add 2 biryani" and silently grow the cart. Kept
@@ -1885,7 +1905,7 @@ def _is_restaurant_on_topic(text: str | None) -> bool:
         or _looks_like_order_question(text)
         or _is_complaint(text)
         or _is_cancel_intent(text)
-        or _is_done_intent(text)
+        or _is_checkout_shortcut(text)
         or _is_clear_cart_command(text)
         or _is_cart_query(text)
     ):
@@ -5972,7 +5992,7 @@ async def _handle_customer_ai(
     if (
         phase == "ordering"
         and inbound.type == MessageType.TEXT
-        and _is_done_intent(inbound.payload.get("text") or "")
+        and _is_checkout_shortcut(inbound.payload.get("text") or "")
     ):
         from app.ordering.models import Order
 
@@ -6069,9 +6089,20 @@ async def _handle_customer_ai(
         )
         return
 
-    await _dispatch_action(
-        session, conv, inbound, restaurant_id, result, phase, restaurant
-    )
+    try:
+        await _dispatch_action(
+            session, conv, inbound, restaurant_id, result, phase, restaurant
+        )
+    except Exception:
+        _logger.error(
+            "dispatch_action failed for restaurant %s conv %s",
+            restaurant_id, conv.id, exc_info=True,
+        )
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="action-fallback",
+            body="Sorry, having a moment 😅 Type the dish name to order, or send 'hi' to start.",
+        )
 
 
 async def _resolve_counterpart(
@@ -7182,13 +7213,32 @@ async def handle_inbound(
             return
         # "Done" at the confirm step must NOT re-ask for an address that's already on
         # the order (ordering-phase checkout was leaking through the LLM).
-        if _resolve_phase(conv) == "awaiting_confirmation" and _is_done_intent(
+        if _resolve_phase(conv) == "awaiting_confirmation" and _is_checkout_shortcut(
             (inbound.payload.get("text") or "").strip()
         ):
             await _handle_confirmation_done(
                 session, conv, inbound, restaurant_id, restaurant=restaurant,
             )
             return
+        # Bare "ok" / "done" during ordering → checkout before the router/LLM (prod: ack
+        # after a kitchen-note edit was hitting the AI and returning a generic error).
+        if (
+            _resolve_phase(conv) == "ordering"
+            and _is_checkout_shortcut(text)
+        ):
+            from app.ordering.models import Order as _Ord_chk
+
+            _did = conv.state.get("draft_order_id")
+            _order = await session.get(_Ord_chk, _did) if _did else None
+            if (
+                _order is not None
+                and str(_order.status) == "draft"
+                and await _order_has_items(session, _order.id)
+            ):
+                await _handle_done_checkout(
+                    session, conv, inbound, restaurant_id, restaurant=restaurant,
+                )
+                return
         # "Where is my order / can I see the live location" → answer with the
         # current status + ETA + the live tracking link, deterministically.
         if _is_tracking_query(text):
