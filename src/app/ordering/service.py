@@ -488,11 +488,19 @@ async def add_item(
     qty: int = 1,
     notes: str | None = None,
     variant: dict | None = None,
+    price_aed_override: Decimal | None = None,
 ) -> OrderItem:
     # When a serving-size variant is chosen, snapshot its name + price; otherwise the
-    # dish behaves exactly as before (base price, no variant label).
+    # dish behaves exactly as before (base price, no variant label). A caller may pass
+    # ``price_aed_override`` to snapshot an externally-authoritative unit price (e.g. the
+    # tapped Meta catalogue ``item_price``) instead of the local Dish.price_aed (R-051).
     variant_name = variant.get("name") if variant else None
-    unit_price = Decimal(str(variant["price_aed"])) if variant else dish.price_aed
+    if variant:
+        unit_price = Decimal(str(variant["price_aed"]))
+    elif price_aed_override is not None:
+        unit_price = Decimal(str(price_aed_override))
+    else:
+        unit_price = dish.price_aed
 
     # Merge into an existing line for the same dish + variant + notes so the cart shows
     # "2x Mango Lassi" instead of two separate "1x" lines (matches how real ordering

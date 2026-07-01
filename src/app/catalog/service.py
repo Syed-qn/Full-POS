@@ -263,8 +263,17 @@ async def handle_catalog_order(
             pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
         )
 
+    from app.identity.models import Restaurant
+    from app.ordering.quantity_policy import QuantityError, QuantityPolicy
+
+    _CENT = Decimal("0.01")
+    rest = await session.get(Restaurant, restaurant_id)
+    policy = QuantityPolicy.from_restaurant(rest)
+
     added = 0
     unmapped: list[str] = []
+    price_mismatch: list[str] = []  # tapped price drifted from the catalogue price
+    oversized: list[str] = []  # per-line quantity over the tenant guard (R-050)
     for item in product_items:
         retailer_id = _retailer_id_from_item(item)
         try:
@@ -275,8 +284,8 @@ async def handle_catalog_order(
         # STRICT catalogue membership: only add an item that is backed by an ACTIVE
         # synced CatalogProduct. A dish linked to a retailer_id that was never synced
         # (or has since gone inactive/out of stock) must never sneak into the cart.
-        in_catalogue = await session.scalar(
-            select(CatalogProduct.id).where(
+        product = await session.scalar(
+            select(CatalogProduct).where(
                 CatalogProduct.restaurant_id == restaurant_id,
                 CatalogProduct.retailer_id == retailer_id,
                 CatalogProduct.is_active.is_(True),
@@ -285,29 +294,77 @@ async def handle_catalog_order(
         # Also reject a dish the manager turned OFF today, directly on dish.is_available —
         # a Meta pull can reset CatalogProduct.is_active to True, so is_active alone isn't
         # a reliable availability gate for a tapped catalogue card.
-        if dish is None or dish.price_aed is None or in_catalogue is None or not dish.is_available:
+        if dish is None or dish.price_aed is None or product is None or not dish.is_available:
             price = _to_decimal(item.get("item_price"))
             unmapped.append(
                 f"{qty}x item {retailer_id}" + (f" (AED {_aed(price)})" if price else "")
             )
             continue
-        await add_item(session, order=order, dish=dish, qty=qty)
+
+        # R-050: per-line max-quantity guard — parity with the typed-order path. A
+        # malformed/replayed basket with a huge quantity never mutates the cart.
+        try:
+            policy.check_line(qty)
+        except QuantityError:
+            oversized.append(f"{qty}x {dish.name}")
+            continue
+
+        # R-051 / R-019: snapshot the TAPPED Meta ``item_price`` onto the order line,
+        # not the (possibly stale) local Dish.price_aed. If the tapped price and the
+        # tenant catalogue price disagree beyond a cent, BLOCK the item and force a
+        # resync rather than silently under/overcharge.
+        item_price = _to_decimal(item.get("item_price"))
+        price_override: Decimal | None = None
+        if item_price is not None and product.price_aed is not None:
+            if abs(item_price - Decimal(product.price_aed)) > _CENT:
+                price_mismatch.append(
+                    f"{dish.name} (card AED {_aed(item_price)} vs menu AED {_aed(product.price_aed)})"
+                )
+                continue
+            price_override = item_price
+
+        await add_item(
+            session, order=order, dish=dish, qty=qty, price_aed_override=price_override
+        )
         added += 1
 
     if not added:
+        if price_mismatch:
+            body = (
+                "Sorry, the price changed for " + "; ".join(price_mismatch) + ". "
+                "Please reopen the menu to see the current price, or type your order 😊"
+            )
+        elif oversized:
+            body = (
+                "That's a large quantity for " + "; ".join(oversized) + ". "
+                "Please reply with a smaller amount, or call us for bulk orders 🙏"
+            )
+        else:
+            body = (
+                "Thanks 🙏 We couldn't match those items to our menu yet. "
+                "Please type your order and we'll help you right away 😊"
+            )
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="catalog-empty",
-            body=("Thanks 🙏 We couldn't match those items to our menu yet. "
-                  "Please type your order and we'll help you right away 😊"),
+            body=body,
         )
-        logger.info("catalog basket with no mappable items for restaurant %s", restaurant_id)
+        logger.info("catalog basket with no addable items for restaurant %s", restaurant_id)
         return
 
     # Hand control to the normal flow: same state the text bot is in after adding items.
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     cart = await _build_cart_summary(session, conv)
-    extra = ("\nWe couldn't add: " + "; ".join(unmapped)) if unmapped else ""
+    notes: list[str] = []
+    if unmapped:
+        notes.append("We couldn't add: " + "; ".join(unmapped))
+    if price_mismatch:
+        notes.append(
+            "Price changed (reopen the menu for the latest): " + "; ".join(price_mismatch)
+        )
+    if oversized:
+        notes.append("Quantity too large: " + "; ".join(oversized))
+    extra = ("\n" + "\n".join(notes)) if notes else ""
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="catalog-cart",
