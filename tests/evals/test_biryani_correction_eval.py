@@ -22,10 +22,6 @@ FIXTURE = Path(__file__).parent.parent / "fixtures" / "transcripts" / "biryani_r
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="capability eval: passes after W2 (notes) + W3 (render) + W4 (router)",
-)
 async def test_biryani_correction_final_state(db_session, restaurant, seed_biryani_menu):
     data = json.loads(FIXTURE.read_text())
     res = await drive_turns(

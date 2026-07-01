@@ -5062,6 +5062,25 @@ async def _try_catalog_typed_order(
         if _nid_res.confidence == MatchConfidence.DIRECT and _nid_res.candidates:
             dish = _nid_res.candidates[0]
             note = _nid_note_part
+        elif _nid_res.confidence == MatchConfidence.AMBIGUOUS and _nid_res.candidates:
+            # Ambiguous dish reference (e.g. "biriyani" matching both Chicken Biryani
+            # and Mutton Biryani): prefer the candidate already in the cart (RA-7).
+            # This turns "double masala in biriyani" into a note-set on the biryani
+            # the customer actually ordered, without adding a duplicate line.
+            _nid_draft_oid = conv.state.get("draft_order_id")
+            if _nid_draft_oid:
+                from app.ordering.models import OrderItem as _OI_nid
+                for _nid_cand in _nid_res.candidates:
+                    _nid_hit = await session.scalar(
+                        select(_OI_nid.id).where(
+                            _OI_nid.order_id == _nid_draft_oid,
+                            _OI_nid.dish_id == _nid_cand.id,
+                        ).limit(1)
+                    )
+                    if _nid_hit is not None:
+                        dish = _nid_cand
+                        note = _nid_note_part
+                        break
 
     if dish is None:
         for cut in range(len(words), 0, -1):

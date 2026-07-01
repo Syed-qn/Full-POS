@@ -26,10 +26,9 @@ modify sub-flows (F103/TX-28/TX-39). **No previously-xfail eval graduates on W4
 alone** — an honest audit of the 8 remaining xfails (below) shows each blocks on
 a non-router workstream:
 
-- **#1 `test_biryani_correction_final_state`** — router portion done (rhetorical
-  "why did you add 2" no longer mutates; correction turns route as mutations),
-  but the eval still fails on **note preservation** ("double masala" is dropped),
-  a W2 dish/note-parsing concern. Stays xfail pending W2.
+- **#1 `test_biryani_correction_final_state`** — **graduated (W2+W4)**: W2/T6 AMBIGUOUS
+  dish-in-note resolution now picks the in-cart candidate, fixing note preservation.
+  Rhetorical question (turn 4) correctly classified as COMPLAINT (no mutation). ✅
 - **#5 `test_modify_flow_remove_decrements`** — router correctly classifies
   "remove 1 lemon mint" as a mutation and lets it through; the failure is the
   cart path **adding instead of decrementing** (final qty 3, not 1), a W2/W8
@@ -46,7 +45,7 @@ rather than the Fake path alone.
 
 | # | Test ID | Transcript / Finding | Grader(s) | Finding guarded | Workstream |
 |---|---------|----------------------|-----------|-----------------|------------|
-| 1 | `test_biryani_correction_final_state` (biryani_correction_eval.py) | biryani_r1_0097.json turns 0–5 | grade_no_duplicate_dish_line, grade_no_mutation | RA-7 / F49 / RA-5 — duplicate biryani line, note stripped, rhetorical question mutates cart | W2 + W3 + W4 |
+| 1 ✅ | `test_biryani_correction_final_state` *(regression, graduated W2 T6+note-ambiguous)* (biryani_correction_eval.py) | biryani_r1_0097.json turns 0–5 | grade_no_duplicate_dish_line, grade_no_mutation | RA-7 / F49 / RA-5 — duplicate biryani line, note stripped, rhetorical question mutates cart | W2 + W3 + W4 |
 | 2 ✅ | `test_catalogue_basket_double_masala_one_noted_line` *(regression, graduated W2 T6)* | catalog ORDER + "Need double masala in biriyani" | grade_no_duplicate_dish_line | RA-4 — add_item on noted dish creates duplicate instead of updating note; fixed by note-in-dish pattern + Branch B in `_try_catalog_typed_order` | W2 |
 | 3 | `test_confirm_time_edit_total_matches` | "1 chicken biryani" → "make it 2 chicken biryani" | grade_total_consistency | F104 — qty edit creates second line; confirmation total diverges from DB | W3 |
 | 4 | `test_voice_order_five_items_all_present` | 5-item audio turn (no audio_id in harness) | cart length ≥ 3 | F106 — STT not wired in harness; engine sends "couldn't catch that" | W1 + W3 |
