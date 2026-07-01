@@ -590,6 +590,7 @@ async def set_item_qty(
     order: Order,
     dish_id: int,
     qty: int,
+    variant_name: str | None = None,
 ) -> OrderItem | None:
     """Set the quantity of ``dish_id`` in ``order`` to exactly ``qty``.
 
@@ -599,11 +600,12 @@ async def set_item_qty(
 
     Used by the "make it 3" / "change to 2" context-update intercept.
     """
+    conditions = [OrderItem.order_id == order.id, OrderItem.dish_id == dish_id]
+    if variant_name is not None:
+        conditions.append(OrderItem.variant_name == variant_name)
     items = (
         await session.scalars(
-            select(OrderItem)
-            .where(OrderItem.order_id == order.id, OrderItem.dish_id == dish_id)
-            .order_by(OrderItem.id)
+            select(OrderItem).where(*conditions).order_by(OrderItem.id)
         )
     ).all()
     if not items:
@@ -614,10 +616,13 @@ async def set_item_qty(
         for item in items:
             await session.delete(item)
     else:
-        survivor = items[0]
+        # Prefer the line with a non-empty note as the survivor (R-006/RA-7)
+        noted = next((i for i in items if (i.notes or "").strip()), None)
+        survivor = noted if noted is not None else items[0]
         survivor.qty = qty
-        for extra in items[1:]:  # collapse duplicates
-            await session.delete(extra)
+        for item in items:
+            if item.id != survivor.id:
+                await session.delete(item)
     await session.flush()
 
     remaining = (

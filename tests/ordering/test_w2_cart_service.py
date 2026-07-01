@@ -21,3 +21,20 @@ async def test_add_item_noted_reAdd_merges_note(db_session, restaurant, seed_bir
     assert len(items) == 1, f"expected 1 line, got {len(items)}"
     assert items[0].notes == "double masala"
     assert items[0].qty == 2
+
+
+@pytest.mark.asyncio
+async def test_set_item_qty_preserves_note(db_session, restaurant, seed_biryani_menu):
+    """Changing qty must preserve the kitchen note (RA-7/R-006)."""
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer, set_item_qty
+    from app.menu.models import Dish
+
+    customer = await get_or_create_customer(db_session, restaurant_id=restaurant.id, phone="+97150000002")
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
+    dish = (await db_session.scalars(select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.name == "Chicken Biryani"))).first()
+    await add_item(db_session, order=order, dish=dish, qty=2, notes="extra spicy")
+    # Change qty to 1 — note must survive
+    result = await set_item_qty(db_session, order=order, dish_id=dish.id, qty=1)
+    assert result is not None
+    assert result.notes == "extra spicy", f"note lost: {result.notes!r}"
+    assert result.qty == 1
