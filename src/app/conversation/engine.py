@@ -2109,91 +2109,6 @@ async def _redeem_coupon_at_checkout(
     await _send_order_summary(session, conv, inbound, restaurant_id, order)
 
 
-async def _handle_order_confirmation(
-    session: AsyncSession,
-    conv: Conversation,
-    inbound: InboundMessage,
-    restaurant_id: int,
-) -> None:
-    """Handle confirm/cancel buttons on the order summary."""
-    from app.ordering.models import Order
-    from app.ordering.service import finalize_confirmation
-
-    order_id = conv.state.get("pending_order_id")
-    order = await session.get(Order, order_id) if order_id else None
-    if order is None:
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="no-pending-order",
-            body="There is no order to confirm. Send 'hi' to start a new order.",
-        )
-        return
-
-    btn_id = inbound.payload.get("id", "") if inbound.type == MessageType.BUTTON_REPLY else ""
-
-    if btn_id == "confirm_order":
-        # SAFETY GATE: never confirm an empty order (kitchen can't fulfil it).
-        if not await _order_has_items(session, order.id):
-            _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="confirm-empty",
-                body="Your cart is empty, so there's nothing to confirm. Please add a dish to order 😊",
-            )
-            return
-        await finalize_confirmation(session, order=order, actor="customer")
-        # Drop the cart pointers now the order is placed — a later order must start a
-        # fresh draft, not reuse this (now confirmed) order's id.
-        _set_state(conv, dialogue_state="order_placed",
-                   draft_order_id=None, pending_order_id=None)
-        from app.ordering.payments import cod_due_aed
-
-        due = cod_due_aed(order)
-        if order.wallet_applied_aed and order.wallet_applied_aed > 0:
-            payment_line = (
-                f"Total: AED {_aed(order.total)}\n"
-                f"Wallet credit applied: AED {_aed(order.wallet_applied_aed)}\n"
-                f"Pay on delivery: AED {_aed(due)} (COD)\n"
-            )
-        else:
-            payment_line = f"Total: AED {_aed(order.total)} (COD, cash on delivery).\n"
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="order-confirmed",
-            body=(
-                f"Order confirmed! Order #{order.order_number}.\n"
-                f"{payment_line}"
-                f"Your food will arrive within 40 minutes."
-            ),
-        )
-        return
-
-    if btn_id == "cancel_order":
-        from app.ordering.fsm import IllegalTransitionError
-        from app.ordering.service import cancel_order
-
-        try:
-            await cancel_order(session, order=order, actor="customer", reason="customer_cancel")
-        except IllegalTransitionError:
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="order-cancel-blocked",
-                body=f"Sorry, order #{order.order_number} can't be cancelled right now. "
-                     "Please call the restaurant for help.",
-            )
-            return
-        _set_state(conv, dialogue_state="cancelled", draft_order_id=None, pending_order_id=None)
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="order-cancelled",
-            body=_cancel_confirmation_body(order.order_number),
-        )
-        return
-
-    # Unknown input while awaiting confirmation → re-prompt with the summary.
-    await _send_order_summary(session, conv, inbound, restaurant_id, order)
-
-
 async def _handle_modify_intent(
     session: AsyncSession,
     conv: Conversation,
@@ -5826,6 +5741,19 @@ async def handle_inbound(
                 body="Please tap the button below to share your delivery location 📍, "
                      "or use 📎 → Location.",
             )
+            return
+
+    # Confirm/cancel taps must NEVER round-trip through the LLM (F23): route
+    # directly to the deterministic executors regardless of phase/state so a
+    # model mis-classification can never block or delay finalizing/cancelling
+    # an order the customer has already decided on.
+    if inbound.type == MessageType.BUTTON_REPLY:
+        _btn_id = inbound.payload.get("id", "")
+        if _btn_id == "confirm_order":
+            await _execute_confirm_order(session, conv, inbound, restaurant_id)
+            return
+        if _btn_id == "cancel_order":
+            await _execute_cancel_order(session, conv, inbound, restaurant_id)
             return
 
     # Explicit menu request → render the REAL menu deterministically in ANY phase.
