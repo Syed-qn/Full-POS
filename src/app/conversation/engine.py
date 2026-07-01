@@ -73,6 +73,18 @@ def _looks_like_menu(text: str) -> bool:
     return False
 
 
+def _strip_money_claims(text: str) -> str:
+    """Remove lines that contain AED amounts from LLM free text on mutating turns.
+
+    Used as a safety net (R-067): strips LLM-authored price/total claims so only
+    the DB-rendered cart tail carries money facts.
+    """
+    if not text:
+        return text
+    clean = [ln for ln in text.splitlines() if not _PRICE_TOKEN.search(ln)]
+    return "\n".join(clean).strip()
+
+
 # Explicit "show me the menu" keywords — MULTILINGUAL (this is a multi-language SaaS:
 # English, Hindi/Urdu roman + Devanagari, Arabic, Telugu). The word "menu" itself is
 # widely borrowed across all of these, but we add native words too so a menu request in
@@ -4533,6 +4545,7 @@ async def _dispatch_action(
                 lead = "\n".join(
                     ln for ln in reply.splitlines() if not ln.strip().startswith("🛒")
                 ).strip() if reply else ""
+                lead = _strip_money_claims(lead)
                 if not lead or _looks_like_menu(lead):
                     lead = "Got it! 😊"
                 body = f"{lead}{_cart_tail(cart)}"
