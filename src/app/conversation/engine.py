@@ -1502,6 +1502,58 @@ def _parse_set_quantity_items(text: str) -> list[tuple[int, str]] | None:
     return out or None
 
 
+# REMOVE phrasing — "remove 3 chicken soup", "delete biryani", "take off 2 mint".
+# Catalogue typed-order used to strip the leading verb and parse_qty_and_text the rest,
+# turning "remove 3 soup" into ADD 3. Detect these before the add-only typed-order path.
+_REMOVE_ITEM_PATTERNS: tuple[str, ...] = (
+    r"^remove (\d+)\s+(.+)$",
+    r"^delete (\d+)\s+(.+)$",
+    r"^(?:take off|take out) (\d+)\s+(.+)$",
+    r"^drop (\d+)\s+(.+)$",
+    r"^minus (\d+)\s+(.+)$",
+    r"^remove (.+)$",
+    r"^delete (.+)$",
+    r"^(?:take off|take out) (.+)$",
+    r"^drop (.+)$",
+)
+
+
+def _parse_remove_item(text: str) -> tuple[int | None, str] | None:
+    """Detect a REMOVE instruction → (qty, dish_query). ``qty=None`` removes all units
+    of the dish. Returns None when it isn't a single-item remove (whole-cart clears are
+    excluded)."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    if _is_explicit_clear(t) or _is_clear_cart_command(t):
+        return None
+    for pat in _REMOVE_ITEM_PATTERNS:
+        m = _re.match(pat, t)
+        if not m:
+            continue
+        if m.lastindex == 2:
+            qty = int(m.group(1))
+            dish = (m.group(2) or "").strip()
+        else:
+            qty = None
+            dish = (m.group(1) or "").strip()
+        dish = _re.sub(r"\b(please|pls|thanks|thank you)\b", "", dish).strip()
+        if not dish or dish in {"all", "everything", "it", "them", "that"}:
+            return None
+        if dish.startswith(("all ", "everything ")):
+            return None
+        return qty, dish
+    return None
+
+
+def _is_cart_edit_intent(text: str) -> bool:
+    """True when the message is a cart edit (set quantity or remove), not a new add."""
+    return (
+        _parse_set_quantity_items(text) is not None
+        or _parse_remove_item(text) is not None
+    )
+
+
 # KEEP-ONLY phrasing — "only mandi", "just the biryani", "keep only mandi", "i only want
 # mandi" means: the cart should hold ONLY that dish (prune the rest). A digit after the
 # keyword ("only 2 mandi") is a SET-quantity, not keep-only, so those are excluded.
@@ -3954,6 +4006,35 @@ async def _apply_confirmation_edit(
 
     note: str | None = None
     if action == "add_item":
+        # SET-quantity at confirm ("make it 5 soup") must REPLACE qty, not add — the
+        # ordering-phase guard in _dispatch_action never runs here because confirm edits
+        # short-circuit earlier.
+        _raw = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+        _setq_items = _parse_set_quantity_items(_raw)
+        if _setq_items is not None:
+            _changed: list[str] = []
+            for _sqty, _sdish in _setq_items:
+                if not _sdish:
+                    continue
+                _outcome, _dname = await _execute_ai_update_qty(
+                    session, conv, inbound, restaurant_id, _sdish, _sqty,
+                    suppress_offers=len(_setq_items) > 1,
+                )
+                if _outcome == "awaiting_bundle":
+                    return
+                if _outcome in ("updated", "removed"):
+                    _changed.append(_dname or _sdish)
+                elif _outcome == "not_in_cart":
+                    if await _execute_ai_add_item(
+                        session, conv, inbound, restaurant_id, _sdish, _sqty, "",
+                        suppress_offers=True,
+                    ) == "added":
+                        _changed.append(_sdish)
+            if _changed:
+                _set_state(conv, dialogue_phase="awaiting_confirmation",
+                           dialogue_state="order_confirmation")
+                await _send_order_summary(session, conv, inbound, restaurant_id, order)
+                return
         items = data.get("items") or []
         if not items and data.get("dish_query"):
             items = [{"dish_query": data.get("dish_query", ""),
@@ -5275,6 +5356,107 @@ async def _download_and_transcribe_voice(
         return None, None, None
 
 
+async def _try_catalog_cart_edit(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+) -> bool:
+    """In catalogue mode, handle remove / set-quantity edits BEFORE the add-only
+    typed-order path. Regression: "Remove 3 chicken soup" and "Make it 5 chicken soup"
+    were parsed as adds via parse_qty_and_text inside _try_catalog_typed_order."""
+    if inbound.type != MessageType.TEXT:
+        return False
+    if not await _catalog_mode_on(session, restaurant_id):
+        return False
+    text = (inbound.payload.get("text") or "").strip()
+    if not text:
+        return False
+
+    remove_parsed = _parse_remove_item(text)
+    setq_items = None if remove_parsed is not None else _parse_set_quantity_items(text)
+    if remove_parsed is None and setq_items is None:
+        return False
+
+    draft_order_id = conv.state.get("draft_order_id") or conv.state.get("pending_order_id")
+    if not draft_order_id:
+        return False
+
+    from app.ordering.models import Order
+
+    order = await session.get(Order, draft_order_id)
+    if order is None or str(order.status) != "draft":
+        return False
+
+    if conv.state.get("draft_order_id") != order.id:
+        _set_state(conv, draft_order_id=order.id)
+
+    phase = _resolve_phase(conv)
+    prefix = "catalog-cart-edit"
+    body: str
+
+    if remove_parsed is not None:
+        rm_qty, dish_query = remove_parsed
+        outcome, dish_name = await _execute_ai_remove_item(
+            session, conv, restaurant_id, dish_query, rm_qty,
+        )
+        if phase == "awaiting_confirmation":
+            _set_state(conv, dialogue_phase="awaiting_confirmation",
+                       dialogue_state="order_confirmation")
+            await _send_order_summary(session, conv, inbound, restaurant_id, order)
+            return True
+        cart = await _build_cart_summary(session, conv)
+        if outcome == "removed":
+            body = f"Done! Removed {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "reduced":
+            body = f"Done! Removed {rm_qty}x {dish_name} ✅{_cart_tail(cart)}"
+        elif outcome == "not_in_cart":
+            body = f"{dish_name} isn't in your cart.{_cart_tail(cart)}"
+        else:
+            body = (
+                f"I couldn't find '{dish_query}' to remove. Tell me the dish name "
+                "and I'll take it off 😊"
+            )
+        prefix = "catalog-cart-remove"
+    else:
+        assert setq_items is not None
+        changed: list[str] = []
+        for sqty, sdish in setq_items:
+            if not sdish:
+                return False  # lone "make it 5" — dish name needed; let the AI resolve
+            outcome, dname = await _execute_ai_update_qty(
+                session, conv, inbound, restaurant_id, sdish, sqty,
+                suppress_offers=len(setq_items) > 1,
+            )
+            if outcome == "awaiting_bundle":
+                return True
+            if outcome in ("updated", "removed"):
+                changed.append(dname or sdish)
+            elif outcome == "not_in_cart":
+                if await _execute_ai_add_item(
+                    session, conv, inbound, restaurant_id, sdish, sqty, "",
+                    suppress_offers=True,
+                ) == "added":
+                    changed.append(sdish)
+        if not changed:
+            return False
+        if phase == "awaiting_confirmation":
+            _set_state(conv, dialogue_phase="awaiting_confirmation",
+                       dialogue_state="order_confirmation")
+            await _send_order_summary(session, conv, inbound, restaurant_id, order)
+            return True
+        cart = await _build_cart_summary(session, conv)
+        body = f"Updated! ✅{_cart_tail(cart)}"
+        prefix = "catalog-cart-set-qty"
+
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=prefix, body=body,
+    )
+    return True
+
+
 async def _try_catalog_typed_order(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, restaurant,
@@ -5305,6 +5487,8 @@ async def _try_catalog_typed_order(
     text = (inbound.payload.get("text") or "").strip()
     if not text or "?" in text or _is_menu_request(text.lower()):
         return False  # questions / menu requests → AI
+    if _is_cart_edit_intent(text):
+        return False  # remove / set-qty — handled by _try_catalog_cart_edit
 
     # Strip leading politeness/filler so "ok add one mutton biryani", "please give me 2
     # biryani", "i want chicken" parse down to the real dish + quantity.
@@ -5906,9 +6090,11 @@ async def handle_inbound(
     # we don't return, so their actual message is still processed right after.
     await _maybe_offer_resale(session, conv, inbound, restaurant_id)
 
-    # Catalogue mode: a clearly-typed single dish is ADDED deterministically here, so a
-    # plain "one chicken biryani" reliably goes to the cart instead of the model
-    # sometimes re-sending the catalogue cards. Anything else falls through to the AI.
+    # Catalogue mode: remove / set-qty edits first (typed-order only ADDS), then a
+    # clearly-typed single dish is ADDED deterministically so "one chicken biryani"
+    # reliably goes to the cart instead of the model re-sending catalogue cards.
+    if await _try_catalog_cart_edit(session, conv, inbound, restaurant_id, restaurant):
+        return
     if await _try_catalog_typed_order(session, conv, inbound, restaurant_id, restaurant):
         return
 
