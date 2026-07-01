@@ -16,6 +16,32 @@ biryani" absolute-set) remains xfail: the W1 schema layer (`cart_set_qty` +
 `_try_catalog_typed_order` from intercepting the phrase before AI runs) belongs
 to W2 + W4.
 
+**W4 additions (top-level multilingual router):** The LLM intent router
+(`RouterClassifierPort.classify_intent`, LLM-driven/multilingual, no English
+phrase tables on the live path) now runs early in `handle_inbound`. The
+catalogue fast-path is gated to `ordering` phase + a mutating intent, so a
+question / complaint / closing / reaction can no longer be silently misread as a
+cart add (F49/F20-A/RA-5). Global read-only intents (menu, cart) now work inside
+modify sub-flows (F103/TX-28/TX-39). **No previously-xfail eval graduates on W4
+alone** — an honest audit of the 8 remaining xfails (below) shows each blocks on
+a non-router workstream:
+
+- **#1 `test_biryani_correction_final_state`** — router portion done (rhetorical
+  "why did you add 2" no longer mutates; correction turns route as mutations),
+  but the eval still fails on **note preservation** ("double masala" is dropped),
+  a W2 dish/note-parsing concern. Stays xfail pending W2.
+- **#5 `test_modify_flow_remove_decrements`** — router correctly classifies
+  "remove 1 lemon mint" as a mutation and lets it through; the failure is the
+  cart path **adding instead of decrementing** (final qty 3, not 1), a W2/W8
+  QuantityPolicy concern. Stays xfail pending W2.
+- **#3/#4** W3/W1-voice, **#6** W8 QuantityPolicy (lakh), **#7** W8 reactions
+  (UNKNOWN message *type*, not text), **#8** W6/W8 catalogue keyword, **#11** W8
+  idempotency — all unchanged by W4.
+
+W4 additionally *reinforces* the already-graduated #12 (question-not-mutation)
+and #13 (closing proceeds): both remain green, now also guarded by the LLM router
+rather than the Fake path alone.
+
 ---
 
 | # | Test ID | Transcript / Finding | Grader(s) | Finding guarded | Workstream |
