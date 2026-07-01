@@ -74,6 +74,19 @@ def _looks_like_menu(text: str) -> bool:
     return False
 
 
+def _strip_money_claims(text: str) -> str:
+    """Remove lines that contain an AED amount from LLM free text on mutating turns.
+
+    Safety net (R-067): the LLM sometimes authors a price/total in its lead ("Added,
+    that's AED 50"). Money facts must come solely from the DB-rendered cart tail, so
+    any LLM-authored currency line is dropped before the lead is used.
+    """
+    if not text:
+        return text
+    clean = [ln for ln in text.splitlines() if not _PRICE_TOKEN.search(ln)]
+    return "\n".join(clean).strip()
+
+
 # Explicit "show me the menu" keywords — MULTILINGUAL (this is a multi-language SaaS:
 # English, Hindi/Urdu roman + Devanagari, Arabic, Telugu). The word "menu" itself is
 # widely borrowed across all of these, but we add native words too so a menu request in
@@ -4353,6 +4366,7 @@ async def _dispatch_action(
                 lead = "\n".join(
                     ln for ln in reply.splitlines() if not ln.strip().startswith("🛒")
                 ).strip() if reply else ""
+                lead = _strip_money_claims(lead)  # R-067: never let the LLM state money
                 if not lead or _looks_like_menu(lead):
                     lead = "Got it! 😊"
                 body = f"{lead}{_cart_tail(cart)}"

@@ -145,3 +145,30 @@ async def test_observation_turn_after_add(db_session, restaurant, seed_biryani_m
     assert "biryani" in body_text.lower(), (
         f"cart_observation payload must contain the dish name, got: {body_text!r}"
     )
+
+
+def test_strip_money_claims_removes_aed_lines():
+    """_strip_money_claims removes lines containing an AED amount (R-067)."""
+    from app.conversation.engine import _strip_money_claims
+
+    text = "Added biryani ✅\nTotal: AED 20\nEnjoy your meal!"
+    result = _strip_money_claims(text)
+    assert "AED" not in result, f"AED claim not stripped: {result!r}"
+    assert "Added biryani" in result
+    assert "Enjoy your meal!" in result
+
+
+def test_strip_money_claims_preserves_non_money_text():
+    """_strip_money_claims keeps lines without a currency amount."""
+    from app.conversation.engine import _strip_money_claims
+
+    text = "Got it! 😊\nYour order is updated."
+    assert _strip_money_claims(text) == text
+
+
+def test_strip_money_claims_empty_and_none():
+    """_strip_money_claims handles empty and None input."""
+    from app.conversation.engine import _strip_money_claims
+
+    assert _strip_money_claims("") == ""
+    assert _strip_money_claims(None) is None
