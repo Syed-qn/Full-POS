@@ -3574,8 +3574,8 @@ async def _execute_ai_remove_item(
     Returns ``(outcome, dish_name)`` where outcome is "removed" (dish gone),
     "reduced" (some units left), "not_in_cart" (matched a menu dish but it wasn't
     in the cart), or "no_match" (couldn't match the query)."""
+    from app.ordering.cart_service import CartService
     from app.ordering.models import Order, OrderItem
-    from app.ordering.service import remove_item
 
     draft_order_id = conv.state.get("draft_order_id")
     if not draft_order_id or not dish_query:
@@ -3606,7 +3606,8 @@ async def _execute_ai_remove_item(
         ).all()
     )
     to_remove = in_cart_units if qty is None or qty >= in_cart_units else qty
-    removed = await remove_item(session, order=order, dish=dish, qty=to_remove)
+    _cs_rm = CartService(session)
+    removed = await _cs_rm.remove(order=order, dish=dish, qty=to_remove)
     if removed <= 0:
         return ("not_in_cart", dish.name)
     return ("removed" if removed >= in_cart_units else "reduced", dish.name)
@@ -3628,8 +3629,8 @@ async def _execute_ai_update_qty(
     ``suppress_offers`` skips the bundle question and sets the quantity directly —
     used by the multi-dish path (several quantities changed in one message), where
     pausing to ask about one dish's bundle would abandon the rest."""
+    from app.ordering.cart_service import CartService
     from app.ordering.models import Order
-    from app.ordering.service import set_item_qty
 
     draft_order_id = conv.state.get("draft_order_id")
     if not draft_order_id or not dish_query:
@@ -3648,13 +3649,18 @@ async def _execute_ai_update_qty(
     dish = await _resolve_cart_dish(session, order_id=order.id, candidates=cands[:5])
     if dish is None:
         return ("not_in_cart", cands[0].name)
+    _cs_upd = CartService(session)
     if qty <= 0:
-        await set_item_qty(session, order=order, dish_id=dish.id, qty=0)
+        await _cs_upd.set_qty(order=order, dish_id=dish.id, qty=0)
         return ("removed", dish.name)
-    if special_note and await _apply_note_to_existing_cart_item(
-        session, conv, dish_id=dish.id, notes=special_note, qty=qty
-    ):
-        return ("updated", dish.name)
+    # W2/T7: route note through CartService.set_note so normalize_note strips politeness
+    # prefixes ("pls", "please", etc.) before storing, and note survives qty changes.
+    if special_note:
+        result = await _cs_upd.set_note(
+            order=order, dish_id=dish.id, raw_note=special_note, qty=qty
+        )
+        if result is not None:
+            return ("updated", dish.name)
 
     # If the new quantity matches a bundle, ask before pricing it differently.
     bundle = bundle_variant_for_qty(dish, qty)
@@ -3665,7 +3671,7 @@ async def _execute_ai_update_qty(
         )
         return ("awaiting_bundle", dish.name)
 
-    await set_item_qty(session, order=order, dish_id=dish.id, qty=qty)
+    await _cs_upd.set_qty(order=order, dish_id=dish.id, qty=qty)
     return ("updated", dish.name)
 
 
@@ -4935,12 +4941,21 @@ async def _try_catalog_typed_order(
     if not text or "?" in text or _is_menu_request(text.lower()):
         return False  # questions / menu requests → AI
 
+    # "only/just N <dish>" signals an absolute-set intent — detect BEFORE stripping so
+    # the signal survives filler removal (we strip them below but the flag is preserved).
+    is_only_intent = bool(_re.match(
+        r"^(?:only|just|i\s+only\s+want|i\s+just\s+want)\s+",
+        text,
+        _re.IGNORECASE,
+    ))
+
     # Strip leading politeness/filler so "ok add one mutton biryani", "please give me 2
     # biryani", "i want chicken" parse down to the real dish + quantity.
     fillers = (
         "i would like", "i'd like", "id like", "i'll have", "ill have", "can i get",
         "could i get", "let me get", "i want", "i need", "give me", "get me", "gimme",
         "please", "kindly", "okay", "okey", "ok", "pls", "add", "want",
+        "only", "just", "need",  # "only/just" stripped after flag set; "need" strips prefix
     )
     body = text
     changed = True
@@ -4975,21 +4990,99 @@ async def _try_catalog_typed_order(
     words = dish_query.split()
     dish = None
     note: str | None = None
-    for cut in range(len(words), 0, -1):
-        cand = " ".join(words[:cut])
-        pref = await find_dish_matches(session, restaurant_id=restaurant_id, query=cand)
-        if (pref.confidence == MatchConfidence.DIRECT and pref.candidates
-                and pref.candidates[0].name_normalized == normalize_name(cand)):
-            dish = pref.candidates[0]
-            note = (" ".join(words[cut:]).strip() or None)
-            break
+
+    # W2/T6: "[note_words] in/for/on [dish_ref]" pattern — e.g. "double masala in
+    # biriyani", "extra sauce for biryani".  Only fired when a draft order already
+    # exists so there is a cart to update; avoids false-note on a first-order message.
+    _nid = _re.match(
+        r"^(.+?)\s+(?:in|for|on)\s+(\S.{0,60})$",
+        dish_query,
+        _re.IGNORECASE,
+    ) if conv.state.get("draft_order_id") else None
+    if _nid:
+        _nid_note_part = _nid.group(1).strip()
+        _nid_dish_part = _nid.group(2).strip()
+        _nid_res = await find_dish_matches(
+            session, restaurant_id=restaurant_id, query=_nid_dish_part
+        )
+        if _nid_res.confidence == MatchConfidence.DIRECT and _nid_res.candidates:
+            dish = _nid_res.candidates[0]
+            note = _nid_note_part
+
+    if dish is None:
+        for cut in range(len(words), 0, -1):
+            cand = " ".join(words[:cut])
+            pref = await find_dish_matches(session, restaurant_id=restaurant_id, query=cand)
+            if (pref.confidence == MatchConfidence.DIRECT and pref.candidates
+                    and pref.candidates[0].name_normalized == normalize_name(cand)):
+                dish = pref.candidates[0]
+                note = (" ".join(words[cut:]).strip() or None)
+                break
+
     if dish is None:
         # No exact dish-name prefix → fall back to a fuzzy match on the WHOLE query (no
         # note). Catches typos like "chicken biriyani" — still adds the dish.
         pref = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
-        if pref.confidence != MatchConfidence.DIRECT or not pref.candidates:
-            return False  # ambiguous / no match → AI (warm reply or disambiguates)
-        dish = pref.candidates[0]
+        if pref.confidence == MatchConfidence.DIRECT and pref.candidates:
+            dish = pref.candidates[0]
+        else:
+            # W2/T6 Note-indicator heuristic: "extra masala", "without onion", "spicy"
+            # etc.  Body starts with a kitchen-modifier word and remainder is NOT a
+            # known dish → treat as a kitchen note for the single in-cart dish (F101).
+            _NOTE_STARTERS = {
+                "extra", "without", "less", "light", "spicy", "mild",
+                "hot", "cold", "crispy", "soft", "double", "triple", "half",
+            }
+            _bwords = body.split()
+            if _bwords and _bwords[0].lower() in _NOTE_STARTERS:
+                _rest_q = " ".join(_bwords[1:]).strip()
+                if _rest_q:
+                    _rm = await find_dish_matches(
+                        session, restaurant_id=restaurant_id, query=_rest_q
+                    )
+                    if _rm.confidence == MatchConfidence.DIRECT and _rm.candidates:
+                        # e.g. "extra lemon mint" → add that dish (not a note)
+                        dish = _rm.candidates[0]
+                if dish is None:
+                    # Non-dish modifier phrase → apply as note to the single in-cart dish
+                    _doid = conv.state.get("draft_order_id")
+                    if _doid:
+                        from app.ordering.models import OrderItem as _OI_h
+                        _ord_h = await session.get(Order, _doid)
+                        if _ord_h and str(_ord_h.status) == "draft":
+                            _its_h = (
+                                await session.scalars(
+                                    select(_OI_h).where(_OI_h.order_id == _ord_h.id)
+                                )
+                            ).all()
+                            if len({i.dish_id for i in _its_h}) == 1:
+                                from app.ordering.cart_service import (
+                                    CartService, normalize_note,
+                                )
+                                _cs_h = CartService(session)
+                                await _cs_h.set_note(
+                                    order=_ord_h,
+                                    dish_id=_its_h[0].dish_id,
+                                    raw_note=body,
+                                )
+                                _set_state(
+                                    conv,
+                                    dialogue_phase="ordering",
+                                    dialogue_state="collecting_items",
+                                )
+                                _cart_h = await _build_cart_summary(session, conv)
+                                await _send_text(
+                                    session, conv=conv, inbound=inbound,
+                                    restaurant_id=restaurant_id,
+                                    prefix="catalog-typed-note",
+                                    body=(
+                                        f"Got it! {normalize_note(body)} for "
+                                        f"{_its_h[0].dish_name} ✅{_cart_tail(_cart_h)}"
+                                    ),
+                                )
+                                return True
+            if dish is None:
+                return False  # no match → AI (warm reply or disambiguates)
     # If the trailing "note" is itself another dish, this is a MULTI-item order — let the
     # AI handle it (the multi-item parser) rather than burying a second dish in a note.
     if note:
@@ -5032,6 +5125,44 @@ async def _try_catalog_typed_order(
             saved_address_declined=None, saved_address_id=None,
             pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
         )
+    # W2/T6: check whether this dish is already in the cart so we can branch correctly.
+    from app.ordering.models import OrderItem as _OI_ck
+    from app.ordering.cart_service import CartService, normalize_note
+    _any_line = await session.scalar(
+        select(_OI_ck.id).where(
+            _OI_ck.order_id == order.id,
+            _OI_ck.dish_id == dish.id,
+        ).limit(1)
+    )
+    _in_cart = _any_line is not None
+    _cs = CartService(session)
+
+    # Branch A: "only/just N dish" + dish already in cart → absolute qty-set (F82/W2).
+    # Never clears other cart items; only adjusts this dish to the stated total.
+    if is_only_intent and _in_cart:
+        await _cs.set_qty(order=order, dish_id=dish.id, qty=add_qty)
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+        cart = await _build_cart_summary(session, conv)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="catalog-typed-set-qty",
+            body=f"Got it! {dish.name} updated to {add_qty} ✅{_cart_tail(cart)}",
+        )
+        return True
+
+    # Branch B: note text present + dish already in cart → update note, no dup (RA-4/W2).
+    if note and _in_cart:
+        await _cs.set_note(order=order, dish_id=dish.id, raw_note=note)
+        _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+        cart = await _build_cart_summary(session, conv)
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="catalog-typed-note",
+            body=f"Updated {dish.name}: {normalize_note(note)} ✅{_cart_tail(cart)}",
+        )
+        return True
+
+    # Default: plain delta-add (existing behaviour).
     await add_item(session, order=order, dish=dish, qty=add_qty, notes=note)
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     cart = await _build_cart_summary(session, conv)
