@@ -250,7 +250,11 @@ PHASE: Taking the order
 MENU:
 {menu_text}
 
-CURRENT CART: {cart_summary}
+CURRENT CART (authoritative — overrides anything in the chat history): {cart_summary}
+CART LINES (structured; each line has cart_item_id you may reference): {cart_lines}
+If the chat history and the CURRENT CART disagree, the CURRENT CART is correct
+(R-072/R-074): a customer correction like "only 1 X" sets the qty of the existing
+line for X, it never adds a new line or trusts what an earlier message implied.
 
 DECISION ORDER (check in this order, stop at the first that applies):
 STEP 1, COMPLETION: If the CURRENT CART is NOT empty AND the customer is finishing,
@@ -457,6 +461,7 @@ class DeepSeekConversationAgent:
             phase_block = _ORDERING_BLOCK.format(
                 menu_text=context.get("menu_text", "Menu unavailable."),
                 cart_summary=context.get("cart_summary") or "empty",
+                cart_lines=json.dumps(context.get("cart_lines") or [], ensure_ascii=False),
             )
         elif dialogue_phase == "address_capture":
             saved = context.get("saved_address", "")

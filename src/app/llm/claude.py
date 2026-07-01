@@ -1,4 +1,5 @@
 import base64
+import json
 import re as _re
 
 from anthropic import AsyncAnthropic
@@ -417,7 +418,11 @@ expand, abbreviate, or restyle it.
 MENU:
 {menu_text}
 
-CURRENT CART: {cart_summary}
+CURRENT CART (authoritative — overrides anything in the chat history): {cart_summary}
+CART LINES (structured; each line has cart_item_id you may reference): {cart_lines}
+If the chat history and the CURRENT CART disagree, the CURRENT CART is correct
+(R-072/R-074): a customer correction like "only 1 X" sets the qty of the existing
+line for X, it never adds a new line or trusts what an earlier message implied.
 
 DELIVERY FEES — the ONLY correct numbers. Recite EXACTLY when asked about
 delivery cost. NEVER invent or guess tiers/distances. The exact fee for an order
@@ -499,6 +504,7 @@ class ClaudeConversationAgent:
             restaurant_name=restaurant_name,
             menu_text=context.get("menu_text", "Menu unavailable."),
             cart_summary=context.get("cart_summary") or "empty",
+            cart_lines=json.dumps(context.get("cart_lines") or [], ensure_ascii=False),
             delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
         ) + _phase_guidance(dialogue_phase)
         messages = history if history else [{"role": "user", "content": "hi"}]
