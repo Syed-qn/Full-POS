@@ -139,20 +139,22 @@ change was required for R-023; left as an observation for future cleanup (the de
 
 ## W7 additions (history faithfulness + structured cart)
 
-Three new evals added in W7a Task 2 covering the DB-H3–H8 / R-029 / R-072 incident findings:
+Three new evals added in W7a Task 2 covering the DB-H3–H8 / R-029 / R-072 incident findings.
+W7a (Tasks 3–7) graduated two of the three; W7b (all-outbounds-recorded) is deferred —
+see `docs/superpowers/sdd/w7a-report.md`.
 
 | # | Test ID | Finding guarded | Status | Workstream |
 |---|---------|-----------------|--------|------------|
-| W7-a | `test_basket_visible_in_history` | R-029/R-077/F63/DB-H8 — catalogue ORDER turn must render as readable basket (dish names + qty) in `_build_history`, not opaque `[order]` | xfail (strict) | W7a |
+| W7-a | `test_basket_visible_in_history` *(regression, graduated W7a Task 7)* | R-029/R-077/F63/DB-H8 — catalogue ORDER turn must render as readable basket (dish names + qty) in `_build_history`, not opaque `[order]` | ✅ PASSED (xfail removed) | W7a |
 | W7-b | `test_structured_cart_drives_correction` *(regression, graduated W7a Task 2)* | R-072/R-074/R-060 — correction "only 1 chicken biryani" after 2x basket must set qty=1 via structured DB cart; already works on this branch | ✅ PASSED (converted from xfail) | W7a |
-| W7-c | `test_all_customer_outbounds_recorded` | DB-H3/4/5 — every customer-facing outbound (catalog card, STT-fail apology) must create a `Message` row, not live only in outbox | xfail (strict) | W7b |
+| W7-c | `test_all_customer_outbounds_recorded` | DB-H3/4/5 — every customer-facing outbound (catalog card, STT-fail apology) must create a `Message` row, not live only in outbox | xfail (strict) — **W7b deferred, not implemented this pass** | W7b |
 
 **Summary delta:**
 
-| Category | Before W7 | After W7 Task 2 |
-|----------|-----------|-----------------|
-| xfail capability evals | 8 | 9 |
-| regression evals | 13 | 14 |
+| Category | Before W7 | After W7a (Tasks 3–7) |
+|----------|-----------|-----------------------|
+| xfail capability evals | 8 | 8 (7 pre-existing W8 gates + W7-c) |
+| regression evals | 13 | 15 (+W7-a, +W7-b) |
 | **Total test functions** | **22** | **25** |
 
 ## Graduation rule

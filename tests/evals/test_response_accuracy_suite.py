@@ -607,15 +607,12 @@ async def test_no_hallucination_in_menu_state(db_session, restaurant, seed_birya
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W7a basket-visible-in-history: catalogue ORDER turn must render as a "
-           "readable basket (dish names + qty) in _build_history, not '[order]'",
-)
 async def test_basket_visible_in_history(db_session, restaurant, seed_biryani_menu):
     """After a catalogue basket, _build_history must show the resolved dish names
     for that turn (e.g. 'Chicken Biryani'), not the opaque placeholder '[order]'
-    (R-029/R-077/F63/DB-H8)."""
+    (R-029/R-077/F63/DB-H8).
+    GRADUATED (W7a Task 7): _build_history now renders the ORDER turn from the
+    cart_snapshot/display_text persisted at record time (Task 3 + Task 4)."""
     from app.conversation.engine import _build_history
     from tests.harness.replay import _conv_for
 
