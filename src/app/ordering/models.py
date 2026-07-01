@@ -63,7 +63,12 @@ class CustomerAddress(Base, TimestampMixin):
 class Order(Base, TimestampMixin):
     __tablename__ = "orders"
     # open-orders-for-restaurant is the hot dispatch/SLA query path
-    __table_args__ = (Index("ix_orders_restaurant_status", "restaurant_id", "status"),)
+    __table_args__ = (
+        Index("ix_orders_restaurant_status", "restaurant_id", "status"),
+        # TX-13/F114: order numbers must be unique per tenant — a racy allocation
+        # (or a reset) must never silently produce a duplicate #R1-0001.
+        UniqueConstraint("restaurant_id", "order_number", name="uq_orders_restaurant_order_number"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)

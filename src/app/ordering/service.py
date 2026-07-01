@@ -454,30 +454,70 @@ async def recompute_customer_stats(session: "AsyncSession", customer_id: int) ->
     await session.flush()
 
 
+# Namespace for the per-restaurant order-number allocation advisory lock (arbitrary
+# constant, distinct from the dispatch lock's namespace, so the two never collide).
+_ORDER_NUMBER_LOCK_CLASS = 4_919_002
+
+
 async def create_draft_order(
     session: "AsyncSession",
     *,
     restaurant_id: int,
     customer_id: int,
 ) -> Order:
-    count = await session.scalar(
-        select(func.count()).select_from(Order).where(Order.restaurant_id == restaurant_id)
-    ) or 0
-    order_number = f"R{restaurant_id}-{count + 1:04d}"
-    order = Order(
-        restaurant_id=restaurant_id,
-        customer_id=customer_id,
-        order_number=order_number,
-        status=OrderStatus.DRAFT,
-        priority="normal",
-        weather_delay_disclosed=False,
-        delivery_fee_aed=Decimal("0.00"),
-        subtotal=Decimal("0.00"),
-        total=Decimal("0.00"),
-    )
-    session.add(order)
-    await session.flush()
-    return order
+    """Create a draft order with a unique, atomically-allocated per-tenant order number.
+
+    TX-13/F114: a plain ``count() + 1`` allocation races when two inbound messages
+    for the same (or different) customers create draft orders concurrently — both
+    read the same count and mint the same ``order_number``, which used to surface
+    as duplicate ``#R1-0001`` order numbers in production transcripts. We serialize
+    allocation per restaurant with a transaction-scoped Postgres advisory lock (best
+    effort — a non-Postgres test backend just proceeds unserialized), and the DB
+    ``UniqueConstraint(restaurant_id, order_number)`` is the hard backstop: on a
+    collision we retry allocation inside a SAVEPOINT rather than aborting the whole
+    caller transaction.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:c, :o)"),
+            {"c": _ORDER_NUMBER_LOCK_CLASS, "o": restaurant_id},
+        )
+    except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
+        _logger.debug("advisory order-number lock unavailable; proceeding unserialized")
+
+    last_error: IntegrityError | None = None
+    for _attempt in range(5):
+        count = await session.scalar(
+            select(func.count()).select_from(Order).where(Order.restaurant_id == restaurant_id)
+        ) or 0
+        order_number = f"R{restaurant_id}-{count + 1 + _attempt:04d}"
+        order = Order(
+            restaurant_id=restaurant_id,
+            customer_id=customer_id,
+            order_number=order_number,
+            status=OrderStatus.DRAFT,
+            priority="normal",
+            weather_delay_disclosed=False,
+            delivery_fee_aed=Decimal("0.00"),
+            subtotal=Decimal("0.00"),
+            total=Decimal("0.00"),
+        )
+        session.add(order)
+        try:
+            async with session.begin_nested():
+                await session.flush()
+        except IntegrityError as exc:
+            session.expunge(order)
+            last_error = exc
+            continue
+        return order
+
+    raise RuntimeError(
+        f"could not allocate a unique order number for restaurant {restaurant_id}"
+    ) from last_error
 
 
 async def add_item(

@@ -264,3 +264,54 @@ async def test_resume_continue_then_done_advances_to_address_not_empty(db_sessio
     last = rows[-1].payload["body"].lower()
     assert "empty" not in last
     assert "location" in last or "address" in last or "apartment" in last or "pin" in last or "📍" in rows[-1].payload["body"]
+
+
+async def test_greeting_after_confirm_does_not_advance_delivery_state(db_session, restaurant):
+    """TX-14/F114: a greeting/status message after confirmation must never mark
+    the order delivered (or transition it at all) — only real dispatch/FSM
+    events may do that. A greeting only reports the current status."""
+    from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+    from app.menu.models import Dish
+
+    await _seed_menu(db_session, restaurant.id)
+
+    customer = Customer(
+        restaurant_id=restaurant.id, phone="+971501110002", name="Ali",
+        usual_order_times={}, tags={}, total_orders=0, total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    addr = CustomerAddress(
+        customer_id=customer.id, latitude=25.21, longitude=55.27,
+        room_apartment="101", building="Tower A",
+        receiver_name="Ali", confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-0009", status="confirmed",
+        priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("22.00"), total=Decimal("22.00"),
+        address_id=addr.id, distance_km=1.5,
+    )
+    db_session.add(order)
+    await db_session.flush()
+    dish = (await db_session.scalars(
+        select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.dish_number == 110)
+    )).first()
+    db_session.add(OrderItem(
+        order_id=order.id, dish_id=dish.id, dish_number=110, dish_name="Chicken Biryani",
+        price_aed=Decimal("22.00"), qty=1,
+    ))
+    await db_session.flush()
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("Hlo", "wamid.hlo1"), restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    await db_session.refresh(order)
+    assert order.status == "confirmed", (
+        "a greeting must never advance/close order status — only dispatch/FSM events may"
+    )
