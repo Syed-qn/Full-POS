@@ -4509,9 +4509,17 @@ async def _dispatch_action(
             status = await _execute_ai_add_item(
                 session, conv, inbound, restaurant_id, dish_query, qty, special_note
             )
-            if status == "added" and reply:
+            if status in ("added", "updated_note"):
+                # W3: DB-backed cart tail — LLM reply is tone lead only (RA-1/R-013/R-040).
+                cart = await _build_cart_summary(session, conv)
+                lead = "\n".join(
+                    ln for ln in reply.splitlines() if not ln.strip().startswith("🛒")
+                ).strip() if reply else ""
+                if not lead or _looks_like_menu(lead):
+                    lead = "Got it! 😊"
+                body = f"{lead}{_cart_tail(cart)}"
                 await _send_text(session, conv=conv, inbound=inbound,
-                                 restaurant_id=restaurant_id, prefix="ai-add", body=reply)
+                                 restaurant_id=restaurant_id, prefix="ai-add", body=body)
             elif status == "no_match":
                 await _send_text(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
