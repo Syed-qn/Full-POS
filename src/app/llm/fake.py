@@ -213,6 +213,25 @@ class FakeConversationAgent:
                     action="status_query",
                     action_data={},
                 )
+            # Note update detection: "add <adjective>" when cart already has an item.
+            # e.g. "add double masala", "add extra spice" → treated as special_note update
+            # for the first dish in cart. The real LLM classifies this via context; the
+            # fake doubles it by detecting a note-like short phrase after "add".
+            _cart_summary = (context.get("cart_summary") or "").strip()
+            if (
+                _cart_summary
+                and last_user.startswith("add ")
+                and not re.search(r"\d", last_user)  # no qty → not a new dish add
+            ):
+                note_text = last_user[4:].strip()
+                # Extract first dish name from cart_summary ("1x Chicken Biryani …")
+                _m = re.match(r"\d+x\s+([^\(,|]+)", _cart_summary)
+                _first_dish = _m.group(1).strip() if _m else "biryani"
+                return ConversationAgentResult(
+                    message=f"Got it! Added '{note_text}' note 😊",
+                    action="add_item",
+                    action_data={"dish_query": _first_dish, "qty": 1, "special_note": note_text},
+                )
             # Multi-dish message: split on commas / "and" / "+" and emit one item per
             # clause so the engine adds them ALL (mirrors the real agent's 'items').
             if re.search(r",|\band\b|\+", last_user):
