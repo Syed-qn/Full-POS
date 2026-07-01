@@ -202,6 +202,37 @@ async def _send_catalog_text_fallback(
     )
 
 
+async def _order_cart_snapshot(session, order_id: int) -> tuple[str, list[dict]]:
+    """Resolve the resulting draft cart into (display_text, structured snapshot).
+
+    display_text is a human basket line ('2x Chicken Biryani') used by the LLM
+    history; the snapshot is the structured per-line array the interpreter reads.
+    """
+    from app.ordering.models import OrderItem
+
+    items = list((await session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id)
+    )).all())
+    snapshot: list[dict] = []
+    parts: list[str] = []
+    for it in items:
+        snapshot.append({
+            "cart_item_id": it.id,
+            "dish": it.dish_name,
+            "variant": it.variant_name,
+            "note": it.notes,
+            "qty": it.qty,
+            "price": str(it.price_aed),
+        })
+        label = f"{it.qty}x {it.dish_name}"
+        if it.variant_name:
+            label += f" ({it.variant_name})"
+        if it.notes:
+            label += f" — {it.notes}"
+        parts.append(label)
+    return "; ".join(parts), snapshot
+
+
 async def handle_catalog_order(
     session: AsyncSession,
     inbound: InboundMessage,
@@ -233,12 +264,6 @@ async def handle_catalog_order(
 
     conv = await get_or_create_conversation(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone, counterpart="customer",
-    )
-    await record_message(
-        session, conversation_id=conv.id, direction="inbound",
-        wa_message_id=inbound.wa_message_id, msg_type="order",
-        payload={"product_items": product_items},
-        ts=inbound.timestamp or int(time.time()),
     )
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=inbound.from_phone
@@ -329,6 +354,12 @@ async def handle_catalog_order(
         added += 1
 
     if not added:
+        await record_message(
+            session, conversation_id=conv.id, direction="inbound",
+            wa_message_id=inbound.wa_message_id, msg_type="order",
+            payload={"product_items": product_items, "display_text": "", "cart_snapshot": []},
+            ts=inbound.timestamp or int(time.time()),
+        )
         if price_mismatch:
             body = (
                 "Sorry, the price changed for " + "; ".join(price_mismatch) + ". "
@@ -354,6 +385,21 @@ async def handle_catalog_order(
 
     # Hand control to the normal flow: same state the text bot is in after adding items.
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+
+    # Faithful ORDER record: persist a readable basket + structured snapshot so the
+    # LLM history (engine._build_history) renders dish names, not "[order]" (DB-H8).
+    _display_text, _cart_snapshot = await _order_cart_snapshot(session, order.id)
+    await record_message(
+        session, conversation_id=conv.id, direction="inbound",
+        wa_message_id=inbound.wa_message_id, msg_type="order",
+        payload={
+            "product_items": product_items,
+            "display_text": _display_text,
+            "cart_snapshot": _cart_snapshot,
+        },
+        ts=inbound.timestamp or int(time.time()),
+    )
+
     cart = await _build_cart_summary(session, conv)
     notes: list[str] = []
     if unmapped:
