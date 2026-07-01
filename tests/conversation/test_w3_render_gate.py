@@ -89,3 +89,27 @@ async def test_confirm_summary_engine_only(db_session, restaurant, seed_biryani_
     assert "Order summary" in body or "Subtotal" in body, (
         f"outbound missing DB-backed summary fields: {body!r}"
     )
+
+
+@pytest.mark.asyncio
+async def test_observation_turn_after_add(db_session, restaurant, seed_biryani_menu):
+    """After a single add, a cart_observation Message must exist in DB (F66/W3)."""
+    from app.conversation.models import Message
+    from sqlalchemy import select
+
+    res = await drive_turns(
+        db_session,
+        restaurant_id=restaurant.id,
+        phone="+971500000073",
+        turns=[{"type": "text", "text": "one chicken biryani"}],
+    )
+    conv_state = res.turns[0].state
+    # Query Message table for cart_observation type
+    msgs = (await db_session.scalars(
+        select(Message).where(Message.type == "cart_observation")
+    )).all()
+    assert msgs, "cart_observation Message must be recorded after successful add"
+    body_text = msgs[-1].payload.get("text", "")
+    assert "biryani" in body_text.lower(), (
+        f"cart_observation payload must contain dish name, got: {body_text!r}"
+    )

@@ -3061,6 +3061,24 @@ def _cart_tail(cart: str) -> str:
     return f"\n\n🛒 {cart}" if cart else "\n\n🛒 Your cart is now empty."
 
 
+async def _record_cart_observation(
+    session: AsyncSession, conv: Conversation
+) -> None:
+    """Record a compact DB-derived cart observation into message history after any
+    mutation, so the next turn's _build_history carries ground truth (F66/W3)."""
+    cart = await _build_cart_summary(session, conv)
+    if not cart:
+        return
+    await record_message(
+        session,
+        conversation_id=conv.id,
+        direction="outbound",
+        wa_message_id=None,
+        msg_type="cart_observation",
+        payload={"text": f"[Cart updated] {cart}"},
+    )
+
+
 def _cart_expired(order, restaurant) -> bool:
     """True if a draft cart has been quiet past the restaurant's cart_expiry_minutes —
     used so a returning customer's stale cart is started fresh rather than resumed."""
@@ -4518,6 +4536,7 @@ async def _dispatch_action(
                 if not lead or _looks_like_menu(lead):
                     lead = "Got it! 😊"
                 body = f"{lead}{_cart_tail(cart)}"
+                await _record_cart_observation(session, conv)  # F66/W3
                 await _send_text(session, conv=conv, inbound=inbound,
                                  restaurant_id=restaurant_id, prefix="ai-add", body=body)
             elif status == "no_match":
@@ -4552,6 +4571,8 @@ async def _dispatch_action(
                 f"I couldn't find '{dish_query}' to remove. Tell me the dish name "
                 "and I'll take it off 😊"
             )
+        if outcome in ("removed", "reduced"):
+            await _record_cart_observation(session, conv)  # F66/W3
         await _send_text(session, conv=conv, inbound=inbound,
                          restaurant_id=restaurant_id, prefix="ai-remove", body=body)
         return
@@ -5297,6 +5318,7 @@ async def _try_catalog_typed_order(
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
     cart = await _build_cart_summary(session, conv)
     note_label = f" — {note}" if note else ""
+    await _record_cart_observation(session, conv)  # F66/W3
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="catalog-typed-add",
