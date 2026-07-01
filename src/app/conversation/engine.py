@@ -1318,6 +1318,37 @@ def _is_checkout_intent(text: str) -> bool:
     return t in ("done", "checkout", "that's all", "thats all")
 
 
+# Leading phrases that mark a QUESTION / COMPLAINT / aside rather than a request to add a
+# dish. The item parser strips filler words ("add", "you") and would otherwise mine a
+# stray "2 biryani" out of "why did you add 2 biryani" and silently grow the cart. Kept
+# deliberately narrow — only leading interrogatives/complaint openers — so a real order
+# ("2 biryani", "chicken biryani please") is never blocked.
+_ORDER_QUESTION_LEADS: tuple[str, ...] = (
+    "why", "how come", "how much", "how many", "who ", "whom", "whose", "when ",
+    "where ", "did you", "didn't you", "didnt you", "you add", "you added", "you put",
+    "i didn't", "i didnt", "i did not", "i never", "i already", "you do it",
+    "do it your", "do it yourself", "you handle", "you cancel", "cancel it your",
+)
+_ORDER_QUESTION_CONTAINS: tuple[str, ...] = (
+    "why did you", "that's wrong", "thats wrong", "that is wrong", "not what i",
+    "wrong order", "by mistake", "by your self", "by yourself",
+)
+
+
+def _looks_like_order_question(text: str) -> bool:
+    """True when a message is a question/complaint/aside, not a dish request.
+
+    Guards the item-collection parsers so a complaint like "why did you add 2 biryani" or
+    an instruction like "you do it yourself" is NOT mined for a stray quantity and added
+    to the cart (or matched as a bogus dish). Conservative on purpose."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if t.startswith(_ORDER_QUESTION_LEADS):
+        return True
+    return any(p in t for p in _ORDER_QUESTION_CONTAINS)
+
+
 async def _handle_done_checkout(
     session: AsyncSession,
     conv: Conversation,
@@ -1392,6 +1423,18 @@ async def _handle_collecting_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc", body=desc,
+        )
+        return
+
+    # A question/complaint/aside ("why did you add 2 biryani", "you do it yourself") must
+    # NOT be mined for a stray quantity and silently added to the cart. Acknowledge and
+    # ask the customer to state the dish + quantity instead of adding anything.
+    if _looks_like_order_question(text):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="order-question",
+            body=("Sorry if that got mixed up 🙂 Tell me the dish and how many you'd like "
+                  "(e.g. '1 Chicken Biryani') and I'll add exactly that."),
         )
         return
 
@@ -2178,6 +2221,17 @@ async def _handle_modify_items(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="dish-desc-mod", body=desc,
+        )
+        return
+
+    # Same guard as the ordering collector: a question/complaint/aside ("you do it
+    # yourself") must not be parsed as a replacement dish or mined for a quantity.
+    if _looks_like_order_question(text):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="order-question-mod",
+            body=("No problem — tell me the change as a dish and quantity (e.g. "
+                  "'1 Chicken Biryani'), or 'remove <dish>', and I'll update it."),
         )
         return
 

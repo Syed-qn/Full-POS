@@ -108,6 +108,38 @@ async def test_item_collection_qty_parsing(db_session, restaurant):
     assert items[0].qty == 2
 
 
+async def test_complaint_question_does_not_add_items(db_session, restaurant):
+    """A complaint/question ("why did you add 2 biryani") must NOT be mined for a stray
+    quantity and silently added to the cart. Reproduces the bug where asking why an item
+    was added ADDED more of it."""
+    from app.ordering.models import OrderItem
+
+    await _seed_menu(db_session, restaurant.id)
+    await handle_inbound(db_session, _msg("hi", "wamid.greet_q"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": None}
+    await db_session.commit()
+
+    # A genuine order first: 2x Chicken Biryani.
+    await handle_inbound(db_session, _msg("2x chicken biryani", "wamid.q_add"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    before = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert len(before) == 1 and before[0].qty == 2
+
+    # The complaint must leave the cart untouched (no 3rd/4th biryani).
+    await handle_inbound(
+        db_session, _msg("why did you add 2 biryani", "wamid.q_complaint"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    after = (await db_session.execute(select(OrderItem))).scalars().all()
+    assert len(after) == 1 and after[0].qty == 2  # unchanged
+
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Added" not in last  # it did not confirm an add
+
+
 async def test_item_collection_no_match_polite_retry(db_session, restaurant):
     """An unmatched dish query yields a polite retry asking for the dish name."""
     await _seed_menu(db_session, restaurant.id)
