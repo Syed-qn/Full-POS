@@ -1318,6 +1318,38 @@ def _is_checkout_intent(text: str) -> bool:
     return t in ("done", "checkout", "that's all", "thats all")
 
 
+# Broader "I'm finished adding items" detector for the AI path, where the LLM was
+# unreliable — it looped re-adding the same dish on "that's all" and once bounced to a
+# greeting. Tolerates a leading "no" ("no that's all") and trailing filler ("thats all
+# thanks", "thats all can't you understand", "motherf*** that's all").
+_DONE_PHRASES: frozenset[str] = frozenset({
+    "done", "checkout", "check out", "proceed", "proceed to checkout", "finish",
+    "finished", "im done", "i am done", "that will be all", "thats all", "that is all",
+    "thats it", "that is it", "thats everything", "that is everything", "nothing else",
+    "no more", "no more thanks", "complete order", "place order", "im good", "no thats all",
+})
+_DONE_EDGES: tuple[str, ...] = (
+    "thats all", "that is all", "thats it", "that is it", "thats everything",
+    "that is everything", "nothing else", "im done", "i am done", "that will be all",
+)
+
+
+def _is_done_intent(text: str) -> bool:
+    """True for a 'that's all / done / nothing else' checkout phrase (AI path)."""
+    # Drop apostrophes FIRST so "that's" → "thats" (else the apostrophe becomes a space
+    # and "that s all" never matches "thats all"), then punctuation → space, collapse.
+    t = _re.sub(r"[’'`]", "", (text or "").lower())
+    t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    if not t:
+        return False
+    stripped = t[3:].strip() if t.startswith("no ") else t
+    if t in _DONE_PHRASES or stripped in _DONE_PHRASES:
+        return True
+    # A clear done-phrase at the START or END of the message (e.g. angry prefix) counts;
+    # matching only at the edges avoids false hits like the question "is that all you have".
+    return stripped.startswith(_DONE_EDGES) or stripped.endswith(_DONE_EDGES)
+
+
 # Leading phrases that mark a QUESTION / COMPLAINT / aside rather than a request to add a
 # dish. The item parser strips filler words ("add", "you") and would otherwise mine a
 # stray "2 biryani" out of "why did you add 2 biryani" and silently grow the cart. Kept
@@ -4838,6 +4870,30 @@ async def _handle_customer_ai(
                     prefix="dish-info", body=_info_reply,
                 )
                 return
+
+    # Deterministic checkout: a clear "that's all / no that's all / done / nothing else"
+    # with items in the cart goes STRAIGHT to the summary/address — never loop on
+    # "anything else?" or bounce to a greeting. The LLM was unreliable here (it re-added
+    # the same dish repeatedly and once sent a welcome mid-order), so short-circuit before
+    # it runs. Empty cart → fall through to the AI (a bare "done" may mean something else).
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and _is_done_intent(inbound.payload.get("text") or "")
+    ):
+        from app.ordering.models import Order
+
+        _did = conv.state.get("draft_order_id")
+        _order = await session.get(Order, _did) if _did else None
+        if (
+            _order is not None
+            and str(_order.status) == "draft"
+            and await _order_has_items(session, _order.id)
+        ):
+            await _handle_done_checkout(
+                session, conv, inbound, restaurant_id, restaurant=restaurant
+            )
+            return
 
     # Store saved_address_id in conv.state for use_saved_address action
     if "saved_address_id" in context:

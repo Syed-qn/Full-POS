@@ -140,6 +140,76 @@ async def test_complaint_question_does_not_add_items(db_session, restaurant):
     assert "Added" not in last  # it did not confirm an add
 
 
+def test_is_done_intent_variants():
+    """The checkout detector accepts real "finished" phrasings (incl. a leading 'no' and
+    angry/trailing filler) but not orders or the ambiguous bare 'no'."""
+    from app.conversation.engine import _is_done_intent
+
+    for p in [
+        "that's all", "No that's all", "thats all", "Thats all can't you understand",
+        "Motherfucker that's all", "done", "nothing else", "no more thanks", "I'm done",
+        "that's it", "proceed",
+    ]:
+        assert _is_done_intent(p) is True, p
+    for p in ["chicken biryani", "2 mandi", "is that all you have", "add more", "no", ""]:
+        assert _is_done_intent(p) is False, p
+
+
+async def test_thats_all_checks_out_without_calling_llm(db_session, restaurant):
+    """"No that's all" with a cart proceeds to checkout deterministically — the LLM is
+    never called (it used to loop re-adding the item / sent a welcome mid-order)."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    db_session.add(dish)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=dish, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for an explicit checkout phrase")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg("no that's all", "wamid.done"), restaurant.id, restaurant
+        )
+    await db_session.commit()
+
+    # Cart unchanged (not re-added) and we advanced to address capture.
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1 and items[0].qty == 1
+    assert conv.state["dialogue_state"] == "address_capture"
+
+
 async def test_clear_cart_action_with_a_dish_adds_instead_of_wiping(db_session, restaurant):
     """An order the LLM mis-tags as clear_cart ("one beef curry") must ADD the dish, not
     empty the cart. Reproduces the chat where "One beef curry" returned "Cleared your
