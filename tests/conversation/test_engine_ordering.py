@@ -456,6 +456,66 @@ async def test_make_it_n_sets_quantity_instead_of_adding(db_session, restaurant)
     assert "Updated" in last and "Added" not in last
 
 
+async def test_multi_dish_make_it_sets_each_no_phantom(db_session, restaurant):
+    """"Make it 5 lemon mint and 2 grill mandi" sets EACH dish and never creates a phantom
+    line named "lemon mint and 2 grill mandi"."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=9, name="Lemon Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="lemon mint",
+    )
+    mandi = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=8, name="Grill Mandi",
+        price_aed=Decimal("40.00"), category="Rice", is_available=True,
+        name_normalized="grill mandi",
+    )
+    db_session.add_all([mint, mandi])
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.md_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    await add_item(db_session, order=order, dish=mandi, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # LLM mis-tags the multi-dish set as a single add_item with the whole phrase.
+    result = SimpleNamespace(
+        action="add_item",
+        action_data={"dish_query": "lemon mint and 2 grill mandi", "qty": 5}, message="",
+    )
+    await _dispatch_action(
+        db_session, conv, _msg("make it 5 lemon mint and 2 grill mandi", "wamid.md"),
+        restaurant.id, result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    by_num = {i.dish_number: i.qty for i in items if i.qty > 0}
+    assert by_num == {9: 5, 8: 2}  # Lemon Mint→5, Grill Mandi→2, no phantom line
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Updated" in last and "and 2 grill mandi" not in last
+
+
 async def test_explicit_clear_still_empties_cart(db_session, restaurant):
     """A genuine "clear my cart" must still empty the cart (guard doesn't over-fire)."""
     from types import SimpleNamespace
