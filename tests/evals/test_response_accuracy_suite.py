@@ -599,3 +599,104 @@ async def test_no_hallucination_in_menu_state(db_session, restaurant, seed_birya
     assert res.turns[0].cart_rows == [], (
         f"menu request must not add phantom dishes: {res.turns[0].cart_rows}"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# W7 capability evals (xfail-strict until W7a/W7b land)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="W7a basket-visible-in-history: catalogue ORDER turn must render as a "
+           "readable basket (dish names + qty) in _build_history, not '[order]'",
+)
+async def test_basket_visible_in_history(db_session, restaurant, seed_biryani_menu):
+    """After a catalogue basket, _build_history must show the resolved dish names
+    for that turn (e.g. 'Chicken Biryani'), not the opaque placeholder '[order]'
+    (R-029/R-077/F63/DB-H8)."""
+    from app.conversation.engine import _build_history
+    from tests.harness.replay import _conv_for
+
+    await drive_turns(
+        db_session, restaurant_id=restaurant.id, phone="+971500000060",
+        turns=[
+            {"type": "order", "product_items": [
+                {"product_retailer_id": "ju9f8jfy90", "quantity": 2,
+                 "item_price": 20, "currency": "AED"},
+            ]},
+            {"type": "text", "text": "anything else?"},
+        ],
+    )
+    conv = await _conv_for(db_session, restaurant.id, "+971500000060")
+    history = await _build_history(db_session, conv, limit=10)
+    blob = " ".join(h["content"] for h in history).lower()
+    assert "[order]" not in blob, f"history still shows opaque [order]: {history}"
+    assert "biryani" in blob, f"basket dish name missing from history: {history}"
+    assert "2" in blob, f"basket qty missing from history: {history}"
+
+
+@pytest.mark.asyncio
+async def test_structured_cart_drives_correction(db_session, restaurant, seed_biryani_menu):
+    """The interpreter receives context['cart_state'] (a structured array) and is
+    told the DB cart wins over history prose. A correction sets the existing line's
+    qty rather than appending a duplicate (R-072/R-074/R-060).
+    CONVERTED FROM XFAIL (W7a Task 2): already passes on this branch — the
+    catalogue basket + text correction path already sets qty=1 correctly."""
+    res = await drive_turns(
+        db_session, restaurant_id=restaurant.id, phone="+971500000061",
+        turns=[
+            {"type": "order", "product_items": [
+                {"product_retailer_id": "ju9f8jfy90", "quantity": 2,
+                 "item_price": 20, "currency": "AED"},
+            ]},
+            {"type": "text", "text": "only 1 chicken biryani"},
+        ],
+    )
+    biryani = [r for r in res.final_cart() if "biryani" in r["dish_name"].lower()]
+    assert len(biryani) == 1, f"expected 1 biryani line, got {biryani}"
+    assert biryani[0]["qty"] == 1, f"expected qty 1 after correction, got {biryani[0]['qty']}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="W7b all-outbounds-recorded: catalog cards, STT-fail and error apology "
+           "must each create a Message row, not live only in the outbox",
+)
+async def test_all_customer_outbounds_recorded(db_session, restaurant, seed_biryani_menu):
+    """Every customer-facing outbound is recorded in `messages` (DB-H3/4/5).
+    Drive a keyword-catalog send and an STT-fail; assert both produced an outbound
+    Message row (product_list and text)."""
+    from sqlalchemy import select
+    from app.conversation.models import Conversation, Message
+
+    # (a) keyword catalog → product_list card send must be recorded
+    await drive_turns(
+        db_session, restaurant_id=restaurant.id, phone="+971500000062",
+        turns=[{"type": "text", "text": "menu"}],
+    )
+    # (b) STT failure (audio with no audio_id) → apology must be recorded
+    await drive_turns(
+        db_session, restaurant_id=restaurant.id, phone="+971500000062",
+        turns=[{"type": "audio", "audio_id": None, "text": ""}],
+    )
+    conv = await db_session.scalar(
+        select(Conversation).where(
+            Conversation.restaurant_id == restaurant.id,
+            Conversation.phone == "971500000062",
+        )
+    )
+    assert conv is not None, "catalogue keyword path must land on a conversation thread"
+    out = (await db_session.scalars(
+        select(Message).where(
+            Message.conversation_id == conv.id, Message.direction == "outbound"
+        )
+    )).all()
+    types = {m.type for m in out}
+    assert "product_list" in types, f"catalog cards not recorded; types={types}"
+    bodies = " ".join((m.payload or {}).get("body", "") for m in out).lower()
+    assert "catch that" in bodies or "type it" in bodies, (
+        f"STT-fail apology not recorded in messages; bodies={bodies!r}"
+    )
