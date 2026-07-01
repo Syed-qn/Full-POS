@@ -1367,6 +1367,34 @@ def _is_explicit_clear(text: str) -> bool:
     return any(p in t for p in _CLEAR_CART_PHRASES)
 
 
+# SET-quantity phrasings — "make it 5", "only 1 biryani", "change to 3", "set it to 2".
+# These REPLACE the cart quantity, they don't add to it. The LLM often mis-tags them as
+# add_item, so "make it 5" with 1 already in the cart wrongly became 6. Detect them
+# deterministically. Kept to unambiguous SET openers (no bare "i want N", which can mean
+# "add N").
+_SET_QTY_PATTERNS: tuple[str, ...] = (
+    r"^make it (\d+)\s*(.*)$",
+    r"^change (?:it |them |that )?to (\d+)\s*(.*)$",
+    r"^set (?:it |them |that )?(?:to )?(\d+)\s*(.*)$",
+    r"^(?:i )?(?:want|need) only (\d+)\s*(.*)$",
+    r"^only (\d+)\s+(.*)$",
+    r"^just (\d+)\s+(.*)$",
+)
+
+
+def _parse_set_quantity(text: str) -> tuple[int, str] | None:
+    """Detect a SET-quantity instruction → (qty, dish_query). dish_query may be '' when
+    no dish is named ("make it 5"). Returns None when it isn't a set-quantity message."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    for pat in _SET_QTY_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            return int(m.group(1)), (m.group(2) or "").strip()
+    return None
+
+
 async def _handle_done_checkout(
     session: AsyncSession,
     conv: Conversation,
@@ -4248,6 +4276,37 @@ async def _dispatch_action(
 
     if action == "add_item":
         items = data.get("items") or []
+        # SET-quantity guard: "make it 5 lemon mint" / "only 1 biryani" REPLACE the cart
+        # quantity, they don't add. The LLM mis-tags these as add_item, so "make it 5"
+        # with 1 in the cart wrongly became 6. When the phrasing is a set AND the dish is
+        # already in the cart, route to the set path; otherwise ("make it 5" for a dish
+        # not in the cart) fall through and add.
+        _raw = inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+        _setq = _parse_set_quantity(_raw)
+        if _setq is not None:
+            _sqty, _sdish = _setq
+            if not _sdish:
+                _sdish = (
+                    data.get("dish_query")
+                    or (items[0].get("dish_query", "") if items else "")
+                    or ""
+                ).strip()
+            _outcome, _dname = await _execute_ai_update_qty(
+                session, conv, inbound, restaurant_id, _sdish, _sqty
+            )
+            if _outcome == "awaiting_bundle":
+                return
+            if _outcome in ("updated", "removed"):
+                cart = await _build_cart_summary(session, conv)
+                body = (
+                    f"Updated! {_sqty}x {_dname} ✅{_cart_tail(cart)}"
+                    if _outcome == "updated"
+                    else f"Done! Removed {_dname} ✅{_cart_tail(cart)}"
+                )
+                await _send_text(session, conv=conv, inbound=inbound,
+                                 restaurant_id=restaurant_id, prefix="ai-set-qty", body=body)
+                return
+            # not_in_cart / no_match → fall through: "make it N" for a new dish == add N.
         # Multi-dish message: add EVERY dish the customer named in one message. A
         # single add_item used to add one dish and silently drop the rest, while the
         # LLM's reply narrated a full cart that the DB never held. We add each dish

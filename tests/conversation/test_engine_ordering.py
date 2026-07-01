@@ -199,6 +199,59 @@ async def test_clear_cart_action_with_a_dish_adds_instead_of_wiping(db_session, 
     assert "Cleared your cart" not in last
 
 
+async def test_make_it_n_sets_quantity_instead_of_adding(db_session, restaurant):
+    """"Make it 5 lemon mint" with 1 already in the cart must SET the quantity to 5, not
+    add 5 (=6). Reproduces the chat where "make it 5" produced 6x."""
+    from types import SimpleNamespace
+
+    from app.conversation.engine import _dispatch_action
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=210,
+        name="Lemon Mint", price_aed=Decimal("12.00"), category="Drinks",
+        is_available=True, name_normalized="lemon mint",
+    )
+    db_session.add(mint)
+    await db_session.commit()
+
+    await handle_inbound(db_session, _msg("hi", "wamid.mi_hi"), restaurant_id=restaurant.id)
+    await db_session.commit()
+    conv = await _conv(db_session)
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    conv.state = {**conv.state, "dialogue_state": "collecting_items", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # LLM tags "make it 5 lemon mint" as add_item(qty=5).
+    result = SimpleNamespace(
+        action="add_item", action_data={"dish_query": "lemon mint", "qty": 5}, message="",
+    )
+    await _dispatch_action(
+        db_session, conv, _msg("make it 5 lemon mint", "wamid.mi"), restaurant.id,
+        result, "ordering", restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1
+    assert items[0].qty == 5  # SET to 5, not 1 + 5 = 6
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Updated" in last and "Added" not in last
+
+
 async def test_explicit_clear_still_empties_cart(db_session, restaurant):
     """A genuine "clear my cart" must still empty the cart (guard doesn't over-fire)."""
     from types import SimpleNamespace
