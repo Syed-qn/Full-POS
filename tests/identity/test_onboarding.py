@@ -30,6 +30,26 @@ def test_resolve_send_creds_falls_back_to_env_when_not_connected():
     assert isinstance(token, str)
 
 
+def test_disconnect_meta_also_clears_catalog_id():
+    """Disconnect wipes the Meta connection INCLUDING catalog_id, so a later reconnect
+    of a catalog-less account can't inherit a stale catalog pointer."""
+    from app.identity.meta_config import disconnect_meta
+
+    class _R:
+        settings = {
+            "wa_phone_number_id": "PID", "wa_access_token": "TOK",
+            "wa_business_account_id": "WABA", "catalog_id": "CAT-OLD",
+            "onboarding_complete": True, "max_radius_km": 10,  # unrelated key survives
+        }
+
+    r = _R()
+    out = disconnect_meta(r)
+    assert out["catalog_id"] == ""
+    assert r.settings.get("catalog_id") is None
+    assert r.settings["onboarding_complete"] is False
+    assert r.settings["max_radius_km"] == 10  # non-Meta settings untouched
+
+
 async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
     """Onboarding page saves the restaurant's Meta connection; token never echoed."""
     from app.identity import meta_embed
