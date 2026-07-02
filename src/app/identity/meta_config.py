@@ -1,8 +1,11 @@
 """Per-restaurant Meta / WhatsApp connection config, stored in restaurants.settings.
 
-Onboarding page writes these; the WhatsApp/catalog layer will read them with a
-fallback to the global env values (so restaurants not yet onboarded keep working
-on the shared Meta app). Keys mirror the global settings in app/config.py.
+The onboarding page writes these; the WhatsApp/catalog layer reads them, preferring
+the restaurant's own connected number. Connecting Meta is compulsory (onboarding
+cannot finish without it), and in production the global env WA values are left EMPTY
+— so there is no shared number: a connected restaurant sends from its own creds, and
+an unconnected one (blocked by the gate anyway) has no number to fall back to. Keys
+mirror the global settings in app/config.py.
 """
 from __future__ import annotations
 
@@ -52,9 +55,10 @@ def meta_connected(restaurant: Restaurant) -> bool:
 def resolve_send_creds(restaurant: Restaurant | None) -> tuple[str, str]:
     """Return (phone_number_id, access_token) to send WhatsApp for this restaurant.
 
-    Prefers the restaurant's own connected Meta number; falls back to the global
-    env values only when the restaurant hasn't connected yet (transitional —
-    once every restaurant is connected the env values are never used).
+    Prefers the restaurant's own connected Meta number. Falls back to the global env
+    values, which in production are EMPTY — so an unconnected restaurant resolves to
+    blank creds (send fails safe; it can't operate anyway, being blocked by the
+    onboarding gate). No shared number is ever used across restaurants.
     """
     from app.config import get_settings
 

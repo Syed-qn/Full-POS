@@ -24,8 +24,9 @@ def test_resolve_send_creds_falls_back_to_env_when_not_connected():
     class _R:
         settings = {}
 
+    # Env WA values are empty in production, so an unconnected restaurant resolves
+    # to blank creds (no shared number) — here we only assert the types/shape.
     pid, token = resolve_send_creds(_R())
-    # env defaults (empty strings in tests) — restaurant has nothing of its own
     assert isinstance(pid, str)
     assert isinstance(token, str)
 

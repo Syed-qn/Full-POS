@@ -83,8 +83,8 @@ async def _deliver_one(
         if row is None or row.status in _TERMINAL_STATUSES:
             return
         msg = _outbox_row_to_outbound(row)
-        # Send from the owning restaurant's own connected WhatsApp number (env
-        # fallback until it has connected).
+        # Send from the owning restaurant's own connected WhatsApp number. Env WA
+        # values are empty in production, so no shared number is ever used.
         from app.identity.meta_config import resolve_send_creds
         from app.identity.models import Restaurant
 
