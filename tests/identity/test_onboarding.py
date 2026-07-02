@@ -92,8 +92,13 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
         assert token == "EAA-business-token"
         return True
 
+    async def fake_catalog(waba_id, token):
+        assert waba_id == "WABA-9"
+        return "CAT-AUTO-1"
+
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+    monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
 
     r = await client.post(
         "/api/v1/onboarding/meta-connect",
@@ -105,6 +110,7 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert body["wa_phone_number_id"] == "PID-9"
     assert body["wa_business_account_id"] == "WABA-9"
     assert body["wa_access_token_set"] is True
+    assert body["catalog_id"] == "CAT-AUTO-1"  # auto-detected from the WABA
     assert body["connected"] is True
     assert "wa_access_token" not in body  # secret never returned
 
@@ -143,8 +149,12 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     async def fake_subscribe(waba_id, token):
         return True
 
+    async def fake_catalog(waba_id, token):
+        return ""
+
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+    monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
 
     # Connect first.
     await client.post(
