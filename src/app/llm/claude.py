@@ -7,7 +7,20 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.llm.action_schema import CANON_PHASE_ACTIONS, build_anthropic_tool, to_engine_result
+from app.llm.conversation_prompts import (
+    CLAUDE_POST_ORDER_GUIDANCE,
+    build_claude_system,
+)
 from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile, strip_dashes
+from app.llm.prompts_menu import (
+    ARBITRATE_TEMPLATE,
+    DESCRIBE_DISH_TEMPLATE,
+    EXTRACT_SYSTEM,
+    FORECAST_OVERRIDE_TEMPLATE,
+    INTENT_CLASSIFY_TEMPLATE,
+    SEGMENT_COMPILE_TEMPLATE,
+)
+from app.llm.prompts_router import COMPLETION_DETECT_TEMPLATE, ROUTER_CLASSIFY_TEMPLATE
 
 _TOOL = {
     "name": "submit_menu",
@@ -35,11 +48,8 @@ _TOOL = {
 }
 
 _PROMPT = (
-    "Extract EVERY dish from this restaurant menu. For each dish capture: "
-    "dish_number (the printed item number — null ONLY if truly absent), name, "
-    "price_aed as a decimal string, category (menu section heading), and "
-    "description if printed. Do not invent dishes, numbers, or prices. "
-    "Preserve original spelling of names."
+    EXTRACT_SYSTEM.replace("JSON array of dish objects", "structured dish list via submit_menu")
+    + " Use the submit_menu tool with a dishes array."
 )
 
 _IMAGE_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -133,13 +143,7 @@ class ClaudeDescriber:
         self._client = _get_anthropic_client()
 
     def describe(self, name: str, raw_description: str, price_hint: str | None = None) -> str:
-        prompt = (
-            f"Write a customer-facing description for this dish:\n"
-            f"Name: {name}\n"
-            f"Details: {raw_description}\n\n"
-            f"Rules: maximum 3 lines, no price, no currency amounts, "
-            f"no 'AED', factual and appetising."
-        )
+        prompt = DESCRIBE_DISH_TEMPLATE.format(name=name, raw_description=raw_description)
         message = self._client.messages.create(
             model="claude-3-5-haiku-20241022",
             max_tokens=128,
@@ -162,12 +166,7 @@ class ClaudeIntentClassifier:
         self._client = _get_anthropic_client()
 
     def classify(self, text: str) -> str:
-        prompt = (
-            f"Classify this WhatsApp message from a restaurant customer.\n"
-            f"Message: {text!r}\n\n"
-            f"Reply with exactly one word from: "
-            f"order_item, dish_question, cancel, modify, status, other"
-        )
+        prompt = INTENT_CLASSIFY_TEMPLATE.format(text=text)
         message = self._client.messages.create(
             model="claude-3-5-haiku-20241022",
             max_tokens=16,
@@ -190,11 +189,10 @@ class ClaudeArbiter:
         options = "\n".join(
             f"{i + 1}. {c.dish_number}. {c.name}" for i, c in enumerate(candidates)
         )
-        prompt = (
-            f"A customer typed: {query!r}\n"
-            f"These menu items might match:\n{options}\n\n"
-            f"Which number (1-{len(candidates)}) is the best match? "
-            f"Reply with just the number, or 0 if none match."
+        prompt = ARBITRATE_TEMPLATE.format(
+            query=query,
+            options=options,
+            candidate_count=len(candidates),
         )
         message = self._client.messages.create(
             model="claude-3-5-haiku-20241022",
@@ -230,18 +228,7 @@ class ClaudeForecastAdjuster:
     def parse_override(self, text: str) -> dict:
         import json
 
-        prompt = (
-            "A restaurant manager wrote a plain-English forecast override. "
-            "Convert it into a JSON object with these OPTIONAL keys ONLY:\n"
-            '  "horizon": one of breakfast|lunch|dinner|midnight|morning|evening, or null\n'
-            '  "dow": integer 0-6 (Monday=0 .. Sunday=6), or null\n'
-            '  "order_count_delta": integer (default 0)\n'
-            '  "order_count_mult": float (default 1.0)\n'
-            '  "revenue_mult": float (default 1.0)\n'
-            '  "dish_demand_delta": object mapping dish_id string -> integer\n\n'
-            f"Manager note: {text!r}\n\n"
-            "Reply with ONLY the JSON object, no prose. Omit keys you cannot infer."
-        )
+        prompt = FORECAST_OVERRIDE_TEMPLATE.format(text=text)
         try:
             message = self._client.messages.create(
                 model="claude-3-5-haiku-20241022",
@@ -299,20 +286,7 @@ class ClaudeSegmentCompiler:
 
         from app.marketing.segments import validate_dsl
 
-        prompt = (
-            "Translate this restaurant manager's audience description into a "
-            "segment DSL JSON object. Reply with JSON ONLY, no prose.\n\n"
-            f"Description: {text!r}\n\n"
-            "Schema: top-level key 'all' (AND) or 'any' (OR) -> list of conditions.\n"
-            "Each condition is {\"field\":..,\"op\":..,\"value\":..}.\n"
-            "Allowed fields/ops:\n"
-            "  total_spend: eq|gte|lte|gt|lt (numeric AED)\n"
-            "  order_count: eq|gte|lte|gt|lt (integer)\n"
-            "  last_order_days_ago: eq|gte|lte|gt|lt (integer days)\n"
-            "  tag: contains (string tag label, e.g. 'vip')\n"
-            "  ordered_dish_id: eq (integer dish id, optional 'min_count')\n"
-            "Use ONLY these fields and ops. Output JSON only."
-        )
+        prompt = SEGMENT_COMPILE_TEMPLATE.format(text=text)
         message = self._client.messages.create(
             model="claude-3-5-haiku-20241022",
             max_tokens=512,
@@ -340,14 +314,7 @@ class ClaudeCompletionDetector:
     async def is_completion(self, text: str) -> bool:
         if not text or not text.strip():
             return False
-        prompt = (
-            "A restaurant customer sent this WhatsApp message during an order: "
-            f"{text!r}\n\n"
-            "Does the message mean the customer is FINISHED ordering / wants to proceed "
-            "(in ANY language, any phrasing — 'done', 'khalas', 'bas', 'that\\'s all', "
-            "bare 'no', or equivalent)?\n"
-            "Answer with a single word: yes or no."
-        )
+        prompt = COMPLETION_DETECT_TEMPLATE.format(text=text)
         message = self._client.messages.create(
             model="claude-3-5-haiku-20241022",
             max_tokens=4,
@@ -375,22 +342,11 @@ class ClaudeRouterClassifier:
         if not text or not text.strip():
             return IntentLabel.NON_ACTIONABLE
         labels = ", ".join(label.value for label in IntentLabel)
-        prompt = (
-            "You are the intent router for a restaurant WhatsApp ordering bot.\n"
-            f"Dialogue phase: {phase}\n"
-            f"Current cart: {cart_context or '(empty)'}\n"
-            f"Customer message (ANY language): {text!r}\n\n"
-            "Classify the message into EXACTLY ONE of these intents:\n"
-            f"{labels}\n\n"
-            "Rules:\n"
-            "- 'mutation' = actually change the cart (add/remove/set quantity/note).\n"
-            "- A question, even one naming a dish or quantity ('why did you add 2'), is "
-            "'question' or 'complaint' — NEVER 'mutation'.\n"
-            "- 'checkout' = done/that's all/proceed, in any language.\n"
-            "- 'clear' ONLY for an explicit empty-cart/fresh-start request, never 'only X'.\n"
-            "- 'non_actionable' = reactions/emoji/system noise.\n"
-            "- Use 'unknown' if genuinely unclear.\n"
-            "Answer with the single intent word only."
+        prompt = ROUTER_CLASSIFY_TEMPLATE.format(
+            phase=phase,
+            cart_context=cart_context or "(empty)",
+            text=text,
+            labels=labels,
         )
         message = self._client.messages.create(
             model="claude-3-5-haiku-20241022",
@@ -409,91 +365,10 @@ class ClaudeRouterClassifier:
 # can never drift from the canonical action vocabulary (W1 Task 3).
 _CONVERSATION_TOOL = build_anthropic_tool("take_action")
 
-_CONVERSATION_SYSTEM = """\
-You are a friendly WhatsApp ordering assistant for {restaurant_name}.
-Help customers order food in natural, conversational language.
-Always refer to the restaurant by its EXACT name, "{restaurant_name}", never alter,
-expand, abbreviate, or restyle it.
-
-MENU:
-{menu_text}
-
-CURRENT CART (authoritative — overrides anything in the chat history): {cart_summary}
-CART LINES (structured; each line has cart_item_id you may reference): {cart_lines}
-If the chat history and the CURRENT CART disagree, the CURRENT CART is correct
-(R-072/R-074): a customer correction like "only 1 X" sets the qty of the existing
-line for X, it never adds a new line or trusts what an earlier message implied.
-
-DELIVERY FEES — the ONLY correct numbers. Recite EXACTLY when asked about
-delivery cost. NEVER invent or guess tiers/distances. The exact fee for an order
-is set by the backend from the customer's location, not by you:
-{delivery_info}
-
-#1 RULE, ABSOLUTE — NEVER INVENT ANYTHING. Dishes, dish names, prices, sizes, combos,
-drinks, sides, offers, ingredients, delivery fees, distances, area/landmarks, opening
-times: use ONLY the exact facts in the MENU and the lines above. You may NEVER list,
-name, suggest, describe, recommend, or upsell a dish that is not written in the MENU,
-not even as an example. If the customer asks about ANYTHING you do not have a fact for,
-do NOT guess: say you are not sure and give the contact number so they can ask the team.
-Your job is ONLY to take orders from the MENU and capture delivery details.
-
-STRICT RULES — read carefully before choosing an action:
-
-1. GREETINGS ("hi", "hello", "what's on the menu?", "send menu", questions about the bot, etc.)
-   → ALWAYS action="no_action". Greet warmly and show the full menu in your reply: group dishes by category with a *bold* heading, list each dish as a "• Name: AED price" bullet, and NEVER show internal dish numbers.
-
-2. ORDERING ("I want X", "give me Y", "add Z", "order N biryani", etc.)
-   → action="add_item", fill dish_query and qty.
-
-3. CHECKOUT — ONLY when ALL of these are true:
-   a. The cart is NOT empty (current cart shows items)
-   b. The customer explicitly says "done", "that's all", "proceed", "checkout", or equivalent
-   → action="proceed_checkout"
-   If cart is empty, NEVER use "proceed_checkout". Use "no_action" instead.
-
-4. CANCEL — only when customer says they want to cancel the whole order
-   → action="cancel_cart"
-
-5. EVERYTHING ELSE (questions, "are you AI?", unclear messages, status queries)
-   → action="no_action"
-
-AVAILABILITY ("do you have X?", "any drinks?"): the MENU above is the ONLY truth.
-If a matching item IS in the MENU, say YES and name it exactly as written, NEVER deny
-an item that is in the MENU. If nothing matches, say we don't have it, and NEVER name
-or price an item that is not in the MENU. Any upsell may ONLY name an item in the MENU.
-
-LOCATION: NEVER invent or guess the restaurant's area, neighbourhood, or landmarks.
-If asked where you are located, offer to share the exact location pin instead.
-
-Keep replies short (WhatsApp style). COD only. Delivery ~40 minutes. For the delivery radius and fees, rely only on the delivery info provided; never invent a distance limit.
-PUNCTUATION: Never use em dashes (—), en dashes (–), or hyphens to join or separate clauses. Write plainly with commas, periods, or separate sentences instead.
-ALWAYS call take_action. Never reply without the tool.
-"""
-
-
-_POST_ORDER_GUIDANCE = """
-CURRENT PHASE: post_order — customer already has a live order.
-
-ORDER CONTEXT (authoritative): #{order_number} status={order_status}, rider ETA={rider_eta}
-
-CONVERSATION AWARENESS: Read the full chat history. Interpret the customer's latest
-message together with your LAST assistant message. Match their language in replies.
-
-ACKNOWLEDGMENTS (Ok, Sure, Thanks, emoji, etc.):
-- After you already closed the loop (confirmed, resale accepted, delivered) → no_action
-  with one brief warm line. Do NOT re-confirm or dump status again.
-- After a status ping (preparing, on the way) → brief reassurance, or status_query if worried.
-- Never cart_add, confirm_order, or cart mutations in post_order.
-
-Allowed actions this phase only: order_line_remove, order_line_set_qty, order_modify_confirm,
-request_modification, cancel_order, status_query, info_answer, complaint_explain, no_action.
-"""
-
-
 def _phase_guidance(phase: str, context: dict | None = None) -> str:
     if phase == "post_order":
         ctx = context or {}
-        return _POST_ORDER_GUIDANCE.format(
+        return CLAUDE_POST_ORDER_GUIDANCE.format(
             order_number=ctx.get("order_number") or "",
             order_status=ctx.get("order_status") or "unknown",
             rider_eta=ctx.get("rider_eta") or "calculating",
@@ -526,22 +401,28 @@ class ClaudeConversationAgent:
         # Matches ConversationAgentPort. The system prompt is grounded ONLY on the
         # menu_text the engine passes in (catalogue-bounded in catalogue mode), so the
         # model can never talk about an item that isn't on the active menu.
-        system = _CONVERSATION_SYSTEM.format(
-            restaurant_name=restaurant_name,
-            menu_text=context.get("menu_text", "Menu unavailable."),
-            cart_summary=context.get("cart_summary") or "empty",
-            cart_lines=json.dumps(context.get("cart_lines") or [], ensure_ascii=False),
-            delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
-        ) + _phase_guidance(dialogue_phase, context)
-        messages = history if history else [{"role": "user", "content": "hi"}]
-        response = await self._client.messages.create(
-            model=self._model,
-            max_tokens=512,
-            system=system,
-            tools=[_CONVERSATION_TOOL],
-            tool_choice={"type": "tool", "name": "take_action"},
-            messages=messages,
+        from app.llm.context_management import claude_request_kwargs, format_memory_context
+
+        system = build_claude_system(restaurant_name, dialogue_phase, context) + _phase_guidance(
+            dialogue_phase, context
         )
+        memory = format_memory_context(context.get("session_notes"))
+        if memory:
+            system = memory + "\n\n" + system
+        messages = history if history else [{"role": "user", "content": "hi"}]
+        create_kwargs: dict = {
+            "model": self._model,
+            "max_tokens": 512,
+            "system": system,
+            "tools": [_CONVERSATION_TOOL],
+            "tool_choice": {"type": "tool", "name": "take_action"},
+            "messages": messages,
+        }
+        create_kwargs.update(claude_request_kwargs())
+        if create_kwargs.get("betas"):
+            response = await self._client.beta.messages.create(**create_kwargs)
+        else:
+            response = await self._client.messages.create(**create_kwargs)
         for block in response.content:
             if block.type == "tool_use" and block.name == "take_action":
                 inp = dict(block.input)

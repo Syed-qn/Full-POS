@@ -748,6 +748,8 @@ async def _handle_category_availability_query(
     if not needles:
         return
 
+    _set_state(conv, menu_in_context=True)
+
     label = keyword.strip().title() or "that"
     matched: list[tuple[str, str, object]] = []  # (name, category, price)
     matched_cat_names: list[str] = []
@@ -1037,13 +1039,13 @@ async def _send_menu_or_catalog(
             idempotency_key=f"{prefix}-catalog-{conv.id}-{inbound.wa_message_id}",
         )
         if sent:
-            _set_state(conv, dialogue_state="menu_sent")
+            _set_state(conv, dialogue_state="menu_sent", menu_in_context=True)
             return True
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix=prefix, body=await _render_menu(session, restaurant_id, force_text=True),
     )
-    _set_state(conv, dialogue_state="menu_sent")
+    _set_state(conv, dialogue_state="menu_sent", menu_in_context=True)
     return False
 
 
@@ -3062,6 +3064,54 @@ async def _offer_full_cancel_from_empty_modify(
     )
 
 
+async def _notify_manager_modify_review(
+    session: AsyncSession,
+    restaurant_id: int,
+    order_id: int,
+    summary: dict,
+) -> None:
+    """E-10: staff handoff when a modify proposal reaches review (best-effort)."""
+    from app.identity.models import Restaurant
+    from app.ordering.models import Order
+
+    restaurant = await session.get(Restaurant, restaurant_id)
+    order = await session.get(Order, order_id)
+    if restaurant is None or not getattr(restaurant, "phone", None) or order is None:
+        return
+    summary_line = (summary.get("summary") or "Customer proposed order changes.").strip()
+    action_hint = (summary.get("suggested_action") or "").strip()
+    change_count = summary.get("change_count", 0)
+    mgr_tail = f" Suggested: {action_hint}." if action_hint else ""
+    await record_audit(
+        session,
+        actor="system",
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="modify_review",
+        after={
+            "order_number": order.order_number,
+            "summary": summary_line,
+            "change_count": change_count,
+            "suggested_action": action_hint or None,
+        },
+    )
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=restaurant.phone,
+        msg_type=OutboundMessageType.TEXT,
+        payload={
+            "body": (
+                f"📝 Order #{order.order_number} — modify review pending "
+                f"({change_count} line change(s)): {summary_line}.{mgr_tail} "
+                "Customer must confirm in WhatsApp."
+            ),
+        },
+        idempotency_key=f"modify-review:{order.id}:{change_count}:{abs(hash(summary_line)) % 65536}",
+    )
+
+
 async def _advance_modify_to_confirm(
     session: AsyncSession,
     conv: Conversation,
@@ -3077,6 +3127,29 @@ async def _advance_modify_to_confirm(
         )
         return
     _set_state(conv, dialogue_state="modify_confirm", modify_proposed=proposed)
+    try:
+        from app.llm.complaint_agent import build_order_context_for_summarizer
+        from app.llm.factory import get_modify_summarizer
+        from app.llm.modify_agent import format_proposed_lines
+        from app.ordering.models import Order
+
+        _mod_order = await session.get(Order, mod_id)
+        _order_ctx = await build_order_context_for_summarizer(session, _mod_order)
+        _prop_text = format_proposed_lines(proposed)
+        _chat = (inbound.payload.get("text") or "").strip()
+        _mod_summary = await get_modify_summarizer().summarize(
+            _order_ctx, _prop_text, _chat,
+        )
+        if _mod_summary:
+            _set_state(conv, modify_summary=_mod_summary)
+            await _notify_manager_modify_review(
+                session, restaurant_id, mod_id, _mod_summary,
+            )
+    except Exception:  # noqa: BLE001
+        _logger.exception(
+            "modify summarizer failed for restaurant %s conv %s",
+            restaurant_id, conv.id,
+        )
     await _send_modify_summary(session, conv, inbound, restaurant_id, mod_id, proposed)
 
 
@@ -3171,6 +3244,11 @@ async def _handle_modify_intent(
         return
 
     seeded = await _proposed_from_order(session, order.id)
+    _update_agent_notes(
+        conv,
+        modify_intent="active",
+        pending_modify_order=str(order.order_number or order.id),
+    )
     _set_state(
         conv,
         dialogue_state="modify_items",
@@ -3344,10 +3422,13 @@ async def _handle_modify_items(
     qty, dish_query = parse_qty_and_text(text)
     lower_q = dish_query.lower()
 
-    from app.llm.factory import get_completion_detector
-    _mod_done = _is_done_intent(text) or (
-        not keep_q and remove_parsed is None and setq_items is None
-        and await get_completion_detector().is_completion(text)
+    from app.conversation.intent_rubric import is_completion_intent
+
+    _mod_done = (
+        not keep_q
+        and remove_parsed is None
+        and setq_items is None
+        and (is_completion_intent(text) or _is_ack_proceed_intent(text))
     )
     if _mod_done:
         if not mod_id:
@@ -3699,7 +3780,6 @@ async def _handle_restaurant_location_request(
     Read-only: does NOT touch the dialogue phase or any draft order, so asking
     "what's your location, I'll come direct" never spins up an order or pushes the
     customer into address capture (the old AI behaviour)."""
-    import time
 
     if restaurant is None or restaurant.lat is None or restaurant.lng is None:
         await _send_text(
@@ -3766,12 +3846,38 @@ async def _handle_complaint(
         .limit(1)
     )
     text = (inbound.payload.get("text") or "").strip()
+    # E-10: focused sub-agent distills issue + suggested_action for staff handoff.
+    summary: dict = {}
+    evidence: list[dict] = []
+    category: str | None = None
+    try:
+        from app.llm.complaint_agent import (
+            build_chat_snippet_for_summarizer,
+            build_order_context_for_summarizer,
+            category_from_summary,
+        )
+        from app.llm.factory import get_complaint_summarizer
+
+        order_context = await build_order_context_for_summarizer(session, latest_order)
+        chat_snippet = text or await build_chat_snippet_for_summarizer(session, conv)
+        summary = await get_complaint_summarizer().summarize(order_context, chat_snippet)
+        if summary:
+            evidence.append({"kind": "ai_summary", **summary})
+            category = category_from_summary(summary)
+    except Exception:  # noqa: BLE001
+        _logger.exception(
+            "complaint summarizer failed for restaurant %s conv %s",
+            restaurant_id, conv.id,
+        )
+
     ticket = await create_ticket(
         session,
         restaurant_id=restaurant_id,
         customer_id=customer.id,
         order_id=latest_order.id if latest_order else None,
         source_message=text or None,
+        evidence=evidence or None,
+        category=category,
     )
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -3782,6 +3888,9 @@ async def _handle_complaint(
     # Notify the manager (best-effort; idempotent on the ticket).
     if restaurant is not None and getattr(restaurant, "phone", None):
         order_ref = latest_order.order_number if latest_order else "—"
+        issue_line = (summary.get("issue") or text[:160]) if summary else text[:160]
+        action_hint = summary.get("suggested_action", "")
+        mgr_tail = f" Suggested: {action_hint}." if action_hint else ""
         await enqueue_message(
             session,
             restaurant_id=restaurant_id,
@@ -3789,7 +3898,8 @@ async def _handle_complaint(
             msg_type=OutboundMessageType.TEXT,
             payload={
                 "body": f"⚠️ New complaint ticket #{ticket.id} (order {order_ref}) "
-                        f"from {customer.phone}: \"{text[:160]}\". Open the dashboard to resolve."
+                        f"from {customer.phone}: \"{issue_line}\".{mgr_tail} "
+                        "Open the dashboard to resolve."
             },
             idempotency_key=f"ticket:{ticket.id}:mgr-alert",
         )
@@ -4157,6 +4267,198 @@ async def _offer_resume_cart(
     )
 
 
+def _history_limit_for_phase(phase: str) -> int:
+    """E-01: per-phase history window — smaller post-order / address slices."""
+    from app.config import get_settings
+
+    s = get_settings()
+    if phase == "post_order":
+        return s.conversation_history_limit_post_order
+    if phase == "address_capture":
+        return s.conversation_history_limit_address
+    if phase == "ordering":
+        return s.conversation_history_limit_ordering
+    return s.conversation_history_limit
+
+
+def _update_agent_notes(conv: Conversation, **kwargs) -> None:
+    """E-05: persist compact session notes outside the history window."""
+    notes = dict(conv.state.get("agent_notes") or {})
+    for key, value in kwargs.items():
+        if value is None:
+            notes.pop(key, None)
+        else:
+            notes[key] = value
+    _set_state(conv, agent_notes=notes or None)
+
+
+def _render_session_notes(agent_notes: dict | None) -> str:
+    """E-05: render a 2–3 line session_notes block for the system prompt."""
+    if not agent_notes:
+        return ""
+    preferred = (
+        ("last_confirmed_order", "Last confirmed order"),
+        ("modify_intent", "Modify intent"),
+        ("pending_modify_order", "Pending modify order"),
+    )
+    lines: list[str] = []
+    for key, label in preferred:
+        val = agent_notes.get(key)
+        if val:
+            lines.append(f"- {label}: {val}")
+    if not lines:
+        for key, val in list(agent_notes.items())[:3]:
+            if val:
+                lines.append(f"- {key}: {val}")
+    if not lines:
+        return ""
+    return "## Session notes\n" + "\n".join(lines[:3])
+
+
+def _apply_history_source_prefix(msg, content: str) -> str:
+    """E-06: prefix history rows with source/direction metadata."""
+    if not content:
+        return content
+    if msg.type in ("order", "product_list"):
+        tag = "[catalog]"
+    elif msg.direction == "inbound":
+        tag = "[customer]"
+    else:
+        tag = "[assistant]"
+    if content.startswith(tag):
+        return content
+    return f"{tag} {content}"
+
+
+_CART_DUP_MARKERS = ("🛒", "[Cart updated]")
+
+
+async def _menu_dish_count(session: AsyncSession, restaurant_id: int) -> int:
+    """Count active WhatsApp-sendable dishes for JIT menu context (E-03)."""
+    from app.identity.models import Restaurant, catalog_mode_enabled
+    from app.menu.models import Dish, Menu
+
+    _rest = await session.get(Restaurant, restaurant_id)
+    if _rest is not None and catalog_mode_enabled(_rest.settings):
+        from app.catalog.service import _load_sendable_products
+
+        _cid, sendable = await _load_sendable_products(session, restaurant_id)
+        return len(sendable) if sendable else 0
+
+    menu = await session.scalar(
+        select(Menu).where(
+            Menu.restaurant_id == restaurant_id,
+            Menu.status == "active",
+        )
+    )
+    if menu is None:
+        return 0
+    dishes = (
+        await session.scalars(
+            select(Dish).where(
+                Dish.menu_id == menu.id,
+                Dish.is_available == True,  # noqa: E712
+                Dish.meta_status == "active",
+                Dish.whatsapp_enabled == True,  # noqa: E712
+            )
+        )
+    ).all()
+    return sum(1 for d in dishes if not _SLUG_NAME.match(d.name or ""))
+
+
+async def _apply_tot_lite_branch(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    restaurant,
+    *,
+    text: str,
+    phase: str,
+) -> bool:
+    """E-17: execute winning ToT-lite interpretation (checkout / add / question)."""
+    from app.ordering.models import Order as _Ord_amb
+
+    _did = conv.state.get("draft_order_id")
+    _order = await session.get(_Ord_amb, _did) if _did else None
+    _cart_ok = (
+        _order is not None
+        and str(_order.status) == "draft"
+        and await _order_has_items(session, _order.id)
+    )
+    from app.llm.factory import get_thought_evaluator
+
+    winner = await get_thought_evaluator().evaluate(
+        text, phase, cart_nonempty=_cart_ok,
+    )
+    if winner == "checkout" and _cart_ok:
+        await _handle_done_checkout(
+            session, conv, inbound, restaurant_id, restaurant=restaurant,
+        )
+        return True
+
+    if winner == "add" and phase == "ordering":
+        if await _try_catalog_typed_order(
+            session, conv, inbound, restaurant_id, restaurant,
+        ):
+            return True
+        _set_state(conv, menu_in_context=True)
+        await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
+        return True
+
+    if winner == "question":
+        if phase == "ordering" and not _is_menu_request(text):
+            _info_name = _dish_info_question(text)
+            if _info_name:
+                _info_reply = await _answer_dish_info(session, restaurant_id, _info_name)
+                if _info_reply:
+                    await _send_text(
+                        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                        prefix="dish-info-tot", body=_info_reply,
+                    )
+                    return True
+        await _handle_customer_ai(session, conv, inbound, restaurant_id, restaurant)
+        return True
+
+    return False
+
+
+async def _maybe_clarify_vague_inbound(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    router_intent=None,
+) -> bool:
+    """E-21: short vague messages with no dish match → one clarifying question."""
+    from app.llm.port import IntentLabel
+
+    if inbound.type != MessageType.TEXT:
+        return False
+    if _resolve_phase(conv) != "ordering":
+        return False
+    # Per E-21 spec: only when the router could not classify the turn.
+    if router_intent is not None and router_intent != IntentLabel.UNKNOWN:
+        return False
+    text = (inbound.payload.get("text") or "").strip()
+    if _is_done_intent(text) or _is_checkout_shortcut(text) or _is_checkout_intent(text):
+        return False
+    if any(ch.isdigit() for ch in text):
+        return False
+    if len(text.split()) >= 4:
+        return False
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=text)
+    if result.confidence != MatchConfidence.NO_MATCH:
+        return False
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="vague-clarify",
+        body="Could you tell me the dish name and quantity?",
+    )
+    return True
+
+
 def _render_history_content(msg) -> str:
     """Render one stored Message into LLM-readable content. Covers every
     Message.type so nothing falls through to an opaque '[type]' (R-078/82/84,
@@ -4165,6 +4467,10 @@ def _render_history_content(msg) -> str:
 
     payload = msg.payload or {}
     mtype = msg.type
+
+    if mtype == "cart_observation":
+        text = payload.get("text") or payload.get("body") or ""
+        return to_whatsapp_text(text) if text else ""
 
     if mtype == "order":
         # Catalogue basket → readable basket from the snapshot persisted at record
@@ -4199,10 +4505,9 @@ def _render_history_content(msg) -> str:
         return f"[selected: {title}]"
 
     if mtype == "buttons":
+        # E-22: body alone — drop verbose option lists when the body was already sent.
         body = to_whatsapp_text(payload.get("body") or "")
-        titles = [b.get("title", "") for b in (payload.get("buttons") or []) if b.get("title")]
-        opts = f" [options: {' | '.join(titles)}]" if titles else ""
-        return (body + opts).strip() or "[buttons sent]"
+        return body.strip() or "[buttons sent]"
 
     if mtype in ("cta_url", "location_request"):
         body = to_whatsapp_text(payload.get("body") or "")
@@ -4221,6 +4526,7 @@ async def _build_history(
     session: AsyncSession,
     conv: Conversation,
     limit: int | None = None,
+    dialogue_phase: str | None = None,
 ) -> list[dict]:
     """Single source of truth for LLM conversation history.
 
@@ -4232,11 +4538,14 @@ async def _build_history(
     uses a configurable window (R-080/F55). Returns OpenAI-style
     [{role, content}].
     """
-    from app.config import get_settings
+    from app.conversation.compaction import maybe_compact_history
     from app.conversation.models import Message
 
+    await maybe_compact_history(session, conv)
+
     if limit is None:
-        limit = get_settings().conversation_history_limit
+        phase = dialogue_phase or _resolve_phase(conv)
+        limit = _history_limit_for_phase(phase)
 
     rows = (
         await session.scalars(
@@ -4248,12 +4557,27 @@ async def _build_history(
     ).all()
     rows = list(reversed(rows))  # oldest first
 
+    latest_cart_obs_idx = max(
+        (i for i, msg in enumerate(rows) if msg.type == "cart_observation"),
+        default=None,
+    )
+
     raw: list[dict] = []
-    for msg in rows:
+    for i, msg in enumerate(rows):
         content = _render_history_content(msg)
         if not content:
             continue
         role = "user" if msg.direction == "inbound" else "assistant"
+        # E-22: drop stale assistant cart echoes when a newer cart_observation exists.
+        if (
+            role == "assistant"
+            and msg.type != "cart_observation"
+            and latest_cart_obs_idx is not None
+            and i < latest_cart_obs_idx
+            and any(marker in content for marker in _CART_DUP_MARKERS)
+        ):
+            continue
+        content = _apply_history_source_prefix(msg, content)
         raw.append({"role": role, "content": content})
 
     # Merge consecutive same-role turns so the model never sees user,user,user
@@ -4327,7 +4651,9 @@ async def _build_context(
     restaurant,
 ) -> dict:
     """Build phase-specific context dict for the AI agent."""
-    ctx: dict = {}
+    ctx: dict = {
+        "restaurant_name": (restaurant.name if restaurant else None) or "Restaurant",
+    }
 
     # Restaurant location label — grounds "where are you located?" in the REAL
     # saved coordinates (Settings → location) so the LLM can't invent an area.
@@ -4351,8 +4677,21 @@ async def _build_context(
     # special arrangements, off-topic asks) — "please call us on …".
     ctx["restaurant_phone"] = (restaurant.phone if restaurant else "") or ""
 
+    session_notes = _render_session_notes(conv.state.get("agent_notes"))
+    if session_notes:
+        ctx["session_notes"] = session_notes
+
     if phase == "ordering":
-        ctx["menu_text"] = await _render_menu(session, restaurant_id)
+        dish_count = await _menu_dish_count(session, restaurant_id)
+        ctx["menu_dish_count"] = dish_count
+        if conv.state.get("menu_in_context"):
+            ctx["menu_text"] = await _render_menu(session, restaurant_id)
+            _set_state(conv, menu_in_context=False)
+        else:
+            ctx["menu_text"] = (
+                "Menu available on request — use menu_show action or dish_query for adds. "
+                f"{dish_count} active dishes."
+            )
         ctx["cart_summary"] = await _build_cart_summary(session, conv)
 
         from app.ordering.cart_service import CartService
@@ -5456,6 +5795,12 @@ async def _execute_confirm_order(
         )
         return
     await finalize_confirmation(session, order=order, actor="customer")
+    _update_agent_notes(
+        conv,
+        last_confirmed_order=str(order.order_number or order.id),
+        modify_intent=None,
+        pending_modify_order=None,
+    )
     # Drop the cart pointers now the order is placed — a later order must start a
     # fresh draft, not reuse this (now confirmed) order's id.
     _set_state(conv, dialogue_phase="post_order", dialogue_state="order_placed",
@@ -6372,7 +6717,7 @@ async def _handle_customer_ai(
         else ""
     )
     try:
-        history = await _build_history(session, conv)
+        history = await _build_history(session, conv, dialogue_phase=phase)
     except Exception:
         _logger.warning(
             "build_history failed for restaurant %s conv %s",
@@ -6511,6 +6856,24 @@ async def _handle_customer_ai(
     if "saved_address_id" in context:
         _set_state(conv, saved_address_id=context["saved_address_id"])
 
+    # Prompt KB (vector RAG over context.txt): retrieve master-template + phase specs.
+    try:
+        from app.config import get_settings
+        from app.llm.prompt_kb import prompt_kb_grounding
+
+        _kb_settings = get_settings()
+        if _kb_settings.prompt_kb_enabled and _inbound_text:
+            context["prompt_kb"] = prompt_kb_grounding(
+                _inbound_text,
+                phase=phase,
+                top_k=_kb_settings.prompt_kb_top_k,
+                max_chars=_kb_settings.prompt_kb_max_chars,
+            )
+        else:
+            context["prompt_kb"] = ""
+    except Exception:  # noqa: BLE001
+        context["prompt_kb"] = ""
+
     # OKF grounding (RAG): retrieve authoritative facts for this message + customer
     # so the bot answers from real data (menu/policy/customer/order), not invention.
     # Best-effort — grounding must never break a reply.
@@ -6518,6 +6881,21 @@ async def _handle_customer_ai(
         context["grounding"] = await _okf_grounding(session, conv, inbound, restaurant_id)
     except Exception:  # noqa: BLE001
         context["grounding"] = ""
+
+    try:
+        from app.conversation.context_metrics import log_context_snapshot
+        from app.llm.conversation_prompts import build_identity, build_phase_block
+
+        log_context_snapshot(
+            restaurant_id=restaurant_id,
+            conv_id=conv.id,
+            phase=phase,
+            system=build_identity(restaurant_name, context) + build_phase_block(phase, context),
+            history=history,
+            grounding=context.get("grounding"),
+        )
+    except Exception:  # noqa: BLE001
+        _logger.debug("context_metrics snapshot failed", exc_info=True)
 
     agent = get_conversation_agent()
     try:
@@ -6824,6 +7202,8 @@ async def _try_catalog_typed_order(
         return False  # questions / menu requests → AI
     if _is_cart_edit_intent(text):
         return False  # remove / set-qty — handled by _try_catalog_cart_edit
+
+    _set_state(conv, menu_in_context=True)
 
     # "only/just N <dish>" signals an absolute-set intent — detect BEFORE stripping so
     # the signal survives filler removal (we strip them below but the flag is preserved).
@@ -7685,6 +8065,14 @@ async def handle_inbound(
                     session, conv, inbound, restaurant_id, restaurant=restaurant,
                 )
                 return
+        # Bare ack ("ok", "thanks") after order confirm — brief reply, never LLM/status.
+        if _resolve_phase(conv) == "post_order" and _is_ack_proceed_intent(text):
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="post-order-ack",
+                body="Got it! We'll keep you posted 🛵",
+            )
+            return
         # "Where is my order / can I see the live location" → answer with the
         # current status + ETA + the live tracking link, deterministically.
         if _is_tracking_query(text):
@@ -7775,10 +8163,46 @@ async def handle_inbound(
     # can no longer be silently misread as an add. (Global navigation intents —
     # menu / cart / cancel / clear / tracking — are already intercepted by the
     # deterministic guards above, in every phase.)
-    from app.llm.port import MUTATING_INTENTS
+    #
+    # E-07 audit — router LLM is skipped when deterministic guards already own the
+    # turn: pure greetings, menu/cart/tracking/checkout shortcuts, modify FSM,
+    # confirm/cancel buttons, category queries, off-topic, dish-info, etc. (all
+    # return before this block). One more skip: non-empty cart + done phrase in
+    # ordering → checkout without spending a router call.
+    from app.llm.port import IntentLabel, MUTATING_INTENTS
 
-    _router_intent = await _router_classify_intent(session, conv, inbound)
     _router_phase = _resolve_phase(conv)
+    _router_intent = IntentLabel.UNKNOWN
+    _router_text = (
+        (inbound.payload.get("text") or "").strip()
+        if inbound.type == MessageType.TEXT
+        else ""
+    )
+    _skip_router = False
+    if (
+        inbound.type == MessageType.TEXT
+        and _router_phase == "ordering"
+        and _is_done_intent(_router_text)
+    ):
+        from app.ordering.models import Order as _Ord_router
+
+        _did = conv.state.get("draft_order_id")
+        _order = await session.get(_Ord_router, _did) if _did else None
+        if (
+            _order is not None
+            and str(_order.status) == "draft"
+            and await _order_has_items(session, _order.id)
+        ):
+            _skip_router = True
+            _router_intent = IntentLabel.CHECKOUT
+
+    if not _skip_router:
+        _router_intent = await _router_classify_intent(session, conv, inbound)
+    elif _router_intent == IntentLabel.CHECKOUT:
+        await _handle_done_checkout(
+            session, conv, inbound, restaurant_id, restaurant=restaurant,
+        )
+        return
 
     # Catalogue mode: remove / set-qty edits first (typed-order only ADDS), then a
     # clearly-typed single dish is ADDED deterministically so "one chicken biryani"
@@ -7812,6 +8236,20 @@ async def handle_inbound(
     # Post-confirm item edits ("cancel chicken biriyani", "only lemon mint") — deterministic
     # so the LLM can't start modify on a stale order id or treat "only X" as checkout done.
     if await _try_post_order_item_edit(session, conv, inbound, restaurant_id):
+        return
+
+    # E-17: ToT-lite branch when the router could not classify the turn.
+    if _router_intent == IntentLabel.UNKNOWN and inbound.type == MessageType.TEXT:
+        if await _apply_tot_lite_branch(
+            session, conv, inbound, restaurant_id, restaurant,
+            text=_router_text, phase=_router_phase,
+        ):
+            return
+
+    # E-21: vague short messages with no dish match → clarifying question (no LLM).
+    if await _maybe_clarify_vague_inbound(
+        session, conv, inbound, restaurant_id, router_intent=_router_intent,
+    ):
         return
 
     # All remaining text + button_reply → AI

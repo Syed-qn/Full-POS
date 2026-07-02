@@ -14,6 +14,7 @@ import re
 
 from app.config import get_settings
 from app.llm.port import strip_dashes
+from app.llm.prompts_marketing import COPYWRITER_PROMPT
 
 _logger = logging.getLogger(__name__)
 
@@ -39,25 +40,6 @@ def _dedupe_adjacent_emoji(text: str) -> str:
         return text
     return _ADJACENT_EMOJI_RE.sub(lambda m: m.group(1), text)
 
-_PROMPT = (
-    "You write WhatsApp marketing message templates for a restaurant called "
-    "{restaurant}. Turn the offer below into ONE short, friendly template body.\n\n"
-    "OFFER: {describe}\n\n"
-    "RULES (Meta-compliant):\n"
-    "- Start by greeting the customer with the placeholder {{{{1}}}} (their name), "
-    "e.g. 'Hi {{{{1}}}},'.\n"
-    "- Use {{{{1}}}} EXACTLY once and no other placeholders.\n"
-    "- Max ~400 characters. A few tasteful, relevant emojis are welcome (about "
-    "1 to 3, e.g. 🍽️ 😋 🎉) to make it pop, but NEVER put two emojis next to "
-    "each other. Keep at most one emoji at a time, with words in between. Do not "
-    "overdo it. No shortened links, no ALL CAPS words.\n"
-    "- Do NOT use hyphens, en-dashes or em-dashes (- , – , —) as "
-    "separators. Use commas or short separate sentences instead.\n"
-    "- End with a clear call to action (e.g. 'Reply to order').\n"
-    'Reply with ONLY JSON: {{"body": "...", "footer": "Reply STOP to opt out"}}'
-)
-
-
 def _slug(describe: str) -> str:
     words = re.findall(r"[a-z0-9]+", describe.lower())[:4]
     return ("promo_" + "_".join(words))[:60] or "promo_offer"
@@ -74,7 +56,7 @@ def _fallback(describe: str) -> dict:
 async def draft_template(*, restaurant_name: str, describe: str) -> dict:
     """Return ``{suggested_name, body, footer, examples}`` for the offer."""
     settings = get_settings()
-    prompt = _PROMPT.format(restaurant=restaurant_name or "our restaurant", describe=describe.strip())
+    prompt = COPYWRITER_PROMPT.format(restaurant=restaurant_name or "our restaurant", describe=describe.strip())
     drafted: dict | None = None
     try:
         if settings.llm_provider == "deepseek" and settings.deepseek_api_key.get_secret_value():

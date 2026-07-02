@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.llm.conversation_prompts import REPLY_FIELD_DESCRIPTION
+
 _ALL_PHASES = ("ordering", "address_capture", "awaiting_confirmation", "post_order")
 
 
@@ -200,11 +202,7 @@ def build_tool_properties() -> dict:
         "receiver_name": {"type": "string", "description": "Receiver name (address_save)."},
         "reply": {
             "type": "string",
-            "description": (
-                "OPTIONAL non-authoritative tone hint only. The system authors the "
-                "real customer-facing text from verified data. Never put prices, "
-                "totals, the menu, or order numbers here."
-            ),
+            "description": REPLY_FIELD_DESCRIPTION,
         },
     }
 

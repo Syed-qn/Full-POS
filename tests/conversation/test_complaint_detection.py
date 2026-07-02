@@ -63,6 +63,9 @@ async def test_complaint_opens_ticket(db_session, restaurant):
     tickets = (await db_session.scalars(select(Ticket).where(Ticket.restaurant_id == restaurant.id))).all()
     assert len(tickets) == 1
     assert tickets[0].status == "open"
+    assert tickets[0].category == "quality"
+    assert tickets[0].evidence
+    assert tickets[0].evidence[0].get("suggested_action") == "offer_remake"
 
 
 async def test_complaint_does_not_compensate(db_session, restaurant):

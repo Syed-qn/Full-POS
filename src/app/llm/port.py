@@ -127,6 +127,34 @@ class KitchenSummarizerPort(Protocol):
         ...
 
 
+class ComplaintSummarizerPort(Protocol):
+    """E-10 sub-agent: distill post-delivery complaint chat for staff handoff.
+
+    Returns ``{"issue": str, "suggested_action": str}`` — never compensates.
+    """
+
+    async def summarize(self, order_context: str, chat_snippet: str) -> dict: ...
+
+
+class ModifySummarizerPort(Protocol):
+    """E-10 sub-agent: distill order modification proposal for staff handoff.
+
+    Returns ``{"summary": str, "change_count": int, "suggested_action": str}``.
+    """
+
+    async def summarize(
+        self, order_context: str, proposed_text: str, chat_snippet: str = "",
+    ) -> dict: ...
+
+
+class ThoughtEvaluatorPort(Protocol):
+    """E-17 ToT-lite: resolve ambiguous router UNKNOWN turns."""
+
+    async def evaluate(
+        self, text: str, phase: str, *, cart_nonempty: bool,
+    ) -> str | None: ...
+
+
 class ArbiterPort(Protocol):
     async def arbitrate(self, query: str, candidates: list) -> object | None:
         """Given ambiguous matches, return the single best Dish or None."""

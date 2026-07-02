@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # non-compliant Claude action surface. Flip to True once the offline parity
     # contract test (W1 Task 5) passes in CI. Falls back to DeepSeek when False.
     claude_conversation_enabled: bool = False
+    # E-11: Anthropic platform context management (beta clear_tool_uses).
+    claude_context_management_enabled: bool = False
+    claude_context_clear_trigger_tokens: int = 80_000
+    claude_context_keep_tool_uses: int = 3
+    claude_context_clear_at_least_tokens: int = 0
     # Which provider extracts dishes from uploaded menus (PDF/image/text).
     # "auto" = use Claude when an Anthropic key is set (it reads PDFs/images
     # natively so no dishes are missed), else fall back to llm_provider. The chat
@@ -138,8 +143,16 @@ class Settings(BaseSettings):
     # LLM conversation history window (in Message rows fetched before merge/render).
     # Kept at the pre-W7 default of 10 so the window itself doesn't change customer
     # behaviour — W7a only makes what's already in the window render faithfully
-    # (R-080/F55).
+    # (R-080/F55). E-01: per-phase overrides below take precedence in _build_history.
     conversation_history_limit: int = 10
+    conversation_history_limit_ordering: int = 10
+    conversation_history_limit_post_order: int = 5
+    conversation_history_limit_address: int = 8
+
+    # Vector KB over context.txt — inject retrieved prompt specs into the LLM system prompt.
+    prompt_kb_enabled: bool = True
+    prompt_kb_top_k: int = 3
+    prompt_kb_max_chars: int = 2400
 
     # Wallet store credit + complaint-refund abuse controls.
     # Credit older than this with unspent balance is expired by the sweep. 0 = never.

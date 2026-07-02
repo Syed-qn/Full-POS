@@ -69,7 +69,7 @@ async def test_list_reply_and_buttons_and_cta_rendered(db_session, restaurant):
     blob = " ".join(h["content"] for h in hist)
     assert "[list_reply]" not in blob and "[buttons" not in blob and "[cta_url]" not in blob
     assert "Chicken Biryani" in blob          # list_reply title
-    assert "Confirm" in blob and "Cancel" in blob  # button options visible (DB-H12)
+    assert "Confirm your order?" in blob      # button body only (E-22: options omitted)
     assert "Track your order" in blob
 
 

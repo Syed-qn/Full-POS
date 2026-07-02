@@ -151,3 +151,42 @@ def get_kitchen_summarizer():
         return DeepSeekKitchenSummarizer()
     from app.llm.fake import FakeKitchenSummarizer
     return FakeKitchenSummarizer()
+
+
+def get_complaint_summarizer():
+    """E-10 complaint sub-agent (LLM-driven; Fake for tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.complaint_agent import ClaudeComplaintSummarizer
+        return ClaudeComplaintSummarizer()
+    if settings.llm_provider == "deepseek":
+        from app.llm.complaint_agent import DeepSeekComplaintSummarizer
+        return DeepSeekComplaintSummarizer()
+    from app.llm.fake import FakeComplaintSummarizer
+    return FakeComplaintSummarizer()
+
+
+def get_modify_summarizer():
+    """E-10 modify sub-agent (LLM-driven; Fake for tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.modify_agent import ClaudeModifySummarizer
+        return ClaudeModifySummarizer()
+    if settings.llm_provider == "deepseek":
+        from app.llm.modify_agent import DeepSeekModifySummarizer
+        return DeepSeekModifySummarizer()
+    from app.llm.fake import FakeModifySummarizer
+    return FakeModifySummarizer()
+
+
+def get_thought_evaluator():
+    """E-17 ToT-lite evaluator (deterministic-first; Fake for tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.thought_evaluator import ClaudeThoughtEvaluator
+        return ClaudeThoughtEvaluator()
+    if settings.llm_provider == "deepseek":
+        from app.llm.thought_evaluator import DeepSeekThoughtEvaluator
+        return DeepSeekThoughtEvaluator()
+    from app.llm.fake import FakeThoughtEvaluator
+    return FakeThoughtEvaluator()

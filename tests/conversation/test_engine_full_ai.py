@@ -80,9 +80,9 @@ async def test_build_history_alternates_roles(db_session, restaurant):
     history = await _build_history(db_session, conv, limit=10)
 
     assert len(history) == 3
-    assert history[0] == {"role": "user", "content": "hi"}
-    assert history[1] == {"role": "assistant", "content": "Hello! Here is our menu."}
-    assert history[2] == {"role": "user", "content": "I want biryani"}
+    assert history[0] == {"role": "user", "content": "[customer] hi"}
+    assert history[1] == {"role": "assistant", "content": "[assistant] Hello! Here is our menu."}
+    assert history[2] == {"role": "user", "content": "[customer] I want biryani"}
 
 
 async def test_build_history_maps_location_to_text(db_session, restaurant):

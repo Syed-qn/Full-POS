@@ -136,10 +136,18 @@ class FakeConversationAgent:
         import re
         from app.llm.action_schema import to_engine_result
 
+        def _strip_source_prefix(content: str) -> str:
+            for prefix in ("[customer]", "[assistant]", "[catalog]", "[system]"):
+                if content.startswith(prefix + " "):
+                    return content[len(prefix) + 1 :].strip()
+                if content.startswith(prefix):
+                    return content[len(prefix) :].strip()
+            return content.strip()
+
         last_user = ""
         for msg in reversed(history):
             if msg.get("role") == "user":
-                last_user = (msg.get("content") or "").lower()
+                last_user = _strip_source_prefix((msg.get("content") or "")).lower()
                 break
         # Unify curly/smart apostrophes so "that's all" == "that's all".
         last_user = (
@@ -333,7 +341,9 @@ class FakeConversationAgent:
             last_assistant = ""
             for msg in reversed(history):
                 if msg.get("role") == "assistant":
-                    last_assistant = (msg.get("content") or "").lower()
+                    last_assistant = _strip_source_prefix(
+                        (msg.get("content") or "")
+                    ).lower()
                     break
             _ack = {
                 "ok", "okay", "okey", "k", "sure", "yes", "yep", "yeah", "fine",
@@ -391,20 +401,9 @@ class FakeCompletionDetector:
         )
 
     async def is_completion(self, text: str) -> bool:
-        if not text or not text.strip():
-            return False
-        normalised = self._normalise(text).lower().strip()
-        # Bare token match (exact).
-        if normalised in self._COMPLETION_TOKENS:
-            return True
-        # Contains-match: a completion token appears as a sub-phrase (e.g. "no that's all").
-        for token in self._COMPLETION_TOKENS:
-            # Only multi-word tokens are safe to match as substrings; single
-            # words like "no" / "na" must be exact to avoid false positives
-            # (e.g. "no onion" contains "no" but is an item instruction).
-            if " " in token and token in normalised:
-                return True
-        return False
+        from app.conversation.intent_rubric import is_completion_intent
+
+        return is_completion_intent(text)
 
 
 class FakeKitchenSummarizer:
@@ -414,6 +413,70 @@ class FakeKitchenSummarizer:
         self, structured_block: str, inbound_messages: list[str]
     ) -> list[str]:
         return []
+
+
+class FakeModifySummarizer:
+    """Test double: deterministic modify distillation without LLM calls."""
+
+    async def summarize(
+        self, order_context: str, proposed_text: str, chat_snippet: str = "",
+    ) -> dict:
+        snippet = (chat_snippet or "").strip().lower()
+        proposed = (proposed_text or "").strip()
+        if "refund" in snippet or "money back" in snippet:
+            return {
+                "summary": "Customer requested changes with refund language.",
+                "change_count": max(1, proposed.count("\n") + 1) if proposed else 0,
+                "suggested_action": "escalate_to_human",
+            }
+        if not proposed or proposed == "(empty)":
+            return {
+                "summary": "No proposed line changes yet.",
+                "change_count": 0,
+                "suggested_action": "clarify_with_customer",
+            }
+        return {
+            "summary": "Customer proposed order line changes.",
+            "change_count": max(1, proposed.count("\n") + 1),
+            "suggested_action": "confirm_modify",
+        }
+
+
+class FakeThoughtEvaluator:
+    """Test double: rubric-only ambiguous intent resolution."""
+
+    async def evaluate(
+        self, text: str, phase: str, *, cart_nonempty: bool,
+    ) -> str | None:
+        from app.conversation.intent_rubric import resolve_ambiguous_intent
+
+        return resolve_ambiguous_intent(text, phase, cart_nonempty=cart_nonempty)
+
+
+class FakeComplaintSummarizer:
+    """Test double: deterministic complaint distillation without LLM calls."""
+
+    async def summarize(self, order_context: str, chat_snippet: str) -> dict:
+        snippet = (chat_snippet or "").strip().lower()
+        if "refund" in snippet or "money back" in snippet:
+            return {
+                "issue": "Customer requested a refund for a post-delivery problem.",
+                "suggested_action": "escalate_to_human",
+            }
+        if "cold" in snippet or "stale" in snippet:
+            return {
+                "issue": "Customer reported food quality issue (cold/stale).",
+                "suggested_action": "offer_remake",
+            }
+        if "missing" in snippet or "wrong" in snippet:
+            return {
+                "issue": "Customer reported wrong or missing items.",
+                "suggested_action": "escalate_to_human",
+            }
+        return {
+            "issue": "Customer reported a post-delivery problem.",
+            "suggested_action": "acknowledge_and_wait",
+        }
 
 
 class FakeSegmentCompiler:

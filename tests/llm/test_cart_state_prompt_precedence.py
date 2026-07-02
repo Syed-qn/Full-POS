@@ -34,15 +34,19 @@ def test_deepseek_ordering_prompt_carries_cart_lines_and_precedence():
 
 
 def test_claude_ordering_prompt_carries_cart_lines_and_precedence():
-    from app.llm.claude import _CONVERSATION_SYSTEM, _phase_guidance
+    from app.llm.claude import _phase_guidance
+    from app.llm.conversation_prompts import build_claude_system
     import json
 
-    sys = _CONVERSATION_SYSTEM.format(
-        restaurant_name="Testaurant",
-        menu_text="1. Chicken Biryani",
-        cart_summary="2x Chicken Biryani",
-        cart_lines=json.dumps(_CART_LINES),
-        delivery_info="AED 5",
+    sys = build_claude_system(
+        "Testaurant",
+        "ordering",
+        {
+            "menu_text": "1. Chicken Biryani",
+            "cart_summary": "2x Chicken Biryani",
+            "cart_lines": _CART_LINES,
+            "delivery_info": "AED 5",
+        },
     ) + _phase_guidance("ordering")
     assert '"cart_item_id": 5' in sys
     assert "CURRENT CART is correct" in sys
