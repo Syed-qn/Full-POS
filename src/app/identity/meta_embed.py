@@ -116,6 +116,39 @@ async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
         return ""
 
 
+async def register_phone_number(
+    phone_number_id: str, access_token: str, pin: str
+) -> bool:
+    """Register (activate) the number on the Cloud API so it can send/receive.
+
+    Embedded Signup often leaves a number ``status=PENDING`` (not messageable —
+    customers see "invite to WhatsApp"). POST /{pid}/register with a 6-digit 2FA pin
+    flips it to CONNECTED. Best-effort: returns True on success, False (logged) on
+    failure — never raises, never blocks the connection. A number already registered
+    with a DIFFERENT pin returns False (expected on reconnect); it's already live.
+    """
+    if not (phone_number_id and pin):
+        return False
+    url = f"{_graph_base()}/{phone_number_id}/register"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                data={"messaging_product": "whatsapp", "pin": pin},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code == 200 and (resp.json() or {}).get("success"):
+            return True
+        logger.warning(
+            "register_phone_number non-success pid=%s http=%s body=%s",
+            phone_number_id, resp.status_code, resp.text[:300],
+        )
+        return False
+    except httpx.HTTPError as exc:
+        logger.warning("register_phone_number request failed pid=%s: %s", phone_number_id, exc)
+        return False
+
+
 async def fetch_waba_owner_business(waba_id: str, access_token: str) -> str:
     """Return the id of the business portfolio that owns the WABA, or ''.
 
@@ -287,7 +320,8 @@ async def fetch_display_phone_number(phone_number_id: str, access_token: str) ->
 
 
 async def connect_embedded_signup(
-    *, code: str, phone_number_id: str, waba_id: str, business_name: str = ""
+    *, code: str, phone_number_id: str, waba_id: str, business_name: str = "",
+    existing_pin: str = "",
 ) -> dict[str, str]:
     """Full Embedded Signup connect: exchange code, subscribe WABA, ensure a Commerce
     catalog exists (auto-create if none), and return creds shaped for
@@ -305,6 +339,15 @@ async def connect_embedded_signup(
         "wa_business_account_id": (waba_id or "").strip(),
         "wa_access_token": token,
     }
+    # Activate the number on the Cloud API so it's messageable (ES often leaves it
+    # PENDING). Reuse the stored pin on reconnect; otherwise mint one. Best-effort —
+    # we persist the pin whenever we have one so a future reconnect matches Meta's 2FA.
+    import secrets
+
+    pin = existing_pin or "".join(secrets.choice("0123456789") for _ in range(6))
+    registered = await register_phone_number(phone_number_id, token, pin)
+    if registered or existing_pin:
+        creds["wa_2fa_pin"] = pin
     catalog_id = await ensure_waba_catalog(waba_id, token, business_name=business_name)
     if catalog_id:
         creds["catalog_id"] = catalog_id

@@ -6,6 +6,11 @@ from app.identity.service import get_onboarding_status
 pytestmark_asyncio = pytest.mark.asyncio
 
 
+async def _ok_register(phone_number_id, access_token, pin):
+    """Stub: number activation succeeds (real call hits Meta; tests never should)."""
+    return True
+
+
 def test_resolve_send_creds_prefers_connected_restaurant():
     from app.identity.meta_config import resolve_send_creds
 
@@ -174,6 +179,7 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
         return "+971 55 000 9999"  # deliberately different from signup phone
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
@@ -236,6 +242,7 @@ async def test_meta_connect_attaches_shared_catalog_when_not_yet_linked(
         return ""
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)
@@ -298,6 +305,7 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
         return ""
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)

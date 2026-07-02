@@ -231,6 +231,7 @@ async def meta_connect(
             phone_number_id=body.phone_number_id,
             waba_id=body.waba_id,
             business_name=restaurant.name or "",
+            existing_pin=(restaurant.settings or {}).get("wa_2fa_pin", "") or "",
         )
     except MetaEmbedError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
