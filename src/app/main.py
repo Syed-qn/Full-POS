@@ -18,6 +18,7 @@ from app.dispatch.tracking_router import router as tracking_router
 from app.identity.router import router as identity_router
 from app.menu.router import router as menu_router
 from app.middleware.security import SecurityHeadersMiddleware
+from app.middleware.timing import ResponseTimingMiddleware
 from app.ordering.customer_router import router as customer_router
 from app.ordering.router import router as ordering_router
 from app.webhook.router import router as webhook_router
@@ -49,8 +50,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.geo_provider,
         )
 
-    # One Redis connection shared by the rate limiter and the geocode cache.
-    if settings.rate_limit_enabled or settings.geocode_cache_enabled:
+    # One Redis connection shared by the rate limiter, geocode cache, and batch preview.
+    if (
+        settings.rate_limit_enabled
+        or settings.geocode_cache_enabled
+        or settings.batch_preview_cache_enabled
+    ):
         redis_conn = await aioredis.from_url(
             settings.redis_url,
             decode_responses=True,
@@ -69,6 +74,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from app.geo.cache import set_geocode_redis
 
         set_geocode_redis(redis_conn)
+    if settings.batch_preview_cache_enabled and redis_conn is not None:
+        from app.dispatch.preview_cache import set_preview_cache_redis
+
+        set_preview_cache_redis(redis_conn)
 
     # In-process dispatch sweep: re-runs dispatch for restaurants with ready+
     # unassigned orders so held (batch-window) orders are released once they mature
@@ -109,9 +118,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         set_limiter(None)
     if redis_conn is not None:
+        from app.dispatch.preview_cache import set_preview_cache_redis
         from app.geo.cache import set_geocode_redis
 
         set_geocode_redis(None)
+        set_preview_cache_redis(None)
         await redis_conn.aclose()
 
     engine = get_engine()
@@ -126,6 +137,7 @@ def create_app() -> FastAPI:
     # Middleware order matters: add_middleware inserts at the front of the stack,
     # so the last call here executes FIRST on the request path.
     # SecurityHeadersMiddleware runs last on request / first on response.
+    app.add_middleware(ResponseTimingMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.hsts_enabled)
     # CORSMiddleware runs first on request (handles pre-flight) / last on response.
     if settings.cors_allow_origins:

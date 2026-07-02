@@ -16,6 +16,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
+
 from app.coupons import service as coupons
 from app.coupons.service import CouponError
 from app.wallet import service as wallet
@@ -37,6 +39,111 @@ def cod_due_aed(order: "Order") -> Decimal:
     """
     due = (Decimal(order.total) - Decimal(order.wallet_applied_aed or _ZERO)).quantize(_CENT)
     return max(due, _ZERO)
+
+
+async def recompute_order_total(session: "AsyncSession", *, order: "Order") -> Decimal:
+    """Re-derive ``order.total`` from persisted items + fee + coupon + wallet.
+
+    The ONE money recomputation used by coupon redeem, modify, and confirm so the
+    same rules apply everywhere (F26/F41):
+
+    - subtotal := SUM(item.price_aed * qty) from the DB (source of truth),
+    - re-apply ``order.coupon_discount_aed`` (clamped >= 0), never below the fee floor,
+    - clamp ``order.wallet_applied_aed`` down to the new total, releasing the excess
+      hold on the wallet ledger so a shrunk order can never over-capture (RA-3).
+
+    Idempotent for a given cart. Caller commits. Returns the new total.
+    """
+    from app.ordering.models import OrderItem
+
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    if items:
+        # Items are the source of truth when they exist.
+        subtotal = sum(
+            (Decimal(i.price_aed) * i.qty for i in items), _ZERO
+        ).quantize(_CENT)
+        order.subtotal = subtotal
+    else:
+        # No line rows persisted (e.g. an order whose subtotal was set directly) —
+        # trust the stored subtotal rather than zeroing the order.
+        subtotal = Decimal(order.subtotal or _ZERO).quantize(_CENT)
+
+    fee = Decimal(order.delivery_fee_aed or _ZERO)
+    discount = max(Decimal(order.coupon_discount_aed or _ZERO), _ZERO)
+    # Coupon never pushes the total below the delivery fee (mirrors apply_at_confirm).
+    new_total = max(subtotal + fee - discount, fee).quantize(_CENT)
+    order.total = new_total
+
+    # Clamp the wallet portion down to the (possibly smaller) new total. If the current
+    # hold is larger than the new total, release it and re-hold only what's owed so the
+    # ledger never captures more than the order is worth.
+    applied = Decimal(order.wallet_applied_aed or _ZERO)
+    if applied > new_total:
+        acc = await wallet.get_or_create_account(
+            session, restaurant_id=order.restaurant_id, customer_id=order.customer_id
+        )
+        await wallet.release(
+            session,
+            account_id=acc.id,
+            restaurant_id=order.restaurant_id,
+            order_id=order.id,
+            idempotency_key=f"order:{order.id}:walletrelease:recompute:{subtotal}",
+            created_by="system",
+        )
+        order.wallet_applied_aed = _ZERO
+        avail = await wallet.available(session, account_id=acc.id)
+        to_apply = min(new_total, avail).quantize(_CENT)
+        if to_apply > _ZERO:
+            await wallet.hold(
+                session,
+                account_id=acc.id,
+                restaurant_id=order.restaurant_id,
+                amount=to_apply,
+                order_id=order.id,
+                idempotency_key=f"order:{order.id}:wallethold:recompute:{subtotal}",
+                created_by="system",
+            )
+            order.wallet_applied_aed = to_apply
+
+    await session.flush()
+    return new_total
+
+
+async def apply_coupon(
+    session: "AsyncSession",
+    *,
+    order: "Order",
+    coupon_code: str,
+    created_by: str = "customer",
+) -> dict:
+    """Validate + redeem ``coupon_code`` against ``order`` and re-apply the total.
+
+    The ONLY sanctioned way a coupon touches an order's money (F41): validate/redeem
+    through the coupon service (idempotent on ``order:{id}:coupon``), persist
+    ``coupon_id`` + ``coupon_discount_aed``, then ``recompute_order_total`` — never
+    mutate ``order.total`` by hand. Raises CouponError on any validation failure.
+
+    Returns {"coupon_discount_aed", "total", "cod_due_aed"}. Caller commits.
+    """
+    redemption = await coupons.validate_and_redeem(
+        session,
+        restaurant_id=order.restaurant_id,
+        code=coupon_code,
+        customer_id=order.customer_id,
+        order_id=order.id,
+        order_subtotal_aed=order.subtotal,
+        idempotency_key=f"order:{order.id}:coupon",
+    )
+    order.coupon_id = redemption.coupon_id
+    order.coupon_discount_aed = Decimal(redemption.discount_applied_aed).quantize(_CENT)
+    await recompute_order_total(session, order=order)
+    return {
+        "coupon_discount_aed": order.coupon_discount_aed,
+        "total": order.total,
+        "cod_due_aed": cod_due_aed(order),
+    }
 
 
 async def apply_at_confirm(
@@ -68,6 +175,8 @@ async def apply_at_confirm(
                 idempotency_key=f"order:{order.id}:coupon",
             )
             coupon_discount = redemption.discount_applied_aed
+            # Persist the discount so recompute_order_total re-applies it verbatim later.
+            order.coupon_discount_aed = Decimal(coupon_discount).quantize(_CENT)
             # Reduce the order total by the coupon (never below the delivery fee).
             new_total = (order.total - coupon_discount)
             order.total = max(new_total, order.delivery_fee_aed).quantize(_CENT)

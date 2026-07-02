@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-06-30)
+# Graph Report - .  (2026-07-01)
 
 ## Corpus Check
-- 613 files · ~702,577 words
+- 668 files · ~1,042,389 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5626 nodes · 18602 edges · 705 communities detected
-- Extraction: 36% EXTRACTED · 63% INFERRED · 0% AMBIGUOUS · INFERRED: 11738 edges (avg confidence: 0.5)
+- 7891 nodes · 23620 edges · 1066 communities detected
+- Extraction: 38% EXTRACTED · 61% INFERRED · 0% AMBIGUOUS · INFERRED: 14483 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -715,1584 +715,1945 @@
 - [[_COMMUNITY_Community 702|Community 702]]
 - [[_COMMUNITY_Community 703|Community 703]]
 - [[_COMMUNITY_Community 704|Community 704]]
+- [[_COMMUNITY_Community 705|Community 705]]
+- [[_COMMUNITY_Community 706|Community 706]]
+- [[_COMMUNITY_Community 707|Community 707]]
+- [[_COMMUNITY_Community 708|Community 708]]
+- [[_COMMUNITY_Community 709|Community 709]]
+- [[_COMMUNITY_Community 710|Community 710]]
+- [[_COMMUNITY_Community 711|Community 711]]
+- [[_COMMUNITY_Community 712|Community 712]]
+- [[_COMMUNITY_Community 713|Community 713]]
+- [[_COMMUNITY_Community 714|Community 714]]
+- [[_COMMUNITY_Community 715|Community 715]]
+- [[_COMMUNITY_Community 716|Community 716]]
+- [[_COMMUNITY_Community 717|Community 717]]
+- [[_COMMUNITY_Community 718|Community 718]]
+- [[_COMMUNITY_Community 719|Community 719]]
+- [[_COMMUNITY_Community 720|Community 720]]
+- [[_COMMUNITY_Community 721|Community 721]]
+- [[_COMMUNITY_Community 722|Community 722]]
+- [[_COMMUNITY_Community 723|Community 723]]
+- [[_COMMUNITY_Community 724|Community 724]]
+- [[_COMMUNITY_Community 725|Community 725]]
+- [[_COMMUNITY_Community 726|Community 726]]
+- [[_COMMUNITY_Community 727|Community 727]]
+- [[_COMMUNITY_Community 728|Community 728]]
+- [[_COMMUNITY_Community 729|Community 729]]
+- [[_COMMUNITY_Community 730|Community 730]]
+- [[_COMMUNITY_Community 731|Community 731]]
+- [[_COMMUNITY_Community 732|Community 732]]
+- [[_COMMUNITY_Community 733|Community 733]]
+- [[_COMMUNITY_Community 734|Community 734]]
+- [[_COMMUNITY_Community 735|Community 735]]
+- [[_COMMUNITY_Community 736|Community 736]]
+- [[_COMMUNITY_Community 737|Community 737]]
+- [[_COMMUNITY_Community 738|Community 738]]
+- [[_COMMUNITY_Community 739|Community 739]]
+- [[_COMMUNITY_Community 740|Community 740]]
+- [[_COMMUNITY_Community 741|Community 741]]
+- [[_COMMUNITY_Community 742|Community 742]]
+- [[_COMMUNITY_Community 743|Community 743]]
+- [[_COMMUNITY_Community 744|Community 744]]
+- [[_COMMUNITY_Community 745|Community 745]]
+- [[_COMMUNITY_Community 746|Community 746]]
+- [[_COMMUNITY_Community 747|Community 747]]
+- [[_COMMUNITY_Community 748|Community 748]]
+- [[_COMMUNITY_Community 749|Community 749]]
+- [[_COMMUNITY_Community 750|Community 750]]
+- [[_COMMUNITY_Community 751|Community 751]]
+- [[_COMMUNITY_Community 752|Community 752]]
+- [[_COMMUNITY_Community 753|Community 753]]
+- [[_COMMUNITY_Community 754|Community 754]]
+- [[_COMMUNITY_Community 755|Community 755]]
+- [[_COMMUNITY_Community 756|Community 756]]
+- [[_COMMUNITY_Community 757|Community 757]]
+- [[_COMMUNITY_Community 758|Community 758]]
+- [[_COMMUNITY_Community 759|Community 759]]
+- [[_COMMUNITY_Community 760|Community 760]]
+- [[_COMMUNITY_Community 761|Community 761]]
+- [[_COMMUNITY_Community 762|Community 762]]
+- [[_COMMUNITY_Community 763|Community 763]]
+- [[_COMMUNITY_Community 764|Community 764]]
+- [[_COMMUNITY_Community 765|Community 765]]
+- [[_COMMUNITY_Community 766|Community 766]]
+- [[_COMMUNITY_Community 767|Community 767]]
+- [[_COMMUNITY_Community 768|Community 768]]
+- [[_COMMUNITY_Community 769|Community 769]]
+- [[_COMMUNITY_Community 770|Community 770]]
+- [[_COMMUNITY_Community 771|Community 771]]
+- [[_COMMUNITY_Community 772|Community 772]]
+- [[_COMMUNITY_Community 773|Community 773]]
+- [[_COMMUNITY_Community 774|Community 774]]
+- [[_COMMUNITY_Community 775|Community 775]]
+- [[_COMMUNITY_Community 776|Community 776]]
+- [[_COMMUNITY_Community 777|Community 777]]
+- [[_COMMUNITY_Community 778|Community 778]]
+- [[_COMMUNITY_Community 779|Community 779]]
+- [[_COMMUNITY_Community 780|Community 780]]
+- [[_COMMUNITY_Community 781|Community 781]]
+- [[_COMMUNITY_Community 782|Community 782]]
+- [[_COMMUNITY_Community 783|Community 783]]
+- [[_COMMUNITY_Community 784|Community 784]]
+- [[_COMMUNITY_Community 785|Community 785]]
+- [[_COMMUNITY_Community 786|Community 786]]
+- [[_COMMUNITY_Community 787|Community 787]]
+- [[_COMMUNITY_Community 788|Community 788]]
+- [[_COMMUNITY_Community 789|Community 789]]
+- [[_COMMUNITY_Community 790|Community 790]]
+- [[_COMMUNITY_Community 791|Community 791]]
+- [[_COMMUNITY_Community 792|Community 792]]
+- [[_COMMUNITY_Community 793|Community 793]]
+- [[_COMMUNITY_Community 794|Community 794]]
+- [[_COMMUNITY_Community 795|Community 795]]
+- [[_COMMUNITY_Community 796|Community 796]]
+- [[_COMMUNITY_Community 797|Community 797]]
+- [[_COMMUNITY_Community 798|Community 798]]
+- [[_COMMUNITY_Community 799|Community 799]]
+- [[_COMMUNITY_Community 800|Community 800]]
+- [[_COMMUNITY_Community 801|Community 801]]
+- [[_COMMUNITY_Community 802|Community 802]]
+- [[_COMMUNITY_Community 803|Community 803]]
+- [[_COMMUNITY_Community 804|Community 804]]
+- [[_COMMUNITY_Community 805|Community 805]]
+- [[_COMMUNITY_Community 806|Community 806]]
+- [[_COMMUNITY_Community 807|Community 807]]
+- [[_COMMUNITY_Community 808|Community 808]]
+- [[_COMMUNITY_Community 809|Community 809]]
+- [[_COMMUNITY_Community 810|Community 810]]
+- [[_COMMUNITY_Community 811|Community 811]]
+- [[_COMMUNITY_Community 812|Community 812]]
+- [[_COMMUNITY_Community 813|Community 813]]
+- [[_COMMUNITY_Community 814|Community 814]]
+- [[_COMMUNITY_Community 815|Community 815]]
+- [[_COMMUNITY_Community 816|Community 816]]
+- [[_COMMUNITY_Community 817|Community 817]]
+- [[_COMMUNITY_Community 818|Community 818]]
+- [[_COMMUNITY_Community 819|Community 819]]
+- [[_COMMUNITY_Community 820|Community 820]]
+- [[_COMMUNITY_Community 821|Community 821]]
+- [[_COMMUNITY_Community 822|Community 822]]
+- [[_COMMUNITY_Community 823|Community 823]]
+- [[_COMMUNITY_Community 824|Community 824]]
+- [[_COMMUNITY_Community 825|Community 825]]
+- [[_COMMUNITY_Community 826|Community 826]]
+- [[_COMMUNITY_Community 827|Community 827]]
+- [[_COMMUNITY_Community 828|Community 828]]
+- [[_COMMUNITY_Community 829|Community 829]]
+- [[_COMMUNITY_Community 830|Community 830]]
+- [[_COMMUNITY_Community 831|Community 831]]
+- [[_COMMUNITY_Community 832|Community 832]]
+- [[_COMMUNITY_Community 833|Community 833]]
+- [[_COMMUNITY_Community 834|Community 834]]
+- [[_COMMUNITY_Community 835|Community 835]]
+- [[_COMMUNITY_Community 836|Community 836]]
+- [[_COMMUNITY_Community 837|Community 837]]
+- [[_COMMUNITY_Community 838|Community 838]]
+- [[_COMMUNITY_Community 839|Community 839]]
+- [[_COMMUNITY_Community 840|Community 840]]
+- [[_COMMUNITY_Community 841|Community 841]]
+- [[_COMMUNITY_Community 842|Community 842]]
+- [[_COMMUNITY_Community 843|Community 843]]
+- [[_COMMUNITY_Community 844|Community 844]]
+- [[_COMMUNITY_Community 845|Community 845]]
+- [[_COMMUNITY_Community 846|Community 846]]
+- [[_COMMUNITY_Community 847|Community 847]]
+- [[_COMMUNITY_Community 848|Community 848]]
+- [[_COMMUNITY_Community 849|Community 849]]
+- [[_COMMUNITY_Community 850|Community 850]]
+- [[_COMMUNITY_Community 851|Community 851]]
+- [[_COMMUNITY_Community 852|Community 852]]
+- [[_COMMUNITY_Community 853|Community 853]]
+- [[_COMMUNITY_Community 854|Community 854]]
+- [[_COMMUNITY_Community 855|Community 855]]
+- [[_COMMUNITY_Community 856|Community 856]]
+- [[_COMMUNITY_Community 857|Community 857]]
+- [[_COMMUNITY_Community 858|Community 858]]
+- [[_COMMUNITY_Community 859|Community 859]]
+- [[_COMMUNITY_Community 860|Community 860]]
+- [[_COMMUNITY_Community 861|Community 861]]
+- [[_COMMUNITY_Community 862|Community 862]]
+- [[_COMMUNITY_Community 863|Community 863]]
+- [[_COMMUNITY_Community 864|Community 864]]
+- [[_COMMUNITY_Community 865|Community 865]]
+- [[_COMMUNITY_Community 866|Community 866]]
+- [[_COMMUNITY_Community 867|Community 867]]
+- [[_COMMUNITY_Community 868|Community 868]]
+- [[_COMMUNITY_Community 869|Community 869]]
+- [[_COMMUNITY_Community 870|Community 870]]
+- [[_COMMUNITY_Community 871|Community 871]]
+- [[_COMMUNITY_Community 872|Community 872]]
+- [[_COMMUNITY_Community 873|Community 873]]
+- [[_COMMUNITY_Community 874|Community 874]]
+- [[_COMMUNITY_Community 875|Community 875]]
+- [[_COMMUNITY_Community 876|Community 876]]
+- [[_COMMUNITY_Community 877|Community 877]]
+- [[_COMMUNITY_Community 878|Community 878]]
+- [[_COMMUNITY_Community 879|Community 879]]
+- [[_COMMUNITY_Community 880|Community 880]]
+- [[_COMMUNITY_Community 881|Community 881]]
+- [[_COMMUNITY_Community 882|Community 882]]
+- [[_COMMUNITY_Community 883|Community 883]]
+- [[_COMMUNITY_Community 884|Community 884]]
+- [[_COMMUNITY_Community 885|Community 885]]
+- [[_COMMUNITY_Community 886|Community 886]]
+- [[_COMMUNITY_Community 887|Community 887]]
+- [[_COMMUNITY_Community 888|Community 888]]
+- [[_COMMUNITY_Community 889|Community 889]]
+- [[_COMMUNITY_Community 890|Community 890]]
+- [[_COMMUNITY_Community 891|Community 891]]
+- [[_COMMUNITY_Community 892|Community 892]]
+- [[_COMMUNITY_Community 893|Community 893]]
+- [[_COMMUNITY_Community 894|Community 894]]
+- [[_COMMUNITY_Community 895|Community 895]]
+- [[_COMMUNITY_Community 896|Community 896]]
+- [[_COMMUNITY_Community 897|Community 897]]
+- [[_COMMUNITY_Community 898|Community 898]]
+- [[_COMMUNITY_Community 899|Community 899]]
+- [[_COMMUNITY_Community 900|Community 900]]
+- [[_COMMUNITY_Community 901|Community 901]]
+- [[_COMMUNITY_Community 902|Community 902]]
+- [[_COMMUNITY_Community 903|Community 903]]
+- [[_COMMUNITY_Community 904|Community 904]]
+- [[_COMMUNITY_Community 905|Community 905]]
+- [[_COMMUNITY_Community 906|Community 906]]
+- [[_COMMUNITY_Community 907|Community 907]]
+- [[_COMMUNITY_Community 908|Community 908]]
+- [[_COMMUNITY_Community 909|Community 909]]
+- [[_COMMUNITY_Community 910|Community 910]]
+- [[_COMMUNITY_Community 911|Community 911]]
+- [[_COMMUNITY_Community 912|Community 912]]
+- [[_COMMUNITY_Community 913|Community 913]]
+- [[_COMMUNITY_Community 914|Community 914]]
+- [[_COMMUNITY_Community 915|Community 915]]
+- [[_COMMUNITY_Community 916|Community 916]]
+- [[_COMMUNITY_Community 917|Community 917]]
+- [[_COMMUNITY_Community 918|Community 918]]
+- [[_COMMUNITY_Community 919|Community 919]]
+- [[_COMMUNITY_Community 920|Community 920]]
+- [[_COMMUNITY_Community 921|Community 921]]
+- [[_COMMUNITY_Community 922|Community 922]]
+- [[_COMMUNITY_Community 923|Community 923]]
+- [[_COMMUNITY_Community 924|Community 924]]
+- [[_COMMUNITY_Community 925|Community 925]]
+- [[_COMMUNITY_Community 926|Community 926]]
+- [[_COMMUNITY_Community 927|Community 927]]
+- [[_COMMUNITY_Community 928|Community 928]]
+- [[_COMMUNITY_Community 929|Community 929]]
+- [[_COMMUNITY_Community 930|Community 930]]
+- [[_COMMUNITY_Community 931|Community 931]]
+- [[_COMMUNITY_Community 932|Community 932]]
+- [[_COMMUNITY_Community 933|Community 933]]
+- [[_COMMUNITY_Community 934|Community 934]]
+- [[_COMMUNITY_Community 935|Community 935]]
+- [[_COMMUNITY_Community 936|Community 936]]
+- [[_COMMUNITY_Community 937|Community 937]]
+- [[_COMMUNITY_Community 938|Community 938]]
+- [[_COMMUNITY_Community 939|Community 939]]
+- [[_COMMUNITY_Community 940|Community 940]]
+- [[_COMMUNITY_Community 941|Community 941]]
+- [[_COMMUNITY_Community 942|Community 942]]
+- [[_COMMUNITY_Community 943|Community 943]]
+- [[_COMMUNITY_Community 944|Community 944]]
+- [[_COMMUNITY_Community 945|Community 945]]
+- [[_COMMUNITY_Community 946|Community 946]]
+- [[_COMMUNITY_Community 947|Community 947]]
+- [[_COMMUNITY_Community 948|Community 948]]
+- [[_COMMUNITY_Community 949|Community 949]]
+- [[_COMMUNITY_Community 950|Community 950]]
+- [[_COMMUNITY_Community 951|Community 951]]
+- [[_COMMUNITY_Community 952|Community 952]]
+- [[_COMMUNITY_Community 953|Community 953]]
+- [[_COMMUNITY_Community 954|Community 954]]
+- [[_COMMUNITY_Community 955|Community 955]]
+- [[_COMMUNITY_Community 956|Community 956]]
+- [[_COMMUNITY_Community 957|Community 957]]
+- [[_COMMUNITY_Community 958|Community 958]]
+- [[_COMMUNITY_Community 959|Community 959]]
+- [[_COMMUNITY_Community 960|Community 960]]
+- [[_COMMUNITY_Community 961|Community 961]]
+- [[_COMMUNITY_Community 962|Community 962]]
+- [[_COMMUNITY_Community 963|Community 963]]
+- [[_COMMUNITY_Community 964|Community 964]]
+- [[_COMMUNITY_Community 965|Community 965]]
+- [[_COMMUNITY_Community 966|Community 966]]
+- [[_COMMUNITY_Community 967|Community 967]]
+- [[_COMMUNITY_Community 968|Community 968]]
+- [[_COMMUNITY_Community 969|Community 969]]
+- [[_COMMUNITY_Community 970|Community 970]]
+- [[_COMMUNITY_Community 971|Community 971]]
+- [[_COMMUNITY_Community 972|Community 972]]
+- [[_COMMUNITY_Community 973|Community 973]]
+- [[_COMMUNITY_Community 974|Community 974]]
+- [[_COMMUNITY_Community 975|Community 975]]
+- [[_COMMUNITY_Community 976|Community 976]]
+- [[_COMMUNITY_Community 977|Community 977]]
+- [[_COMMUNITY_Community 978|Community 978]]
+- [[_COMMUNITY_Community 979|Community 979]]
+- [[_COMMUNITY_Community 980|Community 980]]
+- [[_COMMUNITY_Community 981|Community 981]]
+- [[_COMMUNITY_Community 982|Community 982]]
+- [[_COMMUNITY_Community 983|Community 983]]
+- [[_COMMUNITY_Community 984|Community 984]]
+- [[_COMMUNITY_Community 985|Community 985]]
+- [[_COMMUNITY_Community 986|Community 986]]
+- [[_COMMUNITY_Community 987|Community 987]]
+- [[_COMMUNITY_Community 988|Community 988]]
+- [[_COMMUNITY_Community 989|Community 989]]
+- [[_COMMUNITY_Community 990|Community 990]]
+- [[_COMMUNITY_Community 991|Community 991]]
+- [[_COMMUNITY_Community 992|Community 992]]
+- [[_COMMUNITY_Community 993|Community 993]]
+- [[_COMMUNITY_Community 994|Community 994]]
+- [[_COMMUNITY_Community 995|Community 995]]
+- [[_COMMUNITY_Community 996|Community 996]]
+- [[_COMMUNITY_Community 997|Community 997]]
+- [[_COMMUNITY_Community 998|Community 998]]
+- [[_COMMUNITY_Community 999|Community 999]]
+- [[_COMMUNITY_Community 1000|Community 1000]]
+- [[_COMMUNITY_Community 1001|Community 1001]]
+- [[_COMMUNITY_Community 1002|Community 1002]]
+- [[_COMMUNITY_Community 1003|Community 1003]]
+- [[_COMMUNITY_Community 1004|Community 1004]]
+- [[_COMMUNITY_Community 1005|Community 1005]]
+- [[_COMMUNITY_Community 1006|Community 1006]]
+- [[_COMMUNITY_Community 1007|Community 1007]]
+- [[_COMMUNITY_Community 1008|Community 1008]]
+- [[_COMMUNITY_Community 1009|Community 1009]]
+- [[_COMMUNITY_Community 1010|Community 1010]]
+- [[_COMMUNITY_Community 1011|Community 1011]]
+- [[_COMMUNITY_Community 1012|Community 1012]]
+- [[_COMMUNITY_Community 1013|Community 1013]]
+- [[_COMMUNITY_Community 1014|Community 1014]]
+- [[_COMMUNITY_Community 1015|Community 1015]]
+- [[_COMMUNITY_Community 1016|Community 1016]]
+- [[_COMMUNITY_Community 1017|Community 1017]]
+- [[_COMMUNITY_Community 1018|Community 1018]]
+- [[_COMMUNITY_Community 1019|Community 1019]]
+- [[_COMMUNITY_Community 1020|Community 1020]]
+- [[_COMMUNITY_Community 1021|Community 1021]]
+- [[_COMMUNITY_Community 1022|Community 1022]]
+- [[_COMMUNITY_Community 1023|Community 1023]]
+- [[_COMMUNITY_Community 1024|Community 1024]]
+- [[_COMMUNITY_Community 1025|Community 1025]]
+- [[_COMMUNITY_Community 1026|Community 1026]]
+- [[_COMMUNITY_Community 1027|Community 1027]]
+- [[_COMMUNITY_Community 1028|Community 1028]]
+- [[_COMMUNITY_Community 1029|Community 1029]]
+- [[_COMMUNITY_Community 1030|Community 1030]]
+- [[_COMMUNITY_Community 1031|Community 1031]]
+- [[_COMMUNITY_Community 1032|Community 1032]]
+- [[_COMMUNITY_Community 1033|Community 1033]]
+- [[_COMMUNITY_Community 1034|Community 1034]]
+- [[_COMMUNITY_Community 1035|Community 1035]]
+- [[_COMMUNITY_Community 1036|Community 1036]]
+- [[_COMMUNITY_Community 1037|Community 1037]]
+- [[_COMMUNITY_Community 1038|Community 1038]]
+- [[_COMMUNITY_Community 1039|Community 1039]]
+- [[_COMMUNITY_Community 1040|Community 1040]]
+- [[_COMMUNITY_Community 1041|Community 1041]]
+- [[_COMMUNITY_Community 1042|Community 1042]]
+- [[_COMMUNITY_Community 1043|Community 1043]]
+- [[_COMMUNITY_Community 1044|Community 1044]]
+- [[_COMMUNITY_Community 1045|Community 1045]]
+- [[_COMMUNITY_Community 1046|Community 1046]]
+- [[_COMMUNITY_Community 1047|Community 1047]]
+- [[_COMMUNITY_Community 1048|Community 1048]]
+- [[_COMMUNITY_Community 1049|Community 1049]]
+- [[_COMMUNITY_Community 1050|Community 1050]]
+- [[_COMMUNITY_Community 1051|Community 1051]]
+- [[_COMMUNITY_Community 1052|Community 1052]]
+- [[_COMMUNITY_Community 1053|Community 1053]]
+- [[_COMMUNITY_Community 1054|Community 1054]]
+- [[_COMMUNITY_Community 1055|Community 1055]]
+- [[_COMMUNITY_Community 1056|Community 1056]]
+- [[_COMMUNITY_Community 1057|Community 1057]]
+- [[_COMMUNITY_Community 1058|Community 1058]]
+- [[_COMMUNITY_Community 1059|Community 1059]]
+- [[_COMMUNITY_Community 1060|Community 1060]]
+- [[_COMMUNITY_Community 1061|Community 1061]]
+- [[_COMMUNITY_Community 1062|Community 1062]]
+- [[_COMMUNITY_Community 1063|Community 1063]]
+- [[_COMMUNITY_Community 1064|Community 1064]]
+- [[_COMMUNITY_Community 1065|Community 1065]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `Order` - 665 edges
-2. `Customer` - 623 edges
-3. `Restaurant` - 525 edges
-4. `Rider` - 476 edges
-5. `CustomerAddress` - 474 edges
-6. `Dish` - 474 edges
-7. `Menu` - 470 edges
-8. `OrderItem` - 394 edges
-9. `OutboxMessage` - 354 edges
-10. `OrderStatus` - 351 edges
+1. `Order` - 689 edges
+2. `Restaurant` - 664 edges
+3. `Dish` - 625 edges
+4. `Menu` - 607 edges
+5. `Rider` - 587 edges
+6. `Customer` - 585 edges
+7. `Conversation` - 487 edges
+8. `OrderStatus` - 474 edges
+9. `OutboundMessageType` - 449 edges
+10. `CustomerAddress` - 447 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `audit/service.py:record_audit` --semantically_similar_to--> `Append-Only Ledger`  [INFERRED] [semantically similar]
   src/app/audit/service.py → docs/research/wallet-coupon-financial-design.md
-- `_rider_tracker_is_live()` --conceptually_related_to--> `Fix Pickup Live Location Gate`  [INFERRED]
-  src/app/dispatch/rider_flow.py → understanding.txt
-- `ExpoPushProvider` --conceptually_related_to--> `Fix Push Notifications Not Arriving`  [INFERRED]
-  src/app/notifications/expo.py → understanding.txt
+- `WhatsApp Ordering Platform` --semantically_similar_to--> `Understanding Log`  [INFERRED] [semantically similar]
+  docs/partners/cratis-integration-requirements.md → understanding.txt
 - `Seed a minimal restaurant row required for outbox FK.` --uses--> `Restaurant`  [INFERRED]
   tests/outbox/conftest.py → src/app/identity/models.py
 - `Unit tests for manual delivery zones and corridor detour eligibility.` --uses--> `OrderCandidate`  [INFERRED]
+  tests/dispatch/test_zones.py → src/app/dispatch/batching.py
+- `On-the-way stops batch via corridor even when they fall in different zones.` --uses--> `OrderCandidate`  [INFERRED]
   tests/dispatch/test_zones.py → src/app/dispatch/batching.py
 
 ## Communities
 
 ### Community 0 - "Community 0"
 Cohesion: 0.02
-Nodes (478): Base, BatchPlanSettings, labels_from_batches(), Shared batch planning for preview (dry) and dispatch (live)., Return planned batches using the same greedy rules as dispatch., Map order_id -> preview label (A, B, …) for batches with 2+ orders., run_batch_plan(), build_batches() (+470 more)
+Nodes (669): BatchPlanSettings, labels_from_batches(), Shared batch planning for preview (dry) and dispatch (live)., Return planned batches using the same greedy rules as dispatch., Map order_id -> preview label (A, B, …) for batches with 2+ orders., run_batch_plan(), OrderCandidate, PlannedBatch (+661 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.01
-Nodes (304): BaseModel, Manager override: set+lock a customer's tier, or unlock to resume auto-recompute, Base, get_engine(), get_session(), get_session_factory(), TimestampMixin, DeclarativeBase (+296 more)
+Cohesion: 0.04
+Nodes (502): CartService, Remove units of a dish from the cart., Delete ALL items from the cart.          Raises ValueError when *explicit* is Fa, Facade over the ordering service functions.      All callers (conversation engin, Add or merge a dish into the cart (delegates to service.add_item)., Set exact quantity, preserving notes (delegates to service.set_item_qty)., Install a live token-bucket limiter for the app under test, isolated per     tes, Seed a minimal restaurant row required for conversation/harness FKs. (+494 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.06
-Nodes (384): AddressDetailOut, ChatMessageOut, CustomerDetailOut, GpsPingOut, OrderDetailOut, OrderItemDetailOut, RiderDetailOut, TimelineEventOut (+376 more)
+Cohesion: 0.01
+Nodes (344): Base, BaseModel, Manager override: set+lock a customer's tier, or unlock to resume auto-recompute, Base, get_engine(), get_session(), get_session_factory(), TimestampMixin (+336 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.01
-Nodes (157): TokenBucketLimiter, ClaudeArbiter, ClaudeConversationAgent, ClaudeDescriber, ClaudeExtractor, ClaudeForecastAdjuster, ClaudeIntentClassifier, ClaudeSegmentCompiler (+149 more)
+Nodes (193): ClaudeArbiter, ClaudeCompletionDetector, ClaudeConversationAgent, ClaudeDescriber, ClaudeExtractor, ClaudeForecastAdjuster, ClaudeIntentClassifier, ClaudeRouterClassifier (+185 more)
 
 ### Community 4 - "Community 4"
 Cohesion: 0.02
-Nodes (108): ExpoPushProvider, Expo Push API provider (production).  Sends a single push via https://exp.host/-, _get_fake_provider(), get_fake_push_provider(), get_geo_provider(), get_push_provider(), Push provider selection. ``APP_PUSH_PROVIDER`` = fake | expo., FastAPI/Celery dependency. Returns FakeGeoProvider or GoogleMapsGeoProvider. (+100 more)
+Nodes (214): docs/superpowers/sdd/biryani-fix-report.md, cart_set_qty, R-DB-19, requires_one_of, Rider, W1 TASK 5, WhatsApp, App-first Rider Flow Plan (+206 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.03
-Nodes (124): Audit System, Auto App-Invite on Rider Creation, COD Payment, audit/service.py:record_audit, cod/service.py (shift reconciliation), conversation/engine.py, coupons/models.py, coupons/service.py (+116 more)
+Cohesion: 0.02
+Nodes (173): Partial Item Cancellation Analysis (2026-06-30), G1: Post-confirm partial removal has no first-class path, G2: Remove item in modify flow adds instead of removes, G3: remove_item blocked in post_order, G4: Confirmation-phase DeepSeek prompt sends removes to request_modification, G5: No customer-facing copy for modify, G6: Claude provider lacks remove_item/request_modification, G7: Ambiguous phrasing cancel the biryani (+165 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.07
-Nodes (109): _add_dish_to_cart(), _aed(), _answer_dish_info(), _apply_confirmation_edit(), _attach_saved_address_to_order(), _begin_address_capture(), _build_cart_summary(), _build_context() (+101 more)
+Cohesion: 0.02
+Nodes (146): Audit System, Auto App-Invite on Rider Creation, COD Payment, audit/service.py:record_audit, cod/service.py (shift reconciliation), conversation/engine.py, coupons/models.py, coupons/service.py (+138 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.04
-Nodes (93): build_catalog_item_data(), CatalogReadError, CatalogWriteError, check_batch_request_status(), _collect_batch_errors(), _dish_retailer_id(), fetch_catalog_products(), format_meta_price() (+85 more)
+Cohesion: 0.01
+Nodes (140): Dispatch Batching Enterprise Upgrade PR, Dispatch Enterprise Design Spec, Dispatch Enterprise Implementation Plan, Architecture, Commands, Conventions, Knowledge Graph (Graphify) — MANDATORY, MANDATORY: Act as Full stack developer and AI and ML engineer with 5 years of experince. Update understanding.txt after every code change in bullet poing with date and time log and also look into plugins and use them. Always preffer multi agent approach. Investegate producer, source, consumer, handler, plan, implement and run always run a Unit Testing, Integration Testing, System Testing, End-to-End (E2E) Testing, User Acceptance Testing (UAT), Performance Testing, Load Testing, Stress Testing, Security Testing, Usability Testing, Black-Box Testing, White-Box Testing, Grey-Box Testing, Regression Testing, Smoke Testing and Sanity Testing after implementing, NO hallucination, No assumptions, No ambiguity, Do not drift from goal. 100% enterprise Grade code properly wired and production ready. At the begining of the session you have to read this file. Before changing any edits read last 3 bullet points: (+132 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.03
-Nodes (92): Natural Language Opt-out Phrases, AI Marketing Opt-out Implementation Plan, Celery, Cash on Delivery (COD), Max Delivery Radius 10km, FastAPI, Delivery Fee Tiers, Phase 0-1 Foundation Plan (+84 more)
+Cohesion: 0.02
+Nodes (137): Natural Language Opt-out Phrases, Celery, Cash on Delivery (COD), Max Delivery Radius 10km, FastAPI, Delivery Fee Tiers, Phase 0-1 Foundation Plan, WhatsApp Restaurant Platform (+129 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.04
-Nodes (85): Rider, WhatsApp, API-Only Integration (Cratis POS, no manager dashboard), Auth Direction Us→Cratis (API key vs OAuth, webhook signing), Menu Hard Rules (dish number + price mandatory, no price in description, COD), Idempotency + Retry + Dead-letter Contract, Cratis × WhatsApp Platform Integration Requirements, Cratis POS System (+77 more)
+Cohesion: 0.02
+Nodes (129): Complaint Ticket, Customer Wallet (Credit), Audit, Complaint Detection, Customer Notification, Manager Dashboard, Resolution Action, Ticket (+121 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.03
-Nodes (86): Complaint Ticket, Customer Wallet (Credit), Audit, Complaint Detection, Customer Notification, Manager Dashboard, Resolution Action, Ticket (+78 more)
+Nodes (90): FakeGeoProvider, Return the nearest known Dubai area as "Area, Dubai" (dev/tests).          Picks, Haversine-backed provider for tests and Maps-API-down fallback.      Uses static, Return travel minutes from each origin to each destination (haversine + static s, Offline address candidates from the Dubai gazetteer (dev/tests).          Return, Resolve a known Dubai area name in the address to coordinates.          Tries an, _component(), _concise_area() (+82 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.06
-Nodes (72): check_and_flag(), Refund-abuse velocity checks + auto-freeze.  Called after a complaint refund is, Count + sum refund credits to an account within the rolling window., Freeze the customer's wallet if refund velocity exceeds configured caps.      Re, refund_velocity(), AccountFrozen, InsufficientFunds, Wallet domain errors. (+64 more)
+Cohesion: 0.03
+Nodes (113): build_catalog_item_data(), CatalogReadError, CatalogWriteError, check_batch_request_status(), _collect_batch_errors(), _dish_retailer_id(), fetch_catalog_products(), format_meta_price() (+105 more)
 
 ### Community 12 - "Community 12"
+Cohesion: 0.06
+Nodes (122): _acquire_conversation_lock(), _add_dish_to_cart(), _aed(), _answer_dish_info(), _apply_confirmation_edit(), _apply_note_to_existing_cart_item(), _attach_saved_address_to_order(), _begin_address_capture() (+114 more)
+
+### Community 13 - "Community 13"
+Cohesion: 0.03
+Nodes (74): ExpoPushProvider, Expo Push API provider (production).  Sends a single push via https://exp.host/-, _get_fake_provider(), get_fake_push_provider(), get_geo_provider(), get_push_provider(), Push provider selection. ``APP_PUSH_PROVIDER`` = fake | expo., Singleton FakePushProvider so tests can read its ``sent`` list. (+66 more)
+
+### Community 14 - "Community 14"
+Cohesion: 0.06
+Nodes (71): check_and_flag(), Refund-abuse velocity checks + auto-freeze.  Called after a complaint refund is, Count + sum refund credits to an account within the rolling window., Freeze the customer's wallet if refund velocity exceeds configured caps.      Re, refund_velocity(), AccountFrozen, InsufficientFunds, Wallet domain errors. (+63 more)
+
+### Community 15 - "Community 15"
 Cohesion: 0.04
 Nodes (50): _build_graph_payload(), CloudAPIProvider, Raise ValueError if X-Hub-Signature-256 header does not match body HMAC., Upload raw bytes to Meta media API; return the media_id., Fetch inbound media bytes from the Graph API (two-step: resolve the         temp, verify_signature(), get_forecast_model(), _get_mock_provider() (+42 more)
 
-### Community 13 - "Community 13"
-Cohesion: 0.06
-Nodes (58): WebhookEvent, _address_parts(), advance_order(), ButtonReplyIn, cancel_order_endpoint(), create_manual_order_endpoint(), delete_order_endpoint(), _enrich() (+50 more)
-
-### Community 14 - "Community 14"
-Cohesion: 0.05
-Nodes (42): Return the nearest known Dubai area as "Area, Dubai" (dev/tests).          Picks, Haversine-backed provider for tests and Maps-API-down fallback.      Uses static, Return travel minutes from each origin to each destination (haversine + static s, Offline address candidates from the Dubai gazetteer (dev/tests).          Return, Resolve a known Dubai area name in the address to coordinates.          Tries an, _component(), _concise_area(), GoogleMapsGeoProvider (+34 more)
-
-### Community 15 - "Community 15"
-Cohesion: 0.07
-Nodes (46): Exception, Ticket, complete_onboarding(), create_replacement_order(), create_restaurant(), create_rider(), create_ticket(), _customer_phone() (+38 more)
-
 ### Community 16 - "Community 16"
-Cohesion: 0.04
-Nodes (47): Bounded Contexts Architecture Reference, Inbound Message to Outbound Reply Data Flow (Mermaid), Alembic Migration Conventions (PostGIS filter, updated_at trigger), Order Dialogue FSM (draft to delivered states), Ports and Adapters Inventory Table, Multi-Tenancy Model (restaurant_id scoping), Test Architecture (savepoint isolation, port overrides), Modular Monolith Architecture Conventions (+39 more)
+Cohesion: 0.03
+Nodes (66): Bounded Contexts Architecture Reference, Inbound Message to Outbound Reply Data Flow (Mermaid), Alembic Migration Conventions (PostGIS filter, updated_at trigger), Order Dialogue FSM (draft to delivered states), Ports and Adapters Inventory Table, Multi-Tenancy Model (restaurant_id scoping), Test Architecture (savepoint isolation, port overrides), Modular Monolith Architecture Conventions (+58 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.09
-Nodes (36): add_item(), advance_kitchen_status(), _auto_dispatch_on_ready(), cancel_order(), _chat_for_this_order(), _circular_stats(), compute_cook_estimate(), compute_customer_order_stats() (+28 more)
+Cohesion: 0.03
+Nodes (62): 10. Wiring (every hook point already exists), 11. Guardrails (mostly inherited), 12. Build Plan (TDD, phased — small because the rails exist), 13. Resolved Decisions (2026-06-29) — locked for build, 13a-bis. Phase-1 edge decisions (2026-06-29), 13a. Per-restaurant config (settings JSONB — editable via SettingsPatch + frontend), 13b. Still deferred (not v1), 13c. Finalized phase plan (TDD, config-driven) (+54 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.06
-Nodes (37): Grafana Prometheus Datasource Provisioning, Prometheus Scrape Job: restaurant-api, Prometheus Scrape Job: prometheus (self), Prometheus Scrape Configuration, Scrape Target: api:8000 /metrics, Scrape Target: localhost:9090 (prometheus self), Architectural Decision: AI Conversation Agent (Claude tool_use + DeepSeek OpenAI-compatible function calling) replaces rigid FSM for ordering phase, Architectural Decision: Alembic migration conventions (trg_<table>_updated_at triggers, model registration in both env.py and conftest.py) (+29 more)
+Nodes (54): Exception, Ticket, _aed(), complete_onboarding(), create_replacement_order(), create_restaurant(), create_rider(), create_ticket() (+46 more)
 
 ### Community 19 - "Community 19"
+Cohesion: 0.03
+Nodes (58): 1.1 Inbound Text Message, 1.2 Inbound Interactive Button Reply, 1.3 Inbound Interactive List Reply, 1.4 Inbound Location Share, 1.5 Inbound Image Message, 1.6 Status Callbacks, 1. Webhook Payload Shapes, 2.1 GET Verification Handshake (+50 more)
+
+### Community 20 - "Community 20"
+Cohesion: 0.06
+Nodes (33): calculate_fee(), delivery_fee_aed(), delivery_info_text(), fee_settings_from_restaurant(), _fmt_aed(), OutOfRadiusError, radius_km(), Canonical delivery-fee primitive (spec §1, CLAUDE.md non-negotiable rules).  Sin (+25 more)
+
+### Community 21 - "Community 21"
+Cohesion: 0.05
+Nodes (38): 1.1 Food & Restaurant Marketing — Generally Permitted, 1.2 Alcohol — Restricted, Not Banned; Country-Gated, 1.3 Other Prohibited Content Categories (Relevant to Food Context), 1.4 Promotional Content Rules, 1.5 Opt-In Requirements (Mandatory), 1. WhatsApp Business Messaging Policy & Commerce Policy — Restaurant Marketing, 2.1 Rejection Taxonomy, 2.2 Review SLA (+30 more)
+
+### Community 22 - "Community 22"
+Cohesion: 0.08
+Nodes (38): API-Only Integration (Cratis POS, no manager dashboard), Auth Direction Us→Cratis (API key vs OAuth, webhook signing), Menu Hard Rules (dish number + price mandatory, no price in description, COD), Idempotency + Retry + Dead-letter Contract, Cratis × WhatsApp Platform Integration Requirements, Cratis POS System, Menu Sync Mechanism, WhatsApp Ordering Platform (+30 more)
+
+### Community 23 - "Community 23"
+Cohesion: 0.06
+Nodes (37): Grafana Prometheus Datasource Provisioning, Prometheus Scrape Job: restaurant-api, Prometheus Scrape Job: prometheus (self), Prometheus Scrape Configuration, Scrape Target: api:8000 /metrics, Scrape Target: localhost:9090 (prometheus self), Architectural Decision: AI Conversation Agent (Claude tool_use + DeepSeek OpenAI-compatible function calling) replaces rigid FSM for ordering phase, Architectural Decision: Alembic migration conventions (trg_<table>_updated_at triggers, model registration in both env.py and conftest.py) (+29 more)
+
+### Community 24 - "Community 24"
+Cohesion: 0.17
+Nodes (32): _address_parts(), advance_order(), cancel_order_endpoint(), create_manual_order_endpoint(), delete_order_endpoint(), _enrich(), _enrich_orders_bulk(), get_order() (+24 more)
+
+### Community 25 - "Community 25"
+Cohesion: 0.06
+Nodes (35): Existing integration surfaces (verified), File structure (locked in), Global Constraints, Phase 1 — Wallet Ledger Core, Phase 2 — Coupon Generalization + Redemption Ledger, Phase 3 — Complaint Ticket System, Phase 4 — Ordering Integration + Migration, Phase 5 — Reconciliation, Expiry, Abuse (+27 more)
+
+### Community 26 - "Community 26"
+Cohesion: 0.2
+Nodes (33): _ping(), _ready_order(), _seed_restaurant(), test_advance_to_ready_auto_assigns_rider(), test_assignment_algorithm_score_explainability(), test_assignment_algorithm_score_includes_zone(), test_assignment_notifies_rider_by_push_not_whatsapp(), test_assigns_nearest_available_rider() (+25 more)
+
+### Community 27 - "Community 27"
 Cohesion: 0.2
 Nodes (33): _btn(), _conv(), _loc_msg(), _msg(), _seed_lemon_mint(), _seed_menu(), _seed_returning_with_saved_address(), test_ambiguous_match_sends_disambiguation_question() (+25 more)
 
-### Community 20 - "Community 20"
-Cohesion: 0.2
-Nodes (32): _ping(), _ready_order(), _seed_restaurant(), test_advance_to_ready_auto_assigns_rider(), test_assignment_algorithm_score_explainability(), test_assignment_notifies_rider_by_push_not_whatsapp(), test_assigns_nearest_available_rider(), test_batch_expedite_nudges_kitchen_for_same_area_cooking_order() (+24 more)
-
-### Community 21 - "Community 21"
+### Community 28 - "Community 28"
 Cohesion: 0.13
-Nodes (28): _auth(), _seed_full_order(), test_api_advance_delivers_preparing_ping_immediately(), test_api_delete_order_returns_204_then_404(), test_api_order_detail_returns_200(), test_api_order_detail_unknown_id_returns_404(), test_api_patch_address(), test_api_patch_customer_name() (+20 more)
+Nodes (29): _auth(), _seed_full_order(), test_api_advance_delivers_preparing_ping_immediately(), test_api_delete_order_returns_204_then_404(), test_api_order_detail_includes_dispatch_explain(), test_api_order_detail_returns_200(), test_api_order_detail_unknown_id_returns_404(), test_api_patch_address() (+21 more)
 
-### Community 22 - "Community 22"
-Cohesion: 0.07
-Nodes (13): Router tests for the predictions endpoints.  Uses the ``client`` / ``auth_header, No forecast yet — should return 404 or empty list., AI-draft returns a usable body with the {{1}} name placeholder., Header image bytes are stored in Postgres and served back via /media, so     the, Create → submit (mock provider approves a compliant template) → broadcast., An IMAGE-header template submitted to real Meta with no APP_WA_APP_ID must     r, Re-drafting the same offer (same suggested name) must NOT 500 on the unique, test_create_template_duplicate_name_auto_suffixes() (+5 more)
-
-### Community 23 - "Community 23"
+### Community 29 - "Community 29"
 Cohesion: 0.13
 Nodes (29): clean_spec(), Unit tests for the WhatsApp template compliance linter.  Pure function `lint_tem, A fully compliant marketing template spec., test_body_adjacent_variables_flagged(), test_body_excessive_newlines_flagged(), test_body_missing_flagged(), test_body_mostly_variables_flagged(), test_body_over_five_lines_warns() (+21 more)
 
-### Community 24 - "Community 24"
-Cohesion: 0.16
-Nodes (27): _acquire_dispatch_lock(), _active_order_count(), _apply_unbatch_sla_safety(), _batch_plan_settings_from_restaurant(), _build_preview_candidates(), _commit_route(), _dispatch(), _dispatch_greedy() (+19 more)
+### Community 30 - "Community 30"
+Cohesion: 0.07
+Nodes (13): Router tests for the predictions endpoints.  Uses the ``client`` / ``auth_header, No forecast yet — should return 404 or empty list., AI-draft returns a usable body with the {{1}} name placeholder., Header image bytes are stored in Postgres and served back via /media, so     the, Create → submit (mock provider approves a compliant template) → broadcast., An IMAGE-header template submitted to real Meta with no APP_WA_APP_ID must     r, Re-drafting the same offer (same suggested name) must NOT 500 on the unique, test_create_template_duplicate_name_auto_suffixes() (+5 more)
 
-### Community 25 - "Community 25"
-Cohesion: 0.11
-Nodes (22): calculate_fee(), delivery_fee_aed(), delivery_info_text(), fee_settings_from_restaurant(), _fmt_aed(), OutOfRadiusError, radius_km(), Canonical delivery-fee primitive (spec §1, CLAUDE.md non-negotiable rules).  Sin (+14 more)
+### Community 31 - "Community 31"
+Cohesion: 0.07
+Nodes (29): 1. Design Direction, 2. Information Architecture, 3.1 SLA Countdown Treatment Per Order Card, 3.2 Dispatch Map Batch Lasso Animation, 3.3 Approval-Pending Template Shimmer, 3.4 Stale Rider Location Decay, 3.5 KPI Delta Flash on Live Update, 3. Signature Moments (+21 more)
 
-### Community 26 - "Community 26"
+### Community 32 - "Community 32"
+Cohesion: 0.08
+Nodes (25): Dispatch Enterprise Implementation Plan (Phases 0–4), Execution handoff, File structure (locked in), Ops tasks (parallel week 1), Plan self-review vs spec, Task 10: Manual delivery zones (PR-3.1), Task 11: Google distance matrix for OR-Tools (PR-3.3), Task 12: KPI panel (PR-5.3) (+17 more)
+
+### Community 33 - "Community 33"
+Cohesion: 0.08
+Nodes (24): 10. Reliability & operational contract, 11. Open decisions (consolidated), 12. What we need to receive to start building, 1. How the integration works (the model), 2. What we need from Cratis — summary checklist, 3. Access, environments & contacts, 4. Authentication & security **[DECISION]**, 4a. Cratis → Us (you calling our API) (+16 more)
+
+### Community 34 - "Community 34"
 Cohesion: 0.11
 Nodes (9): flash(), saveBatching(), saveCart(), saveDispatch(), saveFees(), saveGeneral(), saveHours(), saveLoyalty() (+1 more)
 
-### Community 27 - "Community 27"
-Cohesion: 0.14
-Nodes (23): _seed_menu(), _status_reply_body(), test_add_item_action_updates_cart(), test_address_step_recovers_stale_draft_pointer(), test_build_history_alternates_roles(), test_build_history_maps_location_to_text(), test_confirm_edit_unknown_dish_gives_warm_grounded_reply(), test_greeting_offers_to_resume_or_start_fresh() (+15 more)
+### Community 35 - "Community 35"
+Cohesion: 0.11
+Nodes (23): _cl_props(), _ds_props(), Provider-parity contract: DeepSeek, Claude, Fake expose ONE action surface (W1)., CANON_PHASE_ACTIONS maps cleanly to LEGACY_PHASE_ACTIONS via CANON_TO_LEGACY., FakeConversationAgent is structurally bound to the canonical schema.      Verifi, FakeConversationAgent behavioural check: every emitted action is in CANON_TO_LEG, Both tool dicts declare only 'action' as a top-level required field., Properties block extracted from DeepSeek's live OpenAI tool dict. (+15 more)
 
-### Community 28 - "Community 28"
+### Community 36 - "Community 36"
 Cohesion: 0.18
 Nodes (22): _approved_campaign(), _customer(), _order(), _seed_template(), test_build_payload_uses_name_key_and_fills_body_variable(), test_campaign_stats_breakdown(), test_campaign_stats_bulk_aggregates_sends(), test_create_campaign_draft() (+14 more)
 
-### Community 29 - "Community 29"
-Cohesion: 0.1
-Nodes (15): test_cook_estimate_is_slowest_dish_with_default_fallback(), test_finalize_confirmation_sets_prep_deadline(), test_get_order_api_404_for_unknown(), test_get_order_api_returns_order(), test_list_orders_api_filters_by_status(), test_list_orders_for_tenant_clamps_limit(), test_list_orders_for_tenant_clamps_limit_floor(), test_list_orders_skips_batch_preview_when_disabled() (+7 more)
+### Community 37 - "Community 37"
+Cohesion: 0.14
+Nodes (23): _seed_menu(), _status_reply_body(), test_add_item_action_updates_cart(), test_address_step_recovers_stale_draft_pointer(), test_build_history_alternates_roles(), test_build_history_maps_location_to_text(), test_confirm_edit_unknown_dish_gives_warm_grounded_reply(), test_greeting_offers_to_resume_or_start_fresh() (+15 more)
 
-### Community 30 - "Community 30"
+### Community 38 - "Community 38"
+Cohesion: 0.08
+Nodes (23): File structure (locked in), Marketing track (Tasks 9–17), Phase 6: ML Demand Predictions + Marketing Automation — Implementation Plan, Post-phase, Task 10: Template naming (datestamped + 30-day blackout) + compliance linter, Task 11: UAE send window + per-user 2/24h throttle, Task 12: Opt-out (STOP keyword) primitives, Task 13: Audience segments — DSL compile + evaluate + LLM SegmentCompiler (+15 more)
+
+### Community 39 - "Community 39"
+Cohesion: 0.08
+Nodes (23): Consistent, Multilingual Order-Completion Handling — Implementation Plan, File Structure, Global Constraints, Refinements vs. approved spec (flagged for user), Self-Review, Task 1: Fake agent recognizes closings robustly (test double parity), Task 2: Remove the hardcoded production closing guard, Task 3: Menu-data-driven re-add backstop in `_dispatch_action` (+15 more)
+
+### Community 40 - "Community 40"
+Cohesion: 0.09
+Nodes (22): File structure (locked in), Phase 0+1: Foundation, Identity & AI Menu — Implementation Plan, Post-phase, Task 10: LLM extractor port + Fake, Task 11: ClaudeExtractor (vision), Task 12: Menu models, Task 13: Menu upload endpoint (extraction → drafts), Task 14: Manager edit endpoints (add / patch / delete dish) (+14 more)
+
+### Community 41 - "Community 41"
+Cohesion: 0.13
+Nodes (11): _drive_modify_to_proposed(), _get_conv(), restaurant_for_completion(), _seed_menu_for_completion(), test_factory_get_completion_detector_fake(), test_fake_completion_detector_curly_apostrophe(), test_fake_completion_detector_no_action(), test_modify_flow_english_done_still_finalizes() (+3 more)
+
+### Community 42 - "Community 42"
+Cohesion: 0.13
+Nodes (19): build_batches(), compute_batch_total_est_min(), _compute_route_time_to_stops(), _insertion_detour_km(), _leg_minutes(), Greedy proximity order batching (spec §4.3.2 + CLAUDE.md).  Rules (non-negotiabl, Cumulative route_time_to_that_stop (mins) for sequenced stops.      Per spec §4., Order stops nearest-first from the restaurant (greedy nearest-neighbour), so a (+11 more)
+
+### Community 43 - "Community 43"
+Cohesion: 0.1
+Nodes (9): client(), rate_limiter(), Seed a minimal restaurant row for prediction FK references.      Dynamic-PK: tes, Override the global client fixture to include the predictions router., Seed a minimal restaurant row required for outbox FK., Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests, _reset_settings_cache(), restaurant() (+1 more)
+
+### Community 44 - "Community 44"
 Cohesion: 0.16
 Nodes (19): _order(), test_active_order_count_field_on_order_candidate(), test_batch_capped_at_max_per_batch(), test_compute_total_est_includes_depot_leg(), test_configurable_buffer_changes_sla_buffer(), test_configurable_proximity_widens_batching(), test_corridor_batches_on_the_way_order(), test_corridor_skips_off_route_order() (+11 more)
 
-### Community 31 - "Community 31"
-Cohesion: 0.17
-Nodes (16): Manager-dashboard conversations read API (/api/v1/conversations)., Manager send must (1) store an outbound message visible in the thread and     (2, Managers can replay inbound voice notes from the Chats screen., _restaurant(), _seed_conversation(), test_list_conversations_returns_real_data(), test_message_audio_endpoint_streams_voice_note(), test_message_media_endpoint_streams_image() (+8 more)
+### Community 45 - "Community 45"
+Cohesion: 0.1
+Nodes (20): File structure (locked in), Open architecture notes for Phase 4 (Logistics), Phase 3 completion checklist, Phase 3: Ordering — Implementation Plan, Task 10: Weather stub port + integration into order confirmation, Task 11: Full ordering service tests (create + items + finalize round-trip), Task 12: MockProvider pipeline integration test (handle_inbound end-to-end), Task 13: Returning customer — stored address offer in address_capture (+12 more)
 
-### Community 32 - "Community 32"
+### Community 46 - "Community 46"
+Cohesion: 0.1
+Nodes (20): File structure (locked in), Phase 4: Logistics & Dispatch — Implementation Plan, Post-phase, Task 10: Rider conversation routing + live location updates, Task 11: Rider button actions — "Orders Picked" / "Delivered" drive the FSM + next-stop nav, Task 12: COD service — record_collection + reconcile_shift, Task 13: Coupon service — issue_coupon + redeem_coupon, Task 14: SLA monitor — yellow/red/breach events, customer + manager alerts, auto-coupon gate (+12 more)
+
+### Community 47 - "Community 47"
 Cohesion: 0.1
 Nodes (4): test_create_rider_auto_sends_app_invite(), test_manager_on_duty_clears_off_shift(), test_manager_sets_rider_duty(), test_update_dispatch_and_kitchen_settings()
 
-### Community 33 - "Community 33"
-Cohesion: 0.24
-Nodes (19): _get_dish_id(), _seed_menu(), test_api_create_manual_order(), test_api_create_manual_order_no_menu_returns_422(), test_api_create_manual_order_unavailable_dish_returns_422(), test_api_customer_lookup_found(), test_api_customer_lookup_not_found(), test_api_get_active_menu() (+11 more)
-
-### Community 34 - "Community 34"
+### Community 48 - "Community 48"
 Cohesion: 0.1
 Nodes (1): Unit tests for marketing template naming (datestamp + 30-day blackout).  Pure fu
 
-### Community 35 - "Community 35"
+### Community 49 - "Community 49"
 Cohesion: 0.15
 Nodes (19): _active_menu_id(), bundle_variant_for_qty(), _dish_vocab(), find_dish_matches(), find_unavailable_match(), normalize_name(), _query_has_foreign_food_word(), Match a free-text size query against a dish's serving-size variants.      Return (+11 more)
 
-### Community 36 - "Community 36"
+### Community 50 - "Community 50"
+Cohesion: 0.1
+Nodes (19): File structure (locked in), Phase 5 completion checklist (gate before declaring done), Phase 5: React Manager Dashboard — Implementation Plan, Scope notes for the implementer, Task 10: CompactTable, Orders screen, OrderDetailDrawer, Task 11: Menu Manager — menuApi, DishCard, DiffPanel, screen (upload → diff → activate, availability toggles), Task 12: Riders board — RiderCard, ridersApi, screen, Task 13: Conversations — ConversationRow, MessageBubble, conversationsApi (fixture fallback), screen with manual takeover (+11 more)
+
+### Community 51 - "Community 51"
+Cohesion: 0.1
+Nodes (19): Phase 7 (Final): Production Hardening — Implementation Plan, Post-phase, Task 10: Observability — Prometheus metrics + `/metrics` endpoint, Task 11: Webhook replay-window freshness check, Task 12: Apply rate limiting to the webhook endpoint, Task 13: Security headers + CORS hardening, Task 14: Secrets-strength audit (CI/cron task), Task 15: Load/stress harness — Locust profile + documented SLOs (+11 more)
+
+### Community 52 - "Community 52"
 Cohesion: 0.33
 Nodes (14): _make_session_factory(), _seed_customer(), _seed_order(), _seed_restaurant(), test_breach_40_creates_coupon(), test_breach_40_skips_coupon_if_weather(), test_customer_outbox_message_created_on_breach_40(), test_manager_outbox_message_created_on_yellow_30() (+6 more)
 
-### Community 37 - "Community 37"
+### Community 53 - "Community 53"
+Cohesion: 0.11
+Nodes (18): File structure (locked in), Open design notes (controller review before execution), Phase 2: WhatsApp Core — Implementation Plan, Post-phase, Task 10: Conversation engine — greeting state (menu render), Task 11: Webhook router (GET verify + signed POST pipeline), Task 12: Dispatch Celery outbox task after webhook commit, Task 13: Web simulator (FastAPI routes + single-page HTML) (+10 more)
+
+### Community 54 - "Community 54"
+Cohesion: 0.11
+Nodes (18): 1. Overview, 2. Architecture (Approach A — approved), 3. Data model (core tables), 4.1 Restaurant onboarding, 4.2 Customer ordering (conversation engine), 4.3 Dispatch engine (the brain), 4.4 Rider flow (WhatsApp only), 4.5 SLA monitor & coupons (+10 more)
+
+### Community 55 - "Community 55"
+Cohesion: 0.22
+Nodes (13): _restaurant(), _seed_conversation(), test_list_conversations_returns_real_data(), test_message_audio_endpoint_streams_voice_note(), test_message_media_endpoint_streams_image(), test_messages_endpoint_marks_audio_playback(), test_messages_endpoint_normalizes_body_to_text(), test_other_restaurants_conversation_is_404() (+5 more)
+
+### Community 56 - "Community 56"
 Cohesion: 0.22
 Nodes (16): _seed(), test_ambiguous_candidates_filtered_to_catalogue(), test_ambiguous_candidates_unfiltered_in_text_mode(), test_cart_query_shows_cart_not_catalogue(), test_catalog_excludes_dish_logic(), test_catalog_excludes_nothing_in_text_mode(), test_catalog_typed_noncatalogue_item_answered_not_catalogue(), test_catalog_typed_order_adds_directly_not_catalogue() (+8 more)
 
-### Community 38 - "Community 38"
-Cohesion: 0.12
-Nodes (6): _FakeRedis, Unit tests for the FakeGeoProvider gazetteer geocoder + Redis cache., Minimal async Redis stub for the read-through cache test., Flipping the provider to google_maps before the key lands must NOT crash —     i, test_factory_falls_back_when_google_key_missing(), test_geocode_cache_read_through()
-
-### Community 39 - "Community 39"
+### Community 57 - "Community 57"
 Cohesion: 0.26
 Nodes (16): _auth(), _seed_customer(), test_advance_delivery_updates_customer_spend(), test_delete_address_linked_to_open_order_returns_409(), test_delete_address_removes_record(), test_delete_customer_linked_to_order_returns_409(), test_delete_customer_removes_record(), test_format_usual_order_time_buckets() (+8 more)
 
-### Community 40 - "Community 40"
+### Community 58 - "Community 58"
 Cohesion: 0.13
 Nodes (8): OrderFSM, Validate, apply, and audit a single order status transition.      The caller MUS, transition(), validate(), Every OrderStatus must appear as a key in the transition map., transition() applies new status and writes an audit log row., test_all_statuses_have_entries_in_transition_map(), test_transition_helper_audits_and_mutates()
 
-### Community 41 - "Community 41"
+### Community 59 - "Community 59"
+Cohesion: 0.16
+Nodes (15): ActionSpec, build_anthropic_tool(), build_openai_tool(), build_tool_properties(), _empty_action_data(), _norm_items(), _present(), Single source of truth for the conversation action (LLM tool) schema (W1).  Ever (+7 more)
+
+### Community 60 - "Community 60"
+Cohesion: 0.26
+Nodes (16): check_and_send_near_dual_if_applicable(), _dropoff_coords(), _get_latest_rider_location(), handle_delivered(), handle_orders_picked(), _maps_link(), notify_customer_near_door_if_applicable(), _notify_customer_status() (+8 more)
+
+### Community 61 - "Community 61"
+Cohesion: 0.12
+Nodes (9): ElevenLabsTranscriber, Speech-to-text via ElevenLabs Scribe.      A single multipart ``POST /v1/speech-, get_transcriber(), Return the configured speech-to-text provider (APP_STT_PROVIDER)., FakeTranscriber, Deterministic transcriber for tests/dev — no network, no cost, no real STT., Transcribe ``audio`` to text. ``language`` is an optional ISO hint         (None, Speech-to-text port. Implementations turn spoken audio into text so an     inbou (+1 more)
+
+### Community 62 - "Community 62"
+Cohesion: 0.12
+Nodes (16): API Functions (`manualOrderApi.ts`), Backend, Backend (`tests/ordering/test_manual_order.py`), Business Rules, Endpoints, Error Handling, Files, Frontend (+8 more)
+
+### Community 63 - "Community 63"
+Cohesion: 0.12
+Nodes (16): 0. Setup (do this once, in order), A. Manager onboarding (signup → login → dashboard), B. Menu digitization (upload → review → set numbers/prices → activate), C. Customer ordering via the simulator (happy path), D. Cancel before cooking, and "where is my order?", D-cancel — cancel a fresh order before it is confirmed, D-status — ask where the order is (use the order confirmed in Scenario C), E-availability — toggle a dish off and confirm it disappears from the menu (+8 more)
+
+### Community 64 - "Community 64"
 Cohesion: 0.31
 Nodes (15): _cust_msgs(), _restaurant(), _rider(), _seed(), test_delivered_blocked_until_tracker_started(), test_delivered_notifies_customer(), test_near_door_is_idempotent(), test_near_door_notifies_customer_at_50m() (+7 more)
 
-### Community 42 - "Community 42"
+### Community 65 - "Community 65"
 Cohesion: 0.16
 Nodes (12): HttpUser, DashboardPollUser, inbound_message(), Peak-hour load profile. Run against a LOCAL stack only:      .venv/bin/locust -f, Outbound send flood — drives inbound traffic that fans out to the outbox.      T, Return signature headers for a webhook body (empty if no app secret)., Simulates Meta delivering inbound messages in peak-hour bursts., Manager dashboard polling live order/rider state. (+4 more)
 
-### Community 43 - "Community 43"
-Cohesion: 0.16
-Nodes (10): Reverse-geocoding (coords → area label) for grounding the bot's "where are you l, A point in Al Karama resolves to the nearest gazetteer area., Coords shared by an alias return the first (canonical) gazetteer key., A bare village (locality, no sublocality) gets its region for context —     regr, With no Redis client, it calls the provider directly and returns its label., _StubProvider, test_concise_area_adds_region_for_rural_locality(), test_fake_reverse_geocode_nearest_area() (+2 more)
+### Community 66 - "Community 66"
+Cohesion: 0.2
+Nodes (8): pollWhenVisible(), useConversationMessagesQuery(), useConversationsQuery(), useCustomersQuery(), useLiveOpsOrdersQuery(), useOpenTicketsCountQuery(), useOrdersQuery(), useRidersQuery()
 
-### Community 44 - "Community 44"
+### Community 67 - "Community 67"
 Cohesion: 0.13
 Nodes (0): 
 
-### Community 45 - "Community 45"
+### Community 68 - "Community 68"
 Cohesion: 0.2
 Nodes (8): _seed_customers(), test_evaluate_any_or(), test_evaluate_is_tenant_scoped(), test_evaluate_last_order_days_ago(), test_evaluate_ordered_dish_min_count(), test_evaluate_tag_contains(), test_evaluate_total_spend_gte(), test_preview_count()
 
-### Community 46 - "Community 46"
+### Community 69 - "Community 69"
+Cohesion: 0.13
+Nodes (15): F20-B, F33, F52, F53, F54, F67, Provider Parity, R-003 (+7 more)
+
+### Community 70 - "Community 70"
 Cohesion: 0.51
 Nodes (13): _pipeline_order(), _ready_order(), _restaurant(), _rider(), test_held_order_releases_after_window(), test_hold_disabled_assigns_immediately(), test_lone_fresh_order_no_mate_assigns_immediately(), test_lone_order_held_when_pipeline_mate_cooking_nearby() (+5 more)
 
-### Community 47 - "Community 47"
+### Community 71 - "Community 71"
 Cohesion: 0.14
 Nodes (2): Restaurants created before the loyalty block existed (raw JSONB, no merge on rea, test_loyalty_cfg_merges_defaults_for_legacy_settings()
 
-### Community 48 - "Community 48"
+### Community 72 - "Community 72"
 Cohesion: 0.14
 Nodes (13): Security headers and CORS tests (P7-T13)., CSP must restrict all source directives and forbid framing., Non-API (SPA) paths must NOT use default-src 'none' — otherwise the browser, API/webhook/machine endpoints stay fully locked down., An origin not in cors_allow_origins must NOT receive an ACAO header., HSTS header must be absent when hsts_enabled=False (the default)., Every response must carry the mandatory security headers including CSP., test_cors_disallows_unlisted_origin() (+5 more)
 
-### Community 49 - "Community 49"
+### Community 73 - "Community 73"
+Cohesion: 0.23
+Nodes (11): Create a dish through the API with the Meta catalogue fields and confirm they, Dishes that were ordered can't be hard-deleted — they're archived off the menu., test_add_dish(), test_add_dish_persists_meta_fields(), test_add_dish_rejects_sale_price_not_positive(), test_delete_dish(), test_delete_dish_with_order_history_archives(), test_duplicate_dish_number_409() (+3 more)
+
+### Community 74 - "Community 74"
+Cohesion: 0.37
+Nodes (12): _btn(), _conv(), _ExplodingAgent, _loc_msg(), _msg(), _seed_menu(), test_cancel_button_no_llm_round_trip(), test_confirm_button_no_llm_round_trip() (+4 more)
+
+### Community 75 - "Community 75"
 Cohesion: 0.24
 Nodes (11): ensure_tracking_session(), get_tracking_session_by_public_token(), get_tracking_session_by_rider_token(), get_tracking_session_for_order(), is_tracking_accessible(), _new_token(), _now(), record_tracking_location() (+3 more)
 
-### Community 50 - "Community 50"
-Cohesion: 0.15
-Nodes (0): 
-
-### Community 51 - "Community 51"
-Cohesion: 0.29
-Nodes (10): _restaurant_by_phone(), _seed_ticket(), test_cross_tenant_ticket_404(), test_debit_endpoint_reduces_and_guards(), test_get_wallet_entries_lists_newest_first(), test_get_wallet_returns_balance(), test_list_and_get_ticket(), test_list_tickets_filter_by_phone() (+2 more)
-
-### Community 52 - "Community 52"
-Cohesion: 0.35
-Nodes (12): _pair(), _ping(), _seed(), test_app_delivered_blocked_without_live_gps(), test_app_delivered_records_cod_and_reports_next(), test_app_endpoints_require_device_token(), test_app_not_delivered_blocked_before_pickup(), test_app_not_delivered_marks_undeliverable_and_advances_run() (+4 more)
-
-### Community 53 - "Community 53"
-Cohesion: 0.28
-Nodes (8): _key_header(), Partner API: key management (manager JWT) + read-only customer pulls (X-API-Key), _restaurant_id(), _seed_customer(), test_partner_customers_missing_or_bad_key_401(), test_partner_customers_pull(), test_revoked_key_cannot_pull(), test_tenant_isolation_key_only_sees_own_customers()
-
-### Community 54 - "Community 54"
-Cohesion: 0.29
-Nodes (12): _resto(), test_customer_doc_grounds_wallet_and_tier(), test_menu_activation_refreshes_okf(), test_order_doc(), test_refresh_is_idempotent(), test_refresh_menu_and_policy_creates_docs(), test_refresh_okf_for_restaurant_picks_up_dish_edits(), test_refresh_prunes_removed_dishes() (+4 more)
-
-### Community 55 - "Community 55"
-Cohesion: 0.15
-Nodes (8): A size/descriptor word the dish carries as a VARIANT (or a generic size word), test_different_protein_is_off_menu_not_forced_match(), test_exact_name_wins_over_longer_named_sibling(), test_find_dish_matches_arabic_dish(), test_find_dish_matches_single_strong_match(), test_normalize_name_preserves_arabic(), test_normalize_name_preserves_arabic_with_punctuation(), test_size_qualified_order_still_matches()
-
-### Community 56 - "Community 56"
-Cohesion: 0.27
-Nodes (10): _make_inbound(), _seed_menu(), test_greeting_advances_state_to_menu_sent(), test_greeting_sends_menu_to_outbox(), test_live_location_ping_outside_address_capture_is_silently_dropped(), test_location_in_awaiting_confirmation_phase_is_silently_dropped(), test_manual_takeover_short_circuits_bot(), test_natural_language_optout_records_optout() (+2 more)
-
-### Community 57 - "Community 57"
-Cohesion: 0.46
-Nodes (12): _conv(), _last_body(), _msg(), _seed_biryani(), test_bundle_offer_no_keeps_them_separate(), test_bundle_offer_yes_adds_the_bundle(), test_make_it_2_offers_then_yes_switches_single_to_bundle(), test_make_it_3_no_bundle_updates_directly() (+4 more)
-
-### Community 58 - "Community 58"
-Cohesion: 0.42
-Nodes (12): _build_abandoned_cart(), _make_session_factory(), _msg(), Re-engagement guard: a freshly-touched conversation (customer just messaged), _seed_menu(), _set_cart_settings(), test_abandoned_cart_nudges_once(), test_active_customer_is_not_nudged() (+4 more)
-
-### Community 59 - "Community 59"
-Cohesion: 0.28
-Nodes (12): _check_body(), _check_buttons(), _check_footer(), _check_header(), _check_name(), _check_opt_out(), _check_variables(), _has_emoji() (+4 more)
-
-### Community 60 - "Community 60"
-Cohesion: 0.21
-Nodes (11): Tests for the outbox orphan-recovery sweeper (sweep_failed_outbox beat task)., Sweeper ignores stale pending rows that have reached max attempts., Seed an outbox row with status=pending and force updated_at to be old., Sweeper re-dispatches a pending row whose updated_at is older than 5 minutes., Sweeper ignores a pending row updated less than 5 minutes ago., Sweeper ignores rows that are already terminal (sent/dead)., _seed_stale_pending(), test_sweep_finds_stale_pending_row() (+3 more)
-
-### Community 61 - "Community 61"
-Cohesion: 0.32
-Nodes (11): _coupon(), test_below_min_order_rejected(), test_expired_rejected(), test_fixed_redeem_applies_discount(), test_idempotent_replay_no_double_count(), test_not_yet_valid_rejected(), test_paused_coupon_rejected(), test_per_customer_limit() (+3 more)
-
-### Community 62 - "Community 62"
-Cohesion: 0.38
-Nodes (11): _inb(), _last(), _resto_with_resale(), test_resale_accept_with_location_pin_sells_it(), test_resale_accept_with_saved_address_sells_it(), test_resale_offered_even_when_settings_lack_resale_block(), test_resale_offered_on_catalog_greeting(), test_resale_offered_on_direct_typed_order() (+3 more)
-
-### Community 63 - "Community 63"
-Cohesion: 0.2
-Nodes (8): _BrokenProvider, Regression tests for the chat engine's road-distance helper.  Guards a bug where, GeoPort stub returning a sentinel distance unmistakably unlike haversine., The helper must return the provider's distance (road), not haversine., A provider/config failure must never break ordering — degrade to haversine., _StubProvider, test_road_distance_falls_back_to_haversine_on_provider_error(), test_road_distance_uses_geo_provider()
-
-### Community 64 - "Community 64"
-Cohesion: 0.45
-Nodes (11): _inb(), _last_outbound(), _order(), _seed(), test_claim_coupon_with_none_tells_customer(), test_claim_my_coupon_intent_applies_single(), test_issued_coupon_shows_option(), test_no_credit_no_coupon_no_option() (+3 more)
-
-### Community 65 - "Community 65"
-Cohesion: 0.2
-Nodes (11): _clamp_to_window(), desired_send_minute(), is_due(), is_personalized(), parse_hhmm(), Today's Special automation — per-customer send-time logic (pure helpers).  When, True iff ``now`` is at/after the desired minute but not more than     ``max_late, Parse a "HH:MM" string into a Dubai minute-of-day, else ``default``. (+3 more)
-
-### Community 66 - "Community 66"
-Cohesion: 0.26
-Nodes (11): _fmt_time(), is_open(), next_opening_label(), _parse_hhmm(), Business-hours helper (OPT-IN).  Pure functions over the restaurant's ``settings, Return (open, close) for the weekday, or None if closed/invalid., True if the restaurant is open at ``now`` (UTC). Empty config ⇒ always open., 12-hour label, e.g. '11:00 AM' (no leading zero on the hour). (+3 more)
-
-### Community 67 - "Community 67"
-Cohesion: 0.18
-Nodes (12): Grafana Restaurant Ops Dashboard, Metric: http_request_duration_seconds, Metric: http_requests_total, Metric: outbox_deliveries_total, Metric: rate_limit_rejections_total, Metric: sla_breaches_total, Panel: Error Rate 4xx/5xx, Panel: HTTP Request Rate by Endpoint (+4 more)
-
-### Community 68 - "Community 68"
-Cohesion: 0.22
-Nodes (3): autoName(), onSubmit(), reload()
-
-### Community 69 - "Community 69"
-Cohesion: 0.2
-Nodes (5): BaseSettings, get_settings(), Settings, Covers new settings for resumable header upload + EOD/poll (no hardcodes)., test_marketing_meta_upload_settings_defaults()
-
-### Community 70 - "Community 70"
-Cohesion: 0.33
-Nodes (8): After successful webhook processing, outbox.deliver must be dispatched., With outbox_sync_delivery on, the reply is delivered IN the webhook request, _seed_restaurant_and_menu(), _signed_body(), test_post_webhook_dispatches_celery_task(), test_post_webhook_duplicate_event_is_ignored(), test_post_webhook_processes_message_and_queues_outbox(), test_post_webhook_sync_delivery_sends_in_request()
-
-### Community 71 - "Community 71"
-Cohesion: 0.18
-Nodes (0): 
-
-### Community 72 - "Community 72"
-Cohesion: 0.44
-Nodes (10): _order(), _rider(), test_empty_orders_returns_empty_plan(), test_impossible_order_is_dropped_not_blocking(), test_infeasible_locked_order_drops_without_blocking_others(), test_locked_order_stays_with_its_current_rider(), test_no_riders_drops_everything(), test_priority_order_gets_own_route() (+2 more)
-
-### Community 73 - "Community 73"
-Cohesion: 0.18
-Nodes (0): 
-
-### Community 74 - "Community 74"
-Cohesion: 0.25
-Nodes (8): _seed_linked_menu(), test_greeting_sends_catalog_when_mode_on(), test_menu_request_falls_back_to_text_when_catalog_unavailable(), test_order_again_after_completed_order_sends_catalog(), test_send_catalog_groups_by_category(), test_send_catalog_refuses_unsynced_fallback(), test_show_menu_falls_back_to_text_when_catalog_off(), test_show_menu_sends_catalog_when_mode_on()
-
-### Community 75 - "Community 75"
-Cohesion: 0.35
-Nodes (10): _make_order(), Order cancellation endpoint (POST /api/v1/orders/{id}/cancel).  Covers the spec, The cancel ENDPOINT is restaurant/manager-initiated. A restaurant cancel of a, _seed_menu(), test_cancel_confirmed_order_returns_cancelled(), test_cancel_preparing_via_endpoint_is_cancelled_not_resold(), test_cancel_ready_order_is_422(), test_cancel_requires_auth() (+2 more)
-
 ### Community 76 - "Community 76"
-Cohesion: 0.18
-Nodes (0): 
+Cohesion: 0.2
+Nodes (7): TokenBucketLimiter, _enforce(), _login_phone(), _parse(), rate_limit_auth(), rate_limit_webhook(), Best-effort phone extraction from the login JSON body.      Reads + caches the r
 
 ### Community 77 - "Community 77"
-Cohesion: 0.24
-Nodes (5): Per-user marketing throttle: pure decision + DB 24h send count.  Pure ``can_send, _send(), test_count_excludes_suppressed_and_failed(), test_count_sends_last_24h_counts_only_trailing_window(), test_count_sends_last_24h_is_tenant_and_phone_scoped()
+Cohesion: 0.16
+Nodes (13): apply_at_confirm(), apply_coupon(), capture_on_deliver(), cod_due_aed(), Order payment composition — coupon + wallet credit against an order's COD.  Kept, Validate + redeem ``coupon_code`` against ``order`` and re-apply the total., Apply an optional coupon then optional wallet credit to ``order``.      Coupon i, Settle the order's wallet hold on delivery. No-op if no wallet was applied. (+5 more)
 
 ### Community 78 - "Community 78"
-Cohesion: 0.29
-Nodes (9): _dubai(), UAE marketing send-window checks (Asia/Dubai, 9am-6pm by UAE Cabinet 56/2024)., A UTC instant corresponding to the given Asia/Dubai wall-clock time., test_before_window_is_false(), test_next_window_open_after_close_is_next_day_9am(), test_next_window_open_before_open_is_same_day_9am(), test_window_close_boundary_is_false(), test_window_last_minute_is_true() (+1 more)
+Cohesion: 0.15
+Nodes (0): 
 
 ### Community 79 - "Community 79"
 Cohesion: 0.29
-Nodes (6): _customer(), _msg(), Don't call me" → persistent customer contact preference.  When a customer asks n, test_can_call_clears_previous_preference(), test_dont_call_sets_customer_preference(), test_ordinary_message_does_not_set_preference()
+Nodes (10): _restaurant_by_phone(), _seed_ticket(), test_cross_tenant_ticket_404(), test_debit_endpoint_reduces_and_guards(), test_get_wallet_entries_lists_newest_first(), test_get_wallet_returns_balance(), test_list_and_get_ticket(), test_list_tickets_filter_by_phone() (+2 more)
 
 ### Community 80 - "Community 80"
-Cohesion: 0.4
-Nodes (10): _pick_up(), _seed_batch(), _start_tracker(), test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location(), test_button_only_unknown_id_no_op(), test_delivered_marks_delivered_and_records_cod(), test_last_delivery_frees_rider(), test_orders_picked_advances_all_and_sends_first_stop() (+2 more)
+Cohesion: 0.15
+Nodes (1): Contract tests for the canonical conversation action schema (W1).
 
 ### Community 81 - "Community 81"
-Cohesion: 0.2
-Nodes (1): App()
+Cohesion: 0.35
+Nodes (12): _pair(), _ping(), _seed(), test_app_delivered_blocked_without_live_gps(), test_app_delivered_records_cod_and_reports_next(), test_app_endpoints_require_device_token(), test_app_not_delivered_blocked_before_pickup(), test_app_not_delivered_marks_undeliverable_and_advances_run() (+4 more)
 
 ### Community 82 - "Community 82"
-Cohesion: 0.2
-Nodes (0): 
+Cohesion: 0.28
+Nodes (8): _key_header(), Partner API: key management (manager JWT) + read-only customer pulls (X-API-Key), _restaurant_id(), _seed_customer(), test_partner_customers_missing_or_bad_key_401(), test_partner_customers_pull(), test_revoked_key_cannot_pull(), test_tenant_isolation_key_only_sees_own_customers()
 
 ### Community 83 - "Community 83"
-Cohesion: 0.2
-Nodes (7): Unit tests for manual delivery zones and corridor detour eligibility., On-the-way stops batch via corridor even when they fall in different zones., Integration: build_batches reads delivery_zones and applies same_zone_or_corrido, A lateral stop fails corridor eligibility when detour exceeds the cap., test_build_batches_uses_zone_gate_when_zones_configured(), test_corridor_detour_eligible_different_zones(), test_corridor_detour_rejected_off_route()
+Cohesion: 0.29
+Nodes (12): _resto(), test_customer_doc_grounds_wallet_and_tier(), test_menu_activation_refreshes_okf(), test_order_doc(), test_refresh_is_idempotent(), test_refresh_menu_and_policy_creates_docs(), test_refresh_okf_for_restaurant_picks_up_dish_edits(), test_refresh_prunes_removed_dishes() (+4 more)
 
 ### Community 84 - "Community 84"
-Cohesion: 0.2
-Nodes (3): seeded_assignment(), test_dispatch_trigger_requires_auth(), test_dispatch_trigger_runs_and_returns_ok()
+Cohesion: 0.15
+Nodes (8): A size/descriptor word the dish carries as a VARIANT (or a generic size word), test_different_protein_is_off_menu_not_forced_match(), test_exact_name_wins_over_longer_named_sibling(), test_find_dish_matches_arabic_dish(), test_find_dish_matches_single_strong_match(), test_normalize_name_preserves_arabic(), test_normalize_name_preserves_arabic_with_punctuation(), test_size_qualified_order_still_matches()
 
 ### Community 85 - "Community 85"
-Cohesion: 0.38
-Nodes (9): _seed(), test_duty_requires_valid_token(), test_duty_toggle_endpoint(), test_expired_pairing_code_rejected(), test_invalid_pairing_code_rejected(), test_location_requires_valid_token(), test_me_endpoint_returns_active_order(), test_pair_then_location_reveals_stop_and_notifies() (+1 more)
+Cohesion: 0.27
+Nodes (10): _make_inbound(), _seed_menu(), test_greeting_advances_state_to_menu_sent(), test_greeting_sends_menu_to_outbox(), test_live_location_ping_outside_address_capture_is_silently_dropped(), test_location_in_awaiting_confirmation_phase_is_silently_dropped(), test_manual_takeover_short_circuits_bot(), test_natural_language_optout_records_optout() (+2 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.38
-Nodes (9): _seed_customer_with_address(), test_patch_address_updates_fields(), test_patch_address_wrong_customer_raises(), test_patch_customer_name(), test_patch_customer_opt_in(), test_patch_customer_opt_out(), test_patch_customer_opt_out_targets_original_phone(), test_patch_customer_phone() (+1 more)
+Cohesion: 0.46
+Nodes (12): _conv(), _last_body(), _msg(), _seed_biryani(), test_bundle_offer_no_keeps_them_separate(), test_bundle_offer_yes_adds_the_bundle(), test_make_it_2_offers_then_yes_switches_single_to_bundle(), test_make_it_3_no_bundle_updates_directly() (+4 more)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.31
-Nodes (7): _pred(), Pure unit tests for the Today's Special send-time logic (no DB)., test_desired_send_minute_clamps_to_window(), test_desired_send_minute_custom_window_clamps(), test_desired_send_minute_falls_back_to_default(), test_desired_send_minute_personalized_subtracts_lead(), test_is_personalized_requires_clustered_history()
+Cohesion: 0.42
+Nodes (12): _build_abandoned_cart(), _make_session_factory(), _msg(), Re-engagement guard: a freshly-touched conversation (customer just messaged), _seed_menu(), _set_cart_settings(), test_abandoned_cart_nudges_once(), test_active_customer_is_not_nudged() (+4 more)
 
 ### Community 88 - "Community 88"
-Cohesion: 0.31
-Nodes (6): _conv_with_inbound(), _last_outbox(), Window-aware customer notifications + utility template registration., test_no_conversation_uses_template(), test_outside_window_sends_template(), test_within_window_sends_session_text()
+Cohesion: 0.15
+Nodes (7): BaseHTTPMiddleware, Re-export SecurityHeadersMiddleware from canonical location (P7-T13).  The canon, Security headers middleware (P7-T6 / P7-T13).  Adds security headers to every re, Add security headers to every response., SecurityHeadersMiddleware, API response timing — surfaces slow dashboard paths on Render., ResponseTimingMiddleware
 
 ### Community 89 - "Community 89"
-Cohesion: 0.2
-Nodes (0): 
+Cohesion: 0.28
+Nodes (12): _check_body(), _check_buttons(), _check_footer(), _check_header(), _check_name(), _check_opt_out(), _check_variables(), _has_emoji() (+4 more)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.56
-Nodes (9): _conv(), _last_body(), _msg(), _seed_drinks(), test_drink_qty_two_asks_size_then_adds_both(), test_drink_size_reply_adds_that_variant(), test_drink_with_sizes_asks_which_size(), test_drink_without_variants_adds_directly() (+1 more)
+Cohesion: 0.15
+Nodes (12): HIGH: Functionality missing from spec, How to Run, Implementation Status — Restaurant WhatsApp Platform, Key Business Rules — Verified Implemented, Known Gaps (from GAP_LIST.md — factual, sourced from spec), LOW: Nice-to-have, MEDIUM: Minor surface/UX deviations, Migration Chain (alembic) (+4 more)
 
 ### Community 91 - "Community 91"
-Cohesion: 0.51
-Nodes (9): _msg(), _seed_menu(), test_clear_cart_empties_everything(), test_multi_dish_message_adds_all_items(), test_multi_dish_quantity_update_sets_all(), test_multi_dish_reply_never_redumps_the_menu(), test_multi_dish_reply_reflects_real_cart_not_llm_prose(), test_multi_dish_unknown_dish_is_reported_not_silently_dropped() (+1 more)
+Cohesion: 0.21
+Nodes (11): Tests for the outbox orphan-recovery sweeper (sweep_failed_outbox beat task)., Sweeper ignores stale pending rows that have reached max attempts., Seed an outbox row with status=pending and force updated_at to be old., Sweeper re-dispatches a pending row whose updated_at is older than 5 minutes., Sweeper ignores a pending row updated less than 5 minutes ago., Sweeper ignores rows that are already terminal (sent/dead)., _seed_stale_pending(), test_sweep_finds_stale_pending_row() (+3 more)
 
 ### Community 92 - "Community 92"
-Cohesion: 0.36
-Nodes (6): _btn(), _conv(), _msg(), _seed_menu(), test_cancel_order_button_in_modify_cancels(), test_off_menu_order_at_summary_declines()
+Cohesion: 0.27
+Nodes (11): _draft_cart_rows(), _last_msg_id(), _latest_outbound(), _seed_one_dish_restaurant(), test_antihallucination_catches_non_catalogue_dish_names(), test_off_catalogue_dish_available_by_phone(), test_one_dish_tenant_names_no_other_dish(), test_slug_named_dish_absent_from_render_menu() (+3 more)
 
 ### Community 93 - "Community 93"
-Cohesion: 0.24
-Nodes (4): Generate the Cratis x CatalystIQ STEP-BY-STEP IMPLEMENTATION PLAN Word document., _shade(), steps(), table()
+Cohesion: 0.32
+Nodes (11): _coupon(), test_below_min_order_rejected(), test_expired_rejected(), test_fixed_redeem_applies_discount(), test_idempotent_replay_no_double_count(), test_not_yet_valid_rejected(), test_paused_coupon_rejected(), test_per_customer_limit() (+3 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.24
-Nodes (9): geocode_cached(), _key(), Redis read-through cache for geocoding results (address → lat/lng).  Repeated ad, Inject the async Redis client used for the geocode cache (or None)., Geocode ``address`` via a Redis read-through cache.      Returns ``(lat, lng)``, Reverse-geocode ``(lat, lng)`` to an area label via a Redis read-through     cac, reverse_geocode_cached(), _reverse_key() (+1 more)
+Cohesion: 0.38
+Nodes (11): _inb(), _last(), _resto_with_resale(), test_resale_accept_with_location_pin_sells_it(), test_resale_accept_with_saved_address_sells_it(), test_resale_offered_even_when_settings_lack_resale_block(), test_resale_offered_on_catalog_greeting(), test_resale_offered_on_direct_typed_order() (+3 more)
 
 ### Community 95 - "Community 95"
-Cohesion: 0.29
-Nodes (9): accept_resale(), discounted_total(), Resale of cancelled-after-cooking orders (spec §3).  When the kitchen has alread, Sell the resale food to a new customer. Marks the on-resale order RESOLD and, Resale config, with DEFAULT_SETTINGS merged in. Restaurants created BEFORE the, Return (discounted_subtotal, discount_amount) from settings.resale., Best available resale offer for this customer, or None.      Honors enable flag,, _resale_cfg() (+1 more)
+Cohesion: 0.2
+Nodes (8): _BrokenProvider, Regression tests for the chat engine's road-distance helper.  Guards a bug where, GeoPort stub returning a sentinel distance unmistakably unlike haversine., The helper must return the provider's distance (road), not haversine., A provider/config failure must never break ordering — degrade to haversine., _StubProvider, test_road_distance_falls_back_to_haversine_on_provider_error(), test_road_distance_uses_geo_provider()
 
 ### Community 96 - "Community 96"
-Cohesion: 0.2
-Nodes (9): apply_at_confirm(), capture_on_deliver(), cod_due_aed(), Order payment composition — coupon + wallet credit against an order's COD.  Kept, Settle the order's wallet hold on delivery. No-op if no wallet was applied., Return the held wallet credit on cancellation. No-op if no wallet applied., Cash the rider collects at the door = order total minus wallet credit applied., Apply an optional coupon then optional wallet credit to ``order``.      Coupon i (+1 more)
+Cohesion: 0.45
+Nodes (11): _inb(), _last_outbound(), _order(), _seed(), test_claim_coupon_with_none_tells_customer(), test_claim_my_coupon_intent_applies_single(), test_issued_coupon_shows_option(), test_no_credit_no_coupon_no_option() (+3 more)
 
 ### Community 97 - "Community 97"
-Cohesion: 0.27
-Nodes (9): datestamped_name(), is_name_reusable(), next_available_name(), WhatsApp template naming — datestamped names + 30-day reuse blackout.  Pure func, Lowercase, replace non-[a-z0-9_] with '_', collapse repeats, trim '_'., Build ``{slug}_{YYYYMMDD}`` (+ ``_{suffix}`` when suffix > 0).      Raises ``Val, False if ``name`` was deleted within the last 30 days, else True.      ``deleted, Return the first datestamped name that is reusable AND not in use.      Incremen (+1 more)
+Cohesion: 0.2
+Nodes (11): _clamp_to_window(), desired_send_minute(), is_due(), is_personalized(), parse_hhmm(), Today's Special automation — per-customer send-time logic (pure helpers).  When, True iff ``now`` is at/after the desired minute but not more than     ``max_late, Parse a "HH:MM" string into a Dubai minute-of-day, else ``default``. (+3 more)
 
 ### Community 98 - "Community 98"
-Cohesion: 0.31
-Nodes (4): onDeleteDish(), onDropDish(), persistRenumber(), reloadDishes()
+Cohesion: 0.26
+Nodes (11): _fmt_time(), is_open(), next_opening_label(), _parse_hhmm(), Business-hours helper (OPT-IN).  Pure functions over the restaurant's ``settings, Return (open, close) for the weekday, or None if closed/invalid., True if the restaurant is open at ``now`` (UTC). Empty config ⇒ always open., 12-hour label, e.g. '11:00 AM' (no leading zero on the hour). (+3 more)
 
 ### Community 99 - "Community 99"
-Cohesion: 0.28
-Nodes (3): pick(), propose(), round6()
+Cohesion: 0.26
+Nodes (11): _aed(), _note_suffix(), Pure DB renderer for cart and order summary (W3/RA-1/R-013/R-040).  Renders cart, Format a money value as a plain AED amount string.      Identical logic to engin, Render an order item's special-note suffix (identical to engine._note_suffix)., Return a DB-backed cart/summary string for the given order and dialogue phase., Render the \\n\\n🛒 cart tail for the ordering phase (mirrors engine._cart_tail)., Render the full order-summary text body for the awaiting_confirmation phase. (+3 more)
 
 ### Community 100 - "Community 100"
-Cohesion: 0.36
-Nodes (7): fetchPublicTracking(), fetchPublicTrackingLocation(), fetchRiderTracking(), postRiderLocation(), stopRiderTracking(), TrackingError, trackingRequest()
+Cohesion: 0.18
+Nodes (12): Grafana Restaurant Ops Dashboard, Metric: http_request_duration_seconds, Metric: http_requests_total, Metric: outbox_deliveries_total, Metric: rate_limit_rejections_total, Metric: sla_breaches_total, Panel: Error Rate 4xx/5xx, Panel: HTTP Request Rate by Endpoint (+4 more)
 
 ### Community 101 - "Community 101"
 Cohesion: 0.22
-Nodes (0): 
+Nodes (3): autoName(), onSubmit(), reload()
 
 ### Community 102 - "Community 102"
-Cohesion: 0.53
-Nodes (8): _assigned_order(), _planned_batch(), test_new_ready_inserts_into_planned_batch(), test_new_ready_via_kitchen_hook_inserts_into_planned_batch(), test_rebatch_noop_after_pickup(), test_rebatch_splits_when_sla_risk(), test_resequence_enqueues_customer_eta_update(), test_sweep_rebatch_with_movable_orders()
-
-### Community 103 - "Community 103"
-Cohesion: 0.47
-Nodes (7): _order_inbound(), _seed_catalog_menu(), test_basket_accepts_alternate_retailer_id_keys(), test_basket_rejects_dish_without_active_catalog_product(), test_catalog_cart_creates_order_and_confirms(), test_partial_mapping_adds_known_and_lists_unknown(), test_unmapped_items_do_not_create_empty_order()
-
-### Community 104 - "Community 104"
-Cohesion: 0.42
-Nodes (8): _resale_order(), test_accept_resale_batches_companion_order(), test_accept_resale_creates_discounted_ready_order(), test_offer_applies_fixed_discount(), test_offer_applies_percent_discount(), test_offer_disabled(), test_offer_excludes_original_customer(), test_offer_respects_max_age()
-
-### Community 105 - "Community 105"
-Cohesion: 0.56
-Nodes (8): _order(), _seed(), test_capture_on_deliver_drops_balance(), test_coupon_then_wallet_stack(), test_no_wallet_no_coupon_is_noop(), test_release_on_cancel_restores_credit(), test_wallet_applied_reduces_cod_due(), test_wallet_hold_never_exceeds_available()
-
-### Community 106 - "Community 106"
-Cohesion: 0.39
-Nodes (8): Serving-size variants on a dish: persistence, schema validation, activation guar, test_activate_blocked_if_variant_missing_price(), test_activate_ok_with_complete_variants(), test_dish_persists_variants(), test_duplicate_variant_names_rejected(), test_nonpositive_variant_price_rejected(), test_patch_dish_sets_variants(), _upload()
-
-### Community 107 - "Community 107"
-Cohesion: 0.61
-Nodes (8): _approved_template(), _enable(), _noon_customer(), test_tick_is_idempotent_within_the_day(), test_tick_noop_when_disabled(), test_tick_sends_special_at_predicted_time(), test_tick_skips_customer_not_yet_due(), test_tick_uses_default_time_for_sparse_customer()
-
-### Community 108 - "Community 108"
-Cohesion: 0.22
+Cohesion: 0.18
 Nodes (0): 
 
+### Community 103 - "Community 103"
+Cohesion: 0.2
+Nodes (5): BaseSettings, get_settings(), Settings, Covers new settings for resumable header upload + EOD/poll (no hardcodes)., test_marketing_meta_upload_settings_defaults()
+
+### Community 104 - "Community 104"
+Cohesion: 0.33
+Nodes (8): After successful webhook processing, outbox.deliver must be dispatched., With outbox_sync_delivery on, the reply is delivered IN the webhook request, _seed_restaurant_and_menu(), _signed_body(), test_post_webhook_dispatches_celery_task(), test_post_webhook_duplicate_event_is_ignored(), test_post_webhook_processes_message_and_queues_outbox(), test_post_webhook_sync_delivery_sends_in_request()
+
+### Community 105 - "Community 105"
+Cohesion: 0.18
+Nodes (0): 
+
+### Community 106 - "Community 106"
+Cohesion: 0.44
+Nodes (10): _order(), _rider(), test_empty_orders_returns_empty_plan(), test_impossible_order_is_dropped_not_blocking(), test_infeasible_locked_order_drops_without_blocking_others(), test_locked_order_stays_with_its_current_rider(), test_no_riders_drops_everything(), test_priority_order_gets_own_route() (+2 more)
+
+### Community 107 - "Community 107"
+Cohesion: 0.18
+Nodes (0): 
+
+### Community 108 - "Community 108"
+Cohesion: 0.45
+Nodes (10): _order(), _same_group(), _seed_restaurant(), test_assigned_orders_are_excluded_from_preview(), test_nearby_unassigned_orders_share_a_preview_label(), test_preview_excludes_preparing_beyond_prep_lead(), test_preview_matches_post_dispatch_batch_assignments(), test_preview_matches_run_batch_plan() (+2 more)
+
 ### Community 109 - "Community 109"
-Cohesion: 0.22
-Nodes (4): ~80% acc target per spec/GAP_LIST #5; const drives enforcement/check in run_fore, Example: low accuracy run (below target) should be detectable for retrain/alerts, test_accuracy_below_target_is_flagged_by_score(), test_target_accuracy_default_80pct()
+Cohesion: 0.25
+Nodes (8): _seed_linked_menu(), test_greeting_sends_catalog_when_mode_on(), test_menu_request_falls_back_to_text_when_catalog_unavailable(), test_order_again_after_completed_order_sends_catalog(), test_send_catalog_groups_by_category(), test_send_catalog_refuses_unsynced_fallback(), test_show_menu_falls_back_to_text_when_catalog_off(), test_show_menu_sends_catalog_when_mode_on()
 
 ### Community 110 - "Community 110"
-Cohesion: 0.56
-Nodes (8): _conv(), _drive(), _items(), Large-quantity anomaly guard: an unusually big line (e.g. "100000 lemon mints"), _seed_menu(), test_large_add_qty_escalates_and_does_not_add(), test_large_update_qty_escalates_and_keeps_old_qty(), test_normal_qty_still_adds()
+Cohesion: 0.35
+Nodes (10): _make_order(), Order cancellation endpoint (POST /api/v1/orders/{id}/cancel).  Covers the spec, The cancel ENDPOINT is restaurant/manager-initiated. A restaurant cancel of a, _seed_menu(), test_cancel_confirmed_order_returns_cancelled(), test_cancel_preparing_via_endpoint_is_cancelled_not_resold(), test_cancel_ready_order_is_422(), test_cancel_requires_auth() (+2 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.22
-Nodes (5): BaseHTTPMiddleware, Re-export SecurityHeadersMiddleware from canonical location (P7-T13).  The canon, Security headers middleware (P7-T6 / P7-T13).  Adds security headers to every re, Add security headers to every response., SecurityHeadersMiddleware
+Cohesion: 0.18
+Nodes (0): 
 
 ### Community 112 - "Community 112"
-Cohesion: 0.33
-Nodes (8): _classify(), Named audience segments (RFM-style) over ``Customer``.  A provisional, industry-, Assign one customer to exactly one named bucket. Order = priority.      Recency, Count customers per bucket (mutually exclusive) plus ``all`` = total., Customer ids in one bucket. ``all`` returns every customer of the tenant., _rows(), segment_counts(), segment_customer_ids()
+Cohesion: 0.24
+Nodes (5): Per-user marketing throttle: pure decision + DB 24h send count.  Pure ``can_send, _send(), test_count_excludes_suppressed_and_failed(), test_count_sends_last_24h_counts_only_trailing_window(), test_count_sends_last_24h_is_tenant_and_phone_scoped()
 
 ### Community 113 - "Community 113"
-Cohesion: 0.46
-Nodes (7): getOrders(), markDelivered(), markNotDelivered(), pickup(), registerPushToken(), req(), setDuty()
+Cohesion: 0.29
+Nodes (9): _dubai(), UAE marketing send-window checks (Asia/Dubai, 9am-6pm by UAE Cabinet 56/2024)., A UTC instant corresponding to the given Asia/Dubai wall-clock time., test_before_window_is_false(), test_next_window_open_after_close_is_next_day_9am(), test_next_window_open_before_open_is_same_day_9am(), test_window_close_boundary_is_false(), test_window_last_minute_is_true() (+1 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.32
-Nodes (3): onAddressSaved(), onCustomerSaved(), save()
+Cohesion: 0.29
+Nodes (6): _customer(), _msg(), Don't call me" → persistent customer contact preference.  When a customer asks n, test_can_call_clears_previous_preference(), test_dont_call_sets_customer_preference(), test_ordinary_message_does_not_set_preference()
 
 ### Community 115 - "Community 115"
-Cohesion: 0.32
-Nodes (3): classifyError(), load(), tick()
+Cohesion: 0.4
+Nodes (10): _pick_up(), _seed_batch(), _start_tracker(), test_100m_geofence_sends_dual_buttons_and_delivered_next_reveals_next_location(), test_button_only_unknown_id_no_op(), test_delivered_marks_delivered_and_records_cod(), test_last_delivery_frees_rider(), test_orders_picked_advances_all_and_sends_first_stop() (+2 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.29
-Nodes (2): adjustWallet(), reloadWallet()
+Nodes (10): _conv(), _fetch_conversation_history was already deleted in W1 (b9ae270); guard     again, Older rows without a display_text/cart_snapshot still render human text,     nev, test_body_normalised_to_delivered_form(), test_consecutive_same_role_merged(), test_dead_fetch_builder_absent(), test_list_reply_and_buttons_and_cta_rendered(), test_order_turn_falls_back_to_product_items_count() (+2 more)
 
 ### Community 117 - "Community 117"
-Cohesion: 0.25
-Nodes (0): 
+Cohesion: 0.18
+Nodes (10): Addendum: LLM-driven completion in the order-modification flow, Design, Factory — `app/llm/factory.py`, New port — `app/llm/port.py`, Out of scope, Problem, Provider impls, Success criteria (+2 more)
 
 ### Community 118 - "Community 118"
-Cohesion: 0.25
-Nodes (1): WhatsApp shows *single* asterisks as bold; Markdown's **double** asterisks rende
+Cohesion: 0.18
+Nodes (11): 2026-06-30-biryani-correction-flow-root-cause.md, R-061..R-067, R-077..R-084, R-DB-01, R-I-001..012, TX-02, TX-03, TX-07 (+3 more)
 
 ### Community 119 - "Community 119"
-Cohesion: 0.25
-Nodes (0): 
+Cohesion: 0.2
+Nodes (1): App()
 
 ### Community 120 - "Community 120"
-Cohesion: 0.25
-Nodes (1): strip_dashes: AI replies must not carry em/en-dash separators, but legitimate co
+Cohesion: 0.24
+Nodes (3): onDropDish(), persistRenumber(), reloadDishes()
 
 ### Community 121 - "Community 121"
-Cohesion: 0.46
-Nodes (7): _seed(), test_assigned_to_picked_up(), test_full_happy_path_to_delivered_sets_timestamp(), test_illegal_transition_rejected(), test_last_delivery_completes_batch_and_frees_rider(), test_late_flag_set_when_past_deadline(), test_transition_writes_audit()
+Cohesion: 0.2
+Nodes (0): 
 
 ### Community 122 - "Community 122"
-Cohesion: 0.61
-Nodes (7): _seed_order(), _seed_restaurant(), _seed_rider(), test_tracking_reply_bogus_rider_position_no_eta(), test_tracking_reply_delivered(), test_tracking_reply_en_route_includes_eta(), test_tracking_reply_preparing()
+Cohesion: 0.2
+Nodes (7): Unit tests for manual delivery zones and corridor detour eligibility., On-the-way stops batch via corridor even when they fall in different zones., Integration: build_batches reads delivery_zones and applies same_zone_or_corrido, A lateral stop fails corridor eligibility when detour exceeds the cap., test_build_batches_uses_zone_gate_when_zones_configured(), test_corridor_detour_eligible_different_zones(), test_corridor_detour_rejected_off_route()
 
 ### Community 123 - "Community 123"
-Cohesion: 0.61
-Nodes (7): _order(), _seed_restaurant(), test_assigned_orders_are_excluded_from_preview(), test_nearby_unassigned_orders_share_a_preview_label(), test_preview_matches_run_batch_plan(), test_preview_respects_sla_not_just_proximity(), test_preview_uses_ortools_when_engine_ortools()
+Cohesion: 0.38
+Nodes (9): _seed(), test_duty_requires_valid_token(), test_duty_toggle_endpoint(), test_expired_pairing_code_rejected(), test_invalid_pairing_code_rejected(), test_location_requires_valid_token(), test_me_endpoint_returns_active_order(), test_pair_then_location_reveals_stop_and_notifies() (+1 more)
 
 ### Community 124 - "Community 124"
-Cohesion: 0.46
-Nodes (7): _seed_menu(), select_items(), test_find_unavailable_match_and_alternative(), test_find_unavailable_match_none_for_available(), test_set_item_qty_missing_dish_returns_none(), test_set_item_qty_updates_and_recalcs(), test_set_item_qty_zero_removes()
+Cohesion: 0.38
+Nodes (9): _seed_customer_with_address(), test_patch_address_updates_fields(), test_patch_address_wrong_customer_raises(), test_patch_customer_name(), test_patch_customer_opt_in(), test_patch_customer_opt_out(), test_patch_customer_opt_out_targets_original_phone(), test_patch_customer_phone() (+1 more)
 
 ### Community 125 - "Community 125"
-Cohesion: 0.36
-Nodes (4): _seed(), test_add_item_with_variant_snapshots_price(), test_add_item_without_variant_unchanged(), test_different_variants_are_separate_lines()
+Cohesion: 0.31
+Nodes (7): _pred(), Pure unit tests for the Today's Special send-time logic (no DB)., test_desired_send_minute_clamps_to_window(), test_desired_send_minute_custom_window_clamps(), test_desired_send_minute_falls_back_to_default(), test_desired_send_minute_personalized_subtracts_lead(), test_is_personalized_requires_clustered_history()
 
 ### Community 126 - "Community 126"
-Cohesion: 0.32
-Nodes (7): _seed_order(), test_cancel_before_preparing_transitions_to_cancelled(), test_cancel_during_preparing_creates_resale_copy(), test_exclusion_hash_encodes_phone_and_address(), test_is_excluded_for_resale_helper(), test_resale_offer_matcher_filters_by_exclusion(), test_resale_only_on_customer_cancel_not_restaurant()
+Cohesion: 0.31
+Nodes (6): _conv_with_inbound(), _last_outbox(), Window-aware customer notifications + utility template registration., test_no_conversation_uses_template(), test_outside_window_sends_template(), test_within_window_sends_session_text()
 
 ### Community 127 - "Community 127"
-Cohesion: 0.54
-Nodes (6): _dish(), _draft(), test_added_and_removed(), test_price_change_detected_by_number_and_name(), test_same_number_different_name_flagged(), test_unchanged_not_reported()
+Cohesion: 0.2
+Nodes (0): 
 
 ### Community 128 - "Community 128"
-Cohesion: 0.46
-Nodes (7): _funded(), test_capture_posts_debit_and_nets_hold(), test_concurrent_two_orders_cannot_double_spend(), test_hold_is_idempotent(), test_hold_reduces_available_not_balance(), test_hold_rejects_over_available(), test_release_returns_credit_to_available()
+Cohesion: 0.56
+Nodes (9): _conv(), _last_body(), _msg(), _seed_drinks(), test_drink_qty_two_asks_size_then_adds_both(), test_drink_size_reply_adds_that_variant(), test_drink_with_sizes_asks_which_size(), test_drink_without_variants_adds_directly() (+1 more)
 
 ### Community 129 - "Community 129"
-Cohesion: 0.32
-Nodes (3): _customer(), test_marketing_send_roundtrip(), test_marketing_send_unique_campaign_customer()
+Cohesion: 0.51
+Nodes (9): _msg(), _seed_menu(), test_clear_cart_empties_everything(), test_multi_dish_message_adds_all_items(), test_multi_dish_quantity_update_sets_all(), test_multi_dish_reply_never_redumps_the_menu(), test_multi_dish_reply_reflects_real_cart_not_llm_prose(), test_multi_dish_unknown_dish_is_reported_not_silently_dropped() (+1 more)
 
 ### Community 130 - "Community 130"
-Cohesion: 0.29
-Nodes (3): _clean(), Template copywriter post-processing — no dashes, no back-to-back emojis.  The AI, test_dashes_stripped_but_compound_hyphens_kept()
+Cohesion: 0.36
+Nodes (6): _btn(), _conv(), _msg(), _seed_menu(), test_cancel_order_button_in_modify_cancels(), test_off_menu_order_at_summary_declines()
 
 ### Community 131 - "Community 131"
-Cohesion: 0.25
-Nodes (1): Unit tests for the business-hours helper (pure, no DB/clock).
+Cohesion: 0.49
+Nodes (9): _chicken(), _msg(), Regression: a stale draft_order_id (left over from a PLACED or CANCELLED order), _seed_menu(), test_cart_summary_merges_same_dish_into_one_noted_line(), test_new_order_does_not_reuse_a_placed_order_pointer(), test_quantity_correction_with_note_collapses_duplicate_same_dish_lines(), test_resolver_refuses_a_confirmed_order_as_cart() (+1 more)
 
 ### Community 132 - "Community 132"
-Cohesion: 0.57
-Nodes (7): _bodies(), _seed_menu(), test_done_with_empty_cart_does_not_proceed(), test_done_with_items_proceeds(), test_manual_order_with_no_items_is_rejected(), test_proceed_with_empty_cart_is_refused_by_engine_gate(), _txt()
+Cohesion: 0.24
+Nodes (4): Generate the Cratis x CatalystIQ STEP-BY-STEP IMPLEMENTATION PLAN Word document., _shade(), steps(), table()
 
 ### Community 133 - "Community 133"
-Cohesion: 0.57
-Nodes (6): _last_body(), _msg(), _seed(), test_no_description_falls_back_to_short_line(), test_shows_stored_description_when_present(), test_unknown_dish_does_not_hijack()
+Cohesion: 0.24
+Nodes (9): geocode_cached(), _key(), Redis read-through cache for geocoding results (address → lat/lng).  Repeated ad, Inject the async Redis client used for the geocode cache (or None)., Geocode ``address`` via a Redis read-through cache.      Returns ``(lat, lng)``, Reverse-geocode ``(lat, lng)`` to an area label via a Redis read-through     cac, reverse_geocode_cached(), _reverse_key() (+1 more)
 
 ### Community 134 - "Community 134"
-Cohesion: 0.5
-Nodes (7): _chicken(), _msg(), Regression: a stale draft_order_id (left over from a PLACED or CANCELLED order), _seed_menu(), test_cart_summary_shows_special_note_to_distinguish_duplicate_lines(), test_new_order_does_not_reuse_a_placed_order_pointer(), test_resolver_refuses_a_confirmed_order_as_cart()
+Cohesion: 0.29
+Nodes (9): accept_resale(), discounted_total(), Resale of cancelled-after-cooking orders (spec §3).  When the kitchen has alread, Sell the resale food to a new customer. Marks the on-resale order RESOLD and, Resale config, with DEFAULT_SETTINGS merged in. Restaurants created BEFORE the, Return (discounted_subtotal, discount_amount) from settings.resale., Best available resale offer for this customer, or None.      Honors enable flag,, _resale_cfg() (+1 more)
 
 ### Community 135 - "Community 135"
-Cohesion: 0.29
-Nodes (4): decode_access_token(), decode_token(), Decode and verify a JWT, enforcing aud and iss. Returns full claims dict., Backward-compat wrapper: decode a manager token, return restaurant_id as int.
+Cohesion: 0.2
+Nodes (7): CartLineContext, normalize_note(), CartService — single owner of cart mutations for ordering.  All add / set-qty /, Apply a normalised kitchen note to an in-cart dish.          Strips politeness/a, Return structured cart lines with stable cart_item_id for LLM context (F64)., Strip politeness/action prefixes from a kitchen note before storing.      'pls a, Structured representation of one cart line for LLM context injection.
 
 ### Community 136 - "Community 136"
-Cohesion: 0.29
-Nodes (7): _insertion_detour_km(), Manual delivery zones and corridor eligibility for batching., Extra travel km to fold ``candidate`` into a route from ``origin`` through ``sto, True when both stops share a zone or corridor insertion detour is within the cap, Return the name of the first zone whose radius contains ``(lat, lon)``., same_zone_or_corridor(), zone_for_point()
+Cohesion: 0.27
+Nodes (9): datestamped_name(), is_name_reusable(), next_available_name(), WhatsApp template naming — datestamped names + 30-day reuse blackout.  Pure func, Lowercase, replace non-[a-z0-9_] with '_', collapse repeats, trim '_'., Build ``{slug}_{YYYYMMDD}`` (+ ``_{suffix}`` when suffix > 0).      Raises ``Val, False if ``name`` was deleted within the last 30 days, else True.      ``deleted, Return the first datestamped name that is reusable AND not in use.      Incremen (+1 more)
 
 ### Community 137 - "Community 137"
-Cohesion: 0.29
-Nodes (2): get_customer_profile(), set_loyalty_tier()
+Cohesion: 0.36
+Nodes (7): advanceStatus(), cancelOrderAction(), onAddressSaved(), onCustomerSaved(), reassignAction(), refreshDetail(), save()
 
 ### Community 138 - "Community 138"
-Cohesion: 0.36
-Nodes (7): _dedupe_adjacent_emoji(), draft_template(), _fallback(), AI copywriter for WhatsApp marketing templates.  Turns a manager's plain-English, Collapse runs of back-to-back emojis to a single emoji (no '🍽️🔥')., Return ``{suggested_name, body, footer, examples}`` for the offer., _slug()
+Cohesion: 0.33
+Nodes (6): adjustWallet(), handleDeleteAddress(), handleSaveAddress(), patchProfileCache(), reloadWallet(), saveIdentity()
 
 ### Community 139 - "Community 139"
-Cohesion: 0.32
-Nodes (7): accuracy_from_mape(), mape(), Pure accuracy math for forecast scoring (no DB).  The nightly worker queries act, Mean Absolute Percentage Error over paired points.      ``mean(|p - a| / a)`` ac, Convert MAPE to an accuracy score in [0, 1] (never negative).      Rounded to 4, Accuracy on the primary ``order_count`` metric.      Dish-level multi-point MAPE, score_prediction()
+Cohesion: 0.28
+Nodes (3): pick(), propose(), round6()
 
 ### Community 140 - "Community 140"
-Cohesion: 0.29
+Cohesion: 0.22
 Nodes (0): 
 
 ### Community 141 - "Community 141"
-Cohesion: 0.29
-Nodes (0): 
+Cohesion: 0.36
+Nodes (7): fetchPublicTracking(), fetchPublicTrackingLocation(), fetchRiderTracking(), postRiderLocation(), stopRiderTracking(), TrackingError, trackingRequest()
 
 ### Community 142 - "Community 142"
-Cohesion: 0.29
-Nodes (0): 
+Cohesion: 0.33
+Nodes (8): _drive_to_address_capture(), restaurant(), _seed_full_menu(), test_simulator_button_reply_reaches_engine(), test_simulator_greeting_returns_menu(), test_simulator_location_drives_address_flow(), test_simulator_order_dish_gets_confirmation(), test_simulator_send_requires_exactly_one_payload()
 
 ### Community 143 - "Community 143"
-Cohesion: 0.43
-Nodes (5): getToken(), isAuthenticated(), login(), setToken(), signup()
+Cohesion: 0.53
+Nodes (8): _assigned_order(), _planned_batch(), test_new_ready_inserts_into_planned_batch(), test_new_ready_via_kitchen_hook_inserts_into_planned_batch(), test_rebatch_noop_after_pickup(), test_rebatch_splits_when_sla_risk(), test_resequence_enqueues_customer_eta_update(), test_sweep_rebatch_with_movable_orders()
 
 ### Community 144 - "Community 144"
-Cohesion: 0.33
-Nodes (2): _closing(), test_fake_closing_variants_proceed()
+Cohesion: 0.47
+Nodes (7): _order_inbound(), _seed_catalog_menu(), test_basket_accepts_alternate_retailer_id_keys(), test_basket_rejects_dish_without_active_catalog_product(), test_catalog_cart_creates_order_and_confirms(), test_partial_mapping_adds_known_and_lists_unknown(), test_unmapped_items_do_not_create_empty_order()
 
 ### Community 145 - "Community 145"
-Cohesion: 0.67
-Nodes (6): _order(), _restaurant(), _rider(), test_delete_rider_blocked_by_cod_records(), test_delete_rider_detaches_active_order_and_cleans_ops(), test_delete_rider_with_no_refs()
+Cohesion: 0.42
+Nodes (8): _resale_order(), test_accept_resale_batches_companion_order(), test_accept_resale_creates_discounted_ready_order(), test_offer_applies_fixed_discount(), test_offer_applies_percent_discount(), test_offer_disabled(), test_offer_excludes_original_customer(), test_offer_respects_max_age()
 
 ### Community 146 - "Community 146"
-Cohesion: 0.52
-Nodes (6): _order(), test_earn_credits_wallet_from_settings_rate(), test_earn_disabled_no_credit(), test_earn_idempotent_per_order(), test_earn_respects_per_order_cap(), test_reverse_earn_claws_back()
+Cohesion: 0.56
+Nodes (8): _order(), _seed(), test_capture_on_deliver_drops_balance(), test_coupon_then_wallet_stack(), test_no_wallet_no_coupon_is_noop(), test_release_on_cancel_restores_credit(), test_wallet_applied_reduces_cod_due(), test_wallet_hold_never_exceeds_available()
 
 ### Community 147 - "Community 147"
-Cohesion: 0.52
-Nodes (6): _seed(), test_issue_coupon_creates_unique_code(), test_redeem_coupon_marks_redeemed(), test_redeem_expired_rejected(), test_redeem_twice_rejected(), test_redeem_unknown_code_rejected()
+Cohesion: 0.39
+Nodes (8): Serving-size variants on a dish: persistence, schema validation, activation guar, test_activate_blocked_if_variant_missing_price(), test_activate_ok_with_complete_variants(), test_dish_persists_variants(), test_duplicate_variant_names_rejected(), test_nonpositive_variant_price_rejected(), test_patch_dish_sets_variants(), _upload()
 
 ### Community 148 - "Community 148"
-Cohesion: 0.52
-Nodes (6): test_add_dish(), test_delete_dish(), test_duplicate_dish_number_409(), test_patch_dish_price_and_name(), test_toggle_availability(), _upload()
+Cohesion: 0.61
+Nodes (8): _approved_template(), _enable(), _noon_customer(), test_tick_is_idempotent_within_the_day(), test_tick_noop_when_disabled(), test_tick_sends_special_at_predicted_time(), test_tick_skips_customer_not_yet_due(), test_tick_uses_default_time_for_sparse_customer()
 
 ### Community 149 - "Community 149"
-Cohesion: 0.29
-Nodes (6): Re-extraction endpoint should return 200 without requiring a new upload., Reextract on another restaurant's menu returns 404., Uploading a menu should persist bytes and create a MenuFile DB row., test_reextract_menu(), test_reextract_tenant_isolation(), test_upload_creates_menu_file_row()
+Cohesion: 0.22
+Nodes (0): 
 
 ### Community 150 - "Community 150"
-Cohesion: 0.67
-Nodes (6): _restaurant_by_phone(), _seed_customer_conv(), test_chat_context_returns_orders_and_wallet(), test_credit_rejects_bad_amount(), test_issue_coupon_to_customer(), test_manual_wallet_credit()
+Cohesion: 0.22
+Nodes (4): ~80% acc target per spec/GAP_LIST #5; const drives enforcement/check in run_fore, Example: low accuracy run (below target) should be detectable for retrain/alerts, test_accuracy_below_target_is_flagged_by_score(), test_target_accuracy_default_80pct()
 
 ### Community 151 - "Community 151"
-Cohesion: 0.71
-Nodes (6): _inb(), _post_order_conv(), _seed_menu(), test_complaint_does_not_compensate(), test_complaint_opens_ticket(), test_status_query_not_treated_as_complaint()
+Cohesion: 0.56
+Nodes (8): _conv(), _drive(), _items(), Large-quantity anomaly guard: an unusually big line (e.g. "100000 lemon mints"), _seed_menu(), test_large_add_qty_escalates_and_does_not_add(), test_large_update_qty_escalates_and_keeps_old_qty(), test_normal_qty_still_adds()
 
 ### Community 152 - "Community 152"
 Cohesion: 0.33
-Nodes (3): Generate the Cratis x CatalystIQ integration-requirements Word document., _shade(), table()
+Nodes (7): get_cached_preview(), invalidate_preview_cache(), Tenant-scoped TTL cache for ``preview_batch_groups`` results.  Batch preview run, Drop cached labels when dispatch pool changes (assign, ready, cancel)., _redis_key(), set_cached_preview(), _ttl_seconds()
 
 ### Community 153 - "Community 153"
 Cohesion: 0.33
-Nodes (3): Final meeting overview doc — simple points, NO hyphens, NO em dashes., _shade(), table()
+Nodes (8): _classify(), Named audience segments (RFM-style) over ``Customer``.  A provisional, industry-, Assign one customer to exactly one named bucket. Order = priority.      Recency, Count customers per bucket (mutually exclusive) plus ``all`` = total., Customer ids in one bucket. ``all`` returns every customer of the tenant., _rows(), segment_counts(), segment_customer_ids()
 
 ### Community 154 - "Community 154"
+Cohesion: 0.22
+Nodes (8): 1. Rider flow (spec §4.4, plan phase-4, transcript verbatim), 2. Customer address (spec §4.2, transcript exact echo), 3. Marketing daily / Today's Special + Klaviyo-style (spec §4.7, phase-6 plan), 4. Dispatch batching exact math (spec §4.3, phase-4 plan, transcript "incl. order-to-order travel time check <40min"), 5. Predictions AI+ML full (spec §4.6, phase-6 plan, transcript "weekly retrain on specific day/time, ~80% acc target, full horizons + plain English overrides"), 6. Minor / other (from current greps, UAT Known snapshot, hardcode audit), 7. Enterprise / process gaps (CLAUDE + plans), GAP_LIST — Factual remaining vs full design chat transcript + spec + plans (no assumptions)
+
+### Community 155 - "Community 155"
+Cohesion: 0.22
+Nodes (8): Architecture, Bounded contexts, Data flow: inbound message → outbound reply, Migration conventions, Order dialogue FSM, Ports & adapters inventory, Tenancy model, Test architecture
+
+### Community 156 - "Community 156"
+Cohesion: 0.22
+Nodes (8): Files touched, Item Variants / Sizes — Implementation Plan, Risks / call-outs, Task 1: Schema — variants on Dish, variant_name on OrderItem, Task 2: Activation guard + schema validation, Task 3: Ordering — resolve + price a variant, Task 4: Conversation flow — ask once, resolve, default, Task 5: Seed + manual verification
+
+### Community 157 - "Community 157"
+Cohesion: 0.46
+Nodes (7): getOrders(), markDelivered(), markNotDelivered(), pickup(), registerPushToken(), req(), setDuty()
+
+### Community 158 - "Community 158"
+Cohesion: 0.32
+Nodes (3): classifyError(), load(), tick()
+
+### Community 159 - "Community 159"
+Cohesion: 0.39
+Nodes (5): confirmDeactivateInstead(), confirmRemove(), onDutyChange(), onStatusChange(), patchRiders()
+
+### Community 160 - "Community 160"
+Cohesion: 0.25
+Nodes (1): WhatsApp shows *single* asterisks as bold; Markdown's **double** asterisks rende
+
+### Community 161 - "Community 161"
+Cohesion: 0.25
+Nodes (0): 
+
+### Community 162 - "Community 162"
+Cohesion: 0.39
+Nodes (4): _catalog_inbound(), _latest_draft_order(), test_catalogue_price_drift_blocks_item(), test_catalogue_snapshots_meta_item_price()
+
+### Community 163 - "Community 163"
+Cohesion: 0.25
+Nodes (1): strip_dashes: AI replies must not carry em/en-dash separators, but legitimate co
+
+### Community 164 - "Community 164"
+Cohesion: 0.46
+Nodes (7): _seed(), test_assigned_to_picked_up(), test_full_happy_path_to_delivered_sets_timestamp(), test_illegal_transition_rejected(), test_last_delivery_completes_batch_and_frees_rider(), test_late_flag_set_when_past_deadline(), test_transition_writes_audit()
+
+### Community 165 - "Community 165"
+Cohesion: 0.61
+Nodes (7): _seed_order(), _seed_restaurant(), _seed_rider(), test_tracking_reply_bogus_rider_position_no_eta(), test_tracking_reply_delivered(), test_tracking_reply_en_route_includes_eta(), test_tracking_reply_preparing()
+
+### Community 166 - "Community 166"
+Cohesion: 0.46
+Nodes (7): _cart_key(), grade_last_outbound_matches_cart(), grade_no_duplicate_dish_line(), grade_no_mutation(), grade_reply_subset_of_menu(), grade_total_consistency(), GradeResult
+
+### Community 167 - "Community 167"
+Cohesion: 0.43
+Nodes (7): Coupon service tests (spec §4.5): issue (unique code, 30d expiry) + single-use r, _seed(), test_issue_coupon_creates_unique_code(), test_redeem_coupon_marks_redeemed(), test_redeem_expired_rejected(), test_redeem_twice_rejected(), test_redeem_unknown_code_rejected()
+
+### Community 168 - "Community 168"
+Cohesion: 0.46
+Nodes (7): _seed_menu(), select_items(), test_find_unavailable_match_and_alternative(), test_find_unavailable_match_none_for_available(), test_set_item_qty_missing_dish_returns_none(), test_set_item_qty_updates_and_recalcs(), test_set_item_qty_zero_removes()
+
+### Community 169 - "Community 169"
+Cohesion: 0.43
+Nodes (6): _seed_order(), test_api_list_orders_accepts_filter_query_params(), test_list_orders_filters_by_dubai_date_range(), test_list_orders_offset_skips_rows(), test_list_orders_search_matches_customer_name_and_number(), _token_for()
+
+### Community 170 - "Community 170"
+Cohesion: 0.36
+Nodes (4): _seed(), test_add_item_with_variant_snapshots_price(), test_add_item_without_variant_unchanged(), test_different_variants_are_separate_lines()
+
+### Community 171 - "Community 171"
+Cohesion: 0.54
+Nodes (6): _dish(), _draft(), test_added_and_removed(), test_price_change_detected_by_number_and_name(), test_same_number_different_name_flagged(), test_unchanged_not_reported()
+
+### Community 172 - "Community 172"
+Cohesion: 0.46
+Nodes (7): _funded(), test_capture_posts_debit_and_nets_hold(), test_concurrent_two_orders_cannot_double_spend(), test_hold_is_idempotent(), test_hold_reduces_available_not_balance(), test_hold_rejects_over_available(), test_release_returns_credit_to_available()
+
+### Community 173 - "Community 173"
+Cohesion: 0.32
+Nodes (3): _customer(), test_marketing_send_roundtrip(), test_marketing_send_unique_campaign_customer()
+
+### Community 174 - "Community 174"
+Cohesion: 0.29
+Nodes (3): _clean(), Template copywriter post-processing — no dashes, no back-to-back emojis.  The AI, test_dashes_stripped_but_compound_hyphens_kept()
+
+### Community 175 - "Community 175"
+Cohesion: 0.25
+Nodes (7): Pure DB renderer tests (W3/RA-1/R-013)., awaiting_confirmation phase: result contains order summary fields., ordering phase with no items → '\\n\\n🛒 Your cart is now empty., ordering phase: result starts with \\n\\n🛒, contains dish name and subtotal., test_render_cart_state_confirm_phase(), test_render_cart_state_empty_ordering(), test_render_cart_state_ordering_phase()
+
+### Community 176 - "Community 176"
+Cohesion: 0.64
+Nodes (7): _conv(), _enter_modify(), _latest_body(), _msg(), _seed_menu(), test_cart_query_during_modify_shows_cart_and_stays(), test_menu_request_during_modify_answers_and_stays()
+
+### Community 177 - "Community 177"
+Cohesion: 0.25
+Nodes (1): Unit tests for the business-hours helper (pure, no DB/clock).
+
+### Community 178 - "Community 178"
+Cohesion: 0.57
+Nodes (7): _bodies(), _seed_menu(), test_done_with_empty_cart_does_not_proceed(), test_done_with_items_proceeds(), test_manual_order_with_no_items_is_rejected(), test_proceed_with_empty_cart_is_refused_by_engine_gate(), _txt()
+
+### Community 179 - "Community 179"
+Cohesion: 0.57
+Nodes (6): _last_body(), _msg(), _seed(), test_no_description_falls_back_to_short_line(), test_shows_stored_description_when_present(), test_unknown_dish_does_not_hijack()
+
+### Community 180 - "Community 180"
+Cohesion: 0.29
+Nodes (4): decode_access_token(), decode_token(), Decode and verify a JWT, enforcing aud and iss. Returns full claims dict., Backward-compat wrapper: decode a manager token, return restaurant_id as int.
+
+### Community 181 - "Community 181"
+Cohesion: 0.29
+Nodes (7): _insertion_detour_km(), Manual delivery zones and corridor eligibility for batching., Extra travel km to fold ``candidate`` into a route from ``origin`` through ``sto, True when both stops share a zone or corridor insertion detour is within the cap, Return the name of the first zone whose radius contains ``(lat, lon)``., same_zone_or_corridor(), zone_for_point()
+
+### Community 182 - "Community 182"
+Cohesion: 0.29
+Nodes (2): get_customer_profile(), set_loyalty_tier()
+
+### Community 183 - "Community 183"
+Cohesion: 0.36
+Nodes (7): _dedupe_adjacent_emoji(), draft_template(), _fallback(), AI copywriter for WhatsApp marketing templates.  Turns a manager's plain-English, Collapse runs of back-to-back emojis to a single emoji (no '🍽️🔥')., Return ``{suggested_name, body, footer, examples}`` for the offer., _slug()
+
+### Community 184 - "Community 184"
+Cohesion: 0.32
+Nodes (7): accuracy_from_mape(), mape(), Pure accuracy math for forecast scoring (no DB).  The nightly worker queries act, Mean Absolute Percentage Error over paired points.      ``mean(|p - a| / a)`` ac, Convert MAPE to an accuracy score in [0, 1] (never negative).      Rounded to 4, Accuracy on the primary ``order_count`` metric.      Dish-level multi-point MAPE, score_prediction()
+
+### Community 185 - "Community 185"
+Cohesion: 0.29
+Nodes (0): 
+
+### Community 186 - "Community 186"
+Cohesion: 0.29
+Nodes (0): 
+
+### Community 187 - "Community 187"
+Cohesion: 0.33
+Nodes (2): applyFixtureFilters(), fetchOrders()
+
+### Community 188 - "Community 188"
+Cohesion: 0.43
+Nodes (5): getToken(), isAuthenticated(), login(), setToken(), signup()
+
+### Community 189 - "Community 189"
+Cohesion: 0.67
+Nodes (6): _order(), _restaurant(), _rider(), test_delete_rider_blocked_by_cod_records(), test_delete_rider_detaches_active_order_and_cleans_ops(), test_delete_rider_with_no_refs()
+
+### Community 190 - "Community 190"
+Cohesion: 0.52
+Nodes (6): _order(), test_earn_credits_wallet_from_settings_rate(), test_earn_disabled_no_credit(), test_earn_idempotent_per_order(), test_earn_respects_per_order_cap(), test_reverse_earn_claws_back()
+
+### Community 191 - "Community 191"
+Cohesion: 0.29
+Nodes (2): Manager single-use promos must appear in the default list (not only multi_use)., test_list_includes_single_use_campaign_coupon()
+
+### Community 192 - "Community 192"
+Cohesion: 0.29
+Nodes (6): Re-extraction endpoint should return 200 without requiring a new upload., Reextract on another restaurant's menu returns 404., Uploading a menu should persist bytes and create a MenuFile DB row., test_reextract_menu(), test_reextract_tenant_isolation(), test_upload_creates_menu_file_row()
+
+### Community 193 - "Community 193"
+Cohesion: 0.48
+Nodes (5): _msg(), test_ai_add_with_special_note_targets_in_cart_partial_name(), test_combo_in_cart_gets_modifier_note_by_partial_name(), test_try_kitchen_note_helper_combo_cart(), test_with_modifiers_apply_note_to_in_cart_biryani()
+
+### Community 194 - "Community 194"
+Cohesion: 0.67
+Nodes (6): _restaurant_by_phone(), _seed_customer_conv(), test_chat_context_returns_orders_and_wallet(), test_credit_rejects_bad_amount(), test_issue_coupon_to_customer(), test_manual_wallet_credit()
+
+### Community 195 - "Community 195"
+Cohesion: 0.71
+Nodes (6): _inb(), _post_order_conv(), _seed_menu(), test_complaint_does_not_compensate(), test_complaint_opens_ticket(), test_status_query_not_treated_as_complaint()
+
+### Community 196 - "Community 196"
+Cohesion: 0.33
+Nodes (3): Generate the Cratis x CatalystIQ integration-requirements Word document., _shade(), table()
+
+### Community 197 - "Community 197"
+Cohesion: 0.33
+Nodes (3): Final meeting overview doc — simple points, NO hyphens, NO em dashes., _shade(), table()
+
+### Community 198 - "Community 198"
 Cohesion: 0.38
 Nodes (6): rank_riders(), Rider scoring (spec §4.3.4).  Composite blends distance-to-pickup, current workl, Composite score — lower is better. Persisted to assignments.algorithm_score., Return scored riders sorted best (lowest composite) first., score_rider(), ScoredRider
 
-### Community 155 - "Community 155"
-Cohesion: 0.48
-Nodes (6): _aed(), _find_dish(), handle_catalog_order(), _retailer_id_from_item(), send_catalog(), _to_decimal()
-
-### Community 156 - "Community 156"
+### Community 199 - "Community 199"
 Cohesion: 0.52
 Nodes (6): refresh_customer(), refresh_menu_and_policy(), refresh_okf_for_restaurant(), refresh_order(), _upsert(), _yaml()
 
-### Community 157 - "Community 157"
-Cohesion: 0.57
-Nodes (6): _build_condition(), compile_segment(), evaluate_segment(), preview_count(), _validate_condition(), validate_dsl()
-
-### Community 158 - "Community 158"
+### Community 200 - "Community 200"
 Cohesion: 0.33
 Nodes (6): can_send_marketing(), count_sends_last_24h(), Per-recipient marketing throttle.  ``can_send_marketing`` is a pure decision ove, Decide per-recipient marketing eligibility.      Order of checks: opt-out → wind, Count this tenant's marketing sends to ``phone`` in the trailing 24h.      Count, SendDecision
 
-### Community 159 - "Community 159"
+### Community 201 - "Community 201"
 Cohesion: 0.38
 Nodes (5): download_inbound_media(), inbound_media_id(), inbound_media_mime(), Helpers for inbound WhatsApp attachments shown in the manager Chats UI., Fetch attachment bytes for image/document/video/sticker messages.
 
-### Community 160 - "Community 160"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 161 - "Community 161"
-Cohesion: 0.47
-Nodes (3): activateParsedMenu(), refreshStatus(), saveLocation()
-
-### Community 162 - "Community 162"
-Cohesion: 0.47
-Nodes (3): applyPreset(), presetRange(), toYMD()
-
-### Community 163 - "Community 163"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 164 - "Community 164"
-Cohesion: 0.4
-Nodes (2): remainingMs(), slaTier()
-
-### Community 165 - "Community 165"
-Cohesion: 0.47
-Nodes (2): isDocumentHidden(), PollingTransport
-
-### Community 166 - "Community 166"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 167 - "Community 167"
-Cohesion: 0.33
-Nodes (5): Test outbox exponential backoff (P7-T1)., 4xx HTTP errors should mark the message dead, not retry., Verify countdown doubles: 10, 20, 40, 80, 160., test_backoff_countdown_progression(), test_permanent_failure_marked_dead()
-
-### Community 168 - "Community 168"
-Cohesion: 0.33
-Nodes (2): Existing code creates tokens with just restaurant_id — must still work., test_backward_compat_no_audience_param()
-
-### Community 169 - "Community 169"
-Cohesion: 0.47
-Nodes (4): Cancelling an assigned order must detach it from the rider (no ghost deliveries), _seed_assigned(), test_cancel_preparing_with_rider_releases_dispatch(), test_release_detaches_and_frees_rider()
-
-### Community 170 - "Community 170"
-Cohesion: 0.73
-Nodes (5): _order(), _restaurant(), _rider(), test_preparing_order_excluded_when_prep_deadline_beyond_lead(), test_preparing_order_in_pool_when_prep_deadline_within_lead()
-
-### Community 171 - "Community 171"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 172 - "Community 172"
-Cohesion: 0.33
-Nodes (1): test_list_includes_single_use_campaign_coupon()
-
-### Community 173 - "Community 173"
-Cohesion: 0.67
-Nodes (5): _seed_active_order(), _status_msg(), test_status_query_confirmed_order_returns_status_message(), test_status_query_no_active_order_returns_polite_reply(), test_status_query_preparing_mentions_kitchen()
-
-### Community 174 - "Community 174"
-Cohesion: 0.73
-Nodes (5): _confirmable_order(), _seed(), test_confirm_holds_wallet_and_cod_due_reduced(), test_no_credit_confirm_unchanged(), test_rider_collects_only_remainder_and_capture_settles()
-
-### Community 175 - "Community 175"
-Cohesion: 0.6
-Nodes (5): _seed_confirmed_order(), test_modify_order_blocked_at_ready(), test_modify_order_produces_audit_log(), test_modify_order_recalculates_total(), test_modify_order_restarts_sla_clock()
-
-### Community 176 - "Community 176"
-Cohesion: 0.33
-Nodes (2): Files > 5 MB should be rejected with 413., test_upload_rejects_oversized_file()
-
-### Community 177 - "Community 177"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 178 - "Community 178"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 179 - "Community 179"
-Cohesion: 0.47
-Nodes (4): _at(), RFM bucket classification — pure formula, no DB.  Guards the mutually-exclusive, test_classify_buckets(), test_classify_never_returns_all_or_unknown()
-
-### Community 180 - "Community 180"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 181 - "Community 181"
-Cohesion: 0.53
-Nodes (5): _patch_secret(), The POST /api/v1/marketing/tick heartbeat is guarded by a shared secret and need, test_tick_403_on_wrong_secret(), test_tick_503_when_secret_unconfigured(), test_tick_runs_with_correct_secret()
-
-### Community 182 - "Community 182"
-Cohesion: 0.73
-Nodes (5): _order(), _seed(), test_reconcile_shift_balanced(), test_record_collection_idempotent(), test_record_collection_writes_row()
-
-### Community 183 - "Community 183"
-Cohesion: 0.33
-Nodes (0): 
-
-### Community 184 - "Community 184"
-Cohesion: 0.73
-Nodes (5): _audio_msg(), _msg(), _seed_menu(), test_unintelligible_voice_note_asks_to_retry(), test_voice_note_transcribed_and_added_to_order()
-
-### Community 185 - "Community 185"
-Cohesion: 0.73
-Nodes (5): _conv(), _msg(), test_cancel_after_confirm_blocked_when_picked_up(), test_cancel_after_confirm_cancels_order_and_releases_rider(), test_cancel_during_preparing_uses_simple_message_no_resale_disclaimer()
-
-### Community 186 - "Community 186"
-Cohesion: 0.67
-Nodes (5): _msg(), _seed_menu(), test_confirmation_add_item_actually_applies_and_reshows(), test_confirmation_no_action_reshows_real_summary(), test_confirmation_question_gets_answer_then_summary()
-
-### Community 187 - "Community 187"
-Cohesion: 0.53
-Nodes (5): _patch_secret(), The POST /api/v1/conversations/cart-tick heartbeat drives the abandoned-cart swe, test_cart_tick_403_on_wrong_secret(), test_cart_tick_503_when_secret_unconfigured(), test_cart_tick_runs_with_correct_secret()
-
-### Community 188 - "Community 188"
-Cohesion: 0.4
-Nodes (4): include_object(), Ignore tables that exist in the DB but not in our models.      The postgis/postg, run_async_migrations(), run_migrations_online()
-
-### Community 189 - "Community 189"
-Cohesion: 0.33
-Nodes (5): configure_logging(), get_request_id_processor(), Structlog JSON logging configuration (P7-T8).  Call ``configure_logging()`` once, Configure structlog with JSON output (prod) or pretty console (dev)., Return a structlog processor that reads request_id from context vars.      Retur
-
-### Community 190 - "Community 190"
-Cohesion: 0.4
-Nodes (5): normalize_phone(), phone_lookup_values(), Shared E.164-ish phone normalization for tenant matching., Distinct phone strings that should match the same tenant row.      Covers legacy, Normalize a phone to '+<digits>' (E.164-ish), stripping spaces, dashes, etc.
-
-### Community 191 - "Community 191"
-Cohesion: 0.47
-Nodes (5): build_order_candidates(), CandidatePoolResult, _minutes_since_sla(), Dispatch candidate pool — ready orders plus prep-near orders (spec §5.1)., Load unassigned dispatch candidates: ``ready`` always; ``preparing`` when     ``
-
-### Community 192 - "Community 192"
-Cohesion: 0.4
-Nodes (5): generate_api_key(), hash_api_key(), Partner API-key generation + hashing.  Keys are high-entropy random tokens, so a, SHA-256 hex digest of a full API key (what we store and look up by)., Mint a new key. Returns ``(full_key, key_prefix, key_hash)``.      ``full_key``
-
-### Community 193 - "Community 193"
-Cohesion: 0.33
-Nodes (5): grounding_block(), OKF lexical retrieval — find the concept docs most relevant to a customer messag, Top OKF docs for ``query``.      MULTILINGUAL: lexical (pg_trgm) similarity only, Render retrieved OKF docs into a prompt-injectable grounding block., retrieve()
-
-### Community 194 - "Community 194"
-Cohesion: 0.33
-Nodes (5): is_within_uae_window(), next_window_open(), UAE marketing send-window helpers (pure, timezone-aware).  UAE Cabinet Decision, True iff ``now_utc`` falls inside the UAE send window.      Converts to Asia/Dub, Next UTC instant at which the send window opens.      Today's open if ``now`` is
-
-### Community 195 - "Community 195"
-Cohesion: 0.33
-Nodes (5): list_utility_templates(), Utility-template management (manager JWT).  Submit the transactional utility tem, The utility templates this platform uses (for reference)., Submit all utility templates for approval for this restaurant. Idempotent., register_utility()
-
-### Community 196 - "Community 196"
-Cohesion: 0.4
-Nodes (0): 
-
-### Community 197 - "Community 197"
-Cohesion: 0.6
-Nodes (3): onPause(), reload(), submit()
-
-### Community 198 - "Community 198"
-Cohesion: 0.4
-Nodes (0): 
-
-### Community 199 - "Community 199"
-Cohesion: 0.4
-Nodes (0): 
-
-### Community 200 - "Community 200"
-Cohesion: 0.5
-Nodes (3): ApiError, authHeaders(), request()
-
-### Community 201 - "Community 201"
-Cohesion: 0.4
-Nodes (0): 
-
 ### Community 202 - "Community 202"
-Cohesion: 0.4
-Nodes (1): Tests for Prometheus metrics (P7-T10).
+Cohesion: 0.29
+Nodes (6): Alerting suggestions, Compose additions (paste into `docker-compose.prod.yml` when P7-T10 lands), Dashboard description (`restaurant-ops.json`), Files in this repo, Observability — Prometheus + Grafana, What gets scraped
 
 ### Community 203 - "Community 203"
-Cohesion: 0.7
-Nodes (4): _seed_outbox(), test_deliver_one_marks_dead_after_3_failures(), test_deliver_one_marks_failed_on_send_error(), test_deliver_one_sends_and_marks_sent()
+Cohesion: 0.29
+Nodes (6): 1. Set the shared secret (server), 2. Point a cron job at the endpoint, 3. Turn it on (manager dashboard), Free options for the scheduler, How the timing works, Today's Special — cron heartbeat setup
 
 ### Community 204 - "Community 204"
-Cohesion: 0.4
-Nodes (1): Regression: the address-capture prompt must keep its guardrails so the bot doesn
+Cohesion: 0.29
+Nodes (6): Headless smoke (30 s), Load / Stress Harness, Run, Signed webhooks, SLOs (pass/fail gates), Traffic shapes
 
 ### Community 205 - "Community 205"
-Cohesion: 0.4
-Nodes (0): 
+Cohesion: 0.47
+Nodes (3): patchConversation(), toggleConvTakeover(), toggleTakeover()
 
 ### Community 206 - "Community 206"
-Cohesion: 0.4
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 207 - "Community 207"
-Cohesion: 0.7
-Nodes (4): _c(), test_ab_ad_ba_batch_pattern_sla_invariant(), test_run_batch_plan_matches_build_batches(), test_sla_boundary_greedy_internal_gate()
+Cohesion: 0.47
+Nodes (3): activateParsedMenu(), refreshStatus(), saveLocation()
 
 ### Community 208 - "Community 208"
-Cohesion: 0.7
-Nodes (4): _seed_order(), test_active_run_exposes_do_not_call(), test_no_flag_when_customer_did_not_ask(), test_stop_details_and_body_carry_do_not_call()
+Cohesion: 0.47
+Nodes (3): applyPreset(), presetRange(), toYMD()
 
 ### Community 209 - "Community 209"
-Cohesion: 0.4
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 210 - "Community 210"
 Cohesion: 0.4
-Nodes (0): 
+Nodes (2): remainingMs(), slaTier()
 
 ### Community 211 - "Community 211"
-Cohesion: 0.7
-Nodes (4): _inb(), _resto(), test_grounding_empty_for_non_text(), test_grounding_lazily_builds_bundle_and_returns_facts()
+Cohesion: 0.33
+Nodes (0): 
 
 ### Community 212 - "Community 212"
-Cohesion: 0.7
-Nodes (4): test_activate_blocked_when_missing_price(), test_activate_menu(), test_activate_supersedes_previous(), _upload()
+Cohesion: 0.47
+Nodes (2): isDocumentHidden(), PollingTransport
 
 ### Community 213 - "Community 213"
-Cohesion: 0.4
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 214 - "Community 214"
-Cohesion: 0.7
-Nodes (4): _refund_via_ticket(), test_over_cap_freezes_account(), test_under_cap_not_frozen(), test_velocity_counts_refunds()
+Cohesion: 0.33
+Nodes (5): Test outbox exponential backoff (P7-T1)., 4xx HTTP errors should mark the message dead, not retry., Verify countdown doubles: 10, 20, 40, 80, 160., test_backoff_countdown_progression(), test_permanent_failure_marked_dead()
 
 ### Community 215 - "Community 215"
-Cohesion: 0.4
-Nodes (0): 
+Cohesion: 0.33
+Nodes (2): Existing code creates tokens with just restaurant_id — must still work., test_backward_compat_no_audience_param()
 
 ### Community 216 - "Community 216"
-Cohesion: 0.7
-Nodes (4): _seed_rider(), test_rider_conversation_counterpart_is_rider(), test_rider_location_records_ping(), test_unknown_phone_routed_as_customer()
+Cohesion: 0.47
+Nodes (4): Cancelling an assigned order must detach it from the rider (no ghost deliveries), _seed_assigned(), test_cancel_preparing_with_rider_releases_dispatch(), test_release_detaches_and_frees_rider()
 
 ### Community 217 - "Community 217"
-Cohesion: 0.7
-Nodes (4): _seed_rider(), test_rider_free_text_recorded_and_notifies_manager(), test_rider_inbound_surfaces_in_dashboard_list(), test_rider_outbound_dispatch_mirrored_to_conversation()
+Cohesion: 0.73
+Nodes (5): _order(), _restaurant(), _rider(), test_preparing_order_excluded_when_prep_deadline_beyond_lead(), test_preparing_order_in_pool_when_prep_deadline_within_lead()
 
 ### Community 218 - "Community 218"
-Cohesion: 0.4
-Nodes (2): composite_indexes_customers_orders  Revision ID: 4ed3145276fb Revises: e99f4e761, # NOTE: autogenerate wanted to drop ix_dishes_name_normalized_trgm (raw-SQL GIN
+Cohesion: 0.33
+Nodes (0): 
 
 ### Community 219 - "Community 219"
-Cohesion: 0.6
-Nodes (4): build_rejections_for_dropped(), build_route_algorithm_score(), _infer_batch_reason(), _zone_label()
+Cohesion: 0.67
+Nodes (5): _seed_active_order(), _status_msg(), test_status_query_confirmed_order_returns_status_message(), test_status_query_no_active_order_returns_polite_reply(), test_status_query_preparing_mentions_kitchen()
 
 ### Community 220 - "Community 220"
-Cohesion: 0.7
-Nodes (4): _fire_event(), _fire_kitchen_event(), _run_monitor(), sla_monitor_tick()
+Cohesion: 0.73
+Nodes (5): _confirmable_order(), _seed(), test_confirm_holds_wallet_and_cod_due_reduced(), test_no_credit_confirm_unchanged(), test_rider_collects_only_remainder_and_capture_settles()
 
 ### Community 221 - "Community 221"
-Cohesion: 0.5
-Nodes (4): apply_overrides(), _money(), Deterministic manager-override adjustment layer (spec §4.6).  ``apply_overrides`, Apply ``effects`` to a copy of ``predicted``.      Returns ``(adjusted_dict, rea
+Cohesion: 0.6
+Nodes (5): _seed_confirmed_order(), test_modify_order_blocked_at_ready(), test_modify_order_produces_audit_log(), test_modify_order_recalculates_total(), test_modify_order_restarts_sla_clock()
 
 ### Community 222 - "Community 222"
-Cohesion: 0.4
-Nodes (5): record_opt_in() Function, CustomersScreen — List Page, Address Delete Blocked by Open Order, Customer Profile API Endpoints, Customer/Address Patch Endpoints
+Cohesion: 0.33
+Nodes (2): Files > 5 MB should be rejected with 413., test_upload_rejects_oversized_file()
 
 ### Community 223 - "Community 223"
-Cohesion: 0.5
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 224 - "Community 224"
-Cohesion: 0.5
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 225 - "Community 225"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.47
+Nodes (4): _at(), RFM bucket classification — pure formula, no DB.  Guards the mutually-exclusive, test_classify_buckets(), test_classify_never_returns_all_or_unknown()
 
 ### Community 226 - "Community 226"
-Cohesion: 0.5
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 227 - "Community 227"
-Cohesion: 0.83
-Nodes (3): adjustWallet(), issueCoupon(), reload()
+Cohesion: 0.53
+Nodes (5): _patch_secret(), The POST /api/v1/marketing/tick heartbeat is guarded by a shared secret and need, test_tick_403_on_wrong_secret(), test_tick_503_when_secret_unconfigured(), test_tick_runs_with_correct_secret()
 
 ### Community 228 - "Community 228"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.73
+Nodes (5): _order(), _seed(), test_reconcile_shift_balanced(), test_record_collection_idempotent(), test_record_collection_writes_row()
 
 ### Community 229 - "Community 229"
-Cohesion: 0.5
+Cohesion: 0.33
 Nodes (0): 
 
 ### Community 230 - "Community 230"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.73
+Nodes (5): _audio_msg(), _msg(), _seed_menu(), test_unintelligible_voice_note_asks_to_retry(), test_voice_note_transcribed_and_added_to_order()
 
 ### Community 231 - "Community 231"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.73
+Nodes (5): _conv(), _msg(), test_cancel_after_confirm_blocked_when_picked_up(), test_cancel_after_confirm_cancels_order_and_releases_rider(), test_cancel_during_preparing_uses_simple_message_no_resale_disclaimer()
 
 ### Community 232 - "Community 232"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.67
+Nodes (5): _msg(), _seed_menu(), test_confirmation_add_item_actually_applies_and_reshows(), test_confirmation_no_action_reshows_real_summary(), test_confirmation_question_gets_answer_then_summary()
 
 ### Community 233 - "Community 233"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.53
+Nodes (5): _patch_secret(), The POST /api/v1/conversations/cart-tick heartbeat drives the abandoned-cart swe, test_cart_tick_403_on_wrong_secret(), test_cart_tick_503_when_secret_unconfigured(), test_cart_tick_runs_with_correct_secret()
 
 ### Community 234 - "Community 234"
-Cohesion: 0.5
-Nodes (3): Tests for app startup / shutdown lifespan and the /health endpoint., /health returns {"status": "ok"} — confirms the lifespan completed startup., test_app_health_check_via_client()
+Cohesion: 0.33
+Nodes (5): configure_logging(), get_request_id_processor(), Structlog JSON logging configuration (P7-T8).  Call ``configure_logging()`` once, Configure structlog with JSON output (prod) or pretty console (dev)., Return a structlog processor that reads request_id from context vars.      Retur
 
 ### Community 235 - "Community 235"
-Cohesion: 0.5
-Nodes (1): seed_restaurant_customer()
+Cohesion: 0.4
+Nodes (5): normalize_phone(), phone_lookup_values(), Shared E.164-ish phone normalization for tenant matching., Distinct phone strings that should match the same tenant row.      Covers legacy, Normalize a phone to '+<digits>' (E.164-ish), stripping spaces, dashes, etc.
 
 ### Community 236 - "Community 236"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.4
+Nodes (5): generate_api_key(), hash_api_key(), Partner API-key generation + hashing.  Keys are high-entropy random tokens, so a, SHA-256 hex digest of a full API key (what we store and look up by)., Mint a new key. Returns ``(full_key, key_prefix, key_hash)``.      ``full_key``
 
 ### Community 237 - "Community 237"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.33
+Nodes (5): grounding_block(), OKF lexical retrieval — find the concept docs most relevant to a customer messag, Top OKF docs for ``query``.      MULTILINGUAL: lexical (pg_trgm) similarity only, Render retrieved OKF docs into a prompt-injectable grounding block., retrieve()
 
 ### Community 238 - "Community 238"
-Cohesion: 0.83
-Nodes (3): _seed_tracking_order(), test_live_tracking_expires_when_order_delivered(), test_live_tracking_start_update_public_and_stop()
+Cohesion: 0.33
+Nodes (5): is_within_uae_window(), next_window_open(), UAE marketing send-window helpers (pure, timezone-aware).  UAE Cabinet Decision, True iff ``now_utc`` falls inside the UAE send window.      Converts to Asia/Dub, Next UTC instant at which the send window opens.      Today's open if ``now`` is
 
 ### Community 239 - "Community 239"
-Cohesion: 0.83
-Nodes (3): _greet(), test_toggle_switches_chat_injection(), _types_to()
+Cohesion: 0.33
+Nodes (5): list_utility_templates(), Utility-template management (manager JWT).  Submit the transactional utility tem, The utility templates this platform uses (for reference)., Submit all utility templates for approval for this restaurant. Idempotent., register_utility()
 
 ### Community 240 - "Community 240"
-Cohesion: 0.83
-Nodes (3): _seed_enabled(), test_delivery_earns_and_tiers(), test_delivery_loyalty_noop_when_disabled()
+Cohesion: 0.33
+Nodes (5): Enabling it for a restaurant, Metrics (Prometheus, `/metrics`), Shadow mode (evaluate before flipping), Tuning, What the optimizer does
 
 ### Community 241 - "Community 241"
-Cohesion: 0.83
-Nodes (3): _inb(), _last(), test_tier_query_answers_from_settings()
+Cohesion: 0.33
+Nodes (6): Approach C (recommended), 400 ms target, Phase 0 quick wins, Phase 1 backend slimming, Phase 2 client cache, TanStack Query
 
 ### Community 242 - "Community 242"
-Cohesion: 0.5
-Nodes (0): 
+Cohesion: 0.6
+Nodes (3): onPause(), reload(), submit()
 
 ### Community 243 - "Community 243"
 Cohesion: 0.5
-Nodes (0): 
+Nodes (2): readCachedOnboardingComplete(), resolveOnboardingComplete()
 
 ### Community 244 - "Community 244"
-Cohesion: 0.5
+Cohesion: 0.4
 Nodes (0): 
 
 ### Community 245 - "Community 245"
-Cohesion: 0.83
-Nodes (3): _order(), test_batched_orders_report_trip_members(), test_solo_order_has_no_batch_size()
+Cohesion: 0.5
+Nodes (3): ApiError, authHeaders(), request()
 
 ### Community 246 - "Community 246"
-Cohesion: 0.83
-Nodes (3): test_build_observations_buckets_by_dish_dow_hour(), test_trailing_demand_averages_matching_buckets(), _ts()
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 247 - "Community 247"
-Cohesion: 0.83
-Nodes (3): test_rolling_cold_start_falls_back_to_global_dish_mean(), test_rolling_predicts_weekday_hour_mean_per_dish(), _ts()
+Cohesion: 0.4
+Nodes (1): Tests for Prometheus metrics (P7-T10).
 
 ### Community 248 - "Community 248"
-Cohesion: 0.83
-Nodes (3): _resto(), test_genuinely_off_menu_still_declines(), test_unavailable_dish_offers_alternative()
+Cohesion: 0.7
+Nodes (4): _seed_outbox(), test_deliver_one_marks_dead_after_3_failures(), test_deliver_one_marks_failed_on_send_error(), test_deliver_one_sends_and_marks_sent()
 
 ### Community 249 - "Community 249"
-Cohesion: 0.83
-Nodes (3): _seed_menu(), test_full_greeting_pipeline_via_mock_provider(), test_item_collection_pipeline_direct_match()
+Cohesion: 0.4
+Nodes (2): Insert a restaurant + customer; return (restaurant_id, customer_id).      Dynami, seed_restaurant_customer()
 
 ### Community 250 - "Community 250"
-Cohesion: 0.67
-Nodes (3): main(), TEMP one-off: wipe test orders + delivery operations for a restaurant.  Deletes, _run()
+Cohesion: 0.4
+Nodes (1): Regression: the address-capture prompt must keep its guardrails so the bot doesn
 
 ### Community 251 - "Community 251"
-Cohesion: 0.5
-Nodes (1): merge wallet/tickets + catalog heads  Revision ID: 1b4d8479d894 Revises: f1a2b3c
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 252 - "Community 252"
-Cohesion: 0.5
-Nodes (1): order_rider_fk_rider_performance  Revision ID: bc71688df050 Revises: 4ed3145276f
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 253 - "Community 253"
-Cohesion: 0.5
-Nodes (1): order prep deadline (kitchen plate-by countdown)  Adds orders.prep_deadline — th
+Cohesion: 0.6
+Nodes (3): _seed_batch_assignment(), test_compute_dispatch_kpis_multi_stop_batch(), test_compute_dispatch_kpis_solo_only()
 
 ### Community 254 - "Community 254"
-Cohesion: 0.5
-Nodes (1): okf_docs — Open Knowledge Format concept store for RAG grounding  Per-restaurant
+Cohesion: 0.7
+Nodes (4): _seed_order(), test_active_run_exposes_do_not_call(), test_no_flag_when_customer_did_not_ask(), test_stop_details_and_body_carry_do_not_call()
 
 ### Community 255 - "Community 255"
-Cohesion: 0.5
-Nodes (1): rider app pairing + device auth (native rider app)  Columns on riders to support
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 256 - "Community 256"
-Cohesion: 0.5
-Nodes (1): pg_trgm_name_normalized  Revision ID: e99f4e761d39 Revises: 65800d534af2 Create
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 257 - "Community 257"
 Cohesion: 0.5
-Nodes (1): sla_coupon_cod_tables  Revision ID: ce9e6a9b5dae Revises: 90f99618609c Create Da
+Nodes (4): Smoke test for the transcript replay driver.  Uses the same db_session / restaur, drive_turns: one text turn must produce ≥1 outbound and a cart with biryani., _seed_menu(), test_drive_single_text_turn()
 
 ### Community 258 - "Community 258"
-Cohesion: 0.5
-Nodes (1): partner_api_keys: API keys for partner (POS) read-only data pulls  Per-restauran
+Cohesion: 0.7
+Nodes (4): test_duplicate_line_detected(), test_last_outbound_must_name_cart_dishes(), test_no_mutation_on_question(), _turn()
 
 ### Community 259 - "Community 259"
-Cohesion: 0.5
-Nodes (1): orders_order_items  Revision ID: 65800d534af2 Revises: 61767852ea41 Create Date:
+Cohesion: 0.7
+Nodes (4): _inb(), _resto(), test_grounding_empty_for_non_text(), test_grounding_lazily_builds_bundle_and_returns_facts()
 
 ### Community 260 - "Community 260"
-Cohesion: 0.5
-Nodes (1): backfill customer order stats  Recompute the denormalized customers.total_orders
+Cohesion: 0.7
+Nodes (4): test_activate_blocked_when_missing_price(), test_activate_menu(), test_activate_supersedes_previous(), _upload()
 
 ### Community 261 - "Community 261"
-Cohesion: 0.5
-Nodes (1): dish prep_minutes + order cook_estimate_minutes (kitchen "start by")  Adds dishe
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 262 - "Community 262"
-Cohesion: 0.5
-Nodes (1): menus_dishes  Revision ID: 6695a9376ea3 Revises: f6764ecf8b8d Create Date: 2026-
+Cohesion: 0.7
+Nodes (4): _refund_via_ticket(), test_over_cap_freezes_account(), test_under_cap_not_frozen(), test_velocity_counts_refunds()
 
 ### Community 263 - "Community 263"
-Cohesion: 0.5
-Nodes (1): wallet, tickets, coupon v2 + order wallet_applied  Adds:   * wallet_accounts, wa
+Cohesion: 0.4
+Nodes (0): 
 
 ### Community 264 - "Community 264"
-Cohesion: 0.5
-Nodes (1): add riders.on_duty for the in-app On duty / Off duty switch  Revision ID: e2b3d4
+Cohesion: 0.7
+Nodes (4): _seed_rider(), test_rider_conversation_counterpart_is_rider(), test_rider_location_records_ping(), test_unknown_phone_routed_as_customer()
 
 ### Community 265 - "Community 265"
-Cohesion: 0.5
-Nodes (1): prediction_tables  Revision ID: f5b3d88a3a89 Revises: ea09f818d3c3 Create Date:
+Cohesion: 0.7
+Nodes (4): _seed_rider(), test_rider_free_text_recorded_and_notifies_manager(), test_rider_inbound_surfaces_in_dashboard_list(), test_rider_outbound_dispatch_mirrored_to_conversation()
 
 ### Community 266 - "Community 266"
-Cohesion: 0.5
-Nodes (1): customer loyalty tier columns  Adds the denormalized loyalty tier cache to custo
+Cohesion: 0.6
+Nodes (4): _make_conv_and_inbound(), test_derived_phase_table_covers_old_literal(), test_needs_clarification_sends_message_and_no_mutation(), test_needs_clarification_uses_result_message_when_present()
 
 ### Community 267 - "Community 267"
-Cohesion: 0.5
-Nodes (1): audit_log  Revision ID: fef0973b618c Revises: Create Date: 2026-06-06 04:50:15.5
+Cohesion: 0.4
+Nodes (2): composite_indexes_customers_orders  Revision ID: 4ed3145276fb Revises: e99f4e761, # NOTE: autogenerate wanted to drop ix_dishes_name_normalized_trgm (raw-SQL GIN
 
 ### Community 268 - "Community 268"
-Cohesion: 0.5
-Nodes (1): updated_at_triggers_audit_composite_index  Revision ID: f6764ecf8b8d Revises: ea
+Cohesion: 0.7
+Nodes (4): _fire_event(), _fire_kitchen_event(), _run_monitor(), sla_monitor_tick()
 
 ### Community 269 - "Community 269"
 Cohesion: 0.5
-Nodes (1): dish serving-size variants + order_item variant snapshot  Adds dishes.variants (
+Nodes (4): apply_overrides(), _money(), Deterministic manager-override adjustment layer (spec §4.6).  ``apply_overrides`, Apply ``effects`` to a copy of ``predicted``.      Returns ``(adjusted_dict, rea
 
 ### Community 270 - "Community 270"
-Cohesion: 0.5
-Nodes (1): marketing_tables  Revision ID: ea09f818d3c3 Revises: 539d266a5dda Create Date: 2
+Cohesion: 0.4
+Nodes (5): record_opt_in() Function, CustomersScreen — List Page, Address Delete Blocked by Open Order, Customer Profile API Endpoints, Customer/Address Patch Endpoints
 
 ### Community 271 - "Community 271"
-Cohesion: 0.5
-Nodes (1): customers_customer_addresses  Revision ID: 61767852ea41 Revises: 352c3723491c Cr
+Cohesion: 0.4
+Nodes (5): docs/superpowers/specs/2026-06-30-biryani-correction-flow-root-cause.md, AI Interpretation Accuracy, R-061..067 Findings, R-DB-11+ Findings, R-I-001..012 Findings
 
 ### Community 272 - "Community 272"
 Cohesion: 0.5
-Nodes (1): menu_files  Revision ID: 464f76bc2e70 Revises: 683a8b807b47 Create Date: 2026-06
+Nodes (0): 
 
 ### Community 273 - "Community 273"
 Cohesion: 0.5
-Nodes (1): dispatch_tables  Revision ID: 90f99618609c Revises: bc71688df050 Create Date: 20
+Nodes (0): 
 
 ### Community 274 - "Community 274"
-Cohesion: 0.5
-Nodes (1): marketing_media: DB-backed header-image blobs  Stores marketing template header
+Cohesion: 0.67
+Nodes (2): createTestQueryClient(), TestProviders()
 
 ### Community 275 - "Community 275"
 Cohesion: 0.5
-Nodes (1): webhook_events_processed_at_timestamptz  Revision ID: 683a8b807b47 Revises: eb6f
+Nodes (0): 
 
 ### Community 276 - "Community 276"
-Cohesion: 0.5
-Nodes (1): order_tracking_sessions  Revision ID: c4a8b1f7d2e1 Revises: a1b2c3d4e5f6 Create
+Cohesion: 0.83
+Nodes (3): adjustWallet(), issueCoupon(), reload()
 
 ### Community 277 - "Community 277"
 Cohesion: 0.5
-Nodes (1): messages_ts_bigint  Revision ID: 352c3723491c Revises: ba337a5ead4a Create Date:
+Nodes (0): 
 
 ### Community 278 - "Community 278"
 Cohesion: 0.5
-Nodes (1): optout  Revision ID: 539d266a5dda Revises: ce9e6a9b5dae Create Date: 2026-06-06
+Nodes (0): 
 
 ### Community 279 - "Community 279"
 Cohesion: 0.5
-Nodes (1): webhook_outbox_conversation_messages  Revision ID: ba337a5ead4a Revises: 6695a93
+Nodes (0): 
 
 ### Community 280 - "Community 280"
 Cohesion: 0.5
-Nodes (1): sla_events_unique_order_type  Revision ID: eb6f4dfb6f23 Revises: f5b3d88a3a89 Cr
+Nodes (0): 
 
 ### Community 281 - "Community 281"
 Cohesion: 0.5
-Nodes (1): messages: persist inbound voice-note audio for dashboard playback  Revision ID:
+Nodes (0): 
 
 ### Community 282 - "Community 282"
 Cohesion: 0.5
-Nodes (1): rename messages audio_* columns to media_* (all attachment types)  Revision ID:
+Nodes (3): Tests for app startup / shutdown lifespan and the /health endpoint., /health returns {"status": "ok"} — confirms the lifespan completed startup., test_app_health_check_via_client()
 
 ### Community 283 - "Community 283"
 Cohesion: 0.5
-Nodes (1): add dishes.catalog_retailer_id for WhatsApp catalog ordering  Revision ID: d1a2c
+Nodes (0): 
 
 ### Community 284 - "Community 284"
 Cohesion: 0.5
-Nodes (1): add catalog_products (Meta catalogue mirror for the Sync feature)  Revision ID:
+Nodes (0): 
 
 ### Community 285 - "Community 285"
-Cohesion: 0.5
-Nodes (1): restaurants_riders  Revision ID: ea5ef5651223 Revises: fef0973b618c Create Date:
+Cohesion: 0.83
+Nodes (3): _seed_tracking_order(), test_live_tracking_expires_when_order_delivered(), test_live_tracking_start_update_public_and_stop()
 
 ### Community 286 - "Community 286"
-Cohesion: 0.5
-Nodes (3): metrics_response(), Prometheus metrics registry (P7-T10).  All metrics are registered in a dedicated, Return (body_bytes, content_type) for the /metrics handler.
+Cohesion: 0.83
+Nodes (3): _greet(), test_toggle_switches_chat_injection(), _types_to()
 
 ### Community 287 - "Community 287"
-Cohesion: 0.67
-Nodes (3): parse_cloud_payload(), _parse_single_message(), Parse a Meta Cloud API webhook payload into a list of InboundMessages.      Retu
+Cohesion: 0.5
+Nodes (2): loyalty_settings(), A settings dict with loyalty ENABLED (defaults otherwise).
 
 ### Community 288 - "Community 288"
-Cohesion: 0.5
-Nodes (1): Observability package (metrics, middleware re-exports).
+Cohesion: 0.83
+Nodes (3): _seed_enabled(), test_delivery_earns_and_tiers(), test_delivery_loyalty_noop_when_disabled()
 
 ### Community 289 - "Community 289"
-Cohesion: 0.5
-Nodes (3): init_sentry(), Optional Sentry SDK integration — only initialises when APP_SENTRY_DSN is set., Initialize Sentry if DSN is provided. No-op when DSN is empty/None.
+Cohesion: 0.83
+Nodes (3): _inb(), _last(), test_tier_query_answers_from_settings()
 
 ### Community 290 - "Community 290"
 Cohesion: 0.5
-Nodes (4): Approved Template, Customer Order Time Estimation, Lead Time, Today's Special
+Nodes (0): 
 
 ### Community 291 - "Community 291"
 Cohesion: 0.5
-Nodes (4): APK, APP_RIDER_APP_APK_URL, EAS Android Build, expo-splash-screen
+Nodes (0): 
 
 ### Community 292 - "Community 292"
 Cohesion: 0.5
-Nodes (4): Cratis POS, Menu Sync, Order Intake, Order Status Webhook
+Nodes (0): 
 
 ### Community 293 - "Community 293"
-Cohesion: 0.67
+Cohesion: 0.5
 Nodes (0): 
 
 ### Community 294 - "Community 294"
-Cohesion: 1.0
-Nodes (2): onResolved(), reload()
+Cohesion: 0.83
+Nodes (3): _order(), test_batched_orders_report_trip_members(), test_solo_order_has_no_batch_size()
 
 ### Community 295 - "Community 295"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.83
+Nodes (3): test_build_observations_buckets_by_dish_dow_hour(), test_trailing_demand_averages_matching_buckets(), _ts()
 
 ### Community 296 - "Community 296"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.83
+Nodes (3): test_rolling_cold_start_falls_back_to_global_dish_mean(), test_rolling_predicts_weekday_hour_mean_per_dish(), _ts()
 
 ### Community 297 - "Community 297"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.83
+Nodes (3): _resto(), test_genuinely_off_menu_still_declines(), test_unavailable_dish_offers_alternative()
 
 ### Community 298 - "Community 298"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.83
+Nodes (3): _seed_menu(), test_full_greeting_pipeline_via_mock_provider(), test_item_collection_pipeline_direct_match()
 
 ### Community 299 - "Community 299"
 Cohesion: 0.67
-Nodes (0): 
+Nodes (3): main(), TEMP one-off: wipe test orders + delivery operations for a restaurant.  Deletes, _run()
 
 ### Community 300 - "Community 300"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): merge wallet/tickets + catalog heads  Revision ID: 1b4d8479d894 Revises: f1a2b3c
 
 ### Community 301 - "Community 301"
-Cohesion: 1.0
-Nodes (2): iso(), order()
+Cohesion: 0.5
+Nodes (1): order_rider_fk_rider_performance  Revision ID: bc71688df050 Revises: 4ed3145276f
 
 ### Community 302 - "Community 302"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): orders_unique_order_number  W8 task 3 (TX-13/F114): order numbers must be unique
 
 ### Community 303 - "Community 303"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): order prep deadline (kitchen plate-by countdown)  Adds orders.prep_deadline — th
 
 ### Community 304 - "Community 304"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): okf_docs — Open Knowledge Format concept store for RAG grounding  Per-restaurant
 
 ### Community 305 - "Community 305"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): rider app pairing + device auth (native rider app)  Columns on riders to support
 
 ### Community 306 - "Community 306"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): add dish Meta catalogue product fields  Adds the per-dish Meta Commerce "Add pro
 
 ### Community 307 - "Community 307"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): pg_trgm_name_normalized  Revision ID: e99f4e761d39 Revises: 65800d534af2 Create
 
 ### Community 308 - "Community 308"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): sla_coupon_cod_tables  Revision ID: ce9e6a9b5dae Revises: 90f99618609c Create Da
 
 ### Community 309 - "Community 309"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): partner_api_keys: API keys for partner (POS) read-only data pulls  Per-restauran
 
 ### Community 310 - "Community 310"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): orders_order_items  Revision ID: 65800d534af2 Revises: 61767852ea41 Create Date:
 
 ### Community 311 - "Community 311"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): backfill customer order stats  Recompute the denormalized customers.total_orders
 
 ### Community 312 - "Community 312"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): add dishes.whatsapp_enabled  Per-dish WhatsApp switch. True (default) → publishe
 
 ### Community 313 - "Community 313"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): dish prep_minutes + order cook_estimate_minutes (kitchen "start by")  Adds dishe
 
 ### Community 314 - "Community 314"
-Cohesion: 0.67
-Nodes (1): loyalty_settings()
+Cohesion: 0.5
+Nodes (1): menus_dishes  Revision ID: 6695a9376ea3 Revises: f6764ecf8b8d Create Date: 2026-
 
 ### Community 315 - "Community 315"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): wallet, tickets, coupon v2 + order wallet_applied  Adds:   * wallet_accounts, wa
 
 ### Community 316 - "Community 316"
-Cohesion: 1.0
-Nodes (2): _seed(), test_unified_menu_link_statuses()
+Cohesion: 0.5
+Nodes (1): add riders.on_duty for the in-app On duty / Off duty switch  Revision ID: e2b3d4
 
 ### Community 317 - "Community 317"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): prediction_tables  Revision ID: f5b3d88a3a89 Revises: ea09f818d3c3 Create Date:
 
 ### Community 318 - "Community 318"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): customer loyalty tier columns  Adds the denormalized loyalty tier cache to custo
 
 ### Community 319 - "Community 319"
-Cohesion: 0.67
-Nodes (1): Regression: the Celery worker process must register ALL model metadata.  deliver
+Cohesion: 0.5
+Nodes (1): audit_log  Revision ID: fef0973b618c Revises: Create Date: 2026-06-06 04:50:15.5
 
 ### Community 320 - "Community 320"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): updated_at_triggers_audit_composite_index  Revision ID: f6764ecf8b8d Revises: ea
 
 ### Community 321 - "Community 321"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): dashboard_perf_indexes_and_usual_order_time  Revision ID: n7g8h9i0j1k2 Revises:
 
 ### Community 322 - "Community 322"
-Cohesion: 0.67
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): dish serving-size variants + order_item variant snapshot  Adds dishes.variants (
 
 ### Community 323 - "Community 323"
-Cohesion: 0.67
-Nodes (2): distance_km(), Return great-circle distance in kilometres using the haversine formula.
+Cohesion: 0.5
+Nodes (1): marketing_tables  Revision ID: ea09f818d3c3 Revises: 539d266a5dda Create Date: 2
 
 ### Community 324 - "Community 324"
-Cohesion: 0.67
-Nodes (2): Add an audit row to the caller's transaction. The caller MUST commit (or flush), record_audit()
+Cohesion: 0.5
+Nodes (1): customers_customer_addresses  Revision ID: 61767852ea41 Revises: 352c3723491c Cr
 
 ### Community 325 - "Community 325"
-Cohesion: 0.67
-Nodes (2): get_shift_collections(), List a rider's COD collections for the current tenant.
+Cohesion: 0.5
+Nodes (1): menu_files  Revision ID: 464f76bc2e70 Revises: 683a8b807b47 Create Date: 2026-06
 
 ### Community 326 - "Community 326"
-Cohesion: 0.67
-Nodes (3): Dashboard Component Inventory (24 components), Dashboard Information Architecture (9 Screens), Live Ops Screen Layout (KPI strip, dispatch map, SLA board, order feed)
+Cohesion: 0.5
+Nodes (1): dispatch_tables  Revision ID: 90f99618609c Revises: bc71688df050 Create Date: 20
 
 ### Community 327 - "Community 327"
-Cohesion: 0.67
-Nodes (3): Dispatch Batching Enterprise Upgrade PR, Dispatch Enterprise Design Spec, Dispatch Enterprise Implementation Plan
+Cohesion: 0.5
+Nodes (1): marketing_media: DB-backed header-image blobs  Stores marketing template header
 
 ### Community 328 - "Community 328"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): webhook_events_processed_at_timestamptz  Revision ID: 683a8b807b47 Revises: eb6f
 
 ### Community 329 - "Community 329"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): order_tracking_sessions  Revision ID: c4a8b1f7d2e1 Revises: a1b2c3d4e5f6 Create
 
 ### Community 330 - "Community 330"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): messages_ts_bigint  Revision ID: 352c3723491c Revises: ba337a5ead4a Create Date:
 
 ### Community 331 - "Community 331"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): add catalog_products sendable + review_status  Tracks whether a Meta catalogue p
 
 ### Community 332 - "Community 332"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): optout  Revision ID: 539d266a5dda Revises: ce9e6a9b5dae Create Date: 2026-06-06
 
 ### Community 333 - "Community 333"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): webhook_outbox_conversation_messages  Revision ID: ba337a5ead4a Revises: 6695a93
 
 ### Community 334 - "Community 334"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): sla_events_unique_order_type  Revision ID: eb6f4dfb6f23 Revises: f5b3d88a3a89 Cr
 
 ### Community 335 - "Community 335"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): messages: persist inbound voice-note audio for dashboard playback  Revision ID:
 
 ### Community 336 - "Community 336"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): rename messages audio_* columns to media_* (all attachment types)  Revision ID:
 
 ### Community 337 - "Community 337"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): add orders.coupon_discount_aed and orders.distance_source (W5)  W5 money & catal
 
 ### Community 338 - "Community 338"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): add dishes.catalog_retailer_id for WhatsApp catalog ordering  Revision ID: d1a2c
 
 ### Community 339 - "Community 339"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): add catalog_products (Meta catalogue mirror for the Sync feature)  Revision ID:
 
 ### Community 340 - "Community 340"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): restaurants_riders  Revision ID: ea5ef5651223 Revises: fef0973b618c Create Date:
 
 ### Community 341 - "Community 341"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (3): metrics_response(), Prometheus metrics registry (P7-T10).  All metrics are registered in a dedicated, Return (body_bytes, content_type) for the /metrics handler.
 
 ### Community 342 - "Community 342"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (3): parse_cloud_payload(), _parse_single_message(), Parse a Meta Cloud API webhook payload into a list of InboundMessages.      Retu
 
 ### Community 343 - "Community 343"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (1): Partner integration: API-key-authed read access for third-party systems (POS).
 
 ### Community 344 - "Community 344"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (3): init_sentry(), Optional Sentry SDK integration — only initialises when APP_SENTRY_DSN is set., Initialize Sentry if DSN is provided. No-op when DSN is empty/None.
 
 ### Community 345 - "Community 345"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (4): Approved Template, Customer Order Time Estimation, Lead Time, Today's Special
 
 ### Community 346 - "Community 346"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (4): Cratis POS, Menu Sync, Order Intake, Order Status Webhook
 
 ### Community 347 - "Community 347"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (4): APK, APP_RIDER_APP_APK_URL, EAS Android Build, expo-splash-screen
 
 ### Community 348 - "Community 348"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (4): Greedy Batching, OR-Tools, SLA (40-minute promise), Smart Hold
 
 ### Community 349 - "Community 349"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (4): claude.py, config.py, deepseek.py, Task 5 (W7a)
 
 ### Community 350 - "Community 350"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.5
+Nodes (3): Capability eval — RA-7 / F49 / RA-5: biryani correction incident.  A customer se, test_biryani_correction_final_state(), Biryani Correction
 
 ### Community 351 - "Community 351"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 352 - "Community 352"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 353 - "Community 353"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 354 - "Community 354"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 355 - "Community 355"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 356 - "Community 356"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 357 - "Community 357"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 358 - "Community 358"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 359 - "Community 359"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): iso(), order()
 
 ### Community 360 - "Community 360"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 361 - "Community 361"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 362 - "Community 362"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 363 - "Community 363"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 364 - "Community 364"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 365 - "Community 365"
-Cohesion: 1.0
-Nodes (2): Signature Moment: Dispatch Map Batch Lasso Animation, Dashboard Motion Principles (information-carrying only)
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 366 - "Community 366"
-Cohesion: 1.0
-Nodes (2): Architectural Decision: FileBlobStore (sha256-addressed, tenant-scoped) for menu PDF/image persistence, Architectural Decision: Greeting sends uploaded menu PDF/image as WhatsApp media (not processed text menu)
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 367 - "Community 367"
-Cohesion: 1.0
-Nodes (2): expo-notifications Plugin, Push Notifications Not Arriving Bug
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 368 - "Community 368"
-Cohesion: 1.0
-Nodes (2): SLA Late-Delivery Coupon, Coupon Primitive (Existing)
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 369 - "Community 369"
-Cohesion: 1.0
-Nodes (2): app/wallet/reconcile.py + abuse.py + worker.py, Wallet maintenance: expiry, reconcile, abuse auto-freeze (Celery beat)
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 370 - "Community 370"
-Cohesion: 1.0
-Nodes (2): Duplicate Rider Picked Up Message Bug, Remove sendCurrentLocation from doPickup Fix
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 371 - "Community 371"
-Cohesion: 1.0
-Nodes (2): config.rider_app_apk_url, WhatsApp Service
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 372 - "Community 372"
-Cohesion: 1.0
-Nodes (2): EAS, Splash Screen
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 373 - "Community 373"
-Cohesion: 1.0
-Nodes (2): App Invite Concept, WhatsApp Pairing Concept
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 374 - "Community 374"
 Cohesion: 1.0
-Nodes (2): OR-Tools default, SLA-first policy
+Nodes (2): _order_inbound(), test_order_record_has_display_text_and_snapshot()
 
 ### Community 375 - "Community 375"
-Cohesion: 1.0
-Nodes (2): Re-add backstop, Multilingual order completion
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 376 - "Community 376"
 Cohesion: 1.0
-Nodes (2): Prep-aware dispatch, Smart hold window
+Nodes (2): _seed(), test_unified_menu_link_statuses()
 
 ### Community 377 - "Community 377"
-Cohesion: 1.0
-Nodes (2): Re-batch FSM, Delivery zones model
+Cohesion: 0.67
+Nodes (0): 
 
 ### Community 378 - "Community 378"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 379 - "Community 379"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (1): Regression: the Celery worker process must register ALL model metadata.  deliver
 
 ### Community 380 - "Community 380"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 381 - "Community 381"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 382 - "Community 382"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 383 - "Community 383"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (2): get_shift_collections(), List a rider's COD collections for the current tenant.
 
 ### Community 384 - "Community 384"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (2): distance_km(), Return great-circle distance in kilometres using the haversine formula.
 
 ### Community 385 - "Community 385"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (2): Add an audit row to the caller's transaction. The caller MUST commit (or flush), record_audit()
 
 ### Community 386 - "Community 386"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (3): Dashboard Component Inventory (24 components), Dashboard Information Architecture (9 Screens), Live Ops Screen Layout (KPI strip, dispatch map, SLA board, order feed)
 
 ### Community 387 - "Community 387"
-Cohesion: 1.0
-Nodes (0): 
+Cohesion: 0.67
+Nodes (3): catalog/service.py, Task 3 (W7a), Task 6 (W7a)
 
 ### Community 388 - "Community 388"
 Cohesion: 1.0
@@ -2468,79 +2829,79 @@ Nodes (0):
 
 ### Community 431 - "Community 431"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Signature Moment: Dispatch Map Batch Lasso Animation, Dashboard Motion Principles (information-carrying only)
 
 ### Community 432 - "Community 432"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Architectural Decision: FileBlobStore (sha256-addressed, tenant-scoped) for menu PDF/image persistence, Architectural Decision: Greeting sends uploaded menu PDF/image as WhatsApp media (not processed text menu)
 
 ### Community 433 - "Community 433"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): SLA Late-Delivery Coupon, Coupon Primitive (Existing)
 
 ### Community 434 - "Community 434"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): EAS, Splash Screen
 
 ### Community 435 - "Community 435"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): app/wallet/reconcile.py + abuse.py + worker.py, Wallet maintenance: expiry, reconcile, abuse auto-freeze (Celery beat)
 
 ### Community 436 - "Community 436"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Duplicate Rider Picked Up Message Bug, Remove sendCurrentLocation from doPickup Fix
 
 ### Community 437 - "Community 437"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): expo-notifications Plugin, Push Notifications Not Arriving Bug
 
 ### Community 438 - "Community 438"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): App Invite Concept, WhatsApp Pairing Concept
 
 ### Community 439 - "Community 439"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): OR-Tools default, SLA-first policy
 
 ### Community 440 - "Community 440"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Re-add backstop, Multilingual order completion
 
 ### Community 441 - "Community 441"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Prep-aware dispatch, Smart hold window
 
 ### Community 442 - "Community 442"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Re-batch FSM, Delivery zones model
 
 ### Community 443 - "Community 443"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): modify_proposed, Option A: modify from current
 
 ### Community 444 - "Community 444"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Cart Action Semantics, needs_clarification flag
 
 ### Community 445 - "Community 445"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): W7 Implementation Plan, Root Cause Doc (biryani-correction-flow)
 
 ### Community 446 - "Community 446"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): F33, R-045
 
 ### Community 447 - "Community 447"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Eval #10, W2+W4 routing
 
 ### Community 448 - "Community 448"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): Branch B (note-in-dish), note-in-dish regex pattern
 
 ### Community 449 - "Community 449"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): AMBIGUOUS dish, Chicken Biryani
 
 ### Community 450 - "Community 450"
 Cohesion: 1.0
@@ -2616,19 +2977,19 @@ Nodes (0):
 
 ### Community 468 - "Community 468"
 Cohesion: 1.0
-Nodes (1): Validate the loyalty config the UI sends. All numbers are non-negative;
+Nodes (0): 
 
 ### Community 469 - "Community 469"
 Cohesion: 1.0
-Nodes (1): Validate the auto-special config: ``{enabled: bool, template_id: int|null,
+Nodes (0): 
 
 ### Community 470 - "Community 470"
 Cohesion: 1.0
-Nodes (1): Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.
+Nodes (0): 
 
 ### Community 471 - "Community 471"
 Cohesion: 1.0
-Nodes (1): Each tier needs a positive ascending ``max_km`` and a non-negative         ``fee
+Nodes (0): 
 
 ### Community 472 - "Community 472"
 Cohesion: 1.0
@@ -2712,855 +3073,2299 @@ Nodes (0):
 
 ### Community 492 - "Community 492"
 Cohesion: 1.0
-Nodes (1): Validate the loyalty config the UI sends. All numbers are non-negative;
+Nodes (0): 
 
 ### Community 493 - "Community 493"
 Cohesion: 1.0
-Nodes (1): Validate the auto-special config: ``{enabled: bool, template_id: int|null,
+Nodes (0): 
 
 ### Community 494 - "Community 494"
 Cohesion: 1.0
-Nodes (1): Explainability row for ``GET /api/v1/dispatch/assignments``.
+Nodes (0): 
 
 ### Community 495 - "Community 495"
 Cohesion: 1.0
-Nodes (1): Read every product in ``catalog_id`` from Meta. Raises CatalogReadError on a
+Nodes (0): 
 
 ### Community 496 - "Community 496"
 Cohesion: 1.0
-Nodes (1): The products synced from this restaurant's Meta catalogue (for the OPS view).
+Nodes (0): 
 
 ### Community 497 - "Community 497"
 Cohesion: 1.0
-Nodes (1): Each tier needs a positive ascending ``max_km`` and a non-negative         ``fee
+Nodes (0): 
 
 ### Community 498 - "Community 498"
 Cohesion: 1.0
-Nodes (1): Best-effort per-restaurant lock. No-op if redis unavailable (tests).
+Nodes (0): 
 
 ### Community 499 - "Community 499"
 Cohesion: 1.0
-Nodes (1): +10 min per *additional* batched stop beyond the first.
+Nodes (0): 
 
 ### Community 500 - "Community 500"
 Cohesion: 1.0
-Nodes (1): Send the rider the next stop: nav link + Delivered button (COD-aware).
+Nodes (0): 
 
 ### Community 501 - "Community 501"
 Cohesion: 1.0
-Nodes (1): Rider pressed "Orders Picked": advance the whole batch and send stop #1.
+Nodes (0): 
 
 ### Community 502 - "Community 502"
 Cohesion: 1.0
-Nodes (1): Send the rider the next stop: nav link + Delivered button (COD-aware).     If ne
+Nodes (0): 
 
 ### Community 503 - "Community 503"
 Cohesion: 1.0
-Nodes (1): Raised on invalid issue/redeem (unknown, expired, already redeemed).
+Nodes (0): 
 
 ### Community 504 - "Community 504"
 Cohesion: 1.0
-Nodes (1): Send nudges for stale draft carts. Returns the number of nudges enqueued.
+Nodes (0): 
 
 ### Community 505 - "Community 505"
 Cohesion: 1.0
-Nodes (1): COD collection ledger (spec §4.4.4 / §3).  COD is the only payment method on the
+Nodes (0): 
 
 ### Community 506 - "Community 506"
 Cohesion: 1.0
-Nodes (1): Late-delivery apology coupon. Single-use, issued per order breach.
+Nodes (0): 
 
 ### Community 507 - "Community 507"
 Cohesion: 1.0
-Nodes (1): Late-delivery apology coupon service (spec §4.5).  ``issue_coupon`` mints a sing
+Nodes (0): 
 
 ### Community 508 - "Community 508"
 Cohesion: 1.0
-Nodes (1): A grouped set of orders assigned to one rider for sequential delivery.
+Nodes (0): 
 
 ### Community 509 - "Community 509"
 Cohesion: 1.0
-Nodes (1): Dispatch trigger endpoint — POST /api/v1/dispatch/trigger (spec §4.3).
+Nodes (0): 
 
 ### Community 510 - "Community 510"
 Cohesion: 1.0
-Nodes (1): Marketing REST API — templates, segments, campaigns, analytics.
+Nodes (0): 
 
 ### Community 511 - "Community 511"
 Cohesion: 1.0
-Nodes (1): Pydantic v2 request/response schemas for the Marketing REST API.
+Nodes (0): 
 
 ### Community 512 - "Community 512"
 Cohesion: 1.0
-Nodes (1): Marketing orchestration service (spec §4.7, plan Task 15).  The layer that wires
+Nodes (0): 
 
 ### Community 513 - "Community 513"
 Cohesion: 1.0
-Nodes (1): Celery marketing workers — scheduled campaign dispatch (P6-T19).
+Nodes (0): 
 
 ### Community 514 - "Community 514"
 Cohesion: 1.0
-Nodes (1): Convert common Markdown to WhatsApp formatting (idempotent).
+Nodes (0): 
 
 ### Community 515 - "Community 515"
 Cohesion: 1.0
-Nodes (1): Predictions REST API — forecast runs, prep-ahead suggestions, manager overrides.
+Nodes (0): 
 
 ### Community 516 - "Community 516"
 Cohesion: 1.0
-Nodes (1): Celery ML workers — nightly forecast across all tenants (P6-T19); weekly retrain
+Nodes (0): 
 
 ### Community 517 - "Community 517"
 Cohesion: 1.0
-Nodes (1): Records yellow/red/breach SLA alerts for an order.
+Nodes (0): 
 
 ### Community 518 - "Community 518"
 Cohesion: 1.0
-Nodes (1): Singleton MockProvider shared across the process — enables simulator access.
+Nodes (0): 
 
 ### Community 519 - "Community 519"
 Cohesion: 1.0
-Nodes (1): Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests
+Nodes (0): 
 
 ### Community 520 - "Community 520"
 Cohesion: 1.0
-Nodes (1): Marketing REST API router tests.  Uses the shared ``client`` + ``auth_headers``
+Nodes (0): 
 
 ### Community 521 - "Community 521"
 Cohesion: 1.0
-Nodes (1): Marketing service — campaigns, template submit, compliant send, analytics.  The
+Nodes (0): 
 
 ### Community 522 - "Community 522"
 Cohesion: 1.0
-Nodes (1): Tests for the marketing Celery worker (marketing.send_scheduled_campaigns).
+Nodes (0): 
 
 ### Community 523 - "Community 523"
 Cohesion: 1.0
-Nodes (1): No due campaigns — _dispatch_scheduled must complete without error.
+Nodes (0): 
 
 ### Community 524 - "Community 524"
 Cohesion: 1.0
-Nodes (1): Seed a minimal restaurant row required for ordering FKs.      Non-autouse and dy
+Nodes (0): 
 
 ### Community 525 - "Community 525"
 Cohesion: 1.0
-Nodes (1): Conversations Fixture Data
+Nodes (0): 
 
 ### Community 526 - "Community 526"
 Cohesion: 1.0
-Nodes (1): Orders Fixture Data
+Nodes (0): 
 
 ### Community 527 - "Community 527"
 Cohesion: 1.0
-Nodes (1): Frontend TypeScript Config
+Nodes (0): 
 
 ### Community 528 - "Community 528"
 Cohesion: 1.0
-Nodes (1): Playwright Last Run Result
+Nodes (0): 
 
 ### Community 529 - "Community 529"
 Cohesion: 1.0
-Nodes (1): Test: _run_retrains completes for restaurant
+Nodes (0): 
 
 ### Community 530 - "Community 530"
 Cohesion: 1.0
-Nodes (1): Business Rule: SLA breach_40 without weather delay issues coupon (AED 10)
+Nodes (0): 
 
 ### Community 531 - "Community 531"
 Cohesion: 1.0
-Nodes (1): Business Rule: SLA breach_40 with weather_delay_disclosed skips coupon
+Nodes (0): 
 
 ### Community 532 - "Community 532"
 Cohesion: 1.0
-Nodes (1): Business Rule: SLA monitor is idempotent (no duplicate SlaEvent rows)
+Nodes (0): 
 
 ### Community 533 - "Community 533"
 Cohesion: 1.0
-Nodes (1): Business Rule: yellow_30 enqueues manager alert outbox message
+Nodes (0): 
 
 ### Community 534 - "Community 534"
 Cohesion: 1.0
-Nodes (1): Business Rule: breach_40 enqueues customer alert outbox message
+Nodes (0): 
 
 ### Community 535 - "Community 535"
 Cohesion: 1.0
-Nodes (1): Risk: Celery FK resolution failure causes duplicate WhatsApp messages
+Nodes (0): 
 
 ### Community 536 - "Community 536"
 Cohesion: 1.0
-Nodes (1): Repository Directory Map
+Nodes (0): 
 
 ### Community 537 - "Community 537"
 Cohesion: 1.0
-Nodes (1): Platform Actors
+Nodes (0): 
 
 ### Community 538 - "Community 538"
 Cohesion: 1.0
-Nodes (1): WhatsApp Throughput Limits
+Nodes (0): 
 
 ### Community 539 - "Community 539"
 Cohesion: 1.0
-Nodes (1): Marketing Segment DSL
+Nodes (0): 
 
 ### Community 540 - "Community 540"
 Cohesion: 1.0
-Nodes (1): Redis Token-Bucket Rate Limiter
+Nodes (0): 
 
 ### Community 541 - "Community 541"
 Cohesion: 1.0
-Nodes (1): Google Maps
+Nodes (0): 
 
 ### Community 542 - "Community 542"
 Cohesion: 1.0
-Nodes (1): Claude AI
+Nodes (0): 
 
 ### Community 543 - "Community 543"
 Cohesion: 1.0
-Nodes (1): True if an AI reply appears to list dishes+prices (≥2 menu-ish lines).      Safe
+Nodes (0): 
 
 ### Community 544 - "Community 544"
 Cohesion: 1.0
-Nodes (1): Start of the current operational day in the restaurant's timezone.      Riders'
+Nodes (0): 
 
 ### Community 545 - "Community 545"
 Cohesion: 1.0
-Nodes (1): Singleton FakePushProvider so tests can read its ``sent`` list.
+Nodes (0): 
 
 ### Community 546 - "Community 546"
 Cohesion: 1.0
-Nodes (1): In-memory push provider for tests/dev — records sends, never hits the network.
+Nodes (1): Validate the loyalty config the UI sends. All numbers are non-negative;
 
 ### Community 547 - "Community 547"
 Cohesion: 1.0
-Nodes (1): Deliver freshly-committed outbox rows — synchronously in-request when no     Cel
+Nodes (1): Validate the auto-special config: ``{enabled: bool, template_id: int|null,
 
 ### Community 548 - "Community 548"
 Cohesion: 1.0
-Nodes (1): A pure greeting ("As salam walekum") means start fresh.      Live bug: a custome
+Nodes (1): Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.
 
 ### Community 549 - "Community 549"
 Cohesion: 1.0
-Nodes (1): push_token (concept)
+Nodes (1): Each tier needs a positive ascending ``max_km`` and a non-negative         ``fee
 
 ### Community 550 - "Community 550"
 Cohesion: 1.0
-Nodes (1): Phase A (push notifications + app-driven actions)
+Nodes (0): 
 
 ### Community 551 - "Community 551"
 Cohesion: 1.0
-Nodes (1): Goal: native app primary, WhatsApp fallback
+Nodes (0): 
 
 ### Community 552 - "Community 552"
 Cohesion: 1.0
-Nodes (1): Pairing code (WhatsApp one-time code)
+Nodes (0): 
 
 ### Community 553 - "Community 553"
 Cohesion: 1.0
-Nodes (1): Device token (long-lived auth)
+Nodes (0): 
 
 ### Community 554 - "Community 554"
 Cohesion: 1.0
-Nodes (1): Background GPS tracking
+Nodes (0): 
 
 ### Community 555 - "Community 555"
 Cohesion: 1.0
-Nodes (1): The delivery radius in km = the largest tier's ``max_km``.      Single source of
+Nodes (0): 
 
 ### Community 556 - "Community 556"
 Cohesion: 1.0
-Nodes (1): Atomically claim a restaurant's pending outbox rows for dispatch.      Transitio
+Nodes (0): 
 
 ### Community 557 - "Community 557"
 Cohesion: 1.0
-Nodes (1): The real bug: a rider paired (device_token set) but NOT currently sharing     (n
+Nodes (0): 
 
 ### Community 558 - "Community 558"
 Cohesion: 1.0
-Nodes (1): The WhatsApp flow only collects a receiver name, so upsert_address backfills
+Nodes (0): 
 
 ### Community 559 - "Community 559"
 Cohesion: 1.0
-Nodes (1): Set a cart dish to an exact quantity (``qty <= 0`` removes it).      Returns ``(
+Nodes (1): Build the policy from a restaurant row OR its raw ``settings`` dict.          Ac
 
 ### Community 560 - "Community 560"
 Cohesion: 1.0
-Nodes (1): AI cart edits: add → 'make it 4' (update_qty) → add a 2nd dish →     'remove' th
+Nodes (0): 
 
 ### Community 561 - "Community 561"
 Cohesion: 1.0
-Nodes (1): Fix Double GPS Ping
+Nodes (0): 
 
 ### Community 562 - "Community 562"
 Cohesion: 1.0
-Nodes (1): POST_NOTIFICATIONS Permission
+Nodes (0): 
 
 ### Community 563 - "Community 563"
 Cohesion: 1.0
-Nodes (1): shadow mode
+Nodes (0): 
 
 ### Community 564 - "Community 564"
 Cohesion: 1.0
-Nodes (1): re-optimization
+Nodes (0): 
 
 ### Community 565 - "Community 565"
 Cohesion: 1.0
-Nodes (1): SLA constraint
+Nodes (0): 
 
 ### Community 566 - "Community 566"
 Cohesion: 1.0
-Nodes (1): cost tiebreak
+Nodes (0): 
 
 ### Community 567 - "Community 567"
 Cohesion: 1.0
-Nodes (1): best-effort partial
+Nodes (0): 
 
 ### Community 568 - "Community 568"
 Cohesion: 1.0
-Nodes (1): priority orders
+Nodes (0): 
 
 ### Community 569 - "Community 569"
 Cohesion: 1.0
-Nodes (1): re-optimization
+Nodes (0): 
 
 ### Community 570 - "Community 570"
 Cohesion: 1.0
-Nodes (1): shadow mode
+Nodes (0): 
 
 ### Community 571 - "Community 571"
 Cohesion: 1.0
-Nodes (1): dispatch metrics
+Nodes (1): Verify system prompt mentions all 7 supported languages.
 
 ### Community 572 - "Community 572"
 Cohesion: 1.0
-Nodes (1): Manager alert when an order is still cooking past its plate-by deadline. Idempot
+Nodes (1): A PDF menu is attached as a base64 document (Claude reads it natively) —     nev
 
 ### Community 573 - "Community 573"
 Cohesion: 1.0
-Nodes (1): Outbox
+Nodes (1): A plain-text menu is included verbatim as a text block (not rejected).
 
 ### Community 574 - "Community 574"
 Cohesion: 1.0
-Nodes (1): LiveOps dispatch map
+Nodes (1): A provider/config failure must never break ordering — degrade to haversine.
 
 ### Community 575 - "Community 575"
 Cohesion: 1.0
-Nodes (1): GPS
+Nodes (1): Return ≤3-line customer-facing description. NEVER include price.
 
 ### Community 576 - "Community 576"
 Cohesion: 1.0
-Nodes (1): Duplicate Customer Message Fix
+Nodes (1): Return one of: order_item | dish_question | cancel | modify | status | other.
 
 ### Community 577 - "Community 577"
 Cohesion: 1.0
-Nodes (1): Delivered Stop Stuck Fix
+Nodes (1): Given ambiguous matches, return the single best Dish or None.
 
 ### Community 578 - "Community 578"
 Cohesion: 1.0
-Nodes (1): Rider App-Only Mode
+Nodes (1): Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape).
 
 ### Community 579 - "Community 579"
 Cohesion: 1.0
-Nodes (1): Rider Actions Module Extraction
+Nodes (1): Translate plain-English audience description into a validated segment DSL.
 
 ### Community 580 - "Community 580"
 Cohesion: 1.0
-Nodes (1): Pickup Live Location Gate Fix
+Nodes (1): Result from the AI conversation agent.
 
 ### Community 581 - "Community 581"
 Cohesion: 1.0
-Nodes (1): Native App Pairing Branch
+Nodes (1): Test double: deterministic completion-intent detector.      Normalises curly/sma
 
 ### Community 582 - "Community 582"
 Cohesion: 1.0
-Nodes (1): Splash Screen Fix
+Nodes (1): Test double: rule-based plain-English -> validated segment DSL.      Heuristics
 
 ### Community 583 - "Community 583"
 Cohesion: 1.0
-Nodes (1): UTCNow Deprecation Fix
+Nodes (1): Extract first text block; guard truncation/empty content (error contract: Runtim
 
 ### Community 584 - "Community 584"
 Cohesion: 1.0
-Nodes (1): Test Runner Subagent / Coverage
+Nodes (1): Production describer via Claude API. Max 3 lines, never includes price.
 
 ### Community 585 - "Community 585"
 Cohesion: 1.0
-Nodes (1): Google Maps Geo Provider
+Nodes (1): Production intent classifier via Claude API.
 
 ### Community 586 - "Community 586"
 Cohesion: 1.0
-Nodes (1): Resale Exclusion Helper
+Nodes (1): Production arbiter: given ambiguous dish candidates, returns best match.
 
 ### Community 587 - "Community 587"
 Cohesion: 1.0
-Nodes (1): Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.
+Nodes (1): Production ForecastAdjuster: plain-English override -> parsed_effect DSL.      C
 
 ### Community 588 - "Community 588"
 Cohesion: 1.0
-Nodes (1): Hand the chat to a human and tell the customer we'll confirm. Used when a     re
+Nodes (1): Production segment compiler: plain English -> validated DSL via haiku.      The
 
 ### Community 589 - "Community 589"
 Cohesion: 1.0
-Nodes (1): Periodic dispatch sweep (Celery beat).  Runs the dispatch engine for every resta
+Nodes (1): Production completion detector via Claude API (haiku, yes/no prompt).
 
 ### Community 590 - "Community 590"
 Cohesion: 1.0
-Nodes (1): Rewrite em/en/standalone-hyphen separators in an AI reply as commas.      Compou
+Nodes (1): AI-powered full-conversation agent for customer ordering via WhatsApp.
 
 ### Community 591 - "Community 591"
 Cohesion: 1.0
-Nodes (1): Partner integration: API-key-authed read access for third-party systems (POS).
+Nodes (1): OpenAI-compatible tool-calling: returns parsed arguments dict of the forced tool
 
 ### Community 592 - "Community 592"
 Cohesion: 1.0
-Nodes (1): Partner integration API.  Two surfaces:   * ``/api/v1/api-keys`` — manager-authe
+Nodes (1): Phase-aware AI ordering assistant using DeepSeek function calling.
 
 ### Community 593 - "Community 593"
 Cohesion: 1.0
-Nodes (1): List this restaurant's keys (active + revoked), newest first. Never the     secr
+Nodes (1): Production completion detector: one tiny async chat call, yes/no answer.
 
 ### Community 594 - "Community 594"
 Cohesion: 1.0
-Nodes (1): Pydantic I/O schemas for the partner integration API.
+Nodes (1): Mark resale sold, spawn the discounted READY order, dispatch (+ batch companion)
 
 ### Community 595 - "Community 595"
 Cohesion: 1.0
-Nodes (1): Speech-to-text port. Implementations turn spoken audio into text so an     inbou
+Nodes (1): WhatsApp catalog ordering — a SEPARATE flow from the conversation engine.  A cus
 
 ### Community 596 - "Community 596"
 Cohesion: 1.0
-Nodes (1): A bigger proximity_km lets moderately-spaced drop-offs batch together.
+Nodes (1): Catalog flow HTTP surface (manager-authed).  A small endpoint to push the WhatsA
 
 ### Community 597 - "Community 597"
 Cohesion: 1.0
-Nodes (1): APP_MARKETING_TICK_SECRET
+Nodes (1): The products synced from this restaurant's Meta catalogue (for the OPS view).
 
 ### Community 598 - "Community 598"
 Cohesion: 1.0
-Nodes (1): APP_OUTBOX_SYNC_DELIVERY
+Nodes (1): Handle a WhatsApp catalog cart (``order`` message) → a draft order.  This is int
 
 ### Community 599 - "Community 599"
 Cohesion: 1.0
-Nodes (1): External Cron Job
+Nodes (1): Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5").
 
 ### Community 600 - "Community 600"
 Cohesion: 1.0
-Nodes (1): Atomic Claim Issue
+Nodes (1): COD collection ledger (spec §4.4.4 / §3).  COD is the only payment method on the
 
 ### Community 601 - "Community 601"
 Cohesion: 1.0
-Nodes (1): web tracker CTA
+Nodes (1): True if this restaurant is in catalogue ordering mode (flag on AND catalog_id se
 
 ### Community 602 - "Community 602"
 Cohesion: 1.0
-Nodes (1): device token check
+Nodes (1): Append-only ledger of coupon uses — THE source of truth for limit     enforcemen
 
 ### Community 603 - "Community 603"
 Cohesion: 1.0
-Nodes (1): Customer
+Nodes (1): Coupon management endpoints (manager JWT, tenant-scoped).  Campaign coupon CRUD-
 
 ### Community 604 - "Community 604"
 Cohesion: 1.0
-Nodes (1): GPS Tracking
+Nodes (1): Issue a single-use coupon to a specific customer (e.g. from the chat).     Retur
 
 ### Community 605 - "Community 605"
 Cohesion: 1.0
-Nodes (1): Expo
+Nodes (1): Late-delivery apology coupon service (spec §4.5).  ``issue_coupon`` mints a sing
 
 ### Community 606 - "Community 606"
 Cohesion: 1.0
-Nodes (1): device_token
+Nodes (1): A grouped set of orders assigned to one rider for sequential delivery.
 
 ### Community 607 - "Community 607"
 Cohesion: 1.0
-Nodes (1): WhatsApp catalog ordering — a SEPARATE flow from the conversation engine.  A cus
+Nodes (1): Proactively message the customer on kitchen/delivery progress (preparing,     pi
 
 ### Community 608 - "Community 608"
 Cohesion: 1.0
-Nodes (1): Catalog flow HTTP surface (manager-authed).  A small endpoint to push the WhatsA
+Nodes (1): Dispatch endpoints — trigger + assignment explainability (spec §4.3, §5.6).
 
 ### Community 609 - "Community 609"
 Cohesion: 1.0
-Nodes (1): Handle a WhatsApp catalog cart (``order`` message) → a draft order.  This is int
+Nodes (1): Active batch polylines and SLA pressure rings for the live ops map.
 
 ### Community 610 - "Community 610"
 Cohesion: 1.0
-Nodes (1): Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5").
+Nodes (1): Dispatch API schemas.
 
 ### Community 611 - "Community 611"
 Cohesion: 1.0
-Nodes (1): Minimal restaurant row for the catalog flow's FKs (phone matches the     test in
+Nodes (1): Auto-dispatch engine (spec §4.3).  Behaviour:   * Eligible set = orders ``status
 
 ### Community 612 - "Community 612"
 Cohesion: 1.0
-Nodes (1): Referral Loop
+Nodes (1): Load unassigned preview-eligible orders using the same pool as ``_dispatch``.
 
 ### Community 613 - "Community 613"
 Cohesion: 1.0
-Nodes (1): WalletEntry Ledger
+Nodes (1): Periodic dispatch sweep (Celery beat).  Runs the dispatch engine for every resta
 
 ### Community 614 - "Community 614"
 Cohesion: 1.0
-Nodes (1): Coupon (Generalized)
+Nodes (1): FastAPI/Celery dependency. Returns FakeGeoProvider or GoogleMapsGeoProvider.
 
 ### Community 615 - "Community 615"
 Cohesion: 1.0
-Nodes (1): Double-Entry Ledger
+Nodes (1): Rewrite em/en/standalone-hyphen separators in an AI reply as commas.      Compou
 
 ### Community 616 - "Community 616"
 Cohesion: 1.0
-Nodes (1): Show the menu, preferring the WhatsApp catalogue.      When the restaurant has c
+Nodes (1): Loyalty program — tiers (Phase 1) + earn-as-wallet-credit (Phase 2).  Everything
 
 ### Community 617 - "Community 617"
 Cohesion: 1.0
-Nodes (1): Firebase
+Nodes (1): Celery beat: nightly loyalty tier recompute across all tenants.  Per restaurant
 
 ### Community 618 - "Community 618"
 Cohesion: 1.0
-Nodes (1): FCM
+Nodes (1): Marketing REST API — templates, segments, campaigns, analytics.
 
 ### Community 619 - "Community 619"
 Cohesion: 1.0
-Nodes (1): WhatsApp pairing
+Nodes (1): Delete a template — removes it from Meta (best-effort) and hides it from the
 
 ### Community 620 - "Community 620"
 Cohesion: 1.0
-Nodes (1): live-location gate
+Nodes (1): Pydantic v2 request/response schemas for the Marketing REST API.
 
 ### Community 621 - "Community 621"
 Cohesion: 1.0
-Nodes (1): app-only rider flow
+Nodes (1): Marketing orchestration service (spec §4.7, plan Task 15).  The layer that wires
 
 ### Community 622 - "Community 622"
 Cohesion: 1.0
-Nodes (1): A discount coupon.      Two shapes share this table:       * **apology** (kind='
+Nodes (1): Celery marketing workers — scheduled campaign dispatch (P6-T19).
 
 ### Community 623 - "Community 623"
 Cohesion: 1.0
-Nodes (1): Append-only ledger of coupon uses — THE source of truth for limit     enforcemen
+Nodes (1): Return the currently active menu with all dishes for this restaurant.
 
 ### Community 624 - "Community 624"
 Cohesion: 1.0
-Nodes (1): Coupon management endpoints (manager JWT, tenant-scoped).  Campaign coupon CRUD-
+Nodes (1): Re-run extraction on stored file bytes and return a new draft + diff.
 
 ### Community 625 - "Community 625"
 Cohesion: 1.0
-Nodes (1): Complaint ticket model.  A complaint is HUMAN-handled only: the AI may open a ti
+Nodes (1): In-memory push provider for tests/dev — records sends, never hits the network.
 
 ### Community 626 - "Community 626"
 Cohesion: 1.0
-Nodes (1): Complaint ticket endpoints (manager JWT, tenant-scoped).  Managers list/inspect
+Nodes (1): Observability package (metrics, middleware re-exports).
 
 ### Community 627 - "Community 627"
 Cohesion: 1.0
-Nodes (1): Ticket service — complaint capture + the three manager resolution actions.  The
+Nodes (1): Open Knowledge Format (OKF) store.  OKF (https://cloud.google.com/blog/products/
 
 ### Community 628 - "Community 628"
 Cohesion: 1.0
-Nodes (1): Wallet read endpoints (manager JWT, tenant-scoped).  Balance/history are read-on
+Nodes (1): True only when the buyer's phone AND door/apartment AND building AND pinned
 
 ### Community 629 - "Community 629"
 Cohesion: 1.0
-Nodes (1): Wallet service — the ONLY place wallet value moves.  All balances are derived fr
+Nodes (1): Convert common Markdown to WhatsApp formatting (idempotent).
 
 ### Community 630 - "Community 630"
 Cohesion: 1.0
-Nodes (1): Celery beat tasks for wallet maintenance: credit expiry + reconciliation.  Both
+Nodes (1): Flush all pending outbox rows for a restaurant (best-effort).      For request h
 
 ### Community 631 - "Community 631"
 Cohesion: 1.0
-Nodes (1): POST /api/v1/riders endpoint
+Nodes (1): Atomically claim a restaurant's pending outbox rows for dispatch.      Transitio
 
 ### Community 632 - "Community 632"
 Cohesion: 1.0
-Nodes (1): push notification concept
+Nodes (1): Partner integration API.  Two surfaces:   * ``/api/v1/api-keys`` — manager-authe
 
 ### Community 633 - "Community 633"
 Cohesion: 1.0
-Nodes (1): Rider Onboarding
+Nodes (1): List this restaurant's keys (active + revoked), newest first. Never the     secr
 
 ### Community 634 - "Community 634"
 Cohesion: 1.0
-Nodes (1): Live GPS Tracking
+Nodes (1): Pydantic I/O schemas for the partner integration API.
 
 ### Community 635 - "Community 635"
 Cohesion: 1.0
-Nodes (1): Firebase Cloud Messaging (FCM)
+Nodes (1): Predictions REST API — forecast runs, prep-ahead suggestions, manager overrides.
 
 ### Community 636 - "Community 636"
 Cohesion: 1.0
-Nodes (1): Push Notification Flow
+Nodes (1): Celery ML workers — nightly forecast across all tenants (P6-T19); weekly retrain
 
 ### Community 637 - "Community 637"
 Cohesion: 1.0
-Nodes (1): WhatsApp Messaging Flow
+Nodes (1): Records yellow/red/breach SLA alerts for an order.
 
 ### Community 638 - "Community 638"
 Cohesion: 1.0
-Nodes (1): A typed item NOT in the catalogue (Lemon Mint) must NOT be added by the     dete
+Nodes (1): Complaint ticket model.  A complaint is HUMAN-handled only: the AI may open a ti
 
 ### Community 639 - "Community 639"
 Cohesion: 1.0
-Nodes (1): Rider Goes App-Only Feature
+Nodes (1): Complaint ticket endpoints (manager JWT, tenant-scoped).  Managers list/inspect
 
 ### Community 640 - "Community 640"
 Cohesion: 1.0
-Nodes (1): LiveOps Dispatch Map Enhancement
+Nodes (1): Ticket service — complaint capture + the three manager resolution actions.  The
 
 ### Community 641 - "Community 641"
 Cohesion: 1.0
-Nodes (1): Loyalty program — tiers (Phase 1) + earn-as-wallet-credit (Phase 2).  Everything
+Nodes (1): Window-aware customer notification: session text inside 24h, else the     approv
 
 ### Community 642 - "Community 642"
 Cohesion: 1.0
-Nodes (1): ops
+Nodes (1): Wallet read endpoints (manager JWT, tenant-scoped).  Balance/history are read-on
 
 ### Community 643 - "Community 643"
 Cohesion: 1.0
-Nodes (1): background GPS
+Nodes (1): Wallet service — the ONLY place wallet value moves.  All balances are derived fr
 
 ### Community 644 - "Community 644"
 Cohesion: 1.0
-Nodes (1): Render
+Nodes (1): Celery beat tasks for wallet maintenance: credit expiry + reconciliation.  Both
 
 ### Community 645 - "Community 645"
 Cohesion: 1.0
-Nodes (1): Spend-Threshold Cashback
+Nodes (1): Singleton MockProvider shared across the process — enables simulator access.
 
 ### Community 646 - "Community 646"
 Cohesion: 1.0
-Nodes (1): Celery beat: nightly loyalty tier recompute across all tenants.  Per restaurant
+Nodes (1): Minimal restaurant row for the catalog flow's FKs (phone matches the     test in
 
 ### Community 647 - "Community 647"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (1): Unified menu: menu requests prefer catalogue cards, but fall back to the real
 
 ### Community 648 - "Community 648"
 Cohesion: 1.0
-Nodes (1): rider APK artifact
+Nodes (1): order_confirmation confirm button finalizes the order with totals + ETA.
 
 ### Community 649 - "Community 649"
 Cohesion: 1.0
-Nodes (1): Ops Terminal
+Nodes (1): Tests for dispatch HTTP endpoints (spec §4.3, §5.6).
 
 ### Community 650 - "Community 650"
 Cohesion: 1.0
-Nodes (1): Order
+Nodes (1): A,B,A,D,B,A — corridor cluster (D far) stays SLA-safe; D rides solo.
 
 ### Community 651 - "Community 651"
 Cohesion: 1.0
-Nodes (1): Open Knowledge Format (OKF) store.  OKF (https://cloud.google.com/blog/products/
+Nodes (1): Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests
 
 ### Community 652 - "Community 652"
 Cohesion: 1.0
-Nodes (1): Top OKF docs for ``query``. Always includes the restaurant policy + (if given)
+Nodes (1): Marketing REST API router tests.  Uses the shared ``client`` + ``auth_headers``
 
 ### Community 653 - "Community 653"
 Cohesion: 1.0
-Nodes (1): Normalize retailer id keys from Cloud API / simulator / legacy payloads.
+Nodes (1): Marketing service — campaigns, template submit, compliant send, analytics.  The
 
 ### Community 654 - "Community 654"
 Cohesion: 1.0
-Nodes (1): Backward-compatible voice-note fetch for older clients.
+Nodes (1): Tests for the marketing Celery worker (marketing.send_scheduled_campaigns).
 
 ### Community 655 - "Community 655"
 Cohesion: 1.0
-Nodes (1): Join related rows for many orders in a constant number of queries.
+Nodes (1): No due campaigns — _dispatch_scheduled must complete without error.
 
 ### Community 656 - "Community 656"
 Cohesion: 1.0
-Nodes (1): Unified menu: menu requests prefer catalogue cards, but fall back to the real
+Nodes (1): Seed a minimal restaurant row required for ordering FKs.      Non-autouse and dy
 
 ### Community 657 - "Community 657"
 Cohesion: 1.0
-Nodes (1): Pairing Mechanism
+Nodes (1): AND gate: barred ONLY when phone + door/apartment + building + pin ALL match.
 
 ### Community 658 - "Community 658"
 Cohesion: 1.0
-Nodes (1): Background GPS
+Nodes (1): An over-large limit is clamped to 100 (never returns more than 100 rows).
 
 ### Community 659 - "Community 659"
 Cohesion: 1.0
-Nodes (1): Rebuild OKF menu/policy docs after a dish mutation so the bot grounds on the
+Nodes (1): Cancel an order.      Before cooking (status != preparing) → plain transition to
 
 ### Community 660 - "Community 660"
 Cohesion: 1.0
-Nodes (1): device_token concept
+Nodes (1): Build items_batch ``data`` with Meta Commerce required fields.      See https://
 
 ### Community 661 - "Community 661"
 Cohesion: 1.0
-Nodes (1): rider_app_apk_url config
+Nodes (1): Show the menu under the restaurant's STRICT mode (catalogue OR text, no mixing).
 
 ### Community 662 - "Community 662"
 Cohesion: 1.0
-Nodes (1): app-invite
+Nodes (1): Returning customer → offer the saved address UP FRONT with Use/New buttons,
 
 ### Community 663 - "Community 663"
 Cohesion: 1.0
-Nodes (1): FSM (Finite State Machine)
+Nodes (1): Push local dishes to the restaurant's Meta catalogue.
 
 ### Community 664 - "Community 664"
 Cohesion: 1.0
-Nodes (1): COD (Cash on Delivery)
+Nodes (1): True for short, explicit 'show me the menu' messages (lowercased).      Kept tig
 
 ### Community 665 - "Community 665"
 Cohesion: 1.0
-Nodes (1): Expo Push API
+Nodes (1): Lowercase + strip punctuation/emoji/extra spaces so "No.", "Np!", and     "That'
 
 ### Community 666 - "Community 666"
 Cohesion: 1.0
-Nodes (1): True if ``token`` plausibly refers to a word the dish actually has.      Covered
+Nodes (1): Push local dishes (without Meta link) to the restaurant's Meta catalogue.
 
 ### Community 667 - "Community 667"
 Cohesion: 1.0
-Nodes (1): Web Tracker
+Nodes (1): Pull from Meta, link dishes, then push any dish-only items to Meta.
 
 ### Community 668 - "Community 668"
 Cohesion: 1.0
-Nodes (1): Extract Transport-Agnostic Rider Actions
+Nodes (1): Latest (lat, lon) ping per rider from rider_locations.
 
 ### Community 669 - "Community 669"
 Cohesion: 1.0
-Nodes (1): Fix Delivered Stop Stays on Screen
+Nodes (1): Download a WhatsApp voice note and transcribe it to text. Returns the     transc
 
 ### Community 670 - "Community 670"
 Cohesion: 1.0
-Nodes (1): Proactively message the customer on kitchen/delivery progress (preparing,     pi
+Nodes (1): Cancel an order. Legal before delivery only: draft/pending/confirmed →     cance
 
 ### Community 671 - "Community 671"
 Cohesion: 1.0
-Nodes (1): When the kitchen starts preparing, the customer gets a proactive update.
+Nodes (1): Best-effort per-restaurant lock. No-op if redis unavailable (tests).
 
 ### Community 672 - "Community 672"
 Cohesion: 1.0
-Nodes (1): rider.device_token
+Nodes (1): +10 min per *additional* batched stop beyond the first.
 
 ### Community 673 - "Community 673"
 Cohesion: 1.0
-Nodes (1): Batch
+Nodes (1): Send the rider the next stop: nav link + Delivered button (COD-aware).
 
 ### Community 674 - "Community 674"
 Cohesion: 1.0
-Nodes (1): COD
+Nodes (1): Rider pressed "Orders Picked": advance the whole batch and send stop #1.
 
 ### Community 675 - "Community 675"
 Cohesion: 1.0
-Nodes (1): UAT Checklist
+Nodes (1): Send the rider the next stop: nav link + Delivered button (COD-aware).     If ne
 
 ### Community 676 - "Community 676"
 Cohesion: 1.0
-Nodes (1): LiveOps
+Nodes (1): Return True if this buyer (phone + person/address) is barred from this resale pe
 
 ### Community 677 - "Community 677"
 Cohesion: 1.0
-Nodes (1): Rider Pairing (Code + APK)
+Nodes (1): Resale-offer matcher: returns on_resale orders for which the given buyer is NOT
 
 ### Community 678 - "Community 678"
 Cohesion: 1.0
-Nodes (1): Loyalty config with DEFAULT_SETTINGS merged in. Restaurant settings are raw JSON
+Nodes (1): Assemble the TEMPLATE outbox payload (name, language, components).
 
 ### Community 679 - "Community 679"
 Cohesion: 1.0
-Nodes (1): True only when the buyer's phone AND door/apartment AND building AND pinned
+Nodes (1): Send nudges for stale draft carts. Returns the number of nudges enqueued.
 
 ### Community 680 - "Community 680"
 Cohesion: 1.0
-Nodes (1): AND gate: barred ONLY when phone + door/apartment + building + pin ALL match.
+Nodes (1): Render the active menu as categorized text.
 
 ### Community 681 - "Community 681"
 Cohesion: 1.0
-Nodes (1): True if the message means "I'm done ordering" — exact closing phrase, or a closi
+Nodes (1): Render order summary with totals + ETA and confirm/cancel buttons.
 
 ### Community 682 - "Community 682"
 Cohesion: 1.0
-Nodes (1): Routes API
+Nodes (1): Find and add a dish; return True if successfully added.
 
 ### Community 683 - "Community 683"
 Cohesion: 1.0
-Nodes (1): If the message is clearly 'I want to order <dish>', return the dish phrase.
+Nodes (1): Remove matching dish from draft order cart.
 
 ### Community 684 - "Community 684"
 Cohesion: 1.0
-Nodes (1): New tenants inherit SLA-safe dispatch defaults (spec §8.1).
+Nodes (1): Update quantity of matching dish in draft order.
 
 ### Community 685 - "Community 685"
 Cohesion: 1.0
-Nodes (1): Explainability payload
+Nodes (1): Cancel the current draft/pending order.
 
 ### Community 686 - "Community 686"
 Cohesion: 1.0
-Nodes (1): Re-add backstop
+Nodes (1): Process a location pin in address_capture phase.      Validates against restaura
 
 ### Community 687 - "Community 687"
 Cohesion: 1.0
-Nodes (1): Fake agent closing parity
+Nodes (1): Conversations Fixture Data
 
 ### Community 688 - "Community 688"
 Cohesion: 1.0
-Nodes (1): OR-Tools
+Nodes (1): Orders Fixture Data
 
 ### Community 689 - "Community 689"
 Cohesion: 1.0
-Nodes (1): Greedy fallback
+Nodes (1): Frontend TypeScript Config
 
 ### Community 690 - "Community 690"
 Cohesion: 1.0
-Nodes (1): SLA (40-minute promise)
+Nodes (1): Playwright Last Run Result
 
 ### Community 691 - "Community 691"
 Cohesion: 1.0
-Nodes (1): Prep-aware batching
+Nodes (1): Test: _run_retrains completes for restaurant
 
 ### Community 692 - "Community 692"
 Cohesion: 1.0
-Nodes (1): Manual delivery zones
+Nodes (1): Business Rule: SLA breach_40 without weather delay issues coupon (AED 10)
 
 ### Community 693 - "Community 693"
 Cohesion: 1.0
-Nodes (1): Re-batch until pickup
+Nodes (1): Business Rule: SLA breach_40 with weather_delay_disclosed skips coupon
 
 ### Community 694 - "Community 694"
 Cohesion: 1.0
-Nodes (1): Manager explainability
+Nodes (1): Business Rule: SLA monitor is idempotent (no duplicate SlaEvent rows)
 
 ### Community 695 - "Community 695"
 Cohesion: 1.0
-Nodes (1): Dispatch presets
+Nodes (1): Business Rule: yellow_30 enqueues manager alert outbox message
 
 ### Community 696 - "Community 696"
 Cohesion: 1.0
-Nodes (1): Dispatch API schemas.
+Nodes (1): Business Rule: breach_40 enqueues customer alert outbox message
 
 ### Community 697 - "Community 697"
 Cohesion: 1.0
-Nodes (1): Tests for dispatch HTTP endpoints (spec §4.3, §5.6).
+Nodes (1): Risk: Celery FK resolution failure causes duplicate WhatsApp messages
 
 ### Community 698 - "Community 698"
 Cohesion: 1.0
-Nodes (1): If the agent mis-fires add_item for a dish already in the cart and the     custo
+Nodes (1): Platform Actors
 
 ### Community 699 - "Community 699"
 Cohesion: 1.0
-Nodes (1): Engine safety gate: even if the agent returns proceed_to_address with an     emp
+Nodes (1): WhatsApp Throughput Limits
 
 ### Community 700 - "Community 700"
 Cohesion: 1.0
-Nodes (1): Dispatch KPI aggregation for manager dashboard (spec §2, Phase 5).
+Nodes (1): Marketing Segment DSL
 
 ### Community 701 - "Community 701"
 Cohesion: 1.0
-Nodes (1): Return batch rate, avg stops per multi-stop batch, and engine fallback %.
+Nodes (1): Redis Token-Bucket Rate Limiter
 
 ### Community 702 - "Community 702"
 Cohesion: 1.0
-Nodes (1): Live ops map payload — batch polylines and SLA rings (spec §7 Phase 5).
+Nodes (1): Google Maps
 
 ### Community 703 - "Community 703"
 Cohesion: 1.0
-Nodes (1): Assemble restaurant origin, active batch routes, and SLA pressure rings.
+Nodes (1): Claude AI
 
 ### Community 704 - "Community 704"
 Cohesion: 1.0
-Nodes (1): Shared dry-run planner for preview and invariant tests.      Greedy engine → ``r
+Nodes (1): push_token (concept)
+
+### Community 705 - "Community 705"
+Cohesion: 1.0
+Nodes (1): Phase A (push notifications + app-driven actions)
+
+### Community 706 - "Community 706"
+Cohesion: 1.0
+Nodes (1): Goal: native app primary, WhatsApp fallback
+
+### Community 707 - "Community 707"
+Cohesion: 1.0
+Nodes (1): Pairing code (WhatsApp one-time code)
+
+### Community 708 - "Community 708"
+Cohesion: 1.0
+Nodes (1): Device token (long-lived auth)
+
+### Community 709 - "Community 709"
+Cohesion: 1.0
+Nodes (1): Background GPS tracking
+
+### Community 710 - "Community 710"
+Cohesion: 1.0
+Nodes (1): Fix Double GPS Ping
+
+### Community 711 - "Community 711"
+Cohesion: 1.0
+Nodes (1): POST_NOTIFICATIONS Permission
+
+### Community 712 - "Community 712"
+Cohesion: 1.0
+Nodes (1): shadow mode
+
+### Community 713 - "Community 713"
+Cohesion: 1.0
+Nodes (1): re-optimization
+
+### Community 714 - "Community 714"
+Cohesion: 1.0
+Nodes (1): SLA constraint
+
+### Community 715 - "Community 715"
+Cohesion: 1.0
+Nodes (1): cost tiebreak
+
+### Community 716 - "Community 716"
+Cohesion: 1.0
+Nodes (1): best-effort partial
+
+### Community 717 - "Community 717"
+Cohesion: 1.0
+Nodes (1): priority orders
+
+### Community 718 - "Community 718"
+Cohesion: 1.0
+Nodes (1): re-optimization
+
+### Community 719 - "Community 719"
+Cohesion: 1.0
+Nodes (1): shadow mode
+
+### Community 720 - "Community 720"
+Cohesion: 1.0
+Nodes (1): dispatch metrics
+
+### Community 721 - "Community 721"
+Cohesion: 1.0
+Nodes (1): Outbox
+
+### Community 722 - "Community 722"
+Cohesion: 1.0
+Nodes (1): LiveOps dispatch map
+
+### Community 723 - "Community 723"
+Cohesion: 1.0
+Nodes (1): GPS
+
+### Community 724 - "Community 724"
+Cohesion: 1.0
+Nodes (1): Duplicate Customer Message Fix
+
+### Community 725 - "Community 725"
+Cohesion: 1.0
+Nodes (1): Delivered Stop Stuck Fix
+
+### Community 726 - "Community 726"
+Cohesion: 1.0
+Nodes (1): Rider App-Only Mode
+
+### Community 727 - "Community 727"
+Cohesion: 1.0
+Nodes (1): Rider Actions Module Extraction
+
+### Community 728 - "Community 728"
+Cohesion: 1.0
+Nodes (1): Pickup Live Location Gate Fix
+
+### Community 729 - "Community 729"
+Cohesion: 1.0
+Nodes (1): Native App Pairing Branch
+
+### Community 730 - "Community 730"
+Cohesion: 1.0
+Nodes (1): Splash Screen Fix
+
+### Community 731 - "Community 731"
+Cohesion: 1.0
+Nodes (1): UTCNow Deprecation Fix
+
+### Community 732 - "Community 732"
+Cohesion: 1.0
+Nodes (1): Test Runner Subagent / Coverage
+
+### Community 733 - "Community 733"
+Cohesion: 1.0
+Nodes (1): Google Maps Geo Provider
+
+### Community 734 - "Community 734"
+Cohesion: 1.0
+Nodes (1): Resale Exclusion Helper
+
+### Community 735 - "Community 735"
+Cohesion: 1.0
+Nodes (1): APP_MARKETING_TICK_SECRET
+
+### Community 736 - "Community 736"
+Cohesion: 1.0
+Nodes (1): APP_OUTBOX_SYNC_DELIVERY
+
+### Community 737 - "Community 737"
+Cohesion: 1.0
+Nodes (1): External Cron Job
+
+### Community 738 - "Community 738"
+Cohesion: 1.0
+Nodes (1): Atomic Claim Issue
+
+### Community 739 - "Community 739"
+Cohesion: 1.0
+Nodes (1): web tracker CTA
+
+### Community 740 - "Community 740"
+Cohesion: 1.0
+Nodes (1): device token check
+
+### Community 741 - "Community 741"
+Cohesion: 1.0
+Nodes (1): Customer
+
+### Community 742 - "Community 742"
+Cohesion: 1.0
+Nodes (1): GPS Tracking
+
+### Community 743 - "Community 743"
+Cohesion: 1.0
+Nodes (1): Expo
+
+### Community 744 - "Community 744"
+Cohesion: 1.0
+Nodes (1): device_token
+
+### Community 745 - "Community 745"
+Cohesion: 1.0
+Nodes (1): Referral Loop
+
+### Community 746 - "Community 746"
+Cohesion: 1.0
+Nodes (1): WalletEntry Ledger
+
+### Community 747 - "Community 747"
+Cohesion: 1.0
+Nodes (1): Coupon (Generalized)
+
+### Community 748 - "Community 748"
+Cohesion: 1.0
+Nodes (1): Double-Entry Ledger
+
+### Community 749 - "Community 749"
+Cohesion: 1.0
+Nodes (1): Firebase
+
+### Community 750 - "Community 750"
+Cohesion: 1.0
+Nodes (1): FCM
+
+### Community 751 - "Community 751"
+Cohesion: 1.0
+Nodes (1): WhatsApp pairing
+
+### Community 752 - "Community 752"
+Cohesion: 1.0
+Nodes (1): live-location gate
+
+### Community 753 - "Community 753"
+Cohesion: 1.0
+Nodes (1): app-only rider flow
+
+### Community 754 - "Community 754"
+Cohesion: 1.0
+Nodes (1): POST /api/v1/riders endpoint
+
+### Community 755 - "Community 755"
+Cohesion: 1.0
+Nodes (1): push notification concept
+
+### Community 756 - "Community 756"
+Cohesion: 1.0
+Nodes (1): Rider Onboarding
+
+### Community 757 - "Community 757"
+Cohesion: 1.0
+Nodes (1): Live GPS Tracking
+
+### Community 758 - "Community 758"
+Cohesion: 1.0
+Nodes (1): Firebase Cloud Messaging (FCM)
+
+### Community 759 - "Community 759"
+Cohesion: 1.0
+Nodes (1): Push Notification Flow
+
+### Community 760 - "Community 760"
+Cohesion: 1.0
+Nodes (1): WhatsApp Messaging Flow
+
+### Community 761 - "Community 761"
+Cohesion: 1.0
+Nodes (1): Rider Goes App-Only Feature
+
+### Community 762 - "Community 762"
+Cohesion: 1.0
+Nodes (1): LiveOps Dispatch Map Enhancement
+
+### Community 763 - "Community 763"
+Cohesion: 1.0
+Nodes (1): ops
+
+### Community 764 - "Community 764"
+Cohesion: 1.0
+Nodes (1): background GPS
+
+### Community 765 - "Community 765"
+Cohesion: 1.0
+Nodes (1): Render
+
+### Community 766 - "Community 766"
+Cohesion: 1.0
+Nodes (1): Spend-Threshold Cashback
+
+### Community 767 - "Community 767"
+Cohesion: 1.0
+Nodes (1): rider APK artifact
+
+### Community 768 - "Community 768"
+Cohesion: 1.0
+Nodes (1): Ops Terminal
+
+### Community 769 - "Community 769"
+Cohesion: 1.0
+Nodes (1): Order
+
+### Community 770 - "Community 770"
+Cohesion: 1.0
+Nodes (1): Pairing Mechanism
+
+### Community 771 - "Community 771"
+Cohesion: 1.0
+Nodes (1): Background GPS
+
+### Community 772 - "Community 772"
+Cohesion: 1.0
+Nodes (1): device_token concept
+
+### Community 773 - "Community 773"
+Cohesion: 1.0
+Nodes (1): rider_app_apk_url config
+
+### Community 774 - "Community 774"
+Cohesion: 1.0
+Nodes (1): app-invite
+
+### Community 775 - "Community 775"
+Cohesion: 1.0
+Nodes (1): FSM (Finite State Machine)
+
+### Community 776 - "Community 776"
+Cohesion: 1.0
+Nodes (1): COD (Cash on Delivery)
+
+### Community 777 - "Community 777"
+Cohesion: 1.0
+Nodes (1): Expo Push API
+
+### Community 778 - "Community 778"
+Cohesion: 1.0
+Nodes (1): Web Tracker
+
+### Community 779 - "Community 779"
+Cohesion: 1.0
+Nodes (1): Extract Transport-Agnostic Rider Actions
+
+### Community 780 - "Community 780"
+Cohesion: 1.0
+Nodes (1): Fix Pickup Live Location Gate
+
+### Community 781 - "Community 781"
+Cohesion: 1.0
+Nodes (1): Fix Push Notifications Not Arriving
+
+### Community 782 - "Community 782"
+Cohesion: 1.0
+Nodes (1): Fix Delivered Stop Stays on Screen
+
+### Community 783 - "Community 783"
+Cohesion: 1.0
+Nodes (1): rider.device_token
+
+### Community 784 - "Community 784"
+Cohesion: 1.0
+Nodes (1): Batch
+
+### Community 785 - "Community 785"
+Cohesion: 1.0
+Nodes (1): COD
+
+### Community 786 - "Community 786"
+Cohesion: 1.0
+Nodes (1): UAT Checklist
+
+### Community 787 - "Community 787"
+Cohesion: 1.0
+Nodes (1): LiveOps
+
+### Community 788 - "Community 788"
+Cohesion: 1.0
+Nodes (1): Rider Pairing (Code + APK)
+
+### Community 789 - "Community 789"
+Cohesion: 1.0
+Nodes (1): Routes API
+
+### Community 790 - "Community 790"
+Cohesion: 1.0
+Nodes (1): Explainability payload
+
+### Community 791 - "Community 791"
+Cohesion: 1.0
+Nodes (1): Re-add backstop
+
+### Community 792 - "Community 792"
+Cohesion: 1.0
+Nodes (1): Fake agent closing parity
+
+### Community 793 - "Community 793"
+Cohesion: 1.0
+Nodes (1): Greedy fallback
+
+### Community 794 - "Community 794"
+Cohesion: 1.0
+Nodes (1): Prep-aware batching
+
+### Community 795 - "Community 795"
+Cohesion: 1.0
+Nodes (1): Manual delivery zones
+
+### Community 796 - "Community 796"
+Cohesion: 1.0
+Nodes (1): Re-batch until pickup
+
+### Community 797 - "Community 797"
+Cohesion: 1.0
+Nodes (1): Manager explainability
+
+### Community 798 - "Community 798"
+Cohesion: 1.0
+Nodes (1): Dispatch presets
+
+### Community 799 - "Community 799"
+Cohesion: 1.0
+Nodes (1): Re-batch
+
+### Community 800 - "Community 800"
+Cohesion: 1.0
+Nodes (1): Transcript replay driver.  Drives a list of turn dicts through the real ``handle
+
+### Community 801 - "Community 801"
+Cohesion: 1.0
+Nodes (1): Drive *turns* through the real handle_inbound and return a TranscriptResult.
+
+### Community 802 - "Community 802"
+Cohesion: 1.0
+Nodes (1): Smoke test for the transcript replay driver.  Uses the same db_session / restaur
+
+### Community 803 - "Community 803"
+Cohesion: 1.0
+Nodes (1): drive_turns: one text turn must produce ≥1 outbound and a cart with biryani.
+
+### Community 804 - "Community 804"
+Cohesion: 1.0
+Nodes (1): MessageType
+
+### Community 805 - "Community 805"
+Cohesion: 1.0
+Nodes (1): draft cart
+
+### Community 806 - "Community 806"
+Cohesion: 1.0
+Nodes (1): post_order phase
+
+### Community 807 - "Community 807"
+Cohesion: 1.0
+Nodes (1): biryani correction root cause doc
+
+### Community 808 - "Community 808"
+Cohesion: 1.0
+Nodes (1): platform design spec 2026-06-06
+
+### Community 809 - "Community 809"
+Cohesion: 1.0
+Nodes (1): remediation design 2026-06-30
+
+### Community 810 - "Community 810"
+Cohesion: 1.0
+Nodes (1): full order cancel behavior
+
+### Community 811 - "Community 811"
+Cohesion: 1.0
+Nodes (1): partial cancellation gap
+
+### Community 812 - "Community 812"
+Cohesion: 1.0
+Nodes (1): history limit=10
+
+### Community 813 - "Community 813"
+Cohesion: 1.0
+Nodes (1): _ORDERING_BLOCK
+
+### Community 814 - "Community 814"
+Cohesion: 1.0
+Nodes (1): Option B: inline post-confirm edit
+
+### Community 815 - "Community 815"
+Cohesion: 1.0
+Nodes (1): Option C: unified ConversationActionPort
+
+### Community 816 - "Community 816"
+Cohesion: 1.0
+Nodes (1): _CONFIRMATION_BLOCK
+
+### Community 817 - "Community 817"
+Cohesion: 1.0
+Nodes (1): partial-item-cancellation-analysis.md
+
+### Community 818 - "Community 818"
+Cohesion: 1.0
+Nodes (1): Dish-level remove/cancel, not whole-order cancel.      'Cancel chicken soup from
+
+### Community 819 - "Community 819"
+Cohesion: 1.0
+Nodes (1): Customer wants the bot to apply a pending change without retyping dishes.
+
+### Community 820 - "Community 820"
+Cohesion: 1.0
+Nodes (1): Snapshot current order lines into a serializable modify_proposed list.
+
+### Community 821 - "Community 821"
+Cohesion: 1.0
+Nodes (1): Stable tuple for comparing proposed vs baseline.
+
+### Community 822 - "Community 822"
+Cohesion: 1.0
+Nodes (1): Resolve a dish query to an index in modify_proposed (order snapshot names).
+
+### Community 823 - "Community 823"
+Cohesion: 1.0
+Nodes (1): Remove units from one proposed line. Returns (new_list, dish_name, fully_removed
+
+### Community 824 - "Community 824"
+Cohesion: 1.0
+Nodes (1): Remove a dish from modify_proposed. Returns (success, dish_name).
+
+### Community 825 - "Community 825"
+Cohesion: 1.0
+Nodes (1): Seed the four dishes used by the biryani capability evals.      Each dish is ava
+
+### Community 826 - "Community 826"
+Cohesion: 1.0
+Nodes (1): Capability eval — RA-7 / F49 / RA-5: biryani correction incident.  A customer se
+
+### Community 827 - "Community 827"
+Cohesion: 1.0
+Nodes (1): Response-accuracy capability eval suite — 19 scenarios (W0).  All xfail evals ru
+
+### Community 828 - "Community 828"
+Cohesion: 1.0
+Nodes (1): Catalog basket with biryani, then 'Need double masala in biriyani'.     Engine t
+
+### Community 829 - "Community 829"
+Cohesion: 1.0
+Nodes (1): Customer adds 1 chicken biryani then says 'make it 2 chicken biryani'.     Engin
+
+### Community 830 - "Community 830"
+Cohesion: 1.0
+Nodes (1): Add 2 lemon mints then 'remove 1 lemon mint'.  Today the engine either     dupli
+
+### Community 831 - "Community 831"
+Cohesion: 1.0
+Nodes (1): make it 1 lakh' after adding lemon mint.  The engine today silently     accepts
+
+### Community 832 - "Community 832"
+Cohesion: 1.0
+Nodes (1): A 'reaction' arrives as UNKNOWN type.  Today the engine falls through to     the
+
+### Community 833 - "Community 833"
+Cohesion: 1.0
+Nodes (1): catlog' (common typo) is NOT in _MENU_KEYWORDS today, so it falls through     to
+
+### Community 834 - "Community 834"
+Cohesion: 1.0
+Nodes (1): pls add extra masala' after ordering biryani.  The engine today either     store
+
+### Community 835 - "Community 835"
+Cohesion: 1.0
+Nodes (1): Cart has biryani + lemon mint. 'only 1 biryani' means set biryani qty to 1;
+
+### Community 836 - "Community 836"
+Cohesion: 1.0
+Nodes (1): The engine layer has no deduplication gate (that lives in the webhook router).
+
+### Community 837 - "Community 837"
+Cohesion: 1.0
+Nodes (1): Why did you add 2 biriyani' must not mutate the cart.     CONVERTED FROM XFAIL:
+
+### Community 838 - "Community 838"
+Cohesion: 1.0
+Nodes (1): After adding an item, 'That's all' must advance dialogue out of ordering.     CO
+
+### Community 839 - "Community 839"
+Cohesion: 1.0
+Nodes (1): Do you have my saved address?' with no address in DB — bot must deny.     CONVER
+
+### Community 840 - "Community 840"
+Cohesion: 1.0
+Nodes (1): Arabic question 'ما هو أفضل طبق؟' must not dump an invented English dish list.
+
+### Community 841 - "Community 841"
+Cohesion: 1.0
+Nodes (1): grade_total_consistency must pass for a basic cart (total ≥ subtotal).     CONVE
+
+### Community 842 - "Community 842"
+Cohesion: 1.0
+Nodes (1): Two separate carts must get different order numbers.     CONVERTED FROM XFAIL: s
+
+### Community 843 - "Community 843"
+Cohesion: 1.0
+Nodes (1): Subtotal must equal sum of line prices for a basic two-item cart.     CONVERTED
+
+### Community 844 - "Community 844"
+Cohesion: 1.0
+Nodes (1): CHICKEN BIRYANI' (all-caps) must resolve to the seeded dish.     CONVERTED FROM
+
+### Community 845 - "Community 845"
+Cohesion: 1.0
+Nodes (1): menu' must update dialogue_state to 'menu_sent'.     CONVERTED FROM XFAIL: engin
+
+### Community 846 - "Community 846"
+Cohesion: 1.0
+Nodes (1): show me the full menu' must not produce invented dish names.     CONVERTED FROM
+
+### Community 847 - "Community 847"
+Cohesion: 1.0
+Nodes (1): menu' keyword must trigger send_catalog and enqueue a product_list.      After I
+
+### Community 848 - "Community 848"
+Cohesion: 1.0
+Nodes (1): # NOTE: Fake-scoped guard. Passes because FakeConversationAgent does not reprodu
+
+### Community 849 - "Community 849"
+Cohesion: 1.0
+Nodes (1): CLAUDE.md
+
+### Community 850 - "Community 850"
+Cohesion: 1.0
+Nodes (1): LLM Response Accuracy Issue
+
+### Community 851 - "Community 851"
+Cohesion: 1.0
+Nodes (1): Rider App Fixes (doPickup, push notifications, GPS)
+
+### Community 852 - "Community 852"
+Cohesion: 1.0
+Nodes (1): DB-H14
+
+### Community 853 - "Community 853"
+Cohesion: 1.0
+Nodes (1): Create the W7 branch
+
+### Community 854 - "Community 854"
+Cohesion: 1.0
+Nodes (1): Add the 3 W7 capability evals (xfail-strict)
+
+### Community 855 - "Community 855"
+Cohesion: 1.0
+Nodes (1): Self-review, full matrix, ruff, graphify, understanding.txt
+
+### Community 856 - "Community 856"
+Cohesion: 1.0
+Nodes (1): cart_state (structured array)
+
+### Community 857 - "Community 857"
+Cohesion: 1.0
+Nodes (1): Contract tests for the canonical conversation action schema (W1).
+
+### Community 858 - "Community 858"
+Cohesion: 1.0
+Nodes (1): Single source of truth for the conversation action (LLM tool) schema (W1).  Ever
+
+### Community 859 - "Community 859"
+Cohesion: 1.0
+Nodes (1): JSON-schema `properties` block shared by every provider's tool.
+
+### Community 860 - "Community 860"
+Cohesion: 1.0
+Nodes (1): OpenAI / DeepSeek function-tool wrapper.
+
+### Community 861 - "Community 861"
+Cohesion: 1.0
+Nodes (1): Anthropic tool-use wrapper (same properties, `input_schema` shape).
+
+### Community 862 - "Community 862"
+Cohesion: 1.0
+Nodes (1): Return the list of missing mandatory field names. Empty list = OK.
+
+### Community 863 - "Community 863"
+Cohesion: 1.0
+Nodes (1): Translate a canonical action+payload into (engine_action, action_data).      On
+
+### Community 864 - "Community 864"
+Cohesion: 1.0
+Nodes (1): _DS_TOOL must be derived from the canonical action_schema module.
+
+### Community 865 - "Community 865"
+Cohesion: 1.0
+Nodes (1): cart_set_qty without new_total must be blocked (no cart mutation).
+
+### Community 866 - "Community 866"
+Cohesion: 1.0
+Nodes (1): cart_set_qty with new_total maps to legacy update_qty with correct qty.
+
+### Community 867 - "Community 867"
+Cohesion: 1.0
+Nodes (1): Behavioral constraints (frustration/re-add) must be in the ordering system promp
+
+### Community 868 - "Community 868"
+Cohesion: 1.0
+Nodes (1): Round-trip: Claude returns canonical 'cart_add' -> respond() yields legacy 'add_
+
+### Community 869 - "Community 869"
+Cohesion: 1.0
+Nodes (1): only 1 chicken biryani' must emit update_qty (cart_set_qty), NOT add_item.
+
+### Community 870 - "Community 870"
+Cohesion: 1.0
+Nodes (1): make it 4 biryani' must emit update_qty (cart_set_qty), NOT add_item.
+
+### Community 871 - "Community 871"
+Cohesion: 1.0
+Nodes (1): 2 biryani' must emit add_item (cart_add delta), NOT update_qty.
+
+### Community 872 - "Community 872"
+Cohesion: 1.0
+Nodes (1): Every Fake output must be a clean engine-legacy result, never a raw canonical di
+
+### Community 873 - "Community 873"
+Cohesion: 1.0
+Nodes (1): address' contains 'add' as substring — must NOT yield add_item at confirm phase.
+
+### Community 874 - "Community 874"
+Cohesion: 1.0
+Nodes (1): don't add more' is a refusal, not a cart_add command.
+
+### Community 875 - "Community 875"
+Cohesion: 1.0
+Nodes (1): Provider-parity contract: DeepSeek, Claude, Fake expose ONE action surface (W1).
+
+### Community 876 - "Community 876"
+Cohesion: 1.0
+Nodes (1): Properties block extracted from DeepSeek's live OpenAI tool dict.
+
+### Community 877 - "Community 877"
+Cohesion: 1.0
+Nodes (1): Properties block extracted from Claude's live Anthropic tool dict.
+
+### Community 878 - "Community 878"
+Cohesion: 1.0
+Nodes (1): Both provider tool dicts enumerate exactly the canonical action set.
+
+### Community 879 - "Community 879"
+Cohesion: 1.0
+Nodes (1): DeepSeek and Claude expose the same top-level property names.
+
+### Community 880 - "Community 880"
+Cohesion: 1.0
+Nodes (1): The items[].op enum is identical in both providers and matches the spec.
+
+### Community 881 - "Community 881"
+Cohesion: 1.0
+Nodes (1): validate_required() recognises all canonical actions and returns sane data.
+
+### Community 882 - "Community 882"
+Cohesion: 1.0
+Nodes (1): Explicit qty fields exist; the legacy overloaded 'qty' top-level field is gone.
+
+### Community 883 - "Community 883"
+Cohesion: 1.0
+Nodes (1): CANON_PHASE_ACTIONS maps cleanly to LEGACY_PHASE_ACTIONS via CANON_TO_LEGACY.
+
+### Community 884 - "Community 884"
+Cohesion: 1.0
+Nodes (1): FakeConversationAgent is structurally bound to the canonical schema.      Verifi
+
+### Community 885 - "Community 885"
+Cohesion: 1.0
+Nodes (1): FakeConversationAgent behavioural check: every emitted action is in CANON_TO_LEG
+
+### Community 886 - "Community 886"
+Cohesion: 1.0
+Nodes (1): Both tool dicts declare only 'action' as a top-level required field.
+
+### Community 887 - "Community 887"
+Cohesion: 1.0
+Nodes (1): Tests for W1 Task 6: clarification gate + derived phase-action table.
+
+### Community 888 - "Community 888"
+Cohesion: 1.0
+Nodes (1): A model result flagged needs_clarification must NOT mutate the cart and must
+
+### Community 889 - "Community 889"
+Cohesion: 1.0
+Nodes (1): When result.message is set, the clarification reply uses THAT text (not the
+
+### Community 890 - "Community 890"
+Cohesion: 1.0
+Nodes (1): The derived _PHASE_ACTIONS must be a superset of the old hand-written literal
+
+### Community 891 - "Community 891"
+Cohesion: 1.0
+Nodes (1): A set-qty intent without a quantity must not change the cart and must ask a
+
+### Community 892 - "Community 892"
+Cohesion: 1.0
+Nodes (1): W2 cart-line identity tests.
+
+### Community 893 - "Community 893"
+Cohesion: 1.0
+Nodes (1): Re-adding a dish with a note must update the existing line's note, not create a
+
+### Community 894 - "Community 894"
+Cohesion: 1.0
+Nodes (1): cart_set_qty
+
+### Community 895 - "Community 895"
+Cohesion: 1.0
+Nodes (1): requires_one_of
+
+### Community 896 - "Community 896"
+Cohesion: 1.0
+Nodes (1): no_action
+
+### Community 897 - "Community 897"
+Cohesion: 1.0
+Nodes (1): needs_clarification
+
+### Community 898 - "Community 898"
+Cohesion: 1.0
+Nodes (1): new_total
+
+### Community 899 - "Community 899"
+Cohesion: 1.0
+Nodes (1): regression
+
+### Community 900 - "Community 900"
+Cohesion: 1.0
+Nodes (1): Changing qty must preserve the kitchen note (RA-7/R-006).
+
+### Community 901 - "Community 901"
+Cohesion: 1.0
+Nodes (1): modify_order must carry variant_name and notes from new_items, not silently stri
+
+### Community 902 - "Community 902"
+Cohesion: 1.0
+Nodes (1): CartService — single owner of cart mutations for ordering.  All add / set-qty /
+
+### Community 903 - "Community 903"
+Cohesion: 1.0
+Nodes (1): Strip politeness/action prefixes from a kitchen note before storing.      'pls a
+
+### Community 904 - "Community 904"
+Cohesion: 1.0
+Nodes (1): Structured representation of one cart line for LLM context injection.
+
+### Community 905 - "Community 905"
+Cohesion: 1.0
+Nodes (1): Facade over the ordering service functions.      All callers (conversation engin
+
+### Community 906 - "Community 906"
+Cohesion: 1.0
+Nodes (1): Add or merge a dish into the cart (delegates to service.add_item).
+
+### Community 907 - "Community 907"
+Cohesion: 1.0
+Nodes (1): Set exact quantity, preserving notes (delegates to service.set_item_qty).
+
+### Community 908 - "Community 908"
+Cohesion: 1.0
+Nodes (1): Apply a normalised kitchen note to an in-cart dish.          Strips politeness/a
+
+### Community 909 - "Community 909"
+Cohesion: 1.0
+Nodes (1): Remove units of a dish from the cart.
+
+### Community 910 - "Community 910"
+Cohesion: 1.0
+Nodes (1): Delete ALL items from the cart.          Raises ValueError when *explicit* is Fa
+
+### Community 911 - "Community 911"
+Cohesion: 1.0
+Nodes (1): Return structured cart lines with stable cart_item_id for LLM context (F64).
+
+### Community 912 - "Community 912"
+Cohesion: 1.0
+Nodes (1): set_note must strip politeness prefixes before storing (F101/TX-30).
+
+### Community 913 - "Community 913"
+Cohesion: 1.0
+Nodes (1): clear() must raise ValueError when explicit=False (F82).
+
+### Community 914 - "Community 914"
+Cohesion: 1.0
+Nodes (1): build_structured_context must return CartLineContext with cart_item_id (F64).
+
+### Community 915 - "Community 915"
+Cohesion: 1.0
+Nodes (1): _build_context must inject cart_lines (CartLineContext list) in ordering phase (
+
+### Community 916 - "Community 916"
+Cohesion: 1.0
+Nodes (1): A voice note naming 5 items.  Without audio_id the harness cannot reach     Fake
+
+### Community 917 - "Community 917"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 918 - "Community 918"
+Cohesion: 1.0
+Nodes (1): W2 Fix
+
+### Community 919 - "Community 919"
+Cohesion: 1.0
+Nodes (1): cart unchanged (qty == 2), reply contains clarification keyword
+
+### Community 920 - "Community 920"
+Cohesion: 1.0
+Nodes (1): W2 contract (R-002 / RA-4): a dish merges to ONE line per (dish_id, variant_name
+
+### Community 921 - "Community 921"
+Cohesion: 1.0
+Nodes (1): Pure DB renderer for cart and order summary (W3/RA-1/R-013/R-040).  Renders cart
+
+### Community 922 - "Community 922"
+Cohesion: 1.0
+Nodes (1): Format a money value as a plain AED amount string.      Identical logic to engin
+
+### Community 923 - "Community 923"
+Cohesion: 1.0
+Nodes (1): Render an order item's special-note suffix (identical to engine._note_suffix).
+
+### Community 924 - "Community 924"
+Cohesion: 1.0
+Nodes (1): Return a DB-backed cart/summary string for the given order and dialogue phase.
+
+### Community 925 - "Community 925"
+Cohesion: 1.0
+Nodes (1): Render the \\n\\n🛒 cart tail for the ordering phase (mirrors engine._cart_tail).
+
+### Community 926 - "Community 926"
+Cohesion: 1.0
+Nodes (1): Render the full order-summary text body for the awaiting_confirmation phase.
+
+### Community 927 - "Community 927"
+Cohesion: 1.0
+Nodes (1): Pure DB renderer tests (W3/RA-1/R-013).
+
+### Community 928 - "Community 928"
+Cohesion: 1.0
+Nodes (1): ordering phase: result starts with \\n\\n🛒, contains dish name and subtotal.
+
+### Community 929 - "Community 929"
+Cohesion: 1.0
+Nodes (1): awaiting_confirmation phase: result contains order summary fields.
+
+### Community 930 - "Community 930"
+Cohesion: 1.0
+Nodes (1): ordering phase with no items → '\\n\\n🛒 Your cart is now empty.
+
+### Community 931 - "Community 931"
+Cohesion: 1.0
+Nodes (1): W3 render gate tests — DB-backed cart tail + factual validator (RA-1/R-013/R-040
+
+### Community 932 - "Community 932"
+Cohesion: 1.0
+Nodes (1): drive 'one chicken biryani' → outbound body must contain 🛒, dish name, Subtotal.
+
+### Community 933 - "Community 933"
+Cohesion: 1.0
+Nodes (1): drive add then note update → outbound body must contain 🛒 and Subtotal.
+
+### Community 934 - "Community 934"
+Cohesion: 1.0
+Nodes (1): After cart → 'done', the engine advances the flow with an engine-authored     me
+
+### Community 935 - "Community 935"
+Cohesion: 1.0
+Nodes (1): When an order is confirmed, the confirmation carries a DB order_number, never
+
+### Community 936 - "Community 936"
+Cohesion: 1.0
+Nodes (1): Record a compact DB-derived cart observation into message history after any
+
+### Community 937 - "Community 937"
+Cohesion: 1.0
+Nodes (1): After a single add, a cart_observation Message must exist in DB (F66/W3).
+
+### Community 938 - "Community 938"
+Cohesion: 1.0
+Nodes (1): Remove lines that contain an AED amount from LLM free text on mutating turns.
+
+### Community 939 - "Community 939"
+Cohesion: 1.0
+Nodes (1): _strip_money_claims removes lines containing an AED amount (R-067).
+
+### Community 940 - "Community 940"
+Cohesion: 1.0
+Nodes (1): _strip_money_claims keeps lines without a currency amount.
+
+### Community 941 - "Community 941"
+Cohesion: 1.0
+Nodes (1): _strip_money_claims handles empty and None input.
+
+### Community 942 - "Community 942"
+Cohesion: 1.0
+Nodes (1): Production W4 top-level router via Claude API (single enum, multilingual).
+
+### Community 943 - "Community 943"
+Cohesion: 1.0
+Nodes (1): Production W4 top-level router: one async chat call, single enum answer.      LL
+
+### Community 944 - "Community 944"
+Cohesion: 1.0
+Nodes (1): W4 top-level multilingual intent router (LLM-driven; Fake for tests).
+
+### Community 945 - "Community 945"
+Cohesion: 1.0
+Nodes (1): Top-level multilingual router intent (W4).      A single, phase-aware, language-
+
+### Community 946 - "Community 946"
+Cohesion: 1.0
+Nodes (1): Top-level multilingual intent router (W4).      LLM-driven and language-agnostic
+
+### Community 947 - "Community 947"
+Cohesion: 1.0
+Nodes (1): Deterministic test double for the W4 top-level multilingual router.  The product
+
+### Community 948 - "Community 948"
+Cohesion: 1.0
+Nodes (1): Rule-based, deterministic ``RouterClassifierPort`` test double.
+
+### Community 949 - "Community 949"
+Cohesion: 1.0
+Nodes (1): W4 Task 1 — top-level multilingual intent router: port + Fake impl.  The Fake is
+
+### Community 950 - "Community 950"
+Cohesion: 1.0
+Nodes (1): W4 top-level multilingual router: classify the customer's latest text turn.
+
+### Community 951 - "Community 951"
+Cohesion: 1.0
+Nodes (1): W4 Task 5 — global read-only intents work inside a modify sub-flow.  F103/TX-28/
+
+### Community 952 - "Community 952"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 953 - "Community 953"
+Cohesion: 1.0
+Nodes (1): DIRECT dish
+
+### Community 954 - "Community 954"
+Cohesion: 1.0
+Nodes (1): Mutton Biryani
+
+### Community 955 - "Community 955"
+Cohesion: 1.0
+Nodes (1): W5 capability evals — Money & catalogue price integrity.  Five behaviours the re
+
+### Community 956 - "Community 956"
+Cohesion: 1.0
+Nodes (1): Re-derive ``order.total`` from persisted items + fee + coupon + wallet.      The
+
+### Community 957 - "Community 957"
+Cohesion: 1.0
+Nodes (1): Validate + redeem ``coupon_code`` against ``order`` and re-apply the total.
+
+### Community 958 - "Community 958"
+Cohesion: 1.0
+Nodes (1): One per-line quantity policy for every order path (typed, catalogue, modify).  A
+
+### Community 959 - "Community 959"
+Cohesion: 1.0
+Nodes (1): Raised when a single line's quantity is outside the allowed range.      ``qty``
+
+### Community 960 - "Community 960"
+Cohesion: 1.0
+Nodes (1): Immutable per-line quantity bounds for one restaurant.
+
+### Community 961 - "Community 961"
+Cohesion: 1.0
+Nodes (1): Build the policy from a restaurant row OR its raw ``settings`` dict.          Ac
+
+### Community 962 - "Community 962"
+Cohesion: 1.0
+Nodes (1): Return ``qty`` if within ``1..max_item_qty``; else raise ``QuantityError``.
+
+### Community 963 - "Community 963"
+Cohesion: 1.0
+Nodes (1): Distance (km) restaurant → customer + the SOURCE it was derived from.      Retur
+
+### Community 964 - "Community 964"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 965 - "Community 965"
+Cohesion: 1.0
+Nodes (1): is_only_intent
+
+### Community 966 - "Community 966"
+Cohesion: 1.0
+Nodes (1): note-in-dish pattern
+
+### Community 967 - "Community 967"
+Cohesion: 1.0
+Nodes (1): RA-7
+
+### Community 968 - "Community 968"
+Cohesion: 1.0
+Nodes (1): AMBIGUOUS fallback
+
+### Community 969 - "Community 969"
+Cohesion: 1.0
+Nodes (1): Graduation rule
+
+### Community 970 - "Community 970"
+Cohesion: 1.0
+Nodes (1): W6 capability evals — Menu / availability single source of truth.  Five behaviou
+
+### Community 971 - "Community 971"
+Cohesion: 1.0
+Nodes (1): Body of the most-recent outbound Message inserted after *after_id*.
+
+### Community 972 - "Community 972"
+Cohesion: 1.0
+Nodes (1): Seed a restaurant with ONLY Chicken Biryani — nothing else.
+
+### Community 973 - "Community 973"
+Cohesion: 1.0
+Nodes (1): A model reply listing >=2 dish-like names NOT in the catalogue must be replaced.
+
+### Community 974 - "Community 974"
+Cohesion: 1.0
+Nodes (1): In a single-dish restaurant, the cross-check must flag a reply that names     di
+
+### Community 975 - "Community 975"
+Cohesion: 1.0
+Nodes (1): A dish with whatsapp_enabled=False must not appear in _render_menu output.
+
+### Community 976 - "Community 976"
+Cohesion: 1.0
+Nodes (1): A customer cannot order a whatsapp_enabled=False dish via text.      Covers TX-4
+
+### Community 977 - "Community 977"
+Cohesion: 1.0
+Nodes (1): In catalogue mode, ordering a text-menu dish with no active CatalogProduct must
+
+### Community 978 - "Community 978"
+Cohesion: 1.0
+Nodes (1): A dish whose name matches ^[a-z][a-z0-9_]*$ (slug pattern) must not appear in
+
+### Community 979 - "Community 979"
+Cohesion: 1.0
+Nodes (1): Dashboard Data Latency Design
+
+### Community 980 - "Community 980"
+Cohesion: 1.0
+Nodes (1): Return the normalised canonical dish names for the tenant.      In catalogue mod
+
+### Community 981 - "Community 981"
+Cohesion: 1.0
+Nodes (1): True if the LLM reply appears to list dishes NOT in the tenant's catalogue.
+
+### Community 982 - "Community 982"
+Cohesion: 1.0
+Nodes (1): Tenant-scoped TTL cache for ``preview_batch_groups`` results.  Batch preview run
+
+### Community 983 - "Community 983"
+Cohesion: 1.0
+Nodes (1): Drop cached labels when dispatch pool changes (assign, ready, cancel).
+
+### Community 984 - "Community 984"
+Cohesion: 1.0
+Nodes (1): API response timing — surfaces slow dashboard paths on Render.
+
+### Community 985 - "Community 985"
+Cohesion: 1.0
+Nodes (1): Parse ``?include=`` for order detail. None means all sections.
+
+### Community 986 - "Community 986"
+Cohesion: 1.0
+Nodes (1): Assemble order detail for the manager drawer.      ``includes=None`` loads every
+
+### Community 987 - "Community 987"
+Cohesion: 1.0
+Nodes (1): W2 T6/T7/T8
+
+### Community 988 - "Community 988"
+Cohesion: 1.0
+Nodes (1): CANON_PHASE_ACTIONS
+
+### Community 989 - "Community 989"
+Cohesion: 1.0
+Nodes (1): LEGACY_PHASE_ACTIONS
+
+### Community 990 - "Community 990"
+Cohesion: 1.0
+Nodes (1): CANON_TO_LEGACY
+
+### Community 991 - "Community 991"
+Cohesion: 1.0
+Nodes (1): claude_conversation_enabled
+
+### Community 992 - "Community 992"
+Cohesion: 1.0
+Nodes (1): Onboarding Status API
+
+### Community 993 - "Community 993"
+Cohesion: 1.0
+Nodes (1): True when ``dish`` must never be shown/ordered on WhatsApp.      Two independent
+
+### Community 994 - "Community 994"
+Cohesion: 1.0
+Nodes (1): _execute_ai_add_item
+
+### Community 995 - "Community 995"
+Cohesion: 1.0
+Nodes (1): _handle_collecting_items
+
+### Community 996 - "Community 996"
+Cohesion: 1.0
+Nodes (1): Phone Ordering Reply
+
+### Community 997 - "Community 997"
+Cohesion: 1.0
+Nodes (1): Workstream W5
+
+### Community 998 - "Community 998"
+Cohesion: 1.0
+Nodes (1): Guard F20-A
+
+### Community 999 - "Community 999"
+Cohesion: 1.0
+Nodes (1): Guard F26
+
+### Community 1000 - "Community 1000"
+Cohesion: 1.0
+Nodes (1): Guard F31
+
+### Community 1001 - "Community 1001"
+Cohesion: 1.0
+Nodes (1): Guard F41
+
+### Community 1002 - "Community 1002"
+Cohesion: 1.0
+Nodes (1): Guard F74
+
+### Community 1003 - "Community 1003"
+Cohesion: 1.0
+Nodes (1): Guard F97
+
+### Community 1004 - "Community 1004"
+Cohesion: 1.0
+Nodes (1): Guard F98
+
+### Community 1005 - "Community 1005"
+Cohesion: 1.0
+Nodes (1): Guard F103
+
+### Community 1006 - "Community 1006"
+Cohesion: 1.0
+Nodes (1): Guard R-069
+
+### Community 1007 - "Community 1007"
+Cohesion: 1.0
+Nodes (1): Guard R-051
+
+### Community 1008 - "Community 1008"
+Cohesion: 1.0
+Nodes (1): Guard R-049
+
+### Community 1009 - "Community 1009"
+Cohesion: 1.0
+Nodes (1): Guard R-050
+
+### Community 1010 - "Community 1010"
+Cohesion: 1.0
+Nodes (1): Guard R-026
+
+### Community 1011 - "Community 1011"
+Cohesion: 1.0
+Nodes (1): Guard R-023
+
+### Community 1012 - "Community 1012"
+Cohesion: 1.0
+Nodes (1): Guard R-019
+
+### Community 1013 - "Community 1013"
+Cohesion: 1.0
+Nodes (1): Guard TX-45
+
+### Community 1014 - "Community 1014"
+Cohesion: 1.0
+Nodes (1): Guard TX-06
+
+### Community 1015 - "Community 1015"
+Cohesion: 1.0
+Nodes (1): Guard TX-28
+
+### Community 1016 - "Community 1016"
+Cohesion: 1.0
+Nodes (1): Guard TX-39
+
+### Community 1017 - "Community 1017"
+Cohesion: 1.0
+Nodes (1): Render one stored Message into LLM-readable content. Covers every     Message.ty
+
+### Community 1018 - "Community 1018"
+Cohesion: 1.0
+Nodes (1): Single source of truth for LLM conversation history.      Fetches the last `limi
+
+### Community 1019 - "Community 1019"
+Cohesion: 1.0
+Nodes (1): List orders for the tenant, newest first, with optional server-side filters.
+
+### Community 1020 - "Community 1020"
+Cohesion: 1.0
+Nodes (1): Older rows without a display_text/cart_snapshot still render human text,     nev
+
+### Community 1021 - "Community 1021"
+Cohesion: 1.0
+Nodes (1): _fetch_conversation_history was already deleted in W1 (b9ae270); guard     again
+
+### Community 1022 - "Community 1022"
+Cohesion: 1.0
+Nodes (1): Server-side order list filters (date range, search, offset).
+
+### Community 1023 - "Community 1023"
+Cohesion: 1.0
+Nodes (1): List orders endpoint must stay within dashboard latency budget.
+
+### Community 1024 - "Community 1024"
+Cohesion: 1.0
+Nodes (1): 50 seeded orders + mocked planner — hot list path stays under 250 ms.
+
+### Community 1025 - "Community 1025"
+Cohesion: 1.0
+Nodes (1): Start of a Dubai calendar day as naive UTC (matches DB ``created_at`` storage).
+
+### Community 1026 - "Community 1026"
+Cohesion: 1.0
+Nodes (1): Start of the next Dubai calendar day as naive UTC (exclusive upper bound).
+
+### Community 1027 - "Community 1027"
+Cohesion: 1.0
+Nodes (1): W0 Task 4
+
+### Community 1028 - "Community 1028"
+Cohesion: 1.0
+Nodes (1): Branch B
+
+### Community 1029 - "Community 1029"
+Cohesion: 1.0
+Nodes (1): Only Intent
+
+### Community 1030 - "Community 1030"
+Cohesion: 1.0
+Nodes (1): After a catalogue basket, _build_history must show the resolved dish names     f
+
+### Community 1031 - "Community 1031"
+Cohesion: 1.0
+Nodes (1): The interpreter receives context['cart_state'] (a structured array) and is     t
+
+### Community 1032 - "Community 1032"
+Cohesion: 1.0
+Nodes (1): Every customer-facing outbound is recorded in `messages` (DB-H3/4/5).     Drive
+
+### Community 1033 - "Community 1033"
+Cohesion: 1.0
+Nodes (1): W7
+
+### Community 1034 - "Community 1034"
+Cohesion: 1.0
+Nodes (1): W7a
+
+### Community 1035 - "Community 1035"
+Cohesion: 1.0
+Nodes (1): W7b
+
+### Community 1036 - "Community 1036"
+Cohesion: 1.0
+Nodes (1): R-051
+
+### Community 1037 - "Community 1037"
+Cohesion: 1.0
+Nodes (1): R-019
+
+### Community 1038 - "Community 1038"
+Cohesion: 1.0
+Nodes (1): R-049
+
+### Community 1039 - "Community 1039"
+Cohesion: 1.0
+Nodes (1): R-029
+
+### Community 1040 - "Community 1040"
+Cohesion: 1.0
+Nodes (1): R-077
+
+### Community 1041 - "Community 1041"
+Cohesion: 1.0
+Nodes (1): F63
+
+### Community 1042 - "Community 1042"
+Cohesion: 1.0
+Nodes (1): DB-H8
+
+### Community 1043 - "Community 1043"
+Cohesion: 1.0
+Nodes (1): R-072
+
+### Community 1044 - "Community 1044"
+Cohesion: 1.0
+Nodes (1): R-074
+
+### Community 1045 - "Community 1045"
+Cohesion: 1.0
+Nodes (1): R-060
+
+### Community 1046 - "Community 1046"
+Cohesion: 1.0
+Nodes (1): DB-H3
+
+### Community 1047 - "Community 1047"
+Cohesion: 1.0
+Nodes (1): DB-H4
+
+### Community 1048 - "Community 1048"
+Cohesion: 1.0
+Nodes (1): DB-H5
+
+### Community 1049 - "Community 1049"
+Cohesion: 1.0
+Nodes (1): engine.py
+
+### Community 1050 - "Community 1050"
+Cohesion: 1.0
+Nodes (1): Task 2 (W7a)
+
+### Community 1051 - "Community 1051"
+Cohesion: 1.0
+Nodes (1): Task 4 (W7a)
+
+### Community 1052 - "Community 1052"
+Cohesion: 1.0
+Nodes (1): Task 7 (W7a)
+
+### Community 1053 - "Community 1053"
+Cohesion: 1.0
+Nodes (1): Note-in-dish Pattern
+
+### Community 1054 - "Community 1054"
+Cohesion: 1.0
+Nodes (1): History Faithfulness
+
+### Community 1055 - "Community 1055"
+Cohesion: 1.0
+Nodes (1): Structured Context
+
+### Community 1056 - "Community 1056"
+Cohesion: 1.0
+Nodes (1): W8 — State/flow correctness & ops hardening.  Task 1: confirm_order / cancel_ord
+
+### Community 1057 - "Community 1057"
+Cohesion: 1.0
+Nodes (1): Any call proves the button path took an LLM round-trip — which it must not.
+
+### Community 1058 - "Community 1058"
+Cohesion: 1.0
+Nodes (1): R-008: an out-of-range pin clears only pin/fee state, never the cart.
+
+### Community 1059 - "Community 1059"
+Cohesion: 1.0
+Nodes (1): TX-02: resume → continue → 'that's all' must advance to checkout, never     read
+
+### Community 1060 - "Community 1060"
+Cohesion: 1.0
+Nodes (1): Create a draft order with a unique, atomically-allocated per-tenant order number
+
+### Community 1061 - "Community 1061"
+Cohesion: 1.0
+Nodes (1): TX-14/F114: a greeting/status message after confirmation must never mark     the
+
+### Community 1062 - "Community 1062"
+Cohesion: 1.0
+Nodes (1): W8/TX-13/F114: the DB must reject a duplicate order_number for the same     tena
+
+### Community 1063 - "Community 1063"
+Cohesion: 1.0
+Nodes (1): W8/TX-13/F114: repeated allocation under a simulated race (count() read     befo
+
+### Community 1064 - "Community 1064"
+Cohesion: 1.0
+Nodes (1): Serialize inbound processing per (restaurant, phone) thread (TX-22/TX-46/F94/F11
+
+### Community 1065 - "Community 1065"
+Cohesion: 1.0
+Nodes (1): TX-22/TX-46/F94/F115: two 'simultaneous' inbound messages for the same     conve
 
 ## Ambiguous Edges - Review These
 - `Append-only wallet ledger (hold/capture/release/freeze/reverse, derived balance)` → `Wallet Entry`  [AMBIGUOUS]
@@ -3573,761 +5378,1363 @@ Nodes (1): Shared dry-run planner for preview and invariant tests.      Greedy e
   docs/research/loyalty-program-analysis.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **664 isolated node(s):** `Tests for Prometheus metrics (P7-T10).`, `Tests for app startup / shutdown lifespan and the /health endpoint.`, `/health returns {"status": "ok"} — confirms the lifespan completed startup.`, `Test outbox exponential backoff (P7-T1).`, `Verify countdown doubles: 10, 20, 40, 80, 160.` (+659 more)
+- **1796 isolated node(s):** `Tests for Prometheus metrics (P7-T10).`, `Tests for app startup / shutdown lifespan and the /health endpoint.`, `/health returns {"status": "ok"} — confirms the lifespan completed startup.`, `Test outbox exponential backoff (P7-T1).`, `Verify countdown doubles: 10, 20, 40, 80, 160.` (+1791 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 328`** (2 nodes): `mapsNavigationUrl()`, `maps.ts`
+- **Thin community `Community 388`** (2 nodes): `mapsNavigationUrl()`, `maps.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 329`** (2 nodes): `mockAuthedFetch()`, `App.test.tsx`
+- **Thin community `Community 389`** (2 nodes): `mockAuthedFetch()`, `App.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 330`** (2 nodes): `RiderTrackingScreen.tsx`, `RiderTrackingScreen()`
+- **Thin community `Community 390`** (2 nodes): `RiderTrackingScreen.tsx`, `RiderTrackingScreen()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 331`** (2 nodes): `OrderDetailDrawer.test.tsx`, `renderDrawer()`
+- **Thin community `Community 391`** (2 nodes): `OrderDetailDrawer.test.tsx`, `renderDrawer()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 332`** (2 nodes): `renderProfile()`, `CustomerProfileScreen.test.tsx`
+- **Thin community `Community 392`** (2 nodes): `TicketsScreen.tsx`, `onResolved()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 333`** (2 nodes): `renderScreen()`, `CustomersScreen.test.tsx`
+- **Thin community `Community 393`** (2 nodes): `renderProfile()`, `CustomerProfileScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 334`** (2 nodes): `renderScreen()`, `CustomerProfileScreen.wallet.test.tsx`
+- **Thin community `Community 394`** (2 nodes): `renderScreen()`, `CustomerProfileScreen.wallet.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 335`** (2 nodes): `OrdersScreen.batch.test.tsx`, `order()`
+- **Thin community `Community 395`** (2 nodes): `OrdersScreen.batch.test.tsx`, `order()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 336`** (2 nodes): `KPITile.tsx`, `KPITile()`
+- **Thin community `Community 396`** (2 nodes): `KPITile.tsx`, `KPITile()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 337`** (2 nodes): `ConfirmDialog()`, `ConfirmDialog.tsx`
+- **Thin community `Community 397`** (2 nodes): `ConfirmDialog()`, `ConfirmDialog.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 338`** (2 nodes): `RiderAddModal.tsx`, `RiderAddModal()`
+- **Thin community `Community 398`** (2 nodes): `RiderAddModal.tsx`, `RiderAddModal()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 339`** (2 nodes): `SideDrawer.tsx`, `SideDrawer()`
+- **Thin community `Community 399`** (2 nodes): `SideDrawer.tsx`, `SideDrawer()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 340`** (2 nodes): `DispatchKpiPanel()`, `DispatchKpiPanel.tsx`
+- **Thin community `Community 400`** (2 nodes): `DispatchKpiPanel()`, `DispatchKpiPanel.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 341`** (2 nodes): `SectionBanner.tsx`, `SectionBanner()`
+- **Thin community `Community 401`** (2 nodes): `SectionBanner.tsx`, `SectionBanner()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 342`** (2 nodes): `iso()`, `CountdownTimer.test.tsx`
+- **Thin community `Community 402`** (2 nodes): `iso()`, `CountdownTimer.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 343`** (2 nodes): `TopBar.tsx`, `TopBar()`
+- **Thin community `Community 403`** (2 nodes): `TopBar.tsx`, `TopBar()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 344`** (2 nodes): `LiveOpsMap.tsx`, `LiveOpsMap()`
+- **Thin community `Community 404`** (2 nodes): `LiveOpsMap.tsx`, `LiveOpsMap()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 345`** (2 nodes): `PageHeader.tsx`, `PageHeader()`
+- **Thin community `Community 405`** (2 nodes): `PageHeader.tsx`, `PageHeader()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 346`** (2 nodes): `AppShell()`, `AppShell.tsx`
+- **Thin community `Community 406`** (2 nodes): `AppShell()`, `AppShell.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 347`** (2 nodes): `PrepCountdown.tsx`, `PrepCountdown()`
+- **Thin community `Community 407`** (2 nodes): `PrepCountdown.tsx`, `PrepCountdown()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 348`** (2 nodes): `StatusPill.tsx`, `StatusPill()`
+- **Thin community `Community 408`** (2 nodes): `StatusPill.tsx`, `StatusPill()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 349`** (2 nodes): `PrepCountdown.test.tsx`, `inMin()`
+- **Thin community `Community 409`** (2 nodes): `PrepCountdown.test.tsx`, `inMin()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 350`** (2 nodes): `conv()`, `ConversationRow.test.tsx`
+- **Thin community `Community 410`** (2 nodes): `conv()`, `ConversationRow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 351`** (2 nodes): `CountdownTimer()`, `CountdownTimer.tsx`
+- **Thin community `Community 411`** (2 nodes): `CountdownTimer()`, `CountdownTimer.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 352`** (2 nodes): `onConfirm()`, `AppInviteModal.tsx`
+- **Thin community `Community 412`** (2 nodes): `uploadPhoto()`, `DishEditModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 353`** (2 nodes): `ConversationRow()`, `ConversationRow.tsx`
+- **Thin community `Community 413`** (2 nodes): `onConfirm()`, `AppInviteModal.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 354`** (2 nodes): `TicketDetailDrawer.tsx`, `TicketDetailDrawer()`
+- **Thin community `Community 414`** (2 nodes): `QueryRefreshNote.tsx`, `QueryRefreshNote()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 355`** (2 nodes): `Button()`, `Button.tsx`
+- **Thin community `Community 415`** (2 nodes): `ConversationRow()`, `ConversationRow.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 356`** (2 nodes): `Spinner.tsx`, `Spinner()`
+- **Thin community `Community 416`** (2 nodes): `TicketDetailDrawer.tsx`, `TicketDetailDrawer()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 357`** (2 nodes): `LiveOrderRow.tsx`, `LiveOrderRow()`
+- **Thin community `Community 417`** (2 nodes): `Button()`, `Button.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 358`** (2 nodes): `sla.test.ts`, `iso()`
+- **Thin community `Community 418`** (2 nodes): `Spinner.tsx`, `Spinner()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 359`** (2 nodes): `usePoll.ts`, `usePoll()`
+- **Thin community `Community 419`** (2 nodes): `LiveOrderRow.tsx`, `LiveOrderRow()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 360`** (2 nodes): `usePoll.test.tsx`, `Probe()`
+- **Thin community `Community 420`** (2 nodes): `sla.test.ts`, `iso()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 361`** (2 nodes): `test_record_audit_persists_row()`, `test_audit.py`
+- **Thin community `Community 421`** (2 nodes): `usePoll.ts`, `usePoll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 362`** (2 nodes): `test_health()`, `test_health.py`
+- **Thin community `Community 422`** (2 nodes): `usePoll.test.tsx`, `Probe()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 363`** (2 nodes): `test_processed_at_is_datetime()`, `test_processed_at_type.py`
+- **Thin community `Community 423`** (2 nodes): `test_record_audit_persists_row()`, `test_audit.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 364`** (2 nodes): `current_restaurant()`, `deps.py`
+- **Thin community `Community 424`** (2 nodes): `test_health()`, `test_health.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 365`** (2 nodes): `Signature Moment: Dispatch Map Batch Lasso Animation`, `Dashboard Motion Principles (information-carrying only)`
+- **Thin community `Community 425`** (2 nodes): `test_engine_and_service_import()`, `test_import_smoke.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 366`** (2 nodes): `Architectural Decision: FileBlobStore (sha256-addressed, tenant-scoped) for menu PDF/image persistence`, `Architectural Decision: Greeting sends uploaded menu PDF/image as WhatsApp media (not processed text menu)`
+- **Thin community `Community 426`** (2 nodes): `test_processed_at_is_datetime()`, `test_processed_at_type.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 367`** (2 nodes): `expo-notifications Plugin`, `Push Notifications Not Arriving Bug`
+- **Thin community `Community 427`** (2 nodes): `test_preview_cache_roundtrip_and_invalidate()`, `test_preview_cache.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 368`** (2 nodes): `SLA Late-Delivery Coupon`, `Coupon Primitive (Existing)`
+- **Thin community `Community 428`** (2 nodes): `test_basket_and_text_share_one_conversation()`, `test_catalog_phone_normalization.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 369`** (2 nodes): `app/wallet/reconcile.py + abuse.py + worker.py`, `Wallet maintenance: expiry, reconcile, abuse auto-freeze (Celery beat)`
+- **Thin community `Community 429`** (2 nodes): `test_result_helpers()`, `test_result.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 370`** (2 nodes): `Duplicate Rider Picked Up Message Bug`, `Remove sendCurrentLocation from doPickup Fix`
+- **Thin community `Community 430`** (2 nodes): `current_restaurant()`, `deps.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 371`** (2 nodes): `config.rider_app_apk_url`, `WhatsApp Service`
+- **Thin community `Community 431`** (2 nodes): `Signature Moment: Dispatch Map Batch Lasso Animation`, `Dashboard Motion Principles (information-carrying only)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 372`** (2 nodes): `EAS`, `Splash Screen`
+- **Thin community `Community 432`** (2 nodes): `Architectural Decision: FileBlobStore (sha256-addressed, tenant-scoped) for menu PDF/image persistence`, `Architectural Decision: Greeting sends uploaded menu PDF/image as WhatsApp media (not processed text menu)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 373`** (2 nodes): `App Invite Concept`, `WhatsApp Pairing Concept`
+- **Thin community `Community 433`** (2 nodes): `SLA Late-Delivery Coupon`, `Coupon Primitive (Existing)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 374`** (2 nodes): `OR-Tools default`, `SLA-first policy`
+- **Thin community `Community 434`** (2 nodes): `EAS`, `Splash Screen`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 375`** (2 nodes): `Re-add backstop`, `Multilingual order completion`
+- **Thin community `Community 435`** (2 nodes): `app/wallet/reconcile.py + abuse.py + worker.py`, `Wallet maintenance: expiry, reconcile, abuse auto-freeze (Celery beat)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 376`** (2 nodes): `Prep-aware dispatch`, `Smart hold window`
+- **Thin community `Community 436`** (2 nodes): `Duplicate Rider Picked Up Message Bug`, `Remove sendCurrentLocation from doPickup Fix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 377`** (2 nodes): `Re-batch FSM`, `Delivery zones model`
+- **Thin community `Community 437`** (2 nodes): `expo-notifications Plugin`, `Push Notifications Not Arriving Bug`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 378`** (1 nodes): `app.config.js`
+- **Thin community `Community 438`** (2 nodes): `App Invite Concept`, `WhatsApp Pairing Concept`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 379`** (1 nodes): `babel.config.js`
+- **Thin community `Community 439`** (2 nodes): `OR-Tools default`, `SLA-first policy`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 380`** (1 nodes): `playwright.config.ts`
+- **Thin community `Community 440`** (2 nodes): `Re-add backstop`, `Multilingual order completion`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 381`** (1 nodes): `vite.config.ts`
+- **Thin community `Community 441`** (2 nodes): `Prep-aware dispatch`, `Smart hold window`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 382`** (1 nodes): `tickets-drawer.spec.ts`
+- **Thin community `Community 442`** (2 nodes): `Re-batch FSM`, `Delivery zones model`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 383`** (1 nodes): `smoke.spec.ts`
+- **Thin community `Community 443`** (2 nodes): `modify_proposed`, `Option A: modify from current`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 384`** (1 nodes): `coupons.spec.ts`
+- **Thin community `Community 444`** (2 nodes): `Cart Action Semantics`, `needs_clarification flag`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 385`** (1 nodes): `main.tsx`
+- **Thin community `Community 445`** (2 nodes): `W7 Implementation Plan`, `Root Cause Doc (biryani-correction-flow)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 386`** (1 nodes): `vite-env.d.ts`
+- **Thin community `Community 446`** (2 nodes): `F33`, `R-045`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 387`** (1 nodes): `setup.ts`
+- **Thin community `Community 447`** (2 nodes): `Eval #10`, `W2+W4 routing`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 388`** (1 nodes): `OrdersScreen.test.tsx`
+- **Thin community `Community 448`** (2 nodes): `Branch B (note-in-dish)`, `note-in-dish regex pattern`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 389`** (1 nodes): `ConversationsScreen.test.tsx`
+- **Thin community `Community 449`** (2 nodes): `AMBIGUOUS dish`, `Chicken Biryani`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 390`** (1 nodes): `AnalyticsScreen.test.tsx`
+- **Thin community `Community 450`** (1 nodes): `app.config.js`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 391`** (1 nodes): `CouponsScreen.test.tsx`
+- **Thin community `Community 451`** (1 nodes): `babel.config.js`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 392`** (1 nodes): `RidersScreen.test.tsx`
+- **Thin community `Community 452`** (1 nodes): `playwright.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 393`** (1 nodes): `LiveOpsScreen.tsx`
+- **Thin community `Community 453`** (1 nodes): `vite.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 394`** (1 nodes): `LiveOpsScreen.test.tsx`
+- **Thin community `Community 454`** (1 nodes): `tickets-drawer.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 395`** (1 nodes): `CustomersScreen.tsx`
+- **Thin community `Community 455`** (1 nodes): `smoke.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 396`** (1 nodes): `TicketsScreen.test.tsx`
+- **Thin community `Community 456`** (1 nodes): `coupons.spec.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 397`** (1 nodes): `SettingsScreen.test.tsx`
+- **Thin community `Community 457`** (1 nodes): `main.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 398`** (1 nodes): `MessageBubble.test.tsx`
+- **Thin community `Community 458`** (1 nodes): `vite-env.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 399`** (1 nodes): `SideDrawer.test.tsx`
+- **Thin community `Community 459`** (1 nodes): `setup.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 400`** (1 nodes): `NavSidebar.test.tsx`
+- **Thin community `Community 460`** (1 nodes): `dispatch.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 401`** (1 nodes): `DishCard.tsx`
+- **Thin community `Community 461`** (1 nodes): `OrdersScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 402`** (1 nodes): `LiveOrderRow.test.tsx`
+- **Thin community `Community 462`** (1 nodes): `ConversationsScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 403`** (1 nodes): `DiffPanel.test.tsx`
+- **Thin community `Community 463`** (1 nodes): `AnalyticsScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 404`** (1 nodes): `LiveOpsMap.test.tsx`
+- **Thin community `Community 464`** (1 nodes): `CustomersScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 405`** (1 nodes): `CompactTable.tsx`
+- **Thin community `Community 465`** (1 nodes): `CouponsScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 406`** (1 nodes): `DishEditModal.test.tsx`
+- **Thin community `Community 466`** (1 nodes): `RidersScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 407`** (1 nodes): `TicketDetailDrawer.test.tsx`
+- **Thin community `Community 467`** (1 nodes): `LiveOpsScreen.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 408`** (1 nodes): `SLAOrderCard.tsx`
+- **Thin community `Community 468`** (1 nodes): `LiveOpsScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 409`** (1 nodes): `MessageBubble.tsx`
+- **Thin community `Community 469`** (1 nodes): `CustomersScreen.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 410`** (1 nodes): `AppInviteModal.test.tsx`
+- **Thin community `Community 470`** (1 nodes): `TicketsScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 411`** (1 nodes): `DispatchKpiPanel.test.tsx`
+- **Thin community `Community 471`** (1 nodes): `SettingsScreen.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 412`** (1 nodes): `StatusPill.test.tsx`
+- **Thin community `Community 472`** (1 nodes): `MessageBubble.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 413`** (1 nodes): `DiffPanel.tsx`
+- **Thin community `Community 473`** (1 nodes): `SideDrawer.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 414`** (1 nodes): `RiderCard.test.tsx`
+- **Thin community `Community 474`** (1 nodes): `NavSidebar.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 415`** (1 nodes): `KPITile.test.tsx`
+- **Thin community `Community 475`** (1 nodes): `DishCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 416`** (1 nodes): `CompactTable.test.tsx`
+- **Thin community `Community 476`** (1 nodes): `LiveOrderRow.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 417`** (1 nodes): `ChatCustomerPanel.test.tsx`
+- **Thin community `Community 477`** (1 nodes): `DiffPanel.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 418`** (1 nodes): `DispatchExplainSection.tsx`
+- **Thin community `Community 478`** (1 nodes): `LiveOpsMap.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 419`** (1 nodes): `DishCard.test.tsx`
+- **Thin community `Community 479`** (1 nodes): `CompactTable.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 420`** (1 nodes): `dispatchDisplay.test.ts`
+- **Thin community `Community 480`** (1 nodes): `TicketDetailDrawer.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 421`** (1 nodes): `ordersApi.test.ts`
+- **Thin community `Community 481`** (1 nodes): `SLAOrderCard.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 422`** (1 nodes): `auth.test.ts`
+- **Thin community `Community 482`** (1 nodes): `MessageBubble.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 423`** (1 nodes): `orderDisplay.test.ts`
+- **Thin community `Community 483`** (1 nodes): `AppInviteModal.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 424`** (1 nodes): `types.ts`
+- **Thin community `Community 484`** (1 nodes): `DispatchKpiPanel.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 425`** (1 nodes): `ticketsApi.test.ts`
+- **Thin community `Community 485`** (1 nodes): `StatusPill.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 426`** (1 nodes): `apiClient.test.ts`
+- **Thin community `Community 486`** (1 nodes): `DiffPanel.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 427`** (1 nodes): `pollingTransport.test.ts`
+- **Thin community `Community 487`** (1 nodes): `RiderCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 428`** (1 nodes): `index.ts`
+- **Thin community `Community 488`** (1 nodes): `KPITile.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 429`** (1 nodes): `__init__.py`
+- **Thin community `Community 489`** (1 nodes): `CompactTable.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 430`** (1 nodes): `__init__.py`
+- **Thin community `Community 490`** (1 nodes): `ChatCustomerPanel.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 431`** (1 nodes): `__init__.py`
+- **Thin community `Community 491`** (1 nodes): `DispatchExplainSection.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 432`** (1 nodes): `__init__.py`
+- **Thin community `Community 492`** (1 nodes): `DishCard.test.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 433`** (1 nodes): `__init__.py`
+- **Thin community `Community 493`** (1 nodes): `orderDetailApi.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 434`** (1 nodes): `__init__.py`
+- **Thin community `Community 494`** (1 nodes): `dispatchDisplay.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 435`** (1 nodes): `__init__.py`
+- **Thin community `Community 495`** (1 nodes): `ordersApi.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 436`** (1 nodes): `__init__.py`
+- **Thin community `Community 496`** (1 nodes): `auth.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 437`** (1 nodes): `__init__.py`
+- **Thin community `Community 497`** (1 nodes): `orderDisplay.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 438`** (1 nodes): `__init__.py`
+- **Thin community `Community 498`** (1 nodes): `types.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 439`** (1 nodes): `__init__.py`
+- **Thin community `Community 499`** (1 nodes): `queryClient.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 440`** (1 nodes): `__init__.py`
+- **Thin community `Community 500`** (1 nodes): `ticketsApi.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 441`** (1 nodes): `__init__.py`
+- **Thin community `Community 501`** (1 nodes): `apiClient.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 442`** (1 nodes): `__init__.py`
+- **Thin community `Community 502`** (1 nodes): `pollingTransport.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 443`** (1 nodes): `__init__.py`
+- **Thin community `Community 503`** (1 nodes): `index.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 444`** (1 nodes): `__init__.py`
+- **Thin community `Community 504`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 445`** (1 nodes): `__init__.py`
+- **Thin community `Community 505`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 446`** (1 nodes): `__init__.py`
+- **Thin community `Community 506`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 447`** (1 nodes): `__init__.py`
+- **Thin community `Community 507`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 448`** (1 nodes): `__init__.py`
+- **Thin community `Community 508`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 449`** (1 nodes): `__init__.py`
+- **Thin community `Community 509`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 450`** (1 nodes): `__init__.py`
+- **Thin community `Community 510`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 451`** (1 nodes): `__init__.py`
+- **Thin community `Community 511`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 452`** (1 nodes): `__init__.py`
+- **Thin community `Community 512`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 453`** (1 nodes): `__init__.py`
+- **Thin community `Community 513`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 454`** (1 nodes): `__init__.py`
+- **Thin community `Community 514`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 455`** (1 nodes): `stop_live.ps1`
+- **Thin community `Community 515`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 456`** (1 nodes): `run_live.ps1`
+- **Thin community `Community 516`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 457`** (1 nodes): `__init__.py`
+- **Thin community `Community 517`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 458`** (1 nodes): `__init__.py`
+- **Thin community `Community 518`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 459`** (1 nodes): `celery_app.py`
+- **Thin community `Community 519`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 460`** (1 nodes): `__init__.py`
+- **Thin community `Community 520`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 461`** (1 nodes): `__init__.py`
+- **Thin community `Community 521`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 462`** (1 nodes): `__init__.py`
+- **Thin community `Community 522`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 463`** (1 nodes): `__init__.py`
+- **Thin community `Community 523`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 464`** (1 nodes): `__init__.py`
+- **Thin community `Community 524`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 465`** (1 nodes): `__init__.py`
+- **Thin community `Community 525`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 466`** (1 nodes): `__init__.py`
+- **Thin community `Community 526`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 467`** (1 nodes): `__init__.py`
+- **Thin community `Community 527`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 468`** (1 nodes): `Validate the loyalty config the UI sends. All numbers are non-negative;`
+- **Thin community `Community 528`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 469`** (1 nodes): `Validate the auto-special config: ``{enabled: bool, template_id: int|null,`
+- **Thin community `Community 529`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 470`** (1 nodes): `Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.`
+- **Thin community `Community 530`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 471`** (1 nodes): `Each tier needs a positive ascending ``max_km`` and a non-negative         ``fee`
+- **Thin community `Community 531`** (1 nodes): `conftest.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 472`** (1 nodes): `__init__.py`
+- **Thin community `Community 532`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 473`** (1 nodes): `__init__.py`
+- **Thin community `Community 533`** (1 nodes): `stop_live.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 474`** (1 nodes): `__init__.py`
+- **Thin community `Community 534`** (1 nodes): `run_live.ps1`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 475`** (1 nodes): `__init__.py`
+- **Thin community `Community 535`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 476`** (1 nodes): `__init__.py`
+- **Thin community `Community 536`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 477`** (1 nodes): `__init__.py`
+- **Thin community `Community 537`** (1 nodes): `celery_app.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 478`** (1 nodes): `__init__.py`
+- **Thin community `Community 538`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 479`** (1 nodes): `__init__.py`
+- **Thin community `Community 539`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 480`** (1 nodes): `__init__.py`
+- **Thin community `Community 540`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 481`** (1 nodes): `__init__.py`
+- **Thin community `Community 541`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 482`** (1 nodes): `__init__.py`
+- **Thin community `Community 542`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 483`** (1 nodes): `__init__.py`
+- **Thin community `Community 543`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 484`** (1 nodes): `worker.py`
+- **Thin community `Community 544`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 485`** (1 nodes): `__init__.py`
+- **Thin community `Community 545`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 486`** (1 nodes): `__init__.py`
+- **Thin community `Community 546`** (1 nodes): `Validate the loyalty config the UI sends. All numbers are non-negative;`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 487`** (1 nodes): `__init__.py`
+- **Thin community `Community 547`** (1 nodes): `Validate the auto-special config: ``{enabled: bool, template_id: int|null,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 488`** (1 nodes): `__init__.py`
+- **Thin community `Community 548`** (1 nodes): `Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 489`** (1 nodes): `__init__.py`
+- **Thin community `Community 549`** (1 nodes): `Each tier needs a positive ascending ``max_km`` and a non-negative         ``fee`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 490`** (1 nodes): `__init__.py`
+- **Thin community `Community 550`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 491`** (1 nodes): `__init__.py`
+- **Thin community `Community 551`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 492`** (1 nodes): `Validate the loyalty config the UI sends. All numbers are non-negative;`
+- **Thin community `Community 552`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 493`** (1 nodes): `Validate the auto-special config: ``{enabled: bool, template_id: int|null,`
+- **Thin community `Community 553`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 494`** (1 nodes): `Explainability row for ``GET /api/v1/dispatch/assignments``.`
+- **Thin community `Community 554`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 495`** (1 nodes): `Read every product in ``catalog_id`` from Meta. Raises CatalogReadError on a`
+- **Thin community `Community 555`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 496`** (1 nodes): `The products synced from this restaurant's Meta catalogue (for the OPS view).`
+- **Thin community `Community 556`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 497`** (1 nodes): `Each tier needs a positive ascending ``max_km`` and a non-negative         ``fee`
+- **Thin community `Community 557`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 498`** (1 nodes): `Best-effort per-restaurant lock. No-op if redis unavailable (tests).`
+- **Thin community `Community 558`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 499`** (1 nodes): `+10 min per *additional* batched stop beyond the first.`
+- **Thin community `Community 559`** (1 nodes): `Build the policy from a restaurant row OR its raw ``settings`` dict.          Ac`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 500`** (1 nodes): `Send the rider the next stop: nav link + Delivered button (COD-aware).`
+- **Thin community `Community 560`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 501`** (1 nodes): `Rider pressed "Orders Picked": advance the whole batch and send stop #1.`
+- **Thin community `Community 561`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 502`** (1 nodes): `Send the rider the next stop: nav link + Delivered button (COD-aware).     If ne`
+- **Thin community `Community 562`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 503`** (1 nodes): `Raised on invalid issue/redeem (unknown, expired, already redeemed).`
+- **Thin community `Community 563`** (1 nodes): `worker.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 504`** (1 nodes): `Send nudges for stale draft carts. Returns the number of nudges enqueued.`
+- **Thin community `Community 564`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 505`** (1 nodes): `COD collection ledger (spec §4.4.4 / §3).  COD is the only payment method on the`
+- **Thin community `Community 565`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 506`** (1 nodes): `Late-delivery apology coupon. Single-use, issued per order breach.`
+- **Thin community `Community 566`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 507`** (1 nodes): `Late-delivery apology coupon service (spec §4.5).  ``issue_coupon`` mints a sing`
+- **Thin community `Community 567`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 508`** (1 nodes): `A grouped set of orders assigned to one rider for sequential delivery.`
+- **Thin community `Community 568`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 509`** (1 nodes): `Dispatch trigger endpoint — POST /api/v1/dispatch/trigger (spec §4.3).`
+- **Thin community `Community 569`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 510`** (1 nodes): `Marketing REST API — templates, segments, campaigns, analytics.`
+- **Thin community `Community 570`** (1 nodes): `__init__.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 511`** (1 nodes): `Pydantic v2 request/response schemas for the Marketing REST API.`
+- **Thin community `Community 571`** (1 nodes): `Verify system prompt mentions all 7 supported languages.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 512`** (1 nodes): `Marketing orchestration service (spec §4.7, plan Task 15).  The layer that wires`
+- **Thin community `Community 572`** (1 nodes): `A PDF menu is attached as a base64 document (Claude reads it natively) —     nev`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 513`** (1 nodes): `Celery marketing workers — scheduled campaign dispatch (P6-T19).`
+- **Thin community `Community 573`** (1 nodes): `A plain-text menu is included verbatim as a text block (not rejected).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 514`** (1 nodes): `Convert common Markdown to WhatsApp formatting (idempotent).`
+- **Thin community `Community 574`** (1 nodes): `A provider/config failure must never break ordering — degrade to haversine.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 515`** (1 nodes): `Predictions REST API — forecast runs, prep-ahead suggestions, manager overrides.`
+- **Thin community `Community 575`** (1 nodes): `Return ≤3-line customer-facing description. NEVER include price.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 516`** (1 nodes): `Celery ML workers — nightly forecast across all tenants (P6-T19); weekly retrain`
+- **Thin community `Community 576`** (1 nodes): `Return one of: order_item | dish_question | cancel | modify | status | other.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 517`** (1 nodes): `Records yellow/red/breach SLA alerts for an order.`
+- **Thin community `Community 577`** (1 nodes): `Given ambiguous matches, return the single best Dish or None.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 518`** (1 nodes): `Singleton MockProvider shared across the process — enables simulator access.`
+- **Thin community `Community 578`** (1 nodes): `Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 519`** (1 nodes): `Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests`
+- **Thin community `Community 579`** (1 nodes): `Translate plain-English audience description into a validated segment DSL.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 520`** (1 nodes): `Marketing REST API router tests.  Uses the shared ``client`` + ``auth_headers```
+- **Thin community `Community 580`** (1 nodes): `Result from the AI conversation agent.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 521`** (1 nodes): `Marketing service — campaigns, template submit, compliant send, analytics.  The`
+- **Thin community `Community 581`** (1 nodes): `Test double: deterministic completion-intent detector.      Normalises curly/sma`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 522`** (1 nodes): `Tests for the marketing Celery worker (marketing.send_scheduled_campaigns).`
+- **Thin community `Community 582`** (1 nodes): `Test double: rule-based plain-English -> validated segment DSL.      Heuristics`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 523`** (1 nodes): `No due campaigns — _dispatch_scheduled must complete without error.`
+- **Thin community `Community 583`** (1 nodes): `Extract first text block; guard truncation/empty content (error contract: Runtim`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 524`** (1 nodes): `Seed a minimal restaurant row required for ordering FKs.      Non-autouse and dy`
+- **Thin community `Community 584`** (1 nodes): `Production describer via Claude API. Max 3 lines, never includes price.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 525`** (1 nodes): `Conversations Fixture Data`
+- **Thin community `Community 585`** (1 nodes): `Production intent classifier via Claude API.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 526`** (1 nodes): `Orders Fixture Data`
+- **Thin community `Community 586`** (1 nodes): `Production arbiter: given ambiguous dish candidates, returns best match.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 527`** (1 nodes): `Frontend TypeScript Config`
+- **Thin community `Community 587`** (1 nodes): `Production ForecastAdjuster: plain-English override -> parsed_effect DSL.      C`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 528`** (1 nodes): `Playwright Last Run Result`
+- **Thin community `Community 588`** (1 nodes): `Production segment compiler: plain English -> validated DSL via haiku.      The`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 529`** (1 nodes): `Test: _run_retrains completes for restaurant`
+- **Thin community `Community 589`** (1 nodes): `Production completion detector via Claude API (haiku, yes/no prompt).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 530`** (1 nodes): `Business Rule: SLA breach_40 without weather delay issues coupon (AED 10)`
+- **Thin community `Community 590`** (1 nodes): `AI-powered full-conversation agent for customer ordering via WhatsApp.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 531`** (1 nodes): `Business Rule: SLA breach_40 with weather_delay_disclosed skips coupon`
+- **Thin community `Community 591`** (1 nodes): `OpenAI-compatible tool-calling: returns parsed arguments dict of the forced tool`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 532`** (1 nodes): `Business Rule: SLA monitor is idempotent (no duplicate SlaEvent rows)`
+- **Thin community `Community 592`** (1 nodes): `Phase-aware AI ordering assistant using DeepSeek function calling.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 533`** (1 nodes): `Business Rule: yellow_30 enqueues manager alert outbox message`
+- **Thin community `Community 593`** (1 nodes): `Production completion detector: one tiny async chat call, yes/no answer.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 534`** (1 nodes): `Business Rule: breach_40 enqueues customer alert outbox message`
+- **Thin community `Community 594`** (1 nodes): `Mark resale sold, spawn the discounted READY order, dispatch (+ batch companion)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 535`** (1 nodes): `Risk: Celery FK resolution failure causes duplicate WhatsApp messages`
+- **Thin community `Community 595`** (1 nodes): `WhatsApp catalog ordering — a SEPARATE flow from the conversation engine.  A cus`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 536`** (1 nodes): `Repository Directory Map`
+- **Thin community `Community 596`** (1 nodes): `Catalog flow HTTP surface (manager-authed).  A small endpoint to push the WhatsA`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 537`** (1 nodes): `Platform Actors`
+- **Thin community `Community 597`** (1 nodes): `The products synced from this restaurant's Meta catalogue (for the OPS view).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 538`** (1 nodes): `WhatsApp Throughput Limits`
+- **Thin community `Community 598`** (1 nodes): `Handle a WhatsApp catalog cart (``order`` message) → a draft order.  This is int`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 539`** (1 nodes): `Marketing Segment DSL`
+- **Thin community `Community 599`** (1 nodes): `Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5").`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 540`** (1 nodes): `Redis Token-Bucket Rate Limiter`
+- **Thin community `Community 600`** (1 nodes): `COD collection ledger (spec §4.4.4 / §3).  COD is the only payment method on the`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 541`** (1 nodes): `Google Maps`
+- **Thin community `Community 601`** (1 nodes): `True if this restaurant is in catalogue ordering mode (flag on AND catalog_id se`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 542`** (1 nodes): `Claude AI`
+- **Thin community `Community 602`** (1 nodes): `Append-only ledger of coupon uses — THE source of truth for limit     enforcemen`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 543`** (1 nodes): `True if an AI reply appears to list dishes+prices (≥2 menu-ish lines).      Safe`
+- **Thin community `Community 603`** (1 nodes): `Coupon management endpoints (manager JWT, tenant-scoped).  Campaign coupon CRUD-`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 544`** (1 nodes): `Start of the current operational day in the restaurant's timezone.      Riders'`
+- **Thin community `Community 604`** (1 nodes): `Issue a single-use coupon to a specific customer (e.g. from the chat).     Retur`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 545`** (1 nodes): `Singleton FakePushProvider so tests can read its ``sent`` list.`
+- **Thin community `Community 605`** (1 nodes): `Late-delivery apology coupon service (spec §4.5).  ``issue_coupon`` mints a sing`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 546`** (1 nodes): `In-memory push provider for tests/dev — records sends, never hits the network.`
+- **Thin community `Community 606`** (1 nodes): `A grouped set of orders assigned to one rider for sequential delivery.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 547`** (1 nodes): `Deliver freshly-committed outbox rows — synchronously in-request when no     Cel`
+- **Thin community `Community 607`** (1 nodes): `Proactively message the customer on kitchen/delivery progress (preparing,     pi`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 548`** (1 nodes): `A pure greeting ("As salam walekum") means start fresh.      Live bug: a custome`
+- **Thin community `Community 608`** (1 nodes): `Dispatch endpoints — trigger + assignment explainability (spec §4.3, §5.6).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 549`** (1 nodes): `push_token (concept)`
+- **Thin community `Community 609`** (1 nodes): `Active batch polylines and SLA pressure rings for the live ops map.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 550`** (1 nodes): `Phase A (push notifications + app-driven actions)`
+- **Thin community `Community 610`** (1 nodes): `Dispatch API schemas.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 551`** (1 nodes): `Goal: native app primary, WhatsApp fallback`
+- **Thin community `Community 611`** (1 nodes): `Auto-dispatch engine (spec §4.3).  Behaviour:   * Eligible set = orders ``status`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 552`** (1 nodes): `Pairing code (WhatsApp one-time code)`
+- **Thin community `Community 612`** (1 nodes): `Load unassigned preview-eligible orders using the same pool as ``_dispatch``.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 553`** (1 nodes): `Device token (long-lived auth)`
+- **Thin community `Community 613`** (1 nodes): `Periodic dispatch sweep (Celery beat).  Runs the dispatch engine for every resta`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 554`** (1 nodes): `Background GPS tracking`
+- **Thin community `Community 614`** (1 nodes): `FastAPI/Celery dependency. Returns FakeGeoProvider or GoogleMapsGeoProvider.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 555`** (1 nodes): `The delivery radius in km = the largest tier's ``max_km``.      Single source of`
+- **Thin community `Community 615`** (1 nodes): `Rewrite em/en/standalone-hyphen separators in an AI reply as commas.      Compou`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 556`** (1 nodes): `Atomically claim a restaurant's pending outbox rows for dispatch.      Transitio`
+- **Thin community `Community 616`** (1 nodes): `Loyalty program — tiers (Phase 1) + earn-as-wallet-credit (Phase 2).  Everything`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 557`** (1 nodes): `The real bug: a rider paired (device_token set) but NOT currently sharing     (n`
+- **Thin community `Community 617`** (1 nodes): `Celery beat: nightly loyalty tier recompute across all tenants.  Per restaurant`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 558`** (1 nodes): `The WhatsApp flow only collects a receiver name, so upsert_address backfills`
+- **Thin community `Community 618`** (1 nodes): `Marketing REST API — templates, segments, campaigns, analytics.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 559`** (1 nodes): `Set a cart dish to an exact quantity (``qty <= 0`` removes it).      Returns ``(`
+- **Thin community `Community 619`** (1 nodes): `Delete a template — removes it from Meta (best-effort) and hides it from the`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 560`** (1 nodes): `AI cart edits: add → 'make it 4' (update_qty) → add a 2nd dish →     'remove' th`
+- **Thin community `Community 620`** (1 nodes): `Pydantic v2 request/response schemas for the Marketing REST API.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 561`** (1 nodes): `Fix Double GPS Ping`
+- **Thin community `Community 621`** (1 nodes): `Marketing orchestration service (spec §4.7, plan Task 15).  The layer that wires`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 562`** (1 nodes): `POST_NOTIFICATIONS Permission`
+- **Thin community `Community 622`** (1 nodes): `Celery marketing workers — scheduled campaign dispatch (P6-T19).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 563`** (1 nodes): `shadow mode`
+- **Thin community `Community 623`** (1 nodes): `Return the currently active menu with all dishes for this restaurant.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 564`** (1 nodes): `re-optimization`
+- **Thin community `Community 624`** (1 nodes): `Re-run extraction on stored file bytes and return a new draft + diff.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 565`** (1 nodes): `SLA constraint`
+- **Thin community `Community 625`** (1 nodes): `In-memory push provider for tests/dev — records sends, never hits the network.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 566`** (1 nodes): `cost tiebreak`
+- **Thin community `Community 626`** (1 nodes): `Observability package (metrics, middleware re-exports).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 567`** (1 nodes): `best-effort partial`
+- **Thin community `Community 627`** (1 nodes): `Open Knowledge Format (OKF) store.  OKF (https://cloud.google.com/blog/products/`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 568`** (1 nodes): `priority orders`
+- **Thin community `Community 628`** (1 nodes): `True only when the buyer's phone AND door/apartment AND building AND pinned`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 569`** (1 nodes): `re-optimization`
+- **Thin community `Community 629`** (1 nodes): `Convert common Markdown to WhatsApp formatting (idempotent).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 570`** (1 nodes): `shadow mode`
+- **Thin community `Community 630`** (1 nodes): `Flush all pending outbox rows for a restaurant (best-effort).      For request h`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 571`** (1 nodes): `dispatch metrics`
+- **Thin community `Community 631`** (1 nodes): `Atomically claim a restaurant's pending outbox rows for dispatch.      Transitio`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 572`** (1 nodes): `Manager alert when an order is still cooking past its plate-by deadline. Idempot`
+- **Thin community `Community 632`** (1 nodes): `Partner integration API.  Two surfaces:   * ``/api/v1/api-keys`` — manager-authe`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 573`** (1 nodes): `Outbox`
+- **Thin community `Community 633`** (1 nodes): `List this restaurant's keys (active + revoked), newest first. Never the     secr`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 574`** (1 nodes): `LiveOps dispatch map`
+- **Thin community `Community 634`** (1 nodes): `Pydantic I/O schemas for the partner integration API.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 575`** (1 nodes): `GPS`
+- **Thin community `Community 635`** (1 nodes): `Predictions REST API — forecast runs, prep-ahead suggestions, manager overrides.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 576`** (1 nodes): `Duplicate Customer Message Fix`
+- **Thin community `Community 636`** (1 nodes): `Celery ML workers — nightly forecast across all tenants (P6-T19); weekly retrain`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 577`** (1 nodes): `Delivered Stop Stuck Fix`
+- **Thin community `Community 637`** (1 nodes): `Records yellow/red/breach SLA alerts for an order.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 578`** (1 nodes): `Rider App-Only Mode`
+- **Thin community `Community 638`** (1 nodes): `Complaint ticket model.  A complaint is HUMAN-handled only: the AI may open a ti`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 579`** (1 nodes): `Rider Actions Module Extraction`
+- **Thin community `Community 639`** (1 nodes): `Complaint ticket endpoints (manager JWT, tenant-scoped).  Managers list/inspect`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 580`** (1 nodes): `Pickup Live Location Gate Fix`
+- **Thin community `Community 640`** (1 nodes): `Ticket service — complaint capture + the three manager resolution actions.  The`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 581`** (1 nodes): `Native App Pairing Branch`
+- **Thin community `Community 641`** (1 nodes): `Window-aware customer notification: session text inside 24h, else the     approv`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 582`** (1 nodes): `Splash Screen Fix`
+- **Thin community `Community 642`** (1 nodes): `Wallet read endpoints (manager JWT, tenant-scoped).  Balance/history are read-on`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 583`** (1 nodes): `UTCNow Deprecation Fix`
+- **Thin community `Community 643`** (1 nodes): `Wallet service — the ONLY place wallet value moves.  All balances are derived fr`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 584`** (1 nodes): `Test Runner Subagent / Coverage`
+- **Thin community `Community 644`** (1 nodes): `Celery beat tasks for wallet maintenance: credit expiry + reconciliation.  Both`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 585`** (1 nodes): `Google Maps Geo Provider`
+- **Thin community `Community 645`** (1 nodes): `Singleton MockProvider shared across the process — enables simulator access.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 586`** (1 nodes): `Resale Exclusion Helper`
+- **Thin community `Community 646`** (1 nodes): `Minimal restaurant row for the catalog flow's FKs (phone matches the     test in`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 587`** (1 nodes): `Opening hours: ``{"tz": str, "days": {"0".."6": ["HH:MM","HH:MM"]}}``.`
+- **Thin community `Community 647`** (1 nodes): `Unified menu: menu requests prefer catalogue cards, but fall back to the real`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 588`** (1 nodes): `Hand the chat to a human and tell the customer we'll confirm. Used when a     re`
+- **Thin community `Community 648`** (1 nodes): `order_confirmation confirm button finalizes the order with totals + ETA.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 589`** (1 nodes): `Periodic dispatch sweep (Celery beat).  Runs the dispatch engine for every resta`
+- **Thin community `Community 649`** (1 nodes): `Tests for dispatch HTTP endpoints (spec §4.3, §5.6).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 590`** (1 nodes): `Rewrite em/en/standalone-hyphen separators in an AI reply as commas.      Compou`
+- **Thin community `Community 650`** (1 nodes): `A,B,A,D,B,A — corridor cluster (D far) stays SLA-safe; D rides solo.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 591`** (1 nodes): `Partner integration: API-key-authed read access for third-party systems (POS).`
+- **Thin community `Community 651`** (1 nodes): `Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 592`** (1 nodes): `Partner integration API.  Two surfaces:   * ``/api/v1/api-keys`` — manager-authe`
+- **Thin community `Community 652`** (1 nodes): `Marketing REST API router tests.  Uses the shared ``client`` + ``auth_headers```
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 593`** (1 nodes): `List this restaurant's keys (active + revoked), newest first. Never the     secr`
+- **Thin community `Community 653`** (1 nodes): `Marketing service — campaigns, template submit, compliant send, analytics.  The`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 594`** (1 nodes): `Pydantic I/O schemas for the partner integration API.`
+- **Thin community `Community 654`** (1 nodes): `Tests for the marketing Celery worker (marketing.send_scheduled_campaigns).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 595`** (1 nodes): `Speech-to-text port. Implementations turn spoken audio into text so an     inbou`
+- **Thin community `Community 655`** (1 nodes): `No due campaigns — _dispatch_scheduled must complete without error.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 596`** (1 nodes): `A bigger proximity_km lets moderately-spaced drop-offs batch together.`
+- **Thin community `Community 656`** (1 nodes): `Seed a minimal restaurant row required for ordering FKs.      Non-autouse and dy`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 597`** (1 nodes): `APP_MARKETING_TICK_SECRET`
+- **Thin community `Community 657`** (1 nodes): `AND gate: barred ONLY when phone + door/apartment + building + pin ALL match.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 598`** (1 nodes): `APP_OUTBOX_SYNC_DELIVERY`
+- **Thin community `Community 658`** (1 nodes): `An over-large limit is clamped to 100 (never returns more than 100 rows).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 599`** (1 nodes): `External Cron Job`
+- **Thin community `Community 659`** (1 nodes): `Cancel an order.      Before cooking (status != preparing) → plain transition to`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 600`** (1 nodes): `Atomic Claim Issue`
+- **Thin community `Community 660`** (1 nodes): `Build items_batch ``data`` with Meta Commerce required fields.      See https://`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 601`** (1 nodes): `web tracker CTA`
+- **Thin community `Community 661`** (1 nodes): `Show the menu under the restaurant's STRICT mode (catalogue OR text, no mixing).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 602`** (1 nodes): `device token check`
+- **Thin community `Community 662`** (1 nodes): `Returning customer → offer the saved address UP FRONT with Use/New buttons,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 603`** (1 nodes): `Customer`
+- **Thin community `Community 663`** (1 nodes): `Push local dishes to the restaurant's Meta catalogue.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 604`** (1 nodes): `GPS Tracking`
+- **Thin community `Community 664`** (1 nodes): `True for short, explicit 'show me the menu' messages (lowercased).      Kept tig`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 605`** (1 nodes): `Expo`
+- **Thin community `Community 665`** (1 nodes): `Lowercase + strip punctuation/emoji/extra spaces so "No.", "Np!", and     "That'`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 606`** (1 nodes): `device_token`
+- **Thin community `Community 666`** (1 nodes): `Push local dishes (without Meta link) to the restaurant's Meta catalogue.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 607`** (1 nodes): `WhatsApp catalog ordering — a SEPARATE flow from the conversation engine.  A cus`
+- **Thin community `Community 667`** (1 nodes): `Pull from Meta, link dishes, then push any dish-only items to Meta.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 608`** (1 nodes): `Catalog flow HTTP surface (manager-authed).  A small endpoint to push the WhatsA`
+- **Thin community `Community 668`** (1 nodes): `Latest (lat, lon) ping per rider from rider_locations.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 609`** (1 nodes): `Handle a WhatsApp catalog cart (``order`` message) → a draft order.  This is int`
+- **Thin community `Community 669`** (1 nodes): `Download a WhatsApp voice note and transcribe it to text. Returns the     transc`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 610`** (1 nodes): `Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5").`
+- **Thin community `Community 670`** (1 nodes): `Cancel an order. Legal before delivery only: draft/pending/confirmed →     cance`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 611`** (1 nodes): `Minimal restaurant row for the catalog flow's FKs (phone matches the     test in`
+- **Thin community `Community 671`** (1 nodes): `Best-effort per-restaurant lock. No-op if redis unavailable (tests).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 612`** (1 nodes): `Referral Loop`
+- **Thin community `Community 672`** (1 nodes): `+10 min per *additional* batched stop beyond the first.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 613`** (1 nodes): `WalletEntry Ledger`
+- **Thin community `Community 673`** (1 nodes): `Send the rider the next stop: nav link + Delivered button (COD-aware).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 614`** (1 nodes): `Coupon (Generalized)`
+- **Thin community `Community 674`** (1 nodes): `Rider pressed "Orders Picked": advance the whole batch and send stop #1.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 615`** (1 nodes): `Double-Entry Ledger`
+- **Thin community `Community 675`** (1 nodes): `Send the rider the next stop: nav link + Delivered button (COD-aware).     If ne`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 616`** (1 nodes): `Show the menu, preferring the WhatsApp catalogue.      When the restaurant has c`
+- **Thin community `Community 676`** (1 nodes): `Return True if this buyer (phone + person/address) is barred from this resale pe`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 617`** (1 nodes): `Firebase`
+- **Thin community `Community 677`** (1 nodes): `Resale-offer matcher: returns on_resale orders for which the given buyer is NOT`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 618`** (1 nodes): `FCM`
+- **Thin community `Community 678`** (1 nodes): `Assemble the TEMPLATE outbox payload (name, language, components).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 619`** (1 nodes): `WhatsApp pairing`
+- **Thin community `Community 679`** (1 nodes): `Send nudges for stale draft carts. Returns the number of nudges enqueued.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 620`** (1 nodes): `live-location gate`
+- **Thin community `Community 680`** (1 nodes): `Render the active menu as categorized text.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 621`** (1 nodes): `app-only rider flow`
+- **Thin community `Community 681`** (1 nodes): `Render order summary with totals + ETA and confirm/cancel buttons.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 622`** (1 nodes): `A discount coupon.      Two shapes share this table:       * **apology** (kind='`
+- **Thin community `Community 682`** (1 nodes): `Find and add a dish; return True if successfully added.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 623`** (1 nodes): `Append-only ledger of coupon uses — THE source of truth for limit     enforcemen`
+- **Thin community `Community 683`** (1 nodes): `Remove matching dish from draft order cart.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 624`** (1 nodes): `Coupon management endpoints (manager JWT, tenant-scoped).  Campaign coupon CRUD-`
+- **Thin community `Community 684`** (1 nodes): `Update quantity of matching dish in draft order.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 625`** (1 nodes): `Complaint ticket model.  A complaint is HUMAN-handled only: the AI may open a ti`
+- **Thin community `Community 685`** (1 nodes): `Cancel the current draft/pending order.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 626`** (1 nodes): `Complaint ticket endpoints (manager JWT, tenant-scoped).  Managers list/inspect`
+- **Thin community `Community 686`** (1 nodes): `Process a location pin in address_capture phase.      Validates against restaura`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 627`** (1 nodes): `Ticket service — complaint capture + the three manager resolution actions.  The`
+- **Thin community `Community 687`** (1 nodes): `Conversations Fixture Data`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 628`** (1 nodes): `Wallet read endpoints (manager JWT, tenant-scoped).  Balance/history are read-on`
+- **Thin community `Community 688`** (1 nodes): `Orders Fixture Data`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 629`** (1 nodes): `Wallet service — the ONLY place wallet value moves.  All balances are derived fr`
+- **Thin community `Community 689`** (1 nodes): `Frontend TypeScript Config`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 630`** (1 nodes): `Celery beat tasks for wallet maintenance: credit expiry + reconciliation.  Both`
+- **Thin community `Community 690`** (1 nodes): `Playwright Last Run Result`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 631`** (1 nodes): `POST /api/v1/riders endpoint`
+- **Thin community `Community 691`** (1 nodes): `Test: _run_retrains completes for restaurant`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 632`** (1 nodes): `push notification concept`
+- **Thin community `Community 692`** (1 nodes): `Business Rule: SLA breach_40 without weather delay issues coupon (AED 10)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 633`** (1 nodes): `Rider Onboarding`
+- **Thin community `Community 693`** (1 nodes): `Business Rule: SLA breach_40 with weather_delay_disclosed skips coupon`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 634`** (1 nodes): `Live GPS Tracking`
+- **Thin community `Community 694`** (1 nodes): `Business Rule: SLA monitor is idempotent (no duplicate SlaEvent rows)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 635`** (1 nodes): `Firebase Cloud Messaging (FCM)`
+- **Thin community `Community 695`** (1 nodes): `Business Rule: yellow_30 enqueues manager alert outbox message`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 636`** (1 nodes): `Push Notification Flow`
+- **Thin community `Community 696`** (1 nodes): `Business Rule: breach_40 enqueues customer alert outbox message`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 637`** (1 nodes): `WhatsApp Messaging Flow`
+- **Thin community `Community 697`** (1 nodes): `Risk: Celery FK resolution failure causes duplicate WhatsApp messages`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 638`** (1 nodes): `A typed item NOT in the catalogue (Lemon Mint) must NOT be added by the     dete`
+- **Thin community `Community 698`** (1 nodes): `Platform Actors`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 639`** (1 nodes): `Rider Goes App-Only Feature`
+- **Thin community `Community 699`** (1 nodes): `WhatsApp Throughput Limits`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 640`** (1 nodes): `LiveOps Dispatch Map Enhancement`
+- **Thin community `Community 700`** (1 nodes): `Marketing Segment DSL`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 641`** (1 nodes): `Loyalty program — tiers (Phase 1) + earn-as-wallet-credit (Phase 2).  Everything`
+- **Thin community `Community 701`** (1 nodes): `Redis Token-Bucket Rate Limiter`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 642`** (1 nodes): `ops`
+- **Thin community `Community 702`** (1 nodes): `Google Maps`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 643`** (1 nodes): `background GPS`
+- **Thin community `Community 703`** (1 nodes): `Claude AI`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 644`** (1 nodes): `Render`
+- **Thin community `Community 704`** (1 nodes): `push_token (concept)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 645`** (1 nodes): `Spend-Threshold Cashback`
+- **Thin community `Community 705`** (1 nodes): `Phase A (push notifications + app-driven actions)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 646`** (1 nodes): `Celery beat: nightly loyalty tier recompute across all tenants.  Per restaurant`
+- **Thin community `Community 706`** (1 nodes): `Goal: native app primary, WhatsApp fallback`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 647`** (1 nodes): `understanding.txt`
+- **Thin community `Community 707`** (1 nodes): `Pairing code (WhatsApp one-time code)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 648`** (1 nodes): `rider APK artifact`
+- **Thin community `Community 708`** (1 nodes): `Device token (long-lived auth)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 649`** (1 nodes): `Ops Terminal`
+- **Thin community `Community 709`** (1 nodes): `Background GPS tracking`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 650`** (1 nodes): `Order`
+- **Thin community `Community 710`** (1 nodes): `Fix Double GPS Ping`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 651`** (1 nodes): `Open Knowledge Format (OKF) store.  OKF (https://cloud.google.com/blog/products/`
+- **Thin community `Community 711`** (1 nodes): `POST_NOTIFICATIONS Permission`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 652`** (1 nodes): `Top OKF docs for ``query``. Always includes the restaurant policy + (if given)`
+- **Thin community `Community 712`** (1 nodes): `shadow mode`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 653`** (1 nodes): `Normalize retailer id keys from Cloud API / simulator / legacy payloads.`
+- **Thin community `Community 713`** (1 nodes): `re-optimization`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 654`** (1 nodes): `Backward-compatible voice-note fetch for older clients.`
+- **Thin community `Community 714`** (1 nodes): `SLA constraint`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 655`** (1 nodes): `Join related rows for many orders in a constant number of queries.`
+- **Thin community `Community 715`** (1 nodes): `cost tiebreak`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 656`** (1 nodes): `Unified menu: menu requests prefer catalogue cards, but fall back to the real`
+- **Thin community `Community 716`** (1 nodes): `best-effort partial`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 657`** (1 nodes): `Pairing Mechanism`
+- **Thin community `Community 717`** (1 nodes): `priority orders`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 658`** (1 nodes): `Background GPS`
+- **Thin community `Community 718`** (1 nodes): `re-optimization`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 659`** (1 nodes): `Rebuild OKF menu/policy docs after a dish mutation so the bot grounds on the`
+- **Thin community `Community 719`** (1 nodes): `shadow mode`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 660`** (1 nodes): `device_token concept`
+- **Thin community `Community 720`** (1 nodes): `dispatch metrics`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 661`** (1 nodes): `rider_app_apk_url config`
+- **Thin community `Community 721`** (1 nodes): `Outbox`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 662`** (1 nodes): `app-invite`
+- **Thin community `Community 722`** (1 nodes): `LiveOps dispatch map`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 663`** (1 nodes): `FSM (Finite State Machine)`
+- **Thin community `Community 723`** (1 nodes): `GPS`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 664`** (1 nodes): `COD (Cash on Delivery)`
+- **Thin community `Community 724`** (1 nodes): `Duplicate Customer Message Fix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 665`** (1 nodes): `Expo Push API`
+- **Thin community `Community 725`** (1 nodes): `Delivered Stop Stuck Fix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 666`** (1 nodes): `True if ``token`` plausibly refers to a word the dish actually has.      Covered`
+- **Thin community `Community 726`** (1 nodes): `Rider App-Only Mode`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 667`** (1 nodes): `Web Tracker`
+- **Thin community `Community 727`** (1 nodes): `Rider Actions Module Extraction`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 668`** (1 nodes): `Extract Transport-Agnostic Rider Actions`
+- **Thin community `Community 728`** (1 nodes): `Pickup Live Location Gate Fix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 669`** (1 nodes): `Fix Delivered Stop Stays on Screen`
+- **Thin community `Community 729`** (1 nodes): `Native App Pairing Branch`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 670`** (1 nodes): `Proactively message the customer on kitchen/delivery progress (preparing,     pi`
+- **Thin community `Community 730`** (1 nodes): `Splash Screen Fix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 671`** (1 nodes): `When the kitchen starts preparing, the customer gets a proactive update.`
+- **Thin community `Community 731`** (1 nodes): `UTCNow Deprecation Fix`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 672`** (1 nodes): `rider.device_token`
+- **Thin community `Community 732`** (1 nodes): `Test Runner Subagent / Coverage`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 673`** (1 nodes): `Batch`
+- **Thin community `Community 733`** (1 nodes): `Google Maps Geo Provider`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 674`** (1 nodes): `COD`
+- **Thin community `Community 734`** (1 nodes): `Resale Exclusion Helper`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 675`** (1 nodes): `UAT Checklist`
+- **Thin community `Community 735`** (1 nodes): `APP_MARKETING_TICK_SECRET`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 676`** (1 nodes): `LiveOps`
+- **Thin community `Community 736`** (1 nodes): `APP_OUTBOX_SYNC_DELIVERY`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 677`** (1 nodes): `Rider Pairing (Code + APK)`
+- **Thin community `Community 737`** (1 nodes): `External Cron Job`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 678`** (1 nodes): `Loyalty config with DEFAULT_SETTINGS merged in. Restaurant settings are raw JSON`
+- **Thin community `Community 738`** (1 nodes): `Atomic Claim Issue`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 679`** (1 nodes): `True only when the buyer's phone AND door/apartment AND building AND pinned`
+- **Thin community `Community 739`** (1 nodes): `web tracker CTA`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 680`** (1 nodes): `AND gate: barred ONLY when phone + door/apartment + building + pin ALL match.`
+- **Thin community `Community 740`** (1 nodes): `device token check`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 681`** (1 nodes): `True if the message means "I'm done ordering" — exact closing phrase, or a closi`
+- **Thin community `Community 741`** (1 nodes): `Customer`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 682`** (1 nodes): `Routes API`
+- **Thin community `Community 742`** (1 nodes): `GPS Tracking`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 683`** (1 nodes): `If the message is clearly 'I want to order <dish>', return the dish phrase.`
+- **Thin community `Community 743`** (1 nodes): `Expo`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 684`** (1 nodes): `New tenants inherit SLA-safe dispatch defaults (spec §8.1).`
+- **Thin community `Community 744`** (1 nodes): `device_token`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 685`** (1 nodes): `Explainability payload`
+- **Thin community `Community 745`** (1 nodes): `Referral Loop`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 686`** (1 nodes): `Re-add backstop`
+- **Thin community `Community 746`** (1 nodes): `WalletEntry Ledger`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 687`** (1 nodes): `Fake agent closing parity`
+- **Thin community `Community 747`** (1 nodes): `Coupon (Generalized)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 688`** (1 nodes): `OR-Tools`
+- **Thin community `Community 748`** (1 nodes): `Double-Entry Ledger`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 689`** (1 nodes): `Greedy fallback`
+- **Thin community `Community 749`** (1 nodes): `Firebase`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 690`** (1 nodes): `SLA (40-minute promise)`
+- **Thin community `Community 750`** (1 nodes): `FCM`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 691`** (1 nodes): `Prep-aware batching`
+- **Thin community `Community 751`** (1 nodes): `WhatsApp pairing`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 692`** (1 nodes): `Manual delivery zones`
+- **Thin community `Community 752`** (1 nodes): `live-location gate`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 693`** (1 nodes): `Re-batch until pickup`
+- **Thin community `Community 753`** (1 nodes): `app-only rider flow`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 694`** (1 nodes): `Manager explainability`
+- **Thin community `Community 754`** (1 nodes): `POST /api/v1/riders endpoint`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 695`** (1 nodes): `Dispatch presets`
+- **Thin community `Community 755`** (1 nodes): `push notification concept`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 696`** (1 nodes): `Dispatch API schemas.`
+- **Thin community `Community 756`** (1 nodes): `Rider Onboarding`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 697`** (1 nodes): `Tests for dispatch HTTP endpoints (spec §4.3, §5.6).`
+- **Thin community `Community 757`** (1 nodes): `Live GPS Tracking`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 698`** (1 nodes): `If the agent mis-fires add_item for a dish already in the cart and the     custo`
+- **Thin community `Community 758`** (1 nodes): `Firebase Cloud Messaging (FCM)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 699`** (1 nodes): `Engine safety gate: even if the agent returns proceed_to_address with an     emp`
+- **Thin community `Community 759`** (1 nodes): `Push Notification Flow`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 700`** (1 nodes): `Dispatch KPI aggregation for manager dashboard (spec §2, Phase 5).`
+- **Thin community `Community 760`** (1 nodes): `WhatsApp Messaging Flow`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 701`** (1 nodes): `Return batch rate, avg stops per multi-stop batch, and engine fallback %.`
+- **Thin community `Community 761`** (1 nodes): `Rider Goes App-Only Feature`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 702`** (1 nodes): `Live ops map payload — batch polylines and SLA rings (spec §7 Phase 5).`
+- **Thin community `Community 762`** (1 nodes): `LiveOps Dispatch Map Enhancement`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 703`** (1 nodes): `Assemble restaurant origin, active batch routes, and SLA pressure rings.`
+- **Thin community `Community 763`** (1 nodes): `ops`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 704`** (1 nodes): `Shared dry-run planner for preview and invariant tests.      Greedy engine → ``r`
+- **Thin community `Community 764`** (1 nodes): `background GPS`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 765`** (1 nodes): `Render`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 766`** (1 nodes): `Spend-Threshold Cashback`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 767`** (1 nodes): `rider APK artifact`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 768`** (1 nodes): `Ops Terminal`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 769`** (1 nodes): `Order`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 770`** (1 nodes): `Pairing Mechanism`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 771`** (1 nodes): `Background GPS`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 772`** (1 nodes): `device_token concept`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 773`** (1 nodes): `rider_app_apk_url config`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 774`** (1 nodes): `app-invite`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 775`** (1 nodes): `FSM (Finite State Machine)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 776`** (1 nodes): `COD (Cash on Delivery)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 777`** (1 nodes): `Expo Push API`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 778`** (1 nodes): `Web Tracker`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 779`** (1 nodes): `Extract Transport-Agnostic Rider Actions`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 780`** (1 nodes): `Fix Pickup Live Location Gate`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 781`** (1 nodes): `Fix Push Notifications Not Arriving`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 782`** (1 nodes): `Fix Delivered Stop Stays on Screen`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 783`** (1 nodes): `rider.device_token`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 784`** (1 nodes): `Batch`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 785`** (1 nodes): `COD`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 786`** (1 nodes): `UAT Checklist`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 787`** (1 nodes): `LiveOps`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 788`** (1 nodes): `Rider Pairing (Code + APK)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 789`** (1 nodes): `Routes API`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 790`** (1 nodes): `Explainability payload`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 791`** (1 nodes): `Re-add backstop`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 792`** (1 nodes): `Fake agent closing parity`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 793`** (1 nodes): `Greedy fallback`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 794`** (1 nodes): `Prep-aware batching`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 795`** (1 nodes): `Manual delivery zones`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 796`** (1 nodes): `Re-batch until pickup`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 797`** (1 nodes): `Manager explainability`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 798`** (1 nodes): `Dispatch presets`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 799`** (1 nodes): `Re-batch`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 800`** (1 nodes): `Transcript replay driver.  Drives a list of turn dicts through the real ``handle`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 801`** (1 nodes): `Drive *turns* through the real handle_inbound and return a TranscriptResult.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 802`** (1 nodes): `Smoke test for the transcript replay driver.  Uses the same db_session / restaur`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 803`** (1 nodes): `drive_turns: one text turn must produce ≥1 outbound and a cart with biryani.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 804`** (1 nodes): `MessageType`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 805`** (1 nodes): `draft cart`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 806`** (1 nodes): `post_order phase`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 807`** (1 nodes): `biryani correction root cause doc`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 808`** (1 nodes): `platform design spec 2026-06-06`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 809`** (1 nodes): `remediation design 2026-06-30`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 810`** (1 nodes): `full order cancel behavior`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 811`** (1 nodes): `partial cancellation gap`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 812`** (1 nodes): `history limit=10`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 813`** (1 nodes): `_ORDERING_BLOCK`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 814`** (1 nodes): `Option B: inline post-confirm edit`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 815`** (1 nodes): `Option C: unified ConversationActionPort`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 816`** (1 nodes): `_CONFIRMATION_BLOCK`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 817`** (1 nodes): `partial-item-cancellation-analysis.md`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 818`** (1 nodes): `Dish-level remove/cancel, not whole-order cancel.      'Cancel chicken soup from`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 819`** (1 nodes): `Customer wants the bot to apply a pending change without retyping dishes.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 820`** (1 nodes): `Snapshot current order lines into a serializable modify_proposed list.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 821`** (1 nodes): `Stable tuple for comparing proposed vs baseline.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 822`** (1 nodes): `Resolve a dish query to an index in modify_proposed (order snapshot names).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 823`** (1 nodes): `Remove units from one proposed line. Returns (new_list, dish_name, fully_removed`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 824`** (1 nodes): `Remove a dish from modify_proposed. Returns (success, dish_name).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 825`** (1 nodes): `Seed the four dishes used by the biryani capability evals.      Each dish is ava`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 826`** (1 nodes): `Capability eval — RA-7 / F49 / RA-5: biryani correction incident.  A customer se`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 827`** (1 nodes): `Response-accuracy capability eval suite — 19 scenarios (W0).  All xfail evals ru`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 828`** (1 nodes): `Catalog basket with biryani, then 'Need double masala in biriyani'.     Engine t`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 829`** (1 nodes): `Customer adds 1 chicken biryani then says 'make it 2 chicken biryani'.     Engin`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 830`** (1 nodes): `Add 2 lemon mints then 'remove 1 lemon mint'.  Today the engine either     dupli`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 831`** (1 nodes): `make it 1 lakh' after adding lemon mint.  The engine today silently     accepts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 832`** (1 nodes): `A 'reaction' arrives as UNKNOWN type.  Today the engine falls through to     the`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 833`** (1 nodes): `catlog' (common typo) is NOT in _MENU_KEYWORDS today, so it falls through     to`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 834`** (1 nodes): `pls add extra masala' after ordering biryani.  The engine today either     store`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 835`** (1 nodes): `Cart has biryani + lemon mint. 'only 1 biryani' means set biryani qty to 1;`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 836`** (1 nodes): `The engine layer has no deduplication gate (that lives in the webhook router).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 837`** (1 nodes): `Why did you add 2 biriyani' must not mutate the cart.     CONVERTED FROM XFAIL:`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 838`** (1 nodes): `After adding an item, 'That's all' must advance dialogue out of ordering.     CO`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 839`** (1 nodes): `Do you have my saved address?' with no address in DB — bot must deny.     CONVER`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 840`** (1 nodes): `Arabic question 'ما هو أفضل طبق؟' must not dump an invented English dish list.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 841`** (1 nodes): `grade_total_consistency must pass for a basic cart (total ≥ subtotal).     CONVE`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 842`** (1 nodes): `Two separate carts must get different order numbers.     CONVERTED FROM XFAIL: s`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 843`** (1 nodes): `Subtotal must equal sum of line prices for a basic two-item cart.     CONVERTED`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 844`** (1 nodes): `CHICKEN BIRYANI' (all-caps) must resolve to the seeded dish.     CONVERTED FROM`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 845`** (1 nodes): `menu' must update dialogue_state to 'menu_sent'.     CONVERTED FROM XFAIL: engin`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 846`** (1 nodes): `show me the full menu' must not produce invented dish names.     CONVERTED FROM`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 847`** (1 nodes): `menu' keyword must trigger send_catalog and enqueue a product_list.      After I`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 848`** (1 nodes): `# NOTE: Fake-scoped guard. Passes because FakeConversationAgent does not reprodu`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 849`** (1 nodes): `CLAUDE.md`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 850`** (1 nodes): `LLM Response Accuracy Issue`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 851`** (1 nodes): `Rider App Fixes (doPickup, push notifications, GPS)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 852`** (1 nodes): `DB-H14`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 853`** (1 nodes): `Create the W7 branch`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 854`** (1 nodes): `Add the 3 W7 capability evals (xfail-strict)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 855`** (1 nodes): `Self-review, full matrix, ruff, graphify, understanding.txt`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 856`** (1 nodes): `cart_state (structured array)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 857`** (1 nodes): `Contract tests for the canonical conversation action schema (W1).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 858`** (1 nodes): `Single source of truth for the conversation action (LLM tool) schema (W1).  Ever`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 859`** (1 nodes): `JSON-schema `properties` block shared by every provider's tool.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 860`** (1 nodes): `OpenAI / DeepSeek function-tool wrapper.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 861`** (1 nodes): `Anthropic tool-use wrapper (same properties, `input_schema` shape).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 862`** (1 nodes): `Return the list of missing mandatory field names. Empty list = OK.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 863`** (1 nodes): `Translate a canonical action+payload into (engine_action, action_data).      On`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 864`** (1 nodes): `_DS_TOOL must be derived from the canonical action_schema module.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 865`** (1 nodes): `cart_set_qty without new_total must be blocked (no cart mutation).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 866`** (1 nodes): `cart_set_qty with new_total maps to legacy update_qty with correct qty.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 867`** (1 nodes): `Behavioral constraints (frustration/re-add) must be in the ordering system promp`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 868`** (1 nodes): `Round-trip: Claude returns canonical 'cart_add' -> respond() yields legacy 'add_`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 869`** (1 nodes): `only 1 chicken biryani' must emit update_qty (cart_set_qty), NOT add_item.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 870`** (1 nodes): `make it 4 biryani' must emit update_qty (cart_set_qty), NOT add_item.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 871`** (1 nodes): `2 biryani' must emit add_item (cart_add delta), NOT update_qty.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 872`** (1 nodes): `Every Fake output must be a clean engine-legacy result, never a raw canonical di`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 873`** (1 nodes): `address' contains 'add' as substring — must NOT yield add_item at confirm phase.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 874`** (1 nodes): `don't add more' is a refusal, not a cart_add command.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 875`** (1 nodes): `Provider-parity contract: DeepSeek, Claude, Fake expose ONE action surface (W1).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 876`** (1 nodes): `Properties block extracted from DeepSeek's live OpenAI tool dict.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 877`** (1 nodes): `Properties block extracted from Claude's live Anthropic tool dict.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 878`** (1 nodes): `Both provider tool dicts enumerate exactly the canonical action set.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 879`** (1 nodes): `DeepSeek and Claude expose the same top-level property names.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 880`** (1 nodes): `The items[].op enum is identical in both providers and matches the spec.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 881`** (1 nodes): `validate_required() recognises all canonical actions and returns sane data.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 882`** (1 nodes): `Explicit qty fields exist; the legacy overloaded 'qty' top-level field is gone.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 883`** (1 nodes): `CANON_PHASE_ACTIONS maps cleanly to LEGACY_PHASE_ACTIONS via CANON_TO_LEGACY.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 884`** (1 nodes): `FakeConversationAgent is structurally bound to the canonical schema.      Verifi`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 885`** (1 nodes): `FakeConversationAgent behavioural check: every emitted action is in CANON_TO_LEG`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 886`** (1 nodes): `Both tool dicts declare only 'action' as a top-level required field.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 887`** (1 nodes): `Tests for W1 Task 6: clarification gate + derived phase-action table.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 888`** (1 nodes): `A model result flagged needs_clarification must NOT mutate the cart and must`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 889`** (1 nodes): `When result.message is set, the clarification reply uses THAT text (not the`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 890`** (1 nodes): `The derived _PHASE_ACTIONS must be a superset of the old hand-written literal`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 891`** (1 nodes): `A set-qty intent without a quantity must not change the cart and must ask a`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 892`** (1 nodes): `W2 cart-line identity tests.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 893`** (1 nodes): `Re-adding a dish with a note must update the existing line's note, not create a`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 894`** (1 nodes): `cart_set_qty`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 895`** (1 nodes): `requires_one_of`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 896`** (1 nodes): `no_action`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 897`** (1 nodes): `needs_clarification`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 898`** (1 nodes): `new_total`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 899`** (1 nodes): `regression`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 900`** (1 nodes): `Changing qty must preserve the kitchen note (RA-7/R-006).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 901`** (1 nodes): `modify_order must carry variant_name and notes from new_items, not silently stri`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 902`** (1 nodes): `CartService — single owner of cart mutations for ordering.  All add / set-qty /`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 903`** (1 nodes): `Strip politeness/action prefixes from a kitchen note before storing.      'pls a`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 904`** (1 nodes): `Structured representation of one cart line for LLM context injection.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 905`** (1 nodes): `Facade over the ordering service functions.      All callers (conversation engin`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 906`** (1 nodes): `Add or merge a dish into the cart (delegates to service.add_item).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 907`** (1 nodes): `Set exact quantity, preserving notes (delegates to service.set_item_qty).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 908`** (1 nodes): `Apply a normalised kitchen note to an in-cart dish.          Strips politeness/a`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 909`** (1 nodes): `Remove units of a dish from the cart.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 910`** (1 nodes): `Delete ALL items from the cart.          Raises ValueError when *explicit* is Fa`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 911`** (1 nodes): `Return structured cart lines with stable cart_item_id for LLM context (F64).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 912`** (1 nodes): `set_note must strip politeness prefixes before storing (F101/TX-30).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 913`** (1 nodes): `clear() must raise ValueError when explicit=False (F82).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 914`** (1 nodes): `build_structured_context must return CartLineContext with cart_item_id (F64).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 915`** (1 nodes): `_build_context must inject cart_lines (CartLineContext list) in ordering phase (`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 916`** (1 nodes): `A voice note naming 5 items.  Without audio_id the harness cannot reach     Fake`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 917`** (1 nodes): `w2-finish-report.md`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 918`** (1 nodes): `W2 Fix`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 919`** (1 nodes): `cart unchanged (qty == 2), reply contains clarification keyword`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 920`** (1 nodes): `W2 contract (R-002 / RA-4): a dish merges to ONE line per (dish_id, variant_name`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 921`** (1 nodes): `Pure DB renderer for cart and order summary (W3/RA-1/R-013/R-040).  Renders cart`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 922`** (1 nodes): `Format a money value as a plain AED amount string.      Identical logic to engin`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 923`** (1 nodes): `Render an order item's special-note suffix (identical to engine._note_suffix).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 924`** (1 nodes): `Return a DB-backed cart/summary string for the given order and dialogue phase.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 925`** (1 nodes): `Render the \\n\\n🛒 cart tail for the ordering phase (mirrors engine._cart_tail).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 926`** (1 nodes): `Render the full order-summary text body for the awaiting_confirmation phase.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 927`** (1 nodes): `Pure DB renderer tests (W3/RA-1/R-013).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 928`** (1 nodes): `ordering phase: result starts with \\n\\n🛒, contains dish name and subtotal.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 929`** (1 nodes): `awaiting_confirmation phase: result contains order summary fields.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 930`** (1 nodes): `ordering phase with no items → '\\n\\n🛒 Your cart is now empty.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 931`** (1 nodes): `W3 render gate tests — DB-backed cart tail + factual validator (RA-1/R-013/R-040`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 932`** (1 nodes): `drive 'one chicken biryani' → outbound body must contain 🛒, dish name, Subtotal.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 933`** (1 nodes): `drive add then note update → outbound body must contain 🛒 and Subtotal.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 934`** (1 nodes): `After cart → 'done', the engine advances the flow with an engine-authored     me`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 935`** (1 nodes): `When an order is confirmed, the confirmation carries a DB order_number, never`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 936`** (1 nodes): `Record a compact DB-derived cart observation into message history after any`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 937`** (1 nodes): `After a single add, a cart_observation Message must exist in DB (F66/W3).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 938`** (1 nodes): `Remove lines that contain an AED amount from LLM free text on mutating turns.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 939`** (1 nodes): `_strip_money_claims removes lines containing an AED amount (R-067).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 940`** (1 nodes): `_strip_money_claims keeps lines without a currency amount.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 941`** (1 nodes): `_strip_money_claims handles empty and None input.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 942`** (1 nodes): `Production W4 top-level router via Claude API (single enum, multilingual).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 943`** (1 nodes): `Production W4 top-level router: one async chat call, single enum answer.      LL`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 944`** (1 nodes): `W4 top-level multilingual intent router (LLM-driven; Fake for tests).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 945`** (1 nodes): `Top-level multilingual router intent (W4).      A single, phase-aware, language-`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 946`** (1 nodes): `Top-level multilingual intent router (W4).      LLM-driven and language-agnostic`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 947`** (1 nodes): `Deterministic test double for the W4 top-level multilingual router.  The product`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 948`** (1 nodes): `Rule-based, deterministic ``RouterClassifierPort`` test double.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 949`** (1 nodes): `W4 Task 1 — top-level multilingual intent router: port + Fake impl.  The Fake is`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 950`** (1 nodes): `W4 top-level multilingual router: classify the customer's latest text turn.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 951`** (1 nodes): `W4 Task 5 — global read-only intents work inside a modify sub-flow.  F103/TX-28/`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 952`** (1 nodes): `biryani-fix-report.md`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 953`** (1 nodes): `DIRECT dish`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 954`** (1 nodes): `Mutton Biryani`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 955`** (1 nodes): `W5 capability evals — Money & catalogue price integrity.  Five behaviours the re`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 956`** (1 nodes): `Re-derive ``order.total`` from persisted items + fee + coupon + wallet.      The`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 957`** (1 nodes): `Validate + redeem ``coupon_code`` against ``order`` and re-apply the total.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 958`** (1 nodes): `One per-line quantity policy for every order path (typed, catalogue, modify).  A`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 959`** (1 nodes): `Raised when a single line's quantity is outside the allowed range.      ``qty```
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 960`** (1 nodes): `Immutable per-line quantity bounds for one restaurant.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 961`** (1 nodes): `Build the policy from a restaurant row OR its raw ``settings`` dict.          Ac`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 962`** (1 nodes): `Return ``qty`` if within ``1..max_item_qty``; else raise ``QuantityError``.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 963`** (1 nodes): `Distance (km) restaurant → customer + the SOURCE it was derived from.      Retur`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 964`** (1 nodes): `w5-report.md`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 965`** (1 nodes): `is_only_intent`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 966`** (1 nodes): `note-in-dish pattern`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 967`** (1 nodes): `RA-7`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 968`** (1 nodes): `AMBIGUOUS fallback`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 969`** (1 nodes): `Graduation rule`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 970`** (1 nodes): `W6 capability evals — Menu / availability single source of truth.  Five behaviou`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 971`** (1 nodes): `Body of the most-recent outbound Message inserted after *after_id*.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 972`** (1 nodes): `Seed a restaurant with ONLY Chicken Biryani — nothing else.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 973`** (1 nodes): `A model reply listing >=2 dish-like names NOT in the catalogue must be replaced.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 974`** (1 nodes): `In a single-dish restaurant, the cross-check must flag a reply that names     di`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 975`** (1 nodes): `A dish with whatsapp_enabled=False must not appear in _render_menu output.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 976`** (1 nodes): `A customer cannot order a whatsapp_enabled=False dish via text.      Covers TX-4`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 977`** (1 nodes): `In catalogue mode, ordering a text-menu dish with no active CatalogProduct must`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 978`** (1 nodes): `A dish whose name matches ^[a-z][a-z0-9_]*$ (slug pattern) must not appear in`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 979`** (1 nodes): `Dashboard Data Latency Design`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 980`** (1 nodes): `Return the normalised canonical dish names for the tenant.      In catalogue mod`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 981`** (1 nodes): `True if the LLM reply appears to list dishes NOT in the tenant's catalogue.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 982`** (1 nodes): `Tenant-scoped TTL cache for ``preview_batch_groups`` results.  Batch preview run`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 983`** (1 nodes): `Drop cached labels when dispatch pool changes (assign, ready, cancel).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 984`** (1 nodes): `API response timing — surfaces slow dashboard paths on Render.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 985`** (1 nodes): `Parse ``?include=`` for order detail. None means all sections.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 986`** (1 nodes): `Assemble order detail for the manager drawer.      ``includes=None`` loads every`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 987`** (1 nodes): `W2 T6/T7/T8`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 988`** (1 nodes): `CANON_PHASE_ACTIONS`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 989`** (1 nodes): `LEGACY_PHASE_ACTIONS`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 990`** (1 nodes): `CANON_TO_LEGACY`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 991`** (1 nodes): `claude_conversation_enabled`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 992`** (1 nodes): `Onboarding Status API`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 993`** (1 nodes): `True when ``dish`` must never be shown/ordered on WhatsApp.      Two independent`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 994`** (1 nodes): `_execute_ai_add_item`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 995`** (1 nodes): `_handle_collecting_items`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 996`** (1 nodes): `Phone Ordering Reply`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 997`** (1 nodes): `Workstream W5`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 998`** (1 nodes): `Guard F20-A`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 999`** (1 nodes): `Guard F26`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1000`** (1 nodes): `Guard F31`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1001`** (1 nodes): `Guard F41`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1002`** (1 nodes): `Guard F74`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1003`** (1 nodes): `Guard F97`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1004`** (1 nodes): `Guard F98`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1005`** (1 nodes): `Guard F103`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1006`** (1 nodes): `Guard R-069`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1007`** (1 nodes): `Guard R-051`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1008`** (1 nodes): `Guard R-049`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1009`** (1 nodes): `Guard R-050`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1010`** (1 nodes): `Guard R-026`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1011`** (1 nodes): `Guard R-023`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1012`** (1 nodes): `Guard R-019`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1013`** (1 nodes): `Guard TX-45`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1014`** (1 nodes): `Guard TX-06`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1015`** (1 nodes): `Guard TX-28`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1016`** (1 nodes): `Guard TX-39`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1017`** (1 nodes): `Render one stored Message into LLM-readable content. Covers every     Message.ty`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1018`** (1 nodes): `Single source of truth for LLM conversation history.      Fetches the last `limi`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1019`** (1 nodes): `List orders for the tenant, newest first, with optional server-side filters.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1020`** (1 nodes): `Older rows without a display_text/cart_snapshot still render human text,     nev`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1021`** (1 nodes): `_fetch_conversation_history was already deleted in W1 (b9ae270); guard     again`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1022`** (1 nodes): `Server-side order list filters (date range, search, offset).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1023`** (1 nodes): `List orders endpoint must stay within dashboard latency budget.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1024`** (1 nodes): `50 seeded orders + mocked planner — hot list path stays under 250 ms.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1025`** (1 nodes): `Start of a Dubai calendar day as naive UTC (matches DB ``created_at`` storage).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1026`** (1 nodes): `Start of the next Dubai calendar day as naive UTC (exclusive upper bound).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1027`** (1 nodes): `W0 Task 4`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1028`** (1 nodes): `Branch B`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1029`** (1 nodes): `Only Intent`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1030`** (1 nodes): `After a catalogue basket, _build_history must show the resolved dish names     f`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1031`** (1 nodes): `The interpreter receives context['cart_state'] (a structured array) and is     t`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1032`** (1 nodes): `Every customer-facing outbound is recorded in `messages` (DB-H3/4/5).     Drive`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1033`** (1 nodes): `W7`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1034`** (1 nodes): `W7a`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1035`** (1 nodes): `W7b`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1036`** (1 nodes): `R-051`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1037`** (1 nodes): `R-019`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1038`** (1 nodes): `R-049`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1039`** (1 nodes): `R-029`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1040`** (1 nodes): `R-077`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1041`** (1 nodes): `F63`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1042`** (1 nodes): `DB-H8`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1043`** (1 nodes): `R-072`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1044`** (1 nodes): `R-074`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1045`** (1 nodes): `R-060`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1046`** (1 nodes): `DB-H3`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1047`** (1 nodes): `DB-H4`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1048`** (1 nodes): `DB-H5`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1049`** (1 nodes): `engine.py`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1050`** (1 nodes): `Task 2 (W7a)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1051`** (1 nodes): `Task 4 (W7a)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1052`** (1 nodes): `Task 7 (W7a)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1053`** (1 nodes): `Note-in-dish Pattern`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1054`** (1 nodes): `History Faithfulness`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1055`** (1 nodes): `Structured Context`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1056`** (1 nodes): `W8 — State/flow correctness & ops hardening.  Task 1: confirm_order / cancel_ord`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1057`** (1 nodes): `Any call proves the button path took an LLM round-trip — which it must not.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1058`** (1 nodes): `R-008: an out-of-range pin clears only pin/fee state, never the cart.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1059`** (1 nodes): `TX-02: resume → continue → 'that's all' must advance to checkout, never     read`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1060`** (1 nodes): `Create a draft order with a unique, atomically-allocated per-tenant order number`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1061`** (1 nodes): `TX-14/F114: a greeting/status message after confirmation must never mark     the`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1062`** (1 nodes): `W8/TX-13/F114: the DB must reject a duplicate order_number for the same     tena`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1063`** (1 nodes): `W8/TX-13/F114: repeated allocation under a simulated race (count() read     befo`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1064`** (1 nodes): `Serialize inbound processing per (restaurant, phone) thread (TX-22/TX-46/F94/F11`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 1065`** (1 nodes): `TX-22/TX-46/F94/F115: two 'simultaneous' inbound messages for the same     conve`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -4341,9 +6748,9 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Coupon` and `Coupon`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Order` connect `Community 0` to `Community 96`, `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 40`, `Community 75`, `Community 11`, `Community 13`, `Community 15`, `Community 49`, `Community 95`, `Community 191`?**
-  _High betweenness centrality (0.068) - this node is a cross-community bridge._
-- **Why does `Customer` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 4`, `Community 40`, `Community 77`, `Community 13`, `Community 47`, `Community 79`, `Community 15`, `Community 112`?**
-  _High betweenness centrality (0.065) - this node is a cross-community bridge._
-- **Why does `handle_orders_picked()` connect `Community 9` to `Community 0`?**
-  _High betweenness centrality (0.061) - this node is a cross-community bridge._
+- **Why does `Order` connect `Community 0` to `Community 1`, `Community 2`, `Community 134`, `Community 167`, `Community 135`, `Community 73`, `Community 74`, `Community 75`, `Community 77`, `Community 110`, `Community 13`, `Community 18`, `Community 20`, `Community 24`, `Community 58`?**
+  _High betweenness centrality (0.039) - this node is a cross-community bridge._
+- **Why does `Restaurant` connect `Community 1` to `Community 0`, `Community 191`, `Community 2`, `Community 3`, `Community 167`, `Community 73`, `Community 11`, `Community 43`, `Community 13`, `Community 14`, `Community 239`, `Community 18`, `Community 20`, `Community 24`, `Community 249`, `Community 126`, `Community 287`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+- **Why does `Customer` connect `Community 0` to `Community 1`, `Community 2`, `Community 3`, `Community 10`, `Community 13`, `Community 14`, `Community 18`, `Community 24`, `Community 153`, `Community 287`, `Community 167`, `Community 58`, `Community 191`, `Community 71`, `Community 73`, `Community 74`, `Community 112`, `Community 114`, `Community 249`?**
+  _High betweenness centrality (0.029) - this node is a cross-community bridge._

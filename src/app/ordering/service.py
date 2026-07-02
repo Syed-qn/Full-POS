@@ -177,23 +177,67 @@ async def get_order_for_tenant(
     )
 
 
+def _dubai_day_start(ymd: str) -> datetime:
+    """Start of a Dubai calendar day as naive UTC (matches DB ``created_at`` storage)."""
+    from datetime import date, datetime, time, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    d = date.fromisoformat(ymd)
+    aware = datetime.combine(d, time.min, tzinfo=ZoneInfo("Asia/Dubai"))
+    return aware.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _dubai_day_end_exclusive(ymd: str) -> datetime:
+    """Start of the next Dubai calendar day as naive UTC (exclusive upper bound)."""
+    from datetime import date, datetime, time, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    d = date.fromisoformat(ymd) + timedelta(days=1)
+    aware = datetime.combine(d, time.min, tzinfo=ZoneInfo("Asia/Dubai"))
+    return aware.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 async def list_orders_for_tenant(
     session: "AsyncSession",
     *,
     restaurant_id: int,
     status: str | None = None,
     limit: int = 50,
+    offset: int = 0,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    q: str | None = None,
 ) -> list[Order]:
-    """List orders for the tenant, newest first, optionally filtered by status.
+    """List orders for the tenant, newest first, with optional server-side filters.
 
-    ``limit`` is clamped to the inclusive range [1, 100] to bound result size.
+    ``limit`` is clamped to [1, 100]. ``offset`` is clamped to >= 0.
+    Date bounds use Asia/Dubai calendar days on ``created_at``.
     """
+    from sqlalchemy import or_
+
     limit = min(max(limit, 1), 100)
-    q = select(Order).where(Order.restaurant_id == restaurant_id)
+    offset = max(offset, 0)
+    stmt = select(Order).where(Order.restaurant_id == restaurant_id)
     if status:
-        q = q.where(Order.status == status)
-    q = q.order_by(Order.created_at.desc()).limit(limit)
-    return list((await session.scalars(q)).all())
+        stmt = stmt.where(Order.status == status)
+    if from_date:
+        stmt = stmt.where(Order.created_at >= _dubai_day_start(from_date))
+    if to_date:
+        stmt = stmt.where(Order.created_at < _dubai_day_end_exclusive(to_date))
+    if q:
+        term = q.strip().lstrip("#")
+        if term:
+            stmt = stmt.join(Customer, Customer.id == Order.customer_id)
+            clauses = [
+                Order.order_number.ilike(f"%{term}%"),
+                Customer.name.ilike(f"%{term}%"),
+                Customer.phone.ilike(f"%{term}%"),
+            ]
+            if term.isdigit():
+                clauses.append(Order.id == int(term))
+            stmt = stmt.where(or_(*clauses))
+    stmt = stmt.order_by(Order.created_at.desc()).offset(offset).limit(limit)
+    return list((await session.scalars(stmt)).all())
 
 
 async def get_or_create_customer(
@@ -451,7 +495,13 @@ async def recompute_customer_stats(session: "AsyncSession", customer_id: int) ->
     customer.total_spend = stats["total_spend"] if stats else Decimal("0.00")
     customer.first_order_at = stats["first_order_at"] if stats else None
     customer.last_order_at = stats["last_order_at"] if stats else None
+    customer.usual_order_time = await compute_usual_order_time(session, customer_id)
     await session.flush()
+
+
+# Namespace for the per-restaurant order-number allocation advisory lock (arbitrary
+# constant, distinct from the dispatch lock's namespace, so the two never collide).
+_ORDER_NUMBER_LOCK_CLASS = 4_919_002
 
 
 async def create_draft_order(
@@ -460,24 +510,59 @@ async def create_draft_order(
     restaurant_id: int,
     customer_id: int,
 ) -> Order:
-    count = await session.scalar(
-        select(func.count()).select_from(Order).where(Order.restaurant_id == restaurant_id)
-    ) or 0
-    order_number = f"R{restaurant_id}-{count + 1:04d}"
-    order = Order(
-        restaurant_id=restaurant_id,
-        customer_id=customer_id,
-        order_number=order_number,
-        status=OrderStatus.DRAFT,
-        priority="normal",
-        weather_delay_disclosed=False,
-        delivery_fee_aed=Decimal("0.00"),
-        subtotal=Decimal("0.00"),
-        total=Decimal("0.00"),
-    )
-    session.add(order)
-    await session.flush()
-    return order
+    """Create a draft order with a unique, atomically-allocated per-tenant order number.
+
+    TX-13/F114: a plain ``count() + 1`` allocation races when two inbound messages
+    for the same (or different) customers create draft orders concurrently — both
+    read the same count and mint the same ``order_number``, which used to surface
+    as duplicate ``#R1-0001`` order numbers in production transcripts. We serialize
+    allocation per restaurant with a transaction-scoped Postgres advisory lock (best
+    effort — a non-Postgres test backend just proceeds unserialized), and the DB
+    ``UniqueConstraint(restaurant_id, order_number)`` is the hard backstop: on a
+    collision we retry allocation inside a SAVEPOINT rather than aborting the whole
+    caller transaction.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:c, :o)"),
+            {"c": _ORDER_NUMBER_LOCK_CLASS, "o": restaurant_id},
+        )
+    except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
+        _logger.debug("advisory order-number lock unavailable; proceeding unserialized")
+
+    last_error: IntegrityError | None = None
+    for _attempt in range(5):
+        count = await session.scalar(
+            select(func.count()).select_from(Order).where(Order.restaurant_id == restaurant_id)
+        ) or 0
+        order_number = f"R{restaurant_id}-{count + 1 + _attempt:04d}"
+        order = Order(
+            restaurant_id=restaurant_id,
+            customer_id=customer_id,
+            order_number=order_number,
+            status=OrderStatus.DRAFT,
+            priority="normal",
+            weather_delay_disclosed=False,
+            delivery_fee_aed=Decimal("0.00"),
+            subtotal=Decimal("0.00"),
+            total=Decimal("0.00"),
+        )
+        session.add(order)
+        try:
+            async with session.begin_nested():
+                await session.flush()
+        except IntegrityError as exc:
+            session.expunge(order)
+            last_error = exc
+            continue
+        return order
+
+    raise RuntimeError(
+        f"could not allocate a unique order number for restaurant {restaurant_id}"
+    ) from last_error
 
 
 def _effective_unit_price(dish: "Dish", variant: dict | None = None) -> Decimal:
@@ -507,11 +592,17 @@ async def add_item(
     qty: int = 1,
     notes: str | None = None,
     variant: dict | None = None,
+    price_aed_override: Decimal | None = None,
 ) -> OrderItem:
     # When a serving-size variant is chosen, snapshot its name + price; otherwise the
-    # dish is charged at its sale price when set (else base price), no variant label.
+    # dish is charged at its sale price when set (else base price). A caller may pass
+    # ``price_aed_override`` to snapshot an externally-authoritative unit price (e.g. the
+    # tapped Meta catalogue ``item_price``) instead of the local Dish.price_aed (R-051).
     variant_name = variant.get("name") if variant else None
-    unit_price = _effective_unit_price(dish, variant)
+    if price_aed_override is not None and variant is None:
+        unit_price = Decimal(str(price_aed_override))
+    else:
+        unit_price = _effective_unit_price(dish, variant)
 
     # Merge into an existing line for the same dish + variant + notes so the cart shows
     # "2x Mango Lassi" instead of two separate "1x" lines (matches how real ordering
@@ -524,12 +615,14 @@ async def add_item(
                 OrderItem.variant_name.is_(variant_name)
                 if variant_name is None
                 else OrderItem.variant_name == variant_name,
-                OrderItem.notes.is_(notes) if notes is None else OrderItem.notes == notes,
             )
         )
     ).first()
     if existing_line is not None:
         existing_line.qty += qty
+        # Non-empty incoming note wins; empty preserves existing (R-002)
+        if notes:
+            existing_line.notes = notes
         item = existing_line
     else:
         item = OrderItem(
@@ -607,6 +700,7 @@ async def set_item_qty(
     order: Order,
     dish_id: int,
     qty: int,
+    variant_name: str | None = None,
 ) -> OrderItem | None:
     """Set the quantity of ``dish_id`` in ``order`` to exactly ``qty``.
 
@@ -616,11 +710,12 @@ async def set_item_qty(
 
     Used by the "make it 3" / "change to 2" context-update intercept.
     """
+    conditions = [OrderItem.order_id == order.id, OrderItem.dish_id == dish_id]
+    if variant_name is not None:
+        conditions.append(OrderItem.variant_name == variant_name)
     items = (
         await session.scalars(
-            select(OrderItem)
-            .where(OrderItem.order_id == order.id, OrderItem.dish_id == dish_id)
-            .order_by(OrderItem.id)
+            select(OrderItem).where(*conditions).order_by(OrderItem.id)
         )
     ).all()
     if not items:
@@ -631,10 +726,60 @@ async def set_item_qty(
         for item in items:
             await session.delete(item)
     else:
-        survivor = items[0]
+        # Prefer the line with a non-empty note as the survivor (R-006/RA-7)
+        noted = next((i for i in items if (i.notes or "").strip()), None)
+        survivor = noted if noted is not None else items[0]
         survivor.qty = qty
-        for extra in items[1:]:  # collapse duplicates
-            await session.delete(extra)
+        for item in items:
+            if item.id != survivor.id:
+                await session.delete(item)
+    await session.flush()
+
+    remaining = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    subtotal = sum((i.price_aed * i.qty for i in remaining), Decimal("0.00"))
+    order.subtotal = subtotal
+    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+    return survivor
+
+
+async def set_item_note(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    dish_id: int,
+    notes: str,
+    qty: int | None = None,
+) -> OrderItem | None:
+    """Move an existing cart dish to a kitchen-note line and merge duplicates.
+
+    Special requests are line-level state. When a customer says "no onion on the
+    biryani" after the biryani is already in the cart, that should update the
+    existing line rather than add another paid biryani. ``qty`` optionally sets
+    the final total quantity for the noted line.
+    """
+    clean_notes = (notes or "").strip()
+    if not clean_notes:
+        return None
+
+    items = (
+        await session.scalars(
+            select(OrderItem)
+            .where(OrderItem.order_id == order.id, OrderItem.dish_id == dish_id)
+            .order_by(OrderItem.id)
+        )
+    ).all()
+    if not items:
+        return None
+
+    survivor = next((i for i in items if (i.notes or "").strip() == clean_notes), items[0])
+    survivor.notes = clean_notes
+    survivor.qty = max(1, qty) if qty is not None else sum(i.qty for i in items)
+    for item in items:
+        if item.id != survivor.id:
+            await session.delete(item)
     await session.flush()
 
     remaining = (
@@ -766,12 +911,17 @@ async def modify_order(
         dish = entry["dish"]
         qty = entry.get("qty", 1)
         notes = entry.get("notes")
-        unit_price = _effective_unit_price(dish)
+        variant_name = entry.get("variant_name")
+        if entry.get("price_aed") is not None:
+            unit_price = Decimal(str(entry["price_aed"]))
+        else:
+            unit_price = _effective_unit_price(dish)
         item = OrderItem(
             order_id=order.id,
             dish_id=dish.id,
             dish_number=dish.dish_number,
             dish_name=dish.name,
+            variant_name=variant_name,
             price_aed=unit_price,
             qty=qty,
             notes=notes,
@@ -779,8 +929,12 @@ async def modify_order(
         session.add(item)
         subtotal += unit_price * qty
 
-    order.subtotal = subtotal
-    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+    # Re-derive subtotal/total from the persisted items and RE-APPLY the coupon
+    # discount + wallet hold (F26) — never a bare subtotal+fee that drops payments.
+    from app.ordering.payments import recompute_order_total
+
+    await recompute_order_total(session, order=order)
 
     # Restart the SLA clock after the customer confirms the modification.
     now = datetime.now(timezone.utc)
@@ -913,12 +1067,18 @@ async def cancel_order(
                 )
             )
         await session.flush()
+        from app.dispatch.preview_cache import invalidate_preview_cache
+
+        await invalidate_preview_cache(order.restaurant_id)
         return resale
 
     await fsm_transition(
         session, order, OrderStatus.CANCELLED, actor=actor,
         extra_audit={"reason": reason or ""},
     )
+    from app.dispatch.preview_cache import invalidate_preview_cache
+
+    await invalidate_preview_cache(order.restaurant_id)
     return None
 
 
@@ -1019,6 +1179,9 @@ async def advance_kitchen_status(
     # action if dispatch fails.
     if order.status == "ready":
         await _auto_dispatch_on_ready(session, order.restaurant_id)
+    from app.dispatch.preview_cache import invalidate_preview_cache
+
+    await invalidate_preview_cache(order.restaurant_id)
     return order
 
 
@@ -1259,27 +1422,6 @@ async def create_manual_order(
     return order
 
 
-# Greetings / control words / button taps that carry no kitchen info — kept
-# MULTILINGUAL because this is a multi-language SaaS (the bot is used in English,
-# Hindi/Urdu, Arabic, Telugu, etc.). We can't keyword-match instructions across every
-# language, so instead of an English keep-list we INCLUDE every substantive customer
-# line and only skip these short greeting/confirmation tokens.
-_SUMMARY_SKIP = {
-    # English
-    "hi", "hello", "hey", "yo", "hii", "hlo", "start", "menu", "done", "yes", "no",
-    "ok", "okay", "okey", "confirm", "confirm order", "start new", "new", "continue",
-    "that's all", "thats all", "checkout", "nothing", "thanks", "thank you", "yep", "nope",
-    # Hindi / Urdu (roman + script)
-    "namaste", "namaskar", "salam", "assalam", "assalam o alaikum", "haan", " haan",
-    "nahi", "theek", "theek hai", "accha", "ji", "shukriya", "bas", "हाँ", "नहीं", "ठीक",
-    "नमस्ते", "हाय", "हेलो",
-    # Arabic
-    "مرحبا", "السلام عليكم", "نعم", "لا", "شكرا", "تمام", "اهلا",
-    # Telugu
-    "నమస్తే", "అవును", "కాదు", "సరే",
-}
-
-
 def _chat_for_this_order(chat: list, order) -> list:
     """Restrict the chat to THIS order's session window. The conversation is per-phone
     and spans every past order, so the summary must not bleed in lines from other
@@ -1301,30 +1443,67 @@ def _chat_for_this_order(chat: list, order) -> list:
     return [m for m in chat if lo <= getattr(m, "ts", 0) <= hi]
 
 
-def _kitchen_convo_summary(chat: list, items_rows: list) -> str | None:
-    """A short kitchen-facing digest: every item's special request (note) plus the
-    customer's own substantive lines from the chat — in WHATEVER language they wrote.
-    Only short greeting/confirm tokens are dropped (language-agnostic by design); we
-    never keyword-filter, so a Hindi/Arabic/Telugu instruction is never lost."""
-    lines: list[str] = []
-    for it in items_rows:
-        note = (getattr(it, "notes", None) or "").strip()
-        if note:
-            lines.append(f"• {it.qty}x {it.dish_name}: {note}")
-    seen: set[str] = set()
-    for m in chat:
-        if getattr(m, "direction", None) != "inbound":
-            continue
-        t = (getattr(m, "text", None) or "").strip()
-        low = t.lower()
-        # Skip empties, very short tokens, greetings/confirms, and exact duplicates.
-        if len(t) < 2 or len(t) > 200 or low in _SUMMARY_SKIP or low in seen:
-            continue
-        seen.add(low)
-        lines.append(f"• “{t}”")
-    if not lines:
+async def _kitchen_convo_summary(
+    items_rows: list,
+    *,
+    order_details: str | None = None,
+    delivery_details: str | None = None,
+    chat: list | None = None,
+) -> str | None:
+    """Kitchen digest — max 3 lines.
+
+    Tier 1 (code): item notes + persisted order/address details — authoritative.
+    Tier 2 (LLM port): compress inbound chat into 0–2 net-new lines only.
+    Multilingual; no phrase tables on the live path (see kitchen_summary.py)."""
+    from app.llm.kitchen_summary import clamp_summary_lines, render_structured_lines
+
+    lines = render_structured_lines(
+        items_rows,
+        order_details=order_details,
+        delivery_details=delivery_details,
+    )
+    structured_block = "\n".join(lines)
+
+    inbound = [
+        (getattr(m, "text", None) or "").strip()
+        for m in (chat or [])
+        if getattr(m, "direction", None) == "inbound"
+    ]
+    inbound = [t for t in inbound if t]
+
+    if inbound:
+        try:
+            from app.llm.factory import get_kitchen_summarizer
+
+            extras = await get_kitchen_summarizer().supplement_from_chat(
+                structured_block, inbound
+            )
+        except Exception:
+            _logger.exception("kitchen summary tier-2 failed; using structured only")
+            extras = []
+        blob = structured_block.lower()
+        for extra in extras:
+            e = extra.strip()
+            if e and e.lower() not in blob:
+                lines.append(e)
+                blob += f" {e.lower()}"
+
+    return clamp_summary_lines(lines)
+
+
+def parse_detail_includes(include: str | None) -> frozenset[str] | None:
+    """Parse ``?include=`` for order detail. None means all sections."""
+    if include is None:
         return None
-    return "\n".join(lines[:10])
+    raw = include.strip().lower()
+    if raw in ("", "all", "*"):
+        return None
+    parts = {p.strip() for p in raw.split(",") if p.strip()}
+    return parts | {"overview"}
+
+
+def _detail_wants(section: str, includes: frozenset[str] | None) -> bool:
+    return includes is None or section in includes
 
 
 async def get_order_detail(
@@ -1332,8 +1511,13 @@ async def get_order_detail(
     *,
     restaurant_id: int,
     order_id: int,
+    includes: frozenset[str] | None = None,
 ) -> OrderDetailOut:
-    """Assemble all data for the Order Detail drawer in one call."""
+    """Assemble order detail for the manager drawer.
+
+    ``includes=None`` loads every section (tests). HTTP defaults to overview-only
+    via ``parse_detail_includes`` in the router.
+    """
     from datetime import datetime, timezone
 
     from sqlalchemy import select
@@ -1404,34 +1588,37 @@ async def get_order_detail(
         if r:
             rider = RiderDetailOut(id=r.id, name=r.name, phone=r.phone)
 
-    # 6. Timeline from audit log
-    audit_rows = list(
-        (
-            await session.scalars(
-                select(AuditLog)
-                .where(AuditLog.entity == "order", AuditLog.entity_id == str(order.id))
-                .order_by(AuditLog.created_at)
-            )
-        ).all()
-    )
-    timeline = [
-        TimelineEventOut(
-            # created_at is stored naive-UTC (TimestampMixin → TIMESTAMP WITHOUT
-            # TIME ZONE). Tag it UTC so the JSON carries an offset and the browser
-            # converts correctly instead of treating it as local time.
-            ts=row.created_at.replace(tzinfo=timezone.utc)
-            if row.created_at.tzinfo is None
-            else row.created_at,
-            action=row.action,
-            actor=row.actor,
-            after=row.after,
+    assignment = None
+    if _detail_wants("route", includes) or _detail_wants("dispatch", includes):
+        assignment = await session.scalar(
+            select(Assignment).where(Assignment.order_id == order.id)
         )
-        for row in audit_rows
-    ]
 
-    # 7. Chat history — matched by customer phone on the customer-side conversation
+    timeline: list[TimelineEventOut] = []
+    if _detail_wants("timeline", includes):
+        audit_rows = list(
+            (
+                await session.scalars(
+                    select(AuditLog)
+                    .where(AuditLog.entity == "order", AuditLog.entity_id == str(order.id))
+                    .order_by(AuditLog.created_at)
+                )
+            ).all()
+        )
+        timeline = [
+            TimelineEventOut(
+                ts=row.created_at.replace(tzinfo=timezone.utc)
+                if row.created_at.tzinfo is None
+                else row.created_at,
+                action=row.action,
+                actor=row.actor,
+                after=row.after,
+            )
+            for row in audit_rows
+        ]
+
     chat: list[ChatMessageOut] = []
-    if customer:
+    if _detail_wants("chat", includes) and customer:
         conv = await session.scalar(
             select(Conversation).where(
                 Conversation.restaurant_id == restaurant_id,
@@ -1449,9 +1636,6 @@ async def get_order_detail(
                     )
                 ).all()
             )
-            # Outbound bot replies store their text under "body" (not "text"),
-            # and interactive/location rows under other keys — use the shared
-            # display helper so the order Chat shows real text, not a placeholder.
             from app.conversation.service import message_display_text
 
             chat = [
@@ -1463,32 +1647,27 @@ async def get_order_detail(
                 for m in msg_rows
             ]
 
-    # 8. Rider GPS route — pings between assignment time and delivery (or now)
     route: list[GpsPingOut] = []
-    if order.rider_id:
-        assignment = await session.scalar(
-            select(Assignment).where(Assignment.order_id == order.id)
-        )
-        if assignment:
-            upper = order.delivered_at or datetime.now(timezone.utc)
-            ping_rows = list(
-                (
-                    await session.scalars(
-                        select(RiderLocation)
-                        .where(
-                            RiderLocation.rider_id == order.rider_id,
-                            RiderLocation.restaurant_id == restaurant_id,
-                            RiderLocation.ts >= assignment.assigned_at,
-                            RiderLocation.ts <= upper,
-                        )
-                        .order_by(RiderLocation.ts)
+    if _detail_wants("route", includes) and order.rider_id and assignment:
+        upper = order.delivered_at or datetime.now(timezone.utc)
+        ping_rows = list(
+            (
+                await session.scalars(
+                    select(RiderLocation)
+                    .where(
+                        RiderLocation.rider_id == order.rider_id,
+                        RiderLocation.restaurant_id == restaurant_id,
+                        RiderLocation.ts >= assignment.assigned_at,
+                        RiderLocation.ts <= upper,
                     )
-                ).all()
-            )
-            route = [
-                GpsPingOut(latitude=p.latitude, longitude=p.longitude, ts=p.ts)
-                for p in ping_rows
-            ]
+                    .order_by(RiderLocation.ts)
+                )
+            ).all()
+        )
+        route = [
+            GpsPingOut(latitude=p.latitude, longitude=p.longitude, ts=p.ts)
+            for p in ping_rows
+        ]
 
     # 9. Marketing opt-in flag
     opted_out = (
@@ -1516,23 +1695,22 @@ async def get_order_detail(
         )
 
     dispatch_explain: dict | None = None
-    batch_preview_label: str | None = None
-    assignment = await session.scalar(
-        select(Assignment).where(Assignment.order_id == order.id)
-    )
-    if assignment and assignment.algorithm_score:
+    if _detail_wants("dispatch", includes) and assignment and assignment.algorithm_score:
         dispatch_explain = assignment.algorithm_score
-    if order.rider_id is None and order.status in (
-        "confirmed",
-        "preparing",
-        "ready",
-    ):
-        from app.dispatch.service import preview_batch_groups
 
-        preview = await preview_batch_groups(
-            session, restaurant_id=restaurant_id
-        )
-        batch_preview_label = preview.get(order.id)
+    batch_preview_label: str | None = None
+    if order.rider_id is None and order.status in ("confirmed", "preparing", "ready"):
+        from app.dispatch.preview_cache import get_cached_preview
+
+        cached = await get_cached_preview(restaurant_id)
+        if cached is not None:
+            batch_preview_label = cached.get(order.id)
+        elif includes is None:
+            from app.dispatch.service import preview_batch_groups
+
+            batch_preview_label = (await preview_batch_groups(
+                session, restaurant_id=restaurant_id
+            )).get(order.id)
 
     return OrderDetailOut(
         id=order.id,
@@ -1557,12 +1735,20 @@ async def get_order_detail(
         created_at=order.created_at,
         delivered_at=order.delivered_at,
         sla_deadline=order.sla_deadline,
+        sla_started_at=order.sla_confirmed_at,
         prep_deadline=order.prep_deadline,
         cook_estimate_minutes=order.cook_estimate_minutes,
         timeline=timeline,
         chat=chat,
-        convo_summary=_kitchen_convo_summary(
-            _chat_for_this_order(chat, order), items_rows
+        convo_summary=(
+            await _kitchen_convo_summary(
+                items_rows,
+                order_details=order.additional_details,
+                delivery_details=address.additional_details if address else None,
+                chat=_chat_for_this_order(chat, order) if chat else None,
+            )
+            if _detail_wants("chat", includes)
+            else None
         ),
         route=route,
         batch_preview_label=batch_preview_label,

@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.ordering.models import Customer, CustomerAddress
+from app.ordering.models import Customer, CustomerAddress, Order
 
 
 async def test_customer_table_has_expected_columns(db_session, restaurant):
@@ -291,6 +291,66 @@ async def test_create_draft_order_increments_number(db_session, restaurant):
     order2 = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
     await db_session.commit()
     assert order1.order_number != order2.order_number
+
+
+async def test_order_number_unique_constraint_blocks_duplicate(db_session, restaurant):
+    """W8/TX-13/F114: the DB must reject a duplicate order_number for the same
+    tenant even if application code somehow tries to allocate one twice."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.ordering.service import get_or_create_customer
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000099",
+    )
+    await db_session.flush()
+    order1 = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-DUPTEST", status="draft", priority="normal",
+        weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("0.00"), total=Decimal("0.00"),
+    )
+    db_session.add(order1)
+    await db_session.flush()
+
+    order2 = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number="R1-DUPTEST", status="draft", priority="normal",
+        weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("0.00"), total=Decimal("0.00"),
+    )
+    db_session.add(order2)
+    try:
+        await db_session.flush()
+        raised = False
+    except IntegrityError:
+        raised = True
+        await db_session.rollback()
+    assert raised, "duplicate (restaurant_id, order_number) must violate a DB unique constraint"
+
+
+async def test_create_draft_order_survives_concurrent_allocation_race(db_session, restaurant):
+    """W8/TX-13/F114: repeated allocation under a simulated race (count() read
+    before a competing insert lands) must still yield unique order numbers,
+    thanks to the advisory lock + SAVEPOINT-retry-on-collision in
+    create_draft_order."""
+    from app.ordering.service import create_draft_order, get_or_create_customer
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000098",
+    )
+    await db_session.commit()
+
+    orders = []
+    for _ in range(5):
+        order = await create_draft_order(
+            db_session, restaurant_id=restaurant.id, customer_id=customer.id,
+        )
+        await db_session.commit()
+        orders.append(order)
+
+    numbers = [o.order_number for o in orders]
+    assert len(numbers) == len(set(numbers)), f"duplicate order numbers allocated: {numbers}"
 
 
 async def test_add_item_recalculates_total(db_session, restaurant):

@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_audience_manager: str = "manager"
     jwt_audience_rider: str = "rider"
     llm_provider: str = "fake"  # fake | claude | deepseek
+    # W1 parity gate: ClaudeConversationAgent is schema-parity-complete but gated
+    # behind an explicit ops flag so a future regression can't silently ship a
+    # non-compliant Claude action surface. Flip to True once the offline parity
+    # contract test (W1 Task 5) passes in CI. Falls back to DeepSeek when False.
+    claude_conversation_enabled: bool = False
     # Which provider extracts dishes from uploaded menus (PDF/image/text).
     # "auto" = use Claude when an Anthropic key is set (it reads PDFs/images
     # natively so no dishes are missed), else fall back to llm_provider. The chat
@@ -126,6 +131,15 @@ class Settings(BaseSettings):
     # Celery worker/beat runs — otherwise held/stuck orders are never re-dispatched.
     # Disabled in tests. Safe to leave on alongside Celery (dispatch is idempotent).
     dispatch_inprocess_sweep: bool = True
+    # Dashboard batch-preview labels (orders list + detail). Cached per tenant so
+    # list endpoints stay under the 400 ms budget on Render without skipping labels.
+    batch_preview_cache_enabled: bool = True
+    batch_preview_cache_ttl_seconds: int = 30
+    # LLM conversation history window (in Message rows fetched before merge/render).
+    # Kept at the pre-W7 default of 10 so the window itself doesn't change customer
+    # behaviour — W7a only makes what's already in the window render faithfully
+    # (R-080/F55).
+    conversation_history_limit: int = 10
 
     # Wallet store credit + complaint-refund abuse controls.
     # Credit older than this with unspent balance is expired by the sweep. 0 = never.

@@ -150,6 +150,161 @@ async def rate_limiter(redis_client, monkeypatch):
     set_limiter(None)
 
 
+from app.identity.models import Restaurant  # noqa: E402
+
+
+@pytest.fixture
+async def restaurant(db_session) -> Restaurant:
+    """Seed a minimal restaurant row required for conversation/harness FKs."""
+    row = Restaurant(
+        name="Test Restaurant",
+        phone="+97141234567",
+        password_hash="x",
+        lat=25.2048,
+        lng=55.2708,
+    )
+    db_session.add(row)
+    await db_session.flush()
+    return row
+
+
+@pytest.fixture
+async def seed_biryani_menu(db_session, restaurant):
+    """Seed the four dishes used by the biryani capability evals.
+
+    Each dish is available via BOTH paths:
+    - catalogue ORDER path  → matched by catalog_retailer_id
+    - text / AI path        → matched by name / name_normalized
+
+    CatalogProduct rows are required by handle_catalog_order's strict-membership
+    check (dish + active CatalogProduct must both exist for the retailer_id).
+    The restaurant settings are updated to enable catalogue ordering so the
+    ORDER turn is routed to handle_catalog_order (matching production behaviour).
+    """
+    from decimal import Decimal
+
+    from app.catalog.models import CatalogProduct
+    from app.menu.models import Dish, Menu
+
+    # Enable catalogue ordering on this restaurant so the ORDER message path works.
+    restaurant.settings = {
+        **(restaurant.settings or {}),
+        "catalog_id": "TEST-CAT-001",
+        "catalog_ordering_enabled": True,
+    }
+    await db_session.flush()
+
+    menu = Menu(
+        restaurant_id=restaurant.id,
+        version=1,
+        status="active",
+        source_files=[],
+    )
+    db_session.add(menu)
+    await db_session.flush()
+
+    dishes = [
+        Dish(
+            menu_id=menu.id,
+            restaurant_id=restaurant.id,
+            dish_number=1,
+            name="Chicken Biryani",
+            price_aed=Decimal("20.00"),
+            category="Biryani",
+            is_available=True,
+            name_normalized="chicken biryani",
+            catalog_retailer_id="ju9f8jfy90",
+        ),
+        Dish(
+            menu_id=menu.id,
+            restaurant_id=restaurant.id,
+            dish_number=2,
+            name="Lemon Mint",
+            price_aed=Decimal("12.00"),
+            category="Drinks",
+            is_available=True,
+            name_normalized="lemon mint",
+            catalog_retailer_id="dv5fh8l7j6",
+        ),
+        Dish(
+            menu_id=menu.id,
+            restaurant_id=restaurant.id,
+            dish_number=3,
+            name="Mndhi - 2",
+            price_aed=Decimal("50.00"),
+            category="Mandi",
+            is_available=True,
+            name_normalized="mndhi - 2",
+            catalog_retailer_id="dish-8-6",
+        ),
+        Dish(
+            menu_id=menu.id,
+            restaurant_id=restaurant.id,
+            dish_number=4,
+            name="Mutton Biryani",
+            price_aed=Decimal("10.00"),
+            category="Biryani",
+            is_available=True,
+            name_normalized="mutton biryani",
+            catalog_retailer_id="mutton-biryani-01",
+        ),
+    ]
+    for d in dishes:
+        db_session.add(d)
+
+    catalog_products = [
+        CatalogProduct(
+            restaurant_id=restaurant.id,
+            retailer_id="ju9f8jfy90",
+            name="Chicken Biryani",
+            price_aed=Decimal("20.00"),
+            currency="AED",
+            availability="in stock",
+            category="Biryani",
+            is_active=True,
+            raw={},
+        ),
+        CatalogProduct(
+            restaurant_id=restaurant.id,
+            retailer_id="dv5fh8l7j6",
+            name="Lemon Mint",
+            price_aed=Decimal("12.00"),
+            currency="AED",
+            availability="in stock",
+            category="Drinks",
+            is_active=True,
+            raw={},
+        ),
+        CatalogProduct(
+            restaurant_id=restaurant.id,
+            retailer_id="dish-8-6",
+            name="Mndhi - 2",
+            price_aed=Decimal("50.00"),
+            currency="AED",
+            availability="in stock",
+            category="Mandi",
+            is_active=True,
+            raw={},
+        ),
+        CatalogProduct(
+            restaurant_id=restaurant.id,
+            retailer_id="mutton-biryani-01",
+            name="Mutton Biryani",
+            price_aed=Decimal("10.00"),
+            currency="AED",
+            availability="in stock",
+            category="Biryani",
+            is_active=True,
+            raw={},
+        ),
+    ]
+    for cp in catalog_products:
+        db_session.add(cp)
+
+    await db_session.flush()
+    return dishes
+
+
 @pytest.fixture
 async def auth_headers(client):
     signup = {

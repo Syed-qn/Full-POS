@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { CompactTable, type Column } from "../components/CompactTable";
+import { QueryRefreshNote } from "../components/QueryRefreshNote";
 import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
 import { PrepCountdown } from "../components/PrepCountdown";
 import { orderStatusLabel } from "../lib/orderDisplay";
-import { fetchOrders } from "../lib/ordersApi";
-import { usePollingRefresh } from "../lib/usePollingRefresh";
+import { perfMark, perfNow } from "../lib/perf";
+import { useOrdersQuery } from "../lib/queries/dashboard";
 import type { OrderOut, OrderStatus } from "../lib/types";
 import { OrderDetailDrawer } from "./OrderDetailDrawer";
 import { PageHeader } from "../components/PageHeader";
@@ -69,8 +70,8 @@ function presetRange(key: Exclude<PresetKey, "custom">, now: Date): [string, str
 }
 
 export function OrdersScreen() {
-  const [orders, setOrders] = useState<OrderOut[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   // "all" | "single" | a batch label ("A", "B", …) present in the current orders.
   const [batchFilter, setBatchFilter] = useState<string>("all");
@@ -79,19 +80,39 @@ export function OrdersScreen() {
   const [preset, setPreset] = useState<PresetKey>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const paintMark = useRef<number | null>(null);
 
   useEffect(() => {
-    fetchOrders()
-      .then(setOrders)
-      .finally(() => setLoading(false));
-  }, []);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  // Live updates: new orders + status/SLA changes appear without a refresh.
-  // Filters are applied client-side (useMemo), so they survive each poll.
-  usePollingRefresh(() => {
-    fetchOrders().then(setOrders).catch(() => {});
-  });
+  const listFilters = useMemo(
+    () => ({
+      previewBatch: true as const,
+      status: statusFilter === "all" ? undefined : statusFilter,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      q: debouncedSearch.trim() || undefined,
+      page,
+      limit: PAGE_SIZE,
+    }),
+    [statusFilter, fromDate, toDate, debouncedSearch, page],
+  );
+
+  const { data: orders = [], isLoading, isFetching, isError } = useOrdersQuery(listFilters);
+  const loading = isLoading && orders.length === 0;
+
+  useEffect(() => {
+    if (!loading && orders.length > 0 && paintMark.current != null) {
+      perfMark("orders-first-paint", paintMark.current);
+      paintMark.current = null;
+    }
+  }, [loading, orders.length]);
+
+  useEffect(() => {
+    paintMark.current = perfNow();
+  }, [listFilters]);
 
   function applyPreset(key: Exclude<PresetKey, "custom">) {
     const [from, to] = presetRange(key, new Date());
@@ -118,35 +139,14 @@ export function OrdersScreen() {
   }
 
   const filtered = useMemo(() => {
-    const q = search.trim().replace(/^#/, "").toLowerCase();
-    let base = [...orders].sort((a, b) => b.id - a.id); // newest first
-    if (statusFilter !== "all") {
-      base = base.filter((o) => o.status === statusFilter);
-    }
+    let base = [...orders];
     if (batchFilter === "single") {
-      // Orders that ride alone — neither forecast to batch nor already batched.
       base = base.filter((o) => !o.batch_preview && !(o.batch_size != null && o.batch_size > 1));
     } else if (batchFilter !== "all") {
-      // A specific forecast batch group (A, B, …).
       base = base.filter((o) => o.batch_preview === batchFilter);
     }
-    if (fromDate || toDate) {
-      base = base.filter((o) => {
-        const day = o.created_at ? toYMD(new Date(o.created_at)) : "";
-        if (!day) return false;
-        if (fromDate && day < fromDate) return false;
-        if (toDate && day > toDate) return false;
-        return true;
-      });
-    }
-    if (!q) return base;
-    return base.filter(
-      (o) =>
-        String(o.id).includes(q) ||
-        o.customer_name.toLowerCase().includes(q) ||
-        o.customer_phone.includes(q),
-    );
-  }, [orders, search, statusFilter, batchFilter, fromDate, toDate]);
+    return base;
+  }, [orders, batchFilter]);
 
   // Distinct forecast batch labels present, so the dropdown only offers real groups.
   const batchLabels = useMemo(
@@ -157,12 +157,12 @@ export function OrdersScreen() {
     [orders],
   );
 
-  // Reset to the first page whenever any filter changes.
-  useEffect(() => { setPage(1); }, [search, statusFilter, batchFilter, fromDate, toDate]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, fromDate, toDate]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const hasNextPage = orders.length === PAGE_SIZE;
+  const pageRows = filtered;
 
   const columns: Column<OrderOut>[] = [
     {
@@ -351,7 +351,12 @@ export function OrdersScreen() {
       <div className={s.tableCard}>
         <div className={s.tableHead}>
           <span className={s.tableTitle}>Order list</span>
-          <span className={s.tableCount}>{filtered.length} {filtered.length === 1 ? "order" : "orders"}</span>
+          <span className={s.tableCount}>
+            {filtered.length} {filtered.length === 1 ? "order" : "orders"}
+            {isFetching && !loading ? " · refreshing…" : ""}
+            {" "}
+            <QueryRefreshNote show={isError && orders.length > 0} />
+          </span>
         </div>
         <CompactTable<OrderOut>
           columns={columns}
@@ -363,17 +368,18 @@ export function OrdersScreen() {
           rowClassName={(o) => (o.batch_size && o.batch_size > 1 ? s.batchRow : undefined)}
         />
       </div>
-      {filtered.length > PAGE_SIZE && (
+      {(page > 1 || hasNextPage) && (
         <div className={s.pagination}>
           <span className={s.pageInfo}>
-            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
+            Page {page}
+            {hasNextPage ? "" : " (last)"}
           </span>
           <div className={s.pageBtns}>
-            <button className={s.pageBtn} disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
+            <button className={s.pageBtn} disabled={page <= 1} onClick={() => setPage(page - 1)}>
               ‹ Prev
             </button>
-            <span className={s.pageNum}>Page {safePage} / {totalPages}</span>
-            <button className={s.pageBtn} disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>
+            <span className={s.pageNum}>Page {page}</span>
+            <button className={s.pageBtn} disabled={!hasNextPage} onClick={() => setPage(page + 1)}>
               Next ›
             </button>
           </div>

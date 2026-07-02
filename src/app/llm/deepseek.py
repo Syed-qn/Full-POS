@@ -10,6 +10,7 @@ from functools import lru_cache
 import httpx
 
 from app.config import get_settings
+from app.llm.action_schema import build_openai_tool, to_engine_result
 from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile, strip_dashes
 
 _BASE = "https://api.deepseek.com"
@@ -181,126 +182,9 @@ async def _async_chat_tools(
     raise RuntimeError(f"DeepSeek returned no {tool_name!r} tool call")
 
 
-_DS_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "take_action",
-        "description": (
-            "Record the structured action inferred from the customer message, plus your reply. "
-            "ALWAYS call this tool — never reply without it."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": [
-                        "add_item", "remove_item", "update_qty", "clear_cart",
-                        "proceed_to_address",
-                        "send_location_request", "save_address_text", "use_saved_address",
-                        "proceed_to_confirmation",
-                        "confirm_order", "request_modification", "cancel_order",
-                        "status_query", "show_menu", "no_action",
-                    ],
-                    "description": (
-                        "show_menu: customer asks to see the menu/dishes/prices — the "
-                        "system sends the REAL menu, so do NOT write dishes in 'reply'. "
-                        "add_item: customer NAMES a NEW dish to add (or a quantity for "
-                        "one). NEVER re-add a dish already in the cart in response to a "
-                        "'no'/decline. "
-                        "remove_item: customer wants a dish taken OFF the cart entirely "
-                        "('remove X', 'cancel the X', 'take off X', 'I don't want X'). "
-                        "update_qty: change the quantity of a dish already in the cart "
-                        "('make it 4', 'change to 2', 'actually 3') — qty is the new TOTAL. "
-                        "clear_cart: customer wants to EMPTY the whole cart and start over "
-                        "('clear the cart', 'remove everything', 'start over', 'empty my "
-                        "cart', 'delete all', 'scrap it, let's restart') — NOT a single "
-                        "remove_item. "
-                        "proceed_to_address: cart ready — customer is done, declines more "
-                        "items, or is frustrated the order has not moved on, in ANY "
-                        "language. Move to delivery address capture. "
-                        "send_location_request: ask customer to share their WhatsApp location pin. "
-                        "save_address_text: all 3 address fields collected (apt_room + building + receiver_name). "
-                        "use_saved_address: returning customer confirmed their saved address. "
-                        "proceed_to_confirmation: address complete, show order summary. "
-                        "confirm_order: customer confirmed the order. "
-                        "request_modification: customer wants to change something in the order. "
-                        "cancel_order: customer wants to cancel. "
-                        "status_query: customer asked where their order is. "
-                        "no_action: greeting, question, answer, anything that doesn't change state."
-                    ),
-                },
-                "dish_query": {
-                    "type": "string",
-                    "description": (
-                        "Dish name or number the customer referred to "
-                        "(for add_item, remove_item, update_qty)."
-                    ),
-                },
-                "qty": {
-                    "type": "integer",
-                    "description": (
-                        "For add_item: how many to add (default 1). "
-                        "For update_qty: the NEW TOTAL quantity, not a delta "
-                        "(e.g. 'make it 4' → qty=4). "
-                        "For remove_item: how many units to take off; OMIT it to "
-                        "remove the dish entirely ('remove 2 biryani' → qty=2; "
-                        "'remove the biryani' → no qty)."
-                    ),
-                },
-                "special_note": {
-                    "type": "string",
-                    "description": "Kitchen note e.g. 'no onion', 'extra spicy' (for add_item).",
-                },
-                "items": {
-                    "type": "array",
-                    "description": (
-                        "For add_item OR update_qty. When the customer names MORE THAN ONE "
-                        "dish in the SAME message — to add them, or to set their quantities — "
-                        "list EVERY dish here (one entry per dish, with its qty). Do NOT "
-                        "collapse them into a single dish_query and do NOT silently drop any. "
-                        "For a single dish you may use dish_query/qty instead."
-                    ),
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "dish_query": {
-                                "type": "string",
-                                "description": "Dish name or number the customer named.",
-                            },
-                            "qty": {
-                                "type": "integer",
-                                "description": "How many of this dish to add (default 1).",
-                            },
-                            "special_note": {
-                                "type": "string",
-                                "description": "Kitchen note for this dish e.g. 'no onion'.",
-                            },
-                        },
-                        "required": ["dish_query"],
-                    },
-                },
-                "apt_room": {
-                    "type": "string",
-                    "description": "Apartment / room / door number (for save_address_text).",
-                },
-                "building": {
-                    "type": "string",
-                    "description": "Building name or number (for save_address_text).",
-                },
-                "receiver_name": {
-                    "type": "string",
-                    "description": "Name of person receiving the order (for save_address_text).",
-                },
-                "reply": {
-                    "type": "string",
-                    "description": "Natural WhatsApp reply to send. Short, friendly, casual. Required always.",
-                },
-            },
-            "required": ["action", "reply"],
-        },
-    },
-}
+# Tool definition is derived from the single-source-of-truth schema so providers
+# can never drift from the canonical action vocabulary (W1 Task 2).
+_DS_TOOL = build_openai_tool("take_action")
 
 _IDENTITY = """\
 You are the friendly owner and host of {restaurant_name}, taking orders personally
@@ -366,42 +250,49 @@ PHASE: Taking the order
 MENU:
 {menu_text}
 
-CURRENT CART: {cart_summary}
+CURRENT CART (authoritative — overrides anything in the chat history): {cart_summary}
+CART LINES (structured; each line has cart_item_id you may reference): {cart_lines}
+If the chat history and the CURRENT CART disagree, the CURRENT CART is correct
+(R-072/R-074): a customer correction like "only 1 X" sets the qty of the existing
+line for X, it never adds a new line or trusts what an earlier message implied.
 
 DECISION ORDER (check in this order, stop at the first that applies):
 STEP 1, COMPLETION: If the CURRENT CART is NOT empty AND the customer is finishing,
   declining more items, or showing impatience/frustration that the order has not moved
   on, in ANY language and ANY phrasing (a bare "no", a curse, "can't you understand",
-  a closing word, etc.), return action="proceed_to_address". Do NOT add anything and do
+  a closing word, etc.), return action="checkout_proceed". Do NOT add anything and do
   NOT re-show the menu. NEVER re-add a dish that is already in the cart in response to a
   "no" or a decline. (If the cart IS empty, gently ask what they'd like instead.)
 STEP 2: Otherwise handle add / remove / quantity / menu / question as below.
 
 MENU / BROWSING
 - "menu" / "full menu" / "what do you have" / "options" / "send menu" →
-  action="show_menu", keep 'reply' short (e.g. "Here's our menu! 😊"). The system
+  action="menu_show", keep 'reply' short (e.g. "Here's our menu! 😊"). The system
   sends the REAL menu — NEVER type the dish list yourself.
-- Use show_menu ONLY when the customer EXPLICITLY asks to see the menu/list — in ANY
+- Use menu_show ONLY when the customer EXPLICITLY asks to see the menu/list — in ANY
   language (e.g. "menu", "menu dikhao", "قائمة", "మెను", "what do you have"). NEVER use
-  show_menu when they are adding or ordering a dish (e.g. "ok add one mutton biryani",
-  "1 chicken", "give me a biryani") — that is add_item. If a customer asks for a dish
-  that is NOT in the MENU above, do NOT show the menu: use add_item with that dish_query
+  menu_show when they are adding or ordering a dish (e.g. "ok add one mutton biryani",
+  "1 chicken", "give me a biryani") — that is cart_add. If a customer asks for a dish
+  that is NOT in the MENU above, do NOT show the menu: use cart_add with that dish_query
   (the system replies honestly that we don't have it). Showing the menu in place of
   handling an order is a bug.
-- show_menu IS NOT A FALLBACK. If you are unsure what the customer means, DO NOT show the
+- menu_show IS NOT A FALLBACK. If you are unsure what the customer means, DO NOT show the
   menu. Instead ask a short clarifying question (action="no_action" with a question in the
   customer's language), or if they're mid-order remind them what's in their cart and how
-  to check out. Only an explicit menu request ever triggers show_menu.
+  to check out. Only an explicit menu request ever triggers menu_show.
 - You MAY suggest 1-2 real dishes from the MENU above, but never invent any.
 
-ADDING — action="add_item" (dish_query + qty, default qty 1). Understand shorthand in ANY language:
-    "1 mutton biryani"        → add_item dish_query="mutton biryani" qty=1
-    "ek biryani dena bhai"    → add_item "biryani" qty=1
-    "no onion" / "extra spicy"→ add_item with special_note
-  MULTIPLE dishes in ONE message → action="add_item" with the 'items' list, ONE entry per dish:
-    "2 bry + karahi"          → add_item items=[{{dish_query:"biryani",qty:2}},{{dish_query:"karahi",qty:1}}]
+ADDING — action="cart_add" (dish_query + add_qty, default add_qty 1). Understand shorthand in ANY language:
+    "1 mutton biryani"        → cart_add dish_query="mutton biryani" add_qty=1
+    "ek biryani dena bhai"    → cart_add "biryani" add_qty=1
+    "no onion" / "extra spicy"→ if that dish is already in CURRENT CART, update the
+                              existing cart line with note; do NOT add another
+                              paid copy of the dish. If the dish is not in cart, cart_add
+                              with note.
+  MULTIPLE dishes in ONE message → action="cart_add" with the 'items' list, ONE entry per dish:
+    "2 bry + karahi"          → cart_add items=[{{dish_query:"biryani",qty:2}},{{dish_query:"karahi",qty:1}}]
     "1 chicken biryani, 1 mutton biryani and 2 parotta"
-                              → add_item items=[{{dish_query:"chicken biryani",qty:1}},
+                              → cart_add items=[{{dish_query:"chicken biryani",qty:1}},
                                  {{dish_query:"mutton biryani",qty:1}},{{dish_query:"parotta",qty:2}}]
   These are PARSING examples only — the dish names here are NOT a menu. Only ever
   treat items in the MENU above as real; never assume an example name is on the menu.
@@ -410,34 +301,36 @@ ADDING — action="add_item" (dish_query + qty, default qty 1). Understand short
   cart unless the customer names that dish again or gives a number. A "no"/decline is
   NEVER an add.
 
-CHANGING QUANTITY — action="update_qty" (dish_query + qty = the NEW TOTAL, not a delta):
-    "make it 4"               → update_qty qty=4  (4 in total)
-    "change biryani to 2"     → update_qty dish_query="biryani" qty=2
-    "actually 3 biryanis"     → update_qty dish_query="biryani" qty=3
+CHANGING QUANTITY — action="cart_set_qty" (dish_query + new_total = the ABSOLUTE new total, not a delta):
+    "make it 4"               → cart_set_qty new_total=4  (4 in total)
+    "change biryani to 2"     → cart_set_qty dish_query="biryani" new_total=2
+    "actually 3 biryanis"     → cart_set_qty dish_query="biryani" new_total=3
+    "only 1 biryani with no onion"
+                              → cart_set_qty dish_query="biryani" new_total=1 note="no onion"
   "make it N" right after adding a dish refers to THAT dish.
-  MULTIPLE dishes in ONE message → action="update_qty" with the 'items' list, ONE entry per dish:
+  MULTIPLE dishes in ONE message → action="cart_set_qty" with the 'items' list, ONE entry per dish:
     "make it 2 chicken biryani and 2 parotta"
-        → update_qty items=[{{dish_query:"chicken biryani",qty:2}},{{dish_query:"parotta",qty:2}}]
+        → cart_set_qty items=[{{dish_query:"chicken biryani",qty:2}},{{dish_query:"parotta",qty:2}}]
   List EVERY dish whose quantity changes — NEVER drop one.
 
-REMOVING — action="remove_item" (dish_query = the dish to take off):
-    "remove mutton biryani"   → remove_item dish_query="mutton biryani"  (no qty = remove it all)
+REMOVING — action="cart_remove" (dish_query = the dish to take off):
+    "remove mutton biryani"   → cart_remove dish_query="mutton biryani"  (no remove_qty = remove it all)
     "remove the biryani from cart" / "cancel the karahi" / "take off the coke" /
-    "I don't want the biryani" → remove_item dish_query="..."  (no qty)
-    "remove 2 biryani"        → remove_item dish_query="biryani" qty=2   (take off 2 units)
-  Omit qty to remove the dish entirely; give qty only when the customer names a number.
+    "I don't want the biryani" → cart_remove dish_query="..."  (no remove_qty)
+    "remove 2 biryani"        → cart_remove dish_query="biryani" remove_qty=2   (take off 2 units)
+  Omit remove_qty to remove the dish entirely; give remove_qty only when the customer names a number.
 
-CLEARING THE WHOLE CART — action="clear_cart" (no dish):
+CLEARING THE WHOLE CART — action="cart_clear" (no dish):
     "clear the cart" / "remove everything" / "empty my cart" / "delete all" /
-    "start over" / "scrap it, let's restart" → clear_cart
-  This empties EVERYTHING — never treat "clear the cart" as a single remove_item.
+    "start over" / "scrap it, let's restart" → cart_clear
+  This empties EVERYTHING — never treat "clear the cart" as a single cart_remove.
 
 FINISHING
 - Cart NOT empty + a done/closing signal — "done" / "that's all" / "checkout" /
   "proceed" / "bas" / "khalaas" / "no" / "nope" / "no more" / "nothing else" /
-  "np" / "I'm good" → action="proceed_to_address".
+  "np" / "I'm good" → action="checkout_proceed".
 - The SAME words when the cart IS empty → no_action (gently ask what they'd like).
-- NEVER ask for address or location yourself in this phase — proceed_to_address handles it.
+- NEVER ask for address or location yourself in this phase — checkout_proceed handles it.
 
 QUESTIONS — answer like the owner who knows the food (action="no_action"):
 - Spice level, halal, vegetarian, ingredients, allergens, portion size, what's
@@ -521,10 +414,11 @@ YOUR JOB:
 - Show the summary clearly (already formatted above).
 - Ask: "Shall I place this order? ✅"
 - customer says yes / confirm / ok / haan / aiwa / да / oo / sige → confirm_order
-- customer wants ANY change — add/remove a dish, or change a quantity ("make it 2",
-  "two special", "add a coke", "remove the mint") → request_modification.
-  NEVER claim in your reply that you changed the order yourself — you cannot edit it
-  here; request_modification starts the real edit. Do not state new totals/quantities.
+- customer wants to ADD a dish → cart_add.
+- customer wants to REMOVE a dish or change quantity ("remove the mint", "make it 2",
+  "no coke") → cart_remove or cart_set_qty (inline edit; the system re-shows the summary).
+  NEVER claim in your reply that you changed totals yourself — the system renders from DB.
+- broad "change my order" with no specific dish → request_modification.
 - customer cancels → cancel_order
 - Anything unclear → re-show summary and ask again (no_action).
 """
@@ -540,8 +434,12 @@ YOUR JOB:
 - Status is "preparing" / "confirmed" → "Your order is being prepared in the kitchen 🍳"
 - Status is "ready" → "Your order is ready and will be picked up by a rider soon! 🛵"
 - Status is "assigned" / "picked_up" / "arriving" → "Your rider is on the way! ETA ~{rider_eta} min"
-- Modification requests (before 'ready' status) → request_modification
-- Cancellation (if status is before 'picked_up') → cancel_order
+- Remove one dish / change quantity on a placed order (before 'ready') → order_line_remove
+  or order_line_set_qty (shows confirm summary; SLA restarts only after order_modify_confirm).
+- Broad modification / multiple changes → request_modification
+- Cancel the ENTIRE order (if status is before 'picked_up') → cancel_order
+  (NOT cancel/remove a single dish — use order_line_remove for that)
+- Customer confirms pending line edits → order_modify_confirm
 - If order already picked up / delivered → explain it's too late to cancel
 - "Where is my order" / "كم باقي" / "کتنا وقت لگے گا" → status_query
 """
@@ -568,6 +466,7 @@ class DeepSeekConversationAgent:
             phase_block = _ORDERING_BLOCK.format(
                 menu_text=context.get("menu_text", "Menu unavailable."),
                 cart_summary=context.get("cart_summary") or "empty",
+                cart_lines=json.dumps(context.get("cart_lines") or [], ensure_ascii=False),
             )
         elif dialogue_phase == "address_capture":
             saved = context.get("saved_address", "")
@@ -621,46 +520,83 @@ class DeepSeekConversationAgent:
             max_tokens=512,
         )
 
-        # Pass qty through as-is (None when the customer gave no number). add_item
-        # and update_qty default it to 1 downstream; remove_item treats None as
-        # "remove the whole dish" vs a number as "remove that many units".
-        _q = inp.get("qty")
-        qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
-
-        # Multi-dish messages: the model lists every named dish in 'items' so a single
-        # message ordering several dishes adds ALL of them (one add_item per dish used
-        # to silently drop every dish but one). Each entry is normalised the same way
-        # as the single dish_query/qty path.
-        items: list[dict] = []
-        raw_items = inp.get("items")
-        if isinstance(raw_items, list):
-            for it in raw_items:
-                if not isinstance(it, dict):
-                    continue
-                dq = str(it.get("dish_query") or "").strip()
-                if not dq:
-                    continue
-                iq = it.get("qty")
-                iqty = int(iq) if isinstance(iq, (int, float)) and not isinstance(iq, bool) else None
-                items.append({
-                    "dish_query": dq,
-                    "qty": iqty,
-                    "special_note": str(it.get("special_note") or ""),
-                })
-
+        # Translate canonical action + payload to engine-legacy (action, action_data).
+        # Required-field validation happens inside to_engine_result: missing fields
+        # yield ("no_action", {needs_clarification: True, ...}) so the engine never
+        # mutates state from an under-specified tool call.
+        legacy_action, action_data = to_engine_result(
+            inp.get("action", "no_action"), inp,
+        )
         return ConversationAgentResult(
             message=strip_dashes(inp.get("reply", "")),
-            action=inp.get("action", "no_action"),
-            action_data={
-                "dish_query": inp.get("dish_query", ""),
-                "qty": qty,
-                "special_note": inp.get("special_note", ""),
-                "items": items,
-                "apt_room": inp.get("apt_room", ""),
-                "building": inp.get("building", ""),
-                "receiver_name": inp.get("receiver_name", ""),
-            },
+            action=legacy_action,
+            action_data=action_data,
         )
+
+
+class DeepSeekCompletionDetector:
+    """Production completion detector: one tiny async chat call, yes/no answer."""
+
+    async def is_completion(self, text: str) -> bool:
+        if not text or not text.strip():
+            return False
+        api_key, model = _get_deepseek_settings()
+        prompt = (
+            "A restaurant customer sent this WhatsApp message during an order: "
+            f"{text!r}\n\n"
+            "Does the message mean the customer is FINISHED ordering / wants to proceed "
+            "(in ANY language, any phrasing — 'done', 'khalas', 'bas', 'that\\'s all', "
+            "bare 'no', or equivalent)?\n"
+            "Answer with a single word: yes or no."
+        )
+        raw = await _async_chat(
+            api_key, model,
+            [{"role": "user", "content": prompt}],
+            max_tokens=4,
+        )
+        return raw.strip().lower().startswith("y")
+
+
+class DeepSeekRouterClassifier:
+    """Production W4 top-level router: one async chat call, single enum answer.
+
+    LLM-driven and multilingual — no English phrase tables on the live path.
+    """
+
+    async def classify_intent(self, text: str, cart_context: str, phase: str):
+        from app.llm.port import IntentLabel
+
+        if not text or not text.strip():
+            return IntentLabel.NON_ACTIONABLE
+        api_key, model = _get_deepseek_settings()
+        labels = ", ".join(label.value for label in IntentLabel)
+        prompt = (
+            "You are the intent router for a restaurant WhatsApp ordering bot.\n"
+            f"Dialogue phase: {phase}\n"
+            f"Current cart: {cart_context or '(empty)'}\n"
+            f"Customer message (ANY language): {text!r}\n\n"
+            "Classify the message into EXACTLY ONE of these intents:\n"
+            f"{labels}\n\n"
+            "Rules:\n"
+            "- 'mutation' = actually change the cart (add/remove/set quantity/note).\n"
+            "- A question, even one naming a dish or quantity ('why did you add 2'), is "
+            "'question' or 'complaint' — NEVER 'mutation'.\n"
+            "- 'checkout' = done/that's all/proceed, in any language.\n"
+            "- 'clear' ONLY for an explicit empty-cart/fresh-start request, never 'only X'.\n"
+            "- 'non_actionable' = reactions/emoji/system noise.\n"
+            "- Use 'unknown' if genuinely unclear.\n"
+            "Answer with the single intent word only."
+        )
+        raw = await _async_chat(
+            api_key, model,
+            [{"role": "user", "content": prompt}],
+            max_tokens=8,
+        )
+        token = raw.strip().lower().split()[0] if raw.strip() else ""
+        try:
+            return IntentLabel(token)
+        except ValueError:
+            return IntentLabel.UNKNOWN
 
 
 def _sanitise_effect(parsed: dict) -> dict:
@@ -712,3 +648,32 @@ class DeepSeekSegmentCompiler:
             raise RuntimeError(f"DeepSeekSegmentCompiler returned non-JSON: {exc}") from exc
         validate_dsl(dsl)
         return dsl
+
+
+class DeepSeekKitchenSummarizer:
+    """Tier-2 kitchen chat compressor — multilingual, no phrase tables."""
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        from app.llm.kitchen_summary import (
+            _TIER2_SYSTEM,
+            build_tier2_prompt,
+            parse_tier2_response,
+        )
+
+        if not inbound_messages:
+            return []
+        api_key, model = _get_deepseek_settings()
+        prompt = build_tier2_prompt(structured_block, inbound_messages)
+        raw = await _async_chat(
+            api_key,
+            model,
+            [
+                {"role": "system", "content": _TIER2_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=120,
+            temperature=0.0,
+        )
+        return parse_tier2_response(raw)

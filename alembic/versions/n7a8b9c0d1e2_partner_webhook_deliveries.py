@@ -1,7 +1,7 @@
 """partner_webhook_deliveries: outbound POS webhook queue
 
 Revision ID: n7a8b9c0d1e2
-Revises: m6f7a8b9c0d1
+Revises: o8h9i0j1k2l3
 Create Date: 2026-07-01
 """
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "n7a8b9c0d1e2"
-down_revision: Union[str, Sequence[str], None] = "m6f7a8b9c0d1"
+down_revision: Union[str, Sequence[str], None] = "o8h9i0j1k2l3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

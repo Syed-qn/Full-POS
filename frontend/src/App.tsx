@@ -3,7 +3,10 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { Toaster } from "./components/Toaster";
 import { isAuthenticated } from "./lib/auth";
-import { fetchOnboardingStatus } from "./lib/onboardingApi";
+import {
+  readCachedOnboardingComplete,
+  resolveOnboardingComplete,
+} from "./lib/onboardingGate";
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
 import { CustomerProfileScreen } from "./screens/CustomerProfileScreen";
@@ -24,14 +27,19 @@ import { CouponsScreen } from "./screens/CouponsScreen";
 
 function Guarded({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
-  const [onboardingOk, setOnboardingOk] = useState<boolean | null>(null);
+  const [onboardingOk, setOnboardingOk] = useState<boolean | null>(() =>
+    isAuthenticated() ? readCachedOnboardingComplete() : null,
+  );
 
   useEffect(() => {
     if (!isAuthenticated()) return;
-    fetchOnboardingStatus()
-      .then((s) => setOnboardingOk(s.complete))
-      .catch(() => setOnboardingOk(true));
-  }, [loc.pathname]);
+    // Only block the first paint when we have no cached value yet.
+    if (readCachedOnboardingComplete() !== null) {
+      setOnboardingOk(readCachedOnboardingComplete());
+      return;
+    }
+    resolveOnboardingComplete().then(setOnboardingOk);
+  }, []);
 
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
   if (onboardingOk === false && loc.pathname !== "/onboarding") {

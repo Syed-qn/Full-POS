@@ -591,29 +591,46 @@ async def test_api_delete_order_returns_204_then_404(client, db_session, restaur
     assert again.status_code == 404
 
 
-def test_kitchen_convo_summary_is_multilingual_and_drops_greetings():
-    """The kitchen conversation digest must keep substantive customer lines in ANY
-    language (multi-language SaaS) and item notes, while dropping greetings/confirms."""
+def test_kitchen_structured_lines_multilingual():
+    """Tier 1: any language already stored on order/address rows."""
+    from types import SimpleNamespace as N
+
+    from app.llm.kitchen_summary import clamp_summary_lines, render_structured_lines
+
+    items = [N(qty=1, dish_name="Chicken Biryani", notes="double masala")]
+    out = clamp_summary_lines(
+        render_structured_lines(items, delivery_details="please call before arriving")
+    )
+    assert out.count("\n") <= 2
+    assert "double masala" in out
+    assert "call before arriving" in out
+
+    out_hi = clamp_summary_lines(
+        render_structured_lines(items, delivery_details="गेट बंद है, फोन करना")
+    )
+    assert "गेट बंद है" in out_hi
+
+    assert clamp_summary_lines(render_structured_lines([])) is None
+
+
+async def test_kitchen_convo_summary_tier1_only_when_fake_provider():
+    """Fake provider: tier-2 returns [] — digest is structured data only."""
     from types import SimpleNamespace as N
 
     from app.ordering.service import _kitchen_convo_summary
 
-    items = [N(qty=1, dish_name="Chicken Biryani", notes="double masala")]
+    items = [N(qty=1, dish_name="Chicken Biryani", notes="double masala, chest piece")]
     chat = [
-        N(direction="inbound", text="Hi"),                          # greeting → skip
-        N(direction="outbound", text="Added ✅"),                    # outbound → skip
-        N(direction="inbound", text="please call before arriving"), # EN instruction → keep
-        N(direction="inbound", text="गेट बंद है, फोन करना"),          # Hindi instruction → keep
-        N(direction="inbound", text="हाँ"),                          # Hindi 'yes' → skip
+        N(direction="inbound", text="Send me your restaurant location"),
+        N(direction="inbound", text="Can you provide me code for python"),
+        N(direction="inbound", text="Why are you sending me menu"),
     ]
-    out = _kitchen_convo_summary(chat, items)
-    assert "double masala" in out                 # item note shown
-    assert "call before arriving" in out          # English instruction kept
-    assert "गेट बंद है" in out                      # Hindi instruction kept (not dropped)
-    assert "हाँ" not in out                         # Hindi greeting/confirm dropped
-
-    # No notes + only greetings → nothing to show.
-    assert _kitchen_convo_summary([N(direction="inbound", text="hello")], []) is None
+    out = await _kitchen_convo_summary(items, chat=chat)
+    assert out is not None
+    assert out.count("\n") == 0  # single line — chat not echoed under fake LLM
+    assert "double masala" in out
+    assert "restaurant location" not in out.lower()
+    assert "python" not in out.lower()
 
 
 async def test_api_advance_delivers_preparing_ping_immediately(client, db_session, restaurant, monkeypatch):

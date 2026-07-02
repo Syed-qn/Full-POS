@@ -1,7 +1,7 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { renderWithProviders } from "../test/render";
 import { CustomersScreen } from "./CustomersScreen";
 import type { CustomerListOut } from "../lib/types";
 
@@ -19,7 +19,7 @@ const LIST: CustomerListOut = {
 };
 
 function renderScreen() {
-  return render(<MemoryRouter><CustomersScreen /></MemoryRouter>);
+  return renderWithProviders(<CustomersScreen />);
 }
 
 describe("CustomersScreen filters", () => {

@@ -35,6 +35,8 @@ class Customer(Base, TimestampMixin):
     tags: Mapped[dict] = mapped_column(JSONB, default=dict)
     total_orders: Mapped[int] = mapped_column(Integer, default=0)
     total_spend: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    # Denormalized typical order time label (recomputed from orders on stat refresh).
+    usual_order_time: Mapped[str | None] = mapped_column(String(64))
     # Loyalty (Phase 1). tier is a denormalized cache of the nightly/on-delivery
     # RFM+Monetary computation; locked = manager manually set it (recompute skips).
     # reward_anchor = total_orders at tier entry, for "every N orders" reward counting.
@@ -63,7 +65,13 @@ class CustomerAddress(Base, TimestampMixin):
 class Order(Base, TimestampMixin):
     __tablename__ = "orders"
     # open-orders-for-restaurant is the hot dispatch/SLA query path
-    __table_args__ = (Index("ix_orders_restaurant_status", "restaurant_id", "status"),)
+    __table_args__ = (
+        Index("ix_orders_restaurant_status", "restaurant_id", "status"),
+        Index("ix_orders_restaurant_created_at", "restaurant_id", "created_at"),
+        # TX-13/F114: order numbers must be unique per tenant — a racy allocation
+        # (or a reset) must never silently produce a duplicate #R1-0001.
+        UniqueConstraint("restaurant_id", "order_number", name="uq_orders_restaurant_order_number"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
@@ -82,6 +90,10 @@ class Order(Base, TimestampMixin):
     delivery_fee_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     total: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     distance_km: Mapped[float | None] = mapped_column()
+    # How ``distance_km`` was derived: "road" (geo provider) or "haversine_fallback"
+    # (provider failed / unconfigured). Persisted so fee basis is auditable and a
+    # degraded quote is visible to ops (F112/F31). Null on legacy rows.
+    distance_source: Mapped[str | None] = mapped_column(String(32))
 
     weather_delay_disclosed: Mapped[bool] = mapped_column(Boolean, default=False)
     sla_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -98,6 +110,12 @@ class Order(Base, TimestampMixin):
     late: Mapped[bool | None] = mapped_column(Boolean)
 
     coupon_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Coupon discount applied to this order (AED). Persisted so ``recompute_order_total``
+    # can re-apply it verbatim on every modify/redeem without re-deriving from the coupon
+    # row, keeping summary math == confirm math == door cash (F26/F41).
+    coupon_discount_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
     # Wallet store-credit applied to this order (held at confirm, captured on
     # delivery, released on cancel). COD due = total - wallet_applied_aed.
     wallet_applied_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))

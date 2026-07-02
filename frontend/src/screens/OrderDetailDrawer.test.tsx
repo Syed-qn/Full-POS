@@ -1,7 +1,7 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { renderWithProviders } from "../test/render";
 import { OrderDetailDrawer } from "./OrderDetailDrawer";
 import type { OrderDetailOut, OrderOut } from "../lib/types";
 
@@ -24,12 +24,18 @@ vi.mock("leaflet", () => ({
   },
 }));
 
-vi.mock("../lib/orderDetailApi");
+vi.mock("../lib/orderDetailApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/orderDetailApi")>();
+  return {
+    ...actual,
+    fetchOrderDetail: vi.fn(),
+    patchCustomer: vi.fn(),
+    patchAddress: vi.fn(),
+  };
+});
 vi.mock("../lib/ordersApi");
 
-// Import mocked modules so we can set resolved values
 import * as orderDetailApi from "../lib/orderDetailApi";
-import * as ordersApi from "../lib/ordersApi";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -135,10 +141,8 @@ const mockBasicOrder: OrderOut = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function renderDrawer(orderId: number | null = 1) {
-  return render(
-    <MemoryRouter>
-      <OrderDetailDrawer orderId={orderId} onClose={() => {}} />
-    </MemoryRouter>,
+  return renderWithProviders(
+    <OrderDetailDrawer orderId={orderId} onClose={() => {}} />,
   );
 }
 
@@ -150,7 +154,6 @@ describe("OrderDetailDrawer", () => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
     vi.mocked(orderDetailApi.fetchOrderDetail).mockResolvedValue(mockDetail);
-    vi.mocked(ordersApi.fetchOrder).mockResolvedValue(mockBasicOrder);
   });
 
   // 1. Overview tab renders items when open

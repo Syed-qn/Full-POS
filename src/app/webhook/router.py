@@ -26,7 +26,14 @@ router = APIRouter(tags=["webhook"])
 # Customer text that should surface the WhatsApp catalog (when the restaurant has
 # catalog ordering enabled). Kept here (webhook layer) so the conversation engine
 # is never touched.
-_CATALOG_KEYWORDS = {"menu", "catalog", "catalogue", "order", "items", "list"}
+# F109 / R-028: include common misspellings so a typo never leaves the customer
+# staring at a blank response instead of the catalogue.
+_CATALOG_KEYWORDS = {
+    # canonical spellings
+    "menu", "catalog", "catalogue", "order", "items", "list",
+    # common misspellings (F109)
+    "catlog", "catlogue", "catalouge", "cataloge",
+}
 
 
 def _wants_catalog(inbound, restaurant) -> bool:
@@ -37,7 +44,13 @@ def _wants_catalog(inbound, restaurant) -> bool:
     if not catalog_mode_enabled(getattr(restaurant, "settings", None)):
         return False
     text = (inbound.payload or {}).get("text", "")
-    return text.strip().lower() in _CATALOG_KEYWORDS
+    # Delegate to engine _is_menu_request for longer natural-language menu phrases
+    # so we don't duplicate keyword tables; exact-match set handles short tokens here.
+    if text.strip().lower() in _CATALOG_KEYWORDS:
+        return True
+    from app.conversation.engine import _is_menu_request
+
+    return _is_menu_request(text.strip())
 
 
 @router.get("/webhooks/whatsapp")

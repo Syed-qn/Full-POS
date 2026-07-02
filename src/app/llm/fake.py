@@ -117,7 +117,13 @@ class FakeForecastAdjuster:
 
 
 class FakeConversationAgent:
-    """Test double — returns deterministic responses based on last user message."""
+    """Test double -- returns deterministic responses based on last user message.
+
+    All outputs are routed through ``to_engine_result`` so the returned
+    ConversationAgentResult.action is always the engine-legacy action name,
+    exactly as the real providers (DeepSeek, Claude) produce.  No branch may
+    return a raw action string directly.
+    """
 
     async def respond(
         self,
@@ -128,6 +134,7 @@ class FakeConversationAgent:
         context: dict,
     ) -> "ConversationAgentResult":
         import re
+        from app.llm.action_schema import to_engine_result
 
         last_user = ""
         for msg in reversed(history):
@@ -135,214 +142,247 @@ class FakeConversationAgent:
                 last_user = (msg.get("content") or "").lower()
                 break
         # Unify curly/smart apostrophes so "that's all" == "that's all".
-        last_user = last_user.replace("’", "'").replace("ʼ", "'")
+        last_user = (
+            last_user
+            .replace("‘", "'")
+            .replace("’", "'")
+            .replace("ʼ", "'")
+            .strip()
+        )
+
+        def _emit(canon: str, payload: dict, message: str = "") -> "ConversationAgentResult":
+            action, data = to_engine_result(canon, payload, message=message)
+            return ConversationAgentResult(message=message, action=action, action_data=data)
 
         # ordering phase
         if dialogue_phase == "ordering":
             if "menu" in last_user or "what do you have" in last_user:
-                return ConversationAgentResult(
-                    message="Here's our menu! 😊", action="show_menu", action_data={},
-                )
-            # Closing / decline / impatience with a non-empty cart -> proceed.
-            # Test double only; real comprehension is DeepSeek's job.
-            _closing_tokens = (
+                return _emit("menu_show", {}, "Here's our menu! 😊")
+
+            _closing = (
                 "done", "that's all", "thats all", "bas", "khalaas", "khalas",
                 "proceed", "checkout", "no more", "nothing else", "nope",
             )
+            _ack_proceed = {
+                "ok", "okay", "okey", "k", "sure", "yes", "yep", "yeah", "fine", "good", "great",
+            }
             _cart = (context.get("cart_summary") or "").strip()
-            _is_decline = last_user.strip() in {"no", "na", "nah", "np"}
-            if _is_decline or any(w in last_user for w in _closing_tokens):
+            if (
+                last_user in {"no", "na", "nah", "np"}
+                or last_user in _ack_proceed
+                or any(w in last_user for w in _closing)
+            ):
                 if not _cart:
-                    return ConversationAgentResult(
-                        message="Your cart is empty 😊 What would you like to order?",
-                        action="no_action",
-                        action_data={},
-                    )
-                return ConversationAgentResult(
-                    message="Great! Let me get your delivery details.",
-                    action="proceed_to_address",
-                    action_data={},
-                )
-            if any(w in last_user for w in ("cancel",)):
-                return ConversationAgentResult(
-                    message="Order cancelled.",
-                    action="cancel_order",
-                    action_data={},
-                )
-            # Empty the whole cart: "clear the cart", "start over", "remove everything".
-            if ("clear" in last_user and "cart" in last_user) or \
-                    any(p in last_user for p in ("start over", "remove everything",
-                                                 "empty my cart", "empty cart", "delete all")):
-                return ConversationAgentResult(
-                    message="Cleared!", action="clear_cart", action_data={},
-                )
-            # Multi-dish quantity change ("make it 2 X and 3 Y") → update_qty items.
-            # Checked BEFORE the multi-dish add split so a "make it" stays an update.
-            if any(p in last_user for p in ("make it", "change", "update", "set to")) and \
-                    re.search(r",|\band\b|\+", last_user):
+                    return _emit("no_action", {}, "Your cart is empty 😊 What would you like to order?")
+                return _emit("checkout_proceed", {}, "Great! Let me get your delivery details.")
+
+            if "cancel" in last_user:
+                return _emit("cancel_order", {}, "Order cancelled.")
+
+            if ("clear" in last_user and "cart" in last_user) or any(
+                p in last_user for p in ("start over", "remove everything",
+                                         "empty my cart", "empty cart", "delete all")):
+                return _emit("cart_clear", {}, "Cleared!")
+
+            # Multi-dish set ("make it 2 X and 3 Y").
+            if any(p in last_user for p in ("make it", "change", "set to")) and re.search(
+                r",|\band\b|\+", last_user
+            ):
                 clauses = re.split(r"\s*(?:,|\band\b|\+)\s*", last_user)
                 ups = []
-                for clause in clauses:
-                    clause = re.sub(r"\b(make it|change|update to|update|set to|set|to)\b", " ", clause).strip()
-                    m = re.match(r"^(\d+)\s*[xX]?\s+(.*)$", clause)
-                    if m and m.group(2).strip():
-                        ups.append({"dish_query": m.group(2).strip(), "qty": int(m.group(1))})
+                for c in clauses:
+                    c = re.sub(r"\b(make it|change(?: to)?|set(?: to)?|only)\b", " ", c).strip()
+                    mm = re.match(r"^(\d+)\s*[xX]?\s+(.*)$", c)
+                    if mm and mm.group(2).strip():
+                        ups.append({"op": "set_total", "dish_query": mm.group(2).strip(), "qty": int(mm.group(1))})
                 if len(ups) >= 2:
-                    return ConversationAgentResult(
-                        message="Updated!", action="update_qty", action_data={"items": ups},
-                    )
-            # Parse quantity prefix: "2x biryani" or "2 biryani"
-            qty = 1
-            dish_query = last_user
-            qty_match = re.match(r'^(\d+)\s*[xX]\s+', last_user)
-            if qty_match:
-                qty = int(qty_match.group(1))
-                dish_query = last_user[qty_match.end():]
-            # Greeting → no_action; use word-set to avoid "hi" matching "chicken"
-            _last_words = set(re.findall(r'\b\w+\b', last_user))
-            if _last_words & {"hi", "hello", "hey", "salam", "salaam"}:
-                return ConversationAgentResult(
-                    message=context.get("menu_text", "Welcome! Here is our menu."),
-                    action="no_action",
-                    action_data={},
+                    return _emit("cart_set_qty", {"items": ups}, "Updated!")
+
+            # Single-dish set: "only N X" / "make it N X" -> cart_set_qty absolute.
+            # Checked AFTER multi-dish so "make it 2 X and 3 Y" is not greedily consumed.
+            m_set = re.match(
+                r"^(?:only|make it|change(?: to)?|set(?: to)?)\s+(\d+)\s*[xX]?\s+(.+)$",
+                last_user,
+            )
+            if m_set and m_set.group(2).strip():
+                return _emit(
+                    "cart_set_qty",
+                    {"dish_query": m_set.group(2).strip(), "new_total": int(m_set.group(1))},
+                    "Updated!",
                 )
-            # Status query detection
+
+            # Qty-edit intent WITHOUT a number — e.g. "change the biryani" with no
+            # quantity stated.  Emits cart_set_qty(dish_query only, NO new_total).
+            # to_engine_result's required-field gate detects the missing new_total
+            # (requires_one_of includes ("new_total","items")) and returns
+            # no_action{needs_clarification:True} → engine sends a clarification
+            # reply and performs NO cart mutation (R-069).
+            # Checked AFTER m_set so "change 2 biryani" / "change to 2 biryani"
+            # (which carry a number) still reach the absolute-set path above.
+            m_no_qty = re.match(
+                r"^(?:change|update|modify)\s+(?:the\s+|my\s+)?(.+)$",
+                last_user,
+            )
+            if m_no_qty and m_no_qty.group(1).strip():
+                return _emit("cart_set_qty", {"dish_query": m_no_qty.group(1).strip()}, "")
+
+            if "remove" in last_user:
+                dish = last_user.split("remove", 1)[1].strip()
+                if dish:
+                    return _emit("cart_remove", {"dish_query": dish}, "Sure, removing that.")
+
+            if {"hi", "hello", "hey", "salam", "salaam"} & set(re.findall(r"\b\w+\b", last_user)):
+                return _emit("no_action", {}, context.get("menu_text", "Welcome! Here is our menu."))
+
             if any(w in last_user for w in ("where", "status", "track", "eta", "when")):
-                return ConversationAgentResult(
-                    message="Let me check your order status.",
-                    action="status_query",
-                    action_data={},
+                return _emit("status_query", {}, "Let me check your order status.")
+
+            # Multi-dish add (delta). Skip when the message is a kitchen-note clarification
+            # ("biryani with double masala and chest piece") — those are one dish + note.
+            if (
+                re.search(r",|\band\b|\+", last_user)
+                and not (
+                    " with " in last_user
+                    and any(
+                        w in last_user
+                        for w in (
+                            "masala", "spicy", "piece", "chest", "extra", "double",
+                            "without", "onion", "garlic",
+                        )
+                    )
                 )
-            # Multi-dish message: split on commas / "and" / "+" and emit one item per
-            # clause so the engine adds them ALL (mirrors the real agent's 'items').
-            if re.search(r",|\band\b|\+", last_user):
+            ):
                 clauses = re.split(r"\s*(?:,|\band\b|\+)\s*", last_user)
                 parsed = []
-                for clause in clauses:
-                    clause = clause.strip()
-                    if not clause:
+                for c in clauses:
+                    c = c.strip()
+                    if not c:
                         continue
-                    cqty = 1
-                    m = re.match(r'^(\d+)\s*[xX]?\s+(.*)$', clause)
-                    if m:
-                        cqty = int(m.group(1))
-                        clause = m.group(2).strip()
-                    if clause:
-                        parsed.append({"dish_query": clause, "qty": cqty, "special_note": ""})
+                    cq = 1
+                    mm = re.match(r"^(\d+)\s*[xX]?\s+(.*)$", c)
+                    if mm:
+                        cq, c = int(mm.group(1)), mm.group(2).strip()
+                    if c:
+                        parsed.append({"op": "add_delta", "dish_query": c, "qty": cq})
                 if len(parsed) >= 2:
-                    return ConversationAgentResult(
-                        message="Got it! Added everything to your cart 🛒",
-                        action="add_item",
-                        action_data={"items": parsed},
-                    )
-            # Any non-empty text → try add_item; engine will send no-match if dish not found
-            if last_user:
-                return ConversationAgentResult(
-                    message=f"Added {dish_query} to your cart! 🛒",
-                    action="add_item",
-                    action_data={"dish_query": dish_query, "qty": qty, "special_note": ""},
-                )
-            return ConversationAgentResult(
-                message=context.get("menu_text", "Welcome! Here is our menu."),
-                action="no_action",
-                action_data={},
-            )
+                    return _emit("cart_add", {"items": parsed}, "Got it! Added everything to your cart 🛒")
+
+            # Single add (delta) -- explicit "N X" or bare dish name (never bare acks).
+            qty, dish = 1, last_user
+            mq = re.match(r"^(\d+)\s*[xX]?\s+(.*)$", last_user)
+            if mq:
+                qty, dish = int(mq.group(1)), mq.group(2).strip()
+            if dish and dish not in _ack_proceed:
+                return _emit("cart_add", {"dish_query": dish, "add_qty": qty},
+                             f"Added {dish} to your cart! 🛒")
+            return _emit("no_action", {}, context.get("menu_text", "Welcome! Here is our menu."))
 
         # address_capture phase
         if dialogue_phase == "address_capture":
             saved = context.get("saved_address", "")
             location_received = context.get("location_received", False)
-            # Location received + saved address → offer the saved address
             if saved and location_received:
-                return ConversationAgentResult(
-                    message=f"I see your saved address: {saved}. Would you like to use it?",
-                    action="no_action",
-                    action_data={},
-                )
+                return _emit("no_action", {},
+                             f"I see your saved address: {saved}. Would you like to use it?")
             if saved and any(w in last_user for w in ("yes", "same", "correct", "ok")):
-                return ConversationAgentResult(
-                    message="Using your saved address!",
-                    action="use_saved_address",
-                    action_data={},
-                )
+                return _emit("address_use_saved", {}, "Using your saved address!")
             if not location_received:
-                return ConversationAgentResult(
-                    message="Please share your location 📍",
-                    action="send_location_request",
-                    action_data={},
-                )
+                return _emit("address_location", {}, "Please share your location 📍")
             apt = context.get("apt_room", "")
             building = context.get("building", "")
             if apt and building:
-                return ConversationAgentResult(
-                    message="Got it! What's the receiver's name?",
-                    action="no_action",
-                    action_data={},
-                )
-            return ConversationAgentResult(
-                message="Please share your room/apartment number and building name.",
-                action="no_action",
-                action_data={},
-            )
+                return _emit("no_action", {}, "Got it! What's the receiver's name?")
+            return _emit("no_action", {}, "Please share your room/apartment number and building name.")
 
         # awaiting_confirmation phase
         if dialogue_phase == "awaiting_confirmation":
             if any(w in last_user for w in ("yes", "confirm", "ok", "proceed", "haan", "aiwa")):
-                return ConversationAgentResult(
-                    message="Order confirmed! 🎉",
-                    action="confirm_order",
-                    action_data={},
-                )
-            if any(w in last_user for w in ("cancel",)):
-                return ConversationAgentResult(
-                    message="Order cancelled.",
-                    action="cancel_order",
-                    action_data={},
-                )
-            # Confirm-step edits — add/remove a dish or change a quantity.
-            if "add" in last_user:
-                dish = last_user.split("add", 1)[1].strip()
-                return ConversationAgentResult(
-                    message="Sure, adding that.", action="add_item",
-                    action_data={"dish_query": dish, "qty": 1, "special_note": ""},
-                )
+                return _emit("confirm_order", {}, "Order confirmed! 🎉")
+            if "cancel" in last_user:
+                return _emit("cancel_order", {}, "Order cancelled.")
+            # Confirm-step edits -- use word-boundary \badd\b to prevent false positives
+            # from substrings ("address" contains "add") or negations ("don't add more").
+            _add_word = re.search(r"\badd\b", last_user)
+            _negated = re.search(r"\b(don'?t|dont|not)\b", last_user)
+            if _add_word and not _negated:
+                dish = re.split(r"\badd\b", last_user, maxsplit=1)[1].strip()
+                return _emit("cart_add", {"dish_query": dish, "add_qty": 1}, "Sure, adding that.")
             if "remove" in last_user:
                 dish = last_user.split("remove", 1)[1].strip()
-                return ConversationAgentResult(
-                    message="Sure, removing that.", action="remove_item",
-                    action_data={"dish_query": dish, "qty": None},
-                )
-            return ConversationAgentResult(
-                message="Please confirm or cancel your order.",
-                action="no_action",
-                action_data={},
-            )
+                return _emit("cart_remove", {"dish_query": dish}, "Sure, removing that.")
+            return _emit("no_action", {}, "Please confirm or cancel your order.")
 
         # post_order phase
         if dialogue_phase == "post_order":
-            if any(w in last_user for w in ("cancel",)):
-                return ConversationAgentResult(
-                    message="Order cancelled.",
-                    action="cancel_order",
-                    action_data={},
+            if last_user in ("cancel", "cancel order", "cancel my order"):
+                return _emit("cancel_order", {}, "Order cancelled.")
+            if "remove" in last_user:
+                dish = last_user.split("remove", 1)[1].strip()
+                return _emit("order_line_remove", {"dish_query": dish}, "Sure, removing that.")
+            if last_user.startswith("cancel ") and len(last_user) > 8:
+                return _emit(
+                    "order_line_remove",
+                    {"dish_query": last_user[7:].strip()},
+                    "Sure, removing that.",
                 )
             if any(w in last_user for w in ("modify", "change", "update", "edit")):
-                return ConversationAgentResult(
-                    message="Sure! Let me help you modify your order.",
-                    action="request_modification",
-                    action_data={},
-                )
-            return ConversationAgentResult(
-                message="Your order is being prepared! 🛵",
-                action="status_query",
-                action_data={},
-            )
+                return _emit("request_modification", {}, "Sure! Let me help you modify your order.")
+            return _emit("status_query", {}, "Your order is being prepared! 🛵")
 
-        return ConversationAgentResult(
-            message="How can I help?",
-            action="no_action",
-            action_data={},
+        return _emit("no_action", {}, "How can I help?")
+
+
+class FakeCompletionDetector:
+    """Test double: deterministic completion-intent detector.
+
+    Normalises curly/smart apostrophes, then checks whether the lowercased
+    text matches a known multilingual closing-token set.  Returns False for
+    empty/blank input, dish names, and questions.
+    """
+
+    # Token set mirrors FakeConversationAgent's closing logic + spec token list.
+    _COMPLETION_TOKENS = frozenset({
+        "done", "that's all", "thats all", "checkout", "proceed",
+        "finish", "no more", "nothing else",
+        # Arabic / Gulf
+        "bas", "khalas", "khalaas", "khallas",
+        # Bare declines that signal "I'm done, move on"
+        "no", "na", "nah", "np", "nope",
+    })
+
+    def _normalise(self, text: str) -> str:
+        # Unify curly / smart / modifier apostrophes → straight apostrophe.
+        return (
+            text
+            .replace("’", "'")   # RIGHT SINGLE QUOTATION MARK
+            .replace("‘", "'")   # LEFT SINGLE QUOTATION MARK
+            .replace("ʼ", "'")   # MODIFIER LETTER APOSTROPHE
         )
+
+    async def is_completion(self, text: str) -> bool:
+        if not text or not text.strip():
+            return False
+        normalised = self._normalise(text).lower().strip()
+        # Bare token match (exact).
+        if normalised in self._COMPLETION_TOKENS:
+            return True
+        # Contains-match: a completion token appears as a sub-phrase (e.g. "no that's all").
+        for token in self._COMPLETION_TOKENS:
+            # Only multi-word tokens are safe to match as substrings; single
+            # words like "no" / "na" must be exact to avoid false positives
+            # (e.g. "no onion" contains "no" but is an item instruction).
+            if " " in token and token in normalised:
+                return True
+        return False
+
+
+class FakeKitchenSummarizer:
+    """Test double: tier-1 structured lines only — no LLM chat mining in tests."""
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        return []
 
 
 class FakeSegmentCompiler:

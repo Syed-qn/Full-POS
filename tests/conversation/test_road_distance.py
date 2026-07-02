@@ -39,9 +39,10 @@ async def test_road_distance_uses_geo_provider(monkeypatch):
     stub = _StubProvider()
     monkeypatch.setattr(factory, "get_geo_provider", lambda: stub)
 
-    result = await _road_distance_km(A[0], A[1], B[0], B[1])
+    dist, source = await _road_distance_km(A[0], A[1], B[0], B[1])
 
-    assert result == _StubProvider.SENTINEL  # provider was used, not haversine
+    assert dist == _StubProvider.SENTINEL  # provider was used, not haversine
+    assert source == "road"
     assert stub.calls == [(A[0], A[1], B[0], B[1])]  # exact origin→dest order
 
 
@@ -49,6 +50,7 @@ async def test_road_distance_falls_back_to_haversine_on_provider_error(monkeypat
     """A provider/config failure must never break ordering — degrade to haversine."""
     monkeypatch.setattr(factory, "get_geo_provider", lambda: _BrokenProvider())
 
-    result = await _road_distance_km(A[0], A[1], B[0], B[1])
+    dist, source = await _road_distance_km(A[0], A[1], B[0], B[1])
 
-    assert result == haversine_km(A[0], A[1], B[0], B[1])
+    assert dist == haversine_km(A[0], A[1], B[0], B[1])
+    assert source == "haversine_fallback"

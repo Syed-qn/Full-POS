@@ -253,6 +253,37 @@ async def _send_catalog_text_fallback(
     )
 
 
+async def _order_cart_snapshot(session, order_id: int) -> tuple[str, list[dict]]:
+    """Resolve the resulting draft cart into (display_text, structured snapshot).
+
+    display_text is a human basket line ('2x Chicken Biryani') used by the LLM
+    history; the snapshot is the structured per-line array the interpreter reads.
+    """
+    from app.ordering.models import OrderItem
+
+    items = list((await session.scalars(
+        select(OrderItem).where(OrderItem.order_id == order_id)
+    )).all())
+    snapshot: list[dict] = []
+    parts: list[str] = []
+    for it in items:
+        snapshot.append({
+            "cart_item_id": it.id,
+            "dish": it.dish_name,
+            "variant": it.variant_name,
+            "note": it.notes,
+            "qty": it.qty,
+            "price": str(it.price_aed),
+        })
+        label = f"{it.qty}x {it.dish_name}"
+        if it.variant_name:
+            label += f" ({it.variant_name})"
+        if it.notes:
+            label += f" — {it.notes}"
+        parts.append(label)
+    return "; ".join(parts), snapshot
+
+
 def _category_of(product: CatalogProduct) -> str:
     """Display category for a catalogue product; products with none bucket into "Menu".
 
@@ -509,18 +540,17 @@ async def handle_catalog_order(
     # the engine's helpers (lazy import) so behaviour cannot drift from the text path.
     from app.conversation.engine import _build_cart_summary, _send_text, _set_state
     from app.conversation.service import get_or_create_conversation, record_message
+    from app.identity.phones import normalize_phone
 
+    # Normalize so the catalogue basket lands on the SAME conversation thread the
+    # text bot uses (F71/R-027) — handle_inbound already normalizes; without this
+    # the raw Meta digits-only phone (no leading '+') splits into a second row.
+    _phone = normalize_phone(inbound.from_phone)
     conv = await get_or_create_conversation(
-        session, restaurant_id=restaurant_id, phone=inbound.from_phone, counterpart="customer",
-    )
-    await record_message(
-        session, conversation_id=conv.id, direction="inbound",
-        wa_message_id=inbound.wa_message_id, msg_type="order",
-        payload={"product_items": product_items},
-        ts=inbound.timestamp or int(time.time()),
+        session, restaurant_id=restaurant_id, phone=_phone, counterpart="customer",
     )
     customer = await get_or_create_customer(
-        session, restaurant_id=restaurant_id, phone=inbound.from_phone
+        session, restaurant_id=restaurant_id, phone=_phone
     )
 
     # Reuse the engine's draft order (the live cart pointed to by conv.state), exactly
@@ -539,11 +569,20 @@ async def handle_catalog_order(
         _set_state(
             conv, draft_order_id=order.id, address_offer_made=None,
             saved_address_declined=None, saved_address_id=None,
-            pin_lat=None, pin_lon=None, distance_km=None, delivery_fee=None,
+            pin_lat=None, pin_lon=None, distance_km=None, distance_source=None, delivery_fee=None,
         )
+
+    from app.identity.models import Restaurant
+    from app.ordering.quantity_policy import QuantityError, QuantityPolicy
+
+    _CENT = Decimal("0.01")
+    rest = await session.get(Restaurant, restaurant_id)
+    policy = QuantityPolicy.from_restaurant(rest)
 
     added = 0
     unmapped: list[str] = []
+    price_mismatch: list[str] = []  # tapped price drifted from the catalogue price
+    oversized: list[str] = []  # per-line quantity over the tenant guard (R-050)
     for item in product_items:
         retailer_id = _retailer_id_from_item(item)
         try:
@@ -554,8 +593,8 @@ async def handle_catalog_order(
         # STRICT catalogue membership: only add an item that is backed by an ACTIVE
         # synced CatalogProduct. A dish linked to a retailer_id that was never synced
         # (or has since gone inactive/out of stock) must never sneak into the cart.
-        in_catalogue = await session.scalar(
-            select(CatalogProduct.id).where(
+        product = await session.scalar(
+            select(CatalogProduct).where(
                 CatalogProduct.restaurant_id == restaurant_id,
                 CatalogProduct.retailer_id == retailer_id,
                 CatalogProduct.is_active.is_(True),
@@ -563,30 +602,107 @@ async def handle_catalog_order(
         )
         # Also reject a dish the manager turned OFF today, directly on dish.is_available —
         # a Meta pull can reset CatalogProduct.is_active to True, so is_active alone isn't
-        # a reliable availability gate for a tapped catalogue card.
-        if dish is None or dish.price_aed is None or in_catalogue is None or not dish.is_available:
+        # a reliable availability gate for a tapped catalogue card. Same for the manager's
+        # per-dish WhatsApp switch (whatsapp_enabled=False, TX-45) — never let a disabled
+        # dish sneak into the cart via a stale catalogue card.
+        if (
+            dish is None
+            or dish.price_aed is None
+            or product is None
+            or not dish.is_available
+            or not getattr(dish, "whatsapp_enabled", True)
+        ):
             price = _to_decimal(item.get("item_price"))
             unmapped.append(
                 f"{qty}x item {retailer_id}" + (f" (AED {_aed(price)})" if price else "")
             )
             continue
-        await add_item(session, order=order, dish=dish, qty=qty)
+
+        # R-050: per-line max-quantity guard — parity with the typed-order path. A
+        # malformed/replayed basket with a huge quantity never mutates the cart.
+        try:
+            policy.check_line(qty)
+        except QuantityError:
+            oversized.append(f"{qty}x {dish.name}")
+            continue
+
+        # R-051 / R-019: snapshot the TAPPED Meta ``item_price`` onto the order line,
+        # not the (possibly stale) local Dish.price_aed. If the tapped price and the
+        # tenant catalogue price disagree beyond a cent, BLOCK the item and force a
+        # resync rather than silently under/overcharge.
+        item_price = _to_decimal(item.get("item_price"))
+        price_override: Decimal | None = None
+        if item_price is not None and product.price_aed is not None:
+            if abs(item_price - Decimal(product.price_aed)) > _CENT:
+                price_mismatch.append(
+                    f"{dish.name} (card AED {_aed(item_price)} vs menu AED {_aed(product.price_aed)})"
+                )
+                continue
+            price_override = item_price
+
+        await add_item(
+            session, order=order, dish=dish, qty=qty, price_aed_override=price_override
+        )
         added += 1
 
     if not added:
+        await record_message(
+            session, conversation_id=conv.id, direction="inbound",
+            wa_message_id=inbound.wa_message_id, msg_type="order",
+            payload={"product_items": product_items, "display_text": "", "cart_snapshot": []},
+            ts=inbound.timestamp or int(time.time()),
+        )
+        if price_mismatch:
+            body = (
+                "Sorry, the price changed for " + "; ".join(price_mismatch) + ". "
+                "Please reopen the menu to see the current price, or type your order 😊"
+            )
+        elif oversized:
+            body = (
+                "That's a large quantity for " + "; ".join(oversized) + ". "
+                "Please reply with a smaller amount, or call us for bulk orders 🙏"
+            )
+        else:
+            body = (
+                "Thanks 🙏 We couldn't match those items to our menu yet. "
+                "Please type your order and we'll help you right away 😊"
+            )
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="catalog-empty",
-            body=("Thanks 🙏 We couldn't match those items to our menu yet. "
-                  "Please type your order and we'll help you right away 😊"),
+            body=body,
         )
-        logger.info("catalog basket with no mappable items for restaurant %s", restaurant_id)
+        logger.info("catalog basket with no addable items for restaurant %s", restaurant_id)
         return
 
     # Hand control to the normal flow: same state the text bot is in after adding items.
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+
+    # Faithful ORDER record: persist a readable basket + structured snapshot so the
+    # LLM history (engine._build_history) renders dish names, not "[order]" (DB-H8).
+    _display_text, _cart_snapshot = await _order_cart_snapshot(session, order.id)
+    await record_message(
+        session, conversation_id=conv.id, direction="inbound",
+        wa_message_id=inbound.wa_message_id, msg_type="order",
+        payload={
+            "product_items": product_items,
+            "display_text": _display_text,
+            "cart_snapshot": _cart_snapshot,
+        },
+        ts=inbound.timestamp or int(time.time()),
+    )
+
     cart = await _build_cart_summary(session, conv)
-    extra = ("\nWe couldn't add: " + "; ".join(unmapped)) if unmapped else ""
+    notes: list[str] = []
+    if unmapped:
+        notes.append("We couldn't add: " + "; ".join(unmapped))
+    if price_mismatch:
+        notes.append(
+            "Price changed (reopen the menu for the latest): " + "; ".join(price_mismatch)
+        )
+    if oversized:
+        notes.append("Quantity too large: " + "; ".join(oversized))
+    extra = ("\n" + "\n".join(notes)) if notes else ""
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="catalog-cart",

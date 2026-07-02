@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithProviders } from "../test/render";
 import { ConversationsScreen } from "./ConversationsScreen";
 
 describe("ConversationsScreen", () => {
@@ -10,19 +11,19 @@ describe("ConversationsScreen", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("lists conversations from fixtures", async () => {
-    render(<ConversationsScreen />);
+    renderWithProviders(<ConversationsScreen />);
     await waitFor(() => expect(screen.getByText("+971501234567")).toBeInTheDocument());
   });
 
   it("shows a loading skeleton until conversations resolve", () => {
     vi.mocked(fetch).mockReturnValue(new Promise(() => {})); // never resolves
-    const { container } = render(<ConversationsScreen />);
+    const { container } = renderWithProviders(<ConversationsScreen />);
     expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
     expect(screen.queryByText(/no customer conversations yet/i)).not.toBeInTheDocument();
   });
 
   it("opens a thread and shows takeover toggle", async () => {
-    render(<ConversationsScreen />);
+    renderWithProviders(<ConversationsScreen />);
     await waitFor(() => screen.getByText("+971501234567"));
     await userEvent.click(screen.getByText("+971501234567"));
     await waitFor(() => expect(screen.getByText("I want to order biryani")).toBeInTheDocument());
@@ -30,7 +31,7 @@ describe("ConversationsScreen", () => {
   });
 
   it("separates customer and driver conversations into tabs", async () => {
-    render(<ConversationsScreen />);
+    renderWithProviders(<ConversationsScreen />);
     // Customers tab is active by default: customer phone shown, rider phone hidden.
     await waitFor(() => expect(screen.getByText("+971501234567")).toBeInTheDocument());
     expect(screen.queryByText("+971555550199")).not.toBeInTheDocument();
@@ -42,7 +43,7 @@ describe("ConversationsScreen", () => {
   });
 
   it("driver tab enables composer without takeover", async () => {
-    render(<ConversationsScreen />);
+    renderWithProviders(<ConversationsScreen />);
     await waitFor(() => screen.getByRole("tab", { name: /drivers/i }));
     await userEvent.click(screen.getByRole("tab", { name: /drivers/i }));
     await waitFor(() => screen.getByText("+971555550199"));
@@ -53,7 +54,7 @@ describe("ConversationsScreen", () => {
   });
 
   it("activating takeover shows the control banner", async () => {
-    render(<ConversationsScreen />);
+    renderWithProviders(<ConversationsScreen />);
     await waitFor(() => screen.getByText("+971501234567"));
     await userEvent.click(screen.getByText("+971501234567"));
     await userEvent.click(screen.getByRole("button", { name: /switch to human reply/i }));

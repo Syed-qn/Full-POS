@@ -1,10 +1,12 @@
 import base64
+import json
 import re as _re
 
 from anthropic import AsyncAnthropic
 from pydantic import ValidationError
 
 from app.config import get_settings
+from app.llm.action_schema import CANON_PHASE_ACTIONS, build_anthropic_tool, to_engine_result
 from app.llm.port import ConversationAgentResult, DishDraft, UploadedFile, strip_dashes
 
 _TOOL = {
@@ -328,33 +330,84 @@ class ClaudeSegmentCompiler:
         return dsl
 
 
-_CONVERSATION_TOOL = {
-    "name": "take_action",
-    "description": "Record the structured action inferred from the customer message, plus your reply text.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["add_item", "proceed_checkout", "cancel_cart", "no_action"],
-                "description": "add_item: customer wants to add a dish. proceed_checkout: cart is ready, move to delivery. cancel_cart: customer wants to cancel. no_action: greeting, question, or unclear.",
-            },
-            "dish_query": {
-                "type": "string",
-                "description": "Dish name or number the customer wants (only for add_item).",
-            },
-            "qty": {
-                "type": "integer",
-                "description": "Quantity to add (only for add_item, default 1).",
-            },
-            "reply": {
-                "type": "string",
-                "description": "Natural WhatsApp reply to send to the customer (keep it short and friendly).",
-            },
-        },
-        "required": ["action", "reply"],
-    },
-}
+class ClaudeCompletionDetector:
+    """Production completion detector via Claude API (haiku, yes/no prompt)."""
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def is_completion(self, text: str) -> bool:
+        if not text or not text.strip():
+            return False
+        prompt = (
+            "A restaurant customer sent this WhatsApp message during an order: "
+            f"{text!r}\n\n"
+            "Does the message mean the customer is FINISHED ordering / wants to proceed "
+            "(in ANY language, any phrasing — 'done', 'khalas', 'bas', 'that\\'s all', "
+            "bare 'no', or equivalent)?\n"
+            "Answer with a single word: yes or no."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=4,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = _first_text(message).strip()
+        return raw.lower().startswith("y")
+
+
+class ClaudeRouterClassifier:
+    """Production W4 top-level router via Claude API (single enum, multilingual).
+
+    LLM-driven: no English phrase tables.  The model receives the raw message in
+    ANY language plus the current cart + phase, and returns exactly one
+    ``IntentLabel`` value that decides whether the turn may mutate the cart.
+    """
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def classify_intent(self, text: str, cart_context: str, phase: str):
+        from app.llm.port import IntentLabel
+
+        if not text or not text.strip():
+            return IntentLabel.NON_ACTIONABLE
+        labels = ", ".join(label.value for label in IntentLabel)
+        prompt = (
+            "You are the intent router for a restaurant WhatsApp ordering bot.\n"
+            f"Dialogue phase: {phase}\n"
+            f"Current cart: {cart_context or '(empty)'}\n"
+            f"Customer message (ANY language): {text!r}\n\n"
+            "Classify the message into EXACTLY ONE of these intents:\n"
+            f"{labels}\n\n"
+            "Rules:\n"
+            "- 'mutation' = actually change the cart (add/remove/set quantity/note).\n"
+            "- A question, even one naming a dish or quantity ('why did you add 2'), is "
+            "'question' or 'complaint' — NEVER 'mutation'.\n"
+            "- 'checkout' = done/that's all/proceed, in any language.\n"
+            "- 'clear' ONLY for an explicit empty-cart/fresh-start request, never 'only X'.\n"
+            "- 'non_actionable' = reactions/emoji/system noise.\n"
+            "- Use 'unknown' if genuinely unclear.\n"
+            "Answer with the single intent word only."
+        )
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=8,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = _first_text(message).strip().lower()
+        raw = raw_text.split()[0] if raw_text else ""
+        try:
+            return IntentLabel(raw)
+        except ValueError:
+            return IntentLabel.UNKNOWN
+
+
+# Tool definition is derived from the single-source-of-truth schema so providers
+# can never drift from the canonical action vocabulary (W1 Task 3).
+_CONVERSATION_TOOL = build_anthropic_tool("take_action")
 
 _CONVERSATION_SYSTEM = """\
 You are a friendly WhatsApp ordering assistant for {restaurant_name}.
@@ -365,7 +418,11 @@ expand, abbreviate, or restyle it.
 MENU:
 {menu_text}
 
-CURRENT CART: {cart_summary}
+CURRENT CART (authoritative — overrides anything in the chat history): {cart_summary}
+CART LINES (structured; each line has cart_item_id you may reference): {cart_lines}
+If the chat history and the CURRENT CART disagree, the CURRENT CART is correct
+(R-072/R-074): a customer correction like "only 1 X" sets the qty of the existing
+line for X, it never adds a new line or trusts what an earlier message implied.
 
 DELIVERY FEES — the ONLY correct numbers. Recite EXACTLY when asked about
 delivery cost. NEVER invent or guess tiers/distances. The exact fee for an order
@@ -414,6 +471,16 @@ ALWAYS call take_action. Never reply without the tool.
 """
 
 
+def _phase_guidance(phase: str) -> str:
+    allowed = sorted(CANON_PHASE_ACTIONS.get(phase, CANON_PHASE_ACTIONS["ordering"]))
+    return (
+        f"\nCURRENT PHASE: {phase}. You may ONLY use these actions this phase: "
+        f"{', '.join(allowed)}. cart_add.add_qty is a DELTA; cart_set_qty.new_total "
+        f"is the ABSOLUTE new total ('only 1' -> cart_set_qty new_total=1, never add). "
+        f"For multiple dishes in one message use items[] with an explicit op per dish.\n"
+    )
+
+
 class ClaudeConversationAgent:
     """AI-powered full-conversation agent for customer ordering via WhatsApp."""
 
@@ -437,8 +504,9 @@ class ClaudeConversationAgent:
             restaurant_name=restaurant_name,
             menu_text=context.get("menu_text", "Menu unavailable."),
             cart_summary=context.get("cart_summary") or "empty",
+            cart_lines=json.dumps(context.get("cart_lines") or [], ensure_ascii=False),
             delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
-        )
+        ) + _phase_guidance(dialogue_phase)
         messages = history if history else [{"role": "user", "content": "hi"}]
         response = await self._client.messages.create(
             model=self._model,
@@ -450,20 +518,46 @@ class ClaudeConversationAgent:
         )
         for block in response.content:
             if block.type == "tool_use" and block.name == "take_action":
-                inp = block.input
-                _q = inp.get("qty")
-                qty = int(_q) if isinstance(_q, (int, float)) and not isinstance(_q, bool) else None
+                inp = dict(block.input)
+                # Translate canonical action + payload to engine-legacy (action, action_data).
+                # Required-field validation happens inside to_engine_result: missing fields
+                # yield ("no_action", {needs_clarification: True, ...}) so the engine never
+                # mutates state from an under-specified tool call.
+                legacy_action, action_data = to_engine_result(
+                    inp.get("action", "no_action"), inp,
+                )
                 return ConversationAgentResult(
                     message=strip_dashes(inp.get("reply", "")),
-                    action=inp.get("action", "no_action"),
-                    action_data={
-                        "dish_query": inp.get("dish_query", ""),
-                        "qty": qty,
-                        "special_note": inp.get("special_note", ""),
-                        "items": [],
-                        "apt_room": inp.get("apt_room", ""),
-                        "building": inp.get("building", ""),
-                        "receiver_name": inp.get("receiver_name", ""),
-                    },
+                    action=legacy_action,
+                    action_data=action_data,
                 )
         raise RuntimeError("ClaudeConversationAgent: no take_action block in response")
+
+
+class ClaudeKitchenSummarizer:
+    """Tier-2 kitchen chat compressor — parity with DeepSeekKitchenSummarizer."""
+
+    def __init__(self) -> None:
+        from app.llm.factory import _get_anthropic_client
+        self._client = _get_anthropic_client()
+
+    async def supplement_from_chat(
+        self, structured_block: str, inbound_messages: list[str]
+    ) -> list[str]:
+        from app.llm.kitchen_summary import (
+            _TIER2_SYSTEM,
+            build_tier2_prompt,
+            parse_tier2_response,
+        )
+
+        if not inbound_messages:
+            return []
+        prompt = build_tier2_prompt(structured_block, inbound_messages)
+        message = self._client.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=120,
+            system=_TIER2_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = _first_text(message).strip()
+        return parse_tier2_response(raw)

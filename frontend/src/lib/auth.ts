@@ -1,4 +1,5 @@
 import { apiClient } from "./apiClient";
+import { clearCachedOnboardingComplete } from "./onboardingGate";
 import type { TokenOut } from "./types";
 
 const TOKEN_KEY = apiClient.TOKEN_KEY;
@@ -14,6 +15,7 @@ export function setToken(token: string): void {
 
 export function logout(): void {
   localStorage.removeItem(TOKEN_KEY);
+  clearCachedOnboardingComplete();
 }
 
 export function isAuthenticated(): boolean {

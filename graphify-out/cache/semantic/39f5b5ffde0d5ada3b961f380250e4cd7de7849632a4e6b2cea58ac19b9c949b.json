@@ -1,0 +1,1 @@
+{"nodes": [{"id": "w6_finish_report_migration_py", "label": "Whatsapp Enabled Migration", "file_type": "code", "source_file": "alembic/versions/l5e6f7a8b9c0_add_dish_whatsapp_enabled.py", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

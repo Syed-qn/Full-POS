@@ -89,6 +89,11 @@ def get_forecast_adjuster():
 def get_conversation_agent():
     settings = get_settings()
     if settings.llm_provider == "claude":
+        if not getattr(settings, "claude_conversation_enabled", False):
+            # Claude is parity-gated (W1). Until explicitly enabled, fall back to the
+            # contract-tested DeepSeek agent rather than a divergent action surface.
+            from app.llm.deepseek import DeepSeekConversationAgent
+            return DeepSeekConversationAgent()
         from app.llm.claude import ClaudeConversationAgent
         return ClaudeConversationAgent()
     if settings.llm_provider == "deepseek":
@@ -96,6 +101,31 @@ def get_conversation_agent():
         return DeepSeekConversationAgent()
     from app.llm.fake import FakeConversationAgent
     return FakeConversationAgent()
+
+
+def get_router_classifier():
+    """W4 top-level multilingual intent router (LLM-driven; Fake for tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeRouterClassifier
+        return ClaudeRouterClassifier()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekRouterClassifier
+        return DeepSeekRouterClassifier()
+    from app.llm.router_fake import FakeRouterClassifier
+    return FakeRouterClassifier()
+
+
+def get_completion_detector():
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeCompletionDetector
+        return ClaudeCompletionDetector()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekCompletionDetector
+        return DeepSeekCompletionDetector()
+    from app.llm.fake import FakeCompletionDetector
+    return FakeCompletionDetector()
 
 
 def get_segment_compiler():
@@ -108,3 +138,16 @@ def get_segment_compiler():
         return DeepSeekSegmentCompiler()
     from app.llm.fake import FakeSegmentCompiler
     return FakeSegmentCompiler()
+
+
+def get_kitchen_summarizer():
+    """Tier-2 kitchen chat compressor (LLM-driven; Fake returns [] in tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.claude import ClaudeKitchenSummarizer
+        return ClaudeKitchenSummarizer()
+    if settings.llm_provider == "deepseek":
+        from app.llm.deepseek import DeepSeekKitchenSummarizer
+        return DeepSeekKitchenSummarizer()
+    from app.llm.fake import FakeKitchenSummarizer
+    return FakeKitchenSummarizer()

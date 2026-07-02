@@ -134,7 +134,11 @@ async def get_customer_profile(
     )
 
     opted_out = await is_opted_out(session, restaurant_id=restaurant.id, phone=customer.phone)
-    usual_order_time = await compute_usual_order_time(session, customer.id)
+    usual_order_time = customer.usual_order_time
+    if usual_order_time is None and customer.total_orders > 0:
+        usual_order_time = await compute_usual_order_time(session, customer.id)
+        customer.usual_order_time = usual_order_time
+        await session.flush()
 
     # Fall back to the most recent address receiver when no name is on file.
     profile_name = customer.name

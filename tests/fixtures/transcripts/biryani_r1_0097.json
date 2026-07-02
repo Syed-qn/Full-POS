@@ -1,0 +1,15 @@
+{
+  "phone": "+971500009097",
+  "turns": [
+    {"type": "order", "product_items": [
+      {"product_retailer_id": "dish-8-6", "quantity": 3, "item_price": 50, "currency": "AED"},
+      {"product_retailer_id": "dv5fh8l7j6", "quantity": 1, "item_price": 12, "currency": "AED"},
+      {"product_retailer_id": "ju9f8jfy90", "quantity": 1, "item_price": 20, "currency": "AED"}
+    ]},
+    {"type": "text", "text": "Need double masala in biriyani"},
+    {"type": "text", "text": "That's all"},
+    {"type": "text", "text": "Only 1 biriyani"},
+    {"type": "text", "text": "Why did you add 2 biriyani"},
+    {"type": "text", "text": "I need only 1 biriyani with double masala"}
+  ]
+}
