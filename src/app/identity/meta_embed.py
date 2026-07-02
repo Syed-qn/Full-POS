@@ -64,16 +64,30 @@ async def exchange_code_for_token(code: str) -> str:
 async def subscribe_app_to_waba(waba_id: str, access_token: str) -> bool:
     """Subscribe our app to the business's WABA so we receive its inbound webhooks.
 
+    Also sets a per-WABA ``override_callback_uri`` pointing at our webhook endpoint:
+    Embedded-Signup-onboarded WABAs otherwise don't route inbound to the app's default
+    callback, so messages arrive at Meta (delivered ✓✓) but never reach us. The
+    override is only sent when we have a PUBLIC https base url (skipped for
+    localhost/dev so a bad callback isn't registered).
+
     Best-effort: returns True on success, False (logged) on failure — a manager can
     still fix subscription in Meta later, and this must never block connecting.
     """
     if not waba_id:
         return False
+    settings = get_settings()
+    base = (settings.public_base_url or "").rstrip("/")
+    data: dict[str, str] = {}
+    if base.startswith("https://"):
+        data["override_callback_uri"] = f"{base}/webhooks/whatsapp"
+        data["verify_token"] = settings.wa_verify_token
     url = f"{_graph_base()}/{waba_id}/subscribed_apps"
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.post(
-                url, headers={"Authorization": f"Bearer {access_token}"}
+                url,
+                data=data or None,
+                headers={"Authorization": f"Bearer {access_token}"},
             )
         if resp.status_code == 200 and (resp.json() or {}).get("success"):
             return True
