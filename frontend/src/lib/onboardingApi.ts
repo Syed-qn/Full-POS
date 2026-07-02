@@ -40,3 +40,25 @@ export async function fetchMetaConfig(): Promise<MetaConfig> {
 export async function saveMetaConfig(patch: MetaConfigPatch): Promise<MetaConfig> {
   return apiClient.patch<MetaConfig>("/api/v1/onboarding/meta-config", patch);
 }
+
+export interface MetaEmbedConfig {
+  enabled: boolean;
+  app_id: string;
+  config_id: string;
+  graph_version: string;
+}
+
+export async function fetchMetaEmbedConfig(): Promise<MetaEmbedConfig> {
+  return apiClient.get<MetaEmbedConfig>("/api/v1/onboarding/meta-embed-config");
+}
+
+export interface MetaConnectPayload {
+  code: string;
+  phone_number_id: string;
+  waba_id: string;
+}
+
+/** Send the Embedded Signup popup result to the backend to exchange + store creds. */
+export async function connectMetaEmbedded(payload: MetaConnectPayload): Promise<MetaConfig> {
+  return apiClient.post<MetaConfig>("/api/v1/onboarding/meta-connect", payload);
+}

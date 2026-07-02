@@ -67,6 +67,70 @@ async def test_meta_config_save_and_read(client, auth_headers):
     assert patched.json()["connected"] is True
 
 
+async def test_meta_embed_config_disabled_without_app(client, auth_headers):
+    """No tech-provider app configured in tests → popup disabled, UI uses manual."""
+    r = await client.get("/api/v1/onboarding/meta-embed-config", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is False  # no config_id in test env → popup off
+    assert body["config_id"] == ""
+    assert body["graph_version"]  # e.g. v21.0
+
+
+async def test_meta_connect_exchanges_code_and_stores_creds(
+    client, auth_headers, monkeypatch
+):
+    """Embedded Signup: code → token exchange → per-restaurant creds; token hidden."""
+    from app.identity import meta_embed
+
+    async def fake_exchange(code):
+        assert code == "CODE-123"
+        return "EAA-business-token"
+
+    async def fake_subscribe(waba_id, token):
+        assert waba_id == "WABA-9"
+        assert token == "EAA-business-token"
+        return True
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+
+    r = await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "CODE-123", "phone_number_id": "PID-9", "waba_id": "WABA-9"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["wa_phone_number_id"] == "PID-9"
+    assert body["wa_business_account_id"] == "WABA-9"
+    assert body["wa_access_token_set"] is True
+    assert body["connected"] is True
+    assert "wa_access_token" not in body  # secret never returned
+
+
+async def test_meta_connect_surfaces_exchange_failure(
+    client, auth_headers, monkeypatch
+):
+    """A failed code exchange returns 400, not 500, and stores nothing."""
+    from app.identity import meta_embed
+
+    async def boom(code):
+        raise meta_embed.MetaEmbedError("token exchange failed (HTTP 400): bad code")
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", boom)
+
+    r = await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "BAD", "phone_number_id": "PID-9", "waba_id": "WABA-9"},
+    )
+    assert r.status_code == 400
+    # Nothing stored → still not connected.
+    cfg = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)
+    assert cfg.json()["connected"] is False
+
+
 async def test_new_signup_not_complete_without_menu(db_session, restaurant):
     restaurant.settings = {**restaurant.settings, "onboarding_complete": False}
     await db_session.commit()

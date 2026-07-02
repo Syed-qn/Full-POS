@@ -17,6 +17,8 @@ from app.identity.schemas import (
     LoginIn,
     MetaConfigIn,
     MetaConfigOut,
+    MetaConnectIn,
+    MetaEmbedConfigOut,
     ProfilePatch,
     RestaurantOut,
     RiderIn,
@@ -133,6 +135,49 @@ async def patch_meta_config(
     from app.identity.meta_config import apply_meta_settings
 
     apply_meta_settings(restaurant, body.model_dump(exclude_unset=True))
+    await session.commit()
+    await session.refresh(restaurant)
+    return _meta_config_out(restaurant)
+
+
+@router.get("/onboarding/meta-embed-config", response_model=MetaEmbedConfigOut)
+async def get_meta_embed_config(_: Restaurant = Depends(current_restaurant)):
+    """Config the frontend needs to launch the Embedded Signup ("Connect with
+    Facebook") popup. `enabled` is False when the tech-provider app isn't set up —
+    the UI then falls back to the manual paste form. No secrets returned."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    return MetaEmbedConfigOut(
+        enabled=bool(settings.wa_app_id and settings.wa_es_config_id),
+        app_id=settings.wa_app_id,
+        config_id=settings.wa_es_config_id,
+        graph_version=settings.graph_api_version,
+    )
+
+
+@router.post("/onboarding/meta-connect", response_model=MetaConfigOut)
+async def meta_connect(
+    body: MetaConnectIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Embedded Signup popup result → exchange the code for this restaurant's own
+    long-lived token, subscribe our app to its WABA, and store the creds. The token
+    is never returned; the manager just sees Connected."""
+    from app.identity.meta_config import apply_meta_settings
+    from app.identity.meta_embed import MetaEmbedError, connect_embedded_signup
+
+    try:
+        creds = await connect_embedded_signup(
+            code=body.code,
+            phone_number_id=body.phone_number_id,
+            waba_id=body.waba_id,
+        )
+    except MetaEmbedError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+    apply_meta_settings(restaurant, creds)
     await session.commit()
     await session.refresh(restaurant)
     return _meta_config_out(restaurant)

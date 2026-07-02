@@ -61,6 +61,23 @@ class MetaConfigOut(BaseModel):
     connected: bool
 
 
+class MetaEmbedConfigOut(BaseModel):
+    """Public-to-the-manager config the frontend needs to launch the ES popup."""
+
+    enabled: bool
+    app_id: str
+    config_id: str
+    graph_version: str
+
+
+class MetaConnectIn(BaseModel):
+    """Embedded Signup popup result → exchange the code, store per-restaurant creds."""
+
+    code: str = Field(min_length=1, max_length=2048)
+    phone_number_id: str = Field(min_length=1, max_length=64)
+    waba_id: str = Field(min_length=1, max_length=64)
+
+
 class RiderIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(min_length=7, max_length=32)
