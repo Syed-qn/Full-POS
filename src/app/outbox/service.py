@@ -1,5 +1,6 @@
 import re
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.outbox.models import OutboxMessage
@@ -88,7 +89,19 @@ async def enqueue_message(
     idempotency_key: str,
     mirror_rider_conversation: bool = True,
 ) -> OutboxMessage:
-    """Write an outbox row in the caller's transaction. Commit is the caller's responsibility."""
+    """Write an outbox row in the caller's transaction. Commit is the caller's responsibility.
+
+    Idempotent on ``idempotency_key``: if a row with that key already exists
+    (e.g. the 30s dispatch sweep re-enqueuing the same SLA-breach alert within
+    one time bucket), return it instead of inserting a duplicate — the DB has a
+    UNIQUE constraint on the key, so a blind insert would raise IntegrityError
+    and crash the caller.
+    """
+    existing = await session.scalar(
+        select(OutboxMessage).where(OutboxMessage.idempotency_key == idempotency_key)
+    )
+    if existing is not None:
+        return existing
     body = payload.get("body")
     if isinstance(body, str):
         payload = {**payload, "body": to_whatsapp_text(body)}
