@@ -533,12 +533,16 @@ async def create_draft_order(
     except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
         _logger.debug("advisory order-number lock unavailable; proceeding unserialized")
 
+    # Allocate from the HIGHEST existing suffix, not count(): deleted / resold /
+    # cleaned-up drafts leave gaps, so count()+1 can land on a suffix that a live
+    # order already owns (prod: count=120 but R1-0121 exists → collision). Scanning
+    # the numeric suffixes and taking max+1 is gap-proof; the advisory lock above
+    # serializes concurrent allocators and the UniqueConstraint retry is the backstop.
+    base_seq = await _next_order_seq(session, restaurant_id)
+
     last_error: IntegrityError | None = None
     for _attempt in range(5):
-        count = await session.scalar(
-            select(func.count()).select_from(Order).where(Order.restaurant_id == restaurant_id)
-        ) or 0
-        order_number = f"R{restaurant_id}-{count + 1 + _attempt:04d}"
+        order_number = f"R{restaurant_id}-{base_seq + _attempt:04d}"
         order = Order(
             restaurant_id=restaurant_id,
             customer_id=customer_id,
@@ -555,7 +559,12 @@ async def create_draft_order(
             async with session.begin_nested():
                 await session.flush()
         except IntegrityError as exc:
-            session.expunge(order)
+            # The savepoint rollback already detaches `order`; calling expunge()
+            # unconditionally raises InvalidRequestError ("not present in this
+            # Session"), which used to escape this handler and abort the whole
+            # retry (the real prod crash). Guard it and keep retrying.
+            if order in session:
+                session.expunge(order)
             last_error = exc
             continue
         return order
@@ -563,6 +572,26 @@ async def create_draft_order(
     raise RuntimeError(
         f"could not allocate a unique order number for restaurant {restaurant_id}"
     ) from last_error
+
+
+async def _next_order_seq(session: "AsyncSession", restaurant_id: int) -> int:
+    """Next per-tenant order sequence = 1 + the highest numeric suffix currently in use.
+
+    Order numbers are ``R{restaurant_id}-{seq:04d}``. We derive the next seq from the
+    MAX existing suffix rather than a row count so gaps (deleted drafts, resold /
+    excluded orders) never cause a collision with a live number. Portable across
+    backends — parses suffixes in Python instead of relying on SPLIT_PART.
+    """
+    numbers = await session.scalars(
+        select(Order.order_number).where(Order.restaurant_id == restaurant_id)
+    )
+    max_seq = 0
+    for number in numbers:
+        try:
+            max_seq = max(max_seq, int(str(number).rsplit("-", 1)[-1]))
+        except (ValueError, IndexError):
+            continue  # legacy / malformed number — ignore for allocation
+    return max_seq + 1
 
 
 def _effective_unit_price(dish: "Dish", variant: dict | None = None) -> Decimal:
