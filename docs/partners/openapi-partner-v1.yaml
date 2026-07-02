@@ -311,6 +311,92 @@ paths:
               schema:
                 $ref: "#/components/schemas/PartnerCustomerListOut"
 
+  /api/v1/partner/conversations:
+    get:
+      tags: [chat]
+      summary: List WhatsApp threads for the store (newest activity first)
+      description: >
+        Each item carries a phone, counterpart (customer/rider), manual_takeover
+        flag, last-message preview and unread flag. Match `phone` to an order's
+        customer phone to open that customer's chat. Poll for live updates.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerConversationListOut"
+
+  /api/v1/partner/conversations/{conversation_id}/messages:
+    get:
+      tags: [chat]
+      summary: Read one thread (oldest-first)
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerMessageListOut"
+        "404":
+          description: Conversation not found (or belongs to another store)
+    post:
+      tags: [chat]
+      summary: Send a WhatsApp reply as the POS agent
+      description: >
+        By default (`take_over=true`) this also takes the thread over from the
+        bot so the two don't both answer. Pass `take_over=false` to reply without
+        taking over.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerSendMessageIn"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerMessageOut"
+        "404":
+          description: Conversation not found
+
+  /api/v1/partner/conversations/{conversation_id}/takeover:
+    post:
+      tags: [chat]
+      summary: Take a thread over from the bot, or hand it back
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerTakeoverIn"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerTakeoverOut"
+        "404":
+          description: Conversation not found
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -337,6 +423,58 @@ components:
       description: Rate limit exceeded (Retry-After header set)
 
   schemas:
+    PartnerConversationOut:
+      type: object
+      properties:
+        id: { type: integer }
+        phone: { type: string }
+        counterpart: { type: string, enum: [customer, rider] }
+        manual_takeover: { type: boolean }
+        last_message_preview: { type: string, nullable: true }
+        unread: { type: boolean }
+        updated_at: { type: string }
+    PartnerConversationListOut:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerConversationOut" }
+    PartnerMessageOut:
+      type: object
+      properties:
+        id: { type: integer }
+        direction: { type: string, enum: [inbound, outbound] }
+        type: { type: string }
+        text: { type: string, nullable: true }
+        ts: { type: integer }
+    PartnerMessageListOut:
+      type: object
+      properties:
+        conversation_id: { type: integer }
+        phone: { type: string }
+        counterpart: { type: string }
+        manual_takeover: { type: boolean }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerMessageOut" }
+    PartnerSendMessageIn:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 4096 }
+        take_over:
+          type: boolean
+          default: true
+          description: Also take the thread over from the bot (default true).
+    PartnerTakeoverIn:
+      type: object
+      properties:
+        active: { type: boolean, default: true }
+    PartnerTakeoverOut:
+      type: object
+      properties:
+        conversation_id: { type: integer }
+        manual_takeover: { type: boolean }
     PartnerStoreOut:
       type: object
       properties:

@@ -41,8 +41,15 @@ from app.partner.schemas import (
     ApiKeyCreatedOut,
     ApiKeyCreateIn,
     ApiKeyOut,
+    PartnerConversationListOut,
+    PartnerConversationOut,
     PartnerCustomerListOut,
     PartnerCustomerOut,
+    PartnerMessageListOut,
+    PartnerMessageOut,
+    PartnerSendMessageIn,
+    PartnerTakeoverIn,
+    PartnerTakeoverOut,
     PartnerDeliveryOut,
     PartnerIntegrationConfigIn,
     PartnerIntegrationConfigOut,
@@ -505,6 +512,148 @@ async def partner_store(
         pos_store_id=cfg["pos_store_id"],
         partner_enabled=cfg["partner_enabled"],
         pos_order_push_mode=cfg["pos_order_push_mode"],
+    )
+
+
+# ── Partner chat (WhatsApp conversation) ─────────────────────────────────────
+@partner_router.get("/conversations", response_model=PartnerConversationListOut)
+async def partner_list_conversations(
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerConversationListOut:
+    """WhatsApp threads for this store (newest activity first), each with a
+    last-message preview and unread flag. The POS matches ``phone`` to an order's
+    customer phone to open that customer's chat."""
+    from app.conversation.service import list_dashboard_conversations
+
+    rows = await list_dashboard_conversations(session, restaurant_id=restaurant.id)
+    return PartnerConversationListOut(
+        items=[PartnerConversationOut(**row) for row in rows]
+    )
+
+
+@partner_router.get(
+    "/conversations/{conversation_id}/messages",
+    response_model=PartnerMessageListOut,
+)
+async def partner_get_conversation_messages(
+    conversation_id: int,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerMessageListOut:
+    """Full message history for one thread, oldest-first (POS polls this for live chat)."""
+    from app.conversation.models import Conversation
+    from app.conversation.service import get_dashboard_messages, message_display_text
+
+    messages = await get_dashboard_messages(
+        session, restaurant_id=restaurant.id, conversation_id=conversation_id
+    )
+    if messages is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    conv = await session.get(Conversation, conversation_id)
+    return PartnerMessageListOut(
+        conversation_id=conversation_id,
+        phone=conv.phone if conv else "",
+        counterpart=conv.counterpart if conv else "",
+        manual_takeover=bool(conv.manual_takeover) if conv else False,
+        items=[
+            PartnerMessageOut(
+                id=m.id,
+                direction=m.direction,
+                type=m.type,
+                text=message_display_text(m.payload or {}),
+                ts=m.ts,
+            )
+            for m in messages
+        ],
+    )
+
+
+@partner_router.post(
+    "/conversations/{conversation_id}/messages",
+    response_model=PartnerMessageOut,
+    status_code=201,
+)
+async def partner_send_conversation_message(
+    conversation_id: int,
+    body: PartnerSendMessageIn,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerMessageOut:
+    """POS agent sends a WhatsApp reply. By default this also takes the thread over
+    from the bot so the two don't both answer."""
+    from app.conversation.service import (
+        message_display_text,
+        send_manual_message,
+        set_manual_takeover,
+    )
+
+    result = await send_manual_message(
+        session,
+        restaurant_id=restaurant.id,
+        conversation_id=conversation_id,
+        text=body.text,
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    msg, _outbox_id = result
+    if body.take_over:
+        await set_manual_takeover(
+            session,
+            conversation_id=conversation_id,
+            taken_over_by=restaurant.id,
+            active=True,
+            restaurant_id=restaurant.id,
+        )
+    await session.commit()
+
+    # Deliver the queued WhatsApp send (sync in-request on free tier, else Celery).
+    from app.outbox.service import deliver_pending
+
+    try:
+        await deliver_pending(session, restaurant.id)
+    except Exception:  # noqa: BLE001 - delivery failure must not 500 the POS action
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "partner chat: deliver_pending failed (restaurant_id=%s, conversation_id=%s)",
+            restaurant.id,
+            conversation_id,
+        )
+    return PartnerMessageOut(
+        id=msg.id,
+        direction=msg.direction,
+        type=msg.type,
+        text=message_display_text(msg.payload or {}),
+        ts=msg.ts,
+    )
+
+
+@partner_router.post(
+    "/conversations/{conversation_id}/takeover",
+    response_model=PartnerTakeoverOut,
+)
+async def partner_set_conversation_takeover(
+    conversation_id: int,
+    body: PartnerTakeoverIn,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerTakeoverOut:
+    """Take a thread over from the bot (``active=true``) or hand it back (``false``)."""
+    from app.conversation.service import set_manual_takeover
+
+    ok = await set_manual_takeover(
+        session,
+        conversation_id=conversation_id,
+        taken_over_by=restaurant.id,
+        active=body.active,
+        restaurant_id=restaurant.id,
+    )
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found")
+    await session.commit()
+    return PartnerTakeoverOut(
+        conversation_id=conversation_id, manual_takeover=body.active
     )
 
 
