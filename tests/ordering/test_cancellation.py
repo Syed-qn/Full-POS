@@ -1,6 +1,8 @@
 import hashlib
 from decimal import Decimal
 
+import pytest
+
 from sqlalchemy import select
 
 from app.ordering.fsm import OrderStatus
@@ -174,6 +176,22 @@ async def test_resale_offer_matcher_filters_by_exclusion(db_session, restaurant)
         room_apartment="Test Apt", building="Test Bldg", lat=25.2048, lon=55.2708,
     )
     assert not any(r.id == resale.id for r in available_ex)
+
+
+async def test_customer_cancel_picked_up_blocked(db_session, restaurant):
+    """Customers cannot cancel once the rider has the order — restaurant still can."""
+    from app.ordering.fsm import IllegalTransitionError
+
+    order = await _seed_order(db_session, OrderStatus.PICKED_UP, restaurant.id)
+    with pytest.raises(IllegalTransitionError):
+        await cancel_order(db_session, order=order, actor="customer", reason="changed mind")
+
+
+async def test_manager_cancel_picked_up_allowed(db_session, restaurant):
+    order = await _seed_order(db_session, OrderStatus.PICKED_UP, restaurant.id)
+    await cancel_order(db_session, order=order, actor="manager", reason="customer unreachable")
+    await db_session.refresh(order)
+    assert order.status == OrderStatus.CANCELLED
 
 
 async def test_resale_only_on_customer_cancel_not_restaurant(db_session, restaurant):

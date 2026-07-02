@@ -70,6 +70,34 @@ async def _ready_order_with_address(db_session, *, restaurant_id: int) -> Order:
 
 
 @pytest.mark.asyncio
+async def test_manager_cancel_fires_order_cancelled_webhook(db_session):
+    from app.ordering.service import cancel_order
+
+    rest = await _seed_restaurant(db_session)
+    await _enable_partner(db_session, rest)
+    order = await _ready_order_with_address(db_session, restaurant_id=rest.id)
+    order = await db_session.get(Order, order.id)
+    order.status = "assigned"
+    await db_session.commit()
+
+    await cancel_order(db_session, order=order, actor="manager", reason="out of stock")
+    await db_session.commit()
+
+    row = await db_session.scalar(
+        select(PartnerWebhookDelivery).where(
+            PartnerWebhookDelivery.event_type == "order.cancelled",
+            PartnerWebhookDelivery.restaurant_id == rest.id,
+        )
+    )
+    assert row is not None
+    data = row.payload["data"]
+    assert data["order_id"] == order.id
+    assert data["status"] == "cancelled"
+    assert data["cancelled_by"] == "manager"
+    assert data["cancellation_reason"] == "out of stock"
+
+
+@pytest.mark.asyncio
 async def test_dispatch_fires_rider_assigned_webhook(db_session):
     rest = await _seed_restaurant(db_session)
     await _enable_partner(db_session, rest)

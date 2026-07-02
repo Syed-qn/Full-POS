@@ -55,17 +55,22 @@ class OrderFSM:
         },
         OrderStatus.READY: {
             OrderStatus.ASSIGNED,
+            # Restaurant/POS may cancel until delivery (customer cancel blocked in service).
+            OrderStatus.CANCELLED,
         },
         OrderStatus.ASSIGNED: {
             OrderStatus.PICKED_UP,
+            OrderStatus.CANCELLED,
         },
         OrderStatus.PICKED_UP: {
             OrderStatus.ARRIVING,
             OrderStatus.UNDELIVERABLE,
+            OrderStatus.CANCELLED,
         },
         OrderStatus.ARRIVING: {
             OrderStatus.DELIVERED,
             OrderStatus.UNDELIVERABLE,
+            OrderStatus.CANCELLED,
         },
         OrderStatus.DELIVERED: set(),
         OrderStatus.CANCELLED: set(),

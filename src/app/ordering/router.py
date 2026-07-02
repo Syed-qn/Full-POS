@@ -299,10 +299,10 @@ async def cancel_order_endpoint(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
-    """Cancel an order (MANAGER/restaurant-initiated). Legal before delivery only:
-    draft/pending/confirmed/preparing → cancelled. Restaurant cancellation never resells
-    the food (assumed unavailable/unfit) — resale only happens on a CUSTOMER cancel of a
-    cooking order. Later states (ready/assigned/picked_up/arriving/terminal) return 422."""
+    """Cancel an order (MANAGER/restaurant-initiated). Legal through ``arriving`` —
+    any active pre-delivery status. Restaurant cancellation never resells the food
+    (assumed unavailable/unfit) — resale only happens on a CUSTOMER cancel of a cooking
+    order. ``delivered`` and terminal states return 422."""
     order = await get_order_for_tenant(
         session, restaurant_id=restaurant.id, order_id=order_id
     )
@@ -321,10 +321,12 @@ async def cancel_order_endpoint(
             detail=f"Order in status '{order.status}' can no longer be cancelled.",
         )
     await session.commit()
-    # Flush cancellation/resale pings now, not on the slow background poll.
+    # Flush cancellation customer ping + partner webhook now, not on background poll.
     from app.outbox.service import deliver_pending
+    from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
 
     await deliver_pending(session, restaurant.id)
+    await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
     await session.refresh(order)
     return await _enrich(session, order)
 

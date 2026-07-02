@@ -50,15 +50,16 @@ const ADVANCE_LABEL: Record<string, string> = {
   confirmed: "Start Preparing",
   preparing: "Mark as Ready",
 };
-// Cancellation is only legal before the order leaves the kitchen (FSM): pre-cook
-// states transition to "cancelled"; "preparing" (already cooking) goes to
-// "on_resale" so the food is auto-resold. Ready/assigned/out-for-delivery and
-// terminal states are not cancellable — the button is hidden for them.
+// Restaurant may cancel any active order until delivery (not delivered/terminal).
 const CANCELLABLE = new Set([
   "draft",
   "pending_confirmation",
   "confirmed",
   "preparing",
+  "ready",
+  "assigned",
+  "picked_up",
+  "arriving",
 ]);
 
 export function OrderDetailDrawer({
@@ -321,8 +322,10 @@ export function OrderDetailDrawer({
           title="Cancel this order?"
           message={
             detail?.status === "preparing"
-              ? "It's already being cooked, so the food will be put up for auto-resale. This cannot be undone."
-              : "This cannot be undone."
+              ? "It's already being cooked. Cancelling stops the order — the food won't be resold. This cannot be undone."
+              : ["ready", "assigned", "picked_up", "arriving"].includes(detail?.status ?? "")
+                ? "The order is already in progress. Cancelling will notify the customer and free the rider. This cannot be undone."
+                : "This cannot be undone."
           }
           confirmLabel="Cancel order"
           cancelLabel="Keep order"

@@ -19,7 +19,7 @@ from app.config import get_settings
 from app.geo.factory import get_geo_provider
 from app.identity.models import Restaurant
 from app.menu.models import Dish
-from app.ordering.fsm import OrderStatus
+from app.ordering.fsm import IllegalTransitionError, OrderStatus
 from app.ordering.fsm import transition as fsm_transition
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 
@@ -990,6 +990,62 @@ async def modify_order(
     )
 
 
+# Customer self-cancel via WhatsApp — only before the order leaves the kitchen flow.
+_CUSTOMER_CANCELLABLE_STATUSES = {
+    OrderStatus.DRAFT,
+    OrderStatus.PENDING_CONFIRMATION,
+    OrderStatus.CONFIRMED,
+    OrderStatus.PREPARING,
+}
+
+# Restaurant/manager/POS may cancel any active order until delivery.
+_RESTAURANT_CANCEL_ACTORS = frozenset({"manager", "pos", "restaurant"})
+
+
+async def _emit_cancel_side_effects(
+    session: "AsyncSession",
+    *,
+    order: Order,
+    actor: str,
+    reason: str | None,
+) -> None:
+    """Best-effort customer WhatsApp + partner ``order.cancelled`` webhook.
+
+    Customer-initiated cancels are messaged by the conversation engine — skip the
+    duplicate outbox ping here. Restaurant/POS/manager paths must notify because
+    the dashboard and partner APIs do not go through ``engine._execute_cancel_order``.
+    """
+    if actor in _RESTAURANT_CANCEL_ACTORS:
+        try:
+            from app.dispatch.rider_flow import _notify_customer_status
+
+            await _notify_customer_status(
+                session,
+                restaurant_id=order.restaurant_id,
+                order=order,
+                status_key="cancelled",
+            )
+        except Exception:  # noqa: BLE001 — never block the cancel
+            _logger.exception("customer cancel notify failed (order_id=%s)", order.id)
+
+    try:
+        from app.partner.delivery_api import notify_partner_delivery_event
+
+        extra: dict = {"cancelled_by": actor}
+        if reason:
+            extra["cancellation_reason"] = reason
+        if order.cancelled_at is not None:
+            extra["cancelled_at"] = order.cancelled_at.isoformat()
+        await notify_partner_delivery_event(
+            session,
+            order=order,
+            event_type="order.cancelled",
+            extra=extra,
+        )
+    except Exception:  # noqa: BLE001
+        _logger.exception("partner cancel webhook failed (order_id=%s)", order.id)
+
+
 async def cancel_order(
     session: "AsyncSession",
     *,
@@ -1008,8 +1064,19 @@ async def cancel_order(
     So: customer cancel while ``preparing`` → ON_RESALE + resale copy (exclusion hash).
     Any other cancel (pre-cooking, or restaurant-initiated) → CANCELLED.
 
+    Restaurant/POS/manager may cancel through ``arriving`` (inclusive). Customers may
+    only cancel through ``preparing``. ``delivered`` and terminal states reject all actors.
+
     Returns the resale Order if one was created, else None. Caller must commit.
     """
+    if actor == "customer" and order.status not in _CUSTOMER_CANCELLABLE_STATUSES:
+        raise IllegalTransitionError(
+            f"Customer cannot cancel order in status {order.status!r}. "
+            f"Allowed: {sorted(s.value for s in _CUSTOMER_CANCELLABLE_STATUSES)}"
+        )
+    if actor not in _RESTAURANT_CANCEL_ACTORS and actor != "customer":
+        raise IllegalTransitionError(f"Unknown cancel actor {actor!r}")
+
     order.cancellation_reason = reason
     order.cancelled_at = datetime.now(timezone.utc)
 
@@ -1099,6 +1166,7 @@ async def cancel_order(
         from app.dispatch.preview_cache import invalidate_preview_cache
 
         await invalidate_preview_cache(order.restaurant_id)
+        await _emit_cancel_side_effects(session, order=order, actor=actor, reason=reason)
         return resale
 
     await fsm_transition(
@@ -1108,6 +1176,7 @@ async def cancel_order(
     from app.dispatch.preview_cache import invalidate_preview_cache
 
     await invalidate_preview_cache(order.restaurant_id)
+    await _emit_cancel_side_effects(session, order=order, actor=actor, reason=reason)
     return None
 
 

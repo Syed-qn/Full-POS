@@ -32,6 +32,19 @@ def test_on_resale_to_written_off_allowed():
     OrderFSM.validate(OrderStatus.ON_RESALE, OrderStatus.WRITTEN_OFF)
 
 
+def test_ready_to_cancelled_allowed_for_restaurant():
+    OrderFSM.validate(OrderStatus.READY, OrderStatus.CANCELLED)
+
+
+def test_arriving_to_cancelled_allowed_for_restaurant():
+    OrderFSM.validate(OrderStatus.ARRIVING, OrderStatus.CANCELLED)
+
+
+def test_delivered_cannot_cancel():
+    with pytest.raises(IllegalTransitionError):
+        OrderFSM.validate(OrderStatus.DELIVERED, OrderStatus.CANCELLED)
+
+
 def test_all_statuses_have_entries_in_transition_map():
     """Every OrderStatus must appear as a key in the transition map."""
     for status in OrderStatus:

@@ -107,6 +107,31 @@ async def test_pos_cancel_from_confirmed(client, auth_headers, db_session):
 
 
 @pytest.mark.asyncio
+async def test_pos_cancel_from_picked_up(client, auth_headers, db_session):
+    from sqlalchemy import select
+
+    from app.identity.models import Restaurant
+    from app.ordering.models import Order
+
+    rest = (
+        await db_session.scalars(select(Restaurant).where(Restaurant.phone == "+971501234567"))
+    ).one()
+    order = await _seed_confirmed_order(db_session, restaurant_id=rest.id)
+    order = await db_session.get(Order, order.id)
+    order.status = "picked_up"
+    await db_session.commit()
+    key = await _api_key(client, auth_headers)
+
+    resp = await client.post(
+        f"/api/v1/partner/orders/{order.id}/status",
+        headers={"X-API-Key": key},
+        json={"status": "cancelled", "reason": "customer unreachable"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_pos_cannot_advance_delivered_order(client, auth_headers, db_session):
     from sqlalchemy import select
 

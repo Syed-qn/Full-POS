@@ -303,6 +303,18 @@ async def partner_update_order_status(
             restaurant.id,
             order_id,
         )
+    try:
+        from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+        await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
+    except Exception:  # noqa: BLE001 - webhooks are best-effort
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "partner status: webhook flush failed (restaurant_id=%s, order_id=%s)",
+            restaurant.id,
+            order_id,
+        )
     return PartnerOrderStatusOut(
         order_id=order.id,
         order_number=order.order_number,
