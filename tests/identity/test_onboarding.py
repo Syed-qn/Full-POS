@@ -131,6 +131,43 @@ async def test_meta_connect_surfaces_exchange_failure(
     assert cfg.json()["connected"] is False
 
 
+async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
+    client, auth_headers, monkeypatch
+):
+    """Disconnect clears creds, flips connected→false, and re-opens onboarding."""
+    from app.identity import meta_embed
+
+    async def fake_exchange(code):
+        return "EAA-token"
+
+    async def fake_subscribe(waba_id, token):
+        return True
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+
+    # Connect first.
+    await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "C", "phone_number_id": "PID-1", "waba_id": "WABA-1"},
+    )
+    assert (await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)).json()["connected"] is True
+
+    # Disconnect.
+    r = await client.post("/api/v1/onboarding/meta-disconnect", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["connected"] is False
+    assert body["wa_phone_number_id"] == ""
+    assert body["wa_access_token_set"] is False
+
+    # Onboarding gate re-triggers (complete → false because meta gone).
+    st = (await client.get("/api/v1/onboarding/status", headers=auth_headers)).json()
+    assert st["complete"] is False
+    assert st["has_meta"] is False
+
+
 async def test_new_signup_not_complete_without_menu(db_session, restaurant):
     restaurant.settings = {**restaurant.settings, "onboarding_complete": False}
     await db_session.commit()

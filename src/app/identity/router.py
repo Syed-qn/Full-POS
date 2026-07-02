@@ -140,6 +140,22 @@ async def patch_meta_config(
     return _meta_config_out(restaurant)
 
 
+@router.post("/onboarding/meta-disconnect", response_model=MetaConfigOut)
+async def meta_disconnect(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Disconnect this restaurant's WhatsApp (Meta) account: clears its stored
+    creds and re-opens onboarding. The manager must reconnect to operate again.
+    Menu/catalogue/orders are untouched."""
+    from app.identity.meta_config import disconnect_meta
+
+    disconnect_meta(restaurant)
+    await session.commit()
+    await session.refresh(restaurant)
+    return _meta_config_out(restaurant)
+
+
 @router.get("/onboarding/meta-embed-config", response_model=MetaEmbedConfigOut)
 async def get_meta_embed_config(_: Restaurant = Depends(current_restaurant)):
     """Config the frontend needs to launch the Embedded Signup ("Connect with

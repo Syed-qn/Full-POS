@@ -46,6 +46,21 @@ def apply_meta_settings(restaurant: Restaurant, patch: dict[str, Any]) -> dict[s
     return meta_settings(restaurant)
 
 
+def disconnect_meta(restaurant: Restaurant) -> dict[str, Any]:
+    """Clear this restaurant's WhatsApp connection and re-open onboarding.
+
+    Removes the stored number/token/WABA and flips onboarding_complete off, so the
+    onboarding gate re-triggers and the manager must reconnect Meta to operate
+    again. Menu/catalogue/data are untouched. Caller commits.
+    """
+    settings = dict(restaurant.settings or {})
+    for key in ("wa_phone_number_id", "wa_business_account_id", "wa_access_token"):
+        settings.pop(key, None)
+    settings["onboarding_complete"] = False
+    restaurant.settings = settings
+    return meta_settings(restaurant)
+
+
 def meta_connected(restaurant: Restaurant) -> bool:
     """True when the restaurant has its own WhatsApp number + token configured."""
     cfg = meta_settings(restaurant)

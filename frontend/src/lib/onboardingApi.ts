@@ -52,6 +52,11 @@ export async function fetchMetaEmbedConfig(): Promise<MetaEmbedConfig> {
   return apiClient.get<MetaEmbedConfig>("/api/v1/onboarding/meta-embed-config");
 }
 
+/** Disconnect this restaurant's WhatsApp (Meta) account and re-open onboarding. */
+export async function disconnectMeta(): Promise<MetaConfig> {
+  return apiClient.post<MetaConfig>("/api/v1/onboarding/meta-disconnect", {});
+}
+
 export interface MetaConnectPayload {
   code: string;
   phone_number_id: string;

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
+import { disconnectMeta } from "../lib/onboardingApi";
+import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import {
   createApiKey,
   listApiKeys,
@@ -199,6 +202,7 @@ function defaultHours(): DayHours[] {
 }
 
 export function SettingsScreen() {
+  const nav = useNavigate();
   const [me, setMe] = useState<RestaurantOut | null>(null);
   const [tab, setTab] = useState<Tab>("general");
 
@@ -208,6 +212,24 @@ export function SettingsScreen() {
   const [lng, setLng] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
+  // WhatsApp disconnect
+  const [showDisconnect, setShowDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  async function onDisconnectWhatsApp() {
+    setDisconnecting(true);
+    try {
+      await disconnectMeta();
+      // Onboarding gate must re-trigger — force a re-onboard on next route check.
+      writeCachedOnboardingComplete(false);
+      toast("WhatsApp disconnected — reconnect to keep operating");
+      nav("/onboarding", { replace: true });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't disconnect");
+      setDisconnecting(false);
+      setShowDisconnect(false);
+    }
+  }
 
   // Batching tab
   const [ordersPerBatch, setOrdersPerBatch] = useState(3);
@@ -647,6 +669,25 @@ export function SettingsScreen() {
           </div>
           <div className={s.actions}>
             <Button onClick={saveGeneral}>Save</Button>
+          </div>
+
+          <div
+            className={s.rowStacked}
+            style={{ marginTop: 24, borderTop: "1px solid var(--border, #334155)", paddingTop: 18 }}
+          >
+            <div className={s.rowLabel}>
+              <span className={s.rowName}>WhatsApp connection</span>
+              <span className={s.rowHint}>
+                Disconnect this restaurant's WhatsApp (Meta) account. You'll be taken
+                to onboarding to reconnect. Your menu, orders and settings are kept —
+                but the bot stops replying until you reconnect.
+              </span>
+            </div>
+            <div className={s.actions}>
+              <Button variant="ghost" onClick={() => setShowDisconnect(true)}>
+                Disconnect WhatsApp
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -1271,6 +1312,18 @@ export function SettingsScreen() {
           )}
         </div>
       </div>
+
+      {showDisconnect && (
+        <ConfirmDialog
+          title="Disconnect WhatsApp?"
+          message="This clears your stored WhatsApp (Meta) connection and sends you to onboarding to reconnect. Your menu, orders and settings stay — but the bot won't reply on WhatsApp until you reconnect."
+          confirmLabel="Disconnect"
+          danger
+          busy={disconnecting}
+          onConfirm={onDisconnectWhatsApp}
+          onCancel={() => !disconnecting && setShowDisconnect(false)}
+        />
+      )}
     </div>
   );
 }
