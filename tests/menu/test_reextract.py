@@ -65,10 +65,10 @@ async def test_reextract_tenant_isolation(client, auth_headers, tmp_path, monkey
 
     # Create a second restaurant and try to reextract that menu
     await client.post("/api/v1/auth/signup", json={
-        "name": "Other Restaurant", "phone": "+971509999999",
+        "name": "Other Restaurant", "email": "other@rest.ae", "phone": "+971509999999",
         "password": "hunter2!", "lat": 25.0, "lng": 55.0,
     })
-    resp2 = await client.post("/api/v1/auth/login", json={"phone": "+971509999999", "password": "hunter2!"})
+    resp2 = await client.post("/api/v1/auth/login", json={"email": "other@rest.ae", "password": "hunter2!"})
     other_headers = {"Authorization": f"Bearer {resp2.json()['access_token']}"}
 
     r = await client.post(f"/api/v1/menus/{menu_id}/reextract", headers=other_headers)

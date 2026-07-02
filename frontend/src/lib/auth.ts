@@ -22,22 +22,20 @@ export function isAuthenticated(): boolean {
   return getToken() !== null;
 }
 
-export async function login(phone: string, password: string): Promise<void> {
-  const res = await apiClient.post<TokenOut>("/api/v1/auth/login", { phone, password });
+export async function login(email: string, password: string): Promise<void> {
+  const res = await apiClient.post<TokenOut>("/api/v1/auth/login", { email, password });
   setToken(res.access_token);
 }
 
 export async function signup(
   name: string,
-  phone: string,
+  email: string,
   password: string,
 ): Promise<void> {
   await apiClient.post("/api/v1/auth/signup", {
     name,
-    phone,
+    email,
     password,
-    lat: 25.2048,
-    lng: 55.2708,
   });
-  await login(phone, password);
+  await login(email, password);
 }

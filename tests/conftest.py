@@ -308,12 +308,13 @@ async def seed_biryani_menu(db_session, restaurant):
 @pytest.fixture
 async def auth_headers(client):
     signup = {
-        "name": "Biryani House", "phone": "+971501234567",
+        "name": "Biryani House", "email": "owner@biryani.ae",
+        "phone": "+971501234567",
         "password": "hunter2!", "lat": 25.2048, "lng": 55.2708,
     }
     await client.post("/api/v1/auth/signup", json=signup)
     resp = await client.post(
         "/api/v1/auth/login",
-        json={"phone": "+971501234567", "password": "hunter2!"},
+        json={"email": "owner@biryani.ae", "password": "hunter2!"},
     )
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}

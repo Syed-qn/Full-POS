@@ -123,11 +123,11 @@ async def test_tenant_isolation_key_only_sees_own_customers(client, auth_headers
 
     # Restaurant B: fresh signup + login + its own customer + key.
     await client.post("/api/v1/auth/signup", json={
-        "name": "Other Diner", "phone": "+971509999999",
+        "name": "Other Diner", "email": "other@diner.ae", "phone": "+971509999999",
         "password": "hunter2!", "lat": 25.1, "lng": 55.2,
     })
     token_b = (await client.post("/api/v1/auth/login", json={
-        "phone": "+971509999999", "password": "hunter2!",
+        "email": "other@diner.ae", "password": "hunter2!",
     })).json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}
     rid_b = await _restaurant_id(db_session, "+971509999999")

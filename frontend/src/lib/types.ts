@@ -1,7 +1,8 @@
 export interface RestaurantOut {
   id: number;
   name: string;
-  phone: string;
+  email: string;
+  phone: string | null; // WhatsApp number — set on Meta connect, null until then
   lat: number;
   lng: number;
   settings: Record<string, unknown>;

@@ -116,6 +116,37 @@ async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
         return ""
 
 
+async def fetch_display_phone_number(phone_number_id: str, access_token: str) -> str:
+    """Return the E.164 display number for a WhatsApp phone_number_id, or ''.
+
+    This is the number customers actually message — the INBOUND routing key. We
+    read it from Meta rather than trusting anything typed at signup, so a
+    restaurant's stored phone always equals its real WhatsApp number.
+    """
+    if not phone_number_id:
+        return ""
+    url = f"{_graph_base()}/{phone_number_id}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                url,
+                params={"fields": "display_phone_number"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code != 200:
+            logger.warning(
+                "fetch_display_phone_number non-200 pid=%s http=%s body=%s",
+                phone_number_id, resp.status_code, resp.text[:300],
+            )
+            return ""
+        return str((resp.json() or {}).get("display_phone_number") or "").strip()
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "fetch_display_phone_number request failed pid=%s: %s", phone_number_id, exc
+        )
+        return ""
+
+
 async def connect_embedded_signup(
     *, code: str, phone_number_id: str, waba_id: str
 ) -> dict[str, str]:
@@ -136,4 +167,9 @@ async def connect_embedded_signup(
     catalog_id = await fetch_waba_catalog_id(waba_id, token)
     if catalog_id:
         creds["catalog_id"] = catalog_id
+    # The real WhatsApp display number → becomes the restaurant's inbound routing
+    # phone. Returned under a non-settings key; the router applies it to the column.
+    display = await fetch_display_phone_number(phone_number_id, token)
+    if display:
+        creds["display_phone_number"] = display
     return creds

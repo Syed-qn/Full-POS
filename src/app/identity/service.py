@@ -18,6 +18,10 @@ class DuplicatePhoneError(Exception):
     pass
 
 
+class DuplicateEmailError(Exception):
+    pass
+
+
 class RiderHasHistoryError(Exception):
     """Raised when a rider can't be hard-deleted because they hold financial
     records (COD cash / shift reconciliations) that must be preserved — the
@@ -28,18 +32,28 @@ async def create_restaurant(
     session: AsyncSession,
     *,
     name: str,
-    phone: str,
+    email: str,
     password: str,
-    lat: float,
-    lng: float,
+    phone: str | None = None,
+    lat: float = 0.0,
+    lng: float = 0.0,
 ) -> Restaurant:
-    existing = await session.scalar(select(Restaurant).where(Restaurant.phone == phone))
+    """Sign up a restaurant. Login identity is the email; the WhatsApp number
+    (phone) is normally left unset and filled in when the restaurant connects Meta
+    (an optional phone may be supplied for seeding)."""
+    email = (email or "").strip().lower()
+    existing = await session.scalar(select(Restaurant).where(Restaurant.email == email))
     if existing:
-        raise DuplicatePhoneError("phone already registered")
+        raise DuplicateEmailError("email already registered")
+    if phone:
+        dup = await session.scalar(select(Restaurant).where(Restaurant.phone == phone))
+        if dup:
+            raise DuplicatePhoneError("phone already registered")
     from app.identity.models import DEFAULT_SETTINGS
 
     restaurant = Restaurant(
         name=name,
+        email=email,
         phone=phone,
         password_hash=hash_password(password),
         lat=lat,
@@ -55,7 +69,7 @@ async def create_restaurant(
         entity="restaurant",
         entity_id=str(restaurant.id),
         action="signup",
-        after={"name": name, "phone": phone, "lat": lat, "lng": lng},
+        after={"name": name, "email": email, "lat": lat, "lng": lng},
     )
     await session.commit()
     return restaurant

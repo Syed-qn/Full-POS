@@ -1,4 +1,5 @@
 import copy
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -142,7 +143,19 @@ class Restaurant(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
-    phone: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    # Login identity — unique, stable, independent of the WhatsApp number.
+    # Real signups set this via create_restaurant(); the unique auto-default only
+    # ever applies to rows built directly (e.g. test fixtures) without an email.
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, index=True,
+        default=lambda: f"r-{uuid.uuid4().hex}@auto.local",
+    )
+    # The restaurant's WhatsApp Business display number — the INBOUND routing key
+    # (Restaurant.phone == webhook display_phone_number). Nullable: a freshly
+    # signed-up restaurant has none until it connects Meta, at which point the
+    # connect flow sets it to the real connected number (so signup can never
+    # mismatch the WhatsApp number). Unique still holds; Postgres allows many NULLs.
+    phone: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     lat: Mapped[float] = mapped_column(Float)
     lng: Mapped[float] = mapped_column(Float)

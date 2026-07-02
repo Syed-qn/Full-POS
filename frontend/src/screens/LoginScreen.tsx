@@ -12,7 +12,7 @@ export function LoginScreen() {
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   // Dev-only convenience prefill — production builds (import.meta.env.DEV === false) stay empty.
-  const [phone, setPhone] = useState(import.meta.env.DEV ? "+918754568384" : "");
+  const [email, setEmail] = useState(import.meta.env.DEV ? "owner@biryani.ae" : "");
   const [password, setPassword] = useState(import.meta.env.DEV ? "password123" : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,9 +30,9 @@ export function LoginScreen() {
     try {
       if (mode === "signup") {
         if (!name.trim()) { setError("Restaurant name is required"); setBusy(false); return; }
-        await signup(name.trim(), phone, password);
+        await signup(name.trim(), email, password);
       } else {
-        await login(phone, password);
+        await login(email, password);
       }
       nav(mode === "signup" ? "/onboarding" : "/", { replace: true });
     } catch (err) {
@@ -86,12 +86,13 @@ export function LoginScreen() {
           )}
 
           <label className={s.field}>
-            <span className="label-upper">Phone</span>
+            <span className="label-upper">Email</span>
             <input
-              aria-label="Phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+971XXXXXXXXX"
+              aria-label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@restaurant.com"
               autoComplete="username"
               autoFocus={mode === "login"}
             />

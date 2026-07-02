@@ -9,6 +9,7 @@ async def test_simulator_send_queues_inbound_and_returns_ok(client):
         "/api/v1/auth/signup",
         json={
             "name": "Test Restaurant",
+            "email": "sim@rest.ae",
             "phone": "+97141234567",
             "password": "hunter2!",
             "lat": 25.2048,

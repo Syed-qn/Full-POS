@@ -31,8 +31,15 @@ def test_resolve_send_creds_falls_back_to_env_when_not_connected():
     assert isinstance(token, str)
 
 
-async def test_meta_config_save_and_read(client, auth_headers):
+async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
     """Onboarding page saves the restaurant's Meta connection; token never echoed."""
+    from app.identity import meta_embed
+
+    async def _no_display(pid, token):
+        return ""
+
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", _no_display)
+
     empty = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)
     assert empty.status_code == 200
     assert empty.json()["connected"] is False
@@ -96,9 +103,14 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
         assert waba_id == "WABA-9"
         return "CAT-AUTO-1"
 
+    async def fake_display(pid, token):
+        assert pid == "PID-9"
+        return "+971 55 000 9999"  # deliberately different from signup phone
+
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
 
     r = await client.post(
         "/api/v1/onboarding/meta-connect",
@@ -113,6 +125,11 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert body["catalog_id"] == "CAT-AUTO-1"  # auto-detected from the WABA
     assert body["connected"] is True
     assert "wa_access_token" not in body  # secret never returned
+
+    # The routing phone is reconciled to the REAL connected number (normalized),
+    # not whatever was typed at signup — closing the inbound-mismatch gap.
+    me = await client.get("/api/v1/me", headers=auth_headers)
+    assert me.json()["phone"] == "+971550009999"
 
 
 async def test_meta_connect_surfaces_exchange_failure(
@@ -152,9 +169,13 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     async def fake_catalog(waba_id, token):
         return ""
 
+    async def fake_display(pid, token):
+        return ""
+
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
 
     # Connect first.
     await client.post(

@@ -44,8 +44,8 @@ async def _enforce(key: str, spec: str) -> None:
         )
 
 
-async def _login_phone(request: Request) -> str:
-    """Best-effort phone extraction from the login JSON body.
+async def _login_identifier(request: Request) -> str:
+    """Best-effort login identifier (email) extraction from the login JSON body.
 
     Reads + caches the raw body on the request so the route handler can still
     parse it (Starlette caches ``await request.body()``).
@@ -54,7 +54,7 @@ async def _login_phone(request: Request) -> str:
         raw = await request.body()
         if not raw:
             return ""
-        return str(json.loads(raw).get("phone", ""))
+        return str(json.loads(raw).get("email", ""))
     except (json.JSONDecodeError, ValueError):
         return ""
 
@@ -62,8 +62,8 @@ async def _login_phone(request: Request) -> str:
 async def rate_limit_auth(request: Request) -> None:
     settings = get_settings()
     ip = request.client.host if request.client else "unknown"
-    phone = await _login_phone(request)
-    await _enforce(f"auth:{ip}:{phone}", settings.auth_rate_limit)
+    identifier = await _login_identifier(request)
+    await _enforce(f"auth:{ip}:{identifier}", settings.auth_rate_limit)
 
 
 async def rate_limit_webhook(request: Request) -> None:

@@ -30,7 +30,11 @@ from app.identity.schemas import (
     SignupIn,
     TokenOut,
 )
-from app.identity.service import DuplicatePhoneError, RiderHasHistoryError
+from app.identity.service import (
+    DuplicateEmailError,
+    DuplicatePhoneError,
+    RiderHasHistoryError,
+)
 from app.ratelimit.deps import rate_limit_auth
 
 router = APIRouter(prefix="/api/v1", tags=["identity"])
@@ -46,12 +50,13 @@ async def signup(body: SignupIn, session: AsyncSession = Depends(get_session)):
         return await service.create_restaurant(
             session,
             name=body.name,
-            phone=body.phone,
+            email=body.email,
             password=body.password,
+            phone=body.phone,
             lat=body.lat,
             lng=body.lng,
         )
-    except DuplicatePhoneError as exc:
+    except (DuplicateEmailError, DuplicatePhoneError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
@@ -62,7 +67,7 @@ async def signup(body: SignupIn, session: AsyncSession = Depends(get_session)):
 )
 async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
     restaurant = await session.scalar(
-        select(Restaurant).where(Restaurant.phone == body.phone)
+        select(Restaurant).where(Restaurant.email == body.email)
     )
     if restaurant is None:
         verify_password(body.password, _DUMMY_HASH)  # equalize timing
@@ -106,6 +111,30 @@ async def onboarding_complete(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
+async def _set_connected_phone(
+    session: AsyncSession, restaurant: Restaurant, display_number: str
+) -> None:
+    """Set the restaurant's WhatsApp routing phone to the number it just connected.
+
+    This guarantees Restaurant.phone == the real WhatsApp display number regardless
+    of anything typed at signup, so inbound webhooks always route correctly. Raises
+    409 if that number is already connected to a different restaurant."""
+    from app.identity.phones import normalize_phone
+
+    norm = normalize_phone(display_number)
+    if not norm or norm == restaurant.phone:
+        return
+    clash = await session.scalar(
+        select(Restaurant).where(Restaurant.phone == norm, Restaurant.id != restaurant.id)
+    )
+    if clash is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This WhatsApp number is already connected to another restaurant.",
+        )
+    restaurant.phone = norm
+
+
 def _meta_config_out(restaurant: Restaurant) -> MetaConfigOut:
     from app.identity.meta_config import meta_connected, meta_settings
 
@@ -135,6 +164,17 @@ async def patch_meta_config(
     from app.identity.meta_config import apply_meta_settings
 
     apply_meta_settings(restaurant, body.model_dump(exclude_unset=True))
+    # Manual connect: sync the routing phone from the pasted number too (once both
+    # the number id and token are present), matching the popup's behaviour.
+    from app.identity.meta_config import meta_settings
+    from app.identity.meta_embed import fetch_display_phone_number
+
+    cfg = meta_settings(restaurant)
+    if cfg["wa_phone_number_id"] and cfg["wa_access_token"]:
+        display = await fetch_display_phone_number(
+            cfg["wa_phone_number_id"], cfg["wa_access_token"]
+        )
+        await _set_connected_phone(session, restaurant, display)
     await session.commit()
     await session.refresh(restaurant)
     return _meta_config_out(restaurant)
@@ -193,7 +233,9 @@ async def meta_connect(
     except MetaEmbedError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
+    display_number = creds.pop("display_phone_number", "")
     apply_meta_settings(restaurant, creds)
+    await _set_connected_phone(session, restaurant, display_number)
     await session.commit()
     await session.refresh(restaurant)
     return _meta_config_out(restaurant)
