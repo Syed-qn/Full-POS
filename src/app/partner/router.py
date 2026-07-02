@@ -68,6 +68,8 @@ from app.partner.schemas import (
     PartnerOrderStatusOut,
     PartnerRiderLocationOut,
     PartnerRiderOut,
+    PartnerRiderRosterItem,
+    PartnerRiderRosterOut,
     PartnerStoreOut,
     PartnerWebhookTestOut,
 )
@@ -363,6 +365,36 @@ async def partner_order_delivery(
     if data is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
     return _partner_delivery_out(data)
+
+
+@partner_router.get("/riders", response_model=PartnerRiderRosterOut)
+async def partner_list_riders(
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerRiderRosterOut:
+    """Full rider roster for the store (every rider, not just those on delivery)."""
+    from app.identity.models import Rider
+
+    riders = (
+        await session.scalars(
+            select(Rider)
+            .where(Rider.restaurant_id == restaurant.id)
+            .order_by(Rider.name.asc(), Rider.id.asc())
+        )
+    ).all()
+    return PartnerRiderRosterOut(
+        items=[
+            PartnerRiderRosterItem(
+                id=r.id,
+                name=r.name,
+                phone=r.phone,
+                status=r.status,
+                on_duty=r.on_duty,
+                total_deliveries=int((r.performance or {}).get("total_deliveries", 0)),
+            )
+            for r in riders
+        ]
+    )
 
 
 @partner_router.get(

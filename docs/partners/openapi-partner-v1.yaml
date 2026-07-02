@@ -180,6 +180,17 @@ paths:
                 eta_minutes: 18
                 cod_due: 210.0
 
+  /api/v1/partner/riders:
+    get:
+      tags: [delivery]
+      summary: Full rider roster (all riders, not just those on delivery)
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerRiderRosterOut"
+
   /api/v1/partner/riders/{rider_id}/location:
     get:
       tags: [delivery]
@@ -475,6 +486,21 @@ components:
       properties:
         conversation_id: { type: integer }
         manual_takeover: { type: boolean }
+    PartnerRiderRosterItem:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        status: { type: string, enum: [available, on_delivery, off_shift, deactivated] }
+        on_duty: { type: boolean }
+        total_deliveries: { type: integer }
+    PartnerRiderRosterOut:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PartnerRiderRosterItem" }
     PartnerStoreOut:
       type: object
       properties:

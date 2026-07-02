@@ -234,6 +234,20 @@ class PartnerRiderLocationOut(BaseModel):
     updated_at: str
 
 
+class PartnerRiderRosterItem(BaseModel):
+    """One rider in the store's roster (full list, not just those on delivery)."""
+    id: int
+    name: str
+    phone: str
+    status: str  # available | on_delivery | off_shift | deactivated
+    on_duty: bool
+    total_deliveries: int = 0
+
+
+class PartnerRiderRosterOut(BaseModel):
+    items: list[PartnerRiderRosterItem]
+
+
 # ── Partner chat (WhatsApp conversation) ─────────────────────────────────────
 class PartnerConversationOut(BaseModel):
     """One WhatsApp thread the POS can read/reply to (customer or rider)."""

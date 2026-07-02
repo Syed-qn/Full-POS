@@ -141,10 +141,11 @@ async def list_partner_orders(
     """Poll endpoint: confirmed orders for POS, optionally only not yet acked."""
     page = max(1, min(limit, 500))
     stmt = select(Order).where(Order.restaurant_id == restaurant.id)
-    if status:
-        stmt = stmt.where(Order.status == status)
-    else:
+    if status is None:
         stmt = stmt.where(Order.status == "confirmed")
+    elif status.lower() != "all":
+        # "all" → no status filter (full order history); anything else filters exactly.
+        stmt = stmt.where(Order.status == status)
     if since is not None:
         stmt = stmt.where(Order.created_at >= since)
     if unacked_only:
