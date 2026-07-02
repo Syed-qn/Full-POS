@@ -223,6 +223,9 @@ async def rider_app_pickup(
         session, restaurant_id=rider.restaurant_id, rider=rider, batch_id=None
     )
     await session.commit()
+    from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+    await flush_pending_partner_webhooks(session, restaurant_id=rider.restaurant_id)
     run = await get_active_run_response(session, rider)
     return run
 
@@ -254,6 +257,9 @@ async def rider_app_delivered(
     from app.outbox.service import deliver_pending
 
     await deliver_pending(session, rider.restaurant_id)
+    from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+    await flush_pending_partner_webhooks(session, restaurant_id=rider.restaurant_id)
     return DeliveredOut(
         batchComplete=result.batch_complete,
         nextOrderId=result.next_order.id if result.next_order else None,

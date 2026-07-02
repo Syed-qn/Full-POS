@@ -1,0 +1,1 @@
+"""Outbound partner (POS) webhook delivery queue."""

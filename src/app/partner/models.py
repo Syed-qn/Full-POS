@@ -34,3 +34,7 @@ class PartnerApiKey(Base, TimestampMixin):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+# Register webhook delivery model for Alembic metadata (table lives in webhooks/).
+from app.partner.webhooks.models import PartnerWebhookDelivery  # noqa: F401,E402

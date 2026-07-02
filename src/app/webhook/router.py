@@ -144,6 +144,10 @@ async def receive_webhook(
             )
             await session.commit()
 
+            from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+            await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
+
             if settings.outbox_sync_delivery:
                 # No worker: deliver each reply in-request on this same connection
                 # (mirrors the simulator's synchronous path). Bind a sessionmaker to

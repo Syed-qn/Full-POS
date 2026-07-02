@@ -110,6 +110,11 @@ class Order(Base, TimestampMixin):
     cancellation_reason: Mapped[str | None] = mapped_column(String(256))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Partner POS sync (Phase 1): POS ack + push tracking.
+    pos_order_id: Mapped[str | None] = mapped_column(String(64))
+    pos_pushed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pos_push_status: Mapped[str | None] = mapped_column(String(16))  # pending|acked|failed
+
 
 class OrderItem(Base, TimestampMixin):
     __tablename__ = "order_items"

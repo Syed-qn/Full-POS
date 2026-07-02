@@ -140,6 +140,7 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     auth_rate_limit: str = "5/minute"
     webhook_rate_limit: str = "120/minute"
+    partner_rate_limit: str = "60/minute"
 
     # CORS / security headers (P7-T13)
     cors_allow_origins: list[str] = []

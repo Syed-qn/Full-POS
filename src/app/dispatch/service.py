@@ -523,6 +523,15 @@ async def _commit_route(
             before=before,
             after={"status": order.status, "rider_id": rider.id},
         )
+        if order.status == "assigned":
+            try:
+                from app.partner.delivery_api import notify_partner_delivery_event
+
+                await notify_partner_delivery_event(
+                    session, order=order, event_type="order.rider_assigned"
+                )
+            except Exception:  # noqa: BLE001 — POS notify must never block dispatch
+                pass
 
     rider.status = "on_delivery"
     # App-only rider flow: notify by PUSH (native app), never WhatsApp. Best-effort.

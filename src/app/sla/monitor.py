@@ -107,6 +107,24 @@ async def _run_monitor() -> None:
                     ),
                 )
         await session.commit()
+        try:
+            from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+            from app.partner.webhooks.models import PartnerWebhookDelivery
+
+            rest_ids = (
+                await session.scalars(
+                    select(PartnerWebhookDelivery.restaurant_id)
+                    .where(
+                        PartnerWebhookDelivery.status == "pending",
+                        PartnerWebhookDelivery.attempts == 0,
+                    )
+                    .distinct()
+                )
+            ).all()
+            for rid in rest_ids:
+                await flush_pending_partner_webhooks(session, restaurant_id=rid)
+        except Exception:  # noqa: BLE001 — partner webhook flush is best-effort
+            logger.exception("sla monitor partner webhook flush failed")
 
 
 async def _fire_kitchen_event(
@@ -211,10 +229,26 @@ async def _fire_event(
     # Auto-coupon at breach_40 if NOT weather-delay-disclosed
     if event_type == "breach_40" and not order.weather_delay_disclosed:
         from app.coupons.service import issue_coupon
-        await issue_coupon(
+
+        coupon = await issue_coupon(
             session,
             restaurant_id=order.restaurant_id,
             customer_id=order.customer_id,
             order_id=order.id,
             discount_aed=Decimal("10.00"),
         )
+        try:
+            from app.partner.delivery_api import notify_partner_delivery_event
+
+            await notify_partner_delivery_event(
+                session,
+                order=order,
+                event_type="order.late",
+                extra={
+                    "sla_breach": True,
+                    "coupon_code": coupon.code,
+                    "coupon_discount_aed": float(coupon.discount_aed or 0),
+                },
+            )
+        except Exception:  # noqa: BLE001 — POS notify must never block SLA
+            pass

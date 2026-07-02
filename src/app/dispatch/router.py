@@ -33,6 +33,9 @@ async def trigger_dispatch(
     from app.outbox.service import deliver_pending
 
     await deliver_pending(session, restaurant.id)
+    from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+    await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
     return {
         "assigned": result.assigned_count,
         "unassigned": result.unassigned_count,

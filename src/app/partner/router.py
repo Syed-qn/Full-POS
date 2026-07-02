@@ -14,16 +14,57 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.ordering.models import Customer
-from app.partner.deps import current_restaurant_via_api_key
+from app.partner.deps import partner_authenticated_restaurant
+from app.partner.health import get_partner_integration_health
 from app.partner.keys import generate_api_key
 from app.partner.models import PartnerApiKey
+from app.partner.integration import apply_partner_settings, partner_settings
+from app.partner.menu_api import (
+    PartnerMenuItemInput,
+    get_partner_menu_sync_status,
+    patch_partner_menu_item,
+    queue_pos_menu_pull,
+    upsert_partner_menu_items,
+)
+from app.partner.delivery_api import (
+    RateLimitError,
+    get_partner_order_delivery,
+    get_partner_rider_location,
+)
+from app.partner.orders_api import (
+    ack_partner_order,
+    apply_partner_kitchen_status,
+    build_partner_order_data,
+    list_partner_orders,
+)
 from app.partner.schemas import (
     ApiKeyCreatedOut,
     ApiKeyCreateIn,
     ApiKeyOut,
     PartnerCustomerListOut,
     PartnerCustomerOut,
+    PartnerDeliveryOut,
+    PartnerIntegrationConfigIn,
+    PartnerIntegrationConfigOut,
+    PartnerIntegrationHealthOut,
+    PartnerMenuBulkIn,
+    PartnerMenuChangedIn,
+    PartnerMenuChangedOut,
+    PartnerMenuItemOut,
+    PartnerMenuPatchIn,
+    PartnerMenuSyncStatusOut,
+    PartnerMenuUpsertOut,
+    PartnerOrderAckIn,
+    PartnerOrderListOut,
+    PartnerOrderOut,
+    PartnerOrderStatusIn,
+    PartnerOrderStatusOut,
+    PartnerRiderLocationOut,
+    PartnerRiderOut,
+    PartnerStoreOut,
+    PartnerWebhookTestOut,
 )
+from app.partner.webhooks.enqueue import enqueue_partner_webhook, schedule_partner_webhook_delivery
 
 # ── Key management (manager JWT) ─────────────────────────────────────────────
 keys_router = APIRouter(prefix="/api/v1/api-keys", tags=["api-keys"])
@@ -113,7 +154,7 @@ async def partner_list_customers(
     updated_since: datetime | None = None,
     limit: int = 100,
     offset: int = 0,
-    restaurant: Restaurant = Depends(current_restaurant_via_api_key),
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> PartnerCustomerListOut:
     """Read-only customer pull for a partner POS, scoped to the key's restaurant.
@@ -153,4 +194,371 @@ async def partner_list_customers(
         limit=page,
         offset=max(0, offset),
         next_updated_since=items[-1].updated_at if items else None,
+    )
+
+
+def _partner_order_out(data: dict) -> PartnerOrderOut:
+    return PartnerOrderOut(
+        order_id=data["order_id"],
+        order_number=data["order_number"],
+        pos_store_id=data["pos_store_id"],
+        status=data["status"],
+        pos_order_id=data.get("pos_order_id"),
+        pos_push_status=data.get("pos_push_status"),
+        customer=data["customer"],
+        items=data["items"],
+        additional_details=data.get("additional_details"),
+        address=data.get("address"),
+        subtotal=data["subtotal"],
+        delivery_fee=data["delivery_fee"],
+        wallet_applied=data["wallet_applied"],
+        total=data["total"],
+        cod_due=data["cod_due"],
+        payment=data.get("payment", "COD"),
+        distance_km=data.get("distance_km"),
+        promised_eta=data.get("promised_eta"),
+        sla_deadline=data.get("sla_deadline"),
+        created_at=data.get("created_at"),
+    )
+
+
+@partner_router.get("/orders", response_model=PartnerOrderListOut)
+async def partner_list_orders(
+    status: str | None = "confirmed",
+    since: datetime | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    unacked_only: bool = True,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerOrderListOut:
+    """Poll new confirmed orders (backup when POS cannot receive webhooks)."""
+    page = max(1, min(limit, 500))
+    orders = await list_partner_orders(
+        session,
+        restaurant=restaurant,
+        status=status,
+        since=since,
+        unacked_only=unacked_only,
+        limit=page,
+        offset=offset,
+    )
+    items = [
+        _partner_order_out(
+            await build_partner_order_data(session, order=o, restaurant=restaurant)
+        )
+        for o in orders
+    ]
+    return PartnerOrderListOut(items=items, limit=page, offset=max(0, offset))
+
+
+@partner_router.get("/orders/{order_id}", response_model=PartnerOrderOut)
+async def partner_get_order(
+    order_id: int,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerOrderOut:
+    from app.ordering.models import Order
+
+    order = await session.get(Order, order_id)
+    if order is None or order.restaurant_id != restaurant.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
+    data = await build_partner_order_data(session, order=order, restaurant=restaurant)
+    return _partner_order_out(data)
+
+
+@partner_router.post("/orders/{order_id}/status", response_model=PartnerOrderStatusOut)
+async def partner_update_order_status(
+    order_id: int,
+    body: PartnerOrderStatusIn,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerOrderStatusOut:
+    """POS kitchen update — preparing / ready triggers same path as dashboard advance."""
+    try:
+        order = await apply_partner_kitchen_status(
+            session,
+            restaurant=restaurant,
+            order_id=order_id,
+            pos_status=body.status,
+            reason=body.reason,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "Order not found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, msg) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, msg) from exc
+
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, restaurant.id)
+    return PartnerOrderStatusOut(
+        order_id=order.id,
+        order_number=order.order_number,
+        status=order.status,
+        rider_assigned=order.rider_id is not None,
+    )
+
+
+def _partner_delivery_out(data: dict) -> PartnerDeliveryOut:
+    rider_raw = data.get("rider")
+    rider = PartnerRiderOut(**rider_raw) if rider_raw else None
+    return PartnerDeliveryOut(
+        order_id=data["order_id"],
+        order_number=data["order_number"],
+        pos_store_id=data["pos_store_id"],
+        pos_order_id=data.get("pos_order_id"),
+        status=data["status"],
+        rider=rider,
+        batch_id=data.get("batch_id"),
+        eta_minutes=data.get("eta_minutes"),
+        promised_eta=data.get("promised_eta"),
+        delivered_at=data.get("delivered_at"),
+        late=data.get("late", False),
+        cod_due=data["cod_due"],
+        cod_collected=data.get("cod_collected"),
+    )
+
+
+@partner_router.get("/orders/{order_id}/delivery", response_model=PartnerDeliveryOut)
+async def partner_order_delivery(
+    order_id: int,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerDeliveryOut:
+    """Poll backup: rider assignment, ETA, delivery status, COD collected."""
+    data = await get_partner_order_delivery(
+        session, restaurant=restaurant, order_id=order_id
+    )
+    if data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
+    return _partner_delivery_out(data)
+
+
+@partner_router.get(
+    "/riders/{rider_id}/location",
+    response_model=PartnerRiderLocationOut | None,
+)
+async def partner_rider_location(
+    rider_id: int,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerRiderLocationOut | None:
+    """Read-only latest rider GPS (rate-limited: 1 req / 10s per rider)."""
+    try:
+        result = await get_partner_rider_location(
+            session, restaurant=restaurant, rider_id=rider_id
+        )
+    except RateLimitError as exc:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
+    if result is False:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rider not found")
+    if result is None:
+        return None
+    return PartnerRiderLocationOut(**result)
+
+
+@partner_router.post("/orders/{order_id}/ack", response_model=PartnerOrderOut)
+async def partner_ack_order(
+    order_id: int,
+    body: PartnerOrderAckIn,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerOrderOut:
+    """POS stores its order id after receiving ``order.created``."""
+    order = await ack_partner_order(
+        session,
+        restaurant=restaurant,
+        order_id=order_id,
+        pos_order_id=body.pos_order_id,
+    )
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Order not found")
+    await session.commit()
+    data = await build_partner_order_data(session, order=order, restaurant=restaurant)
+    return _partner_order_out(data)
+
+
+@partner_router.put("/menu/items", response_model=PartnerMenuUpsertOut)
+async def partner_upsert_menu_items(
+    body: PartnerMenuBulkIn,
+    publish: bool = True,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerMenuUpsertOut:
+    """Bulk upsert menu items by ``pos_id`` (push path — real-time menu sync)."""
+    from decimal import Decimal
+
+    inputs = [
+        PartnerMenuItemInput(
+            pos_id=i.pos_id,
+            dish_number=i.dish_number,
+            name=i.name,
+            price_aed=Decimal(str(i.price)),
+            category=i.category,
+            description=i.description,
+            is_available=i.is_available,
+        )
+        for i in body.items
+    ]
+    result = await upsert_partner_menu_items(
+        session, restaurant_id=restaurant.id, items=inputs, publish=publish
+    )
+    await session.commit()
+    return PartnerMenuUpsertOut(
+        created=result.created,
+        updated=result.updated,
+        images=result.images,
+        errors=result.errors or [],
+    )
+
+
+@partner_router.patch("/menu/items/{pos_id}", response_model=PartnerMenuItemOut)
+async def partner_patch_menu_item(
+    pos_id: str,
+    body: PartnerMenuPatchIn,
+    publish: bool = True,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerMenuItemOut:
+    """Fast sold-out / price update for one POS item."""
+    from decimal import Decimal
+
+    try:
+        dish = await patch_partner_menu_item(
+            session,
+            restaurant_id=restaurant.id,
+            pos_id=pos_id,
+            price_aed=Decimal(str(body.price)) if body.price is not None else None,
+            is_available=body.is_available,
+            name=body.name,
+            publish=publish,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    if dish is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Menu item not found")
+    await session.commit()
+    return PartnerMenuItemOut(
+        pos_id=dish.pos_product_id or pos_id,
+        dish_number=dish.dish_number,
+        name=dish.name,
+        price=float(dish.price_aed),
+        category=dish.category,
+        is_available=dish.is_available,
+    )
+
+
+@partner_router.post("/events/menu-changed", response_model=PartnerMenuChangedOut)
+async def partner_menu_changed(
+    body: PartnerMenuChangedIn | None = None,
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+) -> PartnerMenuChangedOut:
+    """Signal that POS menu changed — queues a full POS pull (Path B)."""
+    _ = body
+    out = queue_pos_menu_pull(restaurant.id)
+    return PartnerMenuChangedOut(**out)
+
+
+@partner_router.get("/menu/sync-status", response_model=PartnerMenuSyncStatusOut)
+async def partner_menu_sync_status(
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerMenuSyncStatusOut:
+    data = await get_partner_menu_sync_status(session, restaurant=restaurant)
+    return PartnerMenuSyncStatusOut(**data)
+
+
+@partner_router.get("/store", response_model=PartnerStoreOut)
+async def partner_store(
+    restaurant: Restaurant = Depends(partner_authenticated_restaurant),
+) -> PartnerStoreOut:
+    """Store identity + integration flags for the POS (API-key authed)."""
+    cfg = partner_settings(restaurant)
+    return PartnerStoreOut(
+        restaurant_id=restaurant.id,
+        name=restaurant.name,
+        phone=restaurant.phone,
+        pos_store_id=cfg["pos_store_id"],
+        partner_enabled=cfg["partner_enabled"],
+        pos_order_push_mode=cfg["pos_order_push_mode"],
+    )
+
+
+# ── Manager integration config (JWT) ─────────────────────────────────────────
+integration_router = APIRouter(prefix="/api/v1/partner-integration", tags=["partner-integration"])
+
+
+def _config_out(restaurant: Restaurant) -> PartnerIntegrationConfigOut:
+    cfg = partner_settings(restaurant)
+    return PartnerIntegrationConfigOut(
+        partner_enabled=cfg["partner_enabled"],
+        partner_webhook_url=cfg["partner_webhook_url"],
+        partner_webhook_secret_set=bool(cfg["partner_webhook_secret"]),
+        pos_store_id=cfg["pos_store_id"],
+        pos_order_push_mode=cfg["pos_order_push_mode"],
+    )
+
+
+@integration_router.get("/config", response_model=PartnerIntegrationConfigOut)
+async def get_partner_integration_config(
+    restaurant: Restaurant = Depends(current_restaurant),
+) -> PartnerIntegrationConfigOut:
+    return _config_out(restaurant)
+
+
+@integration_router.get("/health", response_model=PartnerIntegrationHealthOut)
+async def get_partner_integration_health_endpoint(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerIntegrationHealthOut:
+    """Integration health: last webhook delivery, pending count, menu sync."""
+    data = await get_partner_integration_health(session, restaurant=restaurant)
+    return PartnerIntegrationHealthOut(**data)
+
+
+@integration_router.patch("/config", response_model=PartnerIntegrationConfigOut)
+async def patch_partner_integration_config(
+    body: PartnerIntegrationConfigIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerIntegrationConfigOut:
+    patch = body.model_dump(exclude_unset=True)
+    apply_partner_settings(restaurant, patch)
+    await session.commit()
+    await session.refresh(restaurant)
+    return _config_out(restaurant)
+
+
+@integration_router.post("/webhooks/test", response_model=PartnerWebhookTestOut)
+async def test_partner_webhook(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> PartnerWebhookTestOut:
+    """Enqueue a test ``integration.ping`` webhook and deliver it (sync or Celery)."""
+    cfg = partner_settings(restaurant)
+    if not cfg["partner_enabled"] or not cfg["partner_webhook_url"]:
+        return PartnerWebhookTestOut(
+            queued=False,
+            detail="Enable partner integration and set partner_webhook_url first.",
+        )
+
+    import uuid
+
+    idem = f"test-ping-{restaurant.id}-{uuid.uuid4().hex[:12]}"
+    row = await enqueue_partner_webhook(
+        session,
+        restaurant=restaurant,
+        event_type="integration.ping",
+        data={"message": "Webhook test from WhatsApp ordering platform"},
+        idempotency_key=idem,
+    )
+    if row is None:
+        return PartnerWebhookTestOut(queued=False, detail="Failed to enqueue (duplicate?).")
+    await session.commit()
+    await schedule_partner_webhook_delivery(row.id)
+    return PartnerWebhookTestOut(
+        queued=True,
+        delivery_id=row.id,
+        detail="Test webhook queued for delivery.",
     )

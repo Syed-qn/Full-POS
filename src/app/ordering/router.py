@@ -261,6 +261,9 @@ async def create_manual_order_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await session.commit()
+    from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+    await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
     return await _enrich(session, order)
 
 

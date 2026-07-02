@@ -708,6 +708,9 @@ async def finalize_confirmation(
     from app.ordering.payments import apply_at_confirm
 
     await apply_at_confirm(session, order=order, use_wallet=True, created_by=actor)
+    from app.partner.orders_api import push_order_to_partner
+
+    await push_order_to_partner(session, order=order)
     await session.flush()
 
 
@@ -1073,6 +1076,15 @@ async def _auto_dispatch_on_ready(session: "AsyncSession", restaurant_id: int) -
         _logger.exception("auto-dispatch on ready failed (restaurant_id=%s)", restaurant_id)
         await session.rollback()
         return
+    try:
+        from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+        await flush_pending_partner_webhooks(session, restaurant_id=restaurant_id)
+    except Exception:  # noqa: BLE001 - partner webhook flush is best-effort
+        _logger.exception(
+            "auto-dispatch partner webhook flush failed (restaurant_id=%s)",
+            restaurant_id,
+        )
     try:
         ids = (
             await session.scalars(

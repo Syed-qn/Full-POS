@@ -98,6 +98,15 @@ async def advance_delivery(
                 await loyalty.maybe_issue_recurring_reward(session, customer=customer, settings=settings)
         except Exception:  # noqa: BLE001 — loyalty never blocks delivery
             pass
+
+    try:
+        from app.partner.delivery_api import notify_partner_delivery_transition
+
+        await notify_partner_delivery_transition(
+            session, order=order, to_status=to_status
+        )
+    except Exception:  # noqa: BLE001 — POS notify must never block delivery
+        pass
     return order
 
 

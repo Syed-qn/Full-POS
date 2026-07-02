@@ -70,3 +70,8 @@ async def rate_limit_webhook(request: Request) -> None:
     settings = get_settings()
     ip = request.client.host if request.client else "unknown"
     await _enforce(f"webhook:{ip}", settings.webhook_rate_limit)
+
+
+async def enforce_rate_limit(key: str, spec: str) -> None:
+    """Public wrapper for programmatic rate limiting (e.g. partner deps)."""
+    await _enforce(key, spec)
