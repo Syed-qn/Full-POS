@@ -15,6 +15,8 @@ from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
 from app.identity.schemas import (
     LoginIn,
+    MetaConfigIn,
+    MetaConfigOut,
     ProfilePatch,
     RestaurantOut,
     RiderIn,
@@ -100,6 +102,40 @@ async def onboarding_complete(
         return await service.complete_onboarding(session, restaurant=restaurant)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+
+def _meta_config_out(restaurant: Restaurant) -> MetaConfigOut:
+    from app.identity.meta_config import meta_connected, meta_settings
+
+    cfg = meta_settings(restaurant)
+    return MetaConfigOut(
+        wa_phone_number_id=cfg["wa_phone_number_id"],
+        wa_business_account_id=cfg["wa_business_account_id"],
+        wa_access_token_set=bool(cfg["wa_access_token"]),
+        catalog_id=cfg["catalog_id"],
+        connected=meta_connected(restaurant),
+    )
+
+
+@router.get("/onboarding/meta-config", response_model=MetaConfigOut)
+async def get_meta_config(restaurant: Restaurant = Depends(current_restaurant)):
+    """Read this restaurant's Meta/WhatsApp connection (token never returned)."""
+    return _meta_config_out(restaurant)
+
+
+@router.patch("/onboarding/meta-config", response_model=MetaConfigOut)
+async def patch_meta_config(
+    body: MetaConfigIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Onboarding page saves the Meta connection for this restaurant."""
+    from app.identity.meta_config import apply_meta_settings
+
+    apply_meta_settings(restaurant, body.model_dump(exclude_unset=True))
+    await session.commit()
+    await session.refresh(restaurant)
+    return _meta_config_out(restaurant)
 
 
 @router.get("/geo/health")

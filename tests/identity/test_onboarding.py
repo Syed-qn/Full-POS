@@ -1,6 +1,46 @@
 from decimal import Decimal
 
+import pytest
+
 from app.identity.service import get_onboarding_status
+
+pytestmark_asyncio = pytest.mark.asyncio
+
+
+async def test_meta_config_save_and_read(client, auth_headers):
+    """Onboarding page saves the restaurant's Meta connection; token never echoed."""
+    empty = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)
+    assert empty.status_code == 200
+    assert empty.json()["connected"] is False
+
+    saved = await client.patch(
+        "/api/v1/onboarding/meta-config",
+        headers=auth_headers,
+        json={
+            "wa_phone_number_id": "123456789",
+            "wa_business_account_id": "waba-1",
+            "wa_access_token": "EAAsecret-token",
+            "catalog_id": "CAT-1",
+        },
+    )
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["wa_phone_number_id"] == "123456789"
+    assert body["wa_business_account_id"] == "waba-1"
+    assert body["catalog_id"] == "CAT-1"
+    assert body["wa_access_token_set"] is True
+    assert body["connected"] is True
+    assert "wa_access_token" not in body  # secret never returned
+
+    # Partial update keeps existing values.
+    patched = await client.patch(
+        "/api/v1/onboarding/meta-config",
+        headers=auth_headers,
+        json={"catalog_id": "CAT-2"},
+    )
+    assert patched.json()["catalog_id"] == "CAT-2"
+    assert patched.json()["wa_phone_number_id"] == "123456789"
+    assert patched.json()["connected"] is True
 
 
 async def test_new_signup_not_complete_without_menu(db_session, restaurant):

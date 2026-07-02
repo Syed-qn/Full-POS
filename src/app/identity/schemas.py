@@ -41,6 +41,25 @@ class OnboardingStatusOut(BaseModel):
     catalog_synced: bool
 
 
+class MetaConfigIn(BaseModel):
+    """Onboarding page → save this restaurant's Meta/WhatsApp connection."""
+
+    wa_phone_number_id: str | None = Field(default=None, max_length=64)
+    wa_business_account_id: str | None = Field(default=None, max_length=64)
+    wa_access_token: str | None = Field(default=None, max_length=1024)
+    catalog_id: str | None = Field(default=None, max_length=64)
+
+
+class MetaConfigOut(BaseModel):
+    """Never returns the access token — only whether one is set."""
+
+    wa_phone_number_id: str
+    wa_business_account_id: str
+    wa_access_token_set: bool
+    catalog_id: str
+    connected: bool
+
+
 class RiderIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(min_length=7, max_length=32)

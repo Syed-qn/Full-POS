@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { SectionBanner } from "../components/SectionBanner";
 import { UnifiedMenuPanel } from "../components/UnifiedMenuPanel";
+import { MetaConnectPanel } from "../components/MetaConnectPanel";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
@@ -128,6 +129,8 @@ export function OnboardingScreen() {
       </div>
 
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
+
+      <MetaConnectPanel />
 
       {pending ? (
         <div className={s.card}>
