@@ -38,3 +38,4 @@ google-services.json
 # Local demo / test helper scripts (not part of the app)
 scripts/demo_*.py
 frontend/understanding.txt
+terminals/
