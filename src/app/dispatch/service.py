@@ -1163,8 +1163,19 @@ async def _dispatch_ortools(
                 now=now,
             )
 
-    # Remove any batches left empty by the teardown above.
+    # Remove any batches left empty by the teardown above. First drop any
+    # assignments still dangling off those now-empty batches — otherwise the
+    # assignments_batch_id_fkey constraint blocks the batch DELETE with an
+    # IntegrityError (an orphaned Batch+Assignment with no BatchOrder would 500
+    # every subsequent dispatch run).
     await session.flush()
+    empty_batches = select(Batch.id).where(
+        Batch.restaurant_id == restaurant_id,
+        Batch.id.not_in(select(BatchOrder.batch_id)),
+    )
+    await session.execute(
+        delete(Assignment).where(Assignment.batch_id.in_(empty_batches))
+    )
     await session.execute(
         delete(Batch).where(
             Batch.restaurant_id == restaurant_id,
