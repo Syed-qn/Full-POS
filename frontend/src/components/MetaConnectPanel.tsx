@@ -76,37 +76,50 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
     return () => window.removeEventListener("message", onMessage);
   }, []);
 
+  // Runs after the FB popup returns — pairs the OAuth code with the WABA/number
+  // captured from the session-info messages, then exchanges + stores server-side.
+  async function finishConnect(code: string) {
+    const info = sessionInfo.current;
+    if (!info.phone_number_id || !info.waba_id) {
+      toast("Connection incomplete — please try again.");
+      setBusy(false);
+      return;
+    }
+    try {
+      const c = await connectMetaEmbedded({
+        code,
+        phone_number_id: info.phone_number_id,
+        waba_id: info.waba_id,
+      });
+      setCfg(c);
+      setPhone(c.wa_phone_number_id);
+      setWaba(c.wa_business_account_id);
+      toast("WhatsApp connected ✓");
+      if (c.connected) onSaved?.();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't finish connecting");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function connectWithFacebook() {
     if (!embed?.enabled) return;
     setBusy(true);
     try {
       const FB = await loadFacebookSdk(embed.app_id, embed.graph_version);
       sessionInfo.current = {};
+      // FB.login rejects an async callback ("Expression is of type asyncfunction,
+      // not function") — keep this a plain function and kick off async work inside.
       FB.login(
-        async (resp) => {
+        (resp) => {
           const code = resp?.authResponse?.code;
-          const info = sessionInfo.current;
-          if (!code || !info.phone_number_id || !info.waba_id) {
-            toast("Connection cancelled or incomplete — please try again.");
+          if (!code) {
+            toast("Connection cancelled — please try again.");
             setBusy(false);
             return;
           }
-          try {
-            const c = await connectMetaEmbedded({
-              code,
-              phone_number_id: info.phone_number_id,
-              waba_id: info.waba_id,
-            });
-            setCfg(c);
-            setPhone(c.wa_phone_number_id);
-            setWaba(c.wa_business_account_id);
-            toast("WhatsApp connected ✓");
-            if (c.connected) onSaved?.();
-          } catch (e) {
-            toast(e instanceof Error ? e.message : "Couldn't finish connecting");
-          } finally {
-            setBusy(false);
-          }
+          void finishConnect(code);
         },
         {
           config_id: embed.config_id,
