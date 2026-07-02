@@ -1,0 +1,162 @@
+{
+  "info": {
+    "name": "Partner API v1",
+    "description": "POS integration collection. Set `baseUrl` and `apiKey` variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "apiKey", "value": "rk_live_REPLACE_ME" },
+    { "key": "orderId", "value": "1" },
+    { "key": "riderId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Store",
+      "item": [
+        {
+          "name": "GET store",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/store"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "GET orders (poll)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/orders?unacked_only=true"
+          }
+        },
+        {
+          "name": "GET order by id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "POST ack order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"pos_order_id\": \"CRT-ORD-001\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/partner/orders/{{orderId}}/ack"
+          }
+        },
+        {
+          "name": "POST status preparing",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"status\": \"preparing\"}" },
+            "url": "{{baseUrl}}/api/v1/partner/orders/{{orderId}}/status"
+          }
+        },
+        {
+          "name": "POST status ready",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"status\": \"ready\"}" },
+            "url": "{{baseUrl}}/api/v1/partner/orders/{{orderId}}/status"
+          }
+        },
+        {
+          "name": "GET delivery status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/orders/{{orderId}}/delivery"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Menu",
+      "item": [
+        {
+          "name": "PUT menu items",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\": [{\"pos_id\": \"POS-101\", \"dish_number\": 101, \"name\": \"Chicken Biryani\", \"price\": 45.0, \"category\": \"Main\", \"is_available\": true}]}"
+            },
+            "url": "{{baseUrl}}/api/v1/partner/menu/items"
+          }
+        },
+        {
+          "name": "PATCH menu item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "X-API-Key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\"is_available\": false}" },
+            "url": "{{baseUrl}}/api/v1/partner/menu/items/POS-101"
+          }
+        },
+        {
+          "name": "GET menu sync status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/menu/sync-status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delivery",
+      "item": [
+        {
+          "name": "GET rider location",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/riders/{{riderId}}/location"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "GET customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }],
+            "url": "{{baseUrl}}/api/v1/partner/customers"
+          }
+        }
+      ]
+    }
+  ]
+}

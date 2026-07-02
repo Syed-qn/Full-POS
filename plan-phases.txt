@@ -1,0 +1,692 @@
+# POS API + Webhook Build Plan (Step-by-Step)
+# Main engine = OPS (kitchen ready → dispatch → rider → delivered)
+# Rule: Partner APIs are thin HTTP. All logic stays in existing services.
+#       Never duplicate FSM / dispatch / menu sync code.
+
+Last updated: 2026-07-01 (status + revert notes)
+
+---
+
+## Status — call this file to rebuild
+
+Phases **0 and 1** were implemented **locally once** (tests passed). You may **revert**
+that code — nothing on GitHub changes. This file is the source of truth to build again.
+
+| Phase | Status |
+|-------|--------|
+| 0 | Plan ✓ — code optional (revert OK) |
+| 1 | Plan ✓ — code optional (revert OK) |
+| 2 | Plan ✓ — code optional (revert OK) |
+| 3 | Plan ✓ — code optional (revert OK) |
+| 4 | Plan ✓ — code optional (revert OK) |
+| 5 | Plan ✓ — code optional (revert OK) |
+
+**To resume:** say `go phase 0` → `go phase 1` → … (add `don't push` to stay local).
+
+**Revert code:** `git checkout .` / `git reset --hard origin/main` — plans stay on disk.
+
+**Master overview:** `plan.txt`
+
+---
+
+## Golden Rules (read before every phase)
+
+1. **One brain** — POS API, dashboard, and WhatsApp all call the SAME service functions:
+   - Kitchen: `ordering/service.py → advance_kitchen_status()`
+   - Dispatch: already fires inside `advance_kitchen_status()` when status = `ready`
+   - Menu: `pos/sync_service.py → sync_menu_from_pos()`
+   - Cancel: `ordering/service.py → cancel_order()`
+
+2. **Thin routers** — `partner/router.py` only validates input, calls service, returns JSON.
+
+3. **New module layout** (add gradually, do NOT dump everything in router.py):
+   ```
+   src/app/partner/
+     router.py          ← HTTP only (already exists)
+     schemas.py         ← request/response models
+     deps.py            ← X-API-Key auth (already exists)
+     service.py         ← NEW: shared partner helpers
+     orders_api.py      ← NEW: order list/ack/status handlers
+     menu_api.py        ← NEW: menu push handlers (Phase 3)
+     webhooks/
+       models.py        ← partner_webhook_deliveries table
+       enqueue.py       ← write outbound webhook row in same DB transaction
+       deliver.py       ← HTTP POST to POS with HMAC + retry
+       signing.py       ← HMAC-SHA256 sign/verify
+   ```
+
+4. **Outbound webhooks** = separate table from WhatsApp outbox.
+   WhatsApp outbox has `to_phone`. POS webhooks have `target_url` + JSON body.
+   Same pattern: write in transaction → worker delivers with retry.
+
+5. **Inbound from POS** = normal REST endpoints (`X-API-Key`), NOT us receiving
+   their webhook unless they insist. Simpler: POS calls our API directly.
+
+---
+
+## What POS Gets (final package)
+
+| Type | What | Auth |
+|------|------|------|
+| API key | One per store, header `X-API-Key` | Already live |
+| Inbound APIs | POS calls us (orders, kitchen status, menu) | X-API-Key |
+| Outbound webhooks | We POST to POS URL on events | HMAC signed |
+| Docs | OpenAPI YAML + sample payloads | Phase 5 |
+
+---
+
+## How to Create Webhooks (Detailed Guide)
+
+You already have the pattern — WhatsApp **outbox**. POS webhooks are the same idea:
+instead of sending to a phone number, you POST JSON to the POS URL.
+
+### Two directions (do not mix them up)
+
+| Direction | Who calls whom | How |
+|-----------|----------------|-----|
+| **Outbound webhook** (we → POS) | We notify POS when something happens | Queue row → worker POSTs to their URL |
+| **Inbound API** (POS → us) | POS tells us something happened | Normal REST endpoint + `X-API-Key` |
+
+**Recommendation:** Use **outbound webhooks** for orders and delivery updates.
+Use **inbound API** for kitchen status (`ready`, `preparing`) — simpler and more reliable
+than POS sending webhooks to us.
+
+### Outbound webhook — 4 pieces
+
+```
+Business event (order confirmed)
+        ↓
+enqueue_partner_webhook()     ← write row in SAME transaction
+        ↓
+DB commit
+        ↓
+Celery worker picks up row
+        ↓
+POST https://pos.com/hooks/orders  (HMAC signed)
+        ↓
+POS returns 200 → mark sent
+POS fails       → retry with backoff → dead after 5 tries
+```
+
+Parallel in codebase today:
+
+```
+enqueue_message() → outbox_messages → deliver_outbox_message task → Meta API
+```
+
+Copy retry logic from `src/app/outbox/worker.py` (`_backoff_countdown`,
+`_is_permanent_failure`, claim pattern).
+
+### Step 1 — Store POS webhook URL per restaurant
+
+In `restaurants.settings` JSONB (no migration):
+
+```json
+{
+  "partner_enabled": true,
+  "partner_webhook_url": "https://pos.example.com/hooks/whatsapp",
+  "partner_webhook_secret": "shared-secret-for-hmac",
+  "pos_store_id": "CRT-DXB-014",
+  "pos_order_push_mode": "webhook"
+}
+```
+
+POS gives you their URL during onboarding. Store once per store.
+
+### Step 2 — Delivery queue table
+
+New table `partner_webhook_deliveries` (separate from WhatsApp `outbox_messages`):
+
+| Column | Purpose |
+|--------|---------|
+| `restaurant_id` | Which store |
+| `event_type` | e.g. `order.created` |
+| `payload` | JSON body to send |
+| `target_url` | Copied from settings at enqueue time |
+| `idempotency_key` | Unique — prevents duplicate sends on retry |
+| `status` | `pending` → `sent` / `dead` |
+| `attempts` | Retry count |
+| `last_error` | Last failure message |
+| `delivered_at` | When POS returned 2xx |
+
+### Step 3 — Enqueue function (call from business code)
+
+```python
+# partner/webhooks/enqueue.py
+
+async def enqueue_partner_webhook(
+    session,
+    *,
+    restaurant_id: int,
+    event_type: str,          # "order.created"
+    payload: dict,
+    idempotency_key: str,     # "pos-order-created-42"
+) -> None:
+    settings = await get_restaurant_settings(session, restaurant_id)
+    url = settings.get("partner_webhook_url")
+    if not url:
+        return  # POS not configured — skip silently
+
+    row = PartnerWebhookDelivery(
+        restaurant_id=restaurant_id,
+        event_type=event_type,
+        payload=payload,
+        target_url=url,
+        idempotency_key=idempotency_key,
+        status="pending",
+    )
+    session.add(row)
+    # caller commits — same transaction as order confirm
+```
+
+**Hook point** — after order becomes `confirmed` in `ordering/service.py`:
+
+```python
+await enqueue_partner_webhook(
+    session,
+    restaurant_id=order.restaurant_id,
+    event_type="order.created",
+    payload=build_order_payload(order),
+    idempotency_key=f"pos-order-created-{order.id}",
+)
+await session.commit()
+# then trigger Celery worker for the new row
+```
+
+### Step 4 — HMAC signing
+
+```python
+# partner/webhooks/signing.py
+import hmac, hashlib
+
+def sign_body(secret: str, body: bytes) -> str:
+    sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    return f"sha256={sig}"
+```
+
+Delivery headers:
+
+```
+Content-Type: application/json
+X-Partner-Signature: sha256=<hmac of raw body>
+X-Partner-Event: order.created
+X-Partner-Idempotency-Key: pos-order-created-42
+```
+
+POS verifies signature with the same shared secret.
+
+### Step 5 — Celery worker
+
+```python
+# partner/webhooks/worker.py
+
+@shared_task(bind=True, max_retries=5)
+def deliver_partner_webhook_task(self, delivery_id: int):
+    # 1. Load row (status must be pending)
+    # 2. POST to target_url with HMAC headers
+    # 3. 2xx → status = sent
+    # 4. 5xx/timeout → retry with backoff (10s, 20s, 40s, 80s, 160s)
+    # 5. 4xx (except 429) → status = dead (permanent fail)
+```
+
+After commit:
+
+```python
+deliver_partner_webhook_task.apply_async(args=[row.id], queue="maintenance")
+```
+
+### Webhook events we send (outbound)
+
+| Event | When we fire it | POS uses it for |
+|-------|-----------------|-----------------|
+| `order.created` | Customer confirms on WhatsApp | Show order in kitchen screen |
+| `order.modified` | Customer changes order pre-ready | Update kitchen ticket |
+| `order.cancelled` | Either side cancels | Remove from kitchen |
+| `order.rider_assigned` | Dispatch assigns rider | Show rider on the way |
+| `order.picked_up` | Rider taps pickup | Show out for delivery |
+| `order.delivered` | Rider taps delivered | Close order, record COD |
+| `order.late` | SLA breach | Flag in POS |
+
+**Example `order.created` payload:**
+
+```json
+{
+  "event": "order.created",
+  "idempotency_key": "pos-order-created-42",
+  "timestamp": "2026-07-01T13:37:00Z",
+  "data": {
+    "order_id": 42,
+    "order_number": "R1-0042",
+    "pos_store_id": "CRT-DXB-014",
+    "customer": { "name": "Asfer", "phone": "+9715..." },
+    "items": [
+      { "dish_number": 110, "name": "Grill Mandi", "qty": 5, "price": 40.00 }
+    ],
+    "address": {
+      "building": "Tower B", "room": "123", "lat": 25.1, "lng": 55.2
+    },
+    "subtotal": 200.00,
+    "delivery_fee": 10.00,
+    "total": 210.00,
+    "payment": "COD",
+    "promised_eta_minutes": 40
+  }
+}
+```
+
+### What POS must build (their side)
+
+One endpoint receives all events:
+
+```
+POST https://their-pos.com/hooks/whatsapp-orders
+```
+
+Their handler must:
+
+1. Verify `X-Partner-Signature` HMAC
+2. Dedupe on `idempotency_key` (return 200 if already processed)
+3. Route by `event` type
+4. Return `200` within 5 seconds
+
+**Fallback if POS cannot receive webhooks:** they poll
+`GET /api/v1/partner/orders` instead (Phase 1).
+
+### Inbound: POS calls our API (not a webhook)
+
+Kitchen status — POS calls us directly:
+
+```
+POST https://your-api.com/api/v1/partner/orders/42/status
+Header: X-API-Key: <their key>
+Body: { "status": "ready" }
+```
+
+→ calls `advance_kitchen_status(actor="pos")` → dispatch fires automatically.
+
+No inbound webhook receiver needed for kitchen — simpler auth, direct OPS engine hook.
+
+### Webhook mental model
+
+```
+OUTBOUND (webhooks we create):
+  order confirmed  → enqueue → worker POST → POS kitchen screen
+  rider delivered  → enqueue → worker POST → POS order closed
+
+INBOUND (API POS calls):
+  POS "ready"      → POST /partner/orders/{id}/status → advance_kitchen_status()
+  POS menu update  → PUT /partner/menu/items → sync_menu_from_pos()
+```
+
+### Webhook anti-patterns (do NOT)
+
+- Do NOT POST to POS synchronously inside the WhatsApp webhook handler — always queue
+- Do NOT put POS deliveries in `outbox_messages` — that table is for phone numbers only
+- Do NOT call POS before DB commit — enqueue in same transaction, deliver after commit
+- Do NOT skip `idempotency_key` — retries will duplicate orders in POS without it
+
+---
+
+## Phase 0 — Foundation (do this first, ~3 days)
+**Goal:** Plumbing only. No business features yet. Nothing breaks existing dashboard.
+
+### Why
+Without shared config + webhook delivery infra, every later phase becomes copy-paste mess.
+
+### Steps
+
+**Step 0.1 — Store integration config**
+- Add fields to `restaurants.settings` JSONB (no migration needed):
+  ```json
+  {
+    "partner_enabled": true,
+    "partner_webhook_url": "https://pos.example.com/hooks/whatsapp-orders",
+    "partner_webhook_secret": "<HMAC secret>",
+    "pos_store_id": "CRT-DXB-014",
+    "pos_order_push_mode": "webhook"   // or "poll"
+  }
+  ```
+- Add `PATCH /api/v1/partner/config` (manager JWT) so dashboard can set webhook URL.
+- Partner reads config via `GET /api/v1/partner/store` (API key).
+
+**Step 0.2 — Outbound webhook table**
+- Migration: `partner_webhook_deliveries`
+  - `id`, `restaurant_id`, `event_type`, `payload` JSONB,
+  - `target_url`, `idempotency_key` (unique),
+  - `status` (pending/sent/failed/dead), `attempts`, `last_error`, `delivered_at`
+- Copy retry pattern from `outbox/worker.py` (backoff, dead-letter after N tries).
+
+**Step 0.3 — Signing helper**
+- `partner/webhooks/signing.py`:
+  - `sign_body(secret, body_bytes) → "sha256=..."`
+  - `verify_signature(secret, body, header) → bool`
+- Header name: `X-Partner-Signature`
+
+**Step 0.4 — Enqueue helper**
+- `partner/webhooks/enqueue.py`:
+  - `enqueue_partner_webhook(session, restaurant_id, event_type, payload, idempotency_key)`
+  - Only enqueues if `partner_webhook_url` is set in settings.
+  - Called INSIDE the same transaction as the business action (order confirm, etc.).
+
+**Step 0.5 — Celery worker task**
+- `partner/webhooks/worker.py`:
+  - `deliver_partner_webhook_task(delivery_id)`
+  - POST JSON to `target_url`, attach signature header.
+  - On 2xx → mark sent. On fail → retry. Queue: `maintenance` (same as POS sync).
+
+**Step 0.6 — Tests**
+- Unit: sign/verify roundtrip.
+- Unit: enqueue creates row, skips when no webhook URL.
+- Integration: fake HTTP server receives signed POST.
+
+**Phase 0 done when:** You can manually enqueue a test webhook and it delivers to a fake URL.
+
+**Implemented once (local, revert OK):** `partner/webhooks/*`, `partner/integration.py`,
+migration `n7a8b9c0d1e2`, endpoints under `/api/v1/partner-integration/*`,
+`GET /api/v1/partner/store`, tests in `tests/partner/test_partner_webhooks.py`.
+
+---
+
+## Phase 1 — Orders OUT to POS (the intake loop, ~1 week)
+**Goal:** WhatsApp order confirmed → POS receives it. OPS can see the order in POS kitchen.
+
+### Why this is first
+Nothing else matters if the kitchen never sees the order. Customer flow already works;
+this closes the loop POS → kitchen screen.
+
+### Flow
+```
+Customer confirms on WhatsApp
+  → ordering service sets status = confirmed
+  → enqueue_partner_webhook("order.created", payload)
+  → POS kitchen screen shows order
+```
+
+### Steps
+
+**Step 1.1 — Order correlation fields**
+- Migration: on `orders` table add:
+  - `pos_order_id` (string, nullable) — POS's ID after they ack
+  - `pos_pushed_at` (timestamptz, nullable)
+  - `pos_push_status` (pending/acked/failed)
+- Index: `(restaurant_id, status, created_at)` for poll queries.
+
+**Step 1.2 — Hook after order confirmation**
+- Find the ONE place order becomes `confirmed` (conversation engine checkout path
+  or `ordering/service.py` confirm function).
+- After `fsm_transition → confirmed` + commit:
+  - Call `enqueue_partner_webhook("order.created", order_payload)`
+  - Idempotency key: `pos-order-created-{order.id}`
+- **Do NOT** call POS HTTP inline in the request — always via webhook queue.
+
+**Step 1.3 — Build order payload serializer**
+- `partner/orders_api.py → build_order_payload(order) → dict`
+- Include: `order_id`, `order_number`, `pos_store_id`, customer name/phone,
+  items[], address, subtotal, delivery_fee, total, payment="COD",
+  `promised_eta`, `sla_deadline`, `created_at`, `additional_details`.
+
+**Step 1.4 — Poll endpoint (backup if POS can't receive webhooks)**
+- `GET /api/v1/partner/orders`
+  - Query: `?status=confirmed&since=<iso>&limit=50`
+  - Returns orders where `pos_push_status = pending` OR `status = confirmed` and not acked.
+  - Auth: `X-API-Key` (already wired via `current_restaurant_via_api_key`).
+
+**Step 1.5 — Ack endpoint**
+- `POST /api/v1/partner/orders/{order_id}/ack`
+  - Body: `{ "pos_order_id": "POS-12345" }`
+  - Sets `pos_order_id`, `pos_push_status = acked`.
+  - Returns full order payload.
+
+**Step 1.6 — Tests**
+- WhatsApp test order → confirmed → webhook row created with correct payload.
+- Poll returns the order before ack; after ack, poll excludes it.
+- Idempotency: confirming same order doesn't create duplicate webhook rows.
+
+**Phase 1 done when:** Test order from WhatsApp appears in POS (webhook or poll) and POS can ack.
+
+**Implemented once (local, revert OK):** `partner/orders_api.py`, migration `o8b9c0d1e2f3`,
+hook in `finalize_confirmation`, `GET/POST /api/v1/partner/orders*`,
+`flush_pending_partner_webhooks` after commit, tests in `tests/partner/test_partner_orders.py`.
+
+---
+
+## Phase 2 — Kitchen status IN from POS (OPS engine, ~1 week)
+**Goal:** POS marks preparing/ready → our system advances FSM → `ready` triggers dispatch.
+
+### Why this is the main engine
+This is the critical path:
+```
+POS taps "Ready"
+  → POST /partner/orders/{id}/status  { "status": "ready" }
+  → advance_kitchen_status(actor="pos")
+  → _auto_dispatch_on_ready()
+  → rider app push notification
+  → customer WhatsApp "on the way"
+```
+
+### Steps
+
+**Step 2.1 — Status mapping table**
+- `partner/status_map.py` — dict, configurable per partner later:
+  ```python
+  POS_TO_OUR = {
+    "accepted":  "confirmed",    # no-op if already confirmed
+    "preparing": "preparing",
+    "ready":     "ready",
+    "cancelled": "cancelled",
+  }
+  ```
+- Start hardcoded. Move to DB only if second POS partner needs different labels.
+
+**Step 2.2 — Partner status endpoint**
+- `POST /api/v1/partner/orders/{order_id}/status`
+  - Body: `{ "status": "preparing" | "ready" | "cancelled", "reason": "..." }`
+  - Auth: `X-API-Key`
+  - Logic:
+    1. Load order (tenant-scoped).
+    2. Map POS status → our FSM target.
+    3. If `preparing` or `ready`: call `advance_kitchen_status(session, order, actor="pos")`
+       — may need to call TWICE if jumping confirmed→ready (see Step 2.3).
+    4. If `cancelled`: call `cancel_order(session, order, actor="pos", reason=...)`.
+    5. Audit log with `actor="pos"`.
+    6. Return `{ "order_id", "status", "rider_assigned": bool }`.
+
+**Step 2.3 — Multi-hop advance (confirmed → ready in one call)**
+- POS may send `ready` directly without sending `preparing` first.
+- Helper `advance_kitchen_to(session, order, target_status, actor)`:
+  - Loop `advance_kitchen_status()` until order.status == target or illegal transition.
+  - Stops at `ready` → dispatch already fires automatically (existing code).
+
+**Step 2.4 — Guard: only POS-advanceable states**
+- Reject if order is `draft`, `delivered`, etc. → 422 with clear message.
+- Reject if order not yet acked by POS (optional strict mode, configurable).
+
+**Step 2.5 — Tests (most important tests in whole project)**
+- confirmed → preparing: customer gets preparing ping, NO dispatch.
+- preparing → ready: dispatch runs, rider push sent, assignment created.
+- confirmed → ready (single call): both transitions happen, dispatch runs once.
+- cancelled from preparing: order cancelled, customer notified.
+- Dashboard `POST /orders/{id}/advance` still works (regression).
+
+**Phase 2 done when:** POS "Ready" button assigns a rider and customer gets tracking message.
+
+**Implemented once (local, revert OK):** `partner/status_map.py`, `advance_kitchen_to` +
+`apply_partner_kitchen_status` in `orders_api.py`, `POST /api/v1/partner/orders/{id}/status`,
+tests in `tests/partner/test_partner_kitchen.py`.
+
+---
+
+## Phase 3 — Menu sync IN from POS (~1 week)
+**Goal:** POS menu change → WhatsApp catalog updates. Customer sees correct items/prices.
+
+### Why after orders
+Menu can be slightly stale for a day. Orders + kitchen must work first.
+
+### Two paths (pick one with POS partner, both can coexist)
+
+**Path A — POS pushes items to us (real-time, preferred)**
+
+**Step 3.1 — Bulk menu upsert endpoint**
+- `PUT /api/v1/partner/menu/items`
+  - Body: `{ "items": [ { "pos_id", "dish_number", "name", "price", "category",
+    "description", "is_available", "variants": [] } ] }`
+  - Reuse mapping logic from `pos/mapper.py` — extract shared function, don't duplicate.
+  - Upsert by `pos_product_id` on `dishes` table (already exists from Cratis sync).
+  - After upsert: trigger Meta catalog push (same as `sync_menu_from_pos(publish=True)`).
+
+**Step 3.2 — Single item fast path**
+- `PATCH /api/v1/partner/menu/items/{pos_id}`
+  - Body: `{ "price": 25.00, "is_available": false }` only.
+  - For sold-out toggles — must reflect in bot within seconds.
+
+**Path B — POS tells us to pull (already half-built)**
+
+**Step 3.3 — Menu change webhook trigger (POS → us)**
+- `POST /api/v1/partner/events/menu-changed` (optional lightweight endpoint)
+  - Body: `{ "changed_at": "..." }` — no menu data, just a signal.
+  - We enqueue `sync_menu_from_pos()` Celery task (already exists).
+  - Good when POS doesn't want to push full menu payloads.
+
+**Step 3.4 — Sync status endpoint**
+- `GET /api/v1/partner/menu/sync-status`
+  - Returns last sync time, item count, errors (from `settings.pos_last_sync`).
+
+**Step 3.5 — Tests**
+- Push 3 items → dishes created with `pos_product_id`.
+- Patch availability false → bot sees sold out.
+- Push unchanged menu → idempotent, no duplicate dishes.
+- Meta publish called (mock Meta client in test).
+
+**Phase 3 done when:** POS price change reflects on WhatsApp within 1 minute.
+
+**Implemented once (local, revert OK):** `partner/menu_api.py`, `PUT/PATCH /api/v1/partner/menu/items`,
+`POST /api/v1/partner/events/menu-changed`, `GET /api/v1/partner/menu/sync-status`,
+tests in `tests/partner/test_partner_menu.py`.
+
+---
+
+## Phase 4 — Delivery status OUT to POS (~1 week)
+**Goal:** POS sees rider assigned → picked up → delivered. Same data dashboard shows.
+
+### Flow
+```
+Rider app: pickup / delivered
+  → existing rider_actions FSM
+  → enqueue_partner_webhook("order.delivery_updated", payload)
+  → POS order screen updates
+```
+
+### Steps
+
+**Step 4.1 — Hook into existing delivery transitions**
+- Add `enqueue_partner_webhook` calls in ONE place: after `fsm_transition` in
+  ordering FSM or in `dispatch/rider_actions.py` after pickup/deliver.
+- Events to emit:
+  - `order.rider_assigned` — rider name, ETA
+  - `order.picked_up`
+  - `order.delivered` — COD amount collected
+  - `order.late` — SLA breach flag + coupon code if issued
+
+**Step 4.2 — Delivery read endpoint (POS poll backup)**
+- `GET /api/v1/partner/orders/{order_id}/delivery`
+  - Returns: status, rider{name, phone}, batch_id, eta, delivered_at, cod_collected.
+
+**Step 4.3 — Rider location read (optional, for POS tracking screen)**
+- `GET /api/v1/partner/riders/{rider_id}/location`
+  - Returns latest lat/lng + `updated_at` from `rider_locations`.
+  - Read-only. Rate-limit heavily (1 req/10s per rider).
+
+**Step 4.4 — Tests**
+- Ready → assigned → webhook `order.rider_assigned` fired.
+- Delivered → webhook `order.delivered` with COD amount.
+- Dashboard dispatch map still works (same DB).
+
+**Phase 4 done when:** POS screen shows "Out for delivery" and "Delivered" in real time.
+
+---
+
+## Phase 5 — Hardening + docs (~1 week)
+**Goal:** Production-ready for POS partner handoff.
+
+### Steps
+
+**Step 5.1 — OpenAPI spec**
+- Publish `docs/partners/openapi-partner-v1.yaml` covering all `/api/v1/partner/*` endpoints.
+- Include example requests/responses for each.
+
+**Step 5.2 — Webhook contract doc**
+- `docs/partners/webhook-events.md`:
+  - Event types, payload schemas, signature verification code sample (Python + Node).
+  - Retry policy: we retry 5x exponential backoff; POS should return 2xx within 5s.
+  - Idempotency: POS must dedupe on `idempotency_key` in payload.
+
+**Step 5.3 — Sandbox**
+- Seed script: test restaurant + API key + sample menu + fake webhook receiver URL.
+- Postman/Bruno collection.
+
+**Step 5.4 — Dashboard integration health (optional, small)**
+- Settings page section: webhook URL, last delivery status, last menu sync, test ping button.
+- Uses same config from Phase 0.
+
+**Step 5.5 — Security**
+- Rate limit partner endpoints: 60 req/min per API key.
+- Log all partner calls to `audit_log` with `actor="pos"`.
+- Revoked keys → 401 immediately.
+
+**Step 5.6 — End-to-end UAT checklist**
+```
+[ ] Menu push → item appears on WhatsApp catalog
+[ ] Customer orders → POS receives order.created webhook
+[ ] POS acks → pos_order_id stored
+[ ] POS preparing → customer gets WhatsApp ping
+[ ] POS ready → rider app push + dispatch assignment
+[ ] Rider pickup → POS gets order.picked_up webhook
+[ ] Rider delivered → POS gets order.delivered + COD amount
+[ ] Dashboard shows same order state (no drift)
+[ ] POS-only restaurant never needs to open dashboard
+```
+
+**Phase 5 done when:** POS engineering team can integrate from docs alone.
+
+---
+
+## Build Order Summary (do NOT skip or reorder)
+
+| Phase | What | Depends on | ~Time |
+|-------|------|------------|-------|
+| 0 | Webhook infra + config | nothing | 3 days |
+| 1 | Orders OUT to POS | Phase 0 | 1 week |
+| 2 | Kitchen status IN (OPS engine) | Phase 1 | 1 week |
+| 3 | Menu sync IN | Phase 0 | 1 week |
+| 4 | Delivery status OUT | Phase 0 + 2 | 1 week |
+| 5 | Docs + hardening | all above | 1 week |
+
+**Total: ~5–6 weeks.** Phases 3 and 4 can run in parallel after Phase 2.
+
+---
+
+## What NOT to build (avoid the mess)
+
+- Do NOT create a second order table for POS — use `orders` + `pos_order_id`.
+- Do NOT call POS HTTP synchronously in the WhatsApp webhook handler — always queue.
+- Do NOT put FSM logic in `partner/router.py` — call `ordering/service.py`.
+- Do NOT mix POS webhooks into WhatsApp `outbox_messages` table — separate table.
+- Do NOT build a POS-specific dashboard — POS IS the dashboard for those restaurants.
+- Do NOT invent new order statuses — map POS labels onto existing FSM only.
+
+---
+
+## Quick Reference: OPS Critical Path
+
+```
+1. Customer orders on WhatsApp
+2. order.created webhook → POS kitchen screen     [Phase 1]
+3. POS: preparing → our API                       [Phase 2]
+4. POS: ready → advance_kitchen_status()
+              → _auto_dispatch_on_ready()
+              → rider app push                     [Phase 2 — MAIN ENGINE]
+5. Rider: pickup → delivery webhook → POS          [Phase 4]
+6. Rider: delivered → COD webhook → POS           [Phase 4]
+```
+
+Everything else (menu, customers pull, marketing) is supporting — not on the critical path.

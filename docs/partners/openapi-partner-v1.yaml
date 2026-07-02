@@ -1,0 +1,494 @@
+openapi: 3.0.3
+info:
+  title: WhatsApp Restaurant Platform — Partner API v1
+  version: 1.0.0
+  description: |
+    POS integration surface. Authenticate with `X-API-Key` on every request.
+
+    **Critical path:** orders IN (webhook/poll) → kitchen status OUT → dispatch → delivery webhooks OUT.
+
+    See also: `webhook-events.md` (outbound events), `uat-checklist.md` (go-live).
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: http://localhost:8000
+    description: Local dev
+
+tags:
+  - name: store
+  - name: orders
+  - name: kitchen
+  - name: delivery
+  - name: menu
+  - name: customers
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/v1/partner/store:
+    get:
+      tags: [store]
+      summary: Store identity and integration flags
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerStoreOut"
+              example:
+                restaurant_id: 1
+                name: Partner Sandbox
+                phone: "+971509990001"
+                pos_store_id: CRT-SBX-001
+                partner_enabled: true
+                pos_order_push_mode: webhook
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/partner/orders:
+    get:
+      tags: [orders]
+      summary: Poll confirmed orders (webhook backup)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            default: confirmed
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: unacked_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Order list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderListOut"
+
+  /api/v1/partner/orders/{order_id}:
+    get:
+      tags: [orders]
+      summary: Get one order
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderOut"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/partner/orders/{order_id}/ack:
+    post:
+      tags: [orders]
+      summary: Acknowledge order.created — store POS order id
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerOrderAckIn"
+            example:
+              pos_order_id: "CRT-ORD-8842"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderOut"
+
+  /api/v1/partner/orders/{order_id}/status:
+    post:
+      tags: [kitchen]
+      summary: Update kitchen status (preparing / ready / cancelled)
+      description: |
+        `ready` triggers the same dispatch path as the manager dashboard.
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerOrderStatusIn"
+            examples:
+              preparing:
+                value: { status: preparing }
+              ready:
+                value: { status: ready }
+              cancel:
+                value: { status: cancelled, reason: "Out of stock" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderStatusOut"
+              example:
+                order_id: 42
+                order_number: R1-0042
+                status: ready
+                rider_assigned: true
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/partner/orders/{order_id}/delivery:
+    get:
+      tags: [delivery]
+      summary: Delivery status poll backup
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerDeliveryOut"
+              example:
+                order_id: 42
+                order_number: R1-0042
+                status: picked_up
+                rider:
+                  id: 3
+                  name: Ahmed
+                  phone: "+971500000001"
+                batch_id: 7
+                eta_minutes: 18
+                cod_due: 210.0
+
+  /api/v1/partner/riders/{rider_id}/location:
+    get:
+      tags: [delivery]
+      summary: Latest rider GPS (1 req / 10s per rider)
+      parameters:
+        - name: rider_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerRiderLocationOut"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/partner/menu/items:
+    put:
+      tags: [menu]
+      summary: Bulk upsert menu by pos_id
+      parameters:
+        - name: publish
+          in: query
+          schema:
+            type: boolean
+            default: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerMenuBulkIn"
+            example:
+              items:
+                - pos_id: POS-101
+                  dish_number: 101
+                  name: Chicken Biryani
+                  price: 45.0
+                  category: Main
+                  is_available: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerMenuUpsertOut"
+
+  /api/v1/partner/menu/items/{pos_id}:
+    patch:
+      tags: [menu]
+      summary: Fast price / availability update
+      parameters:
+        - name: pos_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: publish
+          in: query
+          schema:
+            type: boolean
+            default: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerMenuPatchIn"
+            example:
+              price: 22.0
+              is_available: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerMenuItemOut"
+
+  /api/v1/partner/events/menu-changed:
+    post:
+      tags: [menu]
+      summary: Signal full POS menu pull (Path B)
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerMenuChangedOut"
+
+  /api/v1/partner/menu/sync-status:
+    get:
+      tags: [menu]
+      summary: Menu sync breadcrumb
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerMenuSyncStatusOut"
+
+  /api/v1/partner/customers:
+    get:
+      tags: [customers]
+      summary: Incremental customer pull
+      parameters:
+        - name: updated_since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerCustomerListOut"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    OrderId:
+      name: order_id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or revoked API key
+    NotFound:
+      description: Resource not found
+    Unprocessable:
+      description: Invalid status transition or input
+    RateLimited:
+      description: Rate limit exceeded (Retry-After header set)
+
+  schemas:
+    PartnerStoreOut:
+      type: object
+      properties:
+        restaurant_id: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        pos_store_id: { type: string }
+        partner_enabled: { type: boolean }
+        pos_order_push_mode: { type: string, enum: [webhook, poll] }
+
+    PartnerOrderAckIn:
+      type: object
+      required: [pos_order_id]
+      properties:
+        pos_order_id: { type: string, maxLength: 64 }
+
+    PartnerOrderStatusIn:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [accepted, preparing, ready, cancelled]
+        reason: { type: string, maxLength: 256 }
+
+    PartnerOrderStatusOut:
+      type: object
+      properties:
+        order_id: { type: integer }
+        order_number: { type: string }
+        status: { type: string }
+        rider_assigned: { type: boolean }
+
+    PartnerOrderOut:
+      type: object
+      properties:
+        order_id: { type: integer }
+        order_number: { type: string }
+        pos_store_id: { type: string }
+        status: { type: string }
+        pos_order_id: { type: string, nullable: true }
+        customer: { type: object }
+        items: { type: array, items: { type: object } }
+        subtotal: { type: number }
+        delivery_fee: { type: number }
+        total: { type: number }
+        cod_due: { type: number }
+        payment: { type: string, default: COD }
+
+    PartnerOrderListOut:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartnerOrderOut"
+        limit: { type: integer }
+        offset: { type: integer }
+
+    PartnerDeliveryOut:
+      type: object
+      properties:
+        order_id: { type: integer }
+        order_number: { type: string }
+        status: { type: string }
+        rider:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            phone: { type: string }
+        batch_id: { type: integer, nullable: true }
+        eta_minutes: { type: integer, nullable: true }
+        delivered_at: { type: string, nullable: true }
+        cod_due: { type: number }
+        cod_collected: { type: number, nullable: true }
+        late: { type: boolean }
+
+    PartnerRiderLocationOut:
+      type: object
+      properties:
+        rider_id: { type: integer }
+        latitude: { type: number }
+        longitude: { type: number }
+        updated_at: { type: string, format: date-time }
+
+    PartnerMenuBulkIn:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/PartnerMenuItemIn"
+
+    PartnerMenuItemIn:
+      type: object
+      required: [pos_id, name, price]
+      properties:
+        pos_id: { type: string }
+        dish_number: { type: integer }
+        name: { type: string }
+        price: { type: number }
+        category: { type: string }
+        description: { type: string }
+        is_available: { type: boolean, default: true }
+
+    PartnerMenuPatchIn:
+      type: object
+      properties:
+        price: { type: number }
+        is_available: { type: boolean }
+        name: { type: string }
+
+    PartnerMenuUpsertOut:
+      type: object
+      properties:
+        created: { type: integer }
+        updated: { type: integer }
+        images: { type: integer }
+        errors: { type: array, items: { type: string } }
+
+    PartnerMenuItemOut:
+      type: object
+      properties:
+        pos_id: { type: string }
+        dish_number: { type: integer }
+        name: { type: string }
+        price: { type: number }
+        category: { type: string }
+        is_available: { type: boolean }
+
+    PartnerMenuChangedOut:
+      type: object
+      properties:
+        queued: { type: boolean }
+        mode: { type: string }
+        detail: { type: string }
+
+    PartnerMenuSyncStatusOut:
+      type: object
+      properties:
+        pos_dish_count: { type: integer }
+        last_pos_pull: { type: object }
+
+    PartnerCustomerListOut:
+      type: object
+      properties:
+        items: { type: array, items: { type: object } }
+        limit: { type: integer }
+        offset: { type: integer }
+        next_updated_since: { type: string, format: date-time, nullable: true }

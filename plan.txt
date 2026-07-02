@@ -1,0 +1,441 @@
+# POS Integration Plan — Master Reference (for Claude Code / rebuild)
+
+**Read this file first.** Step-by-step build: **`plan-phases.txt`**.  
+Tell the agent: **`go phase 0`** … **`go phase 5`** · add **`don't push`** to stay local.
+
+---
+
+## Quick reference (Claude Code)
+
+| Task | Command / prompt |
+|------|------------------|
+| Rebuild from scratch | `go phase 0` → `go phase 5` (use `plan-phases.txt`) |
+| Run partner tests | `.venv/bin/pytest tests/partner/ -v` |
+| Apply DB migrations | `.venv/bin/alembic upgrade head` |
+| Seed sandbox | `.venv/bin/python scripts/seed_partner_sandbox.py` |
+| Webhook smoke test | `.venv/bin/python scripts/test_phase0_webhook_live.py` |
+| Lint partner code | `.venv/bin/ruff check src/app/partner tests/partner` |
+| Hand POS team | `docs/partners/openapi-partner-v1.yaml` + `webhook-events.md` |
+
+**Golden rule:** Partner routers are thin HTTP only. All logic calls existing services — never duplicate FSM/dispatch/menu code. See **Service wiring** below.
+
+---
+
+## Implementation status
+
+| Phase | What | Code | Tests file | Pushed |
+|-------|------|------|------------|--------|
+| **0** | Webhook pipe + config | Done | `test_partner_webhooks.py` (6) | No |
+| **1** | Orders OUT to POS | Done | `test_partner_orders.py` (4) | No |
+| **2** | Kitchen IN → dispatch | Done | `test_partner_kitchen.py` (6) | No |
+| **3** | Menu sync IN | Done | `test_partner_menu.py` (5) | No |
+| **4** | Delivery OUT | Done | `test_partner_delivery.py` (6) | No |
+| **5** | Docs + hardening | Done | `test_partner_security.py` (3) | No |
+| | API keys + customers | Pre-existing on main | `test_partner_api.py` (8) | — |
+
+**Suite:** `tests/partner/` → **38/38 passed** (local, 2026-07-01).
+
+---
+
+## DB migrations
+
+### Partner phases need 2 NEW migrations (0 + 1 only)
+
+Phases 2–5 need **no** extra schema. Config lives in `restaurants.settings` JSONB.
+
+| Migration file | Phase | Schema change |
+|----------------|-------|---------------|
+| `n7a8b9c0d1e2_partner_webhook_deliveries.py` | 0 | Table `partner_webhook_deliveries` |
+| `o8b9c0d1e2f3_order_pos_sync_fields.py` | 1 | `orders`: `pos_order_id`, `pos_pushed_at`, `pos_push_status` + index |
+
+### Already on main (not from phases 0–5)
+
+| Migration | Schema |
+|-----------|--------|
+| `b4e7c2a9f1d3_partner_api_keys.py` | Table `partner_api_keys` |
+| `m6f7a8b9c0d1_add_dish_pos_product_id.py` | `dishes.pos_product_id` |
+
+### Apply migrations
+
+```bash
+docker compose up -d
+.venv/bin/alembic upgrade head
+```
+
+**Dev SQL shortcuts** (if alembic drift on local DB):
+
+- `scripts/phase0_webhook_table.sql`
+- `scripts/phase1_order_pos_fields.sql`
+
+**Tests:** `tests/conftest.py` recreates schema per test — pytest passes without manual migrate on `restaurant_test`.
+
+### No migration needed
+
+- `partner_enabled`, `partner_webhook_url`, `partner_webhook_secret`, `pos_store_id`, `pos_order_push_mode` → `restaurants.settings` JSONB
+- Audit, rate limit, health API → existing tables
+
+---
+
+## Push / deploy / revert (RECOMMENDED)
+
+### Before first push
+
+1. Run `alembic upgrade head` on prod **once** during deploy.
+2. Keep `partner_enabled: false` until a store is onboarded.
+3. Push migration files **with** the code.
+
+### If things go wrong after push
+
+**Recommended: revert CODE only — do NOT roll back DB.**
+
+```bash
+git checkout origin/main
+# or redeploy previous build
+```
+
+- Old app **ignores** extra table + nullable columns — WhatsApp/dashboard keep working.
+- Set `partner_enabled: false` in settings to disable partner without schema change.
+
+**Do not** run `alembic downgrade` on prod unless you have a maintenance window and know the revision chain.
+
+### Optional: clean local dev DB only
+
+```sql
+DROP TABLE IF EXISTS partner_webhook_deliveries;
+ALTER TABLE orders DROP COLUMN IF EXISTS pos_push_status;
+ALTER TABLE orders DROP COLUMN IF EXISTS pos_pushed_at;
+ALTER TABLE orders DROP COLUMN IF EXISTS pos_order_id;
+DROP INDEX IF EXISTS ix_orders_restaurant_status_created;
+```
+
+Do **not** drop `partner_api_keys` — used by pre-existing partner key feature on main.
+
+### Code revert vs DB (remember)
+
+| Action | Reverts code | Reverts DB |
+|--------|--------------|------------|
+| `git checkout` / `git reset` | Yes | **No** |
+| `alembic downgrade` | No | Yes |
+| `partner_enabled: false` | No | No (disables feature only) |
+
+---
+
+## Webhooks vs APIs
+
+| Direction | Mechanism | Use for |
+|-----------|-----------|---------|
+| **Outbound webhook** | We → POS `POST` | order.created, rider_assigned, picked_up, delivered, late |
+| **Inbound API** | POS → us `X-API-Key` | kitchen status, menu, ack, poll backup |
+
+- **Kitchen = always API** (`POST .../status`) — triggers dispatch on `ready`.
+- **Orders + delivery = webhooks** (primary) + **poll APIs** (backup).
+
+### Auth
+
+| Who | How |
+|-----|-----|
+| POS → us | `X-API-Key: rk_live_...` (60/min per key, `APP_PARTNER_RATE_LIMIT`) |
+| Us → POS | HMAC `X-Partner-Signature: sha256=...` |
+| Manager | JWT Bearer |
+
+Revoked key → 401. Authed partner calls → `audit_log` `actor=pos`.
+
+### Outbound webhook headers
+
+```
+Content-Type: application/json
+X-Partner-Event: order.created
+X-Partner-Idempotency-Key: pos-order-created-42
+X-Partner-Signature: sha256=<hmac_hex>
+```
+
+**Envelope:** `{ "event", "idempotency_key", "timestamp", "data" }`  
+**Events:** `integration.ping` · `order.created` · `order.rider_assigned` · `order.picked_up` · `order.delivered` · `order.late`  
+**Retry:** 5× backoff (10s, 20s, 40s, 80s) → dead. POS returns 2xx within 5s.  
+**Doc:** `docs/partners/webhook-events.md`
+
+### Inbound APIs (`/api/v1/partner/...`)
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/store` | Store + integration flags |
+| GET | `/orders` | Poll orders (`?unacked_only=true`) |
+| GET | `/orders/{id}` | One order |
+| POST | `/orders/{id}/ack` | `{ "pos_order_id": "..." }` |
+| POST | `/orders/{id}/status` | `preparing` / `ready` / `cancelled` |
+| GET | `/orders/{id}/delivery` | Rider, ETA, COD poll |
+| GET | `/riders/{id}/location` | GPS (1 req/10s) |
+| PUT | `/menu/items` | Bulk menu upsert |
+| PATCH | `/menu/items/{pos_id}` | Price / sold-out |
+| POST | `/events/menu-changed` | Queue full POS pull |
+| GET | `/menu/sync-status` | Sync breadcrumb |
+| GET | `/customers` | Incremental customer pull |
+
+### Manager JWT only
+
+| Method | Endpoint |
+|--------|----------|
+| GET/PATCH | `/partner-integration/config` |
+| POST | `/partner-integration/webhooks/test` |
+| GET | `/partner-integration/health` |
+| POST/GET/DELETE | `/api/v1/api-keys` |
+
+**OpenAPI:** `docs/partners/openapi-partner-v1.yaml`  
+**Postman:** `docs/partners/postman-partner-v1.json`
+
+### Per-store config (`restaurants.settings`)
+
+```json
+{
+  "partner_enabled": true,
+  "partner_webhook_url": "https://pos.example.com/hooks/whatsapp",
+  "partner_webhook_secret": "shared-secret",
+  "pos_store_id": "CRT-DXB-014",
+  "pos_order_push_mode": "webhook"
+}
+```
+
+Poll mode: empty `partner_webhook_url` + `pos_order_push_mode: poll` → POS uses `GET /partner/orders`.
+
+---
+
+## Critical path (one order)
+
+```
+1. Customer confirms on WhatsApp
+2. order.created webhook → POS                    [Phase 1]
+3. POS POST .../ack                                 [Phase 1]
+4. POS POST .../status preparing                    [Phase 2]
+5. POS POST .../status ready → dispatch → rider    [Phase 2 — MAIN ENGINE]
+6. order.rider_assigned webhook → POS               [Phase 4]
+7. Rider pickup → order.picked_up → POS           [Phase 4]
+8. Rider delivered → order.delivered + COD → POS  [Phase 4]
+9. (optional) order.late + coupon → POS            [Phase 4]
+```
+
+---
+
+## File map (all partner code)
+
+### New module `src/app/partner/`
+
+```
+router.py           HTTP: partner + api-keys + integration routers
+schemas.py          Pydantic I/O
+deps.py             X-API-Key + rate limit + audit (actor=pos)
+integration.py      settings JSONB helpers
+orders_api.py       build payload, push, poll, ack, kitchen apply
+menu_api.py         bulk upsert, patch, sync-status, menu-changed queue
+delivery_api.py     delivery payload, webhooks, rider location
+status_map.py       POS status → FSM (accepted/preparing/ready/cancelled)
+health.py           integration health for manager
+webhooks/
+  models.py         PartnerWebhookDelivery
+  enqueue.py        enqueue + schedule delivery
+  deliver.py        httpx POST
+  dispatch.py       flush_pending_partner_webhooks after commit
+  signing.py        HMAC-SHA256
+  worker.py         Celery partner.deliver_webhook
+```
+
+### Migrations
+
+```
+alembic/versions/n7a8b9c0d1e2_partner_webhook_deliveries.py
+alembic/versions/o8b9c0d1e2f3_order_pos_sync_fields.py
+```
+
+### Docs & scripts
+
+```
+docs/partners/openapi-partner-v1.yaml
+docs/partners/webhook-events.md
+docs/partners/uat-checklist.md
+docs/partners/postman-partner-v1.json
+docs/partners/cratis-integration-requirements.md
+scripts/seed_partner_sandbox.py
+scripts/test_phase0_webhook_live.py
+scripts/phase0_webhook_table.sql
+scripts/phase1_order_pos_fields.sql
+```
+
+### Tests
+
+```
+tests/partner/test_partner_api.py
+tests/partner/test_partner_webhooks.py
+tests/partner/test_partner_orders.py
+tests/partner/test_partner_kitchen.py
+tests/partner/test_partner_menu.py
+tests/partner/test_partner_delivery.py
+tests/partner/test_partner_security.py
+```
+
+---
+
+## Wiring (files touched outside `partner/`)
+
+Must wire these when rebuilding — easy to miss:
+
+| File | What |
+|------|------|
+| `src/app/main.py` | `include_router(partner_router, keys_router, integration_router)` |
+| `apps/workers/celery_app.py` | Route `partner.*` → `maintenance`; autodiscover `app.partner.webhooks`; import `app.partner.models` |
+| `alembic/env.py` | `import app.partner.models` |
+| `tests/conftest.py` | `import app.partner.models` |
+| `src/app/config.py` | `partner_rate_limit: str = "60/minute"` |
+| `src/app/ordering/service.py` | `finalize_confirmation()` → `push_order_to_partner()`; `_auto_dispatch_on_ready()` → flush webhooks |
+| `src/app/ordering/router.py` | `flush_pending_partner_webhooks` after manual order commit |
+| `src/app/webhook/router.py` | `flush_pending_partner_webhooks` after inbound WhatsApp commit |
+| `src/app/dispatch/delivery.py` | `notify_partner_delivery_transition` on pickup/delivered |
+| `src/app/dispatch/service.py` | `order.rider_assigned` in `_commit_route()` |
+| `src/app/dispatch/router.py` | flush after manual dispatch trigger |
+| `src/app/dispatch/rider_app_router.py` | flush after pickup/delivered |
+| `src/app/sla/monitor.py` | `order.late` on breach_40 + flush pending webhooks |
+
+---
+
+## Service wiring (one brain — mandatory)
+
+| POS / event action | Call this — never reimplement |
+|--------------------|-------------------------------|
+| Kitchen advance | `ordering/service.py → advance_kitchen_status()` |
+| Dispatch on ready | `_auto_dispatch_on_ready()` inside advance path |
+| Cancel | `ordering/service.py → cancel_order(actor="pos")` |
+| Order confirm → POS | `push_order_to_partner()` in `finalize_confirmation()` |
+| Menu upsert | `partner/menu_api.py` (+ Meta publish best-effort) |
+| Delivery webhooks | `partner/delivery_api.py` from dispatch + SLA hooks |
+
+---
+
+## Webhook pipeline (technical)
+
+```
+event → enqueue_partner_webhook() [same transaction]
+     → commit
+     → flush_pending_partner_webhooks()
+     → Celery partner.deliver_webhook (or sync if APP_OUTBOX_SYNC_DELIVERY=true)
+     → POST partner_webhook_url [HMAC]
+     → 2xx=sent | retry 5x | dead
+```
+
+| Event | Enqueued from |
+|-------|---------------|
+| `order.created` | `ordering/service.py → finalize_confirmation()` |
+| `order.rider_assigned` | `dispatch/service.py → _commit_route()` |
+| `order.picked_up` / `delivered` | `dispatch/delivery.py → advance_delivery()` |
+| `order.late` | `sla/monitor.py → _fire_event(breach_40)` |
+
+Kitchen inbound only:
+
+```
+POST /api/v1/partner/orders/{id}/status {"status":"ready"}
+→ apply_partner_kitchen_status() → advance_kitchen_status() → _auto_dispatch_on_ready()
+```
+
+---
+
+## Environment variables
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `APP_PARTNER_RATE_LIMIT` | `60/minute` | Per API key rate limit |
+| `APP_OUTBOX_SYNC_DELIVERY` | `false` | `true` = deliver webhooks in-process (no Celery) |
+| `APP_RATE_LIMIT_ENABLED` | `true` | Master switch for rate limiting |
+| `PARTNER_SANDBOX_WEBHOOK_URL` | `http://127.0.0.1:8765/hooks/whatsapp` | Seed script override |
+
+Partner config is per-restaurant in DB settings — not env vars.
+
+---
+
+## Local dev quick start
+
+```bash
+docker compose up -d
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/alembic upgrade head
+.venv/bin/python scripts/seed_partner_sandbox.py
+
+# Terminal 1
+APP_OUTBOX_SYNC_DELIVERY=true .venv/bin/uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 (optional webhook receiver)
+.venv/bin/python scripts/test_phase0_webhook_live.py
+
+# Tests
+.venv/bin/pytest tests/partner/ -v
+```
+
+**UAT:** `docs/partners/uat-checklist.md`
+
+---
+
+## Architecture
+
+**Single source of truth:** our DB. POS API, webhooks, and dashboard all use the same domain services.
+
+```mermaid
+flowchart TB
+    WA[Customer WhatsApp] --> BOT[Conversation Engine]
+    BOT --> API[Partner API + Webhooks]
+    POS[Partner POS] -->|menu + kitchen API| API
+    API -->|order + delivery webhooks| POS
+    API --> DISPATCH[Dispatch + SLA]
+    DISPATCH --> RIDER[Rider App]
+    DISPATCH --> WA
+    API --> META[Meta Catalog]
+    META --> WA
+    DASH[Dashboard optional] --> API
+```
+
+| Actor | UI | Role |
+|-------|-----|------|
+| Customer | WhatsApp | Order, track |
+| POS | Their screens | Menu, kitchen, billing |
+| Platform | APIs + workers | Bot, dispatch, SLA, rider app |
+| Rider | Android app | Pickup, deliver, COD |
+| Restaurant | POS required; dashboard optional | Daily ops |
+
+---
+
+## Phase summary (what each built)
+
+| Phase | Built |
+|-------|-------|
+| 0 | `partner_webhook_deliveries`, HMAC, enqueue/deliver/worker, config endpoints, test ping |
+| 1 | `order.created`, poll/ack, `orders.pos_*` columns, hook on `finalize_confirmation` |
+| 2 | `POST .../status`, `status_map`, multi-hop kitchen, dispatch on ready |
+| 3 | Menu PUT/PATCH, menu-changed, sync-status |
+| 4 | Delivery webhooks + poll + rider location |
+| 5 | OpenAPI, webhook doc, UAT, sandbox, rate limit, audit, health API |
+
+### Not built yet (future)
+
+- `order.modified` / `order.cancelled` outbound webhooks
+- Dashboard UI for integration health (API exists)
+- POS → us inbound webhooks (we use REST instead)
+
+---
+
+## Hand off to POS partner
+
+1. `docs/partners/openapi-partner-v1.yaml`
+2. `docs/partners/webhook-events.md`
+3. `docs/partners/uat-checklist.md`
+4. `docs/partners/postman-partner-v1.json`
+5. `docs/partners/cratis-integration-requirements.md`
+6. API key + `pos_store_id` + webhook URL/secret per store
+
+---
+
+## Rebuild / revert cheatsheet
+
+| Goal | Action |
+|------|--------|
+| Rebuild code | `plan-phases.txt` → `go phase N` |
+| Revert code only | `git checkout origin/main` (recommended) |
+| Disable partner | `partner_enabled: false` in settings |
+| Clean local DB | SQL in **Push / deploy / revert** section |
+| This plan stays | `plan.txt` + `plan-phases.txt` never deleted on revert |
+
+**Related:** `plan-phases.txt` (step-by-step) · `understanding.txt` (session log)
