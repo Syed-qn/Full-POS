@@ -11,6 +11,7 @@ async def _seed_restaurant_and_menu(client, db_session):
         "/api/v1/auth/signup",
         json={
             "name": "Test Restaurant",
+            "email": "webhook@rest.ae",
             "phone": "+97141234567",
             "password": "hunter2!",
             "lat": 25.2048,

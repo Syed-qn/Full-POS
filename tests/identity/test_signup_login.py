@@ -1,7 +1,7 @@
 # tests/identity/test_signup_login.py
 SIGNUP = {
     "name": "Biryani House",
-    "phone": "+971501234567",
+    "email": "owner@biryani.ae",
     "password": "hunter2!",
     "lat": 25.2048,
     "lng": 55.2708,
@@ -17,7 +17,7 @@ async def test_signup_creates_restaurant_with_default_settings(client):
     assert "password" not in body and "password_hash" not in body
 
 
-async def test_signup_duplicate_phone_409(client):
+async def test_signup_duplicate_email_409(client):
     await client.post("/api/v1/auth/signup", json=SIGNUP)
     resp = await client.post("/api/v1/auth/signup", json=SIGNUP)
     assert resp.status_code == 409
@@ -27,7 +27,7 @@ async def test_login_returns_token_and_me_works(client):
     await client.post("/api/v1/auth/signup", json=SIGNUP)
     resp = await client.post(
         "/api/v1/auth/login",
-        json={"phone": "+971501234567", "password": "hunter2!"},
+        json={"email": "owner@biryani.ae", "password": "hunter2!"},
     )
     assert resp.status_code == 200
     token = resp.json()["access_token"]
@@ -50,7 +50,7 @@ async def test_login_still_returns_token_when_template_bootstrap_fails(
     await client.post("/api/v1/auth/signup", json=SIGNUP)
     resp = await client.post(
         "/api/v1/auth/login",
-        json={"phone": "+971501234567", "password": "hunter2!"},
+        json={"email": "owner@biryani.ae", "password": "hunter2!"},
     )
 
     assert resp.status_code == 200
@@ -61,7 +61,7 @@ async def test_login_wrong_password_401(client):
     await client.post("/api/v1/auth/signup", json=SIGNUP)
     resp = await client.post(
         "/api/v1/auth/login",
-        json={"phone": "+971501234567", "password": "nope"},
+        json={"email": "owner@biryani.ae", "password": "nope"},
     )
     assert resp.status_code == 401
 

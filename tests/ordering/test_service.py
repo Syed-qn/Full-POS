@@ -353,6 +353,37 @@ async def test_create_draft_order_survives_concurrent_allocation_race(db_session
     assert len(numbers) == len(set(numbers)), f"duplicate order numbers allocated: {numbers}"
 
 
+async def test_create_draft_order_allocates_past_gap_from_deleted_order(db_session, restaurant):
+    """Prod crash regression: when rows are deleted/resold, count()+1 landed on a
+    suffix a live order already owned (count=1 but R1-0002 exists) → UniqueViolation,
+    and the broken expunge-after-savepoint retry re-raised instead of recovering.
+
+    Allocation must derive the next number from the MAX existing suffix (gap-proof)
+    and, if a collision still happens, retry cleanly and return a fresh order."""
+    from app.ordering.service import create_draft_order, get_or_create_customer
+
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971500000097",
+    )
+    # Seed a single order carrying a HIGH suffix, simulating that lower-numbered
+    # orders were deleted (row count is 1, but suffix 0005 is taken).
+    db_session.add(Order(
+        restaurant_id=restaurant.id, customer_id=customer.id,
+        order_number=f"R{restaurant.id}-0005", status="draft", priority="normal",
+        weather_delay_disclosed=False, delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("0.00"), total=Decimal("0.00"),
+    ))
+    await db_session.commit()
+
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id,
+    )
+    await db_session.commit()
+
+    # Next suffix must clear the gap (0006), never re-collide with 0005.
+    assert order.order_number == f"R{restaurant.id}-0006"
+
+
 async def test_add_item_recalculates_total(db_session, restaurant):
     from app.menu.models import Dish, Menu
     from app.ordering.service import add_item, create_draft_order, get_or_create_customer

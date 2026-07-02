@@ -1,4 +1,3 @@
-from decimal import Decimal
 
 import pytest
 
@@ -31,8 +30,15 @@ def test_resolve_send_creds_falls_back_to_env_when_not_connected():
     assert isinstance(token, str)
 
 
-async def test_meta_config_save_and_read(client, auth_headers):
+async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
     """Onboarding page saves the restaurant's Meta connection; token never echoed."""
+    from app.identity import meta_embed
+
+    async def _no_display(pid, token):
+        return ""
+
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", _no_display)
+
     empty = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)
     assert empty.status_code == 200
     assert empty.json()["connected"] is False
@@ -67,52 +73,153 @@ async def test_meta_config_save_and_read(client, auth_headers):
     assert patched.json()["connected"] is True
 
 
-async def test_new_signup_not_complete_without_menu(db_session, restaurant):
-    restaurant.settings = {**restaurant.settings, "onboarding_complete": False}
-    await db_session.commit()
-    st = await get_onboarding_status(db_session, restaurant=restaurant)
+async def test_meta_embed_config_disabled_without_app(client, auth_headers):
+    """No tech-provider app configured in tests → popup disabled, UI uses manual."""
+    r = await client.get("/api/v1/onboarding/meta-embed-config", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is False  # no config_id in test env → popup off
+    assert body["config_id"] == ""
+    assert body["graph_version"]  # e.g. v21.0
+
+
+async def test_meta_connect_exchanges_code_and_stores_creds(
+    client, auth_headers, monkeypatch
+):
+    """Embedded Signup: code → token exchange → per-restaurant creds; token hidden."""
+    from app.identity import meta_embed
+
+    async def fake_exchange(code):
+        assert code == "CODE-123"
+        return "EAA-business-token"
+
+    async def fake_subscribe(waba_id, token):
+        assert waba_id == "WABA-9"
+        assert token == "EAA-business-token"
+        return True
+
+    async def fake_catalog(waba_id, token):
+        assert waba_id == "WABA-9"
+        return "CAT-AUTO-1"
+
+    async def fake_display(pid, token):
+        assert pid == "PID-9"
+        return "+971 55 000 9999"  # deliberately different from signup phone
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+    monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
+
+    r = await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "CODE-123", "phone_number_id": "PID-9", "waba_id": "WABA-9"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["wa_phone_number_id"] == "PID-9"
+    assert body["wa_business_account_id"] == "WABA-9"
+    assert body["wa_access_token_set"] is True
+    assert body["catalog_id"] == "CAT-AUTO-1"  # auto-detected from the WABA
+    assert body["connected"] is True
+    assert "wa_access_token" not in body  # secret never returned
+
+    # The routing phone is reconciled to the REAL connected number (normalized),
+    # not whatever was typed at signup — closing the inbound-mismatch gap.
+    me = await client.get("/api/v1/me", headers=auth_headers)
+    assert me.json()["phone"] == "+971550009999"
+
+
+async def test_meta_connect_surfaces_exchange_failure(
+    client, auth_headers, monkeypatch
+):
+    """A failed code exchange returns 400, not 500, and stores nothing."""
+    from app.identity import meta_embed
+
+    async def boom(code):
+        raise meta_embed.MetaEmbedError("token exchange failed (HTTP 400): bad code")
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", boom)
+
+    r = await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "BAD", "phone_number_id": "PID-9", "waba_id": "WABA-9"},
+    )
+    assert r.status_code == 400
+    # Nothing stored → still not connected.
+    cfg = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)
+    assert cfg.json()["connected"] is False
+
+
+async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
+    client, auth_headers, monkeypatch
+):
+    """Disconnect clears creds, flips connected→false, and re-opens onboarding."""
+    from app.identity import meta_embed
+
+    async def fake_exchange(code):
+        return "EAA-token"
+
+    async def fake_subscribe(waba_id, token):
+        return True
+
+    async def fake_catalog(waba_id, token):
+        return ""
+
+    async def fake_display(pid, token):
+        return ""
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+    monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
+
+    # Connect first.
+    await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "C", "phone_number_id": "PID-1", "waba_id": "WABA-1"},
+    )
+    assert (await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)).json()["connected"] is True
+
+    # Disconnect.
+    r = await client.post("/api/v1/onboarding/meta-disconnect", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["connected"] is False
+    assert body["wa_phone_number_id"] == ""
+    assert body["wa_access_token_set"] is False
+
+    # Onboarding gate re-triggers (complete → false because meta gone).
+    st = (await client.get("/api/v1/onboarding/status", headers=auth_headers)).json()
     assert st["complete"] is False
-    assert st["has_menu"] is False
+    assert st["has_meta"] is False
 
 
-async def test_catalog_synced_false_when_dish_only_remains(db_session, restaurant):
-    from app.catalog.models import CatalogProduct
-    from app.menu.models import Dish, Menu
-
-    restaurant.settings = {
-        **restaurant.settings,
-        "catalog_id": "CAT1",
-        "onboarding_complete": False,
-    }
-    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
-    db_session.add(menu)
-    await db_session.flush()
-    db_session.add(Dish(
-        menu_id=menu.id, restaurant_id=restaurant.id, name="Biryani",
-        price_aed=Decimal("30"), is_available=True,
-        name_normalized="biryani", catalog_retailer_id="r1",
-    ))
-    db_session.add(Dish(
-        menu_id=menu.id, restaurant_id=restaurant.id, name="Mint",
-        price_aed=Decimal("12"), is_available=True,
-        name_normalized="mint",
-    ))
-    db_session.add(CatalogProduct(
-        restaurant_id=restaurant.id, retailer_id="r1", name="Biryani",
-        price_aed=Decimal("30"), is_active=True, raw={},
-    ))
-    await db_session.commit()
-    st = await get_onboarding_status(db_session, restaurant=restaurant)
-    assert st["catalog_synced"] is False
-    assert st["complete"] is False
-
-
-async def test_legacy_restaurant_with_menu_skips_onboarding(db_session, restaurant):
+async def test_onboarding_incomplete_until_meta_connected(db_session, restaurant):
+    """Onboarding gates ONLY on Meta: no connection → not complete, even with a
+    menu + catalog already present (those are configured later in the dashboard)."""
     from app.menu.models import Menu
 
-    restaurant.settings = {k: v for k, v in restaurant.settings.items() if k != "onboarding_complete"}
-    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
-    db_session.add(menu)
+    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
+    db_session.add(Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[]))
     await db_session.commit()
     st = await get_onboarding_status(db_session, restaurant=restaurant)
+    assert st["has_meta"] is False
+    assert st["complete"] is False  # menu + catalog present, but no Meta → gated
+
+
+async def test_onboarding_complete_once_meta_connected(db_session, restaurant):
+    """Connecting WhatsApp (Meta) alone completes onboarding — no menu required."""
+    from app.identity.meta_config import apply_meta_settings
+
+    apply_meta_settings(
+        restaurant,
+        {"wa_phone_number_id": "PID-1", "wa_access_token": "TOK-1"},
+    )
+    await db_session.commit()
+    st = await get_onboarding_status(db_session, restaurant=restaurant)
+    assert st["has_meta"] is True
     assert st["complete"] is True

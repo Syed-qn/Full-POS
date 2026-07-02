@@ -97,10 +97,10 @@ async def test_register_utility_templates(db_session, restaurant):
 
 
 async def test_login_registers_utility_templates_once(db_session, client):
-    signup = {"name": "Onboard Co", "phone": "+971502223344",
+    signup = {"name": "Onboard Co", "email": "onboard@co.ae", "phone": "+971502223344",
               "password": "pw1234!!", "lat": 25.2, "lng": 55.3}
     await client.post("/api/v1/auth/signup", json=signup)
-    creds = {"phone": "+971502223344", "password": "pw1234!!"}
+    creds = {"email": "onboard@co.ae", "password": "pw1234!!"}
 
     await client.post("/api/v1/auth/login", json=creds)
     r = await db_session.scalar(select(Restaurant).where(Restaurant.phone == "+971502223344"))

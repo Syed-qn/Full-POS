@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     marketing_send_dry_run: bool = True  # safe default — no real Meta calls
     marketing_template_provider: str = "mock"  # mock | meta
     wa_app_id: str = ""  # Facebook App ID for resumable /uploads (template IMAGE header examples per research §5.1)
+    # WhatsApp Embedded Signup: the tech-provider app's ES configuration id. Set
+    # (with wa_app_id + wa_app_secret) to enable the "Connect with Facebook" popup on
+    # onboarding — each restaurant connects its OWN WABA/number through this one app,
+    # and we exchange the returned code for that restaurant's own token. Empty = the
+    # popup is hidden and managers connect by pasting values manually.
+    wa_es_config_id: str = ""
     graph_api_version: str = "v21.0"  # for graph base urls (no hardcode)
     marketing_ephemeral_delete_hour: int = 23  # Asia/Dubai EOD for ephemeral daily specials (spec §4.7)
     marketing_ephemeral_delete_minute: int = 30

@@ -4,17 +4,39 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+def _normalize_email(v: str) -> str:
+    v = (v or "").strip().lower()
+    if "@" not in v or "." not in v.split("@")[-1]:
+        raise ValueError("enter a valid email address")
+    return v
+
+
 class SignupIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    phone: str = Field(min_length=7, max_length=32)
+    email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=8)
-    lat: float = Field(ge=-90, le=90)
-    lng: float = Field(ge=-180, le=180)
+    # Optional: the real WhatsApp number is set when the restaurant connects Meta,
+    # so the signup form never asks for it. Accepted here only for seeding/tests.
+    phone: str | None = Field(default=None, max_length=32)
+    # Optional at signup — location is pinned during onboarding. Defaulted so the
+    # signup form doesn't need to ask for coordinates.
+    lat: float = Field(default=0.0, ge=-90, le=90)
+    lng: float = Field(default=0.0, ge=-180, le=180)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class LoginIn(BaseModel):
-    phone: str = Field(min_length=7, max_length=32)
+    email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class TokenOut(BaseModel):
@@ -27,7 +49,8 @@ class RestaurantOut(BaseModel):
 
     id: int
     name: str
-    phone: str
+    email: str
+    phone: str | None = None  # WhatsApp number — set on Meta connect, null until then
     lat: float
     lng: float
     settings: dict
@@ -59,6 +82,23 @@ class MetaConfigOut(BaseModel):
     wa_access_token_set: bool
     catalog_id: str
     connected: bool
+
+
+class MetaEmbedConfigOut(BaseModel):
+    """Public-to-the-manager config the frontend needs to launch the ES popup."""
+
+    enabled: bool
+    app_id: str
+    config_id: str
+    graph_version: str
+
+
+class MetaConnectIn(BaseModel):
+    """Embedded Signup popup result → exchange the code, store per-restaurant creds."""
+
+    code: str = Field(min_length=1, max_length=2048)
+    phone_number_id: str = Field(min_length=1, max_length=64)
+    waba_id: str = Field(min_length=1, max_length=64)
 
 
 class RiderIn(BaseModel):

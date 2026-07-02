@@ -41,14 +41,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # JS/CSS ('self'), inline styles emitted by recharts/leaflet, Google
             # Fonts, OpenStreetMap map tiles, and same-origin API calls. Without
             # this the browser blocks the SPA's own assets and renders a blank page.
+            # Facebook domains are whitelisted for WhatsApp Embedded Signup: the FB
+            # JS SDK script (connect.facebook.net), its hidden comms iframe + login
+            # popup (*.facebook.com), and the Graph API code-exchange/session XHRs
+            # (graph.facebook.com). Without these the "Connect with Facebook" popup
+            # is blocked by CSP.
             response.headers.setdefault(
                 "Content-Security-Policy",
                 "default-src 'self'; "
-                "script-src 'self'; "
+                "script-src 'self' https://connect.facebook.net; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "font-src 'self' data: https://fonts.gstatic.com; "
                 "img-src 'self' data: blob: https:; "
-                "connect-src 'self'; "
+                "connect-src 'self' https://graph.facebook.com https://www.facebook.com; "
+                "frame-src https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com; "
                 "frame-ancestors 'none'; "
                 "base-uri 'self'",
             )
