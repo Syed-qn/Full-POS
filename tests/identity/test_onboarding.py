@@ -131,11 +131,12 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert me.json()["phone"] == "+971550009999"
 
 
-async def test_meta_connect_auto_creates_catalog_when_none(
+async def test_meta_connect_attaches_shared_catalog_when_not_yet_linked(
     client, auth_headers, monkeypatch
 ):
-    """A new restaurant with no catalog gets one auto-provisioned during connect:
-    resolve owner business → create catalog → connect to WABA → store its id."""
+    """Selecting a catalog in the popup only SHARES it with our app — it isn't
+    attached to the WABA. On connect we find the shared catalog in the owner
+    business and attach it ourselves (Meta forbids us creating one), then store it."""
     from app.identity import meta_embed
 
     calls = {}
@@ -147,16 +148,16 @@ async def test_meta_connect_auto_creates_catalog_when_none(
         return True
 
     async def fake_catalog(waba_id, token):
-        return ""  # WABA has NO linked catalog yet
+        return ""  # nothing attached to the WABA yet
 
     async def fake_owner(waba_id, token):
         assert waba_id == "WABA-NEW"
         return "BIZ-77"
 
-    async def fake_create(business_id, token, *, name):
+    async def fake_list(business_id, token):
         assert business_id == "BIZ-77"
-        calls["created_name"] = name
-        return "CAT-NEW-9"
+        # newest-first; manager just shared "CAT-NEW-9"
+        return [{"id": "CAT-NEW-9", "name": "My Menu"}, {"id": "CAT-OLD-1", "name": "Old"}]
 
     async def fake_connect(waba_id, catalog_id, token):
         calls["connected"] = (waba_id, catalog_id)
@@ -169,7 +170,7 @@ async def test_meta_connect_auto_creates_catalog_when_none(
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)
-    monkeypatch.setattr(meta_embed, "create_owned_catalog", fake_create)
+    monkeypatch.setattr(meta_embed, "list_owned_catalogs", fake_list)
     monkeypatch.setattr(meta_embed, "connect_catalog_to_waba", fake_connect)
     monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
 
@@ -180,9 +181,8 @@ async def test_meta_connect_auto_creates_catalog_when_none(
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["catalog_id"] == "CAT-NEW-9"  # the freshly created + linked catalog
+    assert body["catalog_id"] == "CAT-NEW-9"  # the shared catalog we attached
     assert calls["connected"] == ("WABA-NEW", "CAT-NEW-9")
-    assert "WhatsApp" in calls["created_name"]  # named after the restaurant
 
 
 async def test_meta_connect_surfaces_exchange_failure(

@@ -149,33 +149,42 @@ async def fetch_waba_owner_business(waba_id: str, access_token: str) -> str:
         return ""
 
 
-async def create_owned_catalog(business_id: str, access_token: str, *, name: str) -> str:
-    """Create a Commerce catalog under the business portfolio; return its id or ''.
+async def list_owned_catalogs(business_id: str, access_token: str) -> list[dict]:
+    """Return the catalogs owned by a business as [{'id','name'}], newest-id first.
 
-    Best-effort — a failure just leaves the store without a catalog (set later),
-    never blocks connecting. Requires catalog_management + business_management on
-    the token (granted by the tech-provider Embedded Signup).
+    Used to pick up the catalog a manager just shared with our app during Embedded
+    Signup (selecting a catalog in the popup shares it with the app but does NOT
+    attach it to the WABA — we attach it ourselves). Best-effort — returns [] on error.
+
+    NOTE: our system-user token CANNOT create a catalog (Meta requires a human
+    business admin — POST owned_product_catalogs → code 10 "aren't an admin"). It
+    can only read + attach. So creation stays a one-time human step; everything
+    after (attach + product sync) is automated.
     """
     if not business_id:
-        return ""
+        return []
     url = f"{_graph_base()}/{business_id}/owned_product_catalogs"
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.post(
+            resp = await client.get(
                 url,
-                data={"name": name.strip() or "WhatsApp Catalog", "vertical": "commerce"},
+                params={"fields": "id,name"},
                 headers={"Authorization": f"Bearer {access_token}"},
             )
         if resp.status_code != 200:
             logger.warning(
-                "create_owned_catalog non-200 business=%s http=%s body=%s",
+                "list_owned_catalogs non-200 business=%s http=%s body=%s",
                 business_id, resp.status_code, resp.text[:300],
             )
-            return ""
-        return str((resp.json() or {}).get("id") or "").strip()
+            return []
+        data = (resp.json() or {}).get("data") or []
+        cats = [{"id": str(c.get("id") or ""), "name": c.get("name") or ""} for c in data if c.get("id")]
+        # Highest numeric id ≈ most recently created — the one the manager just made.
+        cats.sort(key=lambda c: int(c["id"]) if c["id"].isdigit() else 0, reverse=True)
+        return cats
     except httpx.HTTPError as exc:
-        logger.warning("create_owned_catalog request failed business=%s: %s", business_id, exc)
-        return ""
+        logger.warning("list_owned_catalogs request failed business=%s: %s", business_id, exc)
+        return []
 
 
 async def connect_catalog_to_waba(waba_id: str, catalog_id: str, access_token: str) -> bool:
@@ -212,27 +221,38 @@ async def connect_catalog_to_waba(waba_id: str, catalog_id: str, access_token: s
 async def ensure_waba_catalog(
     waba_id: str, access_token: str, *, business_name: str = ""
 ) -> str:
-    """Return a catalog id connected to the WABA, creating one if none exists.
+    """Return the catalog id attached to the WABA, attaching a shared one if needed.
 
-    New restaurants arrive from Embedded Signup with no catalog — so a customer's
-    catalogue-ordering can't work until one is made. Rather than sending the manager
-    to Commerce Manager, we auto-provision during connect: reuse an existing linked
-    catalog if present, otherwise create one under the WABA's owner business and
-    connect it. Entirely best-effort — any failure yields '' and the manager can
-    still set a catalog later; it never blocks the WhatsApp connection.
+    During Embedded Signup a manager picks their catalog in the popup — but Meta only
+    *shares* it with our app, it does NOT attach it to the WABA (so chat catalogue
+    ordering wouldn't work). We finish the job here:
+
+      1. If a catalog is already attached to the WABA, use it.
+      2. Otherwise look at the WABA owner business's catalogs (the shared one shows up
+         there) and ATTACH the most recent one to the WABA.
+
+    We do NOT create catalogs — Meta forbids an app/system-user from creating one
+    (only a human business admin can). Creation is the manager's one-time step in the
+    popup / Commerce Manager; attach + later product sync are automated. Entirely
+    best-effort: any failure yields '' and never blocks the WhatsApp connection.
+
+    ``business_name`` is currently unused (kept for signature stability now that we no
+    longer name a freshly-created catalog).
     """
+    _ = business_name
     existing = await fetch_waba_catalog_id(waba_id, access_token)
     if existing:
         return existing
     business_id = await fetch_waba_owner_business(waba_id, access_token)
     if not business_id:
         return ""
-    name = f"{business_name} WhatsApp".strip() if business_name else "WhatsApp Catalog"
-    catalog_id = await create_owned_catalog(business_id, access_token, name=name)
-    if not catalog_id:
-        return ""
-    await connect_catalog_to_waba(waba_id, catalog_id, access_token)
-    return catalog_id
+    catalogs = await list_owned_catalogs(business_id, access_token)
+    for catalog in catalogs:
+        cid = catalog["id"]
+        if await connect_catalog_to_waba(waba_id, cid, access_token):
+            logger.info("attached shared catalog %s (%s) to waba %s", cid, catalog["name"], waba_id)
+            return cid
+    return ""
 
 
 async def fetch_display_phone_number(phone_number_id: str, access_token: str) -> str:
