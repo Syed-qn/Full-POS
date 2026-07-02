@@ -208,6 +208,7 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
             disabled={busy}
             style={{
               width: "100%",
+              marginTop: 14,
               padding: "11px 14px",
               borderRadius: 8,
               border: "none",
