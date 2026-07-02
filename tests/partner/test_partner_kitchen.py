@@ -188,6 +188,36 @@ async def test_pos_ready_with_available_rider_dispatches_without_error(
 
 
 @pytest.mark.asyncio
+async def test_pos_status_survives_notification_failure(client, auth_headers, db_session):
+    """Regression: a WhatsApp notification failure in deliver_pending must NOT 500
+    the POS kitchen action — the order already transitioned, notifications are
+    best-effort. (Prod hit HTTP 500 on 'ready' because deliver_pending raised.)"""
+    from unittest.mock import AsyncMock, patch
+
+    from sqlalchemy import select
+
+    from app.identity.models import Restaurant
+
+    rest = (
+        await db_session.scalars(select(Restaurant).where(Restaurant.phone == "+971501234567"))
+    ).one()
+    order = await _seed_confirmed_order(db_session, restaurant_id=rest.id)
+    key = await _api_key(client, auth_headers)
+
+    with patch(
+        "app.outbox.service.deliver_pending",
+        new=AsyncMock(side_effect=RuntimeError("whatsapp send blew up")),
+    ):
+        resp = await client.post(
+            f"/api/v1/partner/orders/{order.id}/status",
+            headers={"X-API-Key": key},
+            json={"status": "preparing"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "preparing"
+
+
+@pytest.mark.asyncio
 async def test_pos_accepted_is_noop_when_already_confirmed(client, auth_headers, db_session):
     from sqlalchemy import select
 

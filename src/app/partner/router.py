@@ -289,9 +289,20 @@ async def partner_update_order_status(
             raise HTTPException(status.HTTP_404_NOT_FOUND, msg) from exc
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, msg) from exc
 
+    # Kitchen transition already committed. Customer/manager notification delivery
+    # is best-effort — a WhatsApp send/render failure must not 500 the POS's action.
     from app.outbox.service import deliver_pending
 
-    await deliver_pending(session, restaurant.id)
+    try:
+        await deliver_pending(session, restaurant.id)
+    except Exception:  # noqa: BLE001 - notifications are best-effort
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "partner status: deliver_pending failed (restaurant_id=%s, order_id=%s)",
+            restaurant.id,
+            order_id,
+        )
     return PartnerOrderStatusOut(
         order_id=order.id,
         order_number=order.order_number,
