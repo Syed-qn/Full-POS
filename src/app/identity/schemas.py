@@ -39,6 +39,7 @@ class OnboardingStatusOut(BaseModel):
     has_menu: bool
     has_catalog_id: bool
     catalog_synced: bool
+    has_meta: bool = False
 
 
 class MetaConfigIn(BaseModel):

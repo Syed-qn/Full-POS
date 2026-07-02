@@ -13,7 +13,7 @@ import {
  * Embedded Signup flow fills them automatically). The access token is write-only
  * — the server never returns it, only whether one is set.
  */
-export function MetaConnectPanel() {
+export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [cfg, setCfg] = useState<MetaConfig | null>(null);
   const [phone, setPhone] = useState("");
   const [waba, setWaba] = useState("");
@@ -45,6 +45,7 @@ export function MetaConnectPanel() {
       setCfg(c);
       setToken("");
       toast(c.connected ? "WhatsApp connected ✓" : "Saved");
+      if (c.connected) onSaved?.();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Couldn't save");
     } finally {

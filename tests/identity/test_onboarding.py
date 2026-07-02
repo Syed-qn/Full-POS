@@ -7,6 +7,29 @@ from app.identity.service import get_onboarding_status
 pytestmark_asyncio = pytest.mark.asyncio
 
 
+def test_resolve_send_creds_prefers_connected_restaurant():
+    from app.identity.meta_config import resolve_send_creds
+
+    class _R:
+        settings = {"wa_phone_number_id": "PID-own", "wa_access_token": "TOK-own"}
+
+    pid, token = resolve_send_creds(_R())
+    assert pid == "PID-own"
+    assert token == "TOK-own"
+
+
+def test_resolve_send_creds_falls_back_to_env_when_not_connected():
+    from app.identity.meta_config import resolve_send_creds
+
+    class _R:
+        settings = {}
+
+    pid, token = resolve_send_creds(_R())
+    # env defaults (empty strings in tests) — restaurant has nothing of its own
+    assert isinstance(pid, str)
+    assert isinstance(token, str)
+
+
 async def test_meta_config_save_and_read(client, auth_headers):
     """Onboarding page saves the restaurant's Meta connection; token never echoed."""
     empty = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)

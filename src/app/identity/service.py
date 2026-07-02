@@ -391,10 +391,12 @@ async def update_profile(
 async def get_onboarding_status(
     session: AsyncSession, *, restaurant: Restaurant
 ) -> dict:
-    """Steps left after signup: location, menu, Meta catalogue sync."""
+    """Steps left after signup: location, menu, Meta catalogue sync, WhatsApp connect."""
+    from app.identity.meta_config import meta_connected
     from app.menu.models import Menu
 
     settings = restaurant.settings or {}
+    meta = meta_connected(restaurant)
     if settings.get("onboarding_complete") is True:
         return {
             "complete": True,
@@ -402,6 +404,7 @@ async def get_onboarding_status(
             "has_menu": True,
             "has_catalog_id": bool((settings.get("catalog_id") or "").strip()),
             "catalog_synced": True,
+            "has_meta": meta,
         }
     has_menu = await session.scalar(
         select(Menu.id).where(
@@ -425,14 +428,16 @@ async def get_onboarding_status(
             "has_menu": True,
             "has_catalog_id": bool(catalog_id),
             "catalog_synced": catalog_synced,
+            "has_meta": meta,
         }
-    complete = has_menu and bool(catalog_id) and catalog_synced
+    complete = has_menu and bool(catalog_id) and catalog_synced and meta
     return {
         "complete": complete,
         "has_location": has_location,
         "has_menu": has_menu,
         "has_catalog_id": bool(catalog_id),
         "catalog_synced": catalog_synced,
+        "has_meta": meta,
     }
 
 
@@ -441,6 +446,8 @@ async def complete_onboarding(
 ) -> Restaurant:
     """Mark onboarding done; enable catalogue ordering for customer menu requests."""
     status = await get_onboarding_status(session, restaurant=restaurant)
+    if not status.get("has_meta"):
+        raise ValueError("Connect your WhatsApp (Meta) account before finishing onboarding.")
     if not status["has_menu"]:
         raise ValueError("Upload and activate a menu before finishing onboarding.")
     if not status["has_catalog_id"]:

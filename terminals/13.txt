@@ -1,0 +1,44 @@
+---
+pid: 37232
+cwd: "C:\Users\user\Desktop\restaurant-whatsapp-service"
+command: "cmd /c \"cd /d C:\\Users\\user\\Desktop\\restaurant-whatsapp-service && .venv\\Scripts\\pytest.exe tests\\partner\\ -q --tb=short\""
+started_at: 2026-07-01T19:01:39.140Z
+running_for_ms: 38269936 
+---
+......................................                                   [100%]
+============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+tests/partner/test_partner_api.py::test_generate_api_key_shape
+  tests\partner\test_partner_api.py:33: PytestWarning: The test <Function test_generate_api_key_shape> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_generate_api_key_shape():
+
+tests/partner/test_partner_api.py: 6 warnings
+tests/partner/test_partner_delivery.py: 2 warnings
+tests/partner/test_partner_kitchen.py: 6 warnings
+tests/partner/test_partner_menu.py: 5 warnings
+tests/partner/test_partner_orders.py: 4 warnings
+tests/partner/test_partner_security.py: 3 warnings
+tests/partner/test_partner_webhooks.py: 5 warnings
+  C:\Users\user\Desktop\restaurant-whatsapp-service\.venv\Lib\site-packages\jwt\api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 17 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+tests/partner/test_partner_api.py: 6 warnings
+tests/partner/test_partner_delivery.py: 2 warnings
+tests/partner/test_partner_kitchen.py: 6 warnings
+tests/partner/test_partner_menu.py: 5 warnings
+tests/partner/test_partner_orders.py: 1 warning
+tests/partner/test_partner_security.py: 3 warnings
+tests/partner/test_partner_webhooks.py: 2 warnings
+  C:\Users\user\Desktop\restaurant-whatsapp-service\.venv\Lib\site-packages\jwt\api_jwt.py:368: InsecureKeyLengthWarning: The HMAC key is 17 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    decoded = self.decode_complete(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+38 passed, 60 warnings in 38.64s

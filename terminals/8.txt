@@ -1,0 +1,95 @@
+---
+pid: 36620
+cwd: "C:\Users\user\Desktop\restaurant-whatsapp-service"
+command: "cd \"C:\\Users\\user\\Desktop\\restaurant-whatsapp-service\"; .venv\\Scripts\\ruff check src/app/partner src/app/ordering/service.py src/app/webhook/router.py tests/partner; .venv\\Scripts\\pytest tests/partner/ -v --tb=short"
+started_at: 2026-07-01T18:35:51.568Z
+running_for_ms: 39814993 
+---
+F401 [*] `app.partner.orders_api.ack_partner_order` imported but unused
+  --> tests\partner\test_partner_orders.py:13:36
+   |
+11 | from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+12 | from app.partner.integration import apply_partner_settings
+13 | from app.partner.orders_api import ack_partner_order, list_partner_orders, push_order_to_partner
+   |                                    ^^^^^^^^^^^^^^^^^
+14 | from app.partner.webhooks.models import PartnerWebhookDelivery
+15 | from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+   |
+help: Remove unused import
+
+F401 [*] `app.partner.orders_api.list_partner_orders` imported but unused
+  --> tests\partner\test_partner_orders.py:13:55
+   |
+11 | from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+12 | from app.partner.integration import apply_partner_settings
+13 | from app.partner.orders_api import ack_partner_order, list_partner_orders, push_order_to_partner
+   |                                                       ^^^^^^^^^^^^^^^^^^^
+14 | from app.partner.webhooks.models import PartnerWebhookDelivery
+15 | from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+   |
+help: Remove unused import
+
+Found 2 errors.
+[*] 2 fixable with the `--fix` option.
+============================= test session starts =============================
+platform win32 -- Python 3.13.2, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\user\Desktop\restaurant-whatsapp-service\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\user\Desktop\restaurant-whatsapp-service
+configfile: pyproject.toml
+plugins: anyio-4.13.0, locust-2.44.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 18 items
+
+tests/partner/test_partner_api.py::test_generate_api_key_shape PASSED    [  5%]
+tests/partner/test_partner_api.py::test_key_lifecycle_create_list_revoke PASSED [ 11%]
+tests/partner/test_partner_api.py::test_revoke_unknown_key_404 PASSED    [ 16%]
+tests/partner/test_partner_api.py::test_create_key_requires_manager_jwt PASSED [ 22%]
+tests/partner/test_partner_api.py::test_partner_customers_missing_or_bad_key_401 PASSED [ 27%]
+tests/partner/test_partner_api.py::test_partner_customers_pull PASSED    [ 33%]
+tests/partner/test_partner_api.py::test_revoked_key_cannot_pull PASSED   [ 38%]
+tests/partner/test_partner_api.py::test_tenant_isolation_key_only_sees_own_customers PASSED [ 44%]
+tests/partner/test_partner_orders.py::test_push_order_creates_webhook_row PASSED [ 50%]
+tests/partner/test_partner_orders.py::test_finalize_confirmation_triggers_pos_push PASSED [ 55%]
+tests/partner/test_partner_orders.py::test_partner_poll_and_ack PASSED   [ 61%]
+tests/partner/test_partner_orders.py::test_flush_pending_schedules_delivery PASSED [ 66%]
+tests/partner/test_partner_webhooks.py::test_sign_and_verify_roundtrip PASSED [ 72%]
+tests/partner/test_partner_webhooks.py::test_enqueue_skips_when_partner_disabled PASSED [ 77%]
+tests/partner/test_partner_webhooks.py::test_enqueue_creates_row_when_configured PASSED [ 83%]
+tests/partner/test_partner_webhooks.py::test_deliver_posts_signed_payload PASSED [ 88%]
+tests/partner/test_partner_webhooks.py::test_integration_config_patch_and_store PASSED [ 94%]
+tests/partner/test_partner_webhooks.py::test_webhook_test_endpoint_queues_delivery PASSED [100%]
+
+============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+tests/partner/test_partner_api.py::test_generate_api_key_shape
+  tests\partner\test_partner_api.py:33: PytestWarning: The test <Function test_generate_api_key_shape> is marked with '@pytest.mark.asyncio' but it is not an async function. Please remove the asyncio mark. If the test is not marked explicitly, check for global marks applied via 'pytestmark'.
+    def test_generate_api_key_shape():
+
+tests/partner/test_partner_api.py: 6 warnings
+tests/partner/test_partner_orders.py: 4 warnings
+tests/partner/test_partner_webhooks.py: 5 warnings
+  C:\Users\user\Desktop\restaurant-whatsapp-service\.venv\Lib\site-packages\jwt\api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 17 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+tests/partner/test_partner_api.py::test_key_lifecycle_create_list_revoke
+tests/partner/test_partner_api.py::test_revoke_unknown_key_404
+tests/partner/test_partner_api.py::test_partner_customers_pull
+tests/partner/test_partner_api.py::test_revoked_key_cannot_pull
+tests/partner/test_partner_api.py::test_revoked_key_cannot_pull
+tests/partner/test_partner_api.py::test_tenant_isolation_key_only_sees_own_customers
+tests/partner/test_partner_orders.py::test_partner_poll_and_ack
+tests/partner/test_partner_webhooks.py::test_integration_config_patch_and_store
+tests/partner/test_partner_webhooks.py::test_webhook_test_endpoint_queues_delivery
+  C:\Users\user\Desktop\restaurant-whatsapp-service\.venv\Lib\site-packages\jwt\api_jwt.py:368: InsecureKeyLengthWarning: The HMAC key is 17 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    decoded = self.decode_complete(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+====================== 18 passed, 28 warnings in 16.34s =======================

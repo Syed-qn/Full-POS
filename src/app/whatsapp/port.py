@@ -52,8 +52,18 @@ class InboundMessage:
 
 
 class WhatsAppPort(Protocol):
-    async def send(self, msg: OutboundMessage) -> str:
-        """Send message; return wa_message_id."""
+    async def send(
+        self,
+        msg: OutboundMessage,
+        *,
+        phone_number_id: str | None = None,
+        access_token: str | None = None,
+    ) -> str:
+        """Send message; return wa_message_id.
+
+        ``phone_number_id``/``access_token`` override the provider's defaults so a
+        message is sent from the owning restaurant's own connected WhatsApp number.
+        """
         ...
 
     async def download_media(self, media_id: str) -> tuple[bytes, str]:

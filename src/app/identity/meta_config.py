@@ -47,3 +47,19 @@ def meta_connected(restaurant: Restaurant) -> bool:
     """True when the restaurant has its own WhatsApp number + token configured."""
     cfg = meta_settings(restaurant)
     return bool(cfg["wa_phone_number_id"] and cfg["wa_access_token"])
+
+
+def resolve_send_creds(restaurant: Restaurant | None) -> tuple[str, str]:
+    """Return (phone_number_id, access_token) to send WhatsApp for this restaurant.
+
+    Prefers the restaurant's own connected Meta number; falls back to the global
+    env values only when the restaurant hasn't connected yet (transitional —
+    once every restaurant is connected the env values are never used).
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
+    cfg = meta_settings(restaurant) if restaurant is not None else {}
+    pid = cfg.get("wa_phone_number_id") or settings.wa_phone_number_id
+    token = cfg.get("wa_access_token") or settings.wa_access_token.get_secret_value()
+    return pid, token

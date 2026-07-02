@@ -182,12 +182,19 @@ class CloudAPIProvider:
         self._phone_number_id = settings.wa_phone_number_id
         self._app_secret = settings.wa_app_secret.get_secret_value()
 
-    async def _upload_media(self, data: bytes, content_type: str) -> str:
+    async def _upload_media(
+        self,
+        data: bytes,
+        content_type: str,
+        *,
+        phone_number_id: str,
+        access_token: str,
+    ) -> str:
         """Upload raw bytes to Meta media API; return the media_id."""
         import base64 as _b64
         _ = _b64  # suppress unused import — base64 used only by caller
-        url = f"{_GRAPH_BASE}/{self._phone_number_id}/media"
-        headers = {"Authorization": f"Bearer {self._token}"}
+        url = f"{_GRAPH_BASE}/{phone_number_id}/media"
+        headers = {"Authorization": f"Bearer {access_token}"}
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 url,
@@ -212,18 +219,33 @@ class CloudAPIProvider:
             blob.raise_for_status()
         return blob.content, mime
 
-    async def send(self, msg: OutboundMessage) -> str:
+    async def send(
+        self,
+        msg: OutboundMessage,
+        *,
+        phone_number_id: str | None = None,
+        access_token: str | None = None,
+    ) -> str:
+        # Per-restaurant number/token when provided, else this provider's env defaults.
+        pid = phone_number_id or self._phone_number_id
+        token = access_token or self._token
+
         # For file messages with raw base64 data, upload to Meta first to get media_id.
         if msg.type in (OutboundMessageType.IMAGE, OutboundMessageType.DOCUMENT):
             if "data" in msg.payload and "media_id" not in msg.payload:
                 import base64
                 raw = base64.b64decode(msg.payload["data"])
-                media_id = await self._upload_media(raw, msg.payload["content_type"])
+                media_id = await self._upload_media(
+                    raw,
+                    msg.payload["content_type"],
+                    phone_number_id=pid,
+                    access_token=token,
+                )
                 msg.payload = {**msg.payload, "media_id": media_id}
 
-        url = f"{_GRAPH_BASE}/{self._phone_number_id}/messages"
+        url = f"{_GRAPH_BASE}/{pid}/messages"
         headers = {
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
         payload = _build_graph_payload(msg)

@@ -83,8 +83,15 @@ async def _deliver_one(
         if row is None or row.status in _TERMINAL_STATUSES:
             return
         msg = _outbox_row_to_outbound(row)
+        # Send from the owning restaurant's own connected WhatsApp number (env
+        # fallback until it has connected).
+        from app.identity.meta_config import resolve_send_creds
+        from app.identity.models import Restaurant
+
+        restaurant = await session.get(Restaurant, row.restaurant_id)
+        pid, token = resolve_send_creds(restaurant)
         try:
-            wa_id = await provider.send(msg)
+            wa_id = await provider.send(msg, phone_number_id=pid, access_token=token)
             row.status = "sent"
             row.wa_message_id = wa_id
             row.attempts += 1

@@ -7,6 +7,7 @@ export interface OnboardingStatus {
   has_menu: boolean;
   has_catalog_id: boolean;
   catalog_synced: boolean;
+  has_meta: boolean;
 }
 
 export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {

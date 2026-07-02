@@ -108,6 +108,7 @@ export function OnboardingScreen() {
     { id: "menu", label: "2. Menu upload", done: !!status?.has_menu },
     { id: "catalog", label: "3. Meta catalogue", done: !!status?.catalog_synced },
   ];
+  const metaConnected = !!status?.has_meta;
 
   return (
     <div className={s.screen}>
@@ -130,7 +131,7 @@ export function OnboardingScreen() {
 
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
 
-      <MetaConnectPanel />
+      <MetaConnectPanel onSaved={refreshStatus} />
 
       {pending ? (
         <div className={s.card}>
@@ -168,7 +169,12 @@ export function OnboardingScreen() {
             you finish — unlinked dishes are pushed automatically when the server token is set.
           </p>
           <UnifiedMenuPanel onCatalogIdSaved={refreshStatus} />
-          <Button onClick={finish} disabled={busy || !status?.catalog_synced}>
+          {!metaConnected && (
+            <p className={s.hint} style={{ color: "#f59e0b" }}>
+              Connect your WhatsApp (Meta) account above before you can finish.
+            </p>
+          )}
+          <Button onClick={finish} disabled={busy || !status?.catalog_synced || !metaConnected}>
             {busy ? "Finishing…" : "Finish setup"}
           </Button>
         </div>

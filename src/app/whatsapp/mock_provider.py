@@ -15,7 +15,14 @@ class MockProvider:
         self._inbound: deque[InboundMessage] = deque()
         self._media: dict[str, bytes] = {}
 
-    async def send(self, msg: OutboundMessage) -> str:
+    async def send(
+        self,
+        msg: OutboundMessage,
+        *,
+        phone_number_id: str | None = None,
+        access_token: str | None = None,
+    ) -> str:
+        _ = (phone_number_id, access_token)  # mock ignores per-restaurant creds
         wa_id = f"mock-wamid-{uuid.uuid4().hex[:12]}"
         msg.wa_message_id = wa_id
         self._sends.append(msg)
