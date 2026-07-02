@@ -1464,8 +1464,6 @@ async def _send_text(
     prefix: str,
     body: str,
 ) -> None:
-    import time
-
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -1473,15 +1471,6 @@ async def _send_text(
         msg_type=OutboundMessageType.TEXT,
         payload={"body": body},
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
-    )
-    await record_message(
-        session,
-        conversation_id=conv.id,
-        direction="outbound",
-        wa_message_id=None,
-        msg_type="text",
-        payload={"body": body},
-        ts=int(time.time()),
     )
 
 
@@ -1495,8 +1484,6 @@ async def _send_buttons(
     body: str,
     buttons: list[dict],
 ) -> None:
-    import time
-
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -1504,15 +1491,6 @@ async def _send_buttons(
         msg_type=OutboundMessageType.BUTTONS,
         payload={"body": body, "buttons": buttons},
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
-    )
-    await record_message(
-        session,
-        conversation_id=conv.id,
-        direction="outbound",
-        wa_message_id=None,
-        msg_type="buttons",
-        payload={"body": body, "buttons": buttons},
-        ts=int(time.time()),
     )
 
 
@@ -1531,8 +1509,6 @@ async def _send_cta_url(
     tracking link as a "Track your rider" button instead of a raw link. The
     customer is mid-order (24h window open), so a free-form interactive button
     delivers without a pre-approved template."""
-    import time
-
     payload = {"body": body, "button_label": button_label, "url": url}
     await enqueue_message(
         session,
@@ -1541,15 +1517,6 @@ async def _send_cta_url(
         msg_type=OutboundMessageType.CTA_URL,
         payload=payload,
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
-    )
-    await record_message(
-        session,
-        conversation_id=conv.id,
-        direction="outbound",
-        wa_message_id=None,
-        msg_type="cta_url",
-        payload={"type": "cta_url", **payload},
-        ts=int(time.time()),
     )
 
 
@@ -1570,8 +1537,6 @@ async def _send_location_request(
     button reply, which had no handler and looped back to the same prompt. The
     location_request_message is the correct mechanism.
     """
-    import time
-
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -1579,15 +1544,6 @@ async def _send_location_request(
         msg_type=OutboundMessageType.LOCATION_REQUEST,
         payload={"body": body},
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
-    )
-    await record_message(
-        session,
-        conversation_id=conv.id,
-        direction="outbound",
-        wa_message_id=None,
-        msg_type="location_request",
-        payload={"body": body},
-        ts=int(time.time()),
     )
 
 
@@ -3767,15 +3723,6 @@ async def _handle_restaurant_location_request(
         msg_type=OutboundMessageType.LOCATION,
         payload=payload,
         idempotency_key=f"rest-loc-{conv.id}-{inbound.wa_message_id}",
-    )
-    await record_message(
-        session,
-        conversation_id=conv.id,
-        direction="outbound",
-        wa_message_id=None,
-        msg_type="location",
-        payload={"type": "location", **payload},
-        ts=int(time.time()),
     )
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
@@ -6419,8 +6366,38 @@ async def _handle_customer_ai(
 
     restaurant_name = restaurant.name if restaurant else "Restaurant"
     phase = _resolve_phase(conv)
-    history = await _build_history(session, conv)
-    context = await _build_context(session, conv, restaurant_id, phase, restaurant)
+    _inbound_text = (
+        (inbound.payload.get("text") or "").strip()
+        if inbound.type == MessageType.TEXT
+        else ""
+    )
+    try:
+        history = await _build_history(session, conv)
+    except Exception:
+        _logger.warning(
+            "build_history failed for restaurant %s conv %s",
+            restaurant_id, conv.id, exc_info=True,
+        )
+        history = [{"role": "user", "content": _inbound_text or "hi"}]
+    try:
+        context = await _build_context(session, conv, restaurant_id, phase, restaurant)
+    except Exception:
+        _logger.warning(
+            "build_context failed for restaurant %s conv %s",
+            restaurant_id, conv.id, exc_info=True,
+        )
+        context = {
+            "order_number": "",
+            "order_status": "unknown",
+            "rider_eta": "",
+            "menu_text": "",
+            "cart_summary": "",
+            "cart_lines": [],
+            "delivery_info": "",
+            "restaurant_location": "unknown",
+            "hours_info": "",
+            "restaurant_phone": "",
+        }
 
     # Off-topic (health, homework, etc.) → warm decline, NEVER the menu. The LLM used to
     # reply with a fabricated menu or trigger show_menu on "I have fever what can I do".

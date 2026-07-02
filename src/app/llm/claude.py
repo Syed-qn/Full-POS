@@ -471,7 +471,33 @@ ALWAYS call take_action. Never reply without the tool.
 """
 
 
-def _phase_guidance(phase: str) -> str:
+_POST_ORDER_GUIDANCE = """
+CURRENT PHASE: post_order — customer already has a live order.
+
+ORDER CONTEXT (authoritative): #{order_number} status={order_status}, rider ETA={rider_eta}
+
+CONVERSATION AWARENESS: Read the full chat history. Interpret the customer's latest
+message together with your LAST assistant message. Match their language in replies.
+
+ACKNOWLEDGMENTS (Ok, Sure, Thanks, emoji, etc.):
+- After you already closed the loop (confirmed, resale accepted, delivered) → no_action
+  with one brief warm line. Do NOT re-confirm or dump status again.
+- After a status ping (preparing, on the way) → brief reassurance, or status_query if worried.
+- Never cart_add, confirm_order, or cart mutations in post_order.
+
+Allowed actions this phase only: order_line_remove, order_line_set_qty, order_modify_confirm,
+request_modification, cancel_order, status_query, info_answer, complaint_explain, no_action.
+"""
+
+
+def _phase_guidance(phase: str, context: dict | None = None) -> str:
+    if phase == "post_order":
+        ctx = context or {}
+        return _POST_ORDER_GUIDANCE.format(
+            order_number=ctx.get("order_number") or "",
+            order_status=ctx.get("order_status") or "unknown",
+            rider_eta=ctx.get("rider_eta") or "calculating",
+        )
     allowed = sorted(CANON_PHASE_ACTIONS.get(phase, CANON_PHASE_ACTIONS["ordering"]))
     return (
         f"\nCURRENT PHASE: {phase}. You may ONLY use these actions this phase: "
@@ -506,7 +532,7 @@ class ClaudeConversationAgent:
             cart_summary=context.get("cart_summary") or "empty",
             cart_lines=json.dumps(context.get("cart_lines") or [], ensure_ascii=False),
             delivery_info=context.get("delivery_info") or "Delivery fees vary by distance.",
-        ) + _phase_guidance(dialogue_phase)
+        ) + _phase_guidance(dialogue_phase, context)
         messages = history if history else [{"role": "user", "content": "hi"}]
         response = await self._client.messages.create(
             model=self._model,

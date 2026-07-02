@@ -58,24 +58,6 @@ async def _notify_customer_status(
         body = "Keep an eye on the door — our rider is just around the corner!"
     else:
         body = await build_tracking_reply(session, order=order, geo=get_geo_provider())
-    # Also record proactive pings in the customer conversation so the dashboard chat
-    # shows them — without this they delivered to WhatsApp but were invisible to the
-    # restaurant (e.g. "The restaurant has started preparing your order." never appeared).
-    from app.conversation.service import get_or_create_conversation, record_message
-
-    async def _record(payload: dict, msg_type: str) -> None:
-        try:
-            conv = await get_or_create_conversation(
-                session, restaurant_id=restaurant_id,
-                phone=customer.phone, counterpart="customer",
-            )
-            await record_message(
-                session, conversation_id=conv.id, direction="outbound",
-                wa_message_id=None, msg_type=msg_type, payload=payload,
-            )
-        except Exception:  # noqa: BLE001 — chat mirroring must never block the ping
-            _logger.exception("failed to mirror status ping to chat (order %s)", order.id)
-
     if status_key == "picked_up":
         from app.dispatch.tracking_live import build_tracking_url, ensure_tracking_session
 
@@ -97,7 +79,6 @@ async def _notify_customer_status(
             payload=cta_payload,
             idempotency_key=key,
         )
-        await _record(cta_payload, "cta_url")
         return
     await enqueue_message(
         session,
@@ -107,7 +88,6 @@ async def _notify_customer_status(
         payload={"body": body},
         idempotency_key=key,
     )
-    await _record({"body": body}, "text")
 
 async def reveal_first_stop_on_tracking_live(
     session: AsyncSession, *, restaurant_id: int, rider_id: int

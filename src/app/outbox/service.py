@@ -88,6 +88,7 @@ async def enqueue_message(
     payload: dict,
     idempotency_key: str,
     mirror_rider_conversation: bool = True,
+    mirror_customer_conversation: bool = True,
 ) -> OutboxMessage:
     """Write an outbox row in the caller's transaction. Commit is the caller's responsibility.
 
@@ -121,5 +122,15 @@ async def enqueue_message(
             to_phone=to_phone,
             msg_type=str(msg_type),
             payload={"type": str(msg_type), **payload},
+        )
+    if mirror_customer_conversation:
+        from app.conversation.service import maybe_record_customer_outbound
+
+        await maybe_record_customer_outbound(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=to_phone,
+            msg_type=str(msg_type),
+            payload=payload,
         )
     return row

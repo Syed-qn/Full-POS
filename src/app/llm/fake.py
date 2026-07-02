@@ -312,7 +312,7 @@ class FakeConversationAgent:
                 return _emit("cart_remove", {"dish_query": dish}, "Sure, removing that.")
             return _emit("no_action", {}, "Please confirm or cancel your order.")
 
-        # post_order phase
+        # post_order phase — read last assistant turn for contextual acks
         if dialogue_phase == "post_order":
             if last_user in ("cancel", "cancel order", "cancel my order"):
                 return _emit("cancel_order", {}, "Order cancelled.")
@@ -327,6 +327,37 @@ class FakeConversationAgent:
                 )
             if any(w in last_user for w in ("modify", "change", "update", "edit")):
                 return _emit("request_modification", {}, "Sure! Let me help you modify your order.")
+            if any(w in last_user for w in ("where", "status", "track", "eta")):
+                return _emit("status_query", {}, "Your order is being prepared! 🛵")
+
+            last_assistant = ""
+            for msg in reversed(history):
+                if msg.get("role") == "assistant":
+                    last_assistant = (msg.get("content") or "").lower()
+                    break
+            _ack = {
+                "ok", "okay", "okey", "k", "sure", "yes", "yep", "yeah", "fine",
+                "good", "great", "thanks", "thank you", "thx",
+            }
+            if last_user in _ack:
+                if any(
+                    p in last_assistant
+                    for p in (
+                        "order confirmed", "yours!", "delivered", "on its way fast",
+                        "we'll keep you posted",
+                    )
+                ):
+                    return _emit(
+                        "no_action", {},
+                        "You're all set! We'll keep you posted 🛵",
+                    )
+                if "preparing" in last_assistant or "started preparing" in last_assistant:
+                    return _emit(
+                        "no_action", {},
+                        "Still on it — your order is being prepared in the kitchen 🍳",
+                    )
+                return _emit("no_action", {}, "Got it! 😊")
+
             return _emit("status_query", {}, "Your order is being prepared! 🛵")
 
         return _emit("no_action", {}, "How can I help?")

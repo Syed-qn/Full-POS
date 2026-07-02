@@ -180,6 +180,74 @@ async def record_message(
     return msg
 
 
+def _mirror_payload_for_dashboard(msg_type: str, payload: dict) -> dict:
+    """Shape outbox payload for dashboard Message rows (matches engine _send_*)."""
+    clean = {k: v for k, v in payload.items() if k != "type"}
+    if str(msg_type).lower() in {"cta_url", "outboundmessagetype.cta_url"}:
+        return {"type": "cta_url", **clean}
+    return clean
+
+
+async def maybe_record_customer_outbound(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    to_phone: str,
+    msg_type: str,
+    payload: dict,
+) -> Message | None:
+    """Mirror outbound WhatsApp sends to the customer's dashboard thread.
+
+    Skips riders (Drivers tab) and the restaurant's own business line (manager
+    alerts). Best-effort: never raises."""
+    from app.identity.models import Restaurant, Rider
+    from app.identity.phones import normalize_phone, phone_lookup_values
+
+    try:
+        normalized = normalize_phone(to_phone)
+        rider = await session.scalar(
+            select(Rider).where(
+                Rider.restaurant_id == restaurant_id,
+                Rider.phone.in_(phone_lookup_values(normalized)),
+            )
+        )
+        if rider is not None:
+            return None
+
+        restaurant = await session.get(Restaurant, restaurant_id)
+        if restaurant is not None and restaurant.phone:
+            if normalized == normalize_phone(restaurant.phone):
+                return None
+
+        conv = await get_or_create_conversation(
+            session,
+            restaurant_id=restaurant_id,
+            phone=normalized,
+            counterpart="customer",
+        )
+        if conv.counterpart != "customer":
+            conv.counterpart = "customer"
+
+        record_payload = _mirror_payload_for_dashboard(msg_type, payload)
+        msg_type_key = str(msg_type).lower().replace("outboundmessagetype.", "")
+        return await record_message(
+            session,
+            conversation_id=conv.id,
+            direction="outbound",
+            wa_message_id=None,
+            msg_type=msg_type_key,
+            payload=record_payload,
+        )
+    except Exception:  # noqa: BLE001 — mirroring must never block delivery
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "failed to mirror customer outbound to conversation (restaurant %s)",
+            restaurant_id,
+        )
+        return None
+
+
 async def maybe_record_rider_outbound(
     session: AsyncSession,
     *,
@@ -279,19 +347,6 @@ async def send_manual_message(
     if conv is None or conv.restaurant_id != restaurant_id:
         return None
 
-    ts = int(time.time())
-    payload = {"body": text}
-    msg = await record_message(
-        session,
-        conversation_id=conversation_id,
-        direction="outbound",
-        wa_message_id=None,
-        msg_type="text",
-        payload=payload,
-        ts=ts,
-    )
-    await session.flush()  # assign msg.id
-
     outbox = await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -302,6 +357,14 @@ async def send_manual_message(
         mirror_rider_conversation=False,
     )
     await session.flush()  # assign outbox.id
+    msg = await session.scalar(
+        select(Message)
+        .where(Message.conversation_id == conversation_id, Message.direction == "outbound")
+        .order_by(Message.id.desc())
+        .limit(1)
+    )
+    if msg is None:
+        return None
     return msg, outbox.id
 
 
