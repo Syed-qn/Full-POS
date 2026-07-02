@@ -22,7 +22,9 @@ import { loadFacebookSdk } from "../lib/facebookSdk";
  * Fallback path — manual entry: shown when Embedded Signup isn't configured, or when
  * the manager clicks "enter manually". The access token is write-only (never echoed).
  */
-export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
+export function MetaConnectPanel(
+  { onSaved, hideBadge = false }: { onSaved?: () => void; hideBadge?: boolean } = {},
+) {
   const [cfg, setCfg] = useState<MetaConfig | null>(null);
   const [embed, setEmbed] = useState<MetaEmbedConfig | null>(null);
   const [phone, setPhone] = useState("");
@@ -80,7 +82,7 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
   async function finishConnect(code: string) {
     const info = sessionInfo.current;
     if (!info.phone_number_id || !info.waba_id) {
-      toast("Connection incomplete — please try again.");
+      toast("Connection incomplete. Please try again.");
       setBusy(false);
       return;
     }
@@ -114,7 +116,7 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
         (resp) => {
           const code = resp?.authResponse?.code;
           if (!code) {
-            toast("Connection cancelled — please try again.");
+            toast("Connection cancelled. Please try again.");
             setBusy(false);
             return;
           }
@@ -183,24 +185,26 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ margin: 0 }}>Connect WhatsApp (Meta)</h3>
-        <span
-          style={{
-            fontSize: 12,
-            padding: "3px 8px",
-            borderRadius: 999,
-            background: cfg?.connected ? "#166534" : "#334155",
-            color: cfg?.connected ? "#dcfce7" : "#cbd5e1",
-          }}
-        >
-          {cfg?.connected ? "Connected" : "Not connected"}
-        </span>
+        {!hideBadge && (
+          <span
+            style={{
+              fontSize: 12,
+              padding: "3px 8px",
+              borderRadius: 999,
+              background: cfg?.connected ? "#166534" : "#334155",
+              color: cfg?.connected ? "#dcfce7" : "#cbd5e1",
+            }}
+          >
+            {cfg?.connected ? "Connected" : "Not connected"}
+          </span>
+        )}
       </div>
 
       {embed?.enabled && (
         <>
           <p style={{ fontSize: 13, color: "var(--muted, #94a3b8)", marginTop: 6 }}>
             Click below, log in to your Facebook Business, and pick your WhatsApp
-            number — we set everything up for you. No tokens to copy.
+            number. We set everything up for you. No tokens to copy.
           </p>
           <button
             type="button"
@@ -246,7 +250,7 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
           </label>
           <label style={field}>
             <span className="label-upper">
-              Access Token {cfg?.wa_access_token_set ? "(saved — leave blank to keep)" : ""}
+              Access Token {cfg?.wa_access_token_set ? "(saved, leave blank to keep)" : ""}
             </span>
             <input
               style={input}
