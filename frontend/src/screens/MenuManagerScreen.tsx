@@ -6,7 +6,7 @@ import { DishCard } from "../components/DishCard";
 import { DishEditModal } from "../components/DishEditModal";
 import { SectionBanner } from "../components/SectionBanner";
 import { ApiError } from "../lib/apiClient";
-import { activateMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, setWhatsapp, uploadMenu } from "../lib/menuApi";
+import { activateMenu, createBlankMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, setWhatsapp, uploadMenu } from "../lib/menuApi";
 import { toast } from "../components/Toaster";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
@@ -143,6 +143,21 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     }
   }
 
+  async function onAddDish() {
+    // Works even on a fresh restaurant: create an empty active menu on the fly, then
+    // open the editor so the manager can add the first dish without uploading a file.
+    if (activeMenuId === null) {
+      try {
+        const menu = await createBlankMenu();
+        setActiveMenuId(menu.id);
+      } catch (err) {
+        toast(err instanceof ApiError ? err.detail : "Couldn't start a menu.", "error");
+        return;
+      }
+    }
+    setEditing("new");
+  }
+
   async function onToggle(id: number, next: boolean) {
     setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, is_available: next } : d)));
     try {
@@ -267,9 +282,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
               onChange={(e) => onUpload(e.target.files)}
               data-testid="menu-upload"
             />
-            {dishes.length > 0 && activeMenuId !== null && (
-              <Button variant="ghost" onClick={() => setEditing("new")}>+ Add dish</Button>
-            )}
+            <Button variant="ghost" onClick={onAddDish}>+ Add dish</Button>
             <Button onClick={() => fileRef.current?.click()}>
               {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
             </Button>

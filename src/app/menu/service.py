@@ -158,6 +158,26 @@ async def get_active_menu(session: AsyncSession, restaurant_id: int) -> Menu | N
     )
 
 
+async def ensure_active_menu(session: AsyncSession, restaurant_id: int) -> Menu:
+    """Return the active menu, creating an empty one if the restaurant has none.
+
+    Lets a manager start a menu by adding dishes directly (no upload required) — the
+    "+ Add dish" button on an empty restaurant calls this to have something to add to.
+    """
+    existing = await get_active_menu(session, restaurant_id)
+    if existing is not None:
+        return existing
+    menu = Menu(
+        restaurant_id=restaurant_id,
+        version=await next_version(session, restaurant_id),
+        status="active",
+        source_files=[],
+    )
+    session.add(menu)
+    await session.flush()
+    return menu
+
+
 class MenuIncompleteError(Exception):
     pass
 

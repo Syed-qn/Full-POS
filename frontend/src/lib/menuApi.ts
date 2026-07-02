@@ -5,6 +5,12 @@ export async function getMenu(menuId: number): Promise<MenuOut> {
   return apiClient.get<MenuOut>(`/api/v1/menus/${menuId}`);
 }
 
+/** Get the active menu, creating an empty one if the restaurant has none — lets
+ *  "+ Add dish" work before any menu upload. */
+export async function createBlankMenu(): Promise<MenuOut> {
+  return apiClient.post<MenuOut>("/api/v1/menus/blank");
+}
+
 export async function uploadMenu(files: File[]): Promise<MenuWithDiffOut> {
   const form = new FormData();
   for (const f of files) form.append("files", f);

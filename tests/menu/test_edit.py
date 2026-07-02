@@ -4,6 +4,27 @@ async def _upload(client, auth_headers):
     return resp.json()
 
 
+async def test_blank_menu_lets_you_add_first_dish_without_upload(client, auth_headers):
+    """A fresh restaurant (no upload) can start a menu: /menus/blank returns an empty
+    active menu, and dishes can be added straight to it."""
+    blank = await client.post("/api/v1/menus/blank", headers=auth_headers)
+    assert blank.status_code == 201
+    menu = blank.json()
+    assert menu["status"] == "active"
+    assert menu["dishes"] == []
+
+    added = await client.post(
+        f"/api/v1/menus/{menu['id']}/dishes",
+        json={"dish_number": 1, "name": "Chai", "price_aed": "3.00", "category": "Drinks"},
+        headers=auth_headers,
+    )
+    assert added.status_code == 201
+
+    # Idempotent: calling blank again returns the SAME active menu, not a new one.
+    again = await client.post("/api/v1/menus/blank", headers=auth_headers)
+    assert again.json()["id"] == menu["id"]
+
+
 async def test_add_dish(client, auth_headers):
     menu = await _upload(client, auth_headers)
     resp = await client.post(
