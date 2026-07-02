@@ -223,6 +223,7 @@ async def meta_connect(
     is never returned; the manager just sees Connected."""
     from app.identity.meta_config import apply_meta_settings
     from app.identity.meta_embed import MetaEmbedError, connect_embedded_signup
+    from app.partner.integration import provision_partner_integration
 
     try:
         creds = await connect_embedded_signup(
@@ -237,9 +238,14 @@ async def meta_connect(
     display_number = creds.pop("display_phone_number", "")
     apply_meta_settings(restaurant, creds)
     await _set_connected_phone(session, restaurant, display_number)
+    # Auto-provision the POS partner integration: wire the global webhook + mint this
+    # store's API key (returned once) so Cratis can talk to it with no manual setup.
+    api_key = await provision_partner_integration(session, restaurant)
     await session.commit()
     await session.refresh(restaurant)
-    return _meta_config_out(restaurant)
+    out = _meta_config_out(restaurant)
+    out.api_key = api_key
+    return out
 
 
 @router.get("/geo/health")

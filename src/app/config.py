@@ -174,6 +174,13 @@ class Settings(BaseSettings):
     auth_rate_limit: str = "5/minute"
     webhook_rate_limit: str = "120/minute"
     partner_rate_limit: str = "60/minute"
+    # POS partner (Cratis) auto-provisioning on Meta connect. Industry-standard single
+    # webhook endpoint: one receiver URL + one shared signing secret for ALL stores;
+    # each event's payload carries order_number / pos_store_id so the POS routes it.
+    # When partner_webhook_url is set, connecting Meta auto-wires the store's webhook
+    # (enabled + url + secret) and mints its per-restaurant API key. Blank = off.
+    partner_webhook_url: str = ""
+    partner_webhook_secret: SecretStr = SecretStr("")
 
     # CORS / security headers (P7-T13)
     cors_allow_origins: list[str] = []

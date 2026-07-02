@@ -82,6 +82,10 @@ class MetaConfigOut(BaseModel):
     wa_access_token_set: bool
     catalog_id: str
     connected: bool
+    # The POS partner API key, returned ONCE right after Meta connect auto-provisions
+    # it (only its hash is stored, so it can never be shown again). None on every other
+    # read, and None if the store already had a key. The manager hands this to Cratis.
+    api_key: str | None = None
 
 
 class MetaEmbedConfigOut(BaseModel):

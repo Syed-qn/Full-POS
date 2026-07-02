@@ -50,6 +50,53 @@ def test_disconnect_meta_also_clears_catalog_id():
     assert r.settings["max_radius_km"] == 10  # non-Meta settings untouched
 
 
+async def test_provision_partner_integration_mints_key_and_wires_webhook(
+    db_session, restaurant, monkeypatch
+):
+    """On connect we auto-provision the POS side: wire the single global webhook and
+    mint the store's API key once. Idempotent — a second call mints no new key."""
+    from types import SimpleNamespace
+
+    from pydantic import SecretStr
+    from sqlalchemy import func, select
+
+    from app import config
+    from app.partner.integration import partner_settings, provision_partner_integration
+    from app.partner.models import PartnerApiKey
+
+    fake = SimpleNamespace(
+        partner_webhook_url="https://cratis.example.com/hooks/whatsapp",
+        partner_webhook_secret=SecretStr("shared-signing-secret"),
+    )
+    monkeypatch.setattr(config, "get_settings", lambda: fake)
+
+    key = await provision_partner_integration(db_session, restaurant)
+    await db_session.commit()
+
+    assert key and key.startswith("rk_live_")  # returned once for the partner
+    cfg = partner_settings(restaurant)
+    assert cfg["partner_enabled"] is True
+    assert cfg["partner_webhook_url"] == "https://cratis.example.com/hooks/whatsapp"
+    assert cfg["partner_webhook_secret"] == "shared-signing-secret"
+    count = await db_session.scalar(
+        select(func.count()).select_from(PartnerApiKey).where(
+            PartnerApiKey.restaurant_id == restaurant.id
+        )
+    )
+    assert count == 1
+
+    # Idempotent: a reconnect does not mint a second key.
+    again = await provision_partner_integration(db_session, restaurant)
+    await db_session.commit()
+    assert again is None
+    count2 = await db_session.scalar(
+        select(func.count()).select_from(PartnerApiKey).where(
+            PartnerApiKey.restaurant_id == restaurant.id
+        )
+    )
+    assert count2 == 1
+
+
 async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
     """Onboarding page saves the restaurant's Meta connection; token never echoed."""
     from app.identity import meta_embed
@@ -144,6 +191,8 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert body["catalog_id"] == "CAT-AUTO-1"  # auto-detected from the WABA
     assert body["connected"] is True
     assert "wa_access_token" not in body  # secret never returned
+    # Connecting Meta auto-mints the store's POS API key, returned ONCE for Cratis.
+    assert body["api_key"] and body["api_key"].startswith("rk_live_")
 
     # The routing phone is reconciled to the REAL connected number (normalized),
     # not whatever was typed at signup — closing the inbound-mismatch gap.

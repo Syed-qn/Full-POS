@@ -24,6 +24,9 @@ export interface MetaConfig {
   wa_access_token_set: boolean;
   catalog_id: string;
   connected: boolean;
+  // POS partner API key, returned ONCE right after connect auto-provisions it. Null on
+  // every other read. Surface it immediately so the manager can hand it to the POS.
+  api_key?: string | null;
 }
 
 export interface MetaConfigPatch {
