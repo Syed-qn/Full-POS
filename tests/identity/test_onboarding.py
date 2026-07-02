@@ -131,6 +131,60 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert me.json()["phone"] == "+971550009999"
 
 
+async def test_meta_connect_auto_creates_catalog_when_none(
+    client, auth_headers, monkeypatch
+):
+    """A new restaurant with no catalog gets one auto-provisioned during connect:
+    resolve owner business → create catalog → connect to WABA → store its id."""
+    from app.identity import meta_embed
+
+    calls = {}
+
+    async def fake_exchange(code):
+        return "EAA-token"
+
+    async def fake_subscribe(waba_id, token):
+        return True
+
+    async def fake_catalog(waba_id, token):
+        return ""  # WABA has NO linked catalog yet
+
+    async def fake_owner(waba_id, token):
+        assert waba_id == "WABA-NEW"
+        return "BIZ-77"
+
+    async def fake_create(business_id, token, *, name):
+        assert business_id == "BIZ-77"
+        calls["created_name"] = name
+        return "CAT-NEW-9"
+
+    async def fake_connect(waba_id, catalog_id, token):
+        calls["connected"] = (waba_id, catalog_id)
+        return True
+
+    async def fake_display(pid, token):
+        return ""
+
+    monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+    monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
+    monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)
+    monkeypatch.setattr(meta_embed, "create_owned_catalog", fake_create)
+    monkeypatch.setattr(meta_embed, "connect_catalog_to_waba", fake_connect)
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
+
+    r = await client.post(
+        "/api/v1/onboarding/meta-connect",
+        headers=auth_headers,
+        json={"code": "C", "phone_number_id": "PID-NEW", "waba_id": "WABA-NEW"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["catalog_id"] == "CAT-NEW-9"  # the freshly created + linked catalog
+    assert calls["connected"] == ("WABA-NEW", "CAT-NEW-9")
+    assert "WhatsApp" in calls["created_name"]  # named after the restaurant
+
+
 async def test_meta_connect_surfaces_exchange_failure(
     client, auth_headers, monkeypatch
 ):
@@ -168,12 +222,16 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     async def fake_catalog(waba_id, token):
         return ""
 
+    async def fake_owner(waba_id, token):
+        return ""  # no owner business → auto-create is skipped, stays catalog-less
+
     async def fake_display(pid, token):
         return ""
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
+    monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)
     monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
 
     # Connect first.

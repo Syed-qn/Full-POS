@@ -229,6 +229,7 @@ async def meta_connect(
             code=body.code,
             phone_number_id=body.phone_number_id,
             waba_id=body.waba_id,
+            business_name=restaurant.name or "",
         )
     except MetaEmbedError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))

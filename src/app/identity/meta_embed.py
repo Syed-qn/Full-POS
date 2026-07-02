@@ -116,6 +116,125 @@ async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
         return ""
 
 
+async def fetch_waba_owner_business(waba_id: str, access_token: str) -> str:
+    """Return the id of the business portfolio that owns the WABA, or ''.
+
+    Needed to create a catalog under the right business. Best-effort — never raises.
+    """
+    if not waba_id:
+        return ""
+    url = f"{_graph_base()}/{waba_id}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                url,
+                params={"fields": "owner_business_info,on_behalf_of_business_info"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code != 200:
+            logger.warning(
+                "fetch_waba_owner_business non-200 waba=%s http=%s body=%s",
+                waba_id, resp.status_code, resp.text[:300],
+            )
+            return ""
+        body = resp.json() or {}
+        for key in ("owner_business_info", "on_behalf_of_business_info"):
+            info = body.get(key) or {}
+            bid = str(info.get("id") or "").strip()
+            if bid:
+                return bid
+        return ""
+    except httpx.HTTPError as exc:
+        logger.warning("fetch_waba_owner_business request failed waba=%s: %s", waba_id, exc)
+        return ""
+
+
+async def create_owned_catalog(business_id: str, access_token: str, *, name: str) -> str:
+    """Create a Commerce catalog under the business portfolio; return its id or ''.
+
+    Best-effort — a failure just leaves the store without a catalog (set later),
+    never blocks connecting. Requires catalog_management + business_management on
+    the token (granted by the tech-provider Embedded Signup).
+    """
+    if not business_id:
+        return ""
+    url = f"{_graph_base()}/{business_id}/owned_product_catalogs"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                url,
+                data={"name": name.strip() or "WhatsApp Catalog", "vertical": "commerce"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code != 200:
+            logger.warning(
+                "create_owned_catalog non-200 business=%s http=%s body=%s",
+                business_id, resp.status_code, resp.text[:300],
+            )
+            return ""
+        return str((resp.json() or {}).get("id") or "").strip()
+    except httpx.HTTPError as exc:
+        logger.warning("create_owned_catalog request failed business=%s: %s", business_id, exc)
+        return ""
+
+
+async def connect_catalog_to_waba(waba_id: str, catalog_id: str, access_token: str) -> bool:
+    """Connect a catalog to the WABA so it's usable for WhatsApp commerce.
+
+    Best-effort — POST /{waba_id}/product_catalogs {catalog_id}. Returns True on
+    success, False (logged) otherwise. Never raises.
+    """
+    if not (waba_id and catalog_id):
+        return False
+    url = f"{_graph_base()}/{waba_id}/product_catalogs"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                url,
+                data={"catalog_id": catalog_id},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code == 200 and (resp.json() or {}).get("success", True):
+            return True
+        logger.warning(
+            "connect_catalog_to_waba non-success waba=%s catalog=%s http=%s body=%s",
+            waba_id, catalog_id, resp.status_code, resp.text[:300],
+        )
+        return False
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "connect_catalog_to_waba request failed waba=%s catalog=%s: %s",
+            waba_id, catalog_id, exc,
+        )
+        return False
+
+
+async def ensure_waba_catalog(
+    waba_id: str, access_token: str, *, business_name: str = ""
+) -> str:
+    """Return a catalog id connected to the WABA, creating one if none exists.
+
+    New restaurants arrive from Embedded Signup with no catalog — so a customer's
+    catalogue-ordering can't work until one is made. Rather than sending the manager
+    to Commerce Manager, we auto-provision during connect: reuse an existing linked
+    catalog if present, otherwise create one under the WABA's owner business and
+    connect it. Entirely best-effort — any failure yields '' and the manager can
+    still set a catalog later; it never blocks the WhatsApp connection.
+    """
+    existing = await fetch_waba_catalog_id(waba_id, access_token)
+    if existing:
+        return existing
+    business_id = await fetch_waba_owner_business(waba_id, access_token)
+    if not business_id:
+        return ""
+    name = f"{business_name} WhatsApp".strip() if business_name else "WhatsApp Catalog"
+    catalog_id = await create_owned_catalog(business_id, access_token, name=name)
+    if not catalog_id:
+        return ""
+    await connect_catalog_to_waba(waba_id, catalog_id, access_token)
+    return catalog_id
+
+
 async def fetch_display_phone_number(phone_number_id: str, access_token: str) -> str:
     """Return the E.164 display number for a WhatsApp phone_number_id, or ''.
 
@@ -148,14 +267,16 @@ async def fetch_display_phone_number(phone_number_id: str, access_token: str) ->
 
 
 async def connect_embedded_signup(
-    *, code: str, phone_number_id: str, waba_id: str
+    *, code: str, phone_number_id: str, waba_id: str, business_name: str = ""
 ) -> dict[str, str]:
-    """Full Embedded Signup connect: exchange code, subscribe WABA, auto-detect the
-    Commerce catalog, and return creds shaped for apply_meta_settings():
+    """Full Embedded Signup connect: exchange code, subscribe WABA, ensure a Commerce
+    catalog exists (auto-create if none), and return creds shaped for
+    apply_meta_settings():
     {wa_phone_number_id, wa_business_account_id, wa_access_token[, catalog_id]}.
 
-    catalog_id is included only when the WABA has a linked catalog — so we never
-    wipe an existing catalog_id for a store that hasn't connected one via Meta.
+    catalog_id is included only when the WABA ends up with a linked catalog — either
+    one it already had, or one we just auto-provisioned — so we never wipe an
+    existing catalog_id nor set an empty one for a store where provisioning failed.
     """
     token = await exchange_code_for_token(code)
     await subscribe_app_to_waba(waba_id, token)
@@ -164,7 +285,7 @@ async def connect_embedded_signup(
         "wa_business_account_id": (waba_id or "").strip(),
         "wa_access_token": token,
     }
-    catalog_id = await fetch_waba_catalog_id(waba_id, token)
+    catalog_id = await ensure_waba_catalog(waba_id, token, business_name=business_name)
     if catalog_id:
         creds["catalog_id"] = catalog_id
     # The real WhatsApp display number → becomes the restaurant's inbound routing
