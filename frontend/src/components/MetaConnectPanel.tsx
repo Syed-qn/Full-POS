@@ -25,7 +25,6 @@ import { loadFacebookSdk } from "../lib/facebookSdk";
 export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
   const [cfg, setCfg] = useState<MetaConfig | null>(null);
   const [embed, setEmbed] = useState<MetaEmbedConfig | null>(null);
-  const [manual, setManual] = useState(false);
   const [phone, setPhone] = useState("");
   const [waba, setWaba] = useState("");
   const [token, setToken] = useState("");
@@ -169,7 +168,9 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
     color: "inherit",
   };
 
-  const showManual = manual || (embed !== null && !embed.enabled);
+  // Manual entry is only a fallback for when the popup isn't configured — never
+  // shown alongside the "Connect with Facebook" button.
+  const showManual = embed !== null && !embed.enabled;
 
   return (
     <div
@@ -224,21 +225,6 @@ export function MetaConnectPanel({ onSaved }: { onSaved?: () => void } = {}) {
           >
             <span style={{ fontSize: 18, fontWeight: 800 }}>f</span>
             {busy ? "Connecting…" : cfg?.connected ? "Reconnect with Facebook" : "Connect with Facebook"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setManual((m) => !m)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--muted, #94a3b8)",
-              fontSize: 12,
-              marginTop: 10,
-              cursor: "pointer",
-              textDecoration: "underline",
-            }}
-          >
-            {showManual ? "Hide manual entry" : "Enter details manually instead"}
           </button>
         </>
       )}
