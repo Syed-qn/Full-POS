@@ -97,3 +97,15 @@
   color: var(--text-muted, #94a3b8);
 }
 .nextLabel { font-size: 11px; color: var(--text-muted, #94a3b8); text-align: center; margin: 18px 0 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.signout {
+  margin: 26px auto 0;
+  background: none;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  display: block;
+}
+.signout:hover { color: var(--text-secondary, #cbd5e1); }

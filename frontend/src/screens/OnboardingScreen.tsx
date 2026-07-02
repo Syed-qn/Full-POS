@@ -6,6 +6,7 @@ import { MetaConnectPanel } from "../components/MetaConnectPanel";
 import { toast } from "../components/Toaster";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import { completeOnboarding, fetchOnboardingStatus } from "../lib/onboardingApi";
+import { logout } from "../lib/auth";
 import s from "./OnboardingScreen.module.css";
 
 /**
@@ -28,6 +29,11 @@ export function OnboardingScreen() {
   useEffect(() => {
     refreshStatus().catch(() => {});
   }, []);
+
+  function signOut() {
+    logout();
+    nav("/login", { replace: true });
+  }
 
   async function finish() {
     setBusy(true);
@@ -86,6 +92,10 @@ export function OnboardingScreen() {
           <span className={s.nextChip}>Catalogue</span>
           <span className={s.nextChip}>Riders</span>
         </div>
+
+        <button type="button" className={s.signout} onClick={signOut}>
+          Sign out
+        </button>
       </div>
     </div>
   );
