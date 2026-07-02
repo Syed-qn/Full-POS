@@ -1,39 +1,99 @@
 .screen {
   min-height: 100vh;
-  padding: 48px 24px 32px;
-  max-width: 720px;
-  margin: 0 auto;
-}
-.title { font-size: 28px; font-weight: 800; margin: 0 0 8px; }
-.sub { color: var(--text-secondary); margin: 0 0 24px; line-height: 1.5; }
-.steps { display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
-.step {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.stepActive { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
-.stepDone { border-color: #22c55e; color: #166534; background: #f0fdf4; }
-.card {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
-  background: var(--surface-1);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    var(--surface-0, #0b1220);
 }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field input {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  background: var(--surface-0);
+
+.wrap {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
-.row { display: flex; gap: 12px; flex-wrap: wrap; }
-.hint { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-muted, #94a3b8);
+  margin-bottom: 22px;
+}
+.brandIcon { color: var(--accent, #22c55e); font-size: 15px; }
+
+.title {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0 0 8px;
+  text-align: center;
+  line-height: 1.2;
+}
+.sub {
+  color: var(--text-secondary, #94a3b8);
+  margin: 0 0 22px;
+  line-height: 1.55;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* MetaConnectPanel sits here as the focus */
+
+.card {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connectedCard {
+  border: 1px solid color-mix(in srgb, #22c55e 45%, var(--border, #334155));
+  background: color-mix(in srgb, #22c55e 10%, transparent);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  text-align: center;
+}
+.checkPill {
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: #16a34a; color: #fff;
+  font-size: 20px; font-weight: 800;
+}
+
+.hint { font-size: 13px; color: var(--text-secondary, #94a3b8); line-height: 1.5; text-align: center; }
+.warn { font-size: 13px; color: #f59e0b; line-height: 1.5; text-align: center; }
+
+/* Informational "you'll set these up inside" chips — not gating steps */
+.next {
+  margin-top: 20px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.nextChip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px dashed var(--border, #334155);
+  color: var(--text-muted, #94a3b8);
+}
+.nextLabel { font-size: 11px; color: var(--text-muted, #94a3b8); text-align: center; margin: 18px 0 8px; letter-spacing: 0.04em; text-transform: uppercase; }

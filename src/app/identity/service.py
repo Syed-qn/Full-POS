@@ -405,52 +405,27 @@ async def update_profile(
 async def get_onboarding_status(
     session: AsyncSession, *, restaurant: Restaurant
 ) -> dict:
-    """Steps left after signup: location, menu, Meta catalogue sync, WhatsApp connect."""
+    """Onboarding now gates ONLY on connecting WhatsApp (Meta). Menu, location and
+    the Meta catalogue are configured later inside the dashboard, so `complete`
+    depends solely on the Meta connection. The other fields are informational."""
     from app.identity.meta_config import meta_connected
     from app.menu.models import Menu
 
     settings = restaurant.settings or {}
     meta = meta_connected(restaurant)
-    if settings.get("onboarding_complete") is True:
-        return {
-            "complete": True,
-            "has_location": True,
-            "has_menu": True,
-            "has_catalog_id": bool((settings.get("catalog_id") or "").strip()),
-            "catalog_synced": True,
-            "has_meta": meta,
-        }
     has_menu = await session.scalar(
         select(Menu.id).where(
             Menu.restaurant_id == restaurant.id, Menu.status == "active"
         ).limit(1)
     ) is not None
     catalog_id = (settings.get("catalog_id") or "").strip()
-    catalog_synced = False
-    if catalog_id and has_menu:
-        from app.catalog.sync_service import is_catalog_fully_synced
-
-        catalog_synced = await is_catalog_fully_synced(
-            session, restaurant_id=restaurant.id
-        )
     has_location = restaurant.lat != 0.0 or restaurant.lng != 0.0
-    # Legacy tenants (pre-onboarding flag): skip wizard if they already have a menu.
-    if "onboarding_complete" not in settings and has_menu:
-        return {
-            "complete": True,
-            "has_location": has_location,
-            "has_menu": True,
-            "has_catalog_id": bool(catalog_id),
-            "catalog_synced": catalog_synced,
-            "has_meta": meta,
-        }
-    complete = has_menu and bool(catalog_id) and catalog_synced and meta
     return {
-        "complete": complete,
+        "complete": meta,
         "has_location": has_location,
         "has_menu": has_menu,
         "has_catalog_id": bool(catalog_id),
-        "catalog_synced": catalog_synced,
+        "catalog_synced": bool(catalog_id and has_menu),
         "has_meta": meta,
     }
 
@@ -458,16 +433,11 @@ async def get_onboarding_status(
 async def complete_onboarding(
     session: AsyncSession, *, restaurant: Restaurant
 ) -> Restaurant:
-    """Mark onboarding done; enable catalogue ordering for customer menu requests."""
+    """Finish onboarding — requires ONLY a connected WhatsApp (Meta) account. Menu,
+    location and catalogue are set up later in the dashboard."""
     status = await get_onboarding_status(session, restaurant=restaurant)
     if not status.get("has_meta"):
         raise ValueError("Connect your WhatsApp (Meta) account before finishing onboarding.")
-    if not status["has_menu"]:
-        raise ValueError("Upload and activate a menu before finishing onboarding.")
-    if not status["has_catalog_id"]:
-        raise ValueError("Set your Meta Catalog ID before finishing onboarding.")
-    if not status["catalog_synced"]:
-        raise ValueError("Sync from Meta before finishing onboarding.")
     return await update_settings(
         session,
         restaurant=restaurant,
