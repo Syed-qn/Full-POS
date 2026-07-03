@@ -185,15 +185,14 @@ class Settings(BaseSettings):
     # each event's payload carries order_number / pos_store_id so the POS routes it.
     # When partner_webhook_url is set, connecting Meta auto-wires the store's webhook
     # (enabled + url + secret) and mints its per-restaurant API key. Blank = off.
-    partner_webhook_url: str = ""
-    partner_webhook_secret: SecretStr = SecretStr("")
-    # Multi-partner registry. A restaurant is tagged with its partner slug at
-    # onboarding (?partner=<slug>). NO tag = STANDALONE (no POS): the store uses our
-    # platform end-to-end — no webhook, no partner key. Only tagged stores wire to a
-    # partner. `default_partner` names the slug that owns the two legacy fields above
-    # (so the majority partner needs no APP_PARTNERS entry); it is NOT an untagged
-    # fallback. Extra partners live in APP_PARTNERS JSON, e.g.
-    #   {"pos2": {"name": "Acme POS", "webhook_url": "https://...", "webhook_secret": "..."}}
+    # Multi-partner registry (SINGLE source of truth for partner webhooks). A
+    # restaurant is tagged with its partner slug at onboarding (?partner=<slug>).
+    # NO tag = STANDALONE (no POS): the store uses our platform end-to-end — no
+    # webhook, no partner key. Only tagged stores wire to a partner. Every partner
+    # (including the majority one) lives in APP_PARTNERS JSON, e.g.
+    #   {"cratis": {"name": "Cratis", "webhook_url": "https://...", "webhook_secret": "..."},
+    #    "pos2":   {"name": "Acme POS", "webhook_url": "https://...", "webhook_secret": "..."}}
+    # `default_partner` only supplies a slug when normalizing a blank value.
     # See app/partner/registry.py.
     default_partner: str = "cratis"
     partners_json: str = ""

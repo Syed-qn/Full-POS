@@ -73,23 +73,9 @@ def resolve_partner(slug: str | None, settings=None) -> PartnerRef:
             webhook_secret=str(entry.get("webhook_secret") or "").strip(),
         )
 
-    # The default_partner slug owns the legacy top-level partner_webhook_url/secret
-    # (so the majority partner needs no APP_PARTNERS entry). This is NOT an
-    # untagged fallback — an untagged store is standalone and never reaches here.
-    if slug == default:
-        secret = getattr(settings, "partner_webhook_secret", None)
-        secret_val = (
-            secret.get_secret_value() if hasattr(secret, "get_secret_value") else (secret or "")
-        )
-        return PartnerRef(
-            slug=default,
-            name=default,
-            webhook_url=(getattr(settings, "partner_webhook_url", "") or "").strip(),
-            webhook_secret=(secret_val or "").strip(),
-        )
-
-    # Known-shape but unconfigured partner slug: tag the store, but there's no
-    # webhook endpoint to wire yet (configure it in APP_PARTNERS to enable push).
+    # Slug not in APP_PARTNERS: tag the store, but there's no webhook endpoint to
+    # wire yet. Add the partner to APP_PARTNERS (with its url + secret) to enable
+    # push. APP_PARTNERS is the single source of truth — there is no other fallback.
     return PartnerRef(slug=slug, name=slug, webhook_url="", webhook_secret="")
 
 
