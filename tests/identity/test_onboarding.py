@@ -58,11 +58,11 @@ def test_disconnect_meta_also_clears_catalog_id():
 async def test_provision_partner_integration_mints_key_and_wires_webhook(
     db_session, restaurant, monkeypatch
 ):
-    """On connect we auto-provision the POS side: wire the single global webhook and
-    mint the store's API key once. Idempotent — a second call mints no new key."""
+    """On connect, a store onboarded via ?partner=cratis wires that partner's webhook
+    (from the APP_PARTNERS registry) and mints the store's API key once. Idempotent."""
+    import json
     from types import SimpleNamespace
 
-    from pydantic import SecretStr
     from sqlalchemy import func, select
 
     from app import config
@@ -70,8 +70,16 @@ async def test_provision_partner_integration_mints_key_and_wires_webhook(
     from app.partner.models import PartnerApiKey
 
     fake = SimpleNamespace(
-        partner_webhook_url="https://cratis.example.com/hooks/whatsapp",
-        partner_webhook_secret=SecretStr("shared-signing-secret"),
+        default_partner="cratis",
+        partners_json=json.dumps(
+            {
+                "cratis": {
+                    "name": "Cratis",
+                    "webhook_url": "https://cratis.example.com/hooks/whatsapp",
+                    "webhook_secret": "shared-signing-secret",
+                }
+            }
+        ),
     )
     monkeypatch.setattr(config, "get_settings", lambda: fake)
 

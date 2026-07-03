@@ -6,7 +6,6 @@ nothing wired. A slug wires THAT partner's webhook + a partner-labelled key.
 import json
 from types import SimpleNamespace
 
-from pydantic import SecretStr
 from sqlalchemy import func, select
 
 from app.identity.models import Restaurant
@@ -15,54 +14,27 @@ from app.partner.registry import normalize_slug, resolve_partner
 
 
 def _settings(**kw):
-    base = dict(
-        default_partner="cratis",
-        partners_json="",
-        partner_webhook_url="",
-        partner_webhook_secret=SecretStr(""),
-    )
+    base = dict(default_partner="cratis", partners_json="")
     base.update(kw)
     return SimpleNamespace(**base)
 
 
 # ── registry resolver (pure, no DB) ──────────────────────────────────────────
-def test_resolve_default_partner_uses_toplevel_fields():
-    s = _settings(
-        partner_webhook_url="https://cratis.example.com/hooks",
-        partner_webhook_secret=SecretStr("sec"),
-    )
-    ref = resolve_partner("cratis", s)
-    assert ref.slug == "cratis"
-    assert ref.webhook_url == "https://cratis.example.com/hooks"
-    assert ref.webhook_secret == "sec"
-
-
 def test_resolve_registry_partner():
+    """APP_PARTNERS is the single source: every partner is resolved from it."""
     s = _settings(
         partners_json=json.dumps(
-            {"pos2": {"name": "Acme", "webhook_url": "https://acme/h", "webhook_secret": "k2"}}
+            {
+                "cratis": {"name": "Cratis", "webhook_url": "https://cratis/h", "webhook_secret": "k1"},
+                "pos2": {"name": "Acme", "webhook_url": "https://acme/h", "webhook_secret": "k2"},
+            }
         )
     )
-    ref = resolve_partner("pos2", s)
-    assert ref.slug == "pos2"
-    assert ref.name == "Acme"
-    assert ref.webhook_url == "https://acme/h"
-    assert ref.webhook_secret == "k2"
-
-
-def test_registry_entry_overrides_toplevel_for_default_partner():
-    """Putting the default partner (cratis) in APP_PARTNERS wins over the legacy
-    top-level fields, so ALL partners can live in one list."""
-    s = _settings(
-        partner_webhook_url="https://old-toplevel/hooks",
-        partner_webhook_secret=SecretStr("old"),
-        partners_json=json.dumps(
-            {"cratis": {"name": "Cratis", "webhook_url": "https://cratis-new/hooks", "webhook_secret": "new"}}
-        ),
-    )
-    ref = resolve_partner("cratis", s)
-    assert ref.webhook_url == "https://cratis-new/hooks"  # registry wins
-    assert ref.webhook_secret == "new"
+    cratis = resolve_partner("cratis", s)
+    assert cratis.slug == "cratis" and cratis.webhook_url == "https://cratis/h"
+    pos2 = resolve_partner("pos2", s)
+    assert pos2.slug == "pos2" and pos2.name == "Acme"
+    assert pos2.webhook_url == "https://acme/h" and pos2.webhook_secret == "k2"
 
 
 def test_resolve_unknown_slug_has_no_webhook():
