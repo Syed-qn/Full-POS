@@ -221,20 +221,30 @@ function DishDetailForm({
       return;
     }
     setUploadingImage(true);
+    let url: string;
     try {
-      const { url } = await uploadDishImage(file);
-      setImageUrl(url);
-      // Persist the photo right away. Switching dishes remounts this form and would
-      // otherwise drop an unsaved imageUrl — and the activation gate wouldn't count it.
-      // The file is already stored server-side; this just links it to the dish.
-      await patchDish(menuId, dish.id, { image_url: url });
-      onSaved({ ...dish, image_url: url });
-      toast("Photo added.");
+      ({ url } = await uploadDishImage(file));
     } catch (err) {
       toast(err instanceof ApiError ? err.detail : "Image upload failed.", "error");
-    } finally {
       setUploadingImage(false);
       if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+    setUploadingImage(false);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+    setImageUrl(url);
+    // Update the shared list IMMEDIATELY (before the persist round-trip) so switching
+    // dishes and coming back still shows the photo — a remount re-reads dish.image_url
+    // from the parent, and this is what puts it there. Doing it before awaiting patchDish
+    // means a slow/hanging save can't strand the UI without the image.
+    onSaved({ ...dish, image_url: url });
+    toast("Photo added.");
+    // Persist to the DB (best-effort). The file is already stored server-side; this links
+    // it to the dish so it survives a reload and counts toward the activation gate.
+    try {
+      await patchDish(menuId, dish.id, { image_url: url });
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Couldn't save the photo — click Save.", "error");
     }
   }
 
