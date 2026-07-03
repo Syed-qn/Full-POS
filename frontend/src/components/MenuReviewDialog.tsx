@@ -224,6 +224,12 @@ function DishDetailForm({
     try {
       const { url } = await uploadDishImage(file);
       setImageUrl(url);
+      // Persist the photo right away. Switching dishes remounts this form and would
+      // otherwise drop an unsaved imageUrl — and the activation gate wouldn't count it.
+      // The file is already stored server-side; this just links it to the dish.
+      await patchDish(menuId, dish.id, { image_url: url });
+      onSaved({ ...dish, image_url: url });
+      toast("Photo added.");
     } catch (err) {
       toast(err instanceof ApiError ? err.detail : "Image upload failed.", "error");
     } finally {
