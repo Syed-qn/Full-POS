@@ -12,7 +12,7 @@ export function KPITile({
   accent?: string;
 }) {
   return (
-    <div className={s.tile} style={accent ? { borderTop: `3px solid ${accent}` } : undefined}>
+    <div className={s.tile}>
       <span className="label-upper">{label}</span>
       <span className={s.value} style={accent ? { color: accent } : undefined}>{value}</span>
       {delta !== undefined && delta !== 0 && (

@@ -84,7 +84,7 @@
   gap: 16px;
 }
 .dispatchKpiRow {
-  margin-top: 16px;
+  /* No extra margin — the page's 20px flex gap already spaces this row. */
 }
 .stat {
   position: relative;
@@ -171,7 +171,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 24px;
+  padding-top: 4px;
 }
 .donutWrap {
   position: relative;
@@ -218,13 +219,22 @@
 .legend {
   display: flex;
   flex-direction: column;
-  gap: 9px;
   width: 100%;
 }
+/* Each status on its own separated line so rows don't run together. */
 .legendRow {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.legendRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.legendRow:first-child {
+  padding-top: 0;
 }
 .legendDot {
   width: 10px;
@@ -412,7 +422,9 @@
   display: block;
   position: relative;
   overflow: hidden;
-  background: var(--bg-surface-inset);
+  /* Near-white placeholder so the skeleton reads as light on the white cards,
+     not a grey block. The shimmer sweep provides the movement. */
+  background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-surface));
   border-radius: 6px;
 }
 .sk::after {
@@ -444,3 +456,8 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 .skFeedRow:last-child { border-bottom: none; }
+/* Dispatch-KPI tiles + Fleet-Map placeholders — keep the skeleton the same
+   height as the loaded page so nothing jumps when data arrives. */
+.skDispatchRow { display: flex; flex-wrap: wrap; gap: 12px; }
+.skTile { flex: 1; min-width: 150px; height: 88px; border-radius: 12px; }
+.skMap { width: 100%; height: 320px; border-radius: 12px; }

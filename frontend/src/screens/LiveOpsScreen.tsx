@@ -64,6 +64,19 @@ function LiveOpsSkeleton() {
         ))}
       </div>
 
+      <div className={s.dispatchKpiRow} style={{ marginTop: 20 }}>
+        <div className={s.skDispatchRow}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <span key={i} className={`${s.sk} ${s.skTile}`} />
+          ))}
+        </div>
+      </div>
+
+      <div className={s.card} style={{ marginTop: 20 }}>
+        <span className={`${s.sk} ${s.skCardTitle}`} />
+        <span className={`${s.sk} ${s.skMap}`} />
+      </div>
+
       <div className={s.grid2} style={{ marginTop: 20 }}>
         <div className={s.card}>
           <span className={`${s.sk} ${s.skCardTitle}`} />
@@ -83,7 +96,7 @@ function LiveOpsSkeleton() {
 
         <div className={s.card}>
           <span className={`${s.sk} ${s.skCardTitle}`} />
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className={s.skFeedRow}>
               <span className={`${s.sk} ${s.skLineSm}`} style={{ width: 36 }} />
               <span className={`${s.sk} ${s.skLine}`} style={{ flex: 1 }} />
@@ -174,8 +187,8 @@ export function LiveOpsScreen() {
   const laneIds = new Set(urgent.map((o) => o.id));
   const feedSource = orders.filter((o) => !laneIds.has(o.id));
   const feed = filter === "all" ? feedSource : feedSource.filter((o) => o.status === filter);
-  // Show only the 5 most recent orders in the side panel.
-  const visibleFeed = [...feed].sort((a, b) => b.id - a.id).slice(0, 5);
+  // Show only the 8 most recent orders in the side panel.
+  const visibleFeed = [...feed].sort((a, b) => b.id - a.id).slice(0, 8);
 
   const orderColumns: Column<OrderOut>[] = [
     { key: "id", header: "#", render: (o) => <span className="mono">#{o.id}</span> },

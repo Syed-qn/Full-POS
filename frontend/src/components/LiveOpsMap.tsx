@@ -104,6 +104,10 @@ export function LiveOpsMap({ mapData }: { mapData?: LiveOpsMapOut }) {
     return <div className={s.placeholder} aria-busy="true">Loading fleet map…</div>;
   }
 
+  // No SLA rings and no batches → nothing active to plot. Keep the map mounted
+  // (so Leaflet stays initialised) and lay a "no data" overlay over it.
+  const isEmpty = data.sla_rings.length === 0 && data.batches.length === 0;
+
   return (
     <section className={s.wrap} aria-label="Live fleet map">
       <div className={s.legend}>
@@ -111,7 +115,15 @@ export function LiveOpsMap({ mapData }: { mapData?: LiveOpsMapOut }) {
         <span className={s.legendItem}><span className={s.dotWarn} /> SLA warn</span>
         <span className={s.legendItem}><span className={s.dotCrit} /> SLA critical</span>
       </div>
-      <div ref={mapRef} className={s.map} />
+      <div className={s.mapArea}>
+        <div ref={mapRef} className={s.map} />
+        {isEmpty && (
+          <div className={s.emptyOverlay}>
+            <span className={s.emptyOverlayIcon} aria-hidden>🛵</span>
+            <span className={s.emptyOverlayText}>No active deliveries right now</span>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
