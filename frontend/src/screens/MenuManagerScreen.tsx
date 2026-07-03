@@ -197,8 +197,11 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     if (!pending) return;
     setConfirming(true);
     try {
-      await activateMenu(pending.id);
-      setActiveMenuId(pending.id);
+      // Uploading APPENDS the reviewed dishes into the current menu (bulk add), so the
+      // active menu that now holds them may differ from the just-uploaded draft id — use
+      // the id the server returns, not pending.id (which becomes an emptied draft).
+      const activated = await activateMenu(pending.id);
+      setActiveMenuId(activated.id);
       setPending(null);
     } catch {
       setError("Could not activate the menu.");

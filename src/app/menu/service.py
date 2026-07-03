@@ -268,24 +268,53 @@ async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
         raise MenuIncompleteError(
             f"incomplete dishes (need number and price): {names}"
         )
-    previous = await get_active_menu(session, menu.restaurant_id)
-    if previous and previous.id != menu.id:
-        previous.status = "superseded"
-    menu.status = "active"
-    await record_audit(
-        session, actor="manager", restaurant_id=menu.restaurant_id, entity="menu",
-        entity_id=str(menu.id), action="activated",
-        after={"version": menu.version},
-    )
+    active = await get_active_menu(session, menu.restaurant_id)
+    if active is None or active.id == menu.id:
+        # First/only menu — this upload becomes the active menu.
+        menu.status = "active"
+        target = menu
+        await record_audit(
+            session, actor="manager", restaurant_id=menu.restaurant_id, entity="menu",
+            entity_id=str(menu.id), action="activated",
+            after={"version": menu.version},
+        )
+    else:
+        # APPEND (bulk add): move this upload's dishes INTO the existing active menu rather
+        # than replacing it — uploading N dishes grows the menu by N, exactly like "+ Add
+        # dish" grows it by one. Renumber a dish only where its number would collide with an
+        # existing active dish. Re-parent by moving between the ORM collections (not a raw
+        # menu_id flip) so the delete-orphan cascade never deletes the moved dish.
+        existing_nums = {d.dish_number for d in active.dishes if d.dish_number is not None}
+        counter = max(existing_nums, default=0)
+        moved = 0
+        for d in list(menu.dishes):
+            num = d.dish_number
+            if num is None or num in existing_nums:
+                counter += 1
+                while counter in existing_nums:
+                    counter += 1
+                num = counter
+            existing_nums.add(num)
+            d.dish_number = num
+            menu.dishes.remove(d)
+            active.dishes.append(d)
+            moved += 1
+        menu.status = "superseded"  # the now-empty upload menu
+        target = active
+        await record_audit(
+            session, actor="manager", restaurant_id=menu.restaurant_id, entity="menu",
+            entity_id=str(active.id), action="appended",
+            after={"added": moved, "into_version": active.version},
+        )
     await session.commit()
-    await session.refresh(menu)
+    await session.refresh(target)
 
-    # Refresh OKF grounding so the bot answers from the NEW menu, not stale dish
+    # Refresh OKF grounding so the bot answers from the current menu, not stale dish
     # docs. Best-effort — a grounding-refresh hiccup must never fail activation.
     try:
         from app.okf.producer import refresh_menu_and_policy
 
-        await refresh_menu_and_policy(session, restaurant_id=menu.restaurant_id)
+        await refresh_menu_and_policy(session, restaurant_id=target.restaurant_id)
         await session.commit()
     except Exception:  # noqa: BLE001
         await session.rollback()
@@ -298,8 +327,8 @@ async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
     # dish mutation.
     from app.catalog.sync_service import schedule_auto_publish
 
-    schedule_auto_publish(menu.restaurant_id)
-    return menu
+    schedule_auto_publish(target.restaurant_id)
+    return target
 
 
 async def reextract_menu(
