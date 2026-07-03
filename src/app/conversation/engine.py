@@ -202,6 +202,11 @@ _MENU_KEYWORDS: tuple[str, ...] = (
     "మెను", "మెనూ", "ఏమి ఉన్నాయి", "జాబితా",
 )
 
+# LLM filler that promises a menu without calling menu_show — engine must deliver.
+_MENU_PROMISE_PATTERNS: tuple[str, ...] = (
+    "here's our menu", "let me show you", "take a look", "view full menu",
+)
+
 
 async def _text_is_exact_catalogue_dish(
     session: AsyncSession,
@@ -780,6 +785,43 @@ def _is_menu_browse_intent(text: str) -> bool:
         "what should i order", "surprise me",
     )
     return any(p in t for p in browse_phrases)
+
+
+def _maybe_reset_post_order_for_browse(conv: Conversation, text: str) -> bool:
+    """Re-open ordering when post_order customer wants to browse again (empty cart)."""
+    if _resolve_phase(conv) != "post_order":
+        return False
+    if conv.state.get("draft_order_id") or conv.state.get("pending_order_id"):
+        return False
+    if not _is_menu_browse_intent(text):
+        return False
+    _set_state(
+        conv,
+        dialogue_phase="ordering",
+        dialogue_state="collecting_items",
+        draft_order_id=None,
+        pending_order_id=None,
+    )
+    return True
+
+
+async def _handle_menu_browse(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Deterministic full menu for vague browse/suggest intents (not ingredient search)."""
+    raw = (inbound.payload.get("text") or "").strip().lower()
+    if any(p in raw for p in ("suggest", "recommend", "surprise", "pick for me")):
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="menu-browse-intro",
+            body="Sure! Here's our menu — tell me what catches your eye 😊",
+        )
+    await _send_menu_or_catalog(
+        session, conv, inbound, restaurant_id, prefix="menu-browse",
+    )
 
 
 def _dish_search_description(dish: object) -> str:
@@ -6270,6 +6312,22 @@ async def _dispatch_action(
     if not _is_valid_action_for_phase(action, phase):
         action = "no_action"
 
+    _raw_inbound_text = (
+        inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
+    )
+
+    # Menu-promise fulfillment: model said "here's our menu" but chose no_action.
+    if action == "no_action" and reply:
+        _lower = reply.lower()
+        if any(p in _lower for p in _MENU_PROMISE_PATTERNS):
+            _cart = await _build_cart_summary(session, conv)
+            if phase != "post_order" or not _cart:
+                if phase == "post_order" and not _cart:
+                    _maybe_reset_post_order_for_browse(conv, _raw_inbound_text)
+                await _send_menu_or_catalog(
+                    session, conv, inbound, restaurant_id, prefix="menu-promise",
+                )
+                return
 
     # Anti-hallucination safety net: if the AI dumped a (fabricated) menu into its
     # reply, swap in the REAL menu before it goes out. Runs in EVERY phase — the model
@@ -6277,9 +6335,6 @@ async def _dispatch_action(
     # menu from history (in catalogue mode that history may hold the old text menu).
     # _render_menu is catalogue-bounded when catalogue mode is on, so this can never
     # leak a text-menu item.
-    _raw_inbound_text = (
-        inbound.payload.get("text", "") if inbound.type == MessageType.TEXT else ""
-    )
     if _looks_like_menu(reply):
         _draft_for_menu = conv.state.get("draft_order_id")
         if (
@@ -6295,6 +6350,15 @@ async def _dispatch_action(
 
     # ── ordering actions ──────────────────────────────────────────────────
     if action == "show_menu":
+        if phase == "post_order":
+            if await _build_cart_summary(session, conv):
+                if reply:
+                    await _send_text(
+                        session, conv=conv, inbound=inbound,
+                        restaurant_id=restaurant_id, prefix="ai-reply", body=reply,
+                    )
+                return
+            _maybe_reset_post_order_for_browse(conv, _raw_inbound_text)
         if await _try_apply_kitchen_note_to_cart(
             session, conv, inbound, restaurant_id,
         ):
@@ -8250,6 +8314,12 @@ async def handle_inbound(
             await _handle_dish_search(
                 session, conv, inbound, restaurant_id, _dish_kw,
             )
+            return
+        # "OK show me" / "suggest something" → full menu (not ingredient search).
+        _raw_browse = (inbound.payload.get("text") or "").strip()
+        if _is_menu_browse_intent(_raw_browse) and not _parse_dish_search_query(_raw_browse):
+            _maybe_reset_post_order_for_browse(conv, _raw_browse)
+            await _handle_menu_browse(session, conv, inbound, restaurant_id)
             return
         # "What's in my cart / show my order" → show the REAL cart deterministically,
         # in ANY mode, so the model can never mishandle it (e.g. re-send the catalogue).

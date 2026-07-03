@@ -83,7 +83,7 @@ ACTION_SPECS: dict[str, ActionSpec] = {
     ),
     "request_modification": ActionSpec(phases=("awaiting_confirmation", "post_order")),
     "status_query": ActionSpec(phases=("post_order",)),
-    "menu_show": ActionSpec(phases=("ordering",)),
+    "menu_show": ActionSpec(phases=("ordering", "post_order")),
     "info_answer": ActionSpec(phases=_ALL_PHASES),
     "complaint_explain": ActionSpec(
         phases=("ordering", "awaiting_confirmation", "post_order"),
