@@ -97,7 +97,6 @@ const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   sent: "Sent",
   failed: "Failed",
   cancelled: "Cancelled",
-  cancelled: "Cancelled",
 };
 
 function statNum(stats: Record<string, unknown>, key: string): number {
