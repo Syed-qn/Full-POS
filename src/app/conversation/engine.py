@@ -1457,6 +1457,18 @@ def _set_state(conv: Conversation, **updates) -> None:
     conv.state = {**conv.state, **updates}
 
 
+def _is_internal_leak(text: str) -> bool:
+    """Detect compaction/system_summary JSON that must never reach WhatsApp."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if "[Earlier conversation summary]" in t and ("compacted_count" in t or t.startswith("{")):
+        return True
+    if t.startswith("{") and "compacted_count" in t:
+        return True
+    return False
+
+
 async def _send_text(
     session: AsyncSession,
     *,
@@ -1466,6 +1478,13 @@ async def _send_text(
     prefix: str,
     body: str,
 ) -> None:
+    if _is_internal_leak(body):
+        _logger.warning(
+            "blocked internal compaction leak to WhatsApp conv=%s prefix=%s",
+            conv.id,
+            prefix,
+        )
+        body = "Let me help you with the menu 😊"
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -4517,6 +4536,10 @@ def _render_history_content(msg) -> str:
     if mtype == "product_list":
         return "[sent menu / product cards]"
 
+    if mtype == "system_summary":
+        summary = (payload.get("summary") or "").strip()
+        return summary or "[system_summary]"
+
     # Any other type still gets its best human text, never a bare placeholder.
     text = payload.get("text") or payload.get("body") or payload.get("caption")
     return to_whatsapp_text(text) if text else f"[{mtype}]"
@@ -4566,6 +4589,9 @@ async def _build_history(
     for i, msg in enumerate(rows):
         content = _render_history_content(msg)
         if not content:
+            continue
+        if msg.type == "system_summary":
+            raw.append({"role": "system", "content": content})
             continue
         role = "user" if msg.direction == "inbound" else "assistant"
         # E-22: drop stale assistant cart echoes when a newer cart_observation exists.
