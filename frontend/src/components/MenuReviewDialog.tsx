@@ -51,7 +51,10 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
   }, [dishes]);
 
   const selected = dishes.find((d) => d.id === selectedId) ?? null;
-  const [removingId, setRemovingId] = useState<number | null>(null);
+  // Ids with a delete in flight. A Set (not a single id) so several dishes can be
+  // deleting at once — the live DELETE is slow (Meta unpublish + grounding), and a
+  // single in-flight gate would block removing a second dish until the first finished.
+  const [removingIds, setRemovingIds] = useState<Set<number>>(new Set());
 
   // Meta requires a product image. Dishes with no photo can't publish to the
   // WhatsApp catalogue, so we flag them and gate activation until they're set.
@@ -63,23 +66,28 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
   }
 
   async function onRemove(id: number) {
-    if (removingId !== null) return; // ignore double-clicks while one delete is in flight
-    // Optimistic: drop the row immediately so the × feels instant. The live DELETE
-    // also unpublishes from Meta + refreshes grounding (several seconds) — waiting
-    // for that round-trip made the click look like a no-op. Roll back only on error.
-    const prev = dishes;
+    // Optimistic + concurrent: drop the row immediately (the × feels instant) and let
+    // the slow live DELETE run in the background. Each delete is independent, so you
+    // can remove a second dish without waiting for the first. Roll back only on error.
+    const removed = dishes.find((d) => d.id === id);
+    if (!removed || removingIds.has(id)) return;
     const remaining = dishes.filter((d) => d.id !== id);
-    setDishes(remaining);
+    setDishes((cur) => cur.filter((d) => d.id !== id));
     if (selectedId === id) setSelectedId(remaining[0]?.id ?? null);
-    setRemovingId(id);
+    setRemovingIds((s) => new Set(s).add(id));
     try {
       await deleteDish(menu.id, id);
       toast("Dish removed.");
     } catch (e) {
-      setDishes(prev); // restore the row — the server rejected the delete
+      // Re-insert the row (functional update so a concurrent delete isn't clobbered).
+      setDishes((cur) => (cur.some((d) => d.id === id) ? cur : [...cur, removed]));
       toast(e instanceof ApiError ? e.detail : "Could not remove dish.", "error");
     } finally {
-      setRemovingId(null);
+      setRemovingIds((s) => {
+        const n = new Set(s);
+        n.delete(id);
+        return n;
+      });
     }
   }
 
@@ -123,7 +131,7 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
                     <button
                       className={s.listItemRemove}
                       onClick={() => onRemove(d.id)}
-                      disabled={removingId === d.id}
+                      disabled={removingIds.has(d.id)}
                       aria-label={`Remove ${d.name}`}
                       title="Remove dish"
                     >
