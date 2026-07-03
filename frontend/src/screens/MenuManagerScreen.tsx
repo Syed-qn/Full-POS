@@ -8,7 +8,6 @@ import { SectionBanner } from "../components/SectionBanner";
 import { ApiError } from "../lib/apiClient";
 import { activateMenu, createBlankMenu, deleteDish, fetchActiveMenu, getMenu, patchDish, setAvailability, setWhatsapp, uploadMenu } from "../lib/menuApi";
 import { toast } from "../components/Toaster";
-import { pushCatalog } from "../lib/catalogApi";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { UnifiedMenuPanel } from "../components/UnifiedMenuPanel";
@@ -32,7 +31,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   // dish_ids linked to a catalogue product that is still IN REVIEW (image processing) —
   // kept off WhatsApp until ready, shown with an "In review" pill.
   const [waReviewIds, setWaReviewIds] = useState<Set<number>>(new Set());
-  const [pushingAll, setPushingAll] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onMenuLoaded = useCallback((m: UnifiedMenu) => {
@@ -209,30 +207,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     }
   }
 
-  // Bulk push: send the whole menu to Meta Commerce Manager + link to WhatsApp in one
-  // click — same push path (push_dishes_to_meta) a single add/edit triggers automatically.
-  async function onPushAll() {
-    if (pushingAll) return;
-    setPushingAll(true);
-    try {
-      const res = await pushCatalog();
-      const created = res.pushed ?? 0;
-      const updated = res.push_updated ?? 0;
-      if (res.push_errors && res.push_errors.length > 0) {
-        toast(res.push_errors[0], "error");
-      } else if (created === 0 && updated === 0) {
-        toast("Nothing to push — add priced dishes with a photo first.");
-      } else {
-        toast(`Pushed to WhatsApp: ${created} created, ${updated} updated.`);
-      }
-      setMenuRev((r) => r + 1); // refresh the catalogue panel's linked/in-review pills
-    } catch (e) {
-      toast(e instanceof ApiError ? e.detail : "Bulk push to WhatsApp failed.", "error");
-    } finally {
-      setPushingAll(false);
-    }
-  }
-
   const hasErrors = (pending?.diff_vs_active?.conflicts.length ?? 0) > 0;
 
   // Next free dish number — assigned automatically to new dishes.
@@ -315,11 +289,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
               data-testid="menu-upload"
             />
             <Button variant="ghost" onClick={onAddDish}>+ Add dish</Button>
-            {dishes.length > 0 && (
-              <Button variant="ghost" onClick={onPushAll} disabled={pushingAll}>
-                {pushingAll ? "Pushing…" : "Push all to WhatsApp"}
-              </Button>
-            )}
             <Button onClick={() => fileRef.current?.click()}>
               {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
             </Button>
