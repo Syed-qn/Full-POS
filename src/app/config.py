@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -107,6 +108,11 @@ class Settings(BaseSettings):
     # as the X-Tick-Secret header. Empty (default) DISABLES the endpoint (503) so
     # it's never open. Generate a long random value and set it on the server + cron.
     marketing_tick_secret: SecretStr = SecretStr("")
+    # Promo header image generation (Phase 5 — placeholder default, no paid APIs in CI).
+    marketing_image_provider: Literal["placeholder", "openai"] = "placeholder"
+    marketing_image_openai_model: str = "dall-e-3"
+    marketing_image_max_per_day: int = 20
+    openai_api_key: SecretStr = SecretStr("")
 
     # Geo
     geo_provider: str = "fake"  # fake | google_maps

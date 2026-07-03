@@ -99,6 +99,13 @@ async def advance_delivery(
         except Exception:  # noqa: BLE001 — loyalty never blocks delivery
             pass
 
+        try:
+            from app.marketing.service import on_order_delivered
+
+            await on_order_delivered(session, order=order)
+        except Exception:  # noqa: BLE001 — marketing never blocks delivery
+            pass
+
     try:
         from app.partner.delivery_api import notify_partner_delivery_transition
 

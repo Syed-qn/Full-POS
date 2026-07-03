@@ -17,6 +17,26 @@ class SegmentResponse(BaseModel):
     id: int
     name: str
     last_preview_count: int | None
+    plain_english: str | None = None
+    updated_at: datetime | None = None
+
+
+class SegmentCompileRequest(BaseModel):
+    plain_english: str = Field(..., min_length=10, max_length=600)
+
+
+class SegmentCompileResponse(BaseModel):
+    dsl: dict[str, Any]
+    preview_count: int
+    plain_english: str
+
+
+class SegmentPreviewRequest(BaseModel):
+    dsl: dict[str, Any]
+
+
+class SegmentPreviewResponse(BaseModel):
+    preview_count: int
 
 
 class CampaignCreate(BaseModel):
@@ -33,6 +53,16 @@ class CampaignResponse(BaseModel):
     type: str
     status: str
     stats: dict[str, Any]
+    created_at: datetime | None = None
+    scheduled_at: datetime | None = None
+    template_name: str | None = None
+    audience_label: str | None = None
+    segment_id: int | None = None
+    template_id: int | None = None
+
+
+class TemplateFixRequest(BaseModel):
+    hint: str | None = Field(default=None, max_length=300)
 
 
 class TemplateCreate(BaseModel):
@@ -40,6 +70,7 @@ class TemplateCreate(BaseModel):
     language: str = "en"
     category: str = "MARKETING"
     body: str
+    ephemeral: bool = False
     # header is a component dict: {"type":"text","text":...} or
     # {"type":"IMAGE","image_url":...}. None = no header.
     header: dict[str, Any] | None = None
@@ -77,12 +108,18 @@ class ImageUploadResponse(BaseModel):
     url: str
 
 
+class ImageGenerateRequest(BaseModel):
+    prompt: str = ""
+    describe: str | None = None
+
+
 class BroadcastRequest(BaseModel):
     template_id: int
     segment_id: int | None = None          # None = all opted-in customers
     rfm_segment: str | None = None         # named RFM bucket key, e.g. "champions"; None/"all" = everyone
     coupon_value: str | None = None        # Decimal string, optional promo coupon
     type: str = "promotional"
+    scheduled_at: datetime | None = None   # UTC; if set and > now, queue instead of send
 
 
 class AudienceSegmentOut(BaseModel):
@@ -101,8 +138,48 @@ class BroadcastResponse(BaseModel):
     suppressed_window: int
 
 
+class BroadcastScheduleResponse(BaseModel):
+    campaign_id: int
+    scheduled_at: datetime
+    status: str = "scheduled"
+    window_warning: str | None = None
+
+
+class SchedulePatch(BaseModel):
+    scheduled_at: datetime
+
+
 class SendResponse(BaseModel):
     queued: int
     suppressed_cap: int
     suppressed_optout: int
     suppressed_window: int
+
+
+class AutomationConfig(BaseModel):
+    delay_hours: int | None = None
+    lead_minutes: int | None = None
+    lapsed_days: int | None = None
+    cooldown_days: int | None = None
+
+
+class AutomationResponse(BaseModel):
+    preset_key: str
+    title: str
+    description: str
+    enabled: bool
+    template_id: int | None
+    segment_id: int | None
+    segment_name: str | None = None
+    config: AutomationConfig
+    stats: dict[str, Any]
+    last_run_at: datetime | None = None
+    save_blocked: bool = False
+    save_blocked_reason: str | None = None
+
+
+class AutomationPatch(BaseModel):
+    enabled: bool | None = None
+    template_id: int | None = None
+    segment_id: int | None = None
+    config: AutomationConfig | None = None

@@ -37,11 +37,18 @@ async def _dispatch_scheduled() -> None:
         ).all()
         for campaign in due_campaigns:
             try:
+                stats_ids = (campaign.stats or {}).get("audience_ids")
+                audience_ids = (
+                    [int(x) for x in stats_ids]
+                    if isinstance(stats_ids, list) and stats_ids
+                    else None
+                )
                 await run_campaign_send(
                     session,
                     campaign=campaign,
                     provider=provider,
                     now_utc=now_utc,
+                    audience_ids=audience_ids,
                 )
                 await session.commit()
             except Exception as exc:  # noqa: BLE001
@@ -104,3 +111,53 @@ async def _cleanup_ephemeral_templates(now: datetime | None = None) -> None:
             logger.warning("cleanup_ephemeral_templates failed: %s", exc)
             await session.rollback()
             return 0
+
+
+@shared_task(name="marketing.automation_tick", bind=True, max_retries=2)
+def automation_tick(self) -> None:  # type: ignore[override]
+    asyncio.run(_automation_tick())
+
+
+async def _automation_tick() -> None:
+    from app.db import async_session_factory
+    from app.marketing.service import run_automation_tick
+    from app.marketing.template_factory import get_template_provider
+
+    provider = get_template_provider()
+    now_utc = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        try:
+            totals = await run_automation_tick(
+                session, now_utc=now_utc, provider=provider
+            )
+            await session.commit()
+            if totals.get("queued"):
+                logger.info("automation_tick queued=%d", totals["queued"])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("automation_tick failed: %s", exc)
+            await session.rollback()
+
+
+@shared_task(name="marketing.recurring_promo_tick", bind=True, max_retries=2)
+def recurring_promo_tick(self) -> None:  # type: ignore[override]
+    asyncio.run(_recurring_promo_tick())
+
+
+async def _recurring_promo_tick() -> None:
+    from app.db import async_session_factory
+    from app.marketing.service import run_recurring_promo_tick
+    from app.marketing.template_factory import get_template_provider
+
+    provider = get_template_provider()
+    now_utc = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        try:
+            totals = await run_recurring_promo_tick(
+                session, now_utc=now_utc, provider=provider
+            )
+            await session.commit()
+            if totals.get("queued"):
+                logger.info("recurring_promo_tick queued=%d", totals["queued"])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("recurring_promo_tick failed: %s", exc)
+            await session.rollback()

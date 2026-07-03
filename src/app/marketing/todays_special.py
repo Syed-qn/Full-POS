@@ -28,6 +28,7 @@ WINDOW_END_MIN = 18 * 60    # 18:00 -> 1080 (exclusive; last sendable minute 107
 # back to the restaurant's default time. "3 orders around noon" is the canonical
 # signal this encodes.
 MIN_ORDERS = 3
+MIN_ORDERS_WEEKDAY = 2
 MIN_CONCENTRATION = 0.5
 
 # Default lead time and how late a missed tick may still fire (so a cron that
@@ -59,11 +60,15 @@ def _clamp_to_window(minute: int) -> int:
     return minute
 
 
-def is_personalized(pred: OrderTimePrediction | None) -> bool:
+def is_personalized(
+    pred: OrderTimePrediction | None,
+    *,
+    min_orders: int = MIN_ORDERS,
+) -> bool:
     """True when a prediction is trustworthy enough to use the customer's own time."""
     return (
         pred is not None
-        and pred.order_count >= MIN_ORDERS
+        and pred.order_count >= min_orders
         and pred.concentration >= MIN_CONCENTRATION
     )
 
@@ -75,6 +80,7 @@ def desired_send_minute(
     default_minute: int,
     clamp_window: bool = True,
     window: tuple[int, int] | None = None,
+    min_orders: int = MIN_ORDERS,
 ) -> int:
     """Dubai minute-of-day to send a customer's special.
 
@@ -86,7 +92,7 @@ def desired_send_minute(
     clamps the result into it. Otherwise the legacy UAE 09:00-18:00 window applies
     only when ``clamp_window`` is set; with neither, the raw minute-of-day is kept.
     """
-    if is_personalized(pred):
+    if is_personalized(pred, min_orders=min_orders):
         base = pred.minute_of_day - lead_minutes  # type: ignore[union-attr]
     else:
         base = default_minute

@@ -14,7 +14,7 @@ import re
 
 from app.config import get_settings
 from app.llm.port import strip_dashes
-from app.llm.prompts_marketing import COPYWRITER_PROMPT
+from app.llm.prompts_marketing import COPYWRITER_PROMPT, TEMPLATE_FIX_PROMPT
 
 _logger = logging.getLogger(__name__)
 
@@ -98,4 +98,70 @@ async def draft_template(*, restaurant_name: str, describe: str) -> dict:
         "body": body,
         "footer": drafted.get("footer") or "Reply STOP to opt out",
         "examples": ["Ahmed"],
+    }
+
+
+def _fallback_fix(*, body: str, rejection_reason: str | None) -> dict:
+    """Rule-based revision when LLM is unavailable."""
+    revised = body
+    reason = (rejection_reason or "").lower()
+    if "url" in reason or "link" in reason:
+        revised = re.sub(r"https?://\S+", "", revised)
+    revised = _dedupe_adjacent_emoji(strip_dashes(revised.strip()))
+    if "{{1}}" not in revised:
+        revised = "Hi {{1}}, " + revised
+    return {"body": revised, "footer": "Reply STOP to opt out"}
+
+
+async def fix_template_body(
+    *,
+    restaurant_name: str,
+    body: str,
+    rejection_reason: str | None,
+    hint: str | None = None,
+) -> dict:
+    """Return ``{body, footer}`` revising a rejected template for Meta resubmit."""
+    settings = get_settings()
+    prompt = TEMPLATE_FIX_PROMPT.format(
+        restaurant=restaurant_name or "our restaurant",
+        rejection_reason=rejection_reason or "unspecified",
+        body=body.strip(),
+        hint=hint or "",
+    )
+    drafted: dict | None = None
+    try:
+        if settings.llm_provider == "deepseek" and settings.deepseek_api_key.get_secret_value():
+            from app.llm.deepseek import _async_chat, _get_deepseek_settings
+
+            api_key, model = _get_deepseek_settings()
+            raw = await _async_chat(
+                api_key, model, [{"role": "user", "content": prompt}], max_tokens=400
+            )
+            raw = re.sub(r"^```(?:json)?|```$", "", raw, flags=re.MULTILINE).strip()
+            drafted = json.loads(raw)
+        elif settings.llm_provider == "claude" and settings.anthropic_api_key.get_secret_value():
+            from anthropic import AsyncAnthropic
+
+            client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
+            resp = await client.messages.create(
+                model=settings.claude_model,
+                max_tokens=400,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = resp.content[0].text if resp.content else ""
+            text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.MULTILINE).strip()
+            drafted = json.loads(text)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("template fix via %s failed: %s", settings.llm_provider, exc)
+        drafted = None
+
+    if not isinstance(drafted, dict) or not drafted.get("body"):
+        drafted = _fallback_fix(body=body, rejection_reason=rejection_reason)
+
+    fixed_body = _dedupe_adjacent_emoji(strip_dashes(str(drafted["body"]).strip()))
+    if "{{1}}" not in fixed_body:
+        fixed_body = "Hi {{1}}, " + fixed_body
+    return {
+        "body": fixed_body,
+        "footer": drafted.get("footer") or "Reply STOP to opt out",
     }

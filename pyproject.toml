@@ -27,6 +27,7 @@ dependencies = [
     "structlog>=24.0",
     "prometheus-client>=0.20",
     "ortools>=9.11",
+    "pillow>=10.0",
 ]
 
 [project.optional-dependencies]

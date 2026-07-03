@@ -72,6 +72,7 @@ DEFAULT_SETTINGS: dict = {
     "todays_special": {
         "enabled": False,
         "template_id": None,
+        "fallback_template_id": None,
         "lead_minutes": 15,
         "default_time": "11:45",
     },

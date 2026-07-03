@@ -299,6 +299,9 @@ class SettingsPatch(BaseModel):
         template_id = v.get("template_id")
         if template_id is not None and not isinstance(template_id, int):
             raise ValueError("todays_special.template_id must be an integer or null")
+        fallback_template_id = v.get("fallback_template_id")
+        if fallback_template_id is not None and not isinstance(fallback_template_id, int):
+            raise ValueError("todays_special.fallback_template_id must be an integer or null")
         lead = v.get("lead_minutes", 15)
         if not isinstance(lead, int) or not (0 <= lead <= 120):
             raise ValueError("todays_special.lead_minutes must be 0..120")
@@ -310,14 +313,21 @@ class SettingsPatch(BaseModel):
             raise ValueError("todays_special.default_time must be 'HH:MM'") from exc
         if not (0 <= h <= 23 and 0 <= m <= 59):
             raise ValueError("todays_special.default_time must be valid 24h 'HH:MM'")
-        if enabled and template_id is None:
-            raise ValueError("select an approved template before enabling Today's Special")
-        return {
+        if enabled and template_id is None and fallback_template_id is None:
+            raise ValueError(
+                "select a primary or fallback template before enabling Today's Special"
+            )
+        out = {
             "enabled": enabled,
             "template_id": template_id,
+            "fallback_template_id": fallback_template_id,
             "lead_minutes": lead,
             "default_time": f"{h:02d}:{m:02d}",
         }
+        for key in ("window_start", "window_end"):
+            if key in v:
+                out[key] = v[key]
+        return out
 
     @field_validator("open_hours")
     @classmethod

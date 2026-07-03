@@ -4,7 +4,6 @@ import hashlib
 import logging
 import math
 import re
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -21,6 +20,12 @@ from app.identity.models import Restaurant
 from app.menu.models import Dish
 from app.ordering.fsm import IllegalTransitionError, OrderStatus
 from app.ordering.fsm import transition as fsm_transition
+from app.ordering.habits import (
+    OrderTimePrediction,
+    build_usual_order_times,
+    order_stamps_from_rows,
+    predict_from_stamps,
+)
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 
 _logger = logging.getLogger(__name__)
@@ -179,7 +184,7 @@ async def get_order_for_tenant(
 
 def _dubai_day_start(ymd: str) -> datetime:
     """Start of a Dubai calendar day as naive UTC (matches DB ``created_at`` storage)."""
-    from datetime import date, datetime, time, timedelta, timezone
+    from datetime import date, datetime, time, timezone
     from zoneinfo import ZoneInfo
 
     d = date.fromisoformat(ymd)
@@ -368,22 +373,6 @@ async def compute_customer_order_stats(
     }
 
 
-@dataclass(frozen=True)
-class OrderTimePrediction:
-    """When a customer typically orders, derived from their order history.
-
-    ``minute_of_day`` is the circular-mean order time in Asia/Dubai minutes
-    (0..1439). ``order_count`` is how many non-draft orders fed the estimate.
-    ``concentration`` is the resultant length R∈[0,1] of the circular mean —
-    1.0 = every order at the same clock time, ~0 = scattered across the day —
-    so callers can require a tight habit before trusting the time.
-    """
-
-    minute_of_day: int
-    order_count: int
-    concentration: float
-
-
 def _circular_stats(hours: list[float]) -> tuple[float, float] | None:
     """Circular mean of hours-of-day → ``(mean_hour, R)`` or None if empty.
 
@@ -431,24 +420,35 @@ def _format_usual_order_time(hours: list[float]) -> str | None:
     return f"{daypart} (~{h12}:{m:02d} {suffix})"
 
 
+async def _order_created_rows(
+    session: "AsyncSession", customer_id: int
+) -> list[tuple[datetime | None, ...]]:
+    rows = (
+        await session.scalars(
+            select(Order.created_at).where(
+                Order.customer_id == customer_id,
+                Order.status != "draft",
+            )
+        )
+    ).all()
+    return [(r,) for r in rows]
+
+
+async def _order_stamps_dubai(
+    session: "AsyncSession", customer_id: int, *, now_utc: datetime | None = None
+):
+    """Recency-aware Dubai order stamps for habit prediction."""
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+    return order_stamps_from_rows(
+        await _order_created_rows(session, customer_id), now_utc=now_utc
+    )
+
+
 async def _order_hours_dubai(session: "AsyncSession", customer_id: int) -> list[float]:
     """Local (Asia/Dubai) hour-of-day floats for a customer's non-draft orders."""
-    rows = (await session.scalars(
-        select(Order.created_at).where(
-            Order.customer_id == customer_id,
-            Order.status != "draft",
-        )
-    )).all()
-    tz = ZoneInfo("Asia/Dubai")
-    hours: list[float] = []
-    for created in rows:
-        if created is None:
-            continue
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        local = created.astimezone(tz)
-        hours.append(local.hour + local.minute / 60.0)
-    return hours
+    stamps = await _order_stamps_dubai(session, customer_id)
+    return [s.hour for s in stamps]
 
 
 async def compute_usual_order_time(
@@ -459,23 +459,19 @@ async def compute_usual_order_time(
 
 
 async def predict_order_time(
-    session: "AsyncSession", customer_id: int
+    session: "AsyncSession",
+    customer_id: int,
+    *,
+    weekday: int | None = None,
 ) -> OrderTimePrediction | None:
     """Numeric prediction of a customer's usual order time (None if no orders).
 
-    Backs the Today's Special automation: marketing schedules each send a few
-    minutes before ``minute_of_day``, but only trusts it when ``order_count`` and
-    ``concentration`` show a real habit (see app.marketing.todays_special).
+    When ``weekday`` is set (0=Mon, Dubai local), only orders on that weekday
+    feed the estimate — Friday lunch habits stay separate from Saturday dinner.
+    Recency-weighted so habit drift tracks recent behaviour.
     """
-    hours = await _order_hours_dubai(session, customer_id)
-    stats = _circular_stats(hours)
-    if stats is None:
-        return None
-    mean_hour, resultant = stats
-    minute = round(mean_hour * 60) % 1440
-    return OrderTimePrediction(
-        minute_of_day=minute, order_count=len(hours), concentration=resultant
-    )
+    stamps = await _order_stamps_dubai(session, customer_id)
+    return predict_from_stamps(stamps, weekday=weekday, apply_recency=True)
 
 
 async def recompute_customer_stats(session: "AsyncSession", customer_id: int) -> None:
@@ -496,6 +492,9 @@ async def recompute_customer_stats(session: "AsyncSession", customer_id: int) ->
     customer.first_order_at = stats["first_order_at"] if stats else None
     customer.last_order_at = stats["last_order_at"] if stats else None
     customer.usual_order_time = await compute_usual_order_time(session, customer_id)
+    now_utc = datetime.now(timezone.utc)
+    stamps = await _order_stamps_dubai(session, customer_id, now_utc=now_utc)
+    customer.usual_order_times = build_usual_order_times(stamps, now_utc=now_utc)
     await session.flush()
 
 

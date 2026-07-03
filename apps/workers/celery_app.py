@@ -73,9 +73,17 @@ celery_app.conf.update(
                 minute=settings.predictions_weekly_retrain_minute,
             ),
         },
-        "nightly-marketing-campaigns": {
+        "marketing-send-scheduled-campaigns": {
             "task": "marketing.send_scheduled_campaigns",
-            "schedule": crontab(hour=9, minute=0),  # 9am when UAE window opens
+            "schedule": crontab(minute="*/5"),
+        },
+        "marketing-automation-tick": {
+            "task": "marketing.automation_tick",
+            "schedule": crontab(minute="*/15"),
+        },
+        "marketing-recurring-promo-tick": {
+            "task": "marketing.recurring_promo_tick",
+            "schedule": crontab(minute=0),
         },
         "outbox-sweep-failed": {
             "task": "outbox.sweep_failed",

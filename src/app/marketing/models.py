@@ -134,6 +134,85 @@ class Campaign(Base, TimestampMixin):
     stats: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
+class MarketingAutomation(Base, TimestampMixin):
+    """Preset marketing automation (welcome, winback, reorder, recurring)."""
+
+    __tablename__ = "marketing_automations"
+    __table_args__ = (
+        UniqueConstraint("restaurant_id", "preset_key", name="uq_marketing_automation_preset"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id"), index=True
+    )
+    preset_key: Mapped[str] = mapped_column(String(16))
+    enabled: Mapped[bool] = mapped_column(default=False)
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("wa_templates.id"), nullable=True
+    )
+    segment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("segments.id"), nullable=True
+    )
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    stats: Mapped[dict] = mapped_column(JSONB, default=dict)
+    last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class RecurringMessageState(Base, TimestampMixin):
+    """Per-customer recurring promo schedule (day3 → weekly)."""
+
+    __tablename__ = "recurring_message_state"
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id", "customer_id", name="uq_recurring_message_customer"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id"), index=True
+    )
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("customers.id"), index=True
+    )
+    next_send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    suppressed_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    phase: Mapped[str] = mapped_column(String(8), default="day3")
+    weekday: Mapped[int] = mapped_column(default=0)
+    usual_send_local_time: Mapped[str] = mapped_column(String(5), default="11:45")
+
+
+class MarketingAutomationSend(Base):
+    """Dedup ledger — one welcome per customer; winback uses time-window checks."""
+
+    __tablename__ = "marketing_automation_sends"
+    __table_args__ = (
+        UniqueConstraint(
+            "automation_id", "customer_id", name="uq_marketing_automation_send"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id"), index=True
+    )
+    automation_id: Mapped[int] = mapped_column(
+        ForeignKey("marketing_automations.id"), index=True
+    )
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("customers.id"), index=True
+    )
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    campaign_id: Mapped[int | None] = mapped_column(
+        ForeignKey("campaigns.id"), nullable=True
+    )
+
+
 class MarketingSend(Base, TimestampMixin):
     """Per-recipient send ledger — backs the 24h frequency cap and analytics.
 

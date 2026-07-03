@@ -70,10 +70,16 @@ Marketing page → **Today's Special (auto-timed)** → enable the toggle, pick 
 default time for customers without a clear ordering pattern → **Save automation**.
 
 ## How the timing works
-- Each customer's usual order time is the circular mean of their past order times
-  (Asia/Dubai). With ≥3 clustered orders it's "personalized"; otherwise the
+
+See **[customer-order-habits.md](customer-order-habits.md)** for the full design.
+
+Summary:
+
+- Each customer's usual time is the **per-weekday** circular mean of past orders
+  (Asia/Dubai), recency-weighted. Today's tick uses **today's weekday** only.
+- With ≥2 clustered orders on that weekday it's personalized; otherwise the
   restaurant default time is used.
 - Send time = predicted time − lead minutes, clamped to the UAE **09:00–18:00**
-  window. Opt-out and the 2-per-24h cap still apply.
+  window when enabled. Opt-out and the 2-per-24h cap still apply.
 - The cron cadence is the granularity: a 10-min cron means "11:45" lands in the
   11:40 or 11:50 tick.

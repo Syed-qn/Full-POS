@@ -158,6 +158,27 @@ async def get_active_menu(session: AsyncSession, restaurant_id: int) -> Menu | N
     )
 
 
+async def list_active_dishes_catalog(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    limit: int = 200,
+) -> list[dict[str, int | str]]:
+    """Read-only dish list for marketing segment compile (id + name)."""
+    menu = await get_active_menu(session, restaurant_id)
+    if menu is None:
+        return []
+    rows = (
+        await session.scalars(
+            select(Dish)
+            .where(Dish.menu_id == menu.id, Dish.is_available.is_(True))
+            .order_by(Dish.dish_number)
+            .limit(limit)
+        )
+    ).all()
+    return [{"id": d.id, "name": d.name} for d in rows]
+
+
 class MenuIncompleteError(Exception):
     pass
 

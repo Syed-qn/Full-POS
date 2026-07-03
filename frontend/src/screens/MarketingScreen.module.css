@@ -421,6 +421,55 @@
   background: var(--sla-critical);
 }
 
+.sendModeRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.sendModePill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sendModePillActive {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-surface));
+  color: var(--accent-primary);
+}
+.scheduleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+  margin-top: 10px;
+}
+.scheduleField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.scheduleField input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  font-size: 14px;
+}
+.scheduleHint {
+  margin: 0;
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.imagePromptBox {
+  margin-top: 8px;
+}
+
 /* Pill-shaped loading skeleton for the template picker. */
 .skPill {
   width: 132px;
@@ -704,6 +753,51 @@
   padding: 8px 10px 6px;
   box-shadow: var(--shadow-sm);
   position: relative;
+  overflow: hidden;
+}
+.previewShimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(129, 140, 248, 0.18) 50%,
+    transparent 100%
+  );
+  animation: shimmerSweep 1.6s ease-in-out infinite;
+}
+@keyframes shimmerSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.previewApprovedFlash {
+  animation: approvedFlash 400ms ease-out 1;
+}
+@keyframes approvedFlash {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sla-safe) 0%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--sla-safe) 45%, transparent); }
+  100% { box-shadow: var(--shadow-sm); }
+}
+.ephemeralHint {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--sla-warn);
+  background: color-mix(in srgb, var(--sla-warn) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--sla-warn) 25%, var(--border-subtle));
+}
+.specialRejectBanner {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sla-critical);
+  background: color-mix(in srgb, var(--sla-critical) 6%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 30%, var(--border-subtle));
 }
 .bubbleImg {
   width: 100%;
@@ -955,4 +1049,413 @@
 .deleteTpl:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* ---- Audience groups (WhatsApp tab) ---- */
+.audienceGroupLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 10px 0 6px;
+}
+.couponRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  background: var(--bg-surface-inset);
+  border-radius: 12px;
+}
+.couponLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.couponInput {
+  width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+}
+.couponHint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- Segments tab ---- */
+.segmentsCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.segmentsBuilder,
+.segmentsSaved {
+  background: var(--bg-surface);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.exampleChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.exampleChipsLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.exampleChip {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-inset);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.exampleChip:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.compileError {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sla-critical);
+}
+.compileResult {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.compileCount {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sla-safe);
+}
+.dslToggle {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.dslPre {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-surface-inset);
+  border-radius: 8px;
+  font-size: 11px;
+  overflow-x: auto;
+  max-height: 200px;
+}
+.segmentsEmpty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.segmentsTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+.segmentsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.segmentsTable th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-surface-inset);
+}
+.segmentsTable td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.segDeleteBtn {
+  border: none;
+  background: none;
+  color: var(--sla-critical);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---- Campaigns tab ---- */
+.campaignsCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-surface);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.campaignsWarn {
+  margin: 0;
+  font-size: 13px;
+  color: var(--sla-warn);
+}
+.campaignSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.campaignStatBox {
+  background: var(--bg-surface-inset);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.campaignStatNum {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.campaignStatLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.skStatNum { width: 48px; height: 28px; }
+.skStatLabel { width: 80px; height: 12px; }
+.campaignsEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+}
+.campaignsEmptyIcon { font-size: 40px; line-height: 1; }
+.campaignsEmptyTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.campaignsEmptyDesc {
+  margin: 0;
+  max-width: 360px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.campaignTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+.campaignTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.campaignTable th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-surface-inset);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.campaignTable td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.campaignRow {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.campaignRow:hover,
+.campaignRow:focus-visible {
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-surface));
+  outline: none;
+}
+.campaignStatus {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.campaignStatusScheduled {
+  color: var(--accent-primary);
+}
+.campaignRowCancelled {
+  opacity: 0.55;
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+.campaignActions {
+  text-align: right;
+  white-space: nowrap;
+}
+.campaignActionBtn {
+  border: none;
+  background: transparent;
+  color: var(--sla-critical);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.campaignActionBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.campaignDrawer {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.campaignDrawerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.campaignDrawerPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.campaignDrawerLoading {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.campaignDrawerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px;
+}
+.campaignDrawerGrid > div {
+  background: var(--bg-surface-inset);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.automationRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 920px;
+}
+.automationLoading {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.automationCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.automationHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.automationTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.automationDesc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.automationToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.automationField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.automationStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.automationStats strong {
+  color: var(--text-primary);
+}
+.automationAdvanced {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.automationAdvanced summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.campaignDrawerGrid strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.campaignDrawerGrid span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.campaignSuppress {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.campaignSuppressTitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.campaignSuppressRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-secondary);
 }

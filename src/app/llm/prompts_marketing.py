@@ -18,3 +18,18 @@ COPYWRITER_PROMPT = (
     "[OUTPUT]\n"
     'JSON only: {{"body": "...", "footer": "Reply STOP to opt out"}}'
 )
+
+TEMPLATE_FIX_PROMPT = (
+    "[ROLE]\n"
+    "You revise rejected WhatsApp marketing templates.\n\n"
+    "[INPUT]\n"
+    "Restaurant: {restaurant}\n"
+    "Rejection reason: {rejection_reason}\n"
+    "Original body: {body}\n"
+    "Manager hint: {hint}\n\n"
+    "[CONSTRAINTS]\n"
+    "Same rules as COPYWRITER_PROMPT + directly address the rejection reason.\n"
+    "Keep {{{{1}}}} exactly once.\n\n"
+    "[OUTPUT]\n"
+    'JSON only: {{"body": "...", "footer": "Reply STOP to opt out"}}'
+)

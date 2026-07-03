@@ -203,6 +203,10 @@ async def test_profile_reports_usual_order_time(client, db_session, restaurant):
         )
         for i in range(2)
     ])
+    await db_session.flush()
+    from app.ordering.service import recompute_customer_stats
+
+    await recompute_customer_stats(db_session, customer.id)
     await db_session.commit()
 
     resp = await client.get(

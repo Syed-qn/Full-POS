@@ -1,0 +1,123 @@
+.root {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.track {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  position: relative;
+}
+
+.track::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: var(--border-subtle);
+  z-index: 0;
+}
+
+.step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border-default);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.stepActive .dot {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.stepComplete .dot {
+  border-color: var(--sla-safe);
+  background: color-mix(in srgb, var(--sla-safe) 12%, var(--bg-surface));
+  color: var(--sla-safe);
+}
+
+.stepFailed .dot {
+  border-color: var(--sla-critical);
+  background: color-mix(in srgb, var(--sla-critical) 12%, var(--bg-surface));
+  color: var(--sla-critical);
+}
+
+.label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.stepActive .label,
+.stepComplete .label {
+  color: var(--text-secondary);
+}
+
+.stepFailed .label {
+  color: var(--sla-critical);
+}
+
+.rejectedBox {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-critical) 6%, var(--bg-surface));
+}
+
+.rejectedTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sla-critical);
+}
+
+.rejectedReason {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.rejectedActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.draftActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.draftHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.marketing import service
-from app.marketing.models import Campaign, MarketingSend, WaTemplate
+from app.marketing.models import Campaign, MarketingSend, Segment, WaTemplate
 from app.marketing.optout import record_opt_out
 from app.marketing.template_mock import MockTemplateProvider
 from app.marketing.template_port import TemplateCreateResult, TemplateStatus
@@ -87,6 +87,38 @@ async def test_create_segment_rejects_bad_dsl(db_session, restaurant):
             restaurant_id=restaurant.id,
             name="Bad",
             dsl={"all": [{"field": "nope", "op": "eq", "value": 1}]},
+        )
+
+
+async def test_compile_segment_from_english_returns_dsl_and_count(db_session, restaurant):
+    await _customer(db_session, restaurant, "+971500000801", total_orders=5)
+    result = await service.compile_segment_from_english(
+        db_session,
+        restaurant_id=restaurant.id,
+        plain_english="customers who spent over AED 200",
+    )
+    assert "dsl" in result
+    assert result["preview_count"] >= 0
+    assert result["plain_english"] == "customers who spent over AED 200"
+
+
+async def test_delete_segment_success(db_session, restaurant):
+    seg = await service.create_segment(
+        db_session,
+        restaurant_id=restaurant.id,
+        name="Gone",
+        dsl={"all": [{"field": "order_count", "op": "gte", "value": 1}]},
+    )
+    await service.delete_segment(
+        db_session, restaurant_id=restaurant.id, segment_id=seg.id
+    )
+    assert await db_session.get(Segment, seg.id) is None
+
+
+async def test_delete_segment_not_found(db_session, restaurant):
+    with pytest.raises(ValueError, match="not found"):
+        await service.delete_segment(
+            db_session, restaurant_id=restaurant.id, segment_id=999999
         )
 
 
@@ -550,3 +582,53 @@ async def test_service_cleanup_ephemeral_sets_deleted(db_session, restaurant):
     assert n >= 1
     await db_session.refresh(tpl)
     assert tpl.deleted_at is not None and tpl.status == "deleted"
+
+
+async def test_cleanup_ephemeral_clears_todays_special_template_id_in_settings(
+    db_session, restaurant
+):
+    from datetime import datetime, timezone
+
+    from app.marketing.template_mock import MockTemplateProvider
+
+    tpl = WaTemplate(
+        restaurant_id=restaurant.id,
+        meta_template_name="svc_eod_settings",
+        language="en",
+        category="marketing",
+        body="Hi {{1}}, special!",
+        footer="STOP",
+        status="approved",
+        ephemeral=True,
+        meta_template_id="svc-eod-settings",
+        deleted_at=None,
+    )
+    db_session.add(tpl)
+    await db_session.flush()
+    restaurant.settings = {
+        **(restaurant.settings or {}),
+        "todays_special": {
+            "enabled": True,
+            "template_id": tpl.id,
+            "fallback_template_id": tpl.id,
+            "lead_minutes": 15,
+            "default_time": "11:45",
+        },
+    }
+    await db_session.flush()
+    await db_session.commit()
+
+    prov = MockTemplateProvider()
+    spec_name = "svc_eod_settings"
+    prov._id_by_name[spec_name] = "svc-eod-settings"
+    prov._by_id["svc-eod-settings"] = TemplateCreateResult(
+        meta_template_id="svc-eod-settings", status=TemplateStatus.APPROVED
+    )
+
+    now = datetime(2026, 6, 6, 23, 30, tzinfo=timezone.utc)
+    n = await service.cleanup_ephemeral_templates(db_session, provider=prov, now=now)
+    assert n >= 1
+    await db_session.refresh(restaurant)
+    ts = (restaurant.settings or {}).get("todays_special") or {}
+    assert ts.get("template_id") is None
+    assert ts.get("fallback_template_id") is None

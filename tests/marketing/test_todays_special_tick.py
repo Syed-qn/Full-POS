@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 
 from app.marketing import service
-from app.marketing.models import MarketingSend, WaTemplate
+from app.marketing.models import Campaign, MarketingSend, WaTemplate
 from app.outbox.models import OutboxMessage
 from app.ordering.models import Customer, Order
 
@@ -39,12 +39,12 @@ async def _noon_customer(db_session, restaurant, phone="+971500000123"):
     cust = Customer(restaurant_id=restaurant.id, phone=phone, name="Layla")
     db_session.add(cust)
     await db_session.flush()
-    # Three delivered orders, each at 08:00 UTC == 12:00 Dubai (naive UTC column).
+    # Three Monday lunch orders at 08:00 UTC == 12:00 Dubai (tick day is Monday).
     db_session.add_all([
         Order(
             restaurant_id=restaurant.id, customer_id=cust.id,
             order_number=f"R-N{i}", status="delivered",
-            created_at=datetime(2026, 6, 18 + i, 8, 0),
+            created_at=datetime(2026, 6, 8 + i * 7, 8, 0),
         )
         for i in range(3)
     ])
@@ -56,6 +56,36 @@ def _enable(restaurant, template_id, **over):
     cfg = {"enabled": True, "template_id": template_id, "lead_minutes": 15, "default_time": "11:45"}
     cfg.update(over)
     restaurant.settings = {**(restaurant.settings or {}), "todays_special": cfg}
+
+
+async def test_tick_uses_fallback_when_primary_rejected(db_session, restaurant):
+    primary = WaTemplate(
+        restaurant_id=restaurant.id,
+        meta_template_name="special_primary_rej",
+        language="en",
+        category="marketing",
+        body="Hi {{1}}! Primary special.",
+        footer="Reply STOP to unsubscribe",
+        buttons=[],
+        status="rejected",
+    )
+    fallback = await _approved_template(db_session, restaurant)
+    fallback.meta_template_name = "special_fallback_ok"
+    db_session.add(primary)
+    await db_session.flush()
+    cust = await _noon_customer(db_session, restaurant)
+    _enable(restaurant, primary.id, fallback_template_id=fallback.id)
+    await db_session.flush()
+
+    totals = await service.run_todays_special_tick(db_session, now_utc=NOW_DUE)
+    await db_session.commit()
+
+    assert totals["queued"] == 1
+    send = (await db_session.scalars(
+        select(MarketingSend).where(MarketingSend.customer_id == cust.id)
+    )).one()
+    camp = await db_session.get(Campaign, send.campaign_id)
+    assert camp.stats.get("template_source") == "fallback"
 
 
 async def test_tick_sends_special_at_predicted_time(db_session, restaurant):

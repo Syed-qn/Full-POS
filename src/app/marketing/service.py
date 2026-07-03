@@ -32,16 +32,39 @@ from app.audit.service import record_audit
 from app.coupons.service import issue_coupon
 from app.identity.models import Restaurant
 from app.marketing.compliance import lint_template
-from app.marketing.models import Campaign, MarketingSend, Segment, WaTemplate
+from app.marketing.copywriter import fix_template_body
+from app.marketing.automations import (
+    PRESET_DEFAULTS,
+    PRESET_KEYS,
+    advance_recurring_state,
+    clamp_config,
+    record_automation_send,
+    upsert_recurring_state,
+    winback_customer_ids,
+)
+from app.marketing.models import (
+    Campaign,
+    MarketingAutomation,
+    MarketingAutomationSend,
+    MarketingMedia,
+    MarketingSend,
+    RecurringMessageState,
+    Segment,
+    WaTemplate,
+)
+from app.marketing.rfm import RFM_SEGMENTS
 from app.marketing.naming import next_available_name
 from app.marketing.optout import is_opted_out
+from app.menu.service import list_active_dishes_catalog
 from app.marketing.segments import evaluate_segment, preview_count, validate_dsl
 from app.marketing.template_port import TemplatePort, TemplateSpec, TemplateStatus
 from app.marketing.throttle import can_send_marketing, count_sends_last_24h
 from app.marketing.todays_special import (
     DEFAULT_LEAD_MINUTES,
+    MIN_ORDERS_WEEKDAY,
     desired_send_minute,
     is_due,
+    is_personalized,
     parse_hhmm,
 )
 from app.config import get_settings
@@ -99,9 +122,113 @@ async def create_segment(
     return seg
 
 
+async def dish_catalog_for_compiler(
+    session: AsyncSession, *, restaurant_id: int
+) -> list[dict[str, int | str]]:
+    """Active menu dishes for LLM segment compile (ordered_dish_id mapping)."""
+    return await list_active_dishes_catalog(session, restaurant_id=restaurant_id)
+
+
+async def compile_segment_from_english(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    plain_english: str,
+) -> dict:
+    """Plain English → validated DSL + live preview count (read-only, no audit)."""
+    from app.llm.factory import get_segment_compiler
+
+    catalog = await dish_catalog_for_compiler(session, restaurant_id=restaurant_id)
+    enriched = plain_english
+    if catalog:
+        lines = "\n".join(f"- {d['id']}: {d['name']}" for d in catalog)
+        enriched = (
+            f"{plain_english}\n\n"
+            "Active menu dishes (use ordered_dish_id with these ids only):\n"
+            f"{lines}"
+        )
+    try:
+        dsl = get_segment_compiler().compile(enriched)
+    except Exception as exc:
+        raise RuntimeError(f"Segment compile failed: {exc}") from exc
+    try:
+        validate_dsl(dsl)
+    except ValueError as exc:
+        raise ValueError(
+            "Could not understand that audience description. Try simplifying."
+        ) from exc
+    count = await preview_count(session, restaurant_id=restaurant_id, dsl=dsl)
+    return {"dsl": dsl, "preview_count": count, "plain_english": plain_english}
+
+
+async def preview_segment(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    dsl: dict,
+) -> int:
+    """Validate DSL and return matching customer count."""
+    validate_dsl(dsl)
+    return await preview_count(session, restaurant_id=restaurant_id, dsl=dsl)
+
+
+async def delete_segment(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    segment_id: int,
+) -> None:
+    """Hard-delete a saved segment; campaigns keep nullable segment_id for history."""
+    seg = await session.get(Segment, segment_id)
+    if seg is None or seg.restaurant_id != restaurant_id:
+        raise ValueError(f"segment {segment_id} not found for restaurant")
+    in_flight = (
+        await session.execute(
+            select(func.count(Campaign.id)).where(
+                Campaign.restaurant_id == restaurant_id,
+                Campaign.segment_id == segment_id,
+                Campaign.status.in_(("scheduled", "sending")),
+            )
+        )
+    ).scalar_one()
+    if in_flight:
+        raise ValueError("segment is referenced by a campaign that is still sending")
+    name = seg.name
+    await session.delete(seg)
+    await session.flush()
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="segment",
+        entity_id=str(segment_id),
+        action="deleted",
+        after={"name": name},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Campaigns
 # ---------------------------------------------------------------------------
+_RFM_LABELS: dict[str, str] = dict(RFM_SEGMENTS)
+
+
+def audience_label_for_campaign(
+    *,
+    segment_name: str | None,
+    stats: dict | None,
+) -> str:
+    """Human-readable audience for a campaign row (segment name, RFM bucket, or all)."""
+    if segment_name:
+        return segment_name
+    rfm_key = (stats or {}).get("rfm_segment")
+    if rfm_key:
+        label = _RFM_LABELS.get(rfm_key)
+        if label:
+            return label
+    return "All Customers"
+
+
 async def create_campaign(
     session: AsyncSession,
     *,
@@ -153,9 +280,298 @@ async def create_campaign(
     return camp
 
 
+_SCHEDULE_MIN_LEAD = timedelta(minutes=5)
+_SCHEDULE_MAX_HORIZON = timedelta(days=90)
+
+
+def validate_scheduled_at(scheduled_at: datetime, *, now_utc: datetime) -> None:
+    """Raise ValueError when a broadcast schedule time is out of bounds."""
+    if scheduled_at.tzinfo is None:
+        raise ValueError("scheduled_at must be timezone-aware (UTC)")
+    if scheduled_at <= now_utc + _SCHEDULE_MIN_LEAD:
+        raise ValueError("Schedule at least 5 minutes ahead")
+    if scheduled_at > now_utc + _SCHEDULE_MAX_HORIZON:
+        raise ValueError("Cannot schedule more than 90 days out")
+
+
+def window_warning_for_schedule(scheduled_at: datetime) -> str | None:
+    """Non-blocking hint when UAE send-window enforcement may delay delivery."""
+    if not get_settings().marketing_send_window_enabled:
+        return None
+    if is_within_uae_window(scheduled_at):
+        return None
+    return (
+        "Scheduled fire time is outside the 9am–6pm UAE window — "
+        "the send will wait until the next allowed window."
+    )
+
+
+async def _assert_template_approved(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    template_id: int,
+) -> WaTemplate:
+    tpl = await session.get(WaTemplate, template_id)
+    if tpl is None or tpl.restaurant_id != restaurant_id:
+        raise ValueError(f"template {template_id} not found for restaurant")
+    if tpl.status != "approved":
+        raise ValueError("template must be approved before scheduling or sending")
+    return tpl
+
+
+async def schedule_broadcast(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    template_id: int,
+    scheduled_at: datetime,
+    now_utc: datetime,
+    type: str = "promotional",
+    segment_id: int | None = None,
+    rfm_segment: str | None = None,
+    coupon_value: str | None = None,
+) -> tuple[Campaign, str | None]:
+    """Create a scheduled campaign without sending. Caller commits."""
+    validate_scheduled_at(scheduled_at, now_utc=now_utc)
+    await _assert_template_approved(
+        session, restaurant_id=restaurant_id, template_id=template_id
+    )
+    camp = await create_campaign(
+        session,
+        restaurant_id=restaurant_id,
+        type=type,
+        template_id=template_id,
+        segment_id=segment_id,
+        coupon_value=coupon_value,
+        scheduled_at=scheduled_at,
+    )
+    camp.stats = {
+        **(camp.stats or {}),
+        "rfm_segment": (rfm_segment or "all") if segment_id is None else None,
+        "segment_id": segment_id,
+    }
+    warning = window_warning_for_schedule(scheduled_at)
+    if warning:
+        camp.stats["window_warning"] = warning
+    await session.flush()
+    return camp, warning
+
+
+async def cancel_scheduled_campaign(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    campaign_id: int,
+) -> Campaign:
+    """Cancel a queued broadcast. Caller commits."""
+    camp = await session.get(Campaign, campaign_id)
+    if camp is None or camp.restaurant_id != restaurant_id:
+        raise ValueError("campaign not found")
+    if camp.status != "scheduled":
+        raise ValueError("only scheduled campaigns can be cancelled")
+    camp.status = "cancelled"
+    await session.flush()
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="campaign",
+        entity_id=str(camp.id),
+        action="cancelled",
+        after={"status": "cancelled"},
+    )
+    return camp
+
+
+async def reschedule_campaign(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    campaign_id: int,
+    scheduled_at: datetime,
+    now_utc: datetime,
+) -> tuple[Campaign, str | None]:
+    """Move a scheduled broadcast to a new fire time. Caller commits."""
+    camp = await session.get(Campaign, campaign_id)
+    if camp is None or camp.restaurant_id != restaurant_id:
+        raise ValueError("campaign not found")
+    if camp.status != "scheduled":
+        raise ValueError("only scheduled campaigns can be rescheduled")
+    validate_scheduled_at(scheduled_at, now_utc=now_utc)
+    camp.scheduled_at = scheduled_at
+    warning = window_warning_for_schedule(scheduled_at)
+    stats = dict(camp.stats or {})
+    if warning:
+        stats["window_warning"] = warning
+    else:
+        stats.pop("window_warning", None)
+    camp.stats = stats
+    await session.flush()
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="campaign",
+        entity_id=str(camp.id),
+        action="rescheduled",
+        after={"scheduled_at": scheduled_at.isoformat()},
+    )
+    return camp, warning
+
+
+def _dubai_day_bounds(now_utc: datetime) -> tuple[datetime, datetime]:
+    local = now_utc.astimezone(_DUBAI)
+    start_local = datetime(
+        local.year, local.month, local.day, tzinfo=_DUBAI
+    )
+    end_local = start_local + timedelta(days=1)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+async def count_promo_images_today(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    now_utc: datetime,
+) -> int:
+    """Count AI-generated header images for the current Dubai day."""
+    day_start, day_end = _dubai_day_bounds(now_utc)
+    prefix = f"marketing/{restaurant_id}/gen_"
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(MarketingMedia)
+            .where(
+                MarketingMedia.restaurant_id == restaurant_id,
+                MarketingMedia.path.like(f"{prefix}%"),
+                MarketingMedia.created_at >= day_start,
+                MarketingMedia.created_at < day_end,
+            )
+        )
+        or 0
+    )
+
+
+async def generate_promo_image(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    restaurant_name: str,
+    prompt: str = "",
+    describe: str | None = None,
+    now_utc: datetime,
+) -> str:
+    """Generate bytes via the image port, persist MarketingMedia, return public URL."""
+    import uuid
+
+    from app.marketing.image_factory import get_promo_image_generator
+    from app.marketing.image_prompt import build_promo_image_prompt
+
+    settings = get_settings()
+    used = await count_promo_images_today(
+        session, restaurant_id=restaurant_id, now_utc=now_utc
+    )
+    if used >= settings.marketing_image_max_per_day:
+        raise ValueError("Daily image generation limit reached")
+
+    full_prompt = build_promo_image_prompt(
+        restaurant_name=restaurant_name,
+        prompt=prompt,
+        describe=describe,
+    )
+    generator = get_promo_image_generator()
+    content = await generator.generate(prompt=full_prompt, restaurant_name=restaurant_name)
+    if len(content) < 100:
+        raise ValueError("image generator returned empty bytes")
+
+    rel = f"marketing/{restaurant_id}/gen_{uuid.uuid4().hex}.png"
+    session.add(
+        MarketingMedia(
+            restaurant_id=restaurant_id,
+            path=rel,
+            content_type="image/png",
+            data=content,
+        )
+    )
+    await session.flush()
+    return f"{settings.public_base_url.rstrip('/')}/media/{rel}"
+
+
 # ---------------------------------------------------------------------------
 # Template submission
 # ---------------------------------------------------------------------------
+async def fix_template(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    template_id: int,
+    restaurant_name: str,
+    hint: str | None = None,
+) -> WaTemplate:
+    """AI-revise a rejected template, lint, persist as draft. Caller commits."""
+    tpl = await session.get(WaTemplate, template_id)
+    if tpl is None or tpl.restaurant_id != restaurant_id:
+        raise ValueError(f"template {template_id} not found for restaurant")
+    if tpl.status != "rejected":
+        raise ValueError("only rejected templates can be fixed")
+
+    revised = await fix_template_body(
+        restaurant_name=restaurant_name,
+        body=tpl.body,
+        rejection_reason=tpl.rejection_reason,
+        hint=hint,
+    )
+    spec_dict = {
+        "name": tpl.meta_template_name,
+        "body": revised["body"],
+        "header": tpl.header,
+        "footer": revised.get("footer") or tpl.footer,
+        "buttons": tpl.buttons or [],
+    }
+    violations = lint_template(spec_dict)
+    if violations:
+        raise ValueError(f"revised template fails compliance: {'; '.join(violations)}")
+
+    tpl.body = revised["body"]
+    if revised.get("footer"):
+        tpl.footer = revised["footer"]
+    tpl.status = "draft"
+    tpl.rejection_reason = None
+    await session.flush()
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="wa_template",
+        entity_id=str(tpl.id),
+        action="fixed",
+        after={"status": "draft"},
+    )
+    return tpl
+
+
+async def resolve_todays_special_template(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    cfg: dict,
+) -> tuple[WaTemplate | None, str | None]:
+    """Return first approved template from primary then fallback id."""
+    for source, key in (("primary", "template_id"), ("fallback", "fallback_template_id")):
+        tid = cfg.get(key)
+        if not tid:
+            continue
+        tpl = await session.get(WaTemplate, tid)
+        if (
+            tpl is not None
+            and tpl.restaurant_id == restaurant_id
+            and tpl.status == "approved"
+        ):
+            return tpl, source
+    return None, None
+
+
 async def submit_template(
     session: AsyncSession,
     *,
@@ -357,8 +773,12 @@ async def run_campaign_send(
     if tpl is None or tpl.status != "approved":
         raise ValueError("campaign template is not approved")
 
-    # Audience: an explicit id list (e.g. a named RFM bucket computed by the
-    # caller) wins; else a saved segment's DSL; else all customers of the tenant.
+    # Audience: explicit param, else stats.audience_ids (welcome single-send),
+    # else segment DSL, else all customers.
+    if audience_ids is None:
+        raw_ids = (campaign.stats or {}).get("audience_ids")
+        if isinstance(raw_ids, list) and raw_ids:
+            audience_ids = [int(x) for x in raw_ids]
     if audience_ids is not None:
         customers = (
             (
@@ -423,7 +843,7 @@ async def run_campaign_send(
             summary[reason] += 1
 
     campaign.status = "sent"
-    campaign.stats = summary
+    campaign.stats = {**(campaign.stats or {}), **summary}
     await session.flush()
     await record_audit(
         session,
@@ -630,12 +1050,12 @@ async def run_todays_special_tick(
         cfg = (restaurant.settings or {}).get("todays_special") or {}
         if not cfg.get("enabled"):
             continue
-        template_id = cfg.get("template_id")
-        if not template_id:
+        tpl, template_source = await resolve_todays_special_template(
+            session, restaurant_id=restaurant.id, cfg=cfg
+        )
+        if tpl is None:
             continue
-        tpl = await session.get(WaTemplate, template_id)
-        if tpl is None or tpl.restaurant_id != restaurant.id or tpl.status != "approved":
-            continue
+        template_id = tpl.id
         lead = int(cfg.get("lead_minutes", DEFAULT_LEAD_MINUTES))
         # "Custom time" range → only send within [window_start, window_end] and
         # fire new customers at the window start. Absent → "Until today" (no range).
@@ -658,6 +1078,10 @@ async def run_todays_special_tick(
             template_id=template_id,
             day_anchor_utc=day_anchor_utc,
         )
+        campaign.stats = {
+            **(campaign.stats or {}),
+            "template_source": template_source or "primary",
+        }
 
         # Customers already handled today for this campaign — skip (cheap guard;
         # the unique constraint is the real safety net).
@@ -680,13 +1104,16 @@ async def run_todays_special_tick(
         for cust in customers:
             if cust.id in done:
                 continue
-            pred = await predict_order_time(session, cust.id)
+            pred = await predict_order_time(
+                session, cust.id, weekday=local.weekday()
+            )
             desired = desired_send_minute(
                 pred,
                 lead_minutes=lead,
                 default_minute=default_minute,
                 clamp_window=window_on,
                 window=custom_window,
+                min_orders=MIN_ORDERS_WEEKDAY,
             )
             if not is_due(desired, now_minute):
                 continue
@@ -996,6 +1423,7 @@ async def cleanup_ephemeral_templates(
         )
     ).scalars().all()
     deleted = 0
+    cleared_restaurants: list[int] = []
     for tpl in rows:
         try:
             ok = await provider.delete(
@@ -1005,11 +1433,28 @@ async def cleanup_ephemeral_templates(
                 tpl.status = "deleted"
                 tpl.deleted_at = now
                 deleted += 1
+                for restaurant in (
+                    await session.scalars(select(Restaurant))
+                ).all():
+                    settings = dict(restaurant.settings or {})
+                    ts = settings.get("todays_special") or {}
+                    changed = False
+                    if ts.get("template_id") == tpl.id:
+                        ts = {**ts, "template_id": None}
+                        changed = True
+                    if ts.get("fallback_template_id") == tpl.id:
+                        ts = {**ts, "fallback_template_id": None}
+                        changed = True
+                    if changed:
+                        settings["todays_special"] = ts
+                        restaurant.settings = settings
+                        cleared_restaurants.append(restaurant.id)
         except Exception:  # noqa: BLE001
             # best effort; do not block other deletes
             pass
-    if deleted:
+    if deleted or cleared_restaurants:
         await session.flush()
+    if deleted:
         await record_audit(
             session,
             actor="system",
@@ -1019,4 +1464,551 @@ async def cleanup_ephemeral_templates(
             action="deleted",
             after={"deleted": deleted},
         )
+    for rid in cleared_restaurants:
+        await record_audit(
+            session,
+            actor="system",
+            restaurant_id=rid,
+            entity="settings",
+            entity_id=str(rid),
+            action="todays_special.template_cleared",
+            after={"reason": "ephemeral_cleanup"},
+        )
     return deleted
+
+
+# ---------------------------------------------------------------------------
+# Preset automations (Phase 4)
+# ---------------------------------------------------------------------------
+async def ensure_automation_presets(
+    session: AsyncSession, *, restaurant_id: int
+) -> list[MarketingAutomation]:
+    """Ensure four preset rows exist for a tenant (disabled by default)."""
+    existing = (
+        await session.scalars(
+            select(MarketingAutomation).where(
+                MarketingAutomation.restaurant_id == restaurant_id
+            )
+        )
+    ).all()
+    by_key = {a.preset_key: a for a in existing}
+    created: list[MarketingAutomation] = []
+    for key in PRESET_KEYS:
+        if key in by_key:
+            continue
+        meta = PRESET_DEFAULTS[key]
+        row = MarketingAutomation(
+            restaurant_id=restaurant_id,
+            preset_key=key,
+            enabled=False,
+            config=dict(meta["config"]),
+            stats={},
+        )
+        session.add(row)
+        created.append(row)
+    if created:
+        await session.flush()
+    return list(by_key.values()) + created
+
+
+def _automation_save_blocked(auto: MarketingAutomation, tpl: WaTemplate | None) -> tuple[bool, str | None]:
+    if not auto.enabled:
+        return False, None
+    if auto.template_id is None or tpl is None or tpl.status != "approved":
+        return True, "Select an approved template before enabling."
+    return False, None
+
+
+async def list_automations(
+    session: AsyncSession, *, restaurant_id: int
+) -> list[dict]:
+    """Return preset automations enriched for the manager UI."""
+    rows = await ensure_automation_presets(session, restaurant_id=restaurant_id)
+    seg_names: dict[int, str] = {}
+    for auto in rows:
+        if auto.segment_id:
+            seg = await session.get(Segment, auto.segment_id)
+            if seg:
+                seg_names[auto.segment_id] = seg.name
+    out: list[dict] = []
+    for auto in sorted(rows, key=lambda r: PRESET_KEYS.index(r.preset_key)):
+        meta = PRESET_DEFAULTS[auto.preset_key]
+        tpl = (
+            await session.get(WaTemplate, auto.template_id)
+            if auto.template_id
+            else None
+        )
+        blocked, reason = _automation_save_blocked(auto, tpl)
+        out.append(
+            {
+                "preset_key": auto.preset_key,
+                "title": meta["title"],
+                "description": meta["description"],
+                "enabled": auto.enabled,
+                "template_id": auto.template_id,
+                "segment_id": auto.segment_id,
+                "segment_name": seg_names.get(auto.segment_id) if auto.segment_id else None,
+                "config": clamp_config(auto.preset_key, auto.config),
+                "stats": auto.stats or {},
+                "last_run_at": auto.last_run_at,
+                "save_blocked": blocked,
+                "save_blocked_reason": reason,
+            }
+        )
+    return out
+
+
+async def patch_automation(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    preset_key: str,
+    enabled: bool | None = None,
+    template_id: int | None = None,
+    segment_id: int | None = None,
+    config: dict | None = None,
+    clear_segment: bool = False,
+) -> MarketingAutomation:
+    """Update one preset automation row."""
+    if preset_key not in PRESET_KEYS:
+        raise ValueError(f"unknown preset {preset_key}")
+    await ensure_automation_presets(session, restaurant_id=restaurant_id)
+    auto = (
+        await session.execute(
+            select(MarketingAutomation).where(
+                MarketingAutomation.restaurant_id == restaurant_id,
+                MarketingAutomation.preset_key == preset_key,
+            )
+        )
+    ).scalar_one()
+    before = {
+        "enabled": auto.enabled,
+        "template_id": auto.template_id,
+        "segment_id": auto.segment_id,
+        "config": auto.config,
+    }
+    if template_id is not None:
+        tpl = await session.get(WaTemplate, template_id)
+        if tpl is None or tpl.restaurant_id != restaurant_id:
+            raise ValueError(f"template {template_id} not found for restaurant")
+        auto.template_id = template_id
+    if clear_segment:
+        auto.segment_id = None
+    elif segment_id is not None:
+        seg = await session.get(Segment, segment_id)
+        if seg is None or seg.restaurant_id != restaurant_id:
+            raise ValueError(f"segment {segment_id} not found for restaurant")
+        auto.segment_id = segment_id
+    if config is not None:
+        auto.config = clamp_config(preset_key, config)
+    if enabled is not None:
+        auto.enabled = enabled
+    tpl = (
+        await session.get(WaTemplate, auto.template_id)
+        if auto.template_id
+        else None
+    )
+    blocked, reason = _automation_save_blocked(auto, tpl)
+    if blocked:
+        raise ValueError(reason or "automation cannot be enabled")
+    await session.flush()
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="automation",
+        entity_id=preset_key,
+        action="enabled" if enabled else "updated",
+        before=before,
+        after={
+            "enabled": auto.enabled,
+            "template_id": auto.template_id,
+            "segment_id": auto.segment_id,
+            "config": auto.config,
+        },
+    )
+    return auto
+
+
+async def _get_automation(
+    session: AsyncSession, restaurant_id: int, preset_key: str
+) -> MarketingAutomation | None:
+    return (
+        await session.execute(
+            select(MarketingAutomation).where(
+                MarketingAutomation.restaurant_id == restaurant_id,
+                MarketingAutomation.preset_key == preset_key,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _customer_in_automation_segment(
+    session: AsyncSession,
+    *,
+    automation: MarketingAutomation,
+    customer_id: int,
+) -> bool:
+    if automation.segment_id is None:
+        return True
+    seg = await session.get(Segment, automation.segment_id)
+    if seg is None:
+        return False
+    ids = await evaluate_segment(
+        session, restaurant_id=automation.restaurant_id, dsl=seg.definition
+    )
+    return customer_id in ids
+
+
+async def on_order_delivered(
+    session: AsyncSession, *, order: Order
+) -> None:
+    """Best-effort marketing hooks after a delivered order (caller commits)."""
+    customer = await session.get(Customer, order.customer_id)
+    if customer is None:
+        return
+    delivered_at = order.delivered_at or datetime.now(timezone.utc)
+
+    welcome = await _get_automation(session, order.restaurant_id, "welcome")
+    if welcome and welcome.enabled and welcome.template_id:
+        tpl = await session.get(WaTemplate, welcome.template_id)
+        if (
+            tpl
+            and tpl.status == "approved"
+            and customer.total_orders == 1
+            and await _customer_in_automation_segment(
+                session, automation=welcome, customer_id=customer.id
+            )
+        ):
+            exists = await session.scalar(
+                select(MarketingAutomationSend.id).where(
+                    MarketingAutomationSend.automation_id == welcome.id,
+                    MarketingAutomationSend.customer_id == customer.id,
+                )
+            )
+            if not exists:
+                cfg = clamp_config("welcome", welcome.config)
+                delay_h = int(cfg["delay_hours"])
+                scheduled = datetime.now(timezone.utc) + timedelta(hours=delay_h)
+                camp = await create_campaign(
+                    session,
+                    restaurant_id=order.restaurant_id,
+                    type="automation",
+                    template_id=welcome.template_id,
+                    segment_id=welcome.segment_id,
+                    scheduled_at=scheduled,
+                )
+                camp.stats = {
+                    "audience_ids": [customer.id],
+                    "automation_id": welcome.id,
+                    "preset_key": "welcome",
+                }
+
+    recurring = await _get_automation(session, order.restaurant_id, "recurring")
+    if recurring and recurring.enabled:
+        cfg = clamp_config("recurring", recurring.config)
+        await upsert_recurring_state(
+            session,
+            restaurant_id=order.restaurant_id,
+            customer=customer,
+            delivered_at=delivered_at,
+            lead_minutes=int(cfg["lead_minutes"]),
+        )
+
+
+async def ensure_recurring_campaign(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    template_id: int,
+    day_anchor_utc: datetime,
+) -> Campaign:
+    """Per-restaurant daily recurring promo campaign bucket."""
+    existing = (
+        await session.execute(
+            select(Campaign)
+            .where(
+                Campaign.restaurant_id == restaurant_id,
+                Campaign.type == "recurring",
+                Campaign.scheduled_at == day_anchor_utc,
+            )
+            .order_by(Campaign.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.template_id != template_id:
+            existing.template_id = template_id
+            await session.flush()
+        return existing
+    camp = await create_campaign(
+        session,
+        restaurant_id=restaurant_id,
+        type="recurring",
+        template_id=template_id,
+        scheduled_at=day_anchor_utc,
+    )
+    camp.status = "sending"
+    await session.flush()
+    return camp
+
+
+def _bump_automation_stats(auto: MarketingAutomation, summary: dict) -> None:
+    stats = dict(auto.stats or {})
+    for key in ("queued", "suppressed_cap", "suppressed_optout", "suppressed_window"):
+        if key in summary:
+            stats[key] = int(stats.get(key, 0)) + int(summary[key])
+    stats["last_queued"] = summary.get("queued", 0)
+    auto.stats = stats
+
+
+async def run_recurring_promo_tick(
+    session: AsyncSession,
+    *,
+    now_utc: datetime,
+    provider: TemplatePort,
+) -> dict:
+    """Hourly: send due recurring promos and advance state."""
+    local = now_utc.astimezone(_DUBAI)
+    day_anchor_utc = local.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).astimezone(timezone.utc)
+    window_on = get_settings().marketing_send_window_enabled
+    within_window = (not window_on) or is_within_uae_window(now_utc)
+    totals = {"queued": 0, "suppressed": 0}
+
+    due_states = (
+        await session.scalars(
+            select(RecurringMessageState).where(
+                RecurringMessageState.next_send_at <= now_utc,
+                (RecurringMessageState.suppressed_until.is_(None))
+                | (RecurringMessageState.suppressed_until <= now_utc),
+            )
+        )
+    ).all()
+
+    for state in due_states:
+        auto = await _get_automation(session, state.restaurant_id, "recurring")
+        if auto is None or not auto.enabled or auto.template_id is None:
+            continue
+        tpl = await session.get(WaTemplate, auto.template_id)
+        if tpl is None or tpl.status != "approved":
+            continue
+        if not await _customer_in_automation_segment(
+            session, automation=auto, customer_id=state.customer_id
+        ):
+            continue
+        cust = await session.get(Customer, state.customer_id)
+        if cust is None:
+            continue
+
+        campaign = await ensure_recurring_campaign(
+            session,
+            restaurant_id=state.restaurant_id,
+            template_id=tpl.id,
+            day_anchor_utc=day_anchor_utc,
+        )
+        reason = await _send_to_customer(
+            session,
+            campaign=campaign,
+            tpl=tpl,
+            customer=cust,
+            now_utc=now_utc,
+            within_window=within_window,
+        )
+        if reason == "queued":
+            totals["queued"] += 1
+            await record_automation_send(
+                session,
+                restaurant_id=state.restaurant_id,
+                automation_id=auto.id,
+                customer_id=cust.id,
+                campaign_id=campaign.id,
+                sent_at=now_utc,
+            )
+            cfg = clamp_config("recurring", auto.config)
+            await advance_recurring_state(
+                session,
+                state=state,
+                lead_minutes=int(cfg["lead_minutes"]),
+                now_utc=now_utc,
+            )
+            _bump_automation_stats(auto, {"queued": 1})
+            auto.last_run_at = now_utc
+        elif reason.startswith("suppressed"):
+            totals["suppressed"] += 1
+            _bump_automation_stats(auto, {reason: 1})
+
+    await session.flush()
+    return totals
+
+
+async def run_automation_tick(
+    session: AsyncSession,
+    *,
+    now_utc: datetime,
+    provider: TemplatePort,
+) -> dict:
+    """*/15 min: reorder reminders + daily win-back slice."""
+    local = now_utc.astimezone(_DUBAI)
+    now_minute = local.hour * 60 + local.minute
+    day_anchor_utc = local.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).astimezone(timezone.utc)
+    window_on = get_settings().marketing_send_window_enabled
+    within_window = (not window_on) or is_within_uae_window(now_utc)
+    totals = {"queued": 0, "suppressed": 0, "winback": 0, "reorder": 0}
+
+    # --- Reorder ---
+    reorder_autos = (
+        await session.scalars(
+            select(MarketingAutomation).where(
+                MarketingAutomation.preset_key == "reorder",
+                MarketingAutomation.enabled.is_(True),
+            )
+        )
+    ).all()
+    for auto in reorder_autos:
+        if auto.template_id is None:
+            continue
+        tpl = await session.get(WaTemplate, auto.template_id)
+        if tpl is None or tpl.status != "approved":
+            continue
+        cfg = clamp_config("reorder", auto.config)
+        lead = int(cfg["lead_minutes"])
+        customers = (
+            await session.scalars(
+                select(Customer).where(Customer.restaurant_id == auto.restaurant_id)
+            )
+        ).all()
+        campaign = await ensure_recurring_campaign(
+            session,
+            restaurant_id=auto.restaurant_id,
+            template_id=tpl.id,
+            day_anchor_utc=day_anchor_utc,
+        )
+        campaign.type = "automation"
+        campaign.stats = {
+            **(campaign.stats or {}),
+            "preset_key": "reorder",
+            "automation_id": auto.id,
+        }
+        for cust in customers:
+            if not await _customer_in_automation_segment(
+                session, automation=auto, customer_id=cust.id
+            ):
+                continue
+            today_wd = local.weekday()
+            pred = await predict_order_time(
+                session, cust.id, weekday=today_wd
+            )
+            if not is_personalized(pred, min_orders=MIN_ORDERS_WEEKDAY):
+                continue
+            from app.marketing.automations import _dominant_order_weekday
+
+            dom_weekday = await _dominant_order_weekday(session, cust.id)
+            if dom_weekday is None or dom_weekday != today_wd:
+                continue
+            desired = desired_send_minute(
+                pred,
+                lead_minutes=lead,
+                default_minute=11 * 60 + 45,
+                clamp_window=False,
+                min_orders=MIN_ORDERS_WEEKDAY,
+            )
+            if not is_due(desired, now_minute):
+                continue
+            reason = await _send_to_customer(
+                session,
+                campaign=campaign,
+                tpl=tpl,
+                customer=cust,
+                now_utc=now_utc,
+                within_window=within_window,
+            )
+            if reason == "queued":
+                totals["queued"] += 1
+                totals["reorder"] += 1
+                _bump_automation_stats(auto, {"queued": 1})
+            elif reason.startswith("suppressed"):
+                totals["suppressed"] += 1
+                _bump_automation_stats(auto, {reason: 1})
+        auto.last_run_at = now_utc
+
+    # --- Win-back (once per Dubai calendar day) ---
+    winback_autos = (
+        await session.scalars(
+            select(MarketingAutomation).where(
+                MarketingAutomation.preset_key == "winback",
+                MarketingAutomation.enabled.is_(True),
+            )
+        )
+    ).all()
+    for auto in winback_autos:
+        if auto.template_id is None:
+            continue
+        if auto.last_run_at:
+            last_local = auto.last_run_at.astimezone(_DUBAI)
+            if last_local.date() >= local.date():
+                continue
+        tpl = await session.get(WaTemplate, auto.template_id)
+        if tpl is None or tpl.status != "approved":
+            continue
+        ids = await winback_customer_ids(
+            session,
+            restaurant_id=auto.restaurant_id,
+            automation=auto,
+            now_utc=now_utc,
+        )
+        if not ids:
+            auto.last_run_at = now_utc
+            continue
+        camp = await create_campaign(
+            session,
+            restaurant_id=auto.restaurant_id,
+            type="automation",
+            template_id=auto.template_id,
+            segment_id=auto.segment_id,
+        )
+        camp.status = "sending"
+        camp.stats = {
+            "audience_ids": ids,
+            "automation_id": auto.id,
+            "preset_key": "winback",
+        }
+        summary = await run_campaign_send(
+            session,
+            campaign=camp,
+            provider=provider,
+            now_utc=now_utc,
+            audience_ids=ids,
+        )
+        totals["queued"] += summary.get("queued", 0)
+        totals["winback"] += summary.get("queued", 0)
+        totals["suppressed"] += (
+            summary.get("suppressed_cap", 0)
+            + summary.get("suppressed_optout", 0)
+            + summary.get("suppressed_window", 0)
+        )
+        sent_customers = (
+            await session.scalars(
+                select(MarketingSend.customer_id).where(
+                    MarketingSend.campaign_id == camp.id,
+                    MarketingSend.status == "sent",
+                )
+            )
+        ).all()
+        for cid in sent_customers:
+            await record_automation_send(
+                session,
+                restaurant_id=auto.restaurant_id,
+                automation_id=auto.id,
+                customer_id=cid,
+                campaign_id=camp.id,
+                sent_at=now_utc,
+            )
+        _bump_automation_stats(auto, summary)
+        auto.last_run_at = now_utc
+
+    await session.flush()
+    return totals
