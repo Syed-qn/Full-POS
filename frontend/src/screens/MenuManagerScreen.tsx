@@ -60,6 +60,19 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     setMenuRev((v) => v + 1);
   }
 
+  // Add/edit save: paint the saved dish into the list instantly from the API response
+  // (upsert), then refetch for authority. Soft — no browser reload.
+  function onDishSaved(saved?: DishOut) {
+    if (saved) {
+      setDishes((ds) =>
+        ds.some((d) => d.id === saved.id)
+          ? ds.map((d) => (d.id === saved.id ? saved : d))
+          : [...ds, saved],
+      );
+    }
+    reloadDishes();
+  }
+
   useEffect(() => {
     if (pending !== null) return;
     if (activeMenuId !== null) {
@@ -353,7 +366,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           categories={allCategories}
           nextNumber={nextNumber}
           onClose={() => setEditing(null)}
-          onSaved={reloadDishes}
+          onSaved={onDishSaved}
         />
       )}
     </div>

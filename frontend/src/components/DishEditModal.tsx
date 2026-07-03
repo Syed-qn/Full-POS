@@ -49,7 +49,7 @@ interface Props {
   nextNumber: number;
   onClose: () => void;
   /** Called after a successful save/delete so the parent can reload. */
-  onSaved: () => void;
+  onSaved: (saved?: DishOut) => void;
 }
 
 export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, onSaved }: Props) {
@@ -170,14 +170,11 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
       variants: variants.map((v) => ({ name: v.name.trim(), price_aed: v.price_aed.trim() })),
     };
     try {
-      if (isNew) {
-        await addDish(menuId, body);
-        toast(`“${body.name}” added to the menu.`);
-      } else {
-        await patchDish(menuId, d!.id, body);
-        toast(`“${body.name}” updated.`);
-      }
-      onSaved();
+      const saved = isNew
+        ? await addDish(menuId, body)
+        : await patchDish(menuId, d!.id, body);
+      toast(isNew ? `“${body.name}” added to the menu.` : `“${body.name}” updated.`);
+      onSaved(saved);
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Failed to save dish.");
