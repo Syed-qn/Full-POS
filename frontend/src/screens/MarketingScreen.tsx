@@ -1471,36 +1471,77 @@ function AutomationsTab({
 
   return (
     <div className={s.automationRoot}>
-      <p className={s.note}>
-        Hands-off messages triggered by customer behaviour. Each card saves automatically
-        when you toggle or pick a template.
-      </p>
+      <div className={s.automationIntro}>
+        <span className={s.automationIntroIcon} aria-hidden>⚡</span>
+        <div>
+          <div className={s.automationIntroTitle}>Automatic messages</div>
+          <p className={s.automationIntroText}>
+            These send on their own based on what customers do. Every change saves instantly.
+          </p>
+        </div>
+      </div>
       {!loaded ? (
-        <div className={s.automationLoading}>Loading automations…</div>
+        <div className={s.automationGrid} aria-hidden>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={s.automationCard}>
+              <div className={s.automationHead}>
+                <div style={{ flex: 1 }}>
+                  <span className={`${s.sk} ${s.skAutoTitle}`} />
+                  <span className={`${s.sk} ${s.skAutoDesc}`} />
+                </div>
+                <span className={`${s.sk} ${s.skAutoSwitch}`} />
+              </div>
+              <div className={s.automationField}>
+                <span className={`${s.sk} ${s.skAutoLabel}`} />
+                <div className={s.pillRow}>
+                  <span className={`${s.sk} ${s.skPill}`} />
+                  <span className={`${s.sk} ${s.skPill}`} />
+                </div>
+              </div>
+              <div className={s.automationField}>
+                <span className={`${s.sk} ${s.skAutoLabel}`} />
+                <div className={s.pillRow}>
+                  <span className={`${s.sk} ${s.skPill}`} />
+                  <span className={`${s.sk} ${s.skPill}`} />
+                </div>
+              </div>
+              <div className={s.automationStats}>
+                <span className={`${s.sk} ${s.skAutoStat}`} />
+                <span className={`${s.sk} ${s.skAutoStat}`} />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
-        rows.map((auto) => (
+        <div className={s.automationGrid}>
+        {rows.map((auto) => (
           <div key={auto.preset_key} className={s.automationCard}>
             <div className={s.automationHead}>
               <div>
                 <div className={s.automationTitle}>{auto.title}</div>
                 <p className={s.automationDesc}>{auto.description}</p>
               </div>
-              <label className={s.automationToggle}>
-                <input
-                  type="checkbox"
-                  checked={auto.enabled}
-                  disabled={savingKey === auto.preset_key}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    if (enabled && !auto.template_id) {
-                      toast("Select an approved template first.", "error");
-                      return;
-                    }
-                    void save(auto.preset_key, { enabled });
-                  }}
-                />
+              <div className={s.automationToggle}>
                 <span>{auto.enabled ? "On" : "Off"}</span>
-              </label>
+                <label className={s.switch}>
+                  <input
+                    type="checkbox"
+                    checked={auto.enabled}
+                    disabled={savingKey === auto.preset_key}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      if (enabled && !auto.template_id) {
+                        toast("Select an approved template first.", "error");
+                        return;
+                      }
+                      void save(auto.preset_key, { enabled });
+                    }}
+                  />
+                  <span className={s.switchTrack}>
+                    <span className={s.switchThumb} />
+                  </span>
+                </label>
+              </div>
             </div>
 
             {auto.save_blocked && auto.save_blocked_reason && (
@@ -1592,15 +1633,20 @@ function AutomationsTab({
               )}
             </div>
           </div>
-        ))
+        ))}
+        </div>
       )}
 
-      <details className={s.automationAdvanced}>
-        <summary>Advanced: custom automations (coming soon)</summary>
-        <p className={s.note}>
-          Build custom trigger / condition / action rules in plain English — Phase 4b.
-        </p>
-      </details>
+      <div className={s.automationAdvanced}>
+        <span className={s.automationAdvancedIcon} aria-hidden>🛠️</span>
+        <div className={s.automationAdvancedBody}>
+          <div className={s.automationAdvancedTitle}>Custom automations</div>
+          <p className={s.automationAdvancedText}>
+            Build your own trigger, condition and action rules in plain English.
+          </p>
+        </div>
+        <span className={s.automationAdvancedBadge}>Soon</span>
+      </div>
     </div>
   );
 }
@@ -1824,6 +1870,35 @@ function SegmentsTab({
   );
 }
 
+/** Loading placeholder for the campaigns table — mirrors the 9-column layout. */
+function CampaignTableSkeleton() {
+  const cols = ["Date", "Template", "Audience", "Type", "Status", "Sent", "Delivered", "Converted", ""];
+  return (
+    <div className={s.campaignTableWrap} aria-busy="true" aria-label="Loading campaigns">
+      <table className={s.campaignTable}>
+        <thead>
+          <tr>
+            {cols.map((c, i) => (
+              <th key={i}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: 5 }).map((_, r) => (
+            <tr key={r}>
+              {cols.map((_, c) => (
+                <td key={c}>
+                  <span className={`${s.sk} ${s.skCell}`} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Past sends — summary strip, table, and per-campaign stats drawer. */
 function CampaignsTab({ templates }: { templates: TemplateResponse[] }) {
   const { data: campaigns, error } = usePoll(fetchCampaigns, 60_000);
@@ -1915,7 +1990,9 @@ function CampaignsTab({ templates }: { templates: TemplateResponse[] }) {
         <CampaignSummaryStrip summary={summary} />
       ) : null}
 
-      {rows !== null && rows.length === 0 ? (
+      {rows === null ? (
+        <CampaignTableSkeleton />
+      ) : rows.length === 0 ? (
         <div className={s.campaignsEmpty}>
           <div className={s.campaignsEmptyIcon}>📣</div>
           <div className={s.campaignsEmptyTitle}>No campaigns yet</div>
@@ -1924,7 +2001,7 @@ function CampaignsTab({ templates }: { templates: TemplateResponse[] }) {
             delivery and conversion stats.
           </p>
         </div>
-      ) : rows !== null && rows.length > 0 ? (
+      ) : (
         <div className={s.campaignTableWrap}>
           <table className={s.campaignTable}>
             <thead>
@@ -1989,7 +2066,7 @@ function CampaignsTab({ templates }: { templates: TemplateResponse[] }) {
             </tbody>
           </table>
         </div>
-      ) : null}
+      )}
 
       <SideDrawer
         open={selected != null}

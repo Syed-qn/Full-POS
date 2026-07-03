@@ -27,7 +27,7 @@ const automations = [
   },
   {
     preset_key: "winback",
-    title: "Win-back",
+    title: "Win back",
     description: "Lapsed customers.",
     enabled: false,
     template_id: null,

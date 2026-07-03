@@ -40,7 +40,7 @@ PRESET_KEYS = ("welcome", "winback", "reorder", "recurring")
 PRESET_DEFAULTS: dict[str, dict] = {
     "welcome": {
         "title": "Welcome offer",
-        "description": "Send a one-time promo 1 hour after a customer's first order.",
+        "description": "Send a one time promo 1 hour after a customer's first order.",
         "config": {"delay_hours": 1},
     },
     "recurring": {
@@ -49,8 +49,8 @@ PRESET_DEFAULTS: dict[str, dict] = {
         "config": {"lead_minutes": 15},
     },
     "winback": {
-        "title": "Win-back",
-        "description": "Re-engage customers inactive 60+ days.",
+        "title": "Win back",
+        "description": "Bring back customers inactive 60+ days.",
         "config": {"lapsed_days": 60, "cooldown_days": 60},
     },
     "reorder": {

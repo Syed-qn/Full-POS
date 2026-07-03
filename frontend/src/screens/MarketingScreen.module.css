@@ -224,9 +224,16 @@
 .previewPanelBody {
   flex: 1;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
   margin-top: 16px;
+}
+/* The WhatsApp bubble sits at the top (centered); the approval timeline spans
+   the panel width and is pinned to the bottom of the Live preview panel. */
+.previewPanelBody > :last-child {
+  align-self: stretch;
+  margin-top: auto;
 }
 .previewEmpty {
   flex: 1;
@@ -421,44 +428,76 @@
   background: var(--sla-critical);
 }
 
+/* Send now / Schedule — iOS-style segmented toggle sitting in an inset track. */
 .sendModeRow {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 4px;
+  background: var(--bg-surface-inset);
+  border-radius: 10px;
 }
 .sendModePill {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
   font-size: 13px;
   font-weight: 600;
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.sendModePillActive {
-  border-color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-surface));
+.sendModePill:hover {
+  color: var(--text-primary);
+}
+.sendModePillActive,
+.sendModePillActive:hover {
+  background: var(--bg-surface);
   color: var(--accent-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 .scheduleRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 16px;
+  gap: 12px 14px;
   align-items: flex-end;
-  margin-top: 10px;
+  margin-top: 2px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
 }
 .scheduleField {
+  flex: 1 1 140px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: 6px;
+}
+.scheduleField > span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
 .scheduleField input {
-  padding: 8px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
+  font: inherit;
   font-size: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.scheduleField input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 .scheduleHint {
   margin: 0;
@@ -888,6 +927,12 @@
 .skName { flex: 1 1 auto; }
 .skBadge { width: 64px; height: 20px; border-radius: 12px; flex-shrink: 0; }
 .skBtn { width: 72px; height: 24px; flex-shrink: 0; }
+/* Automation-card skeleton pieces (mirror .automationCard content). */
+.skAutoTitle { display: block; width: 150px; height: 15px; margin-bottom: 8px; }
+.skAutoDesc { display: block; width: 85%; height: 11px; }
+.skAutoSwitch { flex-shrink: 0; width: 46px; height: 26px; border-radius: 999px; }
+.skAutoLabel { display: block; width: 70px; height: 11px; margin-bottom: 4px; }
+.skAutoStat { width: 76px; height: 12px; }
 .tplRow {
   display: flex;
   align-items: center;
@@ -1064,27 +1109,39 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 14px;
-  padding: 12px 14px;
-  background: var(--bg-surface-inset);
+  gap: 6px 12px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
 }
 .couponLabel {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
+  margin-right: auto;
 }
 .couponInput {
   width: 120px;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
   font: inherit;
   font-size: 14px;
+  background: var(--bg-surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+.couponInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+/* Hint drops onto its own full-width line, below the label + input. */
 .couponHint {
+  flex: 1 1 100%;
+  margin: 0;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 /* ---- Segments tab ---- */
@@ -1236,6 +1293,8 @@
 }
 .skStatNum { width: 48px; height: 28px; }
 .skStatLabel { width: 80px; height: 12px; }
+/* One shimmer bar per table cell while campaigns load. */
+.skCell { display: block; width: 80%; height: 12px; }
 .campaignsEmpty {
   display: flex;
   flex-direction: column;
@@ -1363,10 +1422,51 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 920px;
+  width: 100%;
+}
+/* Two cards per row on wide screens, one when narrow — fills the panel width
+   instead of a single skinny column. The intro note + advanced row span both. */
+.automationGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 .automationLoading {
   font-size: 13px;
+  color: var(--text-secondary);
+}
+/* Tab intro — a light accent strip instead of a faint one-liner. */
+.automationIntro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-primary) 6%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 18%, var(--border-subtle));
+}
+.automationIntroIcon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-surface));
+}
+.automationIntroTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.automationIntroText {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 .automationCard {
@@ -1410,6 +1510,11 @@
   gap: 6px;
 }
 .automationStats {
+  /* Pinned to the bottom so cards of differing content (some have a Lead time
+     row, some don't) still line their stats up and match height per row. */
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   flex-wrap: wrap;
   gap: 10px 18px;
@@ -1419,14 +1524,56 @@
 .automationStats strong {
   color: var(--text-primary);
 }
+/* Locked "coming soon" row — a muted dashed card so it reads as inactive,
+   not a live automation. */
 .automationAdvanced {
-  margin-top: 8px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px dashed var(--border-default);
+  background: var(--bg-surface-inset);
+}
+.automationAdvancedIcon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  line-height: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  filter: grayscale(0.35);
+}
+.automationAdvancedBody {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.automationAdvancedTitle {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-secondary);
 }
-.automationAdvanced summary {
-  cursor: pointer;
-  font-weight: 600;
+.automationAdvancedText {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.automationAdvancedBadge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--sla-warn);
+  color: #fff;
 }
 
 .campaignDrawerGrid strong {
