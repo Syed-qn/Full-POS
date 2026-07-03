@@ -223,6 +223,7 @@ async def meta_connect(
     is never returned; the manager just sees Connected."""
     from app.identity.meta_config import apply_meta_settings
     from app.identity.meta_embed import MetaEmbedError, connect_embedded_signup
+    from app.partner.integration import provision_partner_integration
 
     try:
         creds = await connect_embedded_signup(
@@ -230,6 +231,7 @@ async def meta_connect(
             phone_number_id=body.phone_number_id,
             waba_id=body.waba_id,
             business_name=restaurant.name or "",
+            existing_pin=(restaurant.settings or {}).get("wa_2fa_pin", "") or "",
         )
     except MetaEmbedError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -237,9 +239,15 @@ async def meta_connect(
     display_number = creds.pop("display_phone_number", "")
     apply_meta_settings(restaurant, creds)
     await _set_connected_phone(session, restaurant, display_number)
+    # Provision the POS partner integration IF the store came via a partner link
+    # (?partner=<slug>): wire that partner's webhook + mint this store's API key
+    # (returned once). No partner = standalone, nothing wired.
+    api_key = await provision_partner_integration(session, restaurant, body.partner)
     await session.commit()
     await session.refresh(restaurant)
-    return _meta_config_out(restaurant)
+    out = _meta_config_out(restaurant)
+    out.api_key = api_key
+    return out
 
 
 @router.get("/geo/health")

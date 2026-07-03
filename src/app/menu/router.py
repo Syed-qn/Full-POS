@@ -100,6 +100,19 @@ async def _load_menu(
     return menu
 
 
+@router.post("/menus/blank", response_model=MenuOut, status_code=201)
+async def create_blank_menu(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return the active menu, creating an empty one if none exists — so a manager can
+    start adding dishes without uploading a file first."""
+    menu = await service.ensure_active_menu(session, restaurant.id)
+    await session.commit()
+    await session.refresh(menu)
+    return _menu_out(menu)
+
+
 @router.post("/menus", response_model=MenuWithDiffOut, status_code=201)
 async def upload_menu(
     files: list[UploadFile],

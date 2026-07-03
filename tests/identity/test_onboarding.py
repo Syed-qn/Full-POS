@@ -6,6 +6,11 @@ from app.identity.service import get_onboarding_status
 pytestmark_asyncio = pytest.mark.asyncio
 
 
+async def _ok_register(phone_number_id, access_token, pin):
+    """Stub: number activation succeeds (real call hits Meta; tests never should)."""
+    return True
+
+
 def test_resolve_send_creds_prefers_connected_restaurant():
     from app.identity.meta_config import resolve_send_creds
 
@@ -28,6 +33,74 @@ def test_resolve_send_creds_falls_back_to_env_when_not_connected():
     pid, token = resolve_send_creds(_R())
     assert isinstance(pid, str)
     assert isinstance(token, str)
+
+
+def test_disconnect_meta_also_clears_catalog_id():
+    """Disconnect wipes the Meta connection INCLUDING catalog_id, so a later reconnect
+    of a catalog-less account can't inherit a stale catalog pointer."""
+    from app.identity.meta_config import disconnect_meta
+
+    class _R:
+        settings = {
+            "wa_phone_number_id": "PID", "wa_access_token": "TOK",
+            "wa_business_account_id": "WABA", "catalog_id": "CAT-OLD",
+            "onboarding_complete": True, "max_radius_km": 10,  # unrelated key survives
+        }
+
+    r = _R()
+    out = disconnect_meta(r)
+    assert out["catalog_id"] == ""
+    assert r.settings.get("catalog_id") is None
+    assert r.settings["onboarding_complete"] is False
+    assert r.settings["max_radius_km"] == 10  # non-Meta settings untouched
+
+
+async def test_provision_partner_integration_mints_key_and_wires_webhook(
+    db_session, restaurant, monkeypatch
+):
+    """On connect we auto-provision the POS side: wire the single global webhook and
+    mint the store's API key once. Idempotent — a second call mints no new key."""
+    from types import SimpleNamespace
+
+    from pydantic import SecretStr
+    from sqlalchemy import func, select
+
+    from app import config
+    from app.partner.integration import partner_settings, provision_partner_integration
+    from app.partner.models import PartnerApiKey
+
+    fake = SimpleNamespace(
+        partner_webhook_url="https://cratis.example.com/hooks/whatsapp",
+        partner_webhook_secret=SecretStr("shared-signing-secret"),
+    )
+    monkeypatch.setattr(config, "get_settings", lambda: fake)
+
+    key = await provision_partner_integration(db_session, restaurant, "cratis")
+    await db_session.commit()
+
+    assert key and key.startswith("rk_live_")  # returned once for the partner
+    cfg = partner_settings(restaurant)
+    assert cfg["partner"] == "cratis"  # store tagged with its partner
+    assert cfg["partner_enabled"] is True
+    assert cfg["partner_webhook_url"] == "https://cratis.example.com/hooks/whatsapp"
+    assert cfg["partner_webhook_secret"] == "shared-signing-secret"
+    count = await db_session.scalar(
+        select(func.count()).select_from(PartnerApiKey).where(
+            PartnerApiKey.restaurant_id == restaurant.id
+        )
+    )
+    assert count == 1
+
+    # Idempotent: a reconnect does not mint a second key.
+    again = await provision_partner_integration(db_session, restaurant, "cratis")
+    await db_session.commit()
+    assert again is None
+    count2 = await db_session.scalar(
+        select(func.count()).select_from(PartnerApiKey).where(
+            PartnerApiKey.restaurant_id == restaurant.id
+        )
+    )
+    assert count2 == 1
 
 
 async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
@@ -107,6 +180,7 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
         return "+971 55 000 9999"  # deliberately different from signup phone
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_display_phone_number", fake_display)
@@ -114,7 +188,8 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     r = await client.post(
         "/api/v1/onboarding/meta-connect",
         headers=auth_headers,
-        json={"code": "CODE-123", "phone_number_id": "PID-9", "waba_id": "WABA-9"},
+        json={"code": "CODE-123", "phone_number_id": "PID-9", "waba_id": "WABA-9",
+              "partner": "cratis"},
     )
     assert r.status_code == 200
     body = r.json()
@@ -124,6 +199,9 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert body["catalog_id"] == "CAT-AUTO-1"  # auto-detected from the WABA
     assert body["connected"] is True
     assert "wa_access_token" not in body  # secret never returned
+    # Onboarding via a partner link (?partner=cratis) auto-mints the store's POS
+    # API key, returned ONCE for the partner.
+    assert body["api_key"] and body["api_key"].startswith("rk_live_")
 
     # The routing phone is reconciled to the REAL connected number (normalized),
     # not whatever was typed at signup — closing the inbound-mismatch gap.
@@ -167,6 +245,7 @@ async def test_meta_connect_attaches_shared_catalog_when_not_yet_linked(
         return ""
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)
@@ -229,6 +308,7 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
         return ""
 
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_waba_catalog_id", fake_catalog)
     monkeypatch.setattr(meta_embed, "fetch_waba_owner_business", fake_owner)

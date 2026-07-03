@@ -18,6 +18,10 @@ _META_KEYS = (
     "wa_business_account_id",
     "wa_access_token",
     "catalog_id",
+    # 2FA PIN used to register the number on the Cloud API. Persisted so a reconnect
+    # re-registers with the SAME pin (Meta rejects a new pin on a number that already
+    # has 2FA). Never surfaced in MetaConfigOut.
+    "wa_2fa_pin",
 )
 
 
@@ -54,7 +58,14 @@ def disconnect_meta(restaurant: Restaurant) -> dict[str, Any]:
     again. Menu/catalogue/data are untouched. Caller commits.
     """
     settings = dict(restaurant.settings or {})
-    for key in ("wa_phone_number_id", "wa_business_account_id", "wa_access_token"):
+    # catalog_id is part of the Meta connection (a pointer to that account's catalog),
+    # so clear it too — otherwise reconnecting a different number/business that has no
+    # catalog leaves a stale catalog_id, since connect only overwrites a catalog_id it
+    # finds, never clears one it doesn't.
+    for key in (
+        "wa_phone_number_id", "wa_business_account_id", "wa_access_token",
+        "catalog_id", "wa_2fa_pin",
+    ):
         settings.pop(key, None)
     settings["onboarding_complete"] = False
     restaurant.settings = settings

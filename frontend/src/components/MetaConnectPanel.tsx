@@ -32,6 +32,9 @@ export function MetaConnectPanel(
   const [token, setToken] = useState("");
   const [catalog, setCatalog] = useState("");
   const [busy, setBusy] = useState(false);
+  // POS API key auto-minted on connect — shown ONCE for the manager to hand to the POS.
+  // While it's set we hold navigation so it can't be missed.
+  const [posKey, setPosKey] = useState<string | null>(null);
   // Embedded Signup posts the business's phone_number_id + waba_id via window
   // messages during the popup; we stash the latest here to pair with the code.
   const sessionInfo = useRef<{ phone_number_id?: string; waba_id?: string }>({});
@@ -87,15 +90,25 @@ export function MetaConnectPanel(
       return;
     }
     try {
+      // Partner attribution: the POS embeds the onboarding link with ?partner=<slug>.
+      // Absent = standalone (no POS) — the store uses the platform end-to-end.
+      const partner = new URLSearchParams(window.location.search).get("partner");
       const c = await connectMetaEmbedded({
         code,
         phone_number_id: info.phone_number_id,
         waba_id: info.waba_id,
+        partner: partner || undefined,
       });
       setCfg(c);
       setPhone(c.wa_phone_number_id);
       setWaba(c.wa_business_account_id);
       toast("WhatsApp connected ✓");
+      if (c.api_key) {
+        // Hold here so the one-time POS key is copied before we move on (finally
+        // clears busy). The manager clicks Continue to proceed.
+        setPosKey(c.api_key);
+        return;
+      }
       if (c.connected) onSaved?.();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Couldn't finish connecting");
@@ -173,6 +186,68 @@ export function MetaConnectPanel(
   // Manual entry is only a fallback for when the popup isn't configured — never
   // shown alongside the "Connect with Facebook" button.
   const showManual = embed !== null && !embed.enabled;
+
+  // One-time POS key hand-off: shown right after connect, before we move on.
+  if (posKey) {
+    return (
+      <div
+        style={{
+          border: "1px solid var(--accent, #22c55e)",
+          borderRadius: 10,
+          padding: 16,
+          marginBottom: 18,
+        }}
+      >
+        <h3 style={{ margin: "0 0 6px" }}>WhatsApp connected ✓</h3>
+        <p style={{ fontSize: 13, color: "var(--muted, #94a3b8)", margin: "0 0 10px" }}>
+          Your POS API key is below. Copy it and give it to your POS provider now —
+          for security it is shown only once and cannot be retrieved later.
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            background: "var(--surface, #0f172a)",
+            border: "1px solid var(--border, #334155)",
+            borderRadius: 6,
+            padding: "8px 10px",
+            marginBottom: 12,
+          }}
+        >
+          <code style={{ flex: 1, wordBreak: "break-all", fontSize: 13 }}>{posKey}</code>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(posKey).then(
+                () => toast("API key copied"),
+                () => toast("Copy failed — select and copy manually"),
+              );
+            }}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              border: "1px solid var(--border, #334155)",
+              background: "transparent",
+              color: "inherit",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            Copy
+          </button>
+        </div>
+        <Button
+          onClick={() => {
+            setPosKey(null);
+            onSaved?.();
+          }}
+        >
+          I've saved it — continue
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div

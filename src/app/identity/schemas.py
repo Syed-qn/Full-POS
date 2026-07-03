@@ -82,6 +82,10 @@ class MetaConfigOut(BaseModel):
     wa_access_token_set: bool
     catalog_id: str
     connected: bool
+    # The POS partner API key, returned ONCE right after Meta connect auto-provisions
+    # it (only its hash is stored, so it can never be shown again). None on every other
+    # read, and None if the store already had a key. The manager hands this to Cratis.
+    api_key: str | None = None
 
 
 class MetaEmbedConfigOut(BaseModel):
@@ -99,6 +103,9 @@ class MetaConnectIn(BaseModel):
     code: str = Field(min_length=1, max_length=2048)
     phone_number_id: str = Field(min_length=1, max_length=64)
     waba_id: str = Field(min_length=1, max_length=64)
+    # Partner attribution from the onboarding link (?partner=<slug>). None/blank =
+    # standalone (no POS): store uses our platform end-to-end, no webhook/key wired.
+    partner: str | None = Field(default=None, max_length=32)
 
 
 class RiderIn(BaseModel):

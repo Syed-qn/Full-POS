@@ -234,6 +234,68 @@ class PartnerRiderLocationOut(BaseModel):
     updated_at: str
 
 
+class PartnerRiderRosterItem(BaseModel):
+    """One rider in the store's roster (full list, not just those on delivery)."""
+    id: int
+    name: str
+    phone: str
+    status: str  # available | on_delivery | off_shift | deactivated
+    on_duty: bool
+    total_deliveries: int = 0
+
+
+class PartnerRiderRosterOut(BaseModel):
+    items: list[PartnerRiderRosterItem]
+
+
+# ── Partner chat (WhatsApp conversation) ─────────────────────────────────────
+class PartnerConversationOut(BaseModel):
+    """One WhatsApp thread the POS can read/reply to (customer or rider)."""
+    id: int
+    phone: str
+    counterpart: str
+    manual_takeover: bool
+    last_message_preview: str | None = None
+    unread: bool = False
+    updated_at: str = ""
+
+
+class PartnerConversationListOut(BaseModel):
+    items: list[PartnerConversationOut]
+
+
+class PartnerMessageOut(BaseModel):
+    id: int
+    direction: str  # "inbound" (from customer) | "outbound" (from us/POS)
+    type: str
+    text: str | None = None
+    ts: int
+
+
+class PartnerMessageListOut(BaseModel):
+    conversation_id: int
+    phone: str
+    counterpart: str
+    manual_takeover: bool
+    items: list[PartnerMessageOut]
+
+
+class PartnerSendMessageIn(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4096)
+    # Default True: replying from the POS takes the bot off this thread so the
+    # human agent and the bot don't both answer. Pass False to reply without takeover.
+    take_over: bool = True
+
+
+class PartnerTakeoverIn(BaseModel):
+    active: bool = True
+
+
+class PartnerTakeoverOut(BaseModel):
+    conversation_id: int
+    manual_takeover: bool
+
+
 # ── Partner integration health (Phase 5) ───────────────────────────────────
 class PartnerWebhookHealthOut(BaseModel):
     delivery_id: int

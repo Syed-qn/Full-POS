@@ -13,7 +13,6 @@ import {
 } from "../lib/partnerApi";
 import type { LoyaltyConfig, LoyaltyTierThreshold, RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
-import { MetaConnectPanel } from "../components/MetaConnectPanel";
 import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
@@ -1302,12 +1301,7 @@ export function SettingsScreen() {
         </div>
       )}
 
-          {tab === "integrations" && (
-            <>
-              <MetaConnectPanel />
-              <ApiKeysSection />
-            </>
-          )}
+          {tab === "integrations" && <ApiKeysSection />}
           </>
           )}
         </div>
