@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record_audit
@@ -329,6 +329,84 @@ async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
 
     schedule_auto_publish(target.restaurant_id)
     return target
+
+
+async def fold_history_into_active_menu(
+    session: AsyncSession, *, restaurant_id: int
+) -> int:
+    """Reconcile: move dishes that live in NON-active menus (old uploads that were
+    superseded before the bulk-add change) INTO the active menu, so the OPS UI shows
+    everything that's still live on WhatsApp / known to the bot. No deletes.
+
+    Dedupes by catalog link (``catalog_retailer_id``) and normalized name — first
+    occurrence wins, later duplicates are left where they are — and renumbers to avoid
+    colliding with an existing active dish. Uses Core UPDATEs (not an ORM re-parent) to
+    move rows in bulk without tripping the ``dishes`` delete-orphan cascade. Idempotent:
+    a second run folds nothing new. Returns the number of dishes folded in. Caller's
+    session is committed here.
+    """
+    active = await ensure_active_menu(session, restaurant_id)
+    active_names = {d.name_normalized for d in active.dishes if d.name_normalized}
+    active_rids = {
+        (d.catalog_retailer_id or "").strip()
+        for d in active.dishes
+        if (d.catalog_retailer_id or "").strip()
+    }
+    active_nums = {d.dish_number for d in active.dishes if d.dish_number is not None}
+    counter = max(active_nums, default=0)
+
+    rows = (
+        await session.execute(
+            select(
+                Dish.id, Dish.dish_number, Dish.name_normalized, Dish.catalog_retailer_id
+            )
+            .join(Menu, Dish.menu_id == Menu.id)
+            .where(
+                Dish.restaurant_id == restaurant_id,
+                # Only old REPLACED menus — never a pending_confirmation draft the manager
+                # is still reviewing (that would pull unconfirmed dishes live early) nor the
+                # active menu itself.
+                Menu.status == "superseded",
+                Menu.id != active.id,
+                Dish.meta_status != "archived",
+            )
+            .order_by(Dish.id)
+        )
+    ).all()
+
+    folded = 0
+    for did, dnum, dname, drid in rows:
+        rid = (drid or "").strip()
+        if (rid and rid in active_rids) or (dname and dname in active_names):
+            continue  # already represented in the active menu — skip the duplicate
+        num = dnum
+        if num is None or num in active_nums:
+            counter += 1
+            while counter in active_nums:
+                counter += 1
+            num = counter
+        active_nums.add(num)
+        if dname:
+            active_names.add(dname)
+        if rid:
+            active_rids.add(rid)
+        await session.execute(
+            update(Dish).where(Dish.id == did).values(menu_id=active.id, dish_number=num)
+        )
+        folded += 1
+
+    if folded:
+        await record_audit(
+            session, actor="manager", restaurant_id=restaurant_id, entity="menu",
+            entity_id=str(active.id), action="reconciled",
+            after={"folded": folded},
+        )
+        # The active menu's cached ``dishes`` collection predates the Core UPDATEs above;
+        # expire just that menu so the caller re-reads the folded-in dishes (an async
+        # relationship reload inside the request greenlet, not a global expire).
+        session.expire(active, ["dishes"])
+    await session.commit()
+    return folded
 
 
 async def reextract_menu(

@@ -114,6 +114,15 @@ async def sync_catalog(
     except CatalogReadError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     await session.commit()
+    # Reconcile: fold any dishes still living in old (superseded) menus into the active
+    # menu, so the OPS list shows everything that's live on WhatsApp — a one-time cleanup
+    # for menus split by the old replace-on-upload behaviour. Idempotent + best-effort.
+    from app.menu.service import fold_history_into_active_menu
+
+    try:
+        await fold_history_into_active_menu(session, restaurant_id=restaurant.id)
+    except Exception:  # noqa: BLE001 — reconcile must never fail the pull
+        await session.rollback()
     await _refresh_grounding(session, restaurant.id)
     products = await list_catalog_products(session, restaurant_id=restaurant.id)
     return SyncResultOut(
