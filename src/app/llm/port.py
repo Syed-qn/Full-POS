@@ -127,6 +127,19 @@ class KitchenSummarizerPort(Protocol):
         ...
 
 
+class SuggestionAgentPort(Protocol):
+    """Grounded dish recommender — picks only from supplied menu candidates."""
+
+    async def suggest(
+        self,
+        menu_candidates: list[dict],
+        customer_text: str,
+        browse_filter: str | None = None,
+    ) -> dict:
+        """Return ``{intro: str, picks: [{dish_name, reason}]}``."""
+        ...
+
+
 class ComplaintSummarizerPort(Protocol):
     """E-10 sub-agent: distill post-delivery complaint chat for staff handoff.
 

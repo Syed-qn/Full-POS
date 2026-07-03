@@ -179,6 +179,19 @@ def get_modify_summarizer():
     return FakeModifySummarizer()
 
 
+def get_suggestion_agent():
+    """Dish suggestion sub-agent (LLM-driven; Fake returns first 2 candidates in tests)."""
+    settings = get_settings()
+    if settings.llm_provider == "claude":
+        from app.llm.suggestion_agent import ClaudeSuggestionAgent
+        return ClaudeSuggestionAgent()
+    if settings.llm_provider == "deepseek":
+        from app.llm.suggestion_agent import DeepSeekSuggestionAgent
+        return DeepSeekSuggestionAgent()
+    from app.llm.fake import FakeSuggestionAgent
+    return FakeSuggestionAgent()
+
+
 def get_thought_evaluator():
     """E-17 ToT-lite evaluator (deterministic-first; Fake for tests)."""
     settings = get_settings()

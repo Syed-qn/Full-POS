@@ -453,6 +453,26 @@ class FakeThoughtEvaluator:
         return resolve_ambiguous_intent(text, phase, cart_nonempty=cart_nonempty)
 
 
+class FakeSuggestionAgent:
+    """Test double: returns the first two menu candidates as deterministic picks."""
+
+    async def suggest(
+        self,
+        menu_candidates: list[dict],
+        customer_text: str,
+        browse_filter: str | None = None,
+    ) -> dict:
+        picks = [
+            {
+                "dish_name": c.get("name") or "?",
+                "reason": "A customer favourite!",
+            }
+            for c in (menu_candidates or [])[:2]
+            if c.get("name")
+        ]
+        return {"intro": "Here are my top picks for you!", "picks": picks}
+
+
 class FakeComplaintSummarizer:
     """Test double: deterministic complaint distillation without LLM calls."""
 

@@ -787,6 +787,15 @@ def _is_menu_browse_intent(text: str) -> bool:
     return any(p in t for p in browse_phrases)
 
 
+def _is_suggestion_browse_intent(text: str) -> bool:
+    """True when the customer wants curated picks, not a full menu dump."""
+    t = (text or "").strip().lower()
+    return any(
+        p in t
+        for p in ("suggest", "recommend", "surprise", "pick for me", "pick me")
+    )
+
+
 def _maybe_reset_post_order_for_browse(conv: Conversation, text: str) -> bool:
     """Re-open ordering when post_order customer wants to browse again (empty cart)."""
     if _resolve_phase(conv) != "post_order":
@@ -811,16 +820,192 @@ async def _handle_menu_browse(
     inbound: InboundMessage,
     restaurant_id: int,
 ) -> None:
-    """Deterministic full menu for vague browse/suggest intents (not ingredient search)."""
-    raw = (inbound.payload.get("text") or "").strip().lower()
-    if any(p in raw for p in ("suggest", "recommend", "surprise", "pick for me")):
-        await _send_text(
-            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-            prefix="menu-browse-intro",
-            body="Sure! Here's our menu — tell me what catches your eye 😊",
-        )
+    """Deterministic full menu for 'show me' browse intents (not ingredient search)."""
     await _send_menu_or_catalog(
         session, conv, inbound, restaurant_id, prefix="menu-browse",
+    )
+
+
+_SUGGESTION_CANDIDATE_MAX = 30
+
+
+async def _load_suggestion_candidates(
+    session: AsyncSession,
+    restaurant_id: int,
+    *,
+    filter_keyword: str | None,
+) -> list[dict]:
+    """Load menu rows for the suggestion sub-agent (optionally filtered, capped at 30)."""
+    needles = _category_match_needles(filter_keyword) if filter_keyword else ()
+    candidates: list[dict] = []
+
+    if await _catalog_mode_on(session, restaurant_id):
+        from app.catalog.service import _category_of, _load_sendable_products
+
+        _cid, sendable = await _load_sendable_products(session, restaurant_id)
+        for p in sendable or []:
+            cat = _category_of(p)
+            desc = getattr(p, "description", None) or ""
+            if needles and not _item_matches_dish_search_query(
+                name=p.name, description=desc, needles=needles,
+            ):
+                continue
+            candidates.append({
+                "name": p.name,
+                "category": cat,
+                "description": desc,
+                "price_aed": p.price_aed,
+            })
+    else:
+        from app.menu.models import Dish, Menu
+
+        menu = await session.scalar(
+            select(Menu).where(
+                Menu.restaurant_id == restaurant_id, Menu.status == "active",
+            )
+        )
+        if menu is not None:
+            dishes = (
+                await session.scalars(
+                    select(Dish).where(
+                        Dish.menu_id == menu.id,
+                        Dish.is_available == True,  # noqa: E712
+                        Dish.meta_status == "active",
+                    ).order_by(Dish.category, Dish.name)
+                )
+            ).all()
+            for d in dishes:
+                if await _catalog_excludes_dish(session, restaurant_id, d):
+                    continue
+                desc = _dish_search_description(d)
+                if needles and not _item_matches_dish_search_query(
+                    name=d.name, description=desc, needles=needles,
+                ):
+                    continue
+                candidates.append({
+                    "name": d.name,
+                    "category": d.category or "Menu",
+                    "description": desc,
+                    "price_aed": d.price_aed,
+                })
+
+    return candidates[:_SUGGESTION_CANDIDATE_MAX]
+
+
+async def _handle_suggestions(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Grounded dish picks from filtered candidates or the suggestion sub-agent."""
+    raw = (inbound.payload.get("text") or "").strip()
+    browse_filter = conv.state.get("browse_filter")
+    text_kw = _parse_dish_search_query(raw)
+    filter_kw = browse_filter or text_kw
+    is_vague = not filter_kw
+
+    candidates = await _load_suggestion_candidates(
+        session, restaurant_id, filter_keyword=filter_kw or None,
+    )
+
+    if not candidates:
+        label = (filter_kw or "that").strip().title()
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="suggestion-none",
+            body=(
+                f"We couldn't find anything matching {label.lower()} right now 🙏 "
+                "Here's our full menu — tell me what catches your eye 😊"
+            ),
+        )
+        await _send_menu_or_catalog(
+            session, conv, inbound, restaurant_id, prefix="suggestion-menu-fallback",
+        )
+        return
+
+    _set_state(conv, menu_in_context=True)
+    use_sub_agent = len(candidates) > 3 or is_vague
+
+    if not use_sub_agent:
+        label = (filter_kw or "your search").strip().title()
+        lines = [f"Here are my picks for {label.lower()} 😊"]
+        for c in candidates:
+            price = c.get("price_aed")
+            price_s = f": AED {_aed(price)}" if price is not None else ""
+            lines.append(f"• {c['name']}{price_s}")
+        lines.append("\nTell me what you'd like and I'll add it 😊")
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="suggestion-list",
+            body="\n".join(lines),
+        )
+        return
+
+    from app.llm.factory import get_suggestion_agent
+
+    try:
+        result = await get_suggestion_agent().suggest(
+            candidates, raw, browse_filter,
+        )
+    except Exception:
+        _logger.exception("Suggestion sub-agent failed; using deterministic fallback")
+        result = {
+            "intro": "Here are a few ideas!",
+            "picks": [
+                {"dish_name": c["name"], "reason": ""}
+                for c in candidates[:3]
+            ],
+        }
+
+    candidate_by_name = {c["name"].lower(): c for c in candidates}
+    valid_picks: list[dict] = []
+    for pick in result.get("picks") or []:
+        dish_name = (pick.get("dish_name") or "").strip()
+        if not dish_name:
+            continue
+        match = await find_dish_matches(
+            session, restaurant_id=restaurant_id, query=dish_name,
+        )
+        if match.confidence != MatchConfidence.DIRECT or not match.candidates:
+            continue
+        resolved = match.candidates[0].name
+        if resolved.lower() not in candidate_by_name:
+            continue
+        valid_picks.append({
+            "dish_name": resolved,
+            "reason": (pick.get("reason") or "").strip(),
+            "price_aed": candidate_by_name[resolved.lower()].get("price_aed"),
+        })
+        if len(valid_picks) >= 3:
+            break
+
+    if not valid_picks:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="suggestion-invalid",
+            body="Tell me what you're in the mood for 😊 Here's our menu:",
+        )
+        await _send_menu_or_catalog(
+            session, conv, inbound, restaurant_id, prefix="suggestion-menu-fallback",
+        )
+        return
+
+    intro = (result.get("intro") or "Here are a few ideas for you!").strip()
+    lines = [intro]
+    for p in valid_picks:
+        reason = p.get("reason") or ""
+        price = p.get("price_aed")
+        price_s = f" — AED {_aed(price)}" if price is not None else ""
+        if reason:
+            lines.append(f"• {p['dish_name']} — {reason}{price_s}")
+        else:
+            lines.append(f"• {p['dish_name']}{price_s}")
+    lines.append("\nTell me what you'd like and I'll add it 😊")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="suggestion-picks",
+        body="\n".join(lines),
     )
 
 
@@ -8315,11 +8500,14 @@ async def handle_inbound(
                 session, conv, inbound, restaurant_id, _dish_kw,
             )
             return
-        # "OK show me" / "suggest something" → full menu (not ingredient search).
+        # "OK show me" → full menu; "suggest/recommend" → grounded suggestion sub-agent.
         _raw_browse = (inbound.payload.get("text") or "").strip()
         if _is_menu_browse_intent(_raw_browse) and not _parse_dish_search_query(_raw_browse):
             _maybe_reset_post_order_for_browse(conv, _raw_browse)
-            await _handle_menu_browse(session, conv, inbound, restaurant_id)
+            if _is_suggestion_browse_intent(_raw_browse):
+                await _handle_suggestions(session, conv, inbound, restaurant_id)
+            else:
+                await _handle_menu_browse(session, conv, inbound, restaurant_id)
             return
         # "What's in my cart / show my order" → show the REAL cart deterministically,
         # in ANY mode, so the model can never mishandle it (e.g. re-send the catalogue).
