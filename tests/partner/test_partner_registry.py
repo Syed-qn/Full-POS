@@ -50,6 +50,21 @@ def test_resolve_registry_partner():
     assert ref.webhook_secret == "k2"
 
 
+def test_registry_entry_overrides_toplevel_for_default_partner():
+    """Putting the default partner (cratis) in APP_PARTNERS wins over the legacy
+    top-level fields, so ALL partners can live in one list."""
+    s = _settings(
+        partner_webhook_url="https://old-toplevel/hooks",
+        partner_webhook_secret=SecretStr("old"),
+        partners_json=json.dumps(
+            {"cratis": {"name": "Cratis", "webhook_url": "https://cratis-new/hooks", "webhook_secret": "new"}}
+        ),
+    )
+    ref = resolve_partner("cratis", s)
+    assert ref.webhook_url == "https://cratis-new/hooks"  # registry wins
+    assert ref.webhook_secret == "new"
+
+
 def test_resolve_unknown_slug_has_no_webhook():
     ref = resolve_partner("ghost", _settings())
     assert ref.slug == "ghost"
