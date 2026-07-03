@@ -315,6 +315,13 @@ async def delete_dish(
     from app.ordering.models import OrderItem
 
     rid = restaurant.id  # capture before expire_all expires the restaurant row
+    # A dish removed from a DRAFT menu (the post-upload review dialog) was never pushed to
+    # Meta and isn't grounding the live bot, so skip the slow Meta unpublish + grounding
+    # refresh and just drop the row — the delete stays instant. Only touch Meta/grounding
+    # when the dish could actually be live: the menu is active, or the dish carries a link.
+    menu_is_live = menu.status == "active"
+    was_linked = bool((dish.catalog_retailer_id or "").strip())
+    touch_meta = menu_is_live or was_linked
     # Capture EVERY Content ID this dish could exist under in Meta, before the delete:
     #   * its stored link (catalog_retailer_id — set on sync/push), and
     #   * the deterministic push id (dish-<id>-<number>) it would have been pushed under
@@ -326,7 +333,7 @@ async def delete_dish(
             (dish.catalog_retailer_id or "").strip(),
             _dish_retailer_id(dish.id, dish.dish_number),
         ) if r
-    }
+    } if touch_meta else set()
     # A dish with order history can't be hard-deleted (order_items FK → would corrupt past
     # orders). In that case DEACTIVATE it instead: unlink, turn WhatsApp off, mark
     # unavailable, keep the row. Otherwise hard-delete. Either way it's removed from Meta.
@@ -354,13 +361,16 @@ async def delete_dish(
     await session.commit()
     session.expire_all()
     # Remove it from the Meta catalogue too so it stops showing as a WhatsApp card.
+    # Skipped entirely for a draft-menu dish that was never published (fast path).
     for retailer_id in retailer_ids:
         try:
             await unpublish_from_meta(session, restaurant_id=rid, retailer_id=retailer_id)
             await session.commit()
         except Exception:  # noqa: BLE001 — unpublish must never fail the delete
             await session.rollback()
-    await _refresh_grounding(session, rid)
+    # Bot grounding only matters for the live menu; a draft edit never affects it.
+    if menu_is_live:
+        await _refresh_grounding(session, rid)
 
 
 @router.patch("/dishes/{dish_id}/availability", response_model=DishOut)
