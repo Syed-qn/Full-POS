@@ -21,6 +21,11 @@
 .text {
   display: block;
 }
+/* Neutral filler for a message with nothing renderable — keeps internal
+   payloads from ever showing as raw JSON. */
+.placeholder {
+  opacity: 0.5;
+}
 .mediaAudio {
   display: block;
   width: 100%;

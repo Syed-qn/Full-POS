@@ -155,8 +155,11 @@ export function MessageBubble({
             {showText ? formatWhatsApp(text) : null}
           </span>
         )}
+        {/* Last resort: a stored type with no text/media/label. NEVER dump the
+            raw payload here — internal rows (system_summary, cart orders) would
+            leak as JSON into the timeline. Show a neutral placeholder instead. */}
         {!showText && !kindLabel && !canShowMedia && (
-          <span className={s.text}>{JSON.stringify(message.payload)}</span>
+          <span className={`${s.text} ${s.placeholder}`}>—</span>
         )}
         {time && <span className={s.time}>{time}</span>}
       </div>

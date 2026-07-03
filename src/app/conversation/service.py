@@ -21,10 +21,15 @@ def message_display_text(payload: dict) -> str | None:
     """Best human-readable string for a stored message payload.
 
     Outbound rows store the text under ``body``; inbound text under ``text``;
-    interactive replies under ``title``; locations have lat/lng. Falls back to
-    None so callers can decide how to render non-text events.
+    interactive replies under ``title``; locations have lat/lng; cart/order
+    submissions under ``display_text``; compaction rows under ``summary``. Falls
+    back to None so callers can decide how to render non-text events.
+
+    Covering ``display_text``/``summary`` here is also what keeps internal
+    payloads from reaching the dashboard as a raw JSON dump (MessageBubble's
+    last-resort branch) — every stored type resolves to a human string.
     """
-    for key in ("text", "body", "title", "caption"):
+    for key in ("text", "body", "title", "caption", "display_text", "summary"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value
