@@ -773,6 +773,79 @@ def _parse_dish_search_query(text: str | None) -> str | None:
     return None
 
 
+async def _dish_search_is_browse_only(
+    session: AsyncSession,
+    restaurant_id: int,
+    keyword: str,
+) -> bool:
+    """True when 'I want X' should show a filtered list; False when X is cart-ready.
+
+    Design rule: exclude dish-search when the keyword is a direct dish order
+    (e.g. 'biryani' → Chicken Biryani). Multi-word ingredient phrases like
+    'boneless chicken' stay browse even when one dish name matches.
+    """
+    kw = (keyword or "").strip().lower()
+    if not kw:
+        return False
+    needles = _category_match_needles(kw)
+    if not needles:
+        return False
+
+    from app.menu.models import Dish, Menu
+
+    menu = await session.scalar(
+        select(Menu).where(
+            Menu.restaurant_id == restaurant_id,
+            Menu.status == "active",
+        )
+    )
+    if menu is None:
+        return True
+
+    dishes = (
+        await session.scalars(
+            select(Dish).where(
+                Dish.menu_id == menu.id,
+                Dish.is_available == True,  # noqa: E712
+                Dish.meta_status == "active",
+            )
+        )
+    ).all()
+
+    name_hits: list[Dish] = []
+    desc_only_hits = 0
+    for d in dishes:
+        if await _catalog_excludes_dish(session, restaurant_id, d):
+            continue
+        name_blob = (d.name or "").lower()
+        desc_blob = _dish_search_description(d).lower()
+        in_name = any(n in name_blob for n in needles)
+        in_desc = any(n in desc_blob for n in needles)
+        if in_name:
+            name_hits.append(d)
+        elif in_desc:
+            desc_only_hits += 1
+
+    if desc_only_hits and not name_hits:
+        return True
+    if len(name_hits) > 1:
+        return True
+
+    match = await find_dish_matches(session, restaurant_id=restaurant_id, query=kw)
+    if match.confidence != MatchConfidence.DIRECT or not match.candidates:
+        return True
+
+    kw_norm = normalize_name(kw)
+    dish_norm = (match.candidates[0].name_normalized or "").lower()
+    if kw_norm and dish_norm == kw_norm:
+        return False
+
+    if len(kw.split()) == 1:
+        return False
+
+    return True
+
+
 def _is_menu_browse_intent(text: str) -> bool:
     """True for short browse/suggest messages that are not explicit menu keywords."""
     t = (text or "").strip().lower()
@@ -8494,7 +8567,9 @@ async def handle_inbound(
         _dish_kw = _parse_dish_search_query(
             (inbound.payload.get("text") or "").strip()
         )
-        if _dish_kw:
+        if _dish_kw and await _dish_search_is_browse_only(
+            session, restaurant_id, _dish_kw,
+        ):
             _set_state(conv, browse_filter=_dish_kw)
             await _handle_dish_search(
                 session, conv, inbound, restaurant_id, _dish_kw,
