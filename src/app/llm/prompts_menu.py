@@ -19,6 +19,12 @@ Extract every dish from the provided menu content.
 - price_aed: decimal string when shown, otherwise null
 - category: section heading when present, otherwise null
 - description: printed text when present, otherwise null
+- variants: when a dish lists MULTIPLE prices for different sizes/portions
+  (e.g. "19/30/50" or "60 / 80", or a Small/Medium/Large row), set price_aed to
+  the smallest/first price and put EACH larger size in variants as
+  {"name": "<size>", "price_aed": "<price>"}. Use the printed size names when
+  shown; otherwise use Small/Medium/Large (or Regular/Large for two prices).
+  Never put a slash-joined value like "19/30/50" in price_aed.
 
 [OUTPUT]
 A JSON array of dish objects only. No prose, no markdown fences.

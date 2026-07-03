@@ -4,7 +4,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 # Em/en dashes used as clause separators (with optional surrounding spaces). We
 # strip these from customer-facing AI replies because the LLM tends to lean on
@@ -32,12 +32,57 @@ class UploadedFile:
     mime: str
 
 
+# Default size labels when a menu prints tiered prices (e.g. "19/30/50") with no
+# written size names. The manager can rename them in the review dialog. The base
+# price (smallest / first) stays on the dish; the larger tiers become variants.
+_SIZE_LABELS: dict[int, list[str]] = {2: ["Large"], 3: ["Medium", "Large"]}
+_PRICE_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+
+
+def split_multisize_price(raw: str) -> tuple[str, list[dict]] | None:
+    """Split a slash-tiered price string into (base_price, variant_dicts).
+
+    "19/30/50" -> ("19", [{"name":"Medium","price_aed":"30"}, {"name":"Large","price_aed":"50"}])
+    Returns None when there is no "/" or fewer than two numeric tiers, so a plain
+    single price is left untouched.
+    """
+    if "/" not in raw:
+        return None
+    nums = [m.group() for part in raw.split("/") if (m := _PRICE_NUM_RE.search(part))]
+    if len(nums) < 2:
+        return None
+    base, extra = nums[0], nums[1:]
+    labels = _SIZE_LABELS.get(len(nums)) or [f"Size {i + 2}" for i in range(len(extra))]
+    return base, [{"name": labels[i], "price_aed": extra[i]} for i in range(len(extra))]
+
+
+class DishVariantDraft(BaseModel):
+    name: str
+    price_aed: Decimal
+
+
 class DishDraft(BaseModel):
     dish_number: int | None = None
     name: str
     price_aed: Decimal | None = None
     category: str | None = None
     description: str | None = None
+    variants: list[DishVariantDraft] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_multisize(cls, data: object) -> object:
+        """Turn a tiered ``price_aed`` string ("19/30/50") into base + variants
+        BEFORE Decimal coercion — otherwise Decimal("19/30/50") aborts the whole
+        upload. Skipped when the model already supplied explicit variants."""
+        if isinstance(data, dict) and not data.get("variants"):
+            raw = data.get("price_aed")
+            if isinstance(raw, str):
+                split = split_multisize_price(raw)
+                if split:
+                    base, variants = split
+                    data = {**data, "price_aed": base, "variants": variants}
+        return data
 
 
 class MenuExtractor(Protocol):

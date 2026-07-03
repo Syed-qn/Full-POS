@@ -136,6 +136,10 @@ async def create_menu_from_upload(
                 price_aed=d.price_aed,
                 category=d.category,
                 description=d.description,
+                variants=[
+                    {"name": v.name, "price_aed": str(v.price_aed), "dish_number": None}
+                    for v in d.variants
+                ],
             )
         )
     await record_audit(

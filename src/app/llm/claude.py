@@ -38,6 +38,22 @@ _TOOL = {
                         "price_aed": {"type": ["string", "null"]},
                         "category": {"type": ["string", "null"]},
                         "description": {"type": ["string", "null"]},
+                        "variants": {
+                            "type": "array",
+                            "description": (
+                                "Size/portion options when a dish has more than one price. "
+                                "Set price_aed to the smallest/first price and list the larger "
+                                "sizes here, each with a size name and its own price."
+                            ),
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "price_aed": {"type": "string"},
+                                },
+                                "required": ["name", "price_aed"],
+                            },
+                        },
                     },
                     "required": ["name"],
                 },
