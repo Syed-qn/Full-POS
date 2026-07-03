@@ -26,27 +26,8 @@ from app.menu.schemas import (
 )
 from app.menu.service import MenuIncompleteError
 from app.menu.unified import UnifiedMenuOut, build_unified_menu
-from app.catalog.sync_service import auto_publish_to_meta, unpublish_from_meta
+from app.catalog.sync_service import schedule_auto_publish, unpublish_from_meta
 from app.okf.producer import refresh_okf_for_restaurant
-
-
-# Keep strong refs to detached background tasks so the event loop doesn't GC them mid-run.
-_BG_PUBLISH_TASKS: set = set()
-
-
-async def _publish_to_meta_bg(restaurant_id: int) -> None:
-    """Publish the menu to the Meta catalogue on its OWN DB session, off the request path.
-    Meta HTTP calls carry 30–60s timeouts; awaiting them inline made the manager's dish
-    save hang until Meta answered. Fire-and-forget + best-effort — any failure is swallowed
-    and re-attempted on the next dish mutation (or on menu activation)."""
-    from app.db import async_session_factory
-
-    try:
-        async with async_session_factory() as session:
-            await auto_publish_to_meta(session, restaurant_id=restaurant_id)
-            await session.commit()
-    except Exception:  # noqa: BLE001 — a background push must never surface anywhere
-        pass
 
 
 async def _refresh_grounding(session: AsyncSession, restaurant_id: int) -> None:
@@ -56,17 +37,12 @@ async def _refresh_grounding(session: AsyncSession, restaurant_id: int) -> None:
          never makes the manager's save hang (the save returns as soon as the DB commit +
          grounding are done).
     Both are best-effort — neither may fail the manager's edit."""
-    import asyncio
-
     try:
         await refresh_okf_for_restaurant(session, restaurant_id=restaurant_id)
         await session.commit()
     except Exception:  # noqa: BLE001
         await session.rollback()
-    # Detached: return to the caller immediately; the push completes on the event loop.
-    task = asyncio.create_task(_publish_to_meta_bg(restaurant_id))
-    _BG_PUBLISH_TASKS.add(task)
-    task.add_done_callback(_BG_PUBLISH_TASKS.discard)
+    schedule_auto_publish(restaurant_id)
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
 

@@ -439,6 +439,36 @@ async def auto_publish_to_meta(session: AsyncSession, *, restaurant_id: int) -> 
         return SyncResult()
 
 
+# Strong refs to detached background pushes so the event loop can't GC them mid-run.
+_BG_PUBLISH_TASKS: set = set()
+
+
+def schedule_auto_publish(restaurant_id: int) -> None:
+    """Fire-and-forget the Meta catalogue push on its OWN DB session, off the caller's
+    request path. Meta HTTP carries 30-60s timeouts, so awaiting it inline stalls the
+    manager's action (a dish save, or Confirm & Activate). Best-effort: failures are
+    swallowed and re-attempted on the next mutation/activation. No-ops when there's no
+    running event loop (e.g. a sync script)."""
+    import asyncio
+
+    async def _run() -> None:
+        from app.db import async_session_factory
+
+        try:
+            async with async_session_factory() as session:
+                await auto_publish_to_meta(session, restaurant_id=restaurant_id)
+                await session.commit()
+        except Exception:  # noqa: BLE001 — a background push must never surface
+            pass
+
+    try:
+        task = asyncio.create_task(_run())
+    except RuntimeError:
+        return  # no running loop — skip the background push
+    _BG_PUBLISH_TASKS.add(task)
+    task.add_done_callback(_BG_PUBLISH_TASKS.discard)
+
+
 async def sync_collections(session: AsyncSession, *, restaurant_id: int) -> dict:
     """Push one Meta product set ("collection") per dish category so the native WhatsApp
     catalogue groups the menu by category. Builds ``category -> [retailer_id]`` from the

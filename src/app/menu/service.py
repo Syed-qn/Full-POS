@@ -264,14 +264,13 @@ async def activate_menu(session: AsyncSession, menu: Menu) -> Menu:
 
     # Auto-publish to the Meta catalogue so every available, priced dish shows as a
     # WhatsApp catalogue card — the manager keeps ONE menu and never clicks "Sync".
-    # Best-effort: no catalog_id / Meta down must never fail activation.
-    try:
-        from app.catalog.sync_service import auto_publish_to_meta
+    # Runs in the BACKGROUND (own session) so a slow Meta push never makes "Confirm &
+    # Activate" hang — the menu is already active + committed above. Best-effort: no
+    # catalog_id / Meta down must never fail activation, and it re-attempts on any later
+    # dish mutation.
+    from app.catalog.sync_service import schedule_auto_publish
 
-        await auto_publish_to_meta(session, restaurant_id=menu.restaurant_id)
-        await session.commit()
-    except Exception:  # noqa: BLE001
-        await session.rollback()
+    schedule_auto_publish(menu.restaurant_id)
     return menu
 
 
