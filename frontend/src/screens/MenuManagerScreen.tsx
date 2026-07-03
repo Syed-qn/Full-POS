@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UnifiedMenu } from "../lib/unifiedMenuApi";
 import { Button } from "../components/Button";
-import { DiffPanel } from "../components/DiffPanel";
+import { MenuReviewDialog } from "../components/MenuReviewDialog";
 import { DishCard } from "../components/DishCard";
 import { DishEditModal } from "../components/DishEditModal";
 import { SectionBanner } from "../components/SectionBanner";
@@ -192,11 +192,19 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     }
   }
 
+  const [confirming, setConfirming] = useState(false);
   async function onConfirm() {
     if (!pending) return;
-    await activateMenu(pending.id);
-    setActiveMenuId(pending.id);
-    setPending(null);
+    setConfirming(true);
+    try {
+      await activateMenu(pending.id);
+      setActiveMenuId(pending.id);
+      setPending(null);
+    } catch {
+      setError("Could not activate the menu.");
+    } finally {
+      setConfirming(false);
+    }
   }
 
   const hasErrors = (pending?.diff_vs_active?.conflicts.length ?? 0) > 0;
@@ -254,15 +262,13 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
   if (pending) {
     return (
-      <div className={s.screen}>
-        <SectionBanner tone="info">New menu parsed. Review and confirm before activating.</SectionBanner>
-        {pending.diff_vs_active ? <DiffPanel diff={pending.diff_vs_active} /> : <p>No diff.</p>}
-        <div className={s.actions}>
-          <Button onClick={onConfirm} disabled={hasErrors}>Confirm &amp; Activate</Button>
-          <Button variant="ghost" onClick={() => setPending(null)}>Discard</Button>
-          {hasErrors && <span className={s.blocked}>Resolve extraction errors before activating.</span>}
-        </div>
-      </div>
+      <MenuReviewDialog
+        menu={pending}
+        onClose={() => setPending(null)}
+        onConfirm={onConfirm}
+        confirming={confirming}
+        hasErrors={hasErrors}
+      />
     );
   }
 

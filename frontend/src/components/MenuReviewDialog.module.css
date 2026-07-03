@@ -1,0 +1,368 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.3));
+  width: min(1040px, 100%);
+  height: min(760px, 92vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ─── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.close {
+  border: none;
+  background: none;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.close:hover {
+  color: var(--text-primary);
+}
+
+/* ── Two-pane body ─── */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+}
+
+/* LEFT — dish list */
+.list {
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+  padding: 10px 8px;
+  background: var(--bg-surface-inset);
+}
+.listGroup {
+  margin-bottom: 8px;
+}
+.listGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.listGroupCount {
+  font-weight: 600;
+}
+.listItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.12s;
+}
+.listItem:hover {
+  background: var(--bg-surface);
+}
+.listItemActive,
+.listItemActive:hover {
+  background: var(--accent-primary);
+}
+.listItemName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listItemPrice {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.listItemActive .listItemName,
+.listItemActive .listItemPrice {
+  color: #fff;
+}
+.listNum {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--bg-surface-inset);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.listItemActive .listNum {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* RIGHT — detail form */
+.detail {
+  overflow-y: auto;
+  padding: 22px 24px;
+}
+.detailEmpty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+.formHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.formTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.formNum {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.formError {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--sla-critical);
+  background: color-mix(in srgb, var(--sla-critical) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 30%, var(--border-subtle));
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.textarea {
+  resize: vertical;
+}
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+
+/* Photo */
+.imageRow {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.imageThumb {
+  flex-shrink: 0;
+  width: 88px;
+  height: 88px;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.imageThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.imagePh {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.imageActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.imageRemove {
+  border: none;
+  background: none;
+  color: var(--sla-critical);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.imageHint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Variants */
+.variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface-inset);
+}
+.variantRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.variantName {
+  flex: 1;
+}
+.variantPrice {
+  width: 100px;
+  flex-shrink: 0;
+}
+.variantRemove {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--sla-critical);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.variantRemove:hover {
+  background: color-mix(in srgb, var(--sla-critical) 12%, var(--bg-surface));
+}
+.addVariant {
+  align-self: flex-start;
+  border: 1px dashed var(--accent-primary);
+  background: transparent;
+  color: var(--accent-primary);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.addVariant:hover {
+  background: var(--accent-primary-dim, color-mix(in srgb, var(--accent-primary) 10%, transparent));
+}
+
+.formFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+/* ── Dialog footer ─── */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-subtle);
+}
+.footerRight {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+.blocked {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sla-critical);
+}
+
+@media (max-width: 720px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+  .list {
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
