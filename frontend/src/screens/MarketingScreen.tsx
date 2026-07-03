@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApprovalTimeline } from "../components/ApprovalTimeline";
 import { Button } from "../components/Button";
+import {
+  CampaignSummarySkeleton,
+  CampaignSummaryStrip,
+} from "../components/CampaignSummaryStrip";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SideDrawer } from "../components/SideDrawer";
 import { toast } from "../components/Toaster";
+import { computeCampaignSummary, statNum } from "../lib/campaignSummary";
 import { apiClient } from "../lib/apiClient";
 import type { RestaurantOut } from "../lib/types";
 import {
@@ -98,11 +103,6 @@ const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   failed: "Failed",
   cancelled: "Cancelled",
 };
-
-function statNum(stats: Record<string, unknown>, key: string): number {
-  const v = stats[key];
-  return typeof v === "number" ? v : 0;
-}
 
 function formatCampaignDate(c: CampaignResponse): string {
   const raw = c.status === "scheduled" && c.scheduled_at ? c.scheduled_at : c.created_at;
@@ -1852,17 +1852,10 @@ function CampaignsTab({ templates }: { templates: TemplateResponse[] }) {
       .finally(() => setDetailLoading(false));
   }, [selected]);
 
-  const summary = useMemo(() => {
-    if (!rows || rows.length === 0) return null;
-    const sent = rows.reduce((acc, c) => acc + statNum(c.stats, "sent"), 0);
-    const converted = rows.reduce((acc, c) => acc + statNum(c.stats, "converted"), 0);
-    return {
-      total: rows.length,
-      sent,
-      converted,
-      rate: sent > 0 ? Math.round((converted / sent) * 100) : 0,
-    };
-  }, [rows]);
+  const summary = useMemo(
+    () => (rows && rows.length > 0 ? computeCampaignSummary(rows) : null),
+    [rows],
+  );
 
   async function onCancelCampaign(c: CampaignResponse, e: React.MouseEvent) {
     e.stopPropagation();
@@ -1917,33 +1910,9 @@ function CampaignsTab({ templates }: { templates: TemplateResponse[] }) {
       )}
 
       {rows === null ? (
-        <div className={s.campaignSummary} aria-busy="true">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className={s.campaignStatBox}>
-              <span className={`${s.sk} ${s.skStatNum}`} />
-              <span className={`${s.sk} ${s.skStatLabel}`} />
-            </div>
-          ))}
-        </div>
+        <CampaignSummarySkeleton />
       ) : summary ? (
-        <div className={s.campaignSummary}>
-          <div className={s.campaignStatBox}>
-            <div className={s.campaignStatNum}>{summary.total}</div>
-            <div className={s.campaignStatLabel}>Campaigns sent</div>
-          </div>
-          <div className={s.campaignStatBox}>
-            <div className={s.campaignStatNum}>{summary.sent}</div>
-            <div className={s.campaignStatLabel}>Messages delivered</div>
-          </div>
-          <div className={s.campaignStatBox}>
-            <div className={s.campaignStatNum}>{summary.converted}</div>
-            <div className={s.campaignStatLabel}>Orders from campaigns</div>
-          </div>
-          <div className={s.campaignStatBox}>
-            <div className={s.campaignStatNum}>{summary.rate}%</div>
-            <div className={s.campaignStatLabel}>Success rate</div>
-          </div>
-        </div>
+        <CampaignSummaryStrip summary={summary} />
       ) : null}
 
       {rows !== null && rows.length === 0 ? (

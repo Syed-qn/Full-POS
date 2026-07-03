@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -8,13 +8,26 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  CampaignSummarySkeleton,
+  CampaignSummaryStrip,
+} from "../components/CampaignSummaryStrip";
+import { DispatchKpiPanel } from "../components/DispatchKpiPanel";
+import { PageHeader } from "../components/PageHeader";
+import { ReportsDateRangePicker } from "../components/ReportsDateRangePicker";
 import { SectionBanner } from "../components/SectionBanner";
+import {
+  computeCampaignSummary,
+  filterCampaignsByDate,
+} from "../lib/campaignSummary";
+import type { CampaignResponse } from "../lib/marketingApi";
+import { fetchCampaigns } from "../lib/marketingApi";
+import { computeOrderDeliveryKpis } from "../lib/orderDeliveryKpis";
+import { fetchOrders } from "../lib/ordersApi";
 import type { ForecastResult } from "../lib/predictionsApi";
 import { fetchLatestForecast } from "../lib/predictionsApi";
-import { fetchCampaigns } from "../lib/marketingApi";
-import type { CampaignResponse } from "../lib/marketingApi";
+import { boundsForPreset, type ReportsDatePreset } from "../lib/reportsDateRange";
 import { usePoll } from "../lib/usePoll";
-import { PageHeader } from "../components/PageHeader";
 import s from "./AnalyticsScreen.module.css";
 
 const HORIZONS = ["breakfast", "lunch", "dinner", "midnight"] as const;
@@ -39,7 +52,11 @@ async function fetchAllForecasts(): Promise<Partial<Record<Horizon, ForecastResu
 }
 
 async function fetchCampaignSummary(): Promise<CampaignResponse[]> {
-  try { return await fetchCampaigns(); } catch { return []; }
+  try {
+    return await fetchCampaigns();
+  } catch {
+    return [];
+  }
 }
 
 function forecastCount(f: ForecastResult): number {
@@ -47,11 +64,11 @@ function forecastCount(f: ForecastResult): number {
   if (typeof p.order_count === "number") return p.order_count;
   if (typeof p.total === "number") return p.total;
   if (typeof p.count === "number") return p.count;
-  return Object.values(p).filter((v): v is number => typeof v === "number").reduce((a, b) => a + b, 0);
+  return Object.values(p)
+    .filter((v): v is number => typeof v === "number")
+    .reduce((a, b) => a + b, 0);
 }
 
-// Skeletons mirror each card's loaded shape: a column chart for the forecast,
-// a row of stat boxes for the campaign summary.
 function ForecastSkeleton() {
   const bars = [62, 88, 74, 96];
   return (
@@ -66,9 +83,9 @@ function ForecastSkeleton() {
   );
 }
 
-function CampaignSkeleton() {
+function DeliverySkeleton() {
   return (
-    <div className={s.statRow} aria-busy="true" aria-label="Loading campaigns">
+    <div className={s.statRow} aria-busy="true" aria-label="Loading delivery metrics">
       {Array.from({ length: 4 }).map((_, i) => (
         <div key={i} className={s.statBox}>
           <span className={`${s.sk} ${s.skStatNum}`} />
@@ -80,11 +97,44 @@ function CampaignSkeleton() {
 }
 
 export function AnalyticsScreen() {
-  const { data: forecasts, error: fErr } = usePoll<Partial<Record<Horizon, ForecastResult>>>(fetchAllForecasts, 60_000);
-  const { data: campaigns, error: cErr } = usePoll<CampaignResponse[]>(fetchCampaignSummary, 60_000);
+  const [datePreset, setDatePreset] = useState<ReportsDatePreset>("7d");
+  const dateBounds = useMemo(() => boundsForPreset(datePreset), [datePreset]);
+
+  const { data: forecasts, error: fErr } = usePoll<Partial<Record<Horizon, ForecastResult>>>(
+    fetchAllForecasts,
+    60_000,
+  );
+  const { data: campaigns, error: cErr } = usePoll<CampaignResponse[]>(
+    fetchCampaignSummary,
+    60_000,
+  );
+  const fetchOrdersForRange = useMemo(
+    () => () =>
+      fetchOrders({
+        fromDate: dateBounds.fromDate,
+        toDate: dateBounds.toDate,
+        previewBatch: false,
+        limit: 500,
+      }),
+    [dateBounds.fromDate, dateBounds.toDate],
+  );
+  const { data: orders, error: oErr } = usePoll(fetchOrdersForRange, 60_000);
+
+  const filteredCampaigns = useMemo(
+    () => (campaigns ? filterCampaignsByDate(campaigns, dateBounds) : null),
+    [campaigns, dateBounds],
+  );
+  const campaignStats = useMemo(
+    () => (filteredCampaigns ? computeCampaignSummary(filteredCampaigns) : null),
+    [filteredCampaigns],
+  );
+  const deliveryKpis = useMemo(
+    () => (orders ? computeOrderDeliveryKpis(orders) : null),
+    [orders],
+  );
 
   const hasForecasts = forecasts != null && Object.keys(forecasts).length > 0;
-  const error = fErr ?? cErr;
+  const error = fErr ?? cErr ?? oErr;
 
   const forecastChart = useMemo(() => {
     if (!forecasts) return [];
@@ -95,61 +145,77 @@ export function AnalyticsScreen() {
     })).filter((d) => d.orders > 0);
   }, [forecasts]);
 
-  const campaignStats = useMemo(() => {
-    if (!campaigns || campaigns.length === 0) return null;
-    const sent = campaigns.reduce((s, c) => s + (typeof c.stats.sent === "number" ? c.stats.sent : 0), 0);
-    const converted = campaigns.reduce((s, c) => s + (typeof c.stats.converted === "number" ? c.stats.converted : 0), 0);
-    return {
-      total: campaigns.length,
-      sent,
-      converted,
-      rate: sent > 0 ? Math.round((converted / sent) * 100) : 0,
-    };
-  }, [campaigns]);
-
   return (
     <div className={s.screen}>
-      <PageHeader title="Reports" subtitle="Performance and delivery insights" />
-      {error != null && <SectionBanner tone="warning">Could not load data — retrying…</SectionBanner>}
+      <PageHeader
+        title="Reports"
+        subtitle="Performance and delivery insights"
+        right={
+          <ReportsDateRangePicker value={datePreset} onChange={setDatePreset} />
+        }
+      />
+      {error != null && (
+        <SectionBanner tone="warning">Could not load data — retrying…</SectionBanner>
+      )}
 
-      {/* ── Marketing / campaigns ─── */}
+      <div className={s.card}>
+        <div className={s.cardHead}>
+          <span className={s.cardTitle}>Delivery &amp; Operations</span>
+          <span className={s.cardSub}>
+            Orders and fleet performance for {dateBounds.label.toLowerCase()}
+          </span>
+        </div>
+
+        {orders === null ? (
+          <DeliverySkeleton />
+        ) : deliveryKpis ? (
+          <div className={s.statRow}>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{deliveryKpis.orders}</div>
+              <div className={s.statLabel}>Orders</div>
+            </div>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{deliveryKpis.delivered}</div>
+              <div className={s.statLabel}>Delivered</div>
+            </div>
+            <div className={s.statBox}>
+              <div className={s.statNum}>AED {deliveryKpis.revenueAed.toFixed(0)}</div>
+              <div className={s.statLabel}>Revenue collected</div>
+            </div>
+            <div className={s.statBox}>
+              <div className={s.statNum}>{deliveryKpis.completionPct}%</div>
+              <div className={s.statLabel}>Completion rate</div>
+            </div>
+          </div>
+        ) : null}
+
+        <DispatchKpiPanel />
+      </div>
+
       <div className={s.card}>
         <div className={s.cardHead}>
           <span className={s.cardTitle}>Marketing Messages</span>
-          <span className={s.cardSub}>How well your promotions are working</span>
+          <span className={s.cardSub}>
+            Promotion results for {dateBounds.label.toLowerCase()}
+          </span>
         </div>
 
-        {campaigns === null ? (
-          <CampaignSkeleton />
+        {filteredCampaigns === null ? (
+          <CampaignSummarySkeleton />
         ) : !campaignStats ? (
           <div className={s.empty}>
             <div className={s.emptyIcon}>📣</div>
-            <div className={s.emptyTitle}>No campaigns yet</div>
-            <div className={s.emptyDesc}>Send your first promotion to customers from the Marketing section.</div>
+            <div className={s.emptyTitle}>No campaigns in this period</div>
+            <div className={s.emptyDesc}>
+              Send your first promotion from the Marketing section, or widen the date
+              range.
+            </div>
           </div>
         ) : (
-          <div className={s.statRow}>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.total}</div>
-              <div className={s.statLabel}>Campaigns sent</div>
-            </div>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.sent}</div>
-              <div className={s.statLabel}>Messages delivered</div>
-            </div>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.converted}</div>
-              <div className={s.statLabel}>Orders from campaigns</div>
-            </div>
-            <div className={s.statBox}>
-              <div className={s.statNum}>{campaignStats.rate}%</div>
-              <div className={s.statLabel}>Success rate</div>
-            </div>
-          </div>
+          <CampaignSummaryStrip summary={campaignStats} />
         )}
       </div>
 
-      {/* ── Today's demand forecast ─── */}
       <div className={s.card}>
         <div className={s.cardHead}>
           <span className={s.cardTitle}>Expected Orders Today</span>
@@ -162,31 +228,45 @@ export function AnalyticsScreen() {
           <div className={s.empty}>
             <div className={s.emptyIcon}>📊</div>
             <div className={s.emptyTitle}>No predictions yet</div>
-            <div className={s.emptyDesc}>Predictions appear after a few days of orders. Keep taking orders!</div>
+            <div className={s.emptyDesc}>
+              Predictions appear after a few days of orders. Keep taking orders!
+            </div>
           </div>
         ) : (
-          <>
-            {/* Simple column chart */}
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={forecastChart} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barSize={48}>
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 13, fill: "#374151" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis hide />
-                <Tooltip
-                  contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 13 }}
-                  formatter={(v) => [`${v} orders`, "Expected"]}
-                  cursor={{ fill: "rgba(0,0,0,0.04)" }}
-                />
-                <Bar dataKey="orders" radius={[6, 6, 0, 0]} label={{ position: "top", fontSize: 14, fontWeight: 700, fill: "#111827" }}>
-                  {forecastChart.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart
+              data={forecastChart}
+              margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+              barSize={48}
+            >
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 13, fill: "#374151" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis hide />
+              <Tooltip
+                contentStyle={{
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  fontSize: 13,
+                }}
+                formatter={(v) => [`${v} orders`, "Expected"]}
+                cursor={{ fill: "rgba(0,0,0,0.04)" }}
+              />
+              <Bar
+                dataKey="orders"
+                radius={[6, 6, 0, 0]}
+                label={{ position: "top", fontSize: 14, fontWeight: 700, fill: "#111827" }}
+              >
+                {forecastChart.map((d, i) => (
+                  <Cell key={i} fill={d.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         )}
       </div>
     </div>

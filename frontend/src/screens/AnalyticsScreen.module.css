@@ -30,13 +30,7 @@
   color: var(--text-muted);
 }
 
-.loading {
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 12px 0;
-}
-
-/* ── Loading skeletons (mirror each card's loaded shape) ── */
+/* ── Loading skeletons ── */
 .sk {
   display: block;
   position: relative;
@@ -55,7 +49,7 @@
 @keyframes analyticsSkShimmer {
   100% { transform: translateX(100%); }
 }
-/* Forecast: column-chart placeholder */
+
 .skChart {
   display: flex;
   align-items: flex-end;
@@ -76,11 +70,9 @@
 }
 .skBar { width: 100%; border-radius: 6px 6px 0 0; }
 .skBarLabel { width: 70%; height: 12px; }
-/* Campaign: stat-box placeholders */
 .skStatNum { width: 48px; height: 28px; }
 .skStatLabel { width: 80px; height: 12px; }
 
-/* Empty states */
 .empty {
   display: flex;
   flex-direction: column;
@@ -105,7 +97,6 @@
   line-height: 1.5;
 }
 
-/* Campaign stat boxes */
 .statRow {
   display: flex;
   gap: 12px;
@@ -135,24 +126,9 @@
   line-height: 1.3;
 }
 
-/* ── Keep campaign table styles (still referenced elsewhere) ── */
-.kpiStrip { display: flex; gap: 12px; flex-wrap: wrap; }
-.section { display: flex; flex-direction: column; gap: 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 20px; }
-.forecastGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.forecastCard { background: var(--bg-surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 4px; }
-.forecastHorizon { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
-.forecastDate { font-size: 13px; color: var(--text-primary); }
-.forecastRunId { font-size: 11px; color: var(--text-muted); }
-.adjustedBadge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-primary); background: var(--accent-primary-dim); border-radius: 4px; padding: 1px 6px; align-self: flex-start; }
-.campaignTable { display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius); overflow: hidden; font-size: 13px; }
-.tableHead { display: grid; grid-template-columns: 56px 1fr 1fr 80px 100px; gap: 8px; padding: 8px 12px; background: var(--bg-surface-inset); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-.tableRow { display: grid; grid-template-columns: 56px 1fr 1fr 80px 100px; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border-subtle); align-items: center; }
-.tableRow:hover { background: var(--bg-surface-inset); }
-.mono { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
-.typeLabel { text-transform: capitalize; }
-.statusLabel { text-transform: capitalize; font-size: 12px; }
-.statusLabel[data-status="sent"], .statusLabel[data-status="completed"] { color: var(--sla-safe); }
-.statusLabel[data-status="failed"], .statusLabel[data-status="cancelled"] { color: var(--sla-critical); }
-.statusLabel[data-status="scheduled"], .statusLabel[data-status="draft"] { color: var(--text-muted); }
-.chartWrap { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-.chartTitle { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.chartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
