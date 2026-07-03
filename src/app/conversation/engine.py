@@ -728,6 +728,77 @@ def _parse_category_availability_query(text: str | None) -> str | None:
     return None
 
 
+# Ingredient / dish browse — "I want boneless chicken", "something with paneer".
+# Short filtered list or ONE category's catalogue cards — never the full menu.
+_DISH_SEARCH_PATTERNS: tuple[str, ...] = (
+    r"^(?:i want|i'd like|id like|looking for|something with)\s+(.+?)[\?\.!]*$",
+    r"^(?:give me|show me)\s+(.+?)\s+options?[\?\.!]*$",
+)
+_DISH_SEARCH_LEAD_FILLERS: tuple[str, ...] = (
+    "to have ", "to get ", "to order ", "the ", "a ", "an ",
+)
+
+
+def _normalize_dish_search_keyword(raw: str) -> str:
+    """Strip filler from a parsed dish-search phrase."""
+    t = _re.sub(r"\s+", " ", (raw or "").strip().lower()).strip("?.! ")
+    for lead in _DISH_SEARCH_LEAD_FILLERS:
+        if t.startswith(lead):
+            t = t[len(lead):].strip()
+    return t
+
+
+def _parse_dish_search_query(text: str | None) -> str | None:
+    """If the message browses by ingredient ('I want boneless chicken'), return keyword."""
+    if not text:
+        return None
+    if _is_menu_request(text) or _dish_info_question(text):
+        return None
+    if _parse_category_availability_query(text):
+        return None
+    t = _re.sub(r"\s+", " ", text.strip().lower()).replace("'", "'")
+    if not t or len(t) > 80:
+        return None
+    for pat in _DISH_SEARCH_PATTERNS:
+        m = _re.match(pat, t)
+        if m:
+            kw = _normalize_dish_search_keyword(m.group(1))
+            if kw and kw not in _CATEGORY_QUERY_BROAD:
+                return kw
+    return None
+
+
+def _is_menu_browse_intent(text: str) -> bool:
+    """True for short browse/suggest messages that are not explicit menu keywords."""
+    t = (text or "").strip().lower()
+    if not t or len(t) > 45:
+        return False
+    if _is_menu_request(text):
+        return True
+    browse_phrases = (
+        "show me", "ok show me", "suggest", "recommend", "pick for me",
+        "what should i order", "surprise me",
+    )
+    return any(p in t for p in browse_phrases)
+
+
+def _dish_search_description(dish: object) -> str:
+    """Customer-facing description for dish-search matching (name + description blob)."""
+    return (
+        getattr(dish, "description_customer", None)
+        or getattr(dish, "description", None)
+        or ""
+    )
+
+
+def _item_matches_dish_search_query(
+    *, name: str, description: str | None, needles: tuple[str, ...],
+) -> bool:
+    """True when a menu row matches a dish-search keyword (name + description)."""
+    blob = f"{(name or '').lower()} {(description or '').lower()}"
+    return any(n in blob for n in needles)
+
+
 def _item_matches_category_query(
     *, name: str, category: str, needles: tuple[str, ...],
 ) -> bool:
@@ -844,6 +915,125 @@ async def _handle_category_availability_query(
     await _send_text(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="category-query-list",
+        body="\n".join(lines),
+    )
+
+
+async def _handle_dish_search(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    keyword: str,
+) -> None:
+    """Answer 'I want boneless chicken' with a capped list or ONE category's catalogue cards."""
+    needles = _category_match_needles(keyword)
+    if not needles:
+        return
+
+    _set_state(conv, menu_in_context=True)
+
+    label = keyword.strip().title() or "that"
+    matched: list[tuple[str, str, object]] = []  # (name, category, price)
+    matched_cat_names: list[str] = []
+
+    if await _catalog_mode_on(session, restaurant_id):
+        from app.catalog.service import _category_of, _load_sendable_products, send_catalog_category
+
+        _cid, sendable = await _load_sendable_products(session, restaurant_id)
+        if sendable:
+            cat_counts: dict[str, int] = {}
+            for p in sendable:
+                cat = _category_of(p)
+                desc = getattr(p, "description", None) or ""
+                if _item_matches_dish_search_query(
+                    name=p.name, description=desc, needles=needles,
+                ):
+                    matched.append((p.name, cat, p.price_aed))
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            matched_cat_names = [c for c, _ in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )]
+
+            if len(matched_cat_names) == 1 and _cid:
+                intro = (
+                    f"Here's what we have with {label.lower()} 😊 Tap below to pick one, "
+                    "then send your basket to order."
+                )
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="dish-search-intro",
+                    body=intro,
+                )
+                sent = await send_catalog_category(
+                    session,
+                    restaurant_id=restaurant_id,
+                    to_phone=inbound.from_phone,
+                    category=matched_cat_names[0],
+                    idempotency_key=f"dsq-{conv.id}-{inbound.wa_message_id}",
+                )
+                if sent:
+                    return
+    else:
+        from app.menu.models import Dish, Menu
+
+        menu = await session.scalar(
+            select(Menu).where(
+                Menu.restaurant_id == restaurant_id, Menu.status == "active",
+            )
+        )
+        if menu is not None:
+            dishes = (
+                await session.scalars(
+                    select(Dish).where(
+                        Dish.menu_id == menu.id,
+                        Dish.is_available == True,  # noqa: E712
+                        Dish.meta_status == "active",
+                    ).order_by(Dish.category, Dish.name)
+                )
+            ).all()
+            cat_counts: dict[str, int] = {}
+            for d in dishes:
+                if await _catalog_excludes_dish(session, restaurant_id, d):
+                    continue
+                cat = d.category or "Menu"
+                if _item_matches_dish_search_query(
+                    name=d.name,
+                    description=_dish_search_description(d),
+                    needles=needles,
+                ):
+                    matched.append((d.name, cat, d.price_aed))
+                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            matched_cat_names = [c for c, _ in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )]
+
+    if not matched:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="dish-search-none",
+            body=(
+                f"We couldn't find anything with {label.lower()} on the menu right now 🙏 "
+                "Say 'menu' to see what we do have, or tell me another dish 😊"
+            ),
+        )
+        return
+
+    emoji = _category_emoji(matched_cat_names[0] if matched_cat_names else label)
+    lines = [f"Here's what we have with {label.lower()} {emoji}"]
+    for name, _cat, price in matched[:_CATEGORY_REPLY_MAX]:
+        lines.append(f"• {name}: AED {_aed(price)}")
+    extra = len(matched) - _CATEGORY_REPLY_MAX
+    if extra > 0:
+        lines.append(
+            f"\n…and {extra} more. Tell me what you'd like, "
+            "or say 'menu' to browse everything 🍛"
+        )
+    else:
+        lines.append("\nTell me what you'd like and I'll add it 😊")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="dish-search-list",
         body="\n".join(lines),
     )
 
@@ -8048,6 +8238,17 @@ async def handle_inbound(
         if _cat_kw:
             await _handle_category_availability_query(
                 session, conv, inbound, restaurant_id, _cat_kw,
+            )
+            return
+        # "I want boneless chicken" → short filtered list or ONE category's catalogue
+        # cards — never the full menu and never the LLM.
+        _dish_kw = _parse_dish_search_query(
+            (inbound.payload.get("text") or "").strip()
+        )
+        if _dish_kw:
+            _set_state(conv, browse_filter=_dish_kw)
+            await _handle_dish_search(
+                session, conv, inbound, restaurant_id, _dish_kw,
             )
             return
         # "What's in my cart / show my order" → show the REAL cart deterministically,
