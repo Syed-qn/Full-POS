@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     claude_model: str = "claude-opus-4-8"
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_model: str = "deepseek-chat"
+    # Live-path resilience — stays on DeepSeek (Claude is NEVER used for conversation,
+    # only for menu/image extraction). When the primary deepseek_model is slow or
+    # errors on an inbound call (conversation agent, router, completion detector),
+    # retry the same call against this faster/previous DeepSeek model. Empty = off.
+    deepseek_fallback_model: str = ""  # e.g. "deepseek-chat"
+    # Seconds to wait on the primary model before cutting over to the fallback model.
+    # Also caps a reasoning model's runaway think phase so one slow call can't stall a reply.
+    llm_primary_timeout_s: float = 12.0
     upload_dir: str = "var/uploads"
     public_base_url: str = "http://localhost:8000"
     # Public download link for the Android rider app APK, included in the WhatsApp

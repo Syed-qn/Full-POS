@@ -177,8 +177,10 @@ _DS_TOOL = build_openai_tool("take_action")
 class DeepSeekConversationAgent:
     """Phase-aware AI ordering assistant using DeepSeek function calling."""
 
-    def __init__(self) -> None:
-        self._api_key, self._model = _get_deepseek_settings()
+    def __init__(self, model: str | None = None) -> None:
+        api_key, default_model = _get_deepseek_settings()
+        self._api_key = api_key
+        self._model = model or default_model
 
     def _build_system(self, restaurant_name: str, dialogue_phase: str, context: dict) -> str:
         ctx = dict(context)
@@ -238,10 +240,14 @@ class DeepSeekConversationAgent:
 class DeepSeekCompletionDetector:
     """Production completion detector: one tiny async chat call, yes/no answer."""
 
+    def __init__(self, model: str | None = None) -> None:
+        self._model_override = model
+
     async def is_completion(self, text: str) -> bool:
         if not text or not text.strip():
             return False
-        api_key, model = _get_deepseek_settings()
+        api_key, default_model = _get_deepseek_settings()
+        model = self._model_override or default_model
         prompt = COMPLETION_DETECT_TEMPLATE.format(text=text)
         raw = await _async_chat(
             api_key, model,
@@ -257,12 +263,16 @@ class DeepSeekRouterClassifier:
     LLM-driven and multilingual — no English phrase tables on the live path.
     """
 
+    def __init__(self, model: str | None = None) -> None:
+        self._model_override = model
+
     async def classify_intent(self, text: str, cart_context: str, phase: str):
         from app.llm.port import IntentLabel
 
         if not text or not text.strip():
             return IntentLabel.NON_ACTIONABLE
-        api_key, model = _get_deepseek_settings()
+        api_key, default_model = _get_deepseek_settings()
+        model = self._model_override or default_model
         labels = ", ".join(label.value for label in IntentLabel)
         prompt = ROUTER_CLASSIFY_TEMPLATE.format(
             phase=phase,

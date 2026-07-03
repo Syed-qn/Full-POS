@@ -5,6 +5,18 @@ from app.llm.fake import FakeExtractor
 from app.llm.port import MenuExtractor
 
 
+def _deepseek_fallback_model(settings) -> str | None:
+    """The previous/faster DeepSeek model to fall back to on the live path, or None.
+
+    Same provider (Claude is never used for conversation). Only active when a
+    fallback model is configured and it differs from the primary model.
+    """
+    fb = (settings.deepseek_fallback_model or "").strip()
+    if fb and fb != settings.deepseek_model:
+        return fb
+    return None
+
+
 @lru_cache
 def get_menu_extractor() -> MenuExtractor:
     settings = get_settings()
@@ -98,6 +110,14 @@ def get_conversation_agent():
         return ClaudeConversationAgent()
     if settings.llm_provider == "deepseek":
         from app.llm.deepseek import DeepSeekConversationAgent
+        fb = _deepseek_fallback_model(settings)
+        if fb:
+            from app.llm.fallback import FallbackConversationAgent
+            return FallbackConversationAgent(
+                DeepSeekConversationAgent(),
+                DeepSeekConversationAgent(model=fb),
+                settings.llm_primary_timeout_s,
+            )
         return DeepSeekConversationAgent()
     from app.llm.fake import FakeConversationAgent
     return FakeConversationAgent()
@@ -111,6 +131,14 @@ def get_router_classifier():
         return ClaudeRouterClassifier()
     if settings.llm_provider == "deepseek":
         from app.llm.deepseek import DeepSeekRouterClassifier
+        fb = _deepseek_fallback_model(settings)
+        if fb:
+            from app.llm.fallback import FallbackRouterClassifier
+            return FallbackRouterClassifier(
+                DeepSeekRouterClassifier(),
+                DeepSeekRouterClassifier(model=fb),
+                settings.llm_primary_timeout_s,
+            )
         return DeepSeekRouterClassifier()
     from app.llm.router_fake import FakeRouterClassifier
     return FakeRouterClassifier()
@@ -123,6 +151,14 @@ def get_completion_detector():
         return ClaudeCompletionDetector()
     if settings.llm_provider == "deepseek":
         from app.llm.deepseek import DeepSeekCompletionDetector
+        fb = _deepseek_fallback_model(settings)
+        if fb:
+            from app.llm.fallback import FallbackCompletionDetector
+            return FallbackCompletionDetector(
+                DeepSeekCompletionDetector(),
+                DeepSeekCompletionDetector(model=fb),
+                settings.llm_primary_timeout_s,
+            )
         return DeepSeekCompletionDetector()
     from app.llm.fake import FakeCompletionDetector
     return FakeCompletionDetector()
