@@ -125,12 +125,40 @@ async def create_menu_from_upload(
             )
         )
     await session.flush()
+    # Auto-assign dish numbers so extracted dishes are always activatable (spec: dish
+    # number is mandatory). Keep any number Claude read off the menu; fill every gap/null
+    # with the next free sequential number — mirrors how "+ Add dish" assigns max+1 and
+    # hides the field in the UI, so the manager never has to type numbers by hand.
+    # Seed the "used" set with this restaurant's EXISTING dish numbers (other menu versions)
+    # too, so an auto-assigned number never collides with an old dish.
+    existing_numbers = set(
+        (
+            await session.scalars(
+                select(Dish.dish_number).where(
+                    Dish.restaurant_id == restaurant_id,
+                    Dish.dish_number.is_not(None),
+                )
+            )
+        ).all()
+    )
+    used_numbers = existing_numbers | {
+        d.dish_number for d in drafts if d.dish_number is not None
+    }
+    _counter = 0
     for d in drafts:
+        if d.dish_number is not None:
+            number = d.dish_number
+        else:
+            _counter += 1
+            while _counter in used_numbers:
+                _counter += 1
+            used_numbers.add(_counter)
+            number = _counter
         session.add(
             Dish(
                 menu_id=menu.id,
                 restaurant_id=restaurant_id,
-                dish_number=d.dish_number,
+                dish_number=number,
                 name=d.name,
                 name_normalized=normalize_name(d.name),
                 price_aed=d.price_aed,
