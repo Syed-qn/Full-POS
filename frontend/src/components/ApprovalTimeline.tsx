@@ -42,9 +42,10 @@ export function ApprovalTimeline({
         {STEPS.map((label, i) => {
           const stepNum = i + 1;
           const complete = active > stepNum || (status === "approved" && stepNum <= 3);
-          const current =
-            (status === "pending_meta" && stepNum === 2) ||
-            (status === "approved" && stepNum === 3);
+          // "current" is the in-progress step (pulsing ring). An approved step is
+          // finished, not in-progress, so it is only "complete" (clean green check)
+          // — never both, which previously drew a blue ring around a green dot.
+          const current = status === "pending_meta" && stepNum === 2;
           const failedStep = failed && label === "Pending";
           return (
             <div
