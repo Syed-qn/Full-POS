@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UnifiedMenu } from "../lib/unifiedMenuApi";
 import { Button } from "../components/Button";
 import { MenuReviewDialog } from "../components/MenuReviewDialog";
+import { Spinner } from "../components/Spinner";
 import { DishCard } from "../components/DishCard";
 import { DishEditModal } from "../components/DishEditModal";
 import { SectionBanner } from "../components/SectionBanner";
@@ -17,6 +18,8 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   const [dishes, setDishes] = useState<DishOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<MenuWithDiffOut | null>(null);
+  // True while Claude is extracting an uploaded menu (before the review dialog opens).
+  const [extracting, setExtracting] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(initialMenuId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<DishOut | "new" | null>(null);
@@ -184,11 +187,14 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
   async function onUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
+    setExtracting(true);
     try {
       const result = await uploadMenu(Array.from(files));
       setPending(result);
     } catch {
       setError("Menu upload failed.");
+    } finally {
+      setExtracting(false);
     }
   }
 
@@ -277,6 +283,20 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
   return (
     <div className={s.screen}>
+      {extracting && (
+        <div className={s.extractOverlay} role="status" aria-live="polite">
+          <div className={s.extractCard}>
+            <div className={s.extractSpin}>
+              <Spinner label="Reading menu" />
+            </div>
+            <h3 className={s.extractTitle}>Reading your menu…</h3>
+            <p className={s.extractInfo}>
+              Our AI is pulling out dish names, numbers, prices, and sizes. This usually
+              takes a few seconds — the review screen opens automatically when it's done.
+            </p>
+          </div>
+        </div>
+      )}
       {error && <SectionBanner tone="error" onDismiss={() => setError(null)}>{error}</SectionBanner>}
       <PageHeader
         title="Menu"
