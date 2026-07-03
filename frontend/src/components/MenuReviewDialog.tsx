@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Button } from "./Button";
 import { toast } from "./Toaster";
-import { patchDish, uploadDishImage } from "../lib/menuApi";
+import { deleteDish, patchDish, uploadDishImage } from "../lib/menuApi";
 import { ApiError } from "../lib/apiClient";
 import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import s from "./MenuReviewDialog.module.css";
@@ -51,9 +51,30 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
   }, [dishes]);
 
   const selected = dishes.find((d) => d.id === selectedId) ?? null;
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  // Meta requires a product image. Dishes with no photo can't publish to the
+  // WhatsApp catalogue, so we flag them and gate activation until they're set.
+  const hasPhoto = (d: DishOut) => Boolean((d.image_url ?? "").trim());
+  const missingPhotos = dishes.filter((d) => !hasPhoto(d)).length;
 
   function applyLocal(updated: DishOut) {
     setDishes((ds) => ds.map((d) => (d.id === updated.id ? updated : d)));
+  }
+
+  async function onRemove(id: number) {
+    setRemovingId(id);
+    try {
+      await deleteDish(menu.id, id);
+      const remaining = dishes.filter((d) => d.id !== id);
+      setDishes(remaining);
+      if (selectedId === id) setSelectedId(remaining[0]?.id ?? null);
+      toast("Dish removed.");
+    } catch (e) {
+      toast(e instanceof ApiError ? e.detail : "Could not remove dish.", "error");
+    } finally {
+      setRemovingId(null);
+    }
   }
 
   return (
@@ -79,17 +100,30 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
                   <span className={s.listGroupCount}>{items.length}</span>
                 </div>
                 {items.map((d) => (
-                  <button
+                  <div
                     key={d.id}
                     className={`${s.listItem} ${d.id === selectedId ? s.listItemActive : ""}`}
-                    onClick={() => setSelectedId(d.id)}
                   >
-                    <span className={s.listItemName}>
-                      {d.dish_number != null && <span className={s.listNum}>{d.dish_number}</span>}
-                      {d.name}
-                    </span>
-                    <span className={s.listItemPrice}>{d.price_aed ? `AED ${d.price_aed}` : "—"}</span>
-                  </button>
+                    <button className={s.listItemMain} onClick={() => setSelectedId(d.id)}>
+                      <span className={s.listItemName}>
+                        {d.dish_number != null && <span className={s.listNum}>{d.dish_number}</span>}
+                        {!hasPhoto(d) && (
+                          <span className={s.noPhoto} title="No photo yet — needed to publish">📷</span>
+                        )}
+                        {d.name}
+                      </span>
+                      <span className={s.listItemPrice}>{d.price_aed ? `AED ${d.price_aed}` : "—"}</span>
+                    </button>
+                    <button
+                      className={s.listItemRemove}
+                      onClick={() => onRemove(d.id)}
+                      disabled={removingId === d.id}
+                      aria-label={`Remove ${d.name}`}
+                      title="Remove dish"
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </div>
             ))}
@@ -112,10 +146,16 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
         </div>
 
         <footer className={s.footer}>
-          {hasErrors && <span className={s.blocked}>Resolve extraction errors before activating.</span>}
+          {hasErrors ? (
+            <span className={s.blocked}>Resolve extraction errors before activating.</span>
+          ) : missingPhotos > 0 ? (
+            <span className={s.blocked}>
+              📷 {missingPhotos} dish{missingPhotos === 1 ? "" : "es"} need a photo before publishing.
+            </span>
+          ) : null}
           <div className={s.footerRight}>
             <Button variant="ghost" onClick={onClose}>Discard</Button>
-            <Button onClick={onConfirm} disabled={confirming || hasErrors}>
+            <Button onClick={onConfirm} disabled={confirming || hasErrors || missingPhotos > 0}>
               {confirming ? "Activating…" : "Confirm & Activate"}
             </Button>
           </div>
