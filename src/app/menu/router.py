@@ -30,22 +30,43 @@ from app.catalog.sync_service import auto_publish_to_meta, unpublish_from_meta
 from app.okf.producer import refresh_okf_for_restaurant
 
 
+# Keep strong refs to detached background tasks so the event loop doesn't GC them mid-run.
+_BG_PUBLISH_TASKS: set = set()
+
+
+async def _publish_to_meta_bg(restaurant_id: int) -> None:
+    """Publish the menu to the Meta catalogue on its OWN DB session, off the request path.
+    Meta HTTP calls carry 30–60s timeouts; awaiting them inline made the manager's dish
+    save hang until Meta answered. Fire-and-forget + best-effort — any failure is swallowed
+    and re-attempted on the next dish mutation (or on menu activation)."""
+    from app.db import async_session_factory
+
+    try:
+        async with async_session_factory() as session:
+            await auto_publish_to_meta(session, restaurant_id=restaurant_id)
+            await session.commit()
+    except Exception:  # noqa: BLE001 — a background push must never surface anywhere
+        pass
+
+
 async def _refresh_grounding(session: AsyncSession, restaurant_id: int) -> None:
     """Run after a dish mutation on these inline endpoints (which bypass activate_menu):
-      1. rebuild OKF menu/policy docs so the bot grounds on the live menu;
-      2. auto-publish the menu to the Meta catalogue so the dish edit shows on WhatsApp.
-    Both are best-effort — neither a grounding refresh nor a Meta push may fail the
-    manager's edit. Each is committed independently so one failing can't undo the other."""
+      1. rebuild OKF menu/policy docs INLINE so the bot grounds on the live menu at once;
+      2. publish the menu to the Meta catalogue in the BACKGROUND so a slow Meta round-trip
+         never makes the manager's save hang (the save returns as soon as the DB commit +
+         grounding are done).
+    Both are best-effort — neither may fail the manager's edit."""
+    import asyncio
+
     try:
         await refresh_okf_for_restaurant(session, restaurant_id=restaurant_id)
         await session.commit()
     except Exception:  # noqa: BLE001
         await session.rollback()
-    try:
-        await auto_publish_to_meta(session, restaurant_id=restaurant_id)
-        await session.commit()
-    except Exception:  # noqa: BLE001
-        await session.rollback()
+    # Detached: return to the caller immediately; the push completes on the event loop.
+    task = asyncio.create_task(_publish_to_meta_bg(restaurant_id))
+    _BG_PUBLISH_TASKS.add(task)
+    task.add_done_callback(_BG_PUBLISH_TASKS.discard)
 
 router = APIRouter(prefix="/api/v1", tags=["menu"])
 
