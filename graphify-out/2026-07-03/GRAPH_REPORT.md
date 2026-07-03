@@ -1,16 +1,16 @@
 # Graph Report - Restaurant Whatsapp Service  (2026-07-03)
 
 ## Corpus Check
-- 880 files · ~762,155 words
+- 887 files · ~769,429 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11358 nodes · 35415 edges · 1133 communities (590 shown, 543 thin omitted)
-- Extraction: 47% EXTRACTED · 53% INFERRED · 0% AMBIGUOUS · INFERRED: 18594 edges (avg confidence: 0.54)
+- 11210 nodes · 33021 edges · 980 communities (579 shown, 401 thin omitted)
+- Extraction: 51% EXTRACTED · 49% INFERRED · 0% AMBIGUOUS · INFERRED: 16161 edges (avg confidence: 0.55)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d286ee86`
+- Built from commit: `e984abb5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -369,11 +369,13 @@
 - [[_COMMUNITY_Community 413|Community 413]]
 - [[_COMMUNITY_Community 414|Community 414]]
 - [[_COMMUNITY_Community 415|Community 415]]
+- [[_COMMUNITY_Community 441|Community 441]]
+- [[_COMMUNITY_Community 442|Community 442]]
+- [[_COMMUNITY_Community 443|Community 443]]
 - [[_COMMUNITY_Community 445|Community 445]]
 - [[_COMMUNITY_Community 451|Community 451]]
 - [[_COMMUNITY_Community 452|Community 452]]
 - [[_COMMUNITY_Community 453|Community 453]]
-- [[_COMMUNITY_Community 505|Community 505]]
 - [[_COMMUNITY_Community 506|Community 506]]
 - [[_COMMUNITY_Community 507|Community 507]]
 - [[_COMMUNITY_Community 508|Community 508]]
@@ -402,13 +404,10 @@
 - [[_COMMUNITY_Community 676|Community 676]]
 - [[_COMMUNITY_Community 682|Community 682]]
 - [[_COMMUNITY_Community 688|Community 688]]
-- [[_COMMUNITY_Community 690|Community 690]]
 - [[_COMMUNITY_Community 691|Community 691]]
 - [[_COMMUNITY_Community 698|Community 698]]
-- [[_COMMUNITY_Community 700|Community 700]]
 - [[_COMMUNITY_Community 725|Community 725]]
 - [[_COMMUNITY_Community 727|Community 727]]
-- [[_COMMUNITY_Community 728|Community 728]]
 - [[_COMMUNITY_Community 731|Community 731]]
 - [[_COMMUNITY_Community 734|Community 734]]
 - [[_COMMUNITY_Community 747|Community 747]]
@@ -452,10 +451,7 @@
 - [[_COMMUNITY_Community 1161|Community 1161]]
 - [[_COMMUNITY_Community 1192|Community 1192]]
 - [[_COMMUNITY_Community 1194|Community 1194]]
-- [[_COMMUNITY_Community 1196|Community 1196]]
-- [[_COMMUNITY_Community 1197|Community 1197]]
 - [[_COMMUNITY_Community 1199|Community 1199]]
-- [[_COMMUNITY_Community 1209|Community 1209]]
 - [[_COMMUNITY_Community 1212|Community 1212]]
 - [[_COMMUNITY_Community 1224|Community 1224]]
 - [[_COMMUNITY_Community 1225|Community 1225]]
@@ -482,9 +478,7 @@
 - [[_COMMUNITY_Community 1384|Community 1384]]
 - [[_COMMUNITY_Community 1385|Community 1385]]
 - [[_COMMUNITY_Community 1386|Community 1386]]
-- [[_COMMUNITY_Community 1388|Community 1388]]
 - [[_COMMUNITY_Community 1414|Community 1414]]
-- [[_COMMUNITY_Community 1416|Community 1416]]
 - [[_COMMUNITY_Community 1426|Community 1426]]
 - [[_COMMUNITY_Community 1427|Community 1427]]
 - [[_COMMUNITY_Community 1482|Community 1482]]
@@ -496,9 +490,7 @@
 - [[_COMMUNITY_Community 1533|Community 1533]]
 - [[_COMMUNITY_Community 1535|Community 1535]]
 - [[_COMMUNITY_Community 1536|Community 1536]]
-- [[_COMMUNITY_Community 1538|Community 1538]]
 - [[_COMMUNITY_Community 1540|Community 1540]]
-- [[_COMMUNITY_Community 1549|Community 1549]]
 - [[_COMMUNITY_Community 1556|Community 1556]]
 - [[_COMMUNITY_Community 1559|Community 1559]]
 - [[_COMMUNITY_Community 1565|Community 1565]]
@@ -512,13 +504,11 @@
 - [[_COMMUNITY_Community 1641|Community 1641]]
 - [[_COMMUNITY_Community 1644|Community 1644]]
 - [[_COMMUNITY_Community 1656|Community 1656]]
-- [[_COMMUNITY_Community 1660|Community 1660]]
 - [[_COMMUNITY_Community 1663|Community 1663]]
 - [[_COMMUNITY_Community 1666|Community 1666]]
 - [[_COMMUNITY_Community 1672|Community 1672]]
 - [[_COMMUNITY_Community 1681|Community 1681]]
 - [[_COMMUNITY_Community 1689|Community 1689]]
-- [[_COMMUNITY_Community 1720|Community 1720]]
 - [[_COMMUNITY_Community 1746|Community 1746]]
 - [[_COMMUNITY_Community 1752|Community 1752]]
 - [[_COMMUNITY_Community 1756|Community 1756]]
@@ -529,7 +519,6 @@
 - [[_COMMUNITY_Community 2023|Community 2023]]
 - [[_COMMUNITY_Community 2055|Community 2055]]
 - [[_COMMUNITY_Community 2114|Community 2114]]
-- [[_COMMUNITY_Community 2128|Community 2128]]
 - [[_COMMUNITY_Community 2135|Community 2135]]
 - [[_COMMUNITY_Community 2136|Community 2136]]
 - [[_COMMUNITY_Community 2137|Community 2137]]
@@ -537,7 +526,6 @@
 - [[_COMMUNITY_Community 2151|Community 2151]]
 - [[_COMMUNITY_Community 2153|Community 2153]]
 - [[_COMMUNITY_Community 2154|Community 2154]]
-- [[_COMMUNITY_Community 2171|Community 2171]]
 - [[_COMMUNITY_Community 2175|Community 2175]]
 - [[_COMMUNITY_Community 2192|Community 2192]]
 - [[_COMMUNITY_Community 2219|Community 2219]]
@@ -553,200 +541,69 @@
 - [[_COMMUNITY_Community 2365|Community 2365]]
 - [[_COMMUNITY_Community 2368|Community 2368]]
 - [[_COMMUNITY_Community 2374|Community 2374]]
-- [[_COMMUNITY_Community 2379|Community 2379]]
 - [[_COMMUNITY_Community 2384|Community 2384]]
 - [[_COMMUNITY_Community 2401|Community 2401]]
 - [[_COMMUNITY_Community 2419|Community 2419]]
-- [[_COMMUNITY_Community 2420|Community 2420]]
 - [[_COMMUNITY_Community 2422|Community 2422]]
-- [[_COMMUNITY_Community 2425|Community 2425]]
-- [[_COMMUNITY_Community 2426|Community 2426]]
-- [[_COMMUNITY_Community 2427|Community 2427]]
-- [[_COMMUNITY_Community 2428|Community 2428]]
 - [[_COMMUNITY_Community 2430|Community 2430]]
-- [[_COMMUNITY_Community 2431|Community 2431]]
-- [[_COMMUNITY_Community 2432|Community 2432]]
-- [[_COMMUNITY_Community 2433|Community 2433]]
-- [[_COMMUNITY_Community 2434|Community 2434]]
-- [[_COMMUNITY_Community 2437|Community 2437]]
 - [[_COMMUNITY_Community 2439|Community 2439]]
-- [[_COMMUNITY_Community 2440|Community 2440]]
-- [[_COMMUNITY_Community 2443|Community 2443]]
-- [[_COMMUNITY_Community 2444|Community 2444]]
 - [[_COMMUNITY_Community 2445|Community 2445]]
-- [[_COMMUNITY_Community 2447|Community 2447]]
-- [[_COMMUNITY_Community 2448|Community 2448]]
 - [[_COMMUNITY_Community 2449|Community 2449]]
-- [[_COMMUNITY_Community 2451|Community 2451]]
-- [[_COMMUNITY_Community 2452|Community 2452]]
 - [[_COMMUNITY_Community 2453|Community 2453]]
-- [[_COMMUNITY_Community 2454|Community 2454]]
-- [[_COMMUNITY_Community 2457|Community 2457]]
-- [[_COMMUNITY_Community 2461|Community 2461]]
-- [[_COMMUNITY_Community 2462|Community 2462]]
 - [[_COMMUNITY_Community 2464|Community 2464]]
-- [[_COMMUNITY_Community 2465|Community 2465]]
-- [[_COMMUNITY_Community 2466|Community 2466]]
 - [[_COMMUNITY_Community 2467|Community 2467]]
-- [[_COMMUNITY_Community 2468|Community 2468]]
 - [[_COMMUNITY_Community 2470|Community 2470]]
-- [[_COMMUNITY_Community 2471|Community 2471]]
 - [[_COMMUNITY_Community 2472|Community 2472]]
-- [[_COMMUNITY_Community 2473|Community 2473]]
-- [[_COMMUNITY_Community 2474|Community 2474]]
-- [[_COMMUNITY_Community 2476|Community 2476]]
-- [[_COMMUNITY_Community 2477|Community 2477]]
-- [[_COMMUNITY_Community 2478|Community 2478]]
 - [[_COMMUNITY_Community 2479|Community 2479]]
-- [[_COMMUNITY_Community 2480|Community 2480]]
 - [[_COMMUNITY_Community 2481|Community 2481]]
-- [[_COMMUNITY_Community 2482|Community 2482]]
-- [[_COMMUNITY_Community 2483|Community 2483]]
 - [[_COMMUNITY_Community 2485|Community 2485]]
 - [[_COMMUNITY_Community 2487|Community 2487]]
 - [[_COMMUNITY_Community 2489|Community 2489]]
-- [[_COMMUNITY_Community 2490|Community 2490]]
-- [[_COMMUNITY_Community 2493|Community 2493]]
-- [[_COMMUNITY_Community 2494|Community 2494]]
 - [[_COMMUNITY_Community 2495|Community 2495]]
-- [[_COMMUNITY_Community 2498|Community 2498]]
-- [[_COMMUNITY_Community 2500|Community 2500]]
 - [[_COMMUNITY_Community 2502|Community 2502]]
-- [[_COMMUNITY_Community 2504|Community 2504]]
-- [[_COMMUNITY_Community 2506|Community 2506]]
-- [[_COMMUNITY_Community 2507|Community 2507]]
-- [[_COMMUNITY_Community 2510|Community 2510]]
-- [[_COMMUNITY_Community 2511|Community 2511]]
-- [[_COMMUNITY_Community 2513|Community 2513]]
-- [[_COMMUNITY_Community 2514|Community 2514]]
 - [[_COMMUNITY_Community 2516|Community 2516]]
 - [[_COMMUNITY_Community 2517|Community 2517]]
-- [[_COMMUNITY_Community 2518|Community 2518]]
-- [[_COMMUNITY_Community 2519|Community 2519]]
 - [[_COMMUNITY_Community 2521|Community 2521]]
 - [[_COMMUNITY_Community 2522|Community 2522]]
-- [[_COMMUNITY_Community 2523|Community 2523]]
-- [[_COMMUNITY_Community 2524|Community 2524]]
-- [[_COMMUNITY_Community 2526|Community 2526]]
-- [[_COMMUNITY_Community 2529|Community 2529]]
-- [[_COMMUNITY_Community 2530|Community 2530]]
-- [[_COMMUNITY_Community 2534|Community 2534]]
-- [[_COMMUNITY_Community 2535|Community 2535]]
-- [[_COMMUNITY_Community 2536|Community 2536]]
-- [[_COMMUNITY_Community 2537|Community 2537]]
-- [[_COMMUNITY_Community 2541|Community 2541]]
 - [[_COMMUNITY_Community 2542|Community 2542]]
-- [[_COMMUNITY_Community 2543|Community 2543]]
-- [[_COMMUNITY_Community 2545|Community 2545]]
-- [[_COMMUNITY_Community 2546|Community 2546]]
-- [[_COMMUNITY_Community 2547|Community 2547]]
-- [[_COMMUNITY_Community 2548|Community 2548]]
-- [[_COMMUNITY_Community 2554|Community 2554]]
-- [[_COMMUNITY_Community 2557|Community 2557]]
-- [[_COMMUNITY_Community 2558|Community 2558]]
 - [[_COMMUNITY_Community 2563|Community 2563]]
-- [[_COMMUNITY_Community 2564|Community 2564]]
 - [[_COMMUNITY_Community 2565|Community 2565]]
 - [[_COMMUNITY_Community 2566|Community 2566]]
-- [[_COMMUNITY_Community 2567|Community 2567]]
 - [[_COMMUNITY_Community 2568|Community 2568]]
-- [[_COMMUNITY_Community 2571|Community 2571]]
 - [[_COMMUNITY_Community 2572|Community 2572]]
-- [[_COMMUNITY_Community 2573|Community 2573]]
 - [[_COMMUNITY_Community 2574|Community 2574]]
-- [[_COMMUNITY_Community 2576|Community 2576]]
-- [[_COMMUNITY_Community 2579|Community 2579]]
-- [[_COMMUNITY_Community 2581|Community 2581]]
-- [[_COMMUNITY_Community 2582|Community 2582]]
 - [[_COMMUNITY_Community 2583|Community 2583]]
 - [[_COMMUNITY_Community 2584|Community 2584]]
-- [[_COMMUNITY_Community 2585|Community 2585]]
 - [[_COMMUNITY_Community 2587|Community 2587]]
-- [[_COMMUNITY_Community 2589|Community 2589]]
-- [[_COMMUNITY_Community 2590|Community 2590]]
 - [[_COMMUNITY_Community 2592|Community 2592]]
 - [[_COMMUNITY_Community 2594|Community 2594]]
-- [[_COMMUNITY_Community 2595|Community 2595]]
-- [[_COMMUNITY_Community 2596|Community 2596]]
-- [[_COMMUNITY_Community 2597|Community 2597]]
-- [[_COMMUNITY_Community 2598|Community 2598]]
-- [[_COMMUNITY_Community 2599|Community 2599]]
-- [[_COMMUNITY_Community 2601|Community 2601]]
-- [[_COMMUNITY_Community 2602|Community 2602]]
 - [[_COMMUNITY_Community 2603|Community 2603]]
 - [[_COMMUNITY_Community 2605|Community 2605]]
-- [[_COMMUNITY_Community 2607|Community 2607]]
-- [[_COMMUNITY_Community 2610|Community 2610]]
-- [[_COMMUNITY_Community 2613|Community 2613]]
 - [[_COMMUNITY_Community 2614|Community 2614]]
 - [[_COMMUNITY_Community 2616|Community 2616]]
 - [[_COMMUNITY_Community 2618|Community 2618]]
 - [[_COMMUNITY_Community 2619|Community 2619]]
-- [[_COMMUNITY_Community 2620|Community 2620]]
 - [[_COMMUNITY_Community 2621|Community 2621]]
-- [[_COMMUNITY_Community 2623|Community 2623]]
 - [[_COMMUNITY_Community 2625|Community 2625]]
-- [[_COMMUNITY_Community 2626|Community 2626]]
-- [[_COMMUNITY_Community 2627|Community 2627]]
-- [[_COMMUNITY_Community 2629|Community 2629]]
-- [[_COMMUNITY_Community 2632|Community 2632]]
-- [[_COMMUNITY_Community 2633|Community 2633]]
-- [[_COMMUNITY_Community 2634|Community 2634]]
 - [[_COMMUNITY_Community 2635|Community 2635]]
-- [[_COMMUNITY_Community 2639|Community 2639]]
 - [[_COMMUNITY_Community 2640|Community 2640]]
 - [[_COMMUNITY_Community 2642|Community 2642]]
-- [[_COMMUNITY_Community 2643|Community 2643]]
-- [[_COMMUNITY_Community 2644|Community 2644]]
-- [[_COMMUNITY_Community 2647|Community 2647]]
-- [[_COMMUNITY_Community 2648|Community 2648]]
 - [[_COMMUNITY_Community 2649|Community 2649]]
-- [[_COMMUNITY_Community 2650|Community 2650]]
-- [[_COMMUNITY_Community 2652|Community 2652]]
-- [[_COMMUNITY_Community 2653|Community 2653]]
-- [[_COMMUNITY_Community 2657|Community 2657]]
 - [[_COMMUNITY_Community 2658|Community 2658]]
 - [[_COMMUNITY_Community 2659|Community 2659]]
-- [[_COMMUNITY_Community 2663|Community 2663]]
-- [[_COMMUNITY_Community 2666|Community 2666]]
-- [[_COMMUNITY_Community 2670|Community 2670]]
-- [[_COMMUNITY_Community 2671|Community 2671]]
-- [[_COMMUNITY_Community 2672|Community 2672]]
 - [[_COMMUNITY_Community 2673|Community 2673]]
-- [[_COMMUNITY_Community 2675|Community 2675]]
 - [[_COMMUNITY_Community 2676|Community 2676]]
 - [[_COMMUNITY_Community 2680|Community 2680]]
-- [[_COMMUNITY_Community 2683|Community 2683]]
-- [[_COMMUNITY_Community 2685|Community 2685]]
-- [[_COMMUNITY_Community 2686|Community 2686]]
 - [[_COMMUNITY_Community 2687|Community 2687]]
-- [[_COMMUNITY_Community 2688|Community 2688]]
 - [[_COMMUNITY_Community 2689|Community 2689]]
-- [[_COMMUNITY_Community 2690|Community 2690]]
-- [[_COMMUNITY_Community 2691|Community 2691]]
-- [[_COMMUNITY_Community 2694|Community 2694]]
-- [[_COMMUNITY_Community 2695|Community 2695]]
-- [[_COMMUNITY_Community 2696|Community 2696]]
-- [[_COMMUNITY_Community 2698|Community 2698]]
-- [[_COMMUNITY_Community 2699|Community 2699]]
-- [[_COMMUNITY_Community 2700|Community 2700]]
-- [[_COMMUNITY_Community 2702|Community 2702]]
 - [[_COMMUNITY_Community 2703|Community 2703]]
 - [[_COMMUNITY_Community 2704|Community 2704]]
-- [[_COMMUNITY_Community 2705|Community 2705]]
-- [[_COMMUNITY_Community 2706|Community 2706]]
 - [[_COMMUNITY_Community 2708|Community 2708]]
-- [[_COMMUNITY_Community 2709|Community 2709]]
 - [[_COMMUNITY_Community 2710|Community 2710]]
-- [[_COMMUNITY_Community 2711|Community 2711]]
-- [[_COMMUNITY_Community 2715|Community 2715]]
 - [[_COMMUNITY_Community 2716|Community 2716]]
 - [[_COMMUNITY_Community 2718|Community 2718]]
 - [[_COMMUNITY_Community 2720|Community 2720]]
-- [[_COMMUNITY_Community 2721|Community 2721]]
 - [[_COMMUNITY_Community 2722|Community 2722]]
-- [[_COMMUNITY_Community 2724|Community 2724]]
-- [[_COMMUNITY_Community 2725|Community 2725]]
 - [[_COMMUNITY_Community 2726|Community 2726]]
 - [[_COMMUNITY_Community 2727|Community 2727]]
 - [[_COMMUNITY_Community 2729|Community 2729]]
@@ -754,18 +611,9 @@
 - [[_COMMUNITY_Community 2732|Community 2732]]
 - [[_COMMUNITY_Community 2737|Community 2737]]
 - [[_COMMUNITY_Community 2738|Community 2738]]
-- [[_COMMUNITY_Community 2739|Community 2739]]
 - [[_COMMUNITY_Community 2740|Community 2740]]
-- [[_COMMUNITY_Community 2742|Community 2742]]
 - [[_COMMUNITY_Community 2743|Community 2743]]
-- [[_COMMUNITY_Community 2745|Community 2745]]
-- [[_COMMUNITY_Community 2746|Community 2746]]
-- [[_COMMUNITY_Community 2747|Community 2747]]
 - [[_COMMUNITY_Community 2748|Community 2748]]
-- [[_COMMUNITY_Community 2749|Community 2749]]
-- [[_COMMUNITY_Community 2751|Community 2751]]
-- [[_COMMUNITY_Community 2752|Community 2752]]
-- [[_COMMUNITY_Community 2753|Community 2753]]
 - [[_COMMUNITY_Community 2754|Community 2754]]
 - [[_COMMUNITY_Community 2755|Community 2755]]
 - [[_COMMUNITY_Community 2756|Community 2756]]
@@ -1004,28 +852,28 @@
 - [[_COMMUNITY_Community 2990|Community 2990]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `Order` - 867 edges
-2. `Customer` - 738 edges
-3. `Restaurant` - 704 edges
-4. `Dish` - 629 edges
-5. `Menu` - 596 edges
-6. `OrderItem` - 572 edges
-7. `CustomerAddress` - 540 edges
-8. `Rider` - 509 edges
-9. `OrderStatus` - 484 edges
-10. `Conversation` - 461 edges
+1. `Order` - 768 edges
+2. `Customer` - 641 edges
+3. `Restaurant` - 605 edges
+4. `Dish` - 534 edges
+5. `Menu` - 502 edges
+6. `OrderItem` - 477 edges
+7. `OutboxMessage` - 451 edges
+8. `CustomerAddress` - 445 edges
+9. `Rider` - 414 edges
+10. `OrderStatus` - 389 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `audit/service.py:record_audit` --semantically_similar_to--> `Append-Only Ledger`  [INFERRED] [semantically similar]
   src/app/audit/service.py → docs/research/wallet-coupon-financial-design.md
 - `WhatsApp Ordering Platform` --semantically_similar_to--> `Understanding Log`  [INFERRED] [semantically similar]
   docs/partners/cratis-integration-requirements.md → understanding.txt
-- `Customer Loyalty Program Analysis` --references--> `ordering/models.py (Customer aggregates)`  [EXTRACTED]
-  docs/research/loyalty-program-analysis.md → src/app/ordering/models.py
-- `Post-Delivery Complaints Analysis` --references--> `sla/monitor.py (SLA late-coupon)`  [EXTRACTED]
-  docs/research/post-delivery-complaints-analysis.md → src/app/sla/monitor.py
+- `outbox/service.py:enqueue_message` --references--> `Idempotency Keys`  [EXTRACTED]
+  src/app/outbox/service.py → docs/research/wallet-coupon-financial-design.md
 - `Ignore tables that exist in the DB but not in our models.      The postgis/postg` --uses--> `Base`  [INFERRED]
   alembic/env.py → src/app/db.py
+- `test_negated_menu_phrases_are_not_menu_requests()` --calls--> `_is_menu_request()`  [INFERRED]
+  tests/conversation/test_kitchen_modifier_flow.py → src/app/conversation/engine.py
 
 ## Import Cycles
 - 1-file cycle: `src/app/main.py -> src/app/main.py`
@@ -1049,27 +897,27 @@
 - 1-file cycle: `src/app/sla/monitor.py -> src/app/sla/monitor.py`
 - 1-file cycle: `src/app/dispatch/candidate_pool.py -> src/app/dispatch/candidate_pool.py`
 
-## Communities (1133 total, 543 thin omitted)
+## Communities (980 total, 401 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.14
-Nodes (179): CatalogProduct, Send uploaded menu files (image/PDF) then a short prompt; fall back to text menu, Return the customer's in-progress cart order to batch with a resale accept., Customer accepted a resale offer. If they have a saved address, sell it now, True if the LLM reply appears to list dishes NOT in the tenant's catalogue., Merge keys into conv.state (JSONB) without losing existing keys., Send a tappable URL button (CTA URL) to the customer — e.g. the live     trackin, Ask for the delivery pin via WhatsApp's NATIVE location-request message — a (+171 more)
+Cohesion: 0.11
+Nodes (121): CatalogProduct, True when ``dish`` must never be shown/ordered on WhatsApp.      Two independent, True if the LLM reply appears to list dishes NOT in the tenant's catalogue., Unified menu: send WhatsApp catalogue cards when synced; else text menu.      Cu, Remove lines that contain an AED amount from LLM free text on mutating turns., Title-cased dish name to echo in an off-menu reply, or '' if nothing usable., True when the customer wants to finish ordering (not a dish name)., Proceed to address only when the draft cart has items; otherwise block checkout. (+113 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.03
-Nodes (355): Base, BatchPlanSettings, RiderShiftReconciliation, COD ledger tests (spec §4.4.4 / §3).  Schema note: orders carry no ``dropoff_lat, Backward-compatible voice-note fetch for older clients., Shape outbox payload for dashboard Message rows (matches engine _send_*)., Mirror outbound WhatsApp sends to the customer's dashboard thread.      Skips ri, Best human-readable string for a stored message payload.      Outbound rows stor (+347 more)
+Cohesion: 0.04
+Nodes (290): BatchPlanSettings, COD ledger tests (spec §4.4.4 / §3).  Schema note: orders carry no ``dropoff_lat, Backward-compatible voice-note fetch for older clients., Regression: cancelling after confirm must actually cancel + release the rider., Post-cook cancel → on_resale internally, but customer copy stays simple., In-chat manager actions: customer context + manual wallet credit + issue coupon., Redeem options at checkout — shown only to customers who have wallet credit or a, Rider button flow (spec §4.4.3-4.4.4): Orders Picked / Delivered drive the FSM. (+282 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.11
-Nodes (93): If a re-plan shifted an order's ETA by more than 5 min, message the customer and, Preset marketing automation evaluators (Phase 4).  Four fixed presets — welcome,, Seed or refresh day3 recurring schedule after a delivered order., Advance recurring state after a successful send., Apply optional segment override to a customer id list., Customers lapsed beyond threshold, respecting cooldown window., Insert dedup ledger row; returns True if inserted., Clamp preset config knobs to allowed ranges. (+85 more)
+Cohesion: 0.10
+Nodes (106): Base, TimestampMixin, Base, A product mirrored from the restaurant's Meta Commerce catalogue.      Populated, End-of-shift COD cash reconciliation for a rider., CouponRedemption, A discount coupon.      Two shapes share this table:       * **apology** (kind=', Append-only ledger of coupon uses — THE source of truth for limit     enforcemen (+98 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.05
-Nodes (66): Extract first text block; guard truncation/empty content (error contract: Runtim, Production describer via Claude API. Max 3 lines, never includes price., Production intent classifier via Claude API., Production W4 top-level router via Claude API (single enum, multilingual)., AI-powered full-conversation agent for customer ordering via WhatsApp., Phase-aware AI ordering assistant using DeepSeek function calling., Production completion detector: one tiny async chat call, yes/no answer., Production W4 top-level router: one async chat call, single enum answer.      LL (+58 more)
+Cohesion: 0.13
+Nodes (23): FakeConversationAgent, FakeExtractor, Test double -- returns deterministic responses based on last user message., _closing(), 2 biryani' must emit add_item (cart_add delta), NOT update_qty., Every Fake output must be a clean engine-legacy result, never a raw canonical di, address' contains 'add' as substring — must NOT yield add_item at confirm phase., don't add more' is a refusal, not a cart_add command. (+15 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.15
-Nodes (65): BaseModel, Manager-dashboard API for WhatsApp conversations.  Backs the React Conversations, CouponCreateIn, CouponIssueIn, CouponOut, Manually trigger the dispatch engine for this restaurant., Batch rate, avg stops, and engine fallback % for the manager dashboard., Active batch polylines and SLA pressure rings for the live ops map. (+57 more)
+Cohesion: 0.21
+Nodes (54): BaseModel, Manager-dashboard API for WhatsApp conversations.  Backs the React Conversations, CouponCreateIn, CouponIssueIn, CouponOut, Delete a template — removes it from Meta (best-effort) and hides it from the, AI-draft a compliant template body from a plain-English offer (DSC-style)., Lint + submit a draft template to Meta for approval. (+46 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.06
@@ -1089,7 +937,7 @@ Nodes (47): Biryani Correction Flow Root Cause, DB precedence, DB-H12, DB-H13, D
 
 ### Community 9 - "Community 9"
 Cohesion: 0.14
-Nodes (40): Bidirectional sync: pull Meta → link dishes → push dish-only → pull again., Exception, Set the restaurant's WhatsApp routing phone to the number it just connected., Read this restaurant's Meta/WhatsApp connection (token never returned)., Disconnect this restaurant's WhatsApp (Meta) account: clears its stored     cred, Embedded Signup popup result → exchange the code for this restaurant's own     l, Diagnose delivery-distance accuracy in the live environment.      Without params, Latest location ping for the live-tracking map. 200 with the pin, 200 with     n (+32 more)
+Nodes (38): Bidirectional sync: pull Meta → link dishes → push dish-only → pull again., Exception, Set the restaurant's WhatsApp routing phone to the number it just connected., Read this restaurant's Meta/WhatsApp connection (token never returned)., Disconnect this restaurant's WhatsApp (Meta) account: clears its stored     cred, Embedded Signup popup result → exchange the code for this restaurant's own     l, Diagnose delivery-distance accuracy in the live environment.      Without params, Latest location ping for the live-tracking map. 200 with the pin, 200 with     n (+30 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.08
@@ -1100,20 +948,20 @@ Cohesion: 0.07
 Nodes (27): 6. Implementation phases, Phase 0 — Quick wins (3–5 days, no schema), Phase 1 — OR-Tools as production default (1 week), Phase 2 — Prep-aware dispatch (1.5 weeks), Phase 3 — Zone & corridor model (1.5 weeks), Phase 4 — Dynamic re-batch until pickup (2 weeks), Phase 5 — Ops & simulation (1 week), Phase 6 — ML layer (optional, 2–3 weeks) (+19 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.11
-Nodes (33): Audit System, COD Payment, llm/deepseek.py (bot identity prompt), Complaint Ticket System Design, Manager Resolution, Resolution Actions, Post-Delivery Complaints Analysis, Complaint Record / Model (+25 more)
+Cohesion: 0.13
+Nodes (27): Audit System, COD Payment, Complaint Ticket System Design, Manager Resolution, Resolution Actions, Multi-Tenant Isolation, Order FSM, Outbox System (+19 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.13
-Nodes (18): FakePushProvider, ExpoPushProvider, Expo Push API provider (production).  Sends a single push via https://exp.host/-, _get_fake_provider(), get_fake_push_provider(), get_push_provider(), Push provider selection. ``APP_PUSH_PROVIDER`` = fake | expo., FastAPI/Celery dependency. Returns FakePushProvider or ExpoPushProvider. (+10 more)
+Cohesion: 0.14
+Nodes (18): FakePushProvider, ExpoPushProvider, Expo Push API provider (production).  Sends a single push via https://exp.host/-, _get_fake_provider(), get_fake_push_provider(), get_push_provider(), Push provider selection. ``APP_PUSH_PROVIDER`` = fake | expo., Singleton FakePushProvider so tests can read its ``sent`` list. (+10 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.08
-Nodes (60): CatalogReadError, CatalogWriteError, fetch_catalog_products(), is_product_sendable(), MetaProduct, True when WhatsApp can include this product in an interactive product_list., Read every product in ``catalog_id`` from Meta. Raises CatalogReadError on a, Raised when the Graph API rejects the catalogue read (bad token / perms / id). (+52 more)
+Cohesion: 0.13
+Nodes (35): CatalogReadError, CatalogWriteError, MetaProduct, Raised when the Graph API rejects the catalogue read (bad token / perms / id)., Raised when pushing products to Meta fails., Rebuild OKF menu/policy docs after a Meta-catalog sync writes/updates dishes,, Send the catalog (tappable product cards) to a phone. For testing the flow., Upsert local ``catalog_products`` from pushed dishes (don't wait for Meta re-pul (+27 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.13
-Nodes (15): Audit, Complaint Detection, Manager Dashboard, Ticket, Ticket FSM, migration f1a2b3c4d5e6, src/app/wallet/ (WalletAccount, WalletEntry), Idempotency + SELECT FOR UPDATE prevent double-spend (+7 more)
+Cohesion: 0.11
+Nodes (20): frontend couponsApi + CouponsScreen, src/app/coupons/ (Coupon, CouponRedemption), app/dispatch/delivery.py advance_delivery, migration f1a2b3c4d5e6, src/app/wallet/ (WalletAccount, WalletEntry), Coupon management UI (CouponsScreen + couponsApi), Coupon v2: campaign fields, per-tenant code, redemption ledger as source of truth, app/coupons/ — generalized dup-proof coupons + CouponRedemption ledger (+12 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.08
@@ -1125,7 +973,7 @@ Nodes (16): Production Environment Variables Reference, Pre-Deploy Gates (tests,
 
 ### Community 18 - "Community 18"
 Cohesion: 0.03
-Nodes (346): Resolve the resulting draft cart into (display_text, structured snapshot)., Display category for a catalogue product; products with none bucket into "Menu"., Stash each product's dish category on a transient ``_resolved_category`` attribu, Return (catalog_id, sendable synced products) for browse-by-category helpers., (category, count) pairs, largest category first then alphabetical — a stable, Send ONE page of the tappable category list. Each page holds up to 9 categories, Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5")., Send a page of the category picker (used by the "More categories" tap). Caller c (+338 more)
+Nodes (370): Resolve the resulting draft cart into (display_text, structured snapshot)., Display category for a catalogue product; products with none bucket into "Menu"., Stash each product's dish category on a transient ``_resolved_category`` attribu, Return (catalog_id, sendable synced products) for browse-by-category helpers., (category, count) pairs, largest category first then alphabetical — a stable, Send ONE page of the tappable category list. Each page holds up to 9 categories, Plain AED amount, trailing zeros stripped (18.00 -> "18", 18.50 -> "18.5")., Send a page of the category picker (used by the "More categories" tap). Caller c (+362 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.12
@@ -1148,8 +996,8 @@ Cohesion: 0.04
 Nodes (48): 1. Tree of Thoughts (ToT), 2. A Prompt Pattern Catalog (full inventory), 3. PromptPilot (LLM-enhanced prompt engineering), 4. Knowledge Graph–integrated collaboration, 5. Context Engineering — corporate multi-agent architecture (Vishnyakova), Academic (arXiv + PDFs), Academic research — advanced prompting & context, Anatomy of effective context (+40 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.12
-Nodes (7): Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests, restaurant(), restaurant(), Seed a minimal restaurant row required for outbox FK., restaurant(), Seed a minimal restaurant row for prediction FK references.      Dynamic-PK: tes, restaurant()
+Cohesion: 0.08
+Nodes (10): seed_restaurant_customer(), Seed a minimal restaurant row for opt-out FK references.      Dynamic-PK: tests, restaurant(), restaurant(), Seed a minimal restaurant row required for outbox FK., restaurant(), Seed a minimal restaurant row for prediction FK references.      Dynamic-PK: tes, restaurant() (+2 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.05
@@ -1193,7 +1041,7 @@ Nodes (29): 10. Implementation Todos (for writing-plans), 11. Confirmed Constrai
 
 ### Community 35 - "Community 35"
 Cohesion: 0.06
-Nodes (70): is_opted_out(), is_optout_intent(), is_stop_keyword(), Marketing opt-out primitives.  Pure matchers: ``is_stop_keyword`` (exact keyword, True if ``phone`` has opted out of marketing for ``restaurant_id``., Remove opt-out record if present. Idempotent — safe when no row exists., True if text contains a natural-language marketing opt-out phrase.      Compleme, True if ``text`` is a marketing opt-out request.      Case-insensitive and trimm (+62 more)
+Nodes (69): is_opted_out(), is_optout_intent(), is_stop_keyword(), Marketing opt-out primitives.  Pure matchers: ``is_stop_keyword`` (exact keyword, True if ``phone`` has opted out of marketing for ``restaurant_id``., Remove opt-out record if present. Idempotent — safe when no row exists., True if text contains a natural-language marketing opt-out phrase.      Compleme, True if ``text`` is a marketing opt-out request.      Case-insensitive and trimm (+61 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.06
@@ -1225,7 +1073,7 @@ Nodes (64): CampaignSummarySkeleton(), CampaignSummaryStrip(), CampaignSummary, 
 
 ### Community 43 - "Community 43"
 Cohesion: 0.11
-Nodes (24): _cl_props(), _ds_props(), Provider-parity contract: DeepSeek, Claude, Fake expose ONE action surface (W1)., CANON_PHASE_ACTIONS maps cleanly to LEGACY_PHASE_ACTIONS via CANON_TO_LEGACY., FakeConversationAgent is structurally bound to the canonical schema.      Verifi, FakeConversationAgent behavioural check: every emitted action is in CANON_TO_LEG, Both tool dicts declare only 'action' as a top-level required field., Properties block extracted from DeepSeek's live OpenAI tool dict. (+16 more)
+Nodes (23): _cl_props(), _ds_props(), Provider-parity contract: DeepSeek, Claude, Fake expose ONE action surface (W1)., CANON_PHASE_ACTIONS maps cleanly to LEGACY_PHASE_ACTIONS via CANON_TO_LEGACY., FakeConversationAgent is structurally bound to the canonical schema.      Verifi, FakeConversationAgent behavioural check: every emitted action is in CANON_TO_LEG, Both tool dicts declare only 'action' as a top-level required field., Properties block extracted from DeepSeek's live OpenAI tool dict. (+15 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.07
@@ -1241,7 +1089,7 @@ Nodes (23): 10. Test doubles (no real LLM prompts), 11. Tests that assert on pro
 
 ### Community 47 - "Community 47"
 Cohesion: 0.15
-Nodes (31): build_tracking_url(), ensure_tracking_session(), get_tracking_session_by_public_token(), get_tracking_session_by_rider_token(), get_tracking_session_for_order(), is_tracking_accessible(), _new_token(), _now() (+23 more)
+Nodes (30): build_tracking_url(), ensure_tracking_session(), get_tracking_session_by_public_token(), get_tracking_session_by_rider_token(), get_tracking_session_for_order(), is_tracking_accessible(), _new_token(), _now() (+22 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.09
@@ -1268,12 +1116,12 @@ Cohesion: 0.10
 Nodes (20): 1. Draft cart — 4 items, remove 1 (pre-confirm), 2. Order summary screen — 4 items, remove 1 (still `draft`), 3. After confirm — 4 items, remove 1 (`confirmed` / `preparing`), 4. After `ready` — remove 1 item, Architecture diagram (today), Current implementation by stage, Decision needed from product, Executive summary (+12 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.09
-Nodes (30): cod/service.py (shift reconciliation), coupons/models.py, marketing/segments.py (Segment DSL), marketing/service.py (Marketing engine), ratelimit/ module, Append-Only Ledger, Coupon Code Entropy (anti-guessing), CouponRedemption Ledger (+22 more)
+Cohesion: 0.11
+Nodes (24): audit/service.py:record_audit, cod/service.py (shift reconciliation), identity/deps.py:current_restaurant, ordering/service.py, outbox/service.py:enqueue_message, ratelimit/ module, tickets/ bounded context (proposed), wallet/ bounded context (proposed) (+16 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.07
-Nodes (30): ✅ Architecture flow (where things break), ✅ Changelog, ✅ Deep investigation follow-up (2026-06-30): root causes for WhatsApp AI / LLM mis-interpreting customer messages in ordering flow (response accuracy focus), ✅ Executive summary, ✅ Graphify references, ✅ Implementation phases (recommended order), ✅ Incident transcript (canonical repro), ✅ P0 — Money, cart corruption, provider breakage (+22 more)
+Cohesion: 0.12
+Nodes (17): ✅ Architecture flow (where things break), ✅ Changelog, ✅ Deep investigation follow-up (2026-06-30): root causes for WhatsApp AI / LLM mis-interpreting customer messages in ordering flow (response accuracy focus), ✅ Executive summary, ✅ Graphify references, ✅ Implementation phases (recommended order), ✅ Incident transcript (canonical repro), ✅ P0 — Money, cart corruption, provider breakage (+9 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.11
@@ -1337,7 +1185,7 @@ Nodes (16): 0. Setup (do this once, in order), A. Manager onboarding (signup →
 
 ### Community 71 - "Community 71"
 Cohesion: 0.15
-Nodes (22): FakeCompletionDetector, _drive_modify_to_proposed(), _get_conv(), restaurant_for_completion(), _seed_menu_for_completion(), test_factory_get_completion_detector_fake(), test_fake_completion_detector_bas(), test_fake_completion_detector_blank_false() (+14 more)
+Nodes (23): get_completion_detector(), FakeCompletionDetector, _drive_modify_to_proposed(), _get_conv(), restaurant_for_completion(), _seed_menu_for_completion(), test_factory_get_completion_detector_fake(), test_fake_completion_detector_bas() (+15 more)
 
 ### Community 72 - "Community 72"
 Cohesion: 0.17
@@ -1348,8 +1196,8 @@ Cohesion: 0.13
 Nodes (12): HttpUser, DashboardPollUser, Peak-hour load profile. Run against a LOCAL stack only:      .venv/bin/locust -f, Outbound send flood — drives inbound traffic that fans out to the outbox.      T, Return signature headers for a webhook body (empty if no app secret)., Simulates Meta delivering inbound messages in peak-hour bursts., Manager dashboard polling live order/rider state., SendFloodUser (+4 more)
 
 ### Community 74 - "Community 74"
-Cohesion: 0.14
-Nodes (18): OpenAI / DeepSeek function-tool wrapper., Return the list of missing mandatory field names. Empty list = OK., Translate a canonical action+payload into (engine_action, action_data).      On, ActionSpec, build_anthropic_tool(), build_openai_tool(), build_tool_properties(), _empty_action_data() (+10 more)
+Cohesion: 0.17
+Nodes (15): ActionSpec, build_anthropic_tool(), build_openai_tool(), build_tool_properties(), _empty_action_data(), _norm_items(), _present(), Single source of truth for the conversation action (LLM tool) schema (W1).  Ever (+7 more)
 
 ### Community 75 - "Community 75"
 Cohesion: 0.12
@@ -1384,8 +1232,8 @@ Cohesion: 0.13
 Nodes (15): F20-B, F33, F52, F53, F54, F67, Provider Parity, R-003 (+7 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.18
-Nodes (21): ColumnElement, _build_condition(), compile_segment(), evaluate_segment(), _validate_condition(), validate_dsl(), _seed_customers(), test_evaluate_any_or() (+13 more)
+Cohesion: 0.16
+Nodes (24): ColumnElement, _build_condition(), compile_segment(), evaluate_segment(), preview_count(), _validate_condition(), validate_dsl(), create_segment() (+16 more)
 
 ### Community 84 - "Community 84"
 Cohesion: 0.15
@@ -1396,16 +1244,16 @@ Cohesion: 0.09
 Nodes (22): ✅ 6.1 Diagnosis through "Building Effective Agents", ✅ 6.2 Tool (action-schema) redesign through "Writing Tools for Agents", ✅ 6.3 The missing layer: an EVAL program (the real deliverable), ✅ 6.4 Sequenced program (what to actually do), ✅ Additional Findings from User Chat Transcripts + DB History Linkage (R-DB-11+), ✅ Confirmation integrity (money wrong), ✅ F100 — 🔴 Modify-order sub-flow turns EVERY remove/set into an ADD; traps the user  [txn], ✅ F101 — 🟠 Trailing words captured as dish-name/note: "Chicken Biryani — PLS"; "chicken mandhi"→"Mndhi-2"  [txn/code] (+14 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.10
-Nodes (22): marketing/rfm.py (RFM segmentation), ordering/models.py (Customer aggregates), Monetary Axis Unused in RFM (gap), RFM Segmentation, At Risk (RFM), Champions (RFM), Loyalty Program Analysis Document, Lost (RFM) (+14 more)
+Cohesion: 0.06
+Nodes (34): coupons/models.py, marketing/rfm.py (RFM segmentation), marketing/segments.py (Segment DSL), marketing/service.py (Marketing engine), ordering/models.py (Customer aggregates), CouponRedemption Ledger, Stored-Value / E-Money Regulatory Risk, UAE PDPL / Consent & Erasure (+26 more)
 
 ### Community 87 - "Community 87"
 Cohesion: 0.11
 Nodes (22): cart_set_qty, requires_one_of, Eval Registry — W0 Capability Suite, Graduation rule, Summary, W5 additions (money & catalogue price integrity), W6 additions (menu / availability single source of truth), W7 additions (history faithfulness + structured cart) (+14 more)
 
 ### Community 88 - "Community 88"
-Cohesion: 0.24
-Nodes (21): create_manual_order(), Create a confirmed delivery order on behalf of a walk-in/phone customer.      By, _get_dish_id(), _seed_menu(), test_api_create_manual_order(), test_api_create_manual_order_no_menu_returns_422(), test_api_create_manual_order_unavailable_dish_returns_422(), test_api_customer_lookup_found() (+13 more)
+Cohesion: 0.26
+Nodes (20): create_manual_order(), _get_dish_id(), _seed_menu(), test_api_create_manual_order(), test_api_create_manual_order_no_menu_returns_422(), test_api_create_manual_order_unavailable_dish_returns_422(), test_api_customer_lookup_found(), test_api_customer_lookup_not_found() (+12 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.14
@@ -1420,24 +1268,24 @@ Cohesion: 0.14
 Nodes (13): 0. Why these 9 workstreams, Out of scope (this remediation), Sequencing & gating, Success criteria (rollup from root-cause doc), W0 — Eval + transcript-replay harness, deploy unblock, dev/CI data, W1 — One hardened tool/action schema (provider parity), W2 — Cart line identity + line-level cart service, W3 — Deterministic post-mutation render gate (+5 more)
 
 ### Community 92 - "Community 92"
-Cohesion: 0.27
-Nodes (14): Restaurant, Restaurant, _restaurant_by_phone(), _seed_ticket(), test_cross_tenant_ticket_404(), test_list_and_get_ticket(), test_list_tickets_filter_by_phone(), test_resolve_wallet_refund_endpoint() (+6 more)
+Cohesion: 0.19
+Nodes (16): No forecast yet — should return 404 or empty list., test_get_latest_forecast_empty(), Restaurant, Restaurant, _restaurant_by_phone(), _seed_ticket(), test_cross_tenant_ticket_404(), test_list_and_get_ticket() (+8 more)
 
 ### Community 93 - "Community 93"
 Cohesion: 0.09
 Nodes (22): ✅ DB-H10 — `conversations.state` overwrite-only; no historical snapshot, ✅ DB-H11 — Audit log not linked to chat rows, ✅ DB-H12 — Interactive outbound truncated in AI history, ✅ DB-H13 — `list_reply` → `[list_reply]` in AI history, ✅ DB-H14 — Dashboard `MessageBubble` JSON fallback for interactive outbound, ✅ DB-H15 — `messages` + `outbox_messages` dual-write with no coupling, ✅ DB-H1 — Outbound rows never get Meta `wa_message_id`, ✅ DB-H2 — Stored body ≠ WhatsApp-delivered body (+14 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.13
-Nodes (21): CartService, MessageType.ORDER (catalog basket), WhatsApp Catalog Ordering Flow, Dish.catalog_retailer_id, catalog/service.py, Catalog basket joins text-bot conversation flow, Answer questions at confirm step, conversation/engine.py — AI complaint detection (_is_complaint/_handle_complaint, open-only) (+13 more)
+Cohesion: 0.12
+Nodes (22): CartService, MessageType.ORDER (catalog basket), WhatsApp Catalog Ordering Flow, Dish.catalog_retailer_id, catalog/service.py, Catalog basket joins text-bot conversation flow, Answer questions at confirm step, conversation/engine.py — AI complaint detection (_is_complaint/_handle_complaint, open-only) (+14 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.14
 Nodes (20): Dispatch Batching Enterprise Upgrade PR, Dispatch Enterprise Design Spec, Dispatch Enterprise Implementation Plan, 10. Rollout schedule, 11. First implementation sprint (highest ROI), 12. Key code references, 13. Changelog, 1. Executive summary (+12 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.20
-Nodes (18): advance_delivery(), _complete_batch_order(), Mark a batch stop handled (delivered or not-delivered) and free the rider when, stamp_batch_stop_handled(), _seed(), test_assigned_to_picked_up(), test_full_happy_path_to_delivered_sets_timestamp(), test_illegal_transition_rejected() (+10 more)
+Cohesion: 0.22
+Nodes (17): advance_delivery(), _complete_batch_order(), stamp_batch_stop_handled(), _seed(), test_assigned_to_picked_up(), test_full_happy_path_to_delivered_sets_timestamp(), test_illegal_transition_rejected(), test_last_delivery_completes_batch_and_frees_rider() (+9 more)
 
 ### Community 97 - "Community 97"
 Cohesion: 0.10
@@ -1465,15 +1313,15 @@ Nodes (11): BaseHTTPMiddleware, Security headers middleware (P7-T6 / P7-T13).  A
 
 ### Community 103 - "Community 103"
 Cohesion: 0.13
-Nodes (17): upsert_address(), Confirming an order populates prep_deadline alongside the SLA clock., test_cook_estimate_is_slowest_dish_with_default_fallback(), test_finalize_confirmation_sets_prep_deadline(), test_get_or_create_customer_idempotent(), test_get_order_api_404_for_unknown(), test_get_order_api_returns_order(), test_list_orders_api_filters_by_status() (+9 more)
+Nodes (17): get_last_address(), upsert_address(), test_cook_estimate_is_slowest_dish_with_default_fallback(), test_finalize_confirmation_sets_prep_deadline(), test_get_or_create_customer_idempotent(), test_get_order_api_404_for_unknown(), test_get_order_api_returns_order(), test_list_orders_api_filters_by_status() (+9 more)
 
 ### Community 104 - "Community 104"
 Cohesion: 0.15
 Nodes (12): HIGH: Functionality missing from spec, How to Run, Implementation Status — Restaurant WhatsApp Platform, Key Business Rules — Verified Implemented, Known Gaps (from GAP_LIST.md — factual, sourced from spec), LOW: Nice-to-have, MEDIUM: Minor surface/UX deviations, Migration Chain (alembic) (+4 more)
 
 ### Community 105 - "Community 105"
-Cohesion: 0.23
-Nodes (18): _api_key(), test_pos_accepted_is_noop_when_already_confirmed(), test_pos_cancel_from_confirmed(), test_pos_cancel_from_picked_up(), test_pos_cannot_advance_delivered_order(), test_pos_preparing_advances_from_confirmed(), test_pos_ready_from_preparing_single_step(), test_pos_ready_triggers_kitchen_to_ready() (+10 more)
+Cohesion: 0.07
+Nodes (55): COD collection ledger (spec §4.4.4 / §3).  COD is the only payment method on the, Idempotent on order_id (unique). Returns the existing row if already recorded., Sum a rider's collections for shift_date; write reconciliation with variance., reconcile_shift(), record_collection(), _order(), _seed(), test_reconcile_shift_balanced() (+47 more)
 
 ### Community 106 - "Community 106"
 Cohesion: 0.11
@@ -1484,8 +1332,8 @@ Cohesion: 0.22
 Nodes (15): _restaurant(), _seed_conversation(), test_list_conversations_returns_real_data(), test_message_audio_endpoint_streams_voice_note(), test_message_audio_other_tenant_is_404(), test_message_media_endpoint_streams_image(), test_messages_endpoint_marks_audio_playback(), test_messages_endpoint_normalizes_body_to_text() (+7 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.23
-Nodes (17): ForecastAdjusterPort, ManagerOverride, ModelRegistry, PredictionRun, create_override(), _horizon_hours(), latest_run(), list_runs() (+9 more)
+Cohesion: 0.13
+Nodes (29): ForecastAdjusterPort, ForecastAdjusterPort, Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape)., ManagerOverride, ModelRegistry, Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape)., PredictionRun, ManagerOverride (+21 more)
 
 ### Community 109 - "Community 109"
 Cohesion: 0.11
@@ -1500,12 +1348,12 @@ Cohesion: 0.12
 Nodes (17): Natural Language Opt-out Phrases, 7-Language Support, Server-Side Phase Guards, Conversation Agent Phases, _resolve_phase — Legacy State Mapping, Returning Customer Address Reuse, Shorthand Order Handling, take_action Tool Schema (+9 more)
 
 ### Community 112 - "Community 112"
-Cohesion: 0.18
+Cohesion: 0.21
 Nodes (8): _BrokenProvider, Regression tests for the chat engine's road-distance helper.  Guards a bug where, GeoPort stub returning a sentinel distance unmistakably unlike haversine., The helper must return the provider's distance (road), not haversine., A provider/config failure must never break ordering — degrade to haversine., _StubProvider, test_road_distance_falls_back_to_haversine_on_provider_error(), test_road_distance_uses_geo_provider()
 
 ### Community 113 - "Community 113"
-Cohesion: 0.15
-Nodes (17): audit/service.py:record_audit, conversation/engine.py, coupons/service.py, ordering/service.py, sla/monitor.py (SLA late-coupon), wallet/ bounded context (proposed), COD Refund Mechanics (no card on file), Compensation Ladder (+9 more)
+Cohesion: 0.10
+Nodes (27): conversation/engine.py, coupons/service.py, llm/deepseek.py (bot identity prompt), sla/monitor.py (SLA late-coupon), Post-Delivery Complaints Analysis, Compensation Ladder, Complaint Record / Model, Universal Complaint-Handling Pipeline (DETECT-CAPTURE-CLASSIFY-DECIDE-ACT-CLOSE) (+19 more)
 
 ### Community 114 - "Community 114"
 Cohesion: 0.12
@@ -1516,8 +1364,8 @@ Cohesion: 0.12
 Nodes (17): ✅ Additional Findings from DB Chat History Analysis (appended 2026-07-01, no prior content removed), ✅ Cross-links to existing backlog, ✅ DB + Conversation History Specialist Investigation (2026-06-30), ✅ Findings (append-only, evidence only), ✅ Key storage + build differences (evidence), ✅ R-077 — Catalogue ORDER inbound stored as opaque `[order]` in LLM history (incomplete payload), ✅ R-078 — Payload key asymmetry (text vs body) + type-dependent extraction leads to fragile/ lossy history, ✅ R-079 — History can contain consecutive same-role turns (no alternating guarantee); first-message hack (+9 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.18
-Nodes (14): _cite_tag(), grounding_block(), OKF lexical retrieval — find the concept docs most relevant to a customer messag, Drop YAML frontmatter — it burns budget without adding customer-facing facts., Truncate markdown body to ~max_chars, suffixing with ellipsis when clipped., Render retrieved OKF docs into a prompt-injectable grounding block., Top OKF docs for ``query``.      MULTILINGUAL: lexical (pg_trgm) similarity only, E-20 provenance tag — entity_id when pinned, else stable doc id. (+6 more)
+Cohesion: 0.20
+Nodes (13): _cite_tag(), grounding_block(), OKF lexical retrieval — find the concept docs most relevant to a customer messag, Drop YAML frontmatter — it burns budget without adding customer-facing facts., Truncate markdown body to ~max_chars, suffixing with ellipsis when clipped., Render retrieved OKF docs into a prompt-injectable grounding block., Top OKF docs for ``query``.      MULTILINGUAL: lexical (pg_trgm) similarity only, E-20 provenance tag — entity_id when pinned, else stable doc id. (+5 more)
 
 ### Community 117 - "Community 117"
 Cohesion: 0.17
@@ -1544,8 +1392,8 @@ Cohesion: 0.12
 Nodes (16): ✅ P3 — Dead code, test debt, maintenance, ✅ R-041 — Legacy FSM handlers dead (~400+ lines), ✅ R-042 — `_is_checkout_intent` English-only in dead handler, ✅ R-043 — `parse_qty_and_text` has no dedicated unit tests, ✅ R-044 — No full catalogue transcript integration test, ✅ R-045 — `FakeConversationAgent` confirm phase diverges from DeepSeek, ✅ R-046 — `_retailer_id_from_item` duplicate key, ✅ R-047 — `_PHASE_ACTIONS` omits confirm edits (relies on pre-guard intercept) (+8 more)
 
 ### Community 123 - "Community 123"
-Cohesion: 0.07
-Nodes (28): include_object(), Ignore tables that exist in the DB but not in our models.      The postgis/postg, run_async_migrations(), run_migrations_online(), Settings, BaseSettings, _get_placeholder_generator(), get_promo_image_generator() (+20 more)
+Cohesion: 0.05
+Nodes (35): CatalogPanel(), fmt(), PosSyncButton(), TopBar(), apiClient, ApiError, authHeaders(), request() (+27 more)
 
 ### Community 124 - "Community 124"
 Cohesion: 0.24
@@ -1556,8 +1404,8 @@ Cohesion: 0.14
 Nodes (15): Celery, Cash on Delivery (COD), Max Delivery Radius 10km, FastAPI, Delivery Fee Tiers, Phase 0-1 Foundation Plan, WhatsApp Restaurant Platform, React Manager Dashboard (+7 more)
 
 ### Community 126 - "Community 126"
-Cohesion: 0.34
-Nodes (14): _acquire_conversation_lock(), _btn(), _conv(), _loc_msg(), _msg(), _seed_menu(), test_cancel_button_no_llm_round_trip(), test_confirm_button_no_llm_round_trip() (+6 more)
+Cohesion: 0.31
+Nodes (15): _acquire_conversation_lock(), Serialize inbound processing per (restaurant, phone) thread (TX-22/TX-46/F94/F11, _btn(), _conv(), _loc_msg(), _msg(), _seed_menu(), test_cancel_button_no_llm_round_trip() (+7 more)
 
 ### Community 127 - "Community 127"
 Cohesion: 0.13
@@ -1580,16 +1428,16 @@ Cohesion: 0.13
 Nodes (15): ✅ Session 5 — priority stack from real traffic, ✅ Session 5 — Production transcript audit (Syed, multi-day), ✅ Transcript timeline — failure clusters, ✅ TX-01 — 🔴 Biryani incident reproduced exactly (R1-0097, 06:31–06:34 PM), ✅ TX-02 — 🔴 Resume-cart → checkout says empty (12:04–12:05 PM), ✅ TX-03 — 🟠 Large-qty guard inconsistent (100,000 lemon mint), ✅ TX-04 — 🟠 `Only mandi` cleared entire cart (05:48 PM), ✅ TX-05 — 🟠 WhatsApp reactions render as raw JSON in dashboard (+7 more)
 
 ### Community 132 - "Community 132"
-Cohesion: 0.33
-Nodes (13): _last_out(), _seed_big_catalogue(), _seed_many_categories(), test_big_menu_sends_category_picker_when_enabled(), test_big_menu_truncates_to_product_list_when_disabled(), test_category_list_paginates_when_many_categories(), test_category_paginates_within_category_over_30(), test_category_resolved_from_dish_when_mirror_null() (+5 more)
+Cohesion: 0.07
+Nodes (28): DETAIL_INCLUDE_BY_TAB, fetchOrderDetail(), mergeOrderDetail(), orderOutFromDetail(), patchAddress(), patchCustomer(), sample, AddressPatchIn (+20 more)
 
 ### Community 133 - "Community 133"
-Cohesion: 0.24
-Nodes (13): _category_match_needles(), _dish_info_question(), _normalize_category_keyword(), _parse_category_availability_query(), _last_body(), _msg(), _seed(), test_dish_info_question_extracts_name() (+5 more)
+Cohesion: 0.09
+Nodes (30): _dish_info_question(), _is_menu_browse_intent(), _normalize_category_keyword(), _normalize_dish_search_keyword(), _parse_category_availability_query(), _parse_dish_search_query(), If the message is a 'tell me about <dish>' style question, return the dish-name, Strip filler and simple plurals from a parsed category phrase. (+22 more)
 
 ### Community 134 - "Community 134"
-Cohesion: 0.15
-Nodes (14): app/conversation/engine.py, src/app/tickets/ (Ticket FSM), Refund-velocity auto-freeze wired into ticket resolve_wallet_refund, AI complaint detection opens ticket, never compensates, Human-only complaint tickets (wallet refund / replacement / no-action), Coupon v2: campaign fields, per-tenant code, redemption ledger as source of truth, app/coupons/ — generalized dup-proof coupons + CouponRedemption ledger, React dashboard: TicketsScreen, drawer, wallet on customer profile (+6 more)
+Cohesion: 0.22
+Nodes (10): app/conversation/engine.py, src/app/tickets/ (Ticket FSM), Refund-velocity auto-freeze wired into ticket resolve_wallet_refund, AI complaint detection opens ticket, never compensates, Human-only complaint tickets (wallet refund / replacement / no-action), React dashboard: TicketsScreen, drawer, wallet on customer profile, WHY: resolution is HUMAN-ONLY; AI never resolves/issues coupon/refund (asserted in tests), Human-only complaint tickets (open->in_progress->resolved, 3 manager actions) (+2 more)
 
 ### Community 135 - "Community 135"
 Cohesion: 0.23
@@ -1613,23 +1461,23 @@ Nodes (11): 2026-06-30-biryani-correction-flow-root-cause.md, R-061..R-067, R-07
 
 ### Community 140 - "Community 140"
 Cohesion: 0.09
-Nodes (24): Delivered, getOrders(), markDelivered(), markNotDelivered(), pickup(), registerPushToken(), req(), Run (+16 more)
+Nodes (23): Delivered, getOrders(), markDelivered(), markNotDelivered(), pickup(), registerPushToken(), req(), Run (+15 more)
 
 ### Community 141 - "Community 141"
-Cohesion: 0.04
-Nodes (45): DishCard(), dish, DishEditModal(), DRINK_CATEGORY_HINTS, isDrinkCategory(), PRESET_CATEGORIES, Props, UnifiedMenuPanel() (+37 more)
+Cohesion: 0.06
+Nodes (31): DishCard(), dish, DishEditModal(), DRINK_CATEGORY_HINTS, isDrinkCategory(), PRESET_CATEGORIES, Props, UnifiedMenuPanel() (+23 more)
 
 ### Community 142 - "Community 142"
-Cohesion: 0.38
-Nodes (13): _api_key(), _enable_partner(), _ready_order_with_address(), _seed_restaurant(), test_delivered_fires_webhook_with_cod(), test_dispatch_fires_rider_assigned_webhook(), test_get_delivery_poll_endpoint(), test_manager_cancel_fires_order_cancelled_webhook() (+5 more)
+Cohesion: 0.12
+Nodes (18): get_suggestion_agent(), FakeSuggestionAgent, build_suggestion_prompt(), ClaudeSuggestionAgent, DeepSeekSuggestionAgent, parse_suggestion_response(), Dish suggestion sub-agent — grounded picks from menu candidates only., Production dish recommender — Claude haiku. (+10 more)
 
 ### Community 143 - "Community 143"
-Cohesion: 0.14
-Nodes (13): 10. Build Order (TDD per CLAUDE.md), 1. The Core Problem, 3.1 Model, 3.2 Rules, 3.3 Spend flow (hold → capture, bank-style), 3.4 Lifecycle edges, 3. Wallet Design (ledger-based), 5. Abuse Prevention (the misuse problem) (+5 more)
+Cohesion: 0.11
+Nodes (17): 10. Build Order (TDD per CLAUDE.md), 1. The Core Problem, 4.1 Two kinds of coupon, 4.2 Model (generalize the existing one), 4.3 Code generation (anti-guessing), 4.4 Redemption rules (enforced atomically), 4. Coupon Design, 5. Abuse Prevention (the misuse problem) (+9 more)
 
 ### Community 144 - "Community 144"
-Cohesion: 0.42
-Nodes (9): _seed(), test_add_item_ignores_invalid_sale_price(), test_add_item_uses_sale_price_when_set(), test_add_item_with_variant_snapshots_price(), test_add_item_without_variant_unchanged(), test_bundle_variant_for_qty(), test_different_variants_are_separate_lines(), test_resolve_variant_fuzzy() (+1 more)
+Cohesion: 0.09
+Nodes (22): 1. Phase reset — `_maybe_reset_post_order_for_browse`, 2. Intent detectors (engine.py), 3. Handlers, 4. Menu-promise fulfillment (`_dispatch_action`), 5. Compaction hardening, 6. Action schema, 7. Suggestion sub-agent (Approach C) — `src/app/llm/suggestion_agent.py`, 8. Prompt updates (+14 more)
 
 ### Community 145 - "Community 145"
 Cohesion: 0.14
@@ -1644,16 +1492,16 @@ Cohesion: 0.14
 Nodes (14): 4.5.10 Frontend files, 4.5.11 Tests (Phase 5 exit criteria), 4.5.12 Phase 5 open decisions (locked defaults), 4.5.13 Explicitly out of scope (all phases post-5), 4.5.1 User stories, 4.5.2 AI header image generation, 4.5.3 Video header — explicitly deferred (Phase 5+), 4.5.4 Scheduled broadcast (+6 more)
 
 ### Community 148 - "Community 148"
-Cohesion: 0.35
-Nodes (12): _btn(), _confirmed_four_item_order(), _conv(), _msg(), _seed_four_item_menu(), test_option_b_inline_post_order_remove_shows_confirm(), test_option_c_schema_has_order_line_actions(), test_t3_confirmation_inline_remove() (+4 more)
+Cohesion: 0.29
+Nodes (14): _proposed_from_order(), Serialize current order lines into modify_proposed entries., _btn(), _confirmed_four_item_order(), _conv(), _msg(), _seed_four_item_menu(), test_option_b_inline_post_order_remove_shows_confirm() (+6 more)
 
 ### Community 149 - "Community 149"
-Cohesion: 0.17
-Nodes (13): frontend couponsApi + CouponsScreen, src/app/coupons/ (Coupon, CouponRedemption), app/dispatch/delivery.py advance_delivery, app/ordering/service.py finalize_confirmation, app/ordering/payments.py, app/dispatch/rider_actions.py, cod_due_aed = total - wallet_applied (floored 0), Coupon management UI (CouponsScreen + couponsApi) (+5 more)
+Cohesion: 0.40
+Nodes (6): app/ordering/service.py finalize_confirmation, app/ordering/payments.py, app/dispatch/rider_actions.py, cod_due_aed = total - wallet_applied (floored 0), No double-charge: wallet + cash == total, Wallet spend activation (live at checkout)
 
 ### Community 150 - "Community 150"
-Cohesion: 0.18
-Nodes (14): FakeForecastModel, Deterministic fake forecast model for service/worker/router tests., Two Mondays of lunch-hour (12:00) delivered orders for both dishes., _seed_menu(), _seed_orders(), target_monday(), test_create_override_parses_and_persists(), test_latest_and_list_runs_tenant_scoped() (+6 more)
+Cohesion: 0.14
+Nodes (20): get_forecast_model(), FakeForecastModel, LightGBM per restaurant stub: setting provider should note deferral or raise exp, test_factory_fake_provider(), test_factory_lightgbm_provider_notes_or_stubs(), test_factory_returns_rolling_by_default(), test_fake_is_deterministic(), Two Mondays of lunch-hour (12:00) delivered orders for both dishes. (+12 more)
 
 ### Community 151 - "Community 151"
 Cohesion: 0.15
@@ -1664,12 +1512,12 @@ Cohesion: 0.15
 Nodes (12): 10. Wiring (every hook point already exists), 11. Guardrails (mostly inherited), 12. Build Plan (TDD, phased — small because the rails exist), 1. Current State — What Exists Today, 3. How to Utilize It, 5. Cross-Cutting Challenges (the hard parts), 6. Implementation Design — Build on What's Already Shipped, 8. Monetary RFM Upgrade (prerequisite, tiny) (+4 more)
 
 ### Community 153 - "Community 153"
-Cohesion: 0.18
-Nodes (12): Complaint Ticket, Customer Wallet (Credit), Loyalty Program, Complaint Pipeline, Abandoned-Cart Nudge Sweep, Embedded Celery beat in worker, Nudge shows cart + concrete CTA, Outbox (idempotency_key) (+4 more)
+Cohesion: 0.20
+Nodes (11): Complaint Ticket, Customer Wallet (Credit), Loyalty Program, Complaint Pipeline, Abandoned-Cart Nudge Sweep, Embedded Celery beat in worker, Nudge shows cart + concrete CTA, Outbox (idempotency_key) (+3 more)
 
 ### Community 154 - "Community 154"
-Cohesion: 0.17
-Nodes (12): Customer Notification, Resolution Action, Wallet Ledger, Abuse Detection Rules, Wallet & Coupon Financial Design, Abuse Prevention, Double-entry Bookkeeping, Hold-Capture Model (+4 more)
+Cohesion: 0.22
+Nodes (9): Abuse Detection Rules, Wallet & Coupon Financial Design, Abuse Prevention, Double-entry Bookkeeping, Hold-Capture Model, Idempotency Key, Reconciliation, Wallet Account (+1 more)
 
 ### Community 155 - "Community 155"
 Cohesion: 0.32
@@ -1680,8 +1528,8 @@ Cohesion: 0.17
 Nodes (12): 5. Data model summary, COD, Conversation, Customers, Dispatch and tracking, Identity, Marketing, Menu (+4 more)
 
 ### Community 157 - "Community 157"
-Cohesion: 0.35
-Nodes (11): cancel_order(), Cancel an order.      Resale (re-offer the cooked food to the next customer) hap, _seed_order(), test_cancel_before_preparing_transitions_to_cancelled(), test_cancel_during_preparing_creates_resale_copy(), test_customer_cancel_picked_up_blocked(), test_exclusion_hash_encodes_phone_and_address(), test_manager_cancel_picked_up_allowed() (+3 more)
+Cohesion: 0.17
+Nodes (18): _pred(), Pure unit tests for the Today's Special send-time logic (no DB)., test_desired_send_minute_clamps_to_window(), test_desired_send_minute_custom_window_clamps(), test_desired_send_minute_falls_back_to_default(), test_desired_send_minute_personalized_subtracts_lead(), test_is_due_window(), test_is_personalized_requires_clustered_history() (+10 more)
 
 ### Community 158 - "Community 158"
 Cohesion: 0.17
@@ -1704,8 +1552,8 @@ Cohesion: 0.20
 Nodes (9): BLOCKED / deferred, Commits (chronological), Evals graduated, Files changed (W7a scope only), Final suite summary, Ordering column kept: `created_at` (not `ts`), Provenance note, Task 5 scoping decision (+1 more)
 
 ### Community 163 - "Community 163"
-Cohesion: 0.03
-Nodes (78): ITEMS, NavSidebar(), PREFETCH, Spinner(), adjustWallet(), handleDeleteAddress(), handleSaveAddress(), patchProfileCache() (+70 more)
+Cohesion: 0.05
+Nodes (56): ITEMS, NavSidebar(), PREFETCH, Spinner(), adjustWallet(), handleDeleteAddress(), handleSaveAddress(), patchProfileCache() (+48 more)
 
 ### Community 164 - "Community 164"
 Cohesion: 0.17
@@ -1736,24 +1584,24 @@ Cohesion: 0.18
 Nodes (11): ✅ F108 — 🟠 "Hi" mid-order floods welcome+menu; users spam "Hi" because nothing progresses  [txn], ✅ F109 — 🟠 "Catalog"/"Catalogue"/"Catlog"/"Catlogue" never sends the WhatsApp catalogue — only text menu  [txn], ✅ F110 — 🟠 Saved-address denied then used: "I don't have access to your saved address" → later "I'll use your saved address"  [txn/code], ✅ F111 — 🟡 Questions at confirm phase silently dropped, only summary re-shown  [txn], ✅ F112 — 🟠 Delivery fee non-deterministic for the SAME saved address  [txn], ✅ F113 — 🟡 Modify FSM triggered by a plain draft-cart correction, on a stale order number  [txn], ✅ F114 — 🟡 Order-number collisions persist (#R1-0001 twice, #R1-0086 twice)  [txn], ✅ F115 — 🟡 Out-of-order / massively delayed replies persist  [txn] (+3 more)
 
 ### Community 171 - "Community 171"
-Cohesion: 0.20
-Nodes (10): identity/deps.py:current_restaurant, outbox/service.py:enqueue_message, tickets/ bounded context (proposed), Idempotency Keys, Append-Only Ledger, Multi-Tenant Fund Isolation, Coupons Bounded Context, Wallet, Coupon & Ticket System Implementation Plan (+2 more)
+Cohesion: 0.13
+Nodes (14): get_kitchen_summarizer(), FakeKitchenSummarizer, build_tier2_prompt(), parse_tier2_response(), User turn for the tier-2 supplement call., Parse tier-2 LLM output into 0–2 supplement lines., build_tier2_user_prompt(), Kitchen digest tier-2 LLM prompts.  Tier 1 (code) renders authoritative order ro (+6 more)
 
 ### Community 172 - "Community 172"
 Cohesion: 0.44
 Nodes (9): _conv(), _enter_modify(), _latest_body(), _msg(), _seed_menu(), test_cart_query_during_modify_shows_cart_and_stays(), test_menu_request_during_modify_answers_and_stays(), Conversation (+1 more)
 
 ### Community 173 - "Community 173"
-Cohesion: 0.38
-Nodes (9): _conv(), _msg(), _placed_order_with_combo(), _seed_combo_menu(), test_cancel_dish_uses_last_placed_order_not_stale_draft(), test_only_lemon_mint_in_modify_sets_proposed_not_no_changes(), test_parse_keep_only_lemon_mint(), Conversation (+1 more)
+Cohesion: 0.18
+Nodes (12): get_arbiter(), FakeArbiter, FakeDescriber, FakeIntentClassifier, FakeDescriber satisfies DescriberPort Protocol (structural check)., test_arbiter_protocol_satisfied_by_fake(), test_describer_protocol_satisfied_by_fake(), test_fake_arbiter_returns_one_of_candidates() (+4 more)
 
 ### Community 174 - "Community 174"
 Cohesion: 0.31
 Nodes (10): Customer Aggregates, Loyalty Program, Loyalty Program Analysis, Referral Program, Loyalty Tiers, Marketing Engine, Monetary Axis Gap in RFM Formula, RFM Segmentation (+2 more)
 
 ### Community 175 - "Community 175"
-Cohesion: 0.27
-Nodes (7): hash_password(), verify_password(), test_password_hash_roundtrip(), test_hash_roundtrip(), test_hashes_are_salted_unique(), test_verifies_legacy_passlib_hash(), main()
+Cohesion: 0.22
+Nodes (15): _conv(), _msg(), _outbox_bodies(), _outbox_has_menu(), OK show me' sends catalogue or text menu without LLM., suggest me something' with >3 dishes invokes suggestion sub-agent, not full menu, post_order + 'OK show me' → menu text or product_list; resets to ordering., _seed_many_dishes() (+7 more)
 
 ### Community 176 - "Community 176"
 Cohesion: 0.58
@@ -1784,8 +1632,8 @@ Cohesion: 0.20
 Nodes (10): 3.1 Send Text Message, 3.2 Send Interactive Reply Buttons, 3.3 Send Interactive List Message, 3.4 Send Location Request (Ask User to Share Location), 3.5 Send Image Message, 3.6 Send Template Message, 3.7 Send Static Location Pin to User, 3. Send API (+2 more)
 
 ### Community 183 - "Community 183"
-Cohesion: 0.36
-Nodes (8): AsyncSession, datetime, check_and_flag(), refund_velocity(), _refund_via_ticket(), test_over_cap_freezes_account(), test_under_cap_not_frozen(), test_velocity_counts_refunds()
+Cohesion: 0.31
+Nodes (9): AsyncSession, datetime, check_and_flag(), Refund-abuse velocity checks + auto-freeze.  Called after a complaint refund is, refund_velocity(), _refund_via_ticket(), test_over_cap_freezes_account(), test_under_cap_not_frozen() (+1 more)
 
 ### Community 184 - "Community 184"
 Cohesion: 0.22
@@ -1816,8 +1664,8 @@ Cohesion: 0.12
 Nodes (20): fetchPublicTracking(), fetchPublicTrackingLocation(), fetchRiderTracking(), postRiderLocation(), PublicTrackingOut, RiderTrackingOut, stopRiderTracking(), TrackingError (+12 more)
 
 ### Community 191 - "Community 191"
-Cohesion: 0.04
-Nodes (67): AppInviteModal(), Props, RIDER, ApprovalTimeline(), ApprovalTimelineProps, stepIndex(), STEPS, Button() (+59 more)
+Cohesion: 0.06
+Nodes (43): AppInviteModal(), Props, RIDER, ApprovalTimeline(), ApprovalTimelineProps, stepIndex(), STEPS, Button() (+35 more)
 
 ### Community 192 - "Community 192"
 Cohesion: 0.22
@@ -1836,12 +1684,12 @@ Cohesion: 0.22
 Nodes (9): FakeConversationAgent — New Interface, Load Test HMAC Signed Webhooks, CloudAPIProvider, MockProvider for WhatsApp, Security Headers Middleware, Idempotent Webhook Processing, WhatsApp Media Expiry Rules, WhatsApp Message Types (+1 more)
 
 ### Community 196 - "Community 196"
-Cohesion: 0.33
-Nodes (5): _approved_tpl(), test_on_order_delivered_schedules_welcome_for_first_order(), test_on_order_delivered_skips_welcome_when_not_first_order(), test_on_order_delivered_upserts_recurring_state_day3(), test_recurring_promo_tick_sends_and_advances_to_weekly()
+Cohesion: 0.24
+Nodes (10): Mark an outbox message as dead (unrecoverable) in the DB., Celery task: deliver one outbox message via the configured provider.      Uses e, Find pending outbox rows stuck for > _SWEEPER_STALE_MINUTES and re-dispatch them, Celery beat task: orphan-recovery for stale pending outbox rows.      Picks up r, Return countdown seconds: base 10s, doubles each retry (10,20,40,80,160)., 4xx (except 429) = permanent failure; 5xx/network = transient., OutboundMessage, Download inbound media (e.g. a voice note) by its provider media id.          Re (+2 more)
 
 ### Community 197 - "Community 197"
-Cohesion: 0.42
-Nodes (8): modify_order(), _seed_confirmed_order(), test_modify_order_blocked_at_ready(), test_modify_order_produces_audit_log(), test_modify_order_recalculates_total(), test_modify_order_restarts_sla_clock(), OrderItem, Order
+Cohesion: 0.50
+Nodes (7): modify_order(), _seed_confirmed_order(), test_modify_order_blocked_at_ready(), test_modify_order_produces_audit_log(), test_modify_order_recalculates_total(), test_modify_order_restarts_sla_clock(), Order
 
 ### Community 198 - "Community 198"
 Cohesion: 0.42
@@ -1852,8 +1700,8 @@ Cohesion: 0.56
 Nodes (8): _order(), _seed(), test_capture_on_deliver_drops_balance(), test_coupon_then_wallet_stack(), test_no_wallet_no_coupon_is_noop(), test_release_on_cancel_restores_credit(), test_wallet_applied_reduces_cod_due(), test_wallet_hold_never_exceeds_available()
 
 ### Community 200 - "Community 200"
-Cohesion: 0.36
-Nodes (8): _api_key(), Partner full lists: rider roster (all riders) and order history (all statuses)., Roster returns every rider, incl. idle/off-duty ones (not just on-delivery)., status=all returns delivered/cancelled history, not just active confirmed., _restaurant(), test_partner_lists_full_rider_roster(), test_partner_orders_history_includes_all_statuses(), test_partner_rider_roster_is_tenant_scoped()
+Cohesion: 0.29
+Nodes (11): get_template_provider(), test_factory_returns_mock_under_default_dry_run(), automation_tick(), cleanup_ephemeral_templates(), _dispatch_scheduled(), poll_template_statuses(), Celery marketing workers — scheduled campaign dispatch (P6-T19)., recurring_promo_tick() (+3 more)
 
 ### Community 201 - "Community 201"
 Cohesion: 0.22
@@ -1864,8 +1712,8 @@ Cohesion: 0.33
 Nodes (8): _drive_to_address_capture(), restaurant(), _seed_full_menu(), test_simulator_button_reply_reaches_engine(), test_simulator_greeting_returns_menu(), test_simulator_location_drives_address_flow(), test_simulator_order_dish_gets_confirmation(), test_simulator_send_requires_exactly_one_payload()
 
 ### Community 203 - "Community 203"
-Cohesion: 0.44
-Nodes (7): _seed_restaurant_and_menu(), _signed_body(), test_get_verify_handshake_valid(), test_post_webhook_dispatches_celery_task(), test_post_webhook_duplicate_event_is_ignored(), test_post_webhook_processes_message_and_queues_outbox(), test_post_webhook_sync_delivery_sends_in_request()
+Cohesion: 0.31
+Nodes (10): diff_menus(), _norm(), _dish(), _draft(), test_added_and_removed(), test_price_change_detected_by_number_and_name(), test_same_number_different_name_flagged(), test_unchanged_not_reported() (+2 more)
 
 ### Community 204 - "Community 204"
 Cohesion: 0.25
@@ -1880,16 +1728,16 @@ Cohesion: 0.46
 Nodes (7): _conv(), _msg(), test_cancel_after_confirm_blocked_when_picked_up(), test_cancel_after_confirm_cancels_order_and_releases_rider(), test_cancel_during_preparing_uses_simple_message_no_resale_disclaimer(), Conversation, InboundMessage
 
 ### Community 207 - "Community 207"
-Cohesion: 0.44
-Nodes (7): _customer(), test_campaign_roundtrip(), test_marketing_send_roundtrip(), test_marketing_send_unique_campaign_customer(), test_segment_roundtrip(), test_wa_template_roundtrip(), test_wa_template_unique_name_lang()
+Cohesion: 0.32
+Nodes (3): _customer(), test_marketing_send_roundtrip(), test_marketing_send_unique_campaign_customer()
 
 ### Community 208 - "Community 208"
 Cohesion: 0.57
 Nodes (7): _bodies(), _seed_menu(), test_done_with_empty_cart_does_not_proceed(), test_done_with_items_proceeds(), test_manual_order_with_no_items_is_rejected(), test_proceed_with_empty_cart_is_refused_by_engine_gate(), _txt()
 
 ### Community 209 - "Community 209"
-Cohesion: 0.39
-Nodes (6): compute_dispatch_kpis(), _seed_batch_assignment(), test_compute_dispatch_kpis_empty(), test_compute_dispatch_kpis_multi_stop_batch(), test_compute_dispatch_kpis_solo_only(), AsyncSession
+Cohesion: 0.21
+Nodes (10): compute_dispatch_kpis(), build_live_ops_map(), _urgency(), _seed_batch_assignment(), test_compute_dispatch_kpis_empty(), test_compute_dispatch_kpis_multi_stop_batch(), test_compute_dispatch_kpis_solo_only(), AsyncSession (+2 more)
 
 ### Community 210 - "Community 210"
 Cohesion: 0.25
@@ -1904,8 +1752,8 @@ Cohesion: 0.43
 Nodes (7): _seed_active_order(), _status_msg(), test_status_query_confirmed_order_returns_status_message(), test_status_query_no_active_order_returns_polite_reply(), test_status_query_preparing_mentions_kitchen(), InboundMessage, Order
 
 ### Community 213 - "Community 213"
-Cohesion: 0.43
-Nodes (7): _seed_outbox(), test_deliver_one_marks_dead_after_3_failures(), test_deliver_one_marks_failed_on_send_error(), test_deliver_one_sends_and_marks_sent(), _deliver_one(), OutboxMessage, WhatsAppPort
+Cohesion: 0.15
+Nodes (13): ✅ P1 — Wrong flow, lost state, silent failures, ✅ R-005 — Confirmation prompt contradicts engine, ✅ R-006 — `set_item_qty` drops kitchen notes when collapsing lines, ✅ R-007 — Re-add backstop bypassed when customer gives explicit quantity, ✅ R-008 — Out-of-range pin wipes entire cart, ✅ R-009 — `modify_order` strips variants and forces `notes=None`, ✅ R-010 — Catalogue basket appends to existing draft without replace semantics, ✅ R-011 — Catalog ORDER webhook bypasses `manual_takeover` (+5 more)
 
 ### Community 214 - "Community 214"
 Cohesion: 0.25
@@ -1916,8 +1764,8 @@ Cohesion: 0.25
 Nodes (8): 5.1 Candidate pool (Phase 2), 5.2 Smart hold (Phase 2), 5.3 Zone model (Phase 3), 5.4 Re-batch FSM (Phase 4), 5.5 Preparing-order rider notification, 5.6 Explainability schema (Phase 1), 5.7 Preview invariant, 5. Functional design
 
 ### Community 216 - "Community 216"
-Cohesion: 0.18
-Nodes (15): deliver_outbox_now(), deliver_pending(), # NOTE: we deliberately do NOT touch __double_underscores__ — that would mangle, Convert common Markdown to WhatsApp formatting (idempotent)., Flush all pending outbox rows for a restaurant (best-effort).      For request h, Deliver freshly-committed outbox rows — synchronously in-request when no     Cel, to_whatsapp_text(), WhatsApp shows *single* asterisks as bold; Markdown's **double** asterisks rende (+7 more)
+Cohesion: 0.10
+Nodes (23): _auto_dispatch_on_ready(), deliver_outbox_now(), deliver_pending(), # NOTE: we deliberately do NOT touch __double_underscores__ — that would mangle, Convert common Markdown to WhatsApp formatting (idempotent)., Flush all pending outbox rows for a restaurant (best-effort).      For request h, Deliver freshly-committed outbox rows — synchronously in-request when no     Cel, to_whatsapp_text() (+15 more)
 
 ### Community 217 - "Community 217"
 Cohesion: 0.25
@@ -1996,12 +1844,12 @@ Cohesion: 0.33
 Nodes (6): 17. Partner / POS integration API, API key management (`/api/v1/keys/`), Manager integration config (`/api/v1/integration/`), Multi-partner registry, Outbound webhooks (platform → POS), REST endpoints (`/api/v1/partner/`)
 
 ### Community 236 - "Community 236"
-Cohesion: 0.33
-Nodes (4): OrderFSM, Raise IllegalTransitionError if the transition is not in the map., Every OrderStatus must appear as a key in the transition map., transition() applies new status and writes an audit log row.
+Cohesion: 0.29
+Nodes (11): _btn(), _conv(), _msg(), _seed_menu(), test_cancel_order_button_in_modify_cancels(), test_extract_order_dish_query_negative(), test_extract_order_dish_query_positive(), test_is_cancel_intent() (+3 more)
 
 ### Community 237 - "Community 237"
-Cohesion: 0.47
-Nodes (5): parse_detail_includes(), Parse ``?include=`` for order detail. None means all sections., test_detail_wants_respects_include_set(), test_parse_detail_includes_always_adds_overview(), test_parse_detail_includes_none_means_all_sections()
+Cohesion: 0.32
+Nodes (10): get_active_run(), mark_batch_picked_up(), mark_order_delivered(), mark_order_not_delivered(), _seed_order(), test_active_run_exposes_do_not_call(), test_no_flag_when_customer_did_not_ask(), test_stop_details_and_body_carry_do_not_call() (+2 more)
 
 ### Community 238 - "Community 238"
 Cohesion: 0.33
@@ -2016,8 +1864,8 @@ Cohesion: 0.60
 Nodes (4): _make_conv_and_inbound(), test_derived_phase_table_covers_old_literal(), test_needs_clarification_sends_message_and_no_mutation(), test_needs_clarification_uses_result_message_when_present()
 
 ### Community 244 - "Community 244"
-Cohesion: 0.50
-Nodes (4): build_live_ops_map(), _urgency(), AsyncSession, Restaurant
+Cohesion: 0.22
+Nodes (10): Live rider position ingestion (spec §4.4.6).  A rider's WhatsApp location messag, Append a rider location ping + best-effort Redis GEO hot copy. Caller commits., Best-effort hot copy to Redis GEO. No-op if redis unavailable (tests)., update_rider_location(), _write_redis_geo(), test_rider_location_endpoint(), AsyncSession, datetime (+2 more)
 
 ### Community 245 - "Community 245"
 Cohesion: 0.40
@@ -2056,20 +1904,20 @@ Cohesion: 0.08
 Nodes (30): adjustWallet(), issueCoupon(), reload(), ChatCustomerPanel(), ctx, ConversationRow(), formatWhatsApp(), MessageBubble() (+22 more)
 
 ### Community 256 - "Community 256"
-Cohesion: 0.08
-Nodes (22): PRESET_LABELS, ReportsDateRangePicker(), fetchCampaigns(), fetchLatestForecast(), ForecastResult, ForecastRun, PrepAheadItem, addDaysUTC() (+14 more)
+Cohesion: 0.07
+Nodes (24): PRESET_LABELS, ReportsDateRangePicker(), fetchCampaigns(), computeOrderDeliveryKpis(), OrderDeliveryKpis, fetchLatestForecast(), ForecastResult, ForecastRun (+16 more)
 
 ### Community 257 - "Community 257"
-Cohesion: 0.07
-Nodes (31): Column, CompactTable(), SK_WIDTHS, cols, Row, PageHeader(), QueryRefreshNote(), COLOR (+23 more)
+Cohesion: 0.47
+Nodes (9): test_update_qty_and_remove_item_actions(), _conv(), _drive(), _items(), Large-quantity anomaly guard: an unusually big line (e.g. "100000 lemon mints"), _seed_menu(), test_large_add_qty_escalates_and_does_not_add(), test_large_update_qty_escalates_and_keeps_old_qty() (+1 more)
 
 ### Community 258 - "Community 258"
 Cohesion: 0.70
 Nodes (4): test_activate_blocked_when_missing_price(), test_activate_menu(), test_activate_supersedes_previous(), _upload()
 
 ### Community 259 - "Community 259"
-Cohesion: 0.08
-Nodes (26): CountdownTimer(), NOW, LiveOrderRow(), o, PrepCountdown(), NOW, SLAOrderCard(), iso() (+18 more)
+Cohesion: 0.05
+Nodes (45): Column, CompactTable(), SK_WIDTHS, cols, Row, CountdownTimer(), NOW, LiveOrderRow() (+37 more)
 
 ### Community 261 - "Community 261"
 Cohesion: 0.40
@@ -2084,8 +1932,8 @@ Cohesion: 0.40
 Nodes (5): 14. Diagrams (flow & wiring), 14a. Tier lifecycle (Phase 1) — nightly recompute, grace, reward issuance, 14b. Earn loop (Phase 2) — points = wallet credit, idempotent, FSM-coupled, 14c. Where it plugs into existing code (all hook points already exist), 14d. Loyalty SettingsScreen tab (wireframe — everything editable, nothing hardcoded)
 
 ### Community 264 - "Community 264"
-Cohesion: 0.40
-Nodes (5): 4.1 Two kinds of coupon, 4.2 Model (generalize the existing one), 4.3 Code generation (anti-guessing), 4.4 Redemption rules (enforced atomically), 4. Coupon Design
+Cohesion: 0.38
+Nodes (9): _seed(), test_duty_requires_valid_token(), test_duty_toggle_endpoint(), test_expired_pairing_code_rejected(), test_invalid_pairing_code_rejected(), test_location_requires_valid_token(), test_me_endpoint_returns_active_order(), test_pair_then_location_reveals_stop_and_notifies() (+1 more)
 
 ### Community 265 - "Community 265"
 Cohesion: 0.40
@@ -2116,20 +1964,20 @@ Cohesion: 0.50
 Nodes (3): build_promo_image_prompt(), Build prompts for AI promo header images., Compose a food-photography prompt from manager input.
 
 ### Community 273 - "Community 273"
-Cohesion: 0.50
-Nodes (3): Habit drift on recurring weekly advance (spec §4.4.5)., Weekly phase must refresh usual_send_local_time from usual_order_times., test_advance_recurring_weekly_recomputes_usual_send_from_habits()
+Cohesion: 0.20
+Nodes (9): File map, Plan self-review (spec coverage), Task 1: Compaction history + outbound sanitizer, Task 2: Intent detectors + dish search handler, Task 3: post_order reset + menu browse handler + promise fulfillment, Task 4: Suggestion sub-agent (Approach C), Task 5: Prompt alignment (`context.txt` + `conversation_prompts.py`), Task 6: Integration + regression (+1 more)
 
 ### Community 274 - "Community 274"
 Cohesion: 0.50
 Nodes (4): Alerting Rules (SLA breach, outbox dead, webhook p95, 5xx, auth brute-force), Grafana Dashboard Description (restaurant-ops.json), Prometheus Metrics Set (http_requests, outbox_deliveries, sla_breaches, rate_limit), Observability: Prometheus + Grafana Setup
 
 ### Community 275 - "Community 275"
-Cohesion: 0.83
-Nodes (3): _order(), test_batched_orders_report_trip_members(), test_solo_order_has_no_batch_size()
+Cohesion: 0.22
+Nodes (5): metrics_response(), Prometheus metrics registry (P7-T10).  All metrics are registered in a dedicated, Return (body_bytes, content_type) for the /metrics handler., Tests for Prometheus metrics (P7-T10)., test_metrics_response_returns_bytes()
 
 ### Community 277 - "Community 277"
-Cohesion: 0.50
-Nodes (4): 9b. Redemption Flow & Duplicate-Redeem Prevention, How customers redeem, The five duplicate-redeem defenses, Why this is bulletproof
+Cohesion: 0.22
+Nodes (9): Audit, Complaint Detection, Customer Notification, Manager Dashboard, Resolution Action, Ticket, Ticket FSM, Wallet Ledger (+1 more)
 
 ### Community 278 - "Community 278"
 Cohesion: 0.50
@@ -2155,6 +2003,10 @@ Nodes (4): 8.1 New tenant defaults (SLA-safe launch), 8.2 Presets (Settings UI),
 Cohesion: 0.50
 Nodes (4): 9.1 PR dependency graph, 9.2 SLA gate per PR (merge blocker), 9.3 Production rollout, 9. Implementation schedule
 
+### Community 286 - "Community 286"
+Cohesion: 0.39
+Nodes (7): Return prep-ahead suggestions derived from the most recent run for the     given, ForecastRequest, ForecastResponse, OverrideRequest, OverrideResponse, PrepAheadResponse, Pydantic I/O schemas for the predictions REST API.
+
 ### Community 288 - "Community 288"
 Cohesion: 0.67
 Nodes (3): 8. Rider features, Rider mobile app (`/api/v1/rider-app/*`), WhatsApp rider flow
@@ -2168,12 +2020,12 @@ Cohesion: 0.33
 Nodes (6): Approach C (recommended), 400 ms target, Phase 0 quick wins, Phase 1 backend slimming, Phase 2 client cache, TanStack Query
 
 ### Community 292 - "Community 292"
-Cohesion: 0.05
-Nodes (51): DiffPanel(), diff, DispatchExplainSection(), SideDrawer(), ticket, TicketDetailDrawer(), onPause(), reload() (+43 more)
+Cohesion: 0.04
+Nodes (56): DiffPanel(), diff, DispatchExplainSection(), PageHeader(), SideDrawer(), ticket, TicketDetailDrawer(), onPause() (+48 more)
 
 ### Community 293 - "Community 293"
 Cohesion: 0.05
-Nodes (42): AppShell(), MetaConnectPanel(), SectionBanner(), Tone, TopBar(), getToken(), isAuthenticated(), login() (+34 more)
+Nodes (44): AppShell(), MetaConnectPanel(), SectionBanner(), Tone, listeners, Toaster(), ToastItem, ToastType (+36 more)
 
 ### Community 297 - "Community 297"
 Cohesion: 0.67
@@ -2188,16 +2040,16 @@ Cohesion: 0.67
 Nodes (3): 8.1 Business Sending Location Pin to User — SUPPORTED, 8.2 Requesting User Location — SUPPORTED, 8. Rider Use Case
 
 ### Community 301 - "Community 301"
-Cohesion: 0.25
-Nodes (3): seed_restaurant_customer(), Insert a restaurant + customer; return (restaurant_id, customer_id).      Dynami, seed_restaurant_customer()
+Cohesion: 0.40
+Nodes (3): Convert ``(lat, lng)`` to a concise human area label, or None.          e.g. ``(, Deliver one push. Returns True on success. Never raises for a normal         del, Send message; return wa_message_id.          ``phone_number_id``/``access_token`
 
 ### Community 312 - "Community 312"
 Cohesion: 0.06
 Nodes (67): _strip_money_claims(), test_confirm_order_number_is_real(), test_observation_turn_after_add(), test_proceed_to_confirmation_is_engine_only(), test_single_add_reply_has_db_cart_tail(), test_strip_money_claims_empty_and_none(), test_strip_money_claims_preserves_non_money_text(), test_strip_money_claims_removes_aed_lines() (+59 more)
 
 ### Community 317 - "Community 317"
-Cohesion: 0.06
-Nodes (64): _is_valid_action_for_phase(), Return True if action is allowed in the given phase., get_or_create_conversation(), _inb(), _last_outbound(), _order(), _seed(), test_claim_coupon_with_none_tells_customer() (+56 more)
+Cohesion: 0.08
+Nodes (54): _is_valid_action_for_phase(), get_or_create_conversation(), _inb(), _last_outbound(), _order(), _seed(), test_claim_coupon_with_none_tells_customer(), test_claim_my_coupon_intent_applies_single() (+46 more)
 
 ### Community 326 - "Community 326"
 Cohesion: 0.40
@@ -2212,8 +2064,8 @@ Cohesion: 0.50
 Nodes (3): loyalty_settings(), A settings dict with loyalty ENABLED (defaults otherwise)., seed_rc()
 
 ### Community 352 - "Community 352"
-Cohesion: 0.13
-Nodes (16): ndarray, build_observations(), DishHourObservation, feature_vector(), Pure feature builder for demand forecasting (no DB, model-agnostic).  The servic, Group raw order items by (dish_id, date, dow, hour) and sum qty.      Each item, Mean qty across observations matching the (dish, dow, hour) bucket.      Returns, Return the feature row in ``FEATURE_COLUMNS`` order.      Ramadan/holiday/weathe (+8 more)
+Cohesion: 0.09
+Nodes (23): ndarray, build_observations(), DishHourObservation, feature_vector(), Pure feature builder for demand forecasting (no DB, model-agnostic).  The servic, Group raw order items by (dish_id, date, dow, hour) and sum qty.      Each item, Mean qty across observations matching the (dish, dow, hour) bucket.      Returns, Return the feature row in ``FEATURE_COLUMNS`` order.      Ramadan/holiday/weathe (+15 more)
 
 ### Community 411 - "Community 411"
 Cohesion: 0.50
@@ -2235,13 +2087,21 @@ Nodes (4): Greedy Batching, OR-Tools, SLA (40-minute promise), Smart Hold
 Cohesion: 0.50
 Nodes (4): claude.py, config.py, deepseek.py, Task 5 (W7a)
 
+### Community 441 - "Community 441"
+Cohesion: 0.40
+Nodes (5): 3.1 Model, 3.2 Rules, 3.3 Spend flow (hold → capture, bank-style), 3.4 Lifecycle edges, 3. Wallet Design (ledger-based)
+
+### Community 442 - "Community 442"
+Cohesion: 0.50
+Nodes (3): get_shift_collections(), List a rider's COD collections for the current tenant., AsyncSession
+
 ### Community 445 - "Community 445"
 Cohesion: 0.38
 Nodes (4): test_model_registry_and_override(), test_prediction_run_roundtrip(), test_create_account_and_entry(), test_wallet_tablenames()
 
 ### Community 451 - "Community 451"
-Cohesion: 0.19
-Nodes (23): Add an audit row to the caller's transaction. The caller MUST commit (or flush), record_audit(), AuditLog, normalize_phone(), Normalize a phone to '+<digits>' (E.164-ish), stripping spaces, dashes, etc., complete_onboarding(), create_restaurant(), create_rider() (+15 more)
+Cohesion: 0.33
+Nodes (17): complete_onboarding(), create_restaurant(), create_rider(), delete_rider(), DuplicatePhoneError, get_onboarding_status(), latest_rider_location(), _latest_rider_locations() (+9 more)
 
 ### Community 452 - "Community 452"
 Cohesion: 0.67
@@ -2250,10 +2110,6 @@ Nodes (3): Dashboard Component Inventory (24 components), Dashboard Information 
 ### Community 453 - "Community 453"
 Cohesion: 0.67
 Nodes (3): catalog/service.py, Task 3 (W7a), Task 6 (W7a)
-
-### Community 505 - "Community 505"
-Cohesion: 0.33
-Nodes (4): current_restaurant(), AsyncSession, HTTPAuthorizationCredentials, Restaurant
 
 ### Community 663 - "Community 663"
 Cohesion: 0.33
@@ -2268,52 +2124,40 @@ Cohesion: 0.33
 Nodes (3): Final meeting overview doc — simple points, NO hyphens, NO em dashes., _shade(), table()
 
 ### Community 666 - "Community 666"
-Cohesion: 0.07
-Nodes (34): get_settings(), geocode_cached(), _key(), Redis read-through cache for geocoding results (address → lat/lng).  Repeated ad, Inject the async Redis client used for the geocode cache (or None)., Geocode ``address`` via a Redis read-through cache.      Returns ``(lat, lng)``, Reverse-geocode ``(lat, lng)`` to an area label via a Redis read-through     cac, reverse_geocode_cached() (+26 more)
+Cohesion: 0.03
+Nodes (62): include_object(), Ignore tables that exist in the DB but not in our models.      The postgis/postg, run_async_migrations(), run_migrations_online(), get_settings(), Settings, BaseSettings, geocode_cached() (+54 more)
 
 ### Community 667 - "Community 667"
 Cohesion: 0.36
 Nodes (9): _count_hits(), _do1_flags(), _extract_blocks(), _load_prompt_text(), main(), _never_always_without_spec(), Path, Return (symbol, block_body) for known prompt constants. (+1 more)
 
 ### Community 676 - "Community 676"
-Cohesion: 0.14
-Nodes (19): build_catalog_item_data(), check_batch_request_status(), _collect_batch_errors(), format_meta_price(), _parse_price(), Read a Meta Commerce catalogue's products via the Graph API.  Used ONLY by the O, Build items_batch ``data`` with Meta Commerce fields.      See https://developer, Surface per-item validation errors from an items_batch response. (+11 more)
+Cohesion: 0.13
+Nodes (20): build_catalog_item_data(), check_batch_request_status(), _collect_batch_errors(), fetch_catalog_products(), format_meta_price(), _parse_price(), Read a Meta Commerce catalogue's products via the Graph API.  Used ONLY by the O, Build items_batch ``data`` with Meta Commerce fields.      See https://developer (+12 more)
 
 ### Community 682 - "Community 682"
-Cohesion: 0.17
-Nodes (34): AvailabilityIn, _dish_retailer_id(), Stable Content ID for a dish pushed to Meta., DishIn, DishPatch, activate_menu(), add_dish(), create_blank_menu() (+26 more)
+Cohesion: 0.19
+Nodes (32): AvailabilityIn, _dish_retailer_id(), Stable Content ID for a dish pushed to Meta., DishIn, DishPatch, activate_menu(), add_dish(), create_blank_menu() (+24 more)
 
 ### Community 688 - "Community 688"
-Cohesion: 0.19
-Nodes (20): push_products_batch(), Push CREATE/UPDATE/DELETE batch to Meta ``/{catalog_id}/items_batch``.      Each, auto_publish_to_meta(), _ensure_orderable_dishes(), is_catalog_fully_synced(), _mirror_dishes_to_catalog(), push_dishes_to_meta(), Sync a restaurant's Meta Commerce catalogue into local ``catalog_products``.  Dr (+12 more)
-
-### Community 690 - "Community 690"
-Cohesion: 0.18
-Nodes (18): Base, TimestampMixin, A product mirrored from the restaurant's Meta Commerce catalogue.      Populated, End-of-shift COD cash reconciliation for a rider., A discount coupon.      Two shapes share this table:       * **apology** (kind=', DeclarativeBase, Junction: which orders belong to a batch, in delivery sequence., Time-series table: each location ping from a rider.      Hot copy also stored in (+10 more)
+Cohesion: 0.09
+Nodes (43): is_product_sendable(), push_products_batch(), True when WhatsApp can include this product in an interactive product_list., Push CREATE/UPDATE/DELETE batch to Meta ``/{catalog_id}/items_batch``.      Each, auto_publish_to_meta(), _ensure_orderable_dishes(), is_catalog_fully_synced(), _mirror_dishes_to_catalog() (+35 more)
 
 ### Community 691 - "Community 691"
-Cohesion: 0.24
-Nodes (18): CatalogProductOut, get_catalog_products(), push_catalog(), Catalog flow HTTP surface (manager-authed).  A small endpoint to push the WhatsA, Pull the latest products from Meta into the local catalogue mirror.      Drives, Push local dishes to Meta, then re-pull the catalogue mirror., The products synced from this restaurant's Meta catalogue (for the OPS view)., _refresh_grounding() (+10 more)
+Cohesion: 0.26
+Nodes (17): CatalogProductOut, get_catalog_products(), push_catalog(), Catalog flow HTTP surface (manager-authed).  A small endpoint to push the WhatsA, Pull the latest products from Meta into the local catalogue mirror.      Drives, Push local dishes to Meta, then re-pull the catalogue mirror., The products synced from this restaurant's Meta catalogue (for the OPS view)., _refresh_grounding() (+9 more)
 
 ### Community 698 - "Community 698"
-Cohesion: 0.28
-Nodes (19): _aed(), _apply_category_map(), _category_of(), _find_dish(), _load_category_map(), _load_sendable_products(), _order_cart_snapshot(), _ordered_categories() (+11 more)
-
-### Community 700 - "Community 700"
-Cohesion: 0.29
-Nodes (12): handle_catalog_order(), Normalize retailer id keys from Cloud API / simulator / legacy payloads., _retailer_id_from_item(), _order_inbound(), _seed_catalog_menu(), test_basket_accepts_alternate_retailer_id_keys(), test_basket_rejects_dish_without_active_catalog_product(), test_catalog_cart_creates_order_and_confirms() (+4 more)
+Cohesion: 0.05
+Nodes (75): _aed(), _apply_category_map(), _category_of(), _find_dish(), handle_catalog_order(), _load_category_map(), _load_sendable_products(), _order_cart_snapshot() (+67 more)
 
 ### Community 725 - "Community 725"
-Cohesion: 0.17
-Nodes (81): AddressDetailOut, AddressPatchIn, AuditLog, CodCollection, Records cash collected by a rider for a delivered order., Mirror outbound WhatsApp sends to a rider's dashboard thread (best-effort)., CustomerDetailOut, CustomerListOut (+73 more)
+Cohesion: 0.13
+Nodes (92): AddressDetailOut, AddressPatchIn, AuditLog, Turn a sent catalog cart into a draft order and ask for the delivery location., CodCollection, Records cash collected by a rider for a delivered order., RiderShiftReconciliation, Mirror outbound WhatsApp sends to a rider's dashboard thread (best-effort). (+84 more)
 
 ### Community 727 - "Community 727"
-Cohesion: 0.11
-Nodes (14): lifespan(), get_shift_collections(), List a rider's COD collections for the current tenant., set_preview_cache_redis(), FastAPI, Serve marketing media (template header images) from Postgres at ``/media/<path>`, serve_media(), init_sentry() (+6 more)
-
-### Community 728 - "Community 728"
-Cohesion: 0.19
-Nodes (16): COD collection ledger (spec §4.4.4 / §3).  COD is the only payment method on the, Idempotent on order_id (unique). Returns the existing row if already recorded., Sum a rider's collections for shift_date; write reconciliation with variance., reconcile_shift(), record_collection(), _order(), _seed(), test_reconcile_shift_balanced() (+8 more)
+Cohesion: 0.12
+Nodes (14): lifespan(), set_preview_cache_redis(), FastAPI, current_restaurant(), init_sentry(), Optional Sentry SDK integration — only initialises when APP_SENTRY_DSN is set., Initialize Sentry if DSN is provided. No-op when DSN is empty/None., get_limiter() (+6 more)
 
 ### Community 731 - "Community 731"
 Cohesion: 0.19
@@ -2324,60 +2168,60 @@ Cohesion: 0.27
 Nodes (9): build_context_snapshot(), estimate_chars(), estimate_tokens(), log_context_snapshot(), Context token estimation for observability (E-22)., Sum character lengths of prompt parts (system, history, grounding)., Approximate token count from character count., Structured context budget snapshot for logging / ops. (+1 more)
 
 ### Community 747 - "Community 747"
-Cohesion: 0.09
-Nodes (36): _dish_ref_matches_cart_name(), _pick_in_cart_dish_id(), Map a partial dish reference to a dish_id already in the draft cart., _resolve_in_cart_dish_id(), _active_menu_id(), bundle_variant_for_qty(), _dish_vocab(), find_dish_matches() (+28 more)
+Cohesion: 0.06
+Nodes (53): _dish_ref_matches_cart_name(), _dish_search_is_browse_only(), _is_menu_request(), _pick_in_cart_dish_id(), True when ``text`` is an unambiguous exact dish name (not a note fragment)., True when a partial customer dish reference targets an in-cart line name., Map a partial dish reference to a dish_id already in the draft cart., True for short, explicit 'show me the menu' messages, in ANY served language. (+45 more)
 
 ### Community 750 - "Community 750"
-Cohesion: 0.06
-Nodes (49): _seed(), test_ambiguous_candidates_filtered_to_catalogue(), test_ambiguous_candidates_unfiltered_in_text_mode(), test_cart_edit_intent_detection(), test_catalog_excludes_dish_logic(), test_catalog_excludes_nothing_in_text_mode(), test_catalog_typed_noncatalogue_item_answered_not_catalogue(), test_catalog_typed_order_adds_directly_not_catalogue() (+41 more)
+Cohesion: 0.05
+Nodes (58): _seed(), test_ambiguous_candidates_filtered_to_catalogue(), test_ambiguous_candidates_unfiltered_in_text_mode(), test_cart_edit_intent_detection(), test_catalog_excludes_dish_logic(), test_catalog_excludes_nothing_in_text_mode(), test_catalog_typed_noncatalogue_item_answered_not_catalogue(), test_catalog_typed_order_adds_directly_not_catalogue() (+50 more)
 
 ### Community 758 - "Community 758"
 Cohesion: 0.23
-Nodes (13): _mentions_can_call(), _mentions_do_not_call(), True if the customer asked not to be phoned (rider should message only)., _customer(), _msg(), test_can_call_clears_previous_preference(), test_dont_call_sets_customer_preference(), test_mentions_can_call_negative() (+5 more)
+Nodes (13): _mentions_can_call(), _mentions_do_not_call(), True if the customer said calling is OK (undo a prior 'don't call')., _customer(), _msg(), test_can_call_clears_previous_preference(), test_dont_call_sets_customer_preference(), test_mentions_can_call_negative() (+5 more)
 
 ### Community 761 - "Community 761"
-Cohesion: 0.05
-Nodes (180): _add_dish_to_cart(), _advance_modify_to_confirm(), _aed(), _answer_dish_info(), _apply_confirmation_edit(), _apply_note_to_existing_cart_item(), _apply_post_confirm_line_edit(), _apply_tot_lite_branch() (+172 more)
+Cohesion: 0.03
+Nodes (214): _add_dish_to_cart(), _advance_modify_to_confirm(), _aed(), _answer_dish_info(), _apply_confirmation_edit(), _apply_note_to_existing_cart_item(), _apply_post_confirm_line_edit(), _apply_tot_lite_branch() (+206 more)
 
 ### Community 809 - "Community 809"
-Cohesion: 0.12
-Nodes (26): _hours_info(), Grounded opening-hours line for the AI prompt.      Unconfigured hours mean "alw, _fmt_time(), is_open(), next_opening_label(), _parse_hhmm(), Business-hours helper (OPT-IN).  Pure functions over the restaurant's ``settings, Return (open, close) for the weekday, or None if closed/invalid. (+18 more)
+Cohesion: 0.08
+Nodes (28): _hours_info(), _fmt_time(), is_open(), next_opening_label(), _parse_hhmm(), Business-hours helper (OPT-IN).  Pure functions over the restaurant's ``settings, Return (open, close) for the weekday, or None if closed/invalid., True if the restaurant is open at ``now`` (UTC). Empty config ⇒ always open. (+20 more)
 
 ### Community 840 - "Community 840"
 Cohesion: 0.07
-Nodes (82): _cart_expired(), _download_and_transcribe_voice(), handle_inbound(), _is_claim_coupon(), _is_done_intent(), _is_pure_greeting(), _is_resale_accept(), True if a draft cart has been quiet past the restaurant's cart_expiry_minutes — (+74 more)
+Nodes (84): _cart_expired(), _download_and_transcribe_voice(), handle_inbound(), _is_ack_proceed_intent(), _is_checkout_shortcut(), _is_claim_coupon(), _is_done_intent(), _is_pure_greeting() (+76 more)
 
 ### Community 859 - "Community 859"
-Cohesion: 0.14
-Nodes (32): _execute_ai_add_item(), _is_size_choice_dish(), True for drink-style dishes whose variants are sizes (Large/Small) to pick,, Find and add a dish. Returns "added" or "no_match".      Serving-size variants a, _resto(), test_genuinely_off_menu_still_declines(), test_unavailable_dish_offers_alternative(), _conv() (+24 more)
+Cohesion: 0.13
+Nodes (34): _execute_ai_add_item(), _is_size_choice_dish(), True for drink-style dishes whose variants are sizes (Large/Small) to pick,, _resto(), test_genuinely_off_menu_still_declines(), test_unavailable_dish_offers_alternative(), _conv(), _last_body() (+26 more)
 
 ### Community 887 - "Community 887"
 Cohesion: 0.08
-Nodes (44): Return ("rider", rider) if the phone is a rider for this tenant, else ("customer, _resolve_counterpart(), attachment_preview_label(), download_inbound_media(), inbound_media_id(), inbound_media_mime(), Helpers for inbound WhatsApp attachments shown in the manager Chats UI., Fetch attachment bytes for image/document/video/sticker messages. (+36 more)
+Nodes (44): _resolve_counterpart(), attachment_preview_label(), download_inbound_media(), inbound_media_id(), inbound_media_mime(), Helpers for inbound WhatsApp attachments shown in the manager Chats UI., Fetch attachment bytes for image/document/video/sticker messages., get_dashboard_messages() (+36 more)
 
 ### Community 900 - "Community 900"
 Cohesion: 0.11
 Nodes (24): is_checkout_intent(), is_completion_intent(), is_done_intent(), E-17 ToT-lite rubric for ambiguous router UNKNOWN turns.  Extracted from engine., True when the customer wants to finish ordering (not a dish name)., E-07 deterministic completion — replaces LLM completion detector on modify path., True for a 'that's all / done / nothing else' checkout phrase., Keyword rubric when the router returns UNKNOWN. (+16 more)
 
 ### Community 907 - "Community 907"
-Cohesion: 0.24
-Nodes (12): _aed(), _note_suffix(), Pure DB renderer for cart and order summary (W3/RA-1/R-013/R-040).  Renders cart, Format a money value as a plain AED amount string.      Identical logic to engin, Render an order item's special-note suffix (identical to engine._note_suffix)., Return a DB-backed cart/summary string for the given order and dialogue phase., Render the \\n\\n🛒 cart tail for the ordering phase (mirrors engine._cart_tail)., Render the full order-summary text body for the awaiting_confirmation phase. (+4 more)
+Cohesion: 0.25
+Nodes (10): _aed(), _note_suffix(), Pure DB renderer for cart and order summary (W3/RA-1/R-013/R-040).  Renders cart, Format a money value as a plain AED amount string.      Identical logic to engin, Render an order item's special-note suffix (identical to engine._note_suffix)., Render the \\n\\n🛒 cart tail for the ordering phase (mirrors engine._cart_tail)., Render the full order-summary text body for the awaiting_confirmation phase., _render_cart_tail() (+2 more)
 
 ### Community 914 - "Community 914"
-Cohesion: 0.21
-Nodes (34): ChatCustomerContextOut, abandoned_cart_tick(), _attachment_response(), conversation_context(), _dispatch_outbox(), get_message_audio(), get_message_media(), list_conversations() (+26 more)
+Cohesion: 0.24
+Nodes (31): ChatCustomerContextOut, abandoned_cart_tick(), _attachment_response(), conversation_context(), _dispatch_outbox(), get_message_audio(), get_message_media(), list_conversations() (+23 more)
 
 ### Community 918 - "Community 918"
 Cohesion: 0.13
-Nodes (26): Customer context for the chat: wallet balance + recent orders, so a manager, MenuExtractor, Single menu view: dishes + Meta catalogue products with link status., Manager turns a dish's WhatsApp catalogue presence ON or OFF.      OFF → unpubli, Serialize a menu for the manager dashboard, hiding archived (soft-deleted) dishe, For a dish that has no own ``image_url`` but is linked to a Meta catalogue produ, AvailabilityIn, DiffOut (+18 more)
+Nodes (27): Customer context for the chat: wallet balance + recent orders, so a manager, Single menu view: dishes + Meta catalogue products with link status., Manager turns a dish's WhatsApp catalogue presence ON or OFF.      OFF → unpubli, Serialize a menu for the manager dashboard, hiding archived (soft-deleted) dishe, For a dish that has no own ``image_url`` but is linked to a Meta catalogue produ, AvailabilityIn, DiffOut, DishIn (+19 more)
 
 ### Community 933 - "Community 933"
-Cohesion: 0.17
-Nodes (9): abandoned_cart_sweep(), Abandoned-cart recovery Celery task.  Every few minutes, look at customer conver, _run_sweep(), dispatch_sweep_ready(), Periodic dispatch sweep (Celery beat).  Runs the dispatch engine for every resta, Celery beat: nightly loyalty tier recompute across all tenants.  Per restaurant, recompute_all_tenants(), _run() (+1 more)
+Cohesion: 0.12
+Nodes (17): abandoned_cart_sweep(), Abandoned-cart recovery Celery task.  Every few minutes, look at customer conver, _run_sweep(), dispatch_sweep_ready(), Periodic dispatch sweep (Celery beat).  Runs the dispatch engine for every resta, Celery beat: nightly loyalty tier recompute across all tenants.  Per restaurant, recompute_all_tenants(), _run() (+9 more)
 
 ### Community 936 - "Community 936"
-Cohesion: 0.13
-Nodes (28): Coupon, CouponRedemption, CouponRedemption, Append-only ledger of coupon uses — THE source of truth for limit     enforcemen, _compute_discount(), create_coupon(), _generate_code(), issue_coupon() (+20 more)
+Cohesion: 0.11
+Nodes (30): Add an audit row to the caller's transaction. The caller MUST commit (or flush), record_audit(), AuditLog, Coupon, CouponRedemption, _compute_discount(), create_coupon(), _generate_code() (+22 more)
 
 ### Community 937 - "Community 937"
 Cohesion: 0.27
@@ -2385,7 +2229,7 @@ Nodes (12): CouponCreateIn, CouponIssueIn, CouponOut, create_coupon(), issue_cou
 
 ### Community 948 - "Community 948"
 Cohesion: 0.06
-Nodes (50): Shared batch planning for preview (dry) and dispatch (live)., Return planned batches using the same greedy rules as dispatch., Map order_id -> preview label (A, B, …) for batches with 2+ orders., run_batch_plan(), compute_batch_total_est_min(), _compute_route_time_to_stops(), _insertion_detour_km(), _leg_minutes() (+42 more)
+Nodes (57): Shared batch planning for preview (dry) and dispatch (live)., Return planned batches using the same greedy rules as dispatch., Map order_id -> preview label (A, B, …) for batches with 2+ orders., run_batch_plan(), compute_batch_total_est_min(), _compute_route_time_to_stops(), _insertion_detour_km(), _leg_minutes() (+49 more)
 
 ### Community 960 - "Community 960"
 Cohesion: 0.22
@@ -2404,100 +2248,88 @@ Cohesion: 0.33
 Nodes (8): get_cached_preview(), invalidate_preview_cache(), Tenant-scoped TTL cache for ``preview_batch_groups`` results.  Batch preview run, Drop cached labels when dispatch pool changes (assign, ready, cancel)., _redis_key(), set_cached_preview(), _ttl_seconds(), test_preview_cache_roundtrip_and_invalidate()
 
 ### Community 992 - "Community 992"
-Cohesion: 0.13
-Nodes (29): create_pairing_code(), get_rider_by_device_token(), _new_device_token(), _new_pairing_code(), notify_rider_cancelled(), _now(), Native rider app (Android): pairing + device auth + background GPS ingest.  Flow, Store the rider's Expo push token (set by the app after it registers for     not (+21 more)
+Cohesion: 0.33
+Nodes (14): create_pairing_code(), get_rider_by_device_token(), _new_device_token(), _new_pairing_code(), notify_rider_assigned(), notify_rider_cancelled(), _now(), record_rider_app_location() (+6 more)
 
 ### Community 997 - "Community 997"
-Cohesion: 0.29
-Nodes (14): notify_rider_assigned(), Push the rider that a delivery was assigned, so they open the app (which     the, _pair(), _ping(), _seed(), test_app_delivered_blocked_without_live_gps(), test_app_delivered_records_cod_and_reports_next(), test_app_endpoints_require_device_token() (+6 more)
+Cohesion: 0.35
+Nodes (12): _pair(), _ping(), _seed(), test_app_delivered_blocked_without_live_gps(), test_app_delivered_records_cod_and_reports_next(), test_app_endpoints_require_device_token(), test_app_not_delivered_blocked_before_pickup(), test_app_not_delivered_marks_undeliverable_and_advances_run() (+4 more)
 
 ### Community 1000 - "Community 1000"
-Cohesion: 0.14
-Nodes (41): DeliverOutcome, NotDeliveredOutcome, AckOut, _active_order(), _current_rider(), DeliveredOut, DutyIn, DutyOut (+33 more)
+Cohesion: 0.15
+Nodes (40): DeliverOutcome, NotDeliveredOutcome, AckOut, _active_order(), _current_rider(), DeliveredOut, DutyIn, DutyOut (+32 more)
 
 ### Community 1010 - "Community 1010"
-Cohesion: 0.15
-Nodes (33): get_active_run(), mark_batch_picked_up(), mark_order_delivered(), mark_order_not_delivered(), check_and_send_near_dual_if_applicable(), _dropoff_coords(), _get_latest_rider_location(), handle_delivered() (+25 more)
+Cohesion: 0.28
+Nodes (21): check_and_send_near_dual_if_applicable(), _dropoff_coords(), _get_latest_rider_location(), handle_delivered(), handle_orders_picked(), _maps_link(), notify_customer_near_door_if_applicable(), _notify_customer_status() (+13 more)
 
 ### Community 1023 - "Community 1023"
-Cohesion: 0.07
-Nodes (14): Live rider position ingestion (spec §4.4.6).  A rider's WhatsApp location messag, Append a rider location ping + best-effort Redis GEO hot copy. Caller commits., Best-effort hot copy to Redis GEO. No-op if redis unavailable (tests)., update_rider_location(), _write_redis_geo(), test_create_rider_auto_sends_app_invite(), test_manager_on_duty_clears_off_shift(), test_manager_sets_rider_duty() (+6 more)
+Cohesion: 0.11
+Nodes (4): test_create_rider_auto_sends_app_invite(), test_manager_on_duty_clears_off_shift(), test_manager_sets_rider_duty(), test_update_dispatch_and_kitchen_settings()
 
 ### Community 1026 - "Community 1026"
-Cohesion: 0.30
-Nodes (10): Assignment, get_dispatch_kpis(), get_live_ops_map(), list_assignments(), Dispatch endpoints — trigger + assignment explainability (spec §4.3, §5.6)., trigger_dispatch(), DispatchKpisOut, LiveOpsMapOut (+2 more)
+Cohesion: 0.14
+Nodes (24): Assignment, ConversationOut, MessageOut, get_dispatch_kpis(), get_live_ops_map(), list_assignments(), Dispatch endpoints — trigger + assignment explainability (spec §4.3, §5.6)., Manually trigger the dispatch engine for this restaurant. (+16 more)
 
 ### Community 1033 - "Community 1033"
 Cohesion: 0.16
 Nodes (12): rank_riders(), Rider scoring (spec §4.3.4).  Composite blends distance-to-pickup, current workl, Composite score — lower is better. Persisted to assignments.algorithm_score., Return scored riders sorted best (lowest composite) first., score_rider(), ScoredRider, test_rank_riders_empty_returns_empty(), test_rank_riders_orders_best_first() (+4 more)
 
 ### Community 1036 - "Community 1036"
-Cohesion: 0.16
-Nodes (38): _acquire_dispatch_lock(), _active_order_count(), _apply_unbatch_sla_safety(), _commit_route(), _dispatch(), _dispatch_greedy(), _dispatch_ortools(), _dropoff_coords() (+30 more)
+Cohesion: 0.21
+Nodes (33): _acquire_dispatch_lock(), _active_order_count(), _apply_unbatch_sla_safety(), _build_preview_candidates(), _commit_route(), _dispatch(), _dispatch_greedy(), _dispatch_ortools() (+25 more)
 
 ### Community 1041 - "Community 1041"
-Cohesion: 0.22
-Nodes (19): labels_from_batches(), _batch_plan_settings_from_restaurant(), _build_preview_candidates(), preview_batch_groups(), Load unassigned preview-eligible orders using the same pool as ``_dispatch``., _order(), _same_group(), _seed_restaurant() (+11 more)
+Cohesion: 0.26
+Nodes (16): labels_from_batches(), _batch_plan_settings_from_restaurant(), preview_batch_groups(), _order(), _same_group(), _seed_restaurant(), test_assigned_orders_are_excluded_from_preview(), test_nearby_unassigned_orders_share_a_preview_label() (+8 more)
 
 ### Community 1069 - "Community 1069"
-Cohesion: 0.13
-Nodes (21): build_rejections_for_dropped(), build_route_algorithm_score(), _infer_batch_reason(), _zone_label(), Unit tests for manual delivery zones and corridor detour eligibility., On-the-way stops batch via corridor even when they fall in different zones., Integration: build_batches reads delivery_zones and applies same_zone_or_corrido, A lateral stop fails corridor eligibility when detour exceeds the cap. (+13 more)
+Cohesion: 0.15
+Nodes (14): Unit tests for manual delivery zones and corridor detour eligibility., On-the-way stops batch via corridor even when they fall in different zones., Integration: build_batches reads delivery_zones and applies same_zone_or_corrido, A lateral stop fails corridor eligibility when detour exceeds the cap., test_build_batches_uses_zone_gate_when_zones_configured(), test_corridor_detour_eligible_different_zones(), test_corridor_detour_rejected_off_route(), test_same_zone_eligible() (+6 more)
 
 ### Community 1078 - "Community 1078"
-Cohesion: 0.08
-Nodes (37): _seed_order(), _seed_restaurant(), _seed_rider(), test_tracking_reply_bogus_rider_position_no_eta(), test_tracking_reply_delivered(), test_tracking_reply_en_route_includes_eta(), test_tracking_reply_preparing(), build_tracking_reply() (+29 more)
+Cohesion: 0.07
+Nodes (41): _seed_order(), _seed_restaurant(), _seed_rider(), test_tracking_reply_bogus_rider_position_no_eta(), test_tracking_reply_delivered(), test_tracking_reply_en_route_includes_eta(), test_tracking_reply_preparing(), build_tracking_reply() (+33 more)
 
 ### Community 1080 - "Community 1080"
-Cohesion: 0.06
-Nodes (35): Return the nearest known Dubai area as "Area, Dubai" (dev/tests).          Picks, Offline address candidates from the Dubai gazetteer (dev/tests).          Return, Resolve a known Dubai area name in the address to coordinates.          Tries an, _component(), _concise_area(), GoogleMapsGeoProvider, Google Maps Routes API provider.  Real implementation calls Routes API with traf, Return road distance in km (haversine fallback on Maps failure). (+27 more)
+Cohesion: 0.07
+Nodes (31): Return the nearest known Dubai area as "Area, Dubai" (dev/tests).          Picks, Offline address candidates from the Dubai gazetteer (dev/tests).          Return, Resolve a known Dubai area name in the address to coordinates.          Tries an, _component(), _concise_area(), GoogleMapsGeoProvider, Google Maps Routes API provider.  Real implementation calls Routes API with traf, Return road distance in km (haversine fallback on Maps failure). (+23 more)
 
 ### Community 1106 - "Community 1106"
-Cohesion: 0.11
-Nodes (26): Convert ``(lat, lng)`` to a concise human area label, or None.          e.g. ``(, _backoff_countdown(), claim_pending_outbox_ids(), deliver_outbox_message(), _is_permanent_failure(), _mark_dead(), _outbox_row_to_outbound(), Mark an outbox message as dead (unrecoverable) in the DB. (+18 more)
+Cohesion: 0.14
+Nodes (24): _seed_outbox(), test_deliver_one_marks_dead_after_3_failures(), test_deliver_one_marks_failed_on_send_error(), test_deliver_one_sends_and_marks_sent(), _backoff_countdown(), claim_pending_outbox_ids(), _deliver_one(), deliver_outbox_message() (+16 more)
 
 ### Community 1107 - "Community 1107"
-Cohesion: 0.17
-Nodes (16): _seed_tracking_order(), test_live_tracking_expires_when_order_delivered(), test_live_tracking_start_update_public_and_stop(), create_access_token(), decode_access_token(), decode_token(), Decode and verify a JWT, enforcing aud and iss. Returns full claims dict., Backward-compat wrapper: decode a manager token, return restaurant_id as int. (+8 more)
+Cohesion: 0.11
+Nodes (23): _seed_tracking_order(), test_live_tracking_expires_when_order_delivered(), test_live_tracking_start_update_public_and_stop(), create_access_token(), decode_access_token(), decode_token(), hash_password(), Decode and verify a JWT, enforcing aud and iss. Returns full claims dict. (+15 more)
 
 ### Community 1109 - "Community 1109"
 Cohesion: 0.07
-Nodes (37): apply_meta_settings(), disconnect_meta(), meta_connected(), meta_settings(), Per-restaurant Meta / WhatsApp connection config, stored in restaurants.settings, Return this restaurant's Meta connection config (empty strings if unset)., Merge a Meta-config patch into restaurant.settings; return the new snapshot., Clear this restaurant's WhatsApp connection and re-open onboarding.      Removes (+29 more)
+Nodes (35): apply_meta_settings(), disconnect_meta(), meta_connected(), meta_settings(), Per-restaurant Meta / WhatsApp connection config, stored in restaurants.settings, Return this restaurant's Meta connection config (empty strings if unset)., Merge a Meta-config patch into restaurant.settings; return the new snapshot., Clear this restaurant's WhatsApp connection and re-open onboarding.      Removes (+27 more)
 
 ### Community 1143 - "Community 1143"
-Cohesion: 0.08
-Nodes (54): ClaudeArbiter, ClaudeCompletionDetector, ClaudeConversationAgent, ClaudeDescriber, ClaudeExtractor, ClaudeForecastAdjuster, ClaudeIntentClassifier, ClaudeKitchenSummarizer (+46 more)
+Cohesion: 0.09
+Nodes (46): ClaudeArbiter, ClaudeCompletionDetector, ClaudeConversationAgent, ClaudeDescriber, ClaudeExtractor, ClaudeForecastAdjuster, ClaudeIntentClassifier, ClaudeKitchenSummarizer (+38 more)
 
 ### Community 1153 - "Community 1153"
 Cohesion: 0.11
-Nodes (18): build_chat_snippet_for_summarizer(), build_complaint_prompt(), category_from_summary(), parse_complaint_response(), Post-delivery complaint sub-agent (E-10).  Focused LLM call with order + chat co, Map sub-agent output to Ticket.category when possible., Parse complaint sub-agent JSON into ``{issue, suggested_action}``., User turn for the complaint summarizer. (+10 more)
+Nodes (20): build_chat_snippet_for_summarizer(), build_complaint_prompt(), category_from_summary(), parse_complaint_response(), Post-delivery complaint sub-agent (E-10).  Focused LLM call with order + chat co, Map sub-agent output to Ticket.category when possible., Parse complaint sub-agent JSON into ``{issue, suggested_action}``., User turn for the complaint summarizer. (+12 more)
 
 ### Community 1161 - "Community 1161"
-Cohesion: 0.08
-Nodes (25): _phase_guidance(), build_context_management_config(), claude_request_kwargs(), format_memory_context(), Anthropic platform context management (E-11).  Server-side tool-result clearing, Return ``context_management`` payload for Claude beta Messages API., E-11 memory-tool analogue: inject durable session notes outside history window., Extra kwargs for ``beta.messages.create`` when context management is enabled. (+17 more)
+Cohesion: 0.05
+Nodes (52): _phase_guidance(), build_context_management_config(), claude_request_kwargs(), format_memory_context(), Anthropic platform context management (E-11).  Server-side tool-result clearing, Return ``context_management`` payload for Claude beta Messages API., E-11 memory-tool analogue: inject durable session notes outside history window., Extra kwargs for ``beta.messages.create`` when context management is enabled. (+44 more)
 
 ### Community 1192 - "Community 1192"
-Cohesion: 0.09
-Nodes (42): clamp_summary_lines(), Kitchen conversation digest — prompt + structured ground-truth renderer.  Senior, Tier 1: deterministic digest from persisted order/address fields., render_structured_lines(), _chat_for_this_order(), delete_order(), get_order_detail(), _kitchen_convo_summary() (+34 more)
+Cohesion: 0.10
+Nodes (41): clamp_summary_lines(), Kitchen conversation digest — prompt + structured ground-truth renderer.  Senior, Tier 1: deterministic digest from persisted order/address fields., render_structured_lines(), _chat_for_this_order(), delete_order(), get_order_detail(), _kitchen_convo_summary() (+33 more)
 
 ### Community 1194 - "Community 1194"
 Cohesion: 0.07
-Nodes (25): _async_chat(), _async_chat_tools(), _get_deepseek_settings(), _headers(), _sanitise_effect(), _sync_chat(), build_tier2_prompt(), parse_tier2_response() (+17 more)
-
-### Community 1196 - "Community 1196"
-Cohesion: 0.20
-Nodes (11): build_modify_prompt(), format_proposed_lines(), parse_modify_response(), Order-modify sub-agent (E-10).  Distills a multi-line modify proposal into struc, E-10 order-modify sub-agent prompt helpers + parsing., test_build_modify_prompt_includes_all_sections(), test_format_proposed_lines(), test_parse_modify_response_invalid_action_defaults() (+3 more)
-
-### Community 1197 - "Community 1197"
-Cohesion: 0.11
-Nodes (25): Rewrite em/en/standalone-hyphen separators in an AI reply as commas.      Compou, strip_dashes(), strip_dashes: AI replies must not carry em/en-dash separators, but legitimate co, test_compound_word_hyphen_is_preserved(), test_em_dash_separator_becomes_comma(), test_empty_and_none_safe(), test_en_dash_separator_becomes_comma(), test_no_dash_unchanged() (+17 more)
+Nodes (26): _async_chat(), _async_chat_tools(), _get_deepseek_settings(), _headers(), _sanitise_effect(), _sync_chat(), get_thought_evaluator(), E-17 ToT-lite evaluator (deterministic-first; Fake for tests). (+18 more)
 
 ### Community 1199 - "Community 1199"
-Cohesion: 0.09
-Nodes (24): ArbiterPort, ComplaintSummarizerPort, CompletionDetectorPort, ConversationAgentPort, DescriberPort, IntentClassifierPort, KitchenSummarizerPort, ModifySummarizerPort (+16 more)
-
-### Community 1209 - "Community 1209"
-Cohesion: 0.19
-Nodes (16): ForecastAdjusterPort, Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape)., Plain-English manager override -> parsed_effect DSL dict (see adjust.py shape)., ManagerOverride, ModelRegistry, PredictionRun, DishHourForecast, ForecastModel (+8 more)
+Cohesion: 0.06
+Nodes (67): AI-powered full-conversation agent for customer ordering via WhatsApp., W4 Task 1 — top-level multilingual intent router: port + Fake impl.  The Fake is, Phase-aware AI ordering assistant using DeepSeek function calling., Enum, Test double — returns deterministic responses based on last user message., Test double: rule-based plain-English -> validated segment DSL.      Heuristics, Extract first text block; guard truncation/empty content (error contract: Runtim, Production describer via Claude API. Max 3 lines, never includes price. (+59 more)
 
 ### Community 1212 - "Community 1212"
 Cohesion: 0.07
@@ -2512,8 +2344,8 @@ Cohesion: 0.33
 Nodes (5): configure_logging(), get_request_id_processor(), Structlog JSON logging configuration (P7-T8).  Call ``configure_logging()`` once, Configure structlog with JSON output (prod) or pretty console (dev)., Return a structlog processor that reads request_id from context vars.      Retur
 
 ### Community 1234 - "Community 1234"
-Cohesion: 0.15
-Nodes (26): compute_tier(), earn(), _issue_tier_reward(), _loyalty_cfg(), maybe_issue_recurring_reward(), _notify_tier_up(), _qualifies(), Loyalty program — tiers (Phase 1) + earn-as-wallet-credit (Phase 2).  Everything (+18 more)
+Cohesion: 0.17
+Nodes (27): compute_tier(), earn(), _issue_tier_reward(), _loyalty_cfg(), maybe_issue_recurring_reward(), _notify_tier_up(), _qualifies(), Loyalty program — tiers (Phase 1) + earn-as-wallet-credit (Phase 2).  Everything (+19 more)
 
 ### Community 1245 - "Community 1245"
 Cohesion: 0.11
@@ -2529,47 +2361,47 @@ Nodes (15): _classify(), Named audience segments (RFM-style) over ``Customer``. 
 
 ### Community 1272 - "Community 1272"
 Cohesion: 0.09
-Nodes (57): AudienceSegmentOut, AutomationPatch, AutomationResponse, BroadcastRequest, BroadcastResponse, BroadcastScheduleResponse, CampaignCreate, CampaignResponse (+49 more)
+Nodes (54): AudienceSegmentOut, BroadcastRequest, BroadcastResponse, BroadcastScheduleResponse, CampaignCreate, CampaignResponse, ImageGenerateRequest, ImageUploadResponse (+46 more)
 
 ### Community 1290 - "Community 1290"
-Cohesion: 0.11
-Nodes (62): clamp_config(), fix_template_body(), Return ``{body, footer}`` revising a rejected template for Meta resubmit., preview_count(), _assert_template_approved(), audience_label_for_campaign(), _automation_save_blocked(), _build_payload() (+54 more)
+Cohesion: 0.12
+Nodes (60): AutomationPatch, AutomationResponse, clamp_config(), update_automation(), _assert_template_approved(), audience_label_for_campaign(), _automation_save_blocked(), _build_payload() (+52 more)
 
 ### Community 1308 - "Community 1308"
-Cohesion: 0.07
-Nodes (39): _get_mock_template_provider(), get_template_provider(), Factory for the TemplatePort — env-driven, ``lru_cache`` like sibling factories., Singleton MockTemplateProvider shared across the process., MetaTemplateProvider, Resumable Meta image header upload (httpx mock)., test_meta_image_upload_resumable_mock_httpx(), _compliant_spec() (+31 more)
+Cohesion: 0.10
+Nodes (24): _get_mock_template_provider(), Factory for the TemplatePort — env-driven, ``lru_cache`` like sibling factories., Singleton MockTemplateProvider shared across the process., MetaTemplateProvider, MockTemplateProvider, In-memory MockTemplateProvider — deterministic, no network.  Runs ``compliance.l, Resumable Meta image header upload (httpx mock)., test_meta_image_upload_resumable_mock_httpx() (+16 more)
 
 ### Community 1310 - "Community 1310"
-Cohesion: 0.08
-Nodes (24): _body_example_values(), _build_components(), _fetch_bytes(), _get_graph_base(), MetaTemplateProvider — real WhatsApp Business message-template management.  Talk, Return (bytes, filename) for ref (http or fs path). Minimal, no extra deps., Real resumable upload for IMAGE header example.         Returns the 'h:...' hand, One sample value per ``{{n}}`` placeholder in the body, in order.      Meta REQU (+16 more)
+Cohesion: 0.09
+Nodes (25): _body_example_values(), _build_components(), _fetch_bytes(), _get_graph_base(), MetaTemplateProvider — real WhatsApp Business message-template management.  Talk, Return (bytes, filename) for ref (http or fs path). Minimal, no extra deps., Real resumable upload for IMAGE header example.         Returns the 'h:...' hand, One sample value per ``{{n}}`` placeholder in the body, in order.      Meta REQU (+17 more)
 
 ### Community 1319 - "Community 1319"
-Cohesion: 0.17
-Nodes (18): Per-user marketing throttle: pure decision + DB 24h send count.  Pure ``can_send, _send(), test_at_cap_is_suppressed(), test_count_excludes_suppressed_and_failed(), test_count_sends_last_24h_counts_only_trailing_window(), test_count_sends_last_24h_is_tenant_and_phone_scoped(), test_opt_out_precedes_window_and_cap(), test_opted_out_is_suppressed_regardless() (+10 more)
+Cohesion: 0.18
+Nodes (17): _send(), test_at_cap_is_suppressed(), test_count_excludes_suppressed_and_failed(), test_count_sends_last_24h_counts_only_trailing_window(), test_count_sends_last_24h_is_tenant_and_phone_scoped(), test_opt_out_precedes_window_and_cap(), test_opted_out_is_suppressed_regardless(), test_outside_window_is_suppressed() (+9 more)
 
 ### Community 1322 - "Community 1322"
-Cohesion: 0.10
-Nodes (38): advance_recurring_state(), _dominant_order_weekday(), filter_automation_audience(), _minute_to_hhmm(), Habit drift: recompute send time from per-weekday ``usual_order_times``., record_automation_send(), _refresh_usual_send_hhmm(), upsert_recurring_state() (+30 more)
+Cohesion: 0.17
+Nodes (23): advance_recurring_state(), _dominant_order_weekday(), filter_automation_audience(), _minute_to_hhmm(), Habit drift: recompute send time from per-weekday ``usual_order_times``., record_automation_send(), _refresh_usual_send_hhmm(), upsert_recurring_state() (+15 more)
 
 ### Community 1328 - "Community 1328"
 Cohesion: 0.21
 Nodes (17): _dubai(), UAE marketing send-window checks (Asia/Dubai, 9am-6pm by UAE Cabinet 56/2024)., A UTC instant corresponding to the given Asia/Dubai wall-clock time., test_before_window_is_false(), test_next_window_open_after_close_is_next_day_9am(), test_next_window_open_before_open_is_same_day_9am(), test_utc_instant_inside_window(), test_window_close_boundary_is_false() (+9 more)
 
 ### Community 1342 - "Community 1342"
-Cohesion: 0.13
-Nodes (35): FileBlobStore, diff_menus(), DiffReport, _norm(), activate_menu(), create_menu_from_upload(), ensure_active_menu(), get_active_menu() (+27 more)
+Cohesion: 0.27
+Nodes (20): FileBlobStore, DiffReport, activate_menu(), create_menu_from_upload(), ensure_active_menu(), get_active_menu(), _get_store(), list_active_dishes_catalog() (+12 more)
 
 ### Community 1350 - "Community 1350"
-Cohesion: 0.13
-Nodes (31): metrics_response(), Prometheus metrics registry (P7-T10).  All metrics are registered in a dedicated, Return (body_bytes, content_type) for the /metrics handler., _fire_event(), _fire_kitchen_event(), SLA monitor Celery task (spec §4.4, P4-T14).  Scans all open orders every 30s (s, _run_monitor(), sla_monitor_tick() (+23 more)
+Cohesion: 0.20
+Nodes (26): _fire_event(), _fire_kitchen_event(), SLA monitor Celery task (spec §4.4, P4-T14).  Scans all open orders every 30s (s, _run_monitor(), sla_monitor_tick(), _make_session_factory(), _seed_customer(), _seed_order() (+18 more)
 
 ### Community 1360 - "Community 1360"
-Cohesion: 0.12
-Nodes (11): In-memory push provider for tests/dev — records sends, never hits the network., test_fake_weather_port_default_no_delay(), test_fake_weather_port_delay_active(), test_fake_weather_port_satisfies_protocol(), get_weather_port(), FastAPI dependency. Returns FakeWeatherPort for now; real implementation in Phas, FakeWeatherPort, Test/dev stub — configurable delay flag. (+3 more)
+Cohesion: 0.15
+Nodes (10): test_fake_weather_port_default_no_delay(), test_fake_weather_port_delay_active(), test_fake_weather_port_satisfies_protocol(), get_weather_port(), FastAPI dependency. Returns FakeWeatherPort for now; real implementation in Phas, FakeWeatherPort, Test/dev stub — configurable delay flag., Return True if current weather conditions may delay delivery. (+2 more)
 
 ### Community 1368 - "Community 1368"
-Cohesion: 0.12
-Nodes (7): get_engine(), get_session(), get_session_factory(), Open Knowledge Format (OKF) store.  OKF (https://cloud.google.com/blog/products/, AsyncSession, Complaint ticket model.  A complaint is HUMAN-handled only: the AI may open a ti, Queue table for outbound webhooks to partner POS systems.
+Cohesion: 0.09
+Nodes (11): get_engine(), get_session(), get_session_factory(), Serve marketing media (template header images) from Postgres at ``/media/<path>`, serve_media(), Open Knowledge Format (OKF) store.  OKF (https://cloud.google.com/blog/products/, AsyncSession, AsyncSession (+3 more)
 
 ### Community 1380 - "Community 1380"
 Cohesion: 0.33
@@ -2577,35 +2409,31 @@ Nodes (4): CartLineContext, CartService — single owner of cart mutations for o
 
 ### Community 1384 - "Community 1384"
 Cohesion: 0.07
-Nodes (65): _seed_soup_cart(), test_cart_query_shows_cart_not_catalogue(), test_catalog_cart_edit_at_confirmation_reshows_summary(), test_catalog_make_it_n_sets_not_adds(), test_catalog_remove_does_not_add(), _msg(), _seed_menu(), test_confirmation_add_item_actually_applies_and_reshows() (+57 more)
+Nodes (71): _seed_soup_cart(), test_cart_query_shows_cart_not_catalogue(), test_catalog_cart_edit_at_confirmation_reshows_summary(), test_catalog_make_it_n_sets_not_adds(), test_catalog_remove_does_not_add(), Return a DB-backed cart/summary string for the given order and dialogue phase., render_cart_state(), _msg() (+63 more)
 
 ### Community 1385 - "Community 1385"
-Cohesion: 0.33
-Nodes (9): Set exact quantity, preserving notes (delegates to service.set_item_qty)., set_item_qty(), _seed_menu(), select_items(), test_find_unavailable_match_and_alternative(), test_find_unavailable_match_none_for_available(), test_set_item_qty_missing_dish_returns_none(), test_set_item_qty_updates_and_recalcs() (+1 more)
+Cohesion: 0.44
+Nodes (8): set_item_qty(), _seed_menu(), select_items(), test_find_unavailable_match_and_alternative(), test_find_unavailable_match_none_for_available(), test_set_item_qty_missing_dish_returns_none(), test_set_item_qty_updates_and_recalcs(), test_set_item_qty_zero_removes()
 
 ### Community 1386 - "Community 1386"
-Cohesion: 0.09
-Nodes (47): Apply a normalised kitchen note to an in-cart dish.          Strips politeness/a, Remove units of a dish from the cart., advance_kitchen_status(), _auto_dispatch_on_ready(), _circular_stats(), compute_cook_estimate(), compute_customer_order_stats(), _compute_exclusion_hash() (+39 more)
+Cohesion: 0.07
+Nodes (59): _approved_tpl(), test_on_order_delivered_schedules_welcome_for_first_order(), test_on_order_delivered_skips_welcome_when_not_first_order(), test_on_order_delivered_upserts_recurring_state_day3(), test_recurring_promo_tick_sends_and_advances_to_weekly(), Apply a normalised kitchen note to an in-cart dish.          Strips politeness/a, advance_kitchen_status(), cancel_order() (+51 more)
 
 ### Community 1414 - "Community 1414"
-Cohesion: 0.27
-Nodes (13): apply_at_confirm(), apply_coupon(), capture_on_deliver(), cod_due_aed(), Settle the order's wallet hold on delivery. No-op if no wallet was applied., recompute_order_total(), release_on_cancel(), _confirmable_order() (+5 more)
-
-### Community 1416 - "Community 1416"
-Cohesion: 0.16
-Nodes (11): _to_decimal(), QuantityError, QuantityPolicy, One per-line quantity policy for every order path (typed, catalogue, modify).  A, Raised when a single line's quantity is outside the allowed range.      ``qty``, Immutable per-line quantity bounds for one restaurant., Build the policy from a restaurant row OR its raw ``settings`` dict.          Ac, Return ``qty`` if within ``1..max_item_qty``; else raise ``QuantityError``. (+3 more)
+Cohesion: 0.30
+Nodes (12): apply_at_confirm(), apply_coupon(), capture_on_deliver(), cod_due_aed(), recompute_order_total(), release_on_cancel(), _confirmable_order(), _seed() (+4 more)
 
 ### Community 1426 - "Community 1426"
-Cohesion: 0.19
-Nodes (27): CancelOrderIn, CustomerLookupOut, ManualOrderIn, _address_parts(), advance_order(), cancel_order_endpoint(), create_manual_order_endpoint(), customer_lookup() (+19 more)
+Cohesion: 0.16
+Nodes (30): CancelOrderIn, CustomerLookupOut, ManualOrderIn, _address_parts(), advance_order(), cancel_order_endpoint(), create_manual_order_endpoint(), customer_lookup() (+22 more)
 
 ### Community 1427 - "Community 1427"
 Cohesion: 0.37
 Nodes (16): Join customer, address, items, and rider to produce the full OrderOut., Cancel an order (MANAGER/restaurant-initiated). Legal through ``arriving`` —, Manually reassign an ASSIGNED order to a chosen rider (recovery path when     th, Hard-delete an order and its dependents (admin/test-data cleanup).     Tenant-sc, AddressOut, CancelOrderIn, CustomerLookupOut, CustomerOut (+8 more)
 
 ### Community 1489 - "Community 1489"
-Cohesion: 0.15
-Nodes (20): _enforce_partner_rate_limit(), partner_authenticated_restaurant(), Partner API-key authentication dependency.  Resolves an ``X-API-Key`` header to, Authenticate partner API key, rate-limit, audit, return tenant restaurant., TokenBucketLimiter, _enforce(), enforce_rate_limit(), get_limiter() (+12 more)
+Cohesion: 0.16
+Nodes (17): _enforce_partner_rate_limit(), partner_authenticated_restaurant(), Partner API-key authentication dependency.  Resolves an ``X-API-Key`` header to, Authenticate partner API key, rate-limit, audit, return tenant restaurant., TokenBucketLimiter, _enforce(), enforce_rate_limit(), _login_identifier() (+9 more)
 
 ### Community 1491 - "Community 1491"
 Cohesion: 0.11
@@ -2620,36 +2448,28 @@ Cohesion: 0.08
 Nodes (72): ApiKeyCreatedOut, ApiKeyCreateIn, ApiKeyOut, RateLimitError, PartnerMenuItemInput, _config_out(), create_api_key(), get_partner_integration_config() (+64 more)
 
 ### Community 1530 - "Community 1530"
-Cohesion: 0.27
-Nodes (56): AI-generate a promo header image and return a public URL (like upload)., PartnerApiKey, List this restaurant's keys (active + revoked), newest first. Never the     secr, Revoke a key (soft delete). Idempotent — revoking an already-revoked key     is, Poll new confirmed orders (backup when POS cannot receive webhooks)., POS kitchen update — preparing / ready triggers same path as dashboard advance., Poll backup: rider assignment, ETA, delivery status, COD collected., POS stores its order id after receiving ``order.created``. (+48 more)
+Cohesion: 0.34
+Nodes (49): AI-generate a promo header image and return a public URL (like upload)., PartnerApiKey, List this restaurant's keys (active + revoked), newest first. Never the     secr, Revoke a key (soft delete). Idempotent — revoking an already-revoked key     is, Read-only customer pull for a partner POS, scoped to the key's restaurant., Poll new confirmed orders (backup when POS cannot receive webhooks)., POS kitchen update — preparing / ready triggers same path as dashboard advance., Poll backup: rider assignment, ETA, delivery status, COD collected. (+41 more)
 
 ### Community 1533 - "Community 1533"
-Cohesion: 0.19
-Nodes (18): ack_partner_order(), advance_kitchen_to(), apply_partner_kitchen_status(), build_partner_order_data(), list_partner_orders(), push_order_to_partner(), parse_pos_kitchen_status(), Map partner POS kitchen labels onto our order FSM targets. (+10 more)
+Cohesion: 0.24
+Nodes (15): ack_partner_order(), advance_kitchen_to(), apply_partner_kitchen_status(), build_partner_order_data(), list_partner_orders(), push_order_to_partner(), parse_pos_kitchen_status(), Map partner POS kitchen labels onto our order FSM targets. (+7 more)
 
 ### Community 1536 - "Community 1536"
-Cohesion: 0.11
-Nodes (19): Phase 0: partner outbound webhook plumbing., _restaurant(), test_deliver_posts_signed_payload(), test_enqueue_creates_row_when_configured(), test_enqueue_skips_when_partner_disabled(), test_sign_and_verify_roundtrip(), async_sessionmaker, AsyncSession (+11 more)
-
-### Community 1538 - "Community 1538"
-Cohesion: 0.40
-Nodes (4): AsyncSession, flush_pending_partner_webhooks(), Flush pending partner webhook deliveries after commit., Schedule delivery for fresh pending partner webhooks (attempts=0).      Call aft
+Cohesion: 0.08
+Nodes (27): Phase 0: partner outbound webhook plumbing., _restaurant(), test_deliver_posts_signed_payload(), test_enqueue_creates_row_when_configured(), test_enqueue_skips_when_partner_disabled(), test_sign_and_verify_roundtrip(), PartnerWebhookDelivery, async_sessionmaker (+19 more)
 
 ### Community 1540 - "Community 1540"
-Cohesion: 0.19
-Nodes (19): _batch_id_for_order(), build_partner_delivery_data(), _eta_minutes(), get_partner_order_delivery(), get_partner_rider_location(), notify_partner_delivery_event(), notify_partner_delivery_transition(), _rider_block() (+11 more)
-
-### Community 1549 - "Community 1549"
-Cohesion: 0.10
-Nodes (22): get_forecast_model(), RollingAverageModel, LightGBM per restaurant stub: setting provider should note deferral or raise exp, test_factory_fake_provider(), test_factory_lightgbm_provider_notes_or_stubs(), test_factory_returns_rolling_by_default(), test_fake_is_deterministic(), forecast_all_tenants() (+14 more)
+Cohesion: 0.44
+Nodes (11): _batch_id_for_order(), build_partner_delivery_data(), _eta_minutes(), get_partner_order_delivery(), get_partner_rider_location(), notify_partner_delivery_event(), notify_partner_delivery_transition(), _rider_block() (+3 more)
 
 ### Community 1556 - "Community 1556"
 Cohesion: 0.21
 Nodes (11): ImageDraw, _bg_color(), _font(), generate_dish_image(), Generate a dish image from its name.  The POS gives no product images, so we ren, Deterministic, mid-tone colour from the name (legible against white text)., Render the dish name onto a name-coloured square and return PNG bytes., _wrap() (+3 more)
 
 ### Community 1559 - "Community 1559"
-Cohesion: 0.16
-Nodes (23): map_pos_menu(), PosDishRecord, Map a normalized :class:`PosMenu` into upsertable dish records.  Pure functions, Sellable POS products → dish records, with category names resolved., _get_or_create_active_menu(), _pos_config(), PosSyncResult, sync_menu_from_pos() (+15 more)
+Cohesion: 0.19
+Nodes (20): map_pos_menu(), PosDishRecord, Map a normalized :class:`PosMenu` into upsertable dish records.  Pure functions, Sellable POS products → dish records, with category names resolved., _get_or_create_active_menu(), sync_menu_from_pos(), _configure(), _menu() (+12 more)
 
 ### Community 1565 - "Community 1565"
 Cohesion: 0.23
@@ -2664,8 +2484,8 @@ Cohesion: 0.16
 Nodes (15): accuracy_from_mape(), mape(), Pure accuracy math for forecast scoring (no DB).  The nightly worker queries act, Mean Absolute Percentage Error over paired points.      ``mean(|p - a| / a)`` ac, Convert MAPE to an accuracy score in [0, 1] (never negative).      Rounded to 4, Accuracy on the primary ``order_count`` metric.      Dish-level multi-point MAPE, score_prediction(), ~80% acc target per spec/GAP_LIST #5; const drives enforcement/check in run_fore (+7 more)
 
 ### Community 1582 - "Community 1582"
-Cohesion: 0.17
-Nodes (15): FakeForecastAdjuster, apply_overrides(), _money(), Deterministic manager-override adjustment layer (spec §4.6).  ``apply_overrides`, Apply ``effects`` to a copy of ``predicted``.      Returns ``(adjusted_dict, rea, test_apply_overrides_count_mult_rounds_to_int(), test_apply_overrides_delta_and_mult(), test_apply_overrides_does_not_mutate_input() (+7 more)
+Cohesion: 0.18
+Nodes (14): FakeForecastAdjuster, apply_overrides(), _money(), Deterministic manager-override adjustment layer (spec §4.6).  ``apply_overrides`, Apply ``effects`` to a copy of ``predicted``.      Returns ``(adjusted_dict, rea, test_apply_overrides_count_mult_rounds_to_int(), test_apply_overrides_delta_and_mult(), test_apply_overrides_does_not_mutate_input() (+6 more)
 
 ### Community 1592 - "Community 1592"
 Cohesion: 0.33
@@ -2680,64 +2500,56 @@ Cohesion: 0.36
 Nodes (17): AsyncSession, Decimal, Ticket, create_replacement_order(), create_ticket(), _customer_phone(), _ensure_open(), get_ticket() (+9 more)
 
 ### Community 1628 - "Community 1628"
-Cohesion: 0.14
-Nodes (30): Refund-abuse velocity checks + auto-freeze.  Called after a complaint refund is, Count + sum refund credits to an account within the rolling window., Freeze the customer's wallet if refund velocity exceeds configured caps.      Re, AccountFrozen, InsufficientFunds, Wallet domain errors., Raised when spending against a frozen (abuse-held) account., Base class for wallet operation failures. (+22 more)
+Cohesion: 0.16
+Nodes (27): Count + sum refund credits to an account within the rolling window., Freeze the customer's wallet if refund velocity exceeds configured caps.      Re, AccountFrozen, InsufficientFunds, Wallet domain errors., Raised when spending against a frozen (abuse-held) account., Base class for wallet operation failures., Raised when a hold/debit would exceed the account's available balance. (+19 more)
 
 ### Community 1641 - "Community 1641"
 Cohesion: 0.34
 Nodes (12): AsyncSession, Customer, Restaurant, credit_wallet(), debit_wallet(), get_wallet(), get_wallet_entries(), Wallet read endpoints (manager JWT, tenant-scoped).  Balance/history are read-on (+4 more)
 
 ### Community 1644 - "Community 1644"
-Cohesion: 0.35
-Nodes (21): AsyncSession, Decimal, _account(), available(), balance(), capture(), credit(), debit() (+13 more)
+Cohesion: 0.34
+Nodes (20): AsyncSession, Decimal, _account(), available(), balance(), capture(), credit(), debit() (+12 more)
 
 ### Community 1656 - "Community 1656"
-Cohesion: 0.20
-Nodes (13): AsyncSession, datetime, expire_credits(), reconcile_tenant(), test_expiry_disabled_keeps_credit(), test_expiry_is_idempotent(), test_expiry_zeroes_old_credit(), test_reconcile_clean_ledger_zero_drift() (+5 more)
-
-### Community 1660 - "Community 1660"
-Cohesion: 0.22
-Nodes (13): test_normalizer_parses_catalog_order(), InboundMessage, parse_cloud_payload(), _parse_single_message(), Parse a Meta Cloud API webhook payload into a list of InboundMessages.      Retu, test_parse_audio_voice_note(), test_parse_button_reply(), test_parse_document_pdf() (+5 more)
+Cohesion: 0.17
+Nodes (15): AsyncSession, datetime, expire_credits(), Wallet maintenance: credit expiry + ledger reconciliation.  Both run per-tenant, Independently re-sum a tenant's wallet ledger and report drift.      liability =, reconcile_tenant(), test_expiry_disabled_keeps_credit(), test_expiry_is_idempotent() (+7 more)
 
 ### Community 1663 - "Community 1663"
-Cohesion: 0.27
-Nodes (9): AsyncSession, Request, Response, Send a one-line human apology after an unexpected processing error, on a fresh, Meta webhook verification handshake., receive_webhook(), _send_error_apology(), verify_webhook() (+1 more)
+Cohesion: 0.31
+Nodes (8): AsyncSession, Request, Response, Meta webhook verification handshake., receive_webhook(), _send_error_apology(), verify_webhook(), _wants_catalog()
 
 ### Community 1666 - "Community 1666"
 Cohesion: 0.09
 Nodes (21): test_provider_builds_product_list_payload(), MockProvider, Any, OutboundMessage, _build_graph_payload(), CloudAPIProvider, Raise ValueError if X-Hub-Signature-256 header does not match body HMAC., Upload raw bytes to Meta media API; return the media_id. (+13 more)
 
 ### Community 1672 - "Community 1672"
-Cohesion: 0.09
-Nodes (19): No real media in tests/simulator. Returns bytes registered via         ``set_med, Test/simulator hook: register raw bytes returned by download_media., Phase 7 Task 2 — atomic outbox row-claim race.  Two concurrent claims over the s, Two claims over the same pending set never overlap; total claimed == seeded., A row already claimed ('dispatching') is delivered and marked sent., _seed_outbox(), test_concurrent_claims_return_disjoint_ids(), test_worker_delivers_dispatching_row() (+11 more)
+Cohesion: 0.10
+Nodes (17): Phase 7 Task 2 — atomic outbox row-claim race.  Two concurrent claims over the s, Two claims over the same pending set never overlap; total claimed == seeded., A row already claimed ('dispatching') is delivered and marked sent., _seed_outbox(), test_concurrent_claims_return_disjoint_ids(), test_worker_delivers_dispatching_row(), InboundMessage, OutboundMessage (+9 more)
 
 ### Community 1681 - "Community 1681"
 Cohesion: 0.25
 Nodes (7): AsyncSession, Restaurant, list_utility_templates(), Utility-template management (manager JWT).  Submit the transactional utility tem, The utility templates this platform uses (for reference)., Submit all utility templates for approval for this restaurant. Idempotent., register_utility()
-
-### Community 1720 - "Community 1720"
-Cohesion: 0.25
-Nodes (10): Unified menu: menu requests prefer catalogue cards, but fall back to the real, _seed_linked_menu(), test_greeting_sends_catalog_when_mode_on(), test_menu_request_falls_back_to_text_when_catalog_unavailable(), test_order_again_after_completed_order_sends_catalog(), test_send_catalog_groups_by_category(), test_send_catalog_noop_without_catalog_id(), test_send_catalog_refuses_unsynced_fallback() (+2 more)
 
 ### Community 1746 - "Community 1746"
 Cohesion: 0.37
 Nodes (13): _build_abandoned_cart(), _make_session_factory(), _msg(), Re-engagement guard: a freshly-touched conversation (customer just messaged), _seed_menu(), _set_cart_settings(), test_abandoned_cart_nudges_once(), test_active_customer_is_not_nudged() (+5 more)
 
 ### Community 1752 - "Community 1752"
-Cohesion: 0.11
-Nodes (33): _apply_history_source_prefix(), _build_history(), _history_limit_for_phase(), _render_history_content(), record_message(), _conv(), _fetch_conversation_history was already deleted in W1 (b9ae270); guard     again, Older rows without a display_text/cart_snapshot still render human text,     nev (+25 more)
+Cohesion: 0.08
+Nodes (44): _apply_history_source_prefix(), _build_history(), _history_limit_for_phase(), _is_internal_leak(), Detect compaction/system_summary JSON that must never reach WhatsApp., E-01: per-phase history window — smaller post-order / address slices., E-06: prefix history rows with source/direction metadata., Render one stored Message into LLM-readable content. Covers every     Message.ty (+36 more)
 
 ### Community 1756 - "Community 1756"
 Cohesion: 0.53
 Nodes (5): _patch_secret(), The POST /api/v1/conversations/cart-tick heartbeat drives the abandoned-cart swe, test_cart_tick_403_on_wrong_secret(), test_cart_tick_503_when_secret_unconfigured(), test_cart_tick_runs_with_correct_secret()
 
 ### Community 1873 - "Community 1873"
-Cohesion: 0.19
-Nodes (17): _looks_like_hallucinated_menu(), _looks_like_menu(), Safety net: a reply listing dishes+prices is detected (and gets replaced     wit, test_looks_like_menu_detects_fabricated_list(), _draft_cart_rows(), _last_msg_id(), _latest_outbound(), _seed_one_dish_restaurant() (+9 more)
+Cohesion: 0.21
+Nodes (16): _looks_like_hallucinated_menu(), _looks_like_menu(), test_looks_like_menu_detects_fabricated_list(), _draft_cart_rows(), _last_msg_id(), _latest_outbound(), _seed_one_dish_restaurant(), test_antihallucination_catches_non_catalogue_dish_names() (+8 more)
 
 ### Community 1888 - "Community 1888"
-Cohesion: 0.10
-Nodes (4): clf(), W4 Task 1 — top-level multilingual intent router: port + Fake impl.  The Fake is, test_factory_returns_fake_for_fake_provider(), RouterClassifierPort
+Cohesion: 0.11
+Nodes (3): clf(), test_factory_returns_fake_for_fake_provider(), RouterClassifierPort
 
 ### Community 1986 - "Community 1986"
 Cohesion: 0.47
@@ -2764,12 +2576,8 @@ Cohesion: 0.29
 Nodes (3): _all_template_text(), Tests for conversation_prompts SSOT (E-02, E-12, E-23, E-04)., test_master_prompt_section_tags_present()
 
 ### Community 2154 - "Community 2154"
-Cohesion: 0.13
-Nodes (10): agent(), Tests for DeepSeekConversationAgent phase-aware prompts and tool schema., _DS_TOOL must be derived from the canonical action_schema module., cart_set_qty without new_total must be blocked (no cart mutation)., cart_set_qty with new_total maps to legacy update_qty with correct qty., Verify system prompt mentions all 7 supported languages., test_ds_set_qty_absolute(), test_ds_set_qty_missing_total_yields_no_mutation() (+2 more)
-
-### Community 2171 - "Community 2171"
-Cohesion: 0.43
-Nodes (6): _build(), The conversation system prompt must ground the restaurant's location in the real, Real fee tiers + hours must reach the prompt so the bot doesn't invent them, test_system_prompt_grounds_delivery_fees_and_hours(), test_system_prompt_handles_unknown_location(), test_system_prompt_includes_real_location_and_no_invent_rule()
+Cohesion: 0.08
+Nodes (23): DeepSeekConversationAgent, Phase-aware AI ordering assistant using DeepSeek function calling., agent(), Tests for DeepSeekConversationAgent phase-aware prompts and tool schema., _DS_TOOL must be derived from the canonical action_schema module., cart_set_qty without new_total must be blocked (no cart mutation)., cart_set_qty with new_total maps to legacy update_qty with correct qty., Verify system prompt mentions all 7 supported languages. (+15 more)
 
 ### Community 2175 - "Community 2175"
 Cohesion: 0.28
@@ -2812,12 +2620,12 @@ Cohesion: 0.38
 Nodes (6): _api_key(), Phase 5: partner API security — rate limit + audit trail., 60/min bucket — exhaust with a low cap via monkeypatched settings., test_integration_health_endpoint(), test_partner_call_writes_audit_log(), test_partner_rate_limit_429()
 
 ### Community 2374 - "Community 2374"
-Cohesion: 0.20
+Cohesion: 0.22
 Nodes (13): create_app(), AsyncClient, client(), Override the global client fixture to include the predictions router., auth_headers(), client(), db_session(), engine() (+5 more)
 
 ### Community 2384 - "Community 2384"
-Cohesion: 0.20
-Nodes (9): With one restaurant seeded, _run_forecasts creates PredictionRun rows., retrain task must be importable as shared_task (consumer of weekly beat)., With restaurant, _run_retrains (or equiv) must complete, perform fit, update reg, Weekly beat defaults Mon 04:00 (dow=0, hour=4) from settings; test drives config, test_forecast_all_tenants_no_restaurants(), test_forecast_all_tenants_runs_for_restaurant(), test_retrain_all_tenants_runs_for_restaurant(), test_retrain_all_tenants_task_exists() (+1 more)
+Cohesion: 0.10
+Nodes (24): Tests for the marketing Celery worker (marketing.send_scheduled_campaigns)., No due campaigns — _dispatch_scheduled must complete without error., Failing: cleanup EOD finds ephemeral approved/sent created 'today', calls     pr, A scheduled campaign is picked up and processed (status transitions to sent/fail, Failing until poll task added to worker + wired in celery_app., Failing until EOD cleanup task + beat in celery_app., Failing: poll should query pending_meta, call provider.get_status, update     st, test_cleanup_ephemeral_deletes_todays_and_sets_deleted_at() (+16 more)
 
 ### Community 2401 - "Community 2401"
 Cohesion: 0.50
@@ -2838,9 +2646,9 @@ Nodes (5): CUSTOMERS, RIDERS, DISPATCH_KPIS, LIVE_MAP, Orders Fixture Data
   docs/research/loyalty-program-analysis.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **2327 isolated node(s):** `InboundMessage`, `AsyncSession`, `DISPATCH_KPIS`, `sampleCoupon`, `CUSTOMERS` (+2322 more)
+- **2355 isolated node(s):** `InboundMessage`, `AsyncSession`, `DISPATCH_KPIS`, `sampleCoupon`, `CUSTOMERS` (+2350 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **543 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **401 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -2853,9 +2661,9 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Coupon` and `Coupon`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Order` connect `Community 1` to `Community 0`, `Community 2`, `Community 4`, `Community 9`, `Community 914`, `Community 1427`, `Community 18`, `Community 918`, `Community 150`, `Community 933`, `Community 47`, `Community 690`, `Community 312`, `Community 1209`, `Community 962`, `Community 1619`, `Community 725`, `Community 1380`, `Community 1384`, `Community 1385`, `Community 1514`, `Community 1386`, `Community 1388`, `Community 236`, `Community 109`, `Community 1000`, `Community 761`, `Community 1530`?**
-  _High betweenness centrality (0.043) - this node is a cross-community bridge._
-- **Why does `Restaurant` connect `Community 1` to `Community 1536`, `Community 0`, `Community 2`, `Community 1540`, `Community 4`, `Community 9`, `Community 1549`, `Community 14`, `Community 1681`, `Community 18`, `Community 914`, `Community 1427`, `Community 918`, `Community 1559`, `Community 24`, `Community 1565`, `Community 31`, `Community 1956`, `Community 933`, `Community 1574`, `Community 301`, `Community 47`, `Community 688`, `Community 690`, `Community 691`, `Community 312`, `Community 2365`, `Community 2374`, `Community 1489`, `Community 1234`, `Community 1491`, `Community 1619`, `Community 725`, `Community 1493`, `Community 1109`, `Community 1368`, `Community 344`, `Community 1106`, `Community 1628`, `Community 1514`, `Community 1530`?**
-  _High betweenness centrality (0.038) - this node is a cross-community bridge._
-- **Why does `get_settings()` connect `Community 666` to `Community 1536`, `Community 1666`, `Community 7`, `Community 136`, `Community 1161`, `Community 1290`, `Community 1036`, `Community 13`, `Community 14`, `Community 1549`, `Community 1656`, `Community 1041`, `Community 914`, `Community 21`, `Community 1308`, `Community 1565`, `Community 30`, `Community 1310`, `Community 35`, `Community 676`, `Community 1192`, `Community 1194`, `Community 1197`, `Community 47`, `Community 688`, `Community 183`, `Community 1080`, `Community 1342`, `Community 68`, `Community 2374`, `Community 203`, `Community 2384`, `Community 1489`, `Community 1107`, `Community 84`, `Community 1109`, `Community 982`, `Community 727`, `Community 1752`, `Community 1368`, `Community 985`, `Community 216`, `Community 1491`, `Community 1493`, `Community 992`, `Community 1000`, `Community 1386`, `Community 107`, `Community 1010`, `Community 1143`, `Community 1272`, `Community 761`, `Community 123`, `Community 1663`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+- **Why does `get_settings()` connect `Community 666` to `Community 1536`, `Community 1153`, `Community 1666`, `Community 7`, `Community 136`, `Community 1161`, `Community 1290`, `Community 1036`, `Community 13`, `Community 142`, `Community 1656`, `Community 1041`, `Community 914`, `Community 21`, `Community 150`, `Community 1565`, `Community 30`, `Community 1310`, `Community 35`, `Community 676`, `Community 1192`, `Community 1194`, `Community 171`, `Community 173`, `Community 47`, `Community 688`, `Community 183`, `Community 1080`, `Community 1342`, `Community 68`, `Community 2374`, `Community 71`, `Community 200`, `Community 2384`, `Community 1489`, `Community 1107`, `Community 84`, `Community 1109`, `Community 982`, `Community 727`, `Community 1752`, `Community 1368`, `Community 985`, `Community 216`, `Community 1491`, `Community 1493`, `Community 992`, `Community 1000`, `Community 1386`, `Community 107`, `Community 1010`, `Community 1143`, `Community 1272`, `Community 761`, `Community 1663`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `Restaurant` connect `Community 1` to `Community 0`, `Community 1536`, `Community 2`, `Community 1026`, `Community 4`, `Community 9`, `Community 14`, `Community 1681`, `Community 18`, `Community 914`, `Community 1427`, `Community 918`, `Community 24`, `Community 1565`, `Community 286`, `Community 31`, `Community 1956`, `Community 933`, `Community 1574`, `Community 688`, `Community 691`, `Community 312`, `Community 2365`, `Community 451`, `Community 196`, `Community 2374`, `Community 1489`, `Community 1234`, `Community 1491`, `Community 1619`, `Community 725`, `Community 1109`, `Community 1493`, `Community 1368`, `Community 344`, `Community 1628`, `Community 1514`, `Community 1530`?**
+  _High betweenness centrality (0.041) - this node is a cross-community bridge._
+- **Why does `Order` connect `Community 1` to `Community 0`, `Community 2`, `Community 1026`, `Community 4`, `Community 9`, `Community 18`, `Community 914`, `Community 1427`, `Community 918`, `Community 150`, `Community 933`, `Community 47`, `Community 312`, `Community 962`, `Community 451`, `Community 1619`, `Community 725`, `Community 1380`, `Community 1000`, `Community 1384`, `Community 1386`, `Community 747`, `Community 108`, `Community 109`, `Community 1514`, `Community 1530`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._

@@ -410,9 +410,9 @@
     "semantic_hash": ""
   },
   "frontend/src/main.tsx": {
-    "mtime": 1782931701.0624833,
-    "ast_hash": "e6c53163fe2517d83fd4134c0cb24bdb",
-    "semantic_hash": "e6c53163fe2517d83fd4134c0cb24bdb"
+    "mtime": 1783085989.4119005,
+    "ast_hash": "5656377f35aebc3fca9987d5673a8629",
+    "semantic_hash": ""
   },
   "frontend/src/screens/AnalyticsScreen.test.tsx": {
     "mtime": 1783075301.0403392,
@@ -635,8 +635,8 @@
     "semantic_hash": "d72f64227a81c5eea43c27d992a0de89"
   },
   "src/app/config.py": {
-    "mtime": 1783071075.8976378,
-    "ast_hash": "3298ff3dd1bf2f726bc92341059d67b9",
+    "mtime": 1783085989.4138756,
+    "ast_hash": "e605c85e34228a1470bf81232ea2d5b1",
     "semantic_hash": ""
   },
   "src/app/conversation/__init__.py": {
@@ -2100,8 +2100,8 @@
     "semantic_hash": "4be5c139c24715d1dafdd2a4831f169d"
   },
   "understanding.txt": {
-    "mtime": 1783076428.5960064,
-    "ast_hash": "fb5afeeeda9812585aed7780790f2e29",
+    "mtime": 1783077438.2929304,
+    "ast_hash": "6769885cefc6782cc9be8de6bb081bf9",
     "semantic_hash": ""
   },
   "alembic/versions/a1b2c3d4e5f6_backfill_customer_order_stats.py": {
@@ -3295,8 +3295,8 @@
     "semantic_hash": "3c28dcfdae8ca087bdbbd7c0133ecf18"
   },
   "tests/identity/test_onboarding.py": {
-    "mtime": 1783071075.9126942,
-    "ast_hash": "5952c59e2b9f46da55783d0630c38f3e",
+    "mtime": 1783085989.4174018,
+    "ast_hash": "df787998f4f17356318abbb732ff0014",
     "semantic_hash": ""
   },
   "tests/menu/conftest.py": {
@@ -3825,8 +3825,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/MetaConnectPanel.tsx": {
-    "mtime": 1783071075.889112,
-    "ast_hash": "15edb3ae386b88b2a0c535baa3bf1e14",
+    "mtime": 1783085989.408003,
+    "ast_hash": "4b5670db3368e3d6e23cdd7e4939dc5c",
     "semantic_hash": ""
   },
   "frontend/src/components/PosSyncButton.tsx": {
@@ -4440,8 +4440,8 @@
     "semantic_hash": ""
   },
   "src/app/partner/registry.py": {
-    "mtime": 1783071075.9095335,
-    "ast_hash": "244abdf929c5467ddf3d853b2998110f",
+    "mtime": 1783085989.4158301,
+    "ast_hash": "72a62fba2644c00e914ef786b98e267b",
     "semantic_hash": ""
   },
   "tests/marketing/test_automations.py": {
@@ -4480,8 +4480,8 @@
     "semantic_hash": ""
   },
   "tests/partner/test_partner_registry.py": {
-    "mtime": 1783071075.914874,
-    "ast_hash": "efc3dc8e2013c0959642edbf019306c2",
+    "mtime": 1783085989.4191823,
+    "ast_hash": "4f14e8bbc6bce5cc136166b790017c86",
     "semantic_hash": ""
   },
   "tests/partner/test_partner_roster.py": {
@@ -4542,6 +4542,11 @@
   "docs/superpowers/specs/2026-07-03-whatsapp-menu-browse-fix-design.md": {
     "mtime": 1783076384.1166904,
     "ast_hash": "f1d8ca04cc65bf957c23ae82f972a411",
+    "semantic_hash": ""
+  },
+  "frontend/src/lib/partner.ts": {
+    "mtime": 1783085989.4095004,
+    "ast_hash": "3d5c09531208ab8aac461356747fc002",
     "semantic_hash": ""
   }
 }
