@@ -64,6 +64,9 @@ export interface MetaConnectPayload {
   code: string;
   phone_number_id: string;
   waba_id: string;
+  // Partner attribution from the onboarding link (?partner=<slug>). Omit/null =
+  // standalone (no POS) — the store uses the platform end-to-end, no webhook/key.
+  partner?: string | null;
 }
 
 /** Send the Embedded Signup popup result to the backend to exchange + store creds. */

@@ -239,9 +239,10 @@ async def meta_connect(
     display_number = creds.pop("display_phone_number", "")
     apply_meta_settings(restaurant, creds)
     await _set_connected_phone(session, restaurant, display_number)
-    # Auto-provision the POS partner integration: wire the global webhook + mint this
-    # store's API key (returned once) so Cratis can talk to it with no manual setup.
-    api_key = await provision_partner_integration(session, restaurant)
+    # Provision the POS partner integration IF the store came via a partner link
+    # (?partner=<slug>): wire that partner's webhook + mint this store's API key
+    # (returned once). No partner = standalone, nothing wired.
+    api_key = await provision_partner_integration(session, restaurant, body.partner)
     await session.commit()
     await session.refresh(restaurant)
     out = _meta_config_out(restaurant)

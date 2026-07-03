@@ -75,11 +75,12 @@ async def test_provision_partner_integration_mints_key_and_wires_webhook(
     )
     monkeypatch.setattr(config, "get_settings", lambda: fake)
 
-    key = await provision_partner_integration(db_session, restaurant)
+    key = await provision_partner_integration(db_session, restaurant, "cratis")
     await db_session.commit()
 
     assert key and key.startswith("rk_live_")  # returned once for the partner
     cfg = partner_settings(restaurant)
+    assert cfg["partner"] == "cratis"  # store tagged with its partner
     assert cfg["partner_enabled"] is True
     assert cfg["partner_webhook_url"] == "https://cratis.example.com/hooks/whatsapp"
     assert cfg["partner_webhook_secret"] == "shared-signing-secret"
@@ -91,7 +92,7 @@ async def test_provision_partner_integration_mints_key_and_wires_webhook(
     assert count == 1
 
     # Idempotent: a reconnect does not mint a second key.
-    again = await provision_partner_integration(db_session, restaurant)
+    again = await provision_partner_integration(db_session, restaurant, "cratis")
     await db_session.commit()
     assert again is None
     count2 = await db_session.scalar(
@@ -187,7 +188,8 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     r = await client.post(
         "/api/v1/onboarding/meta-connect",
         headers=auth_headers,
-        json={"code": "CODE-123", "phone_number_id": "PID-9", "waba_id": "WABA-9"},
+        json={"code": "CODE-123", "phone_number_id": "PID-9", "waba_id": "WABA-9",
+              "partner": "cratis"},
     )
     assert r.status_code == 200
     body = r.json()
@@ -197,7 +199,8 @@ async def test_meta_connect_exchanges_code_and_stores_creds(
     assert body["catalog_id"] == "CAT-AUTO-1"  # auto-detected from the WABA
     assert body["connected"] is True
     assert "wa_access_token" not in body  # secret never returned
-    # Connecting Meta auto-mints the store's POS API key, returned ONCE for Cratis.
+    # Onboarding via a partner link (?partner=cratis) auto-mints the store's POS
+    # API key, returned ONCE for the partner.
     assert body["api_key"] and body["api_key"].startswith("rk_live_")
 
     # The routing phone is reconciled to the REAL connected number (normalized),

@@ -103,6 +103,9 @@ class MetaConnectIn(BaseModel):
     code: str = Field(min_length=1, max_length=2048)
     phone_number_id: str = Field(min_length=1, max_length=64)
     waba_id: str = Field(min_length=1, max_length=64)
+    # Partner attribution from the onboarding link (?partner=<slug>). None/blank =
+    # standalone (no POS): store uses our platform end-to-end, no webhook/key wired.
+    partner: str | None = Field(default=None, max_length=32)
 
 
 class RiderIn(BaseModel):

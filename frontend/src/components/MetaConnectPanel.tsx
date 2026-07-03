@@ -90,10 +90,14 @@ export function MetaConnectPanel(
       return;
     }
     try {
+      // Partner attribution: the POS embeds the onboarding link with ?partner=<slug>.
+      // Absent = standalone (no POS) — the store uses the platform end-to-end.
+      const partner = new URLSearchParams(window.location.search).get("partner");
       const c = await connectMetaEmbedded({
         code,
         phone_number_id: info.phone_number_id,
         waba_id: info.waba_id,
+        partner: partner || undefined,
       });
       setCfg(c);
       setPhone(c.wa_phone_number_id);

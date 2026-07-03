@@ -24,6 +24,9 @@ class PartnerApiKey(Base, TimestampMixin):
     )
     # Manager-facing name, e.g. "Acme POS".
     label: Mapped[str] = mapped_column(String(120))
+    # Partner slug this key belongs to (e.g. "cratis", "pos2"), for per-partner
+    # filtering/revocation and analytics. Null for keys minted before multi-partner.
+    partner: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
     # Non-secret leading fragment shown in the dashboard, e.g. "rk_live_ab12cd".
     key_prefix: Mapped[str] = mapped_column(String(20))
     # SHA-256 hex of the full key; unique so a hash lookup resolves one row.
