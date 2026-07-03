@@ -63,14 +63,20 @@ export function MenuReviewDialog({ menu, onClose, onConfirm, confirming = false,
   }
 
   async function onRemove(id: number) {
+    if (removingId !== null) return; // ignore double-clicks while one delete is in flight
+    // Optimistic: drop the row immediately so the × feels instant. The live DELETE
+    // also unpublishes from Meta + refreshes grounding (several seconds) — waiting
+    // for that round-trip made the click look like a no-op. Roll back only on error.
+    const prev = dishes;
+    const remaining = dishes.filter((d) => d.id !== id);
+    setDishes(remaining);
+    if (selectedId === id) setSelectedId(remaining[0]?.id ?? null);
     setRemovingId(id);
     try {
       await deleteDish(menu.id, id);
-      const remaining = dishes.filter((d) => d.id !== id);
-      setDishes(remaining);
-      if (selectedId === id) setSelectedId(remaining[0]?.id ?? null);
       toast("Dish removed.");
     } catch (e) {
+      setDishes(prev); // restore the row — the server rejected the delete
       toast(e instanceof ApiError ? e.detail : "Could not remove dish.", "error");
     } finally {
       setRemovingId(null);

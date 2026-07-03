@@ -35,3 +35,12 @@ export async function fetchCatalogProducts(): Promise<CatalogProductOut[]> {
 export async function syncCatalog(): Promise<CatalogSyncResult> {
   return apiClient.post<CatalogSyncResult>("/api/v1/catalog/sync", {});
 }
+
+/**
+ * Bulk push: send every available, priced dish to Meta Commerce Manager
+ * (create-or-update + link to WhatsApp), then re-pull the mirror. Same push
+ * path (push_dishes_to_meta) that a single add/edit triggers automatically.
+ */
+export async function pushCatalog(): Promise<CatalogSyncResult> {
+  return apiClient.post<CatalogSyncResult>("/api/v1/catalog/push", {});
+}
