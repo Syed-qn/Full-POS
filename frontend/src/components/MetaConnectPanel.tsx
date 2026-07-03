@@ -10,6 +10,7 @@ import {
   type MetaEmbedConfig,
 } from "../lib/onboardingApi";
 import { loadFacebookSdk } from "../lib/facebookSdk";
+import { getOnboardPartner } from "../lib/partner";
 
 /**
  * Onboarding: connect this restaurant's own WhatsApp / Meta account.
@@ -90,9 +91,9 @@ export function MetaConnectPanel(
       return;
     }
     try {
-      // Partner attribution: the POS embeds the onboarding link with ?partner=<slug>.
-      // Absent = standalone (no POS) — the store uses the platform end-to-end.
-      const partner = new URLSearchParams(window.location.search).get("partner");
+      // Partner attribution: the POS embeds the onboarding link with ?partner=<slug>,
+      // captured at app start so it survives the signup journey. Absent = standalone.
+      const partner = getOnboardPartner();
       const c = await connectMetaEmbedded({
         code,
         phone_number_id: info.phone_number_id,
