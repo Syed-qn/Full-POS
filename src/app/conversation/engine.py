@@ -317,19 +317,27 @@ def _is_menu_request(text: str) -> bool:
 
 
 def _is_cart_query(text: str) -> bool:
-    """True for 'what's in my cart / show my order' style messages (lowercased).
+    """True for 'what's in my cart / show my order' style LISTING requests (lowercased).
 
     Answered deterministically with the real cart so the model can't mis-handle it
     (e.g. re-send the catalogue). Kept tight, and never matches an edit/cancel
-    ('cancel my order', 'clear cart', 'add to cart') which are real actions."""
+    ('cancel my order', 'clear cart', 'add to cart') which are real actions.
+
+    Deliberately NOT a bare "cart" substring check: "is my cart good for lunch"
+    contains the word "cart" but is asking for a judgment, not a listing — that
+    must fall through to the AI (grounded with the real cart) for a real answer,
+    not the canned "reply with more items or done" dump (prod regression)."""
     t = text.strip().lower()
     if not t or len(t) > 45:
         return False
     if any(w in t for w in ("cancel", "clear", "empty", "remove", "delete", "add ")):
         return False
-    if "cart" in t:                       # "my cart", "what's in my cart", "show cart"
+    exact = {"cart", "my cart", "show cart", "show my cart", "view cart", "check cart",
+             "check my cart", "cart?", "my cart?"}
+    if t in exact:
         return True
     return any(p in t for p in (
+        "what's in my cart", "whats in my cart", "what is in my cart", "in my cart",
         "what's in my order", "whats in my order", "my current order", "current order",
         "what did i order", "show my order", "what's my order", "my order so far",
     ))
@@ -3470,6 +3478,26 @@ async def _send_order_summary(
     wallet_available, active_coupons = await _redeem_context(
         session, restaurant_id=restaurant_id, customer_id=order.customer_id
     )
+    # Auto-apply an unambiguous single assigned coupon. _redeem_context already
+    # scopes these to Coupon.customer_id == this customer, so there's no choice
+    # to make — requiring them to type a code they never picked was pure friction
+    # (prod feedback: "why isn't there an auto-apply option"). Two+ coupons stay
+    # a manual prompt (genuinely ambiguous which one to use); a coupon that fails
+    # validation (e.g. below min_order) silently falls back to the prompt too.
+    if len(active_coupons) == 1 and Decimal(order.coupon_discount_aed or 0) <= 0:
+        from app.coupons.service import CouponError
+        from app.ordering.payments import apply_coupon
+
+        try:
+            await apply_coupon(
+                session, order=order, coupon_code=active_coupons[0].code,
+                created_by="system",
+            )
+        except CouponError:
+            pass
+        else:
+            active_coupons = []
+        await session.flush()
     # Payment composition (W5 / R-049 / RA-3): coupon discount, wallet credit applied,
     # and COD due. Summary math == confirm math == door cash. Wallet credit shown is the
     # projected application = min(available balance [+ any existing hold], order total).
@@ -5217,6 +5245,44 @@ async def _post_add_extras(
     return upsell_line, buttons
 
 
+async def _send_cart_confirmation(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    prefix: str,
+    body: str,
+    cart: str,
+) -> None:
+    """Every cart-mutation confirmation (add/remove/swap/qty-change/note) must
+    carry the same quick-action buttons — proceed/upsell/clear — whenever the
+    cart still has items, not just the original add sites. Falls back to plain
+    text when the mutation left the cart empty (nothing to act on).
+
+    Root-cause fix: several mutation replies (remove, swap, qty update,
+    catalogue set-qty/note) used to call ``_send_text`` directly, leaving the
+    customer with no tap target — they'd fall back to typing free text like
+    'Cancel', which can collide with the marketing opt-out keyword (prod
+    regression). Route every cart-mutation reply through here instead."""
+    order = None
+    if cart and (_ccid := conv.state.get("draft_order_id")):
+        from app.ordering.models import Order as _CartConfirmOrder
+
+        order = await session.get(_CartConfirmOrder, _ccid)
+    if order is not None:
+        upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+        await _send_buttons(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix=prefix, body=f"{body}{upsell}", buttons=buttons,
+        )
+    else:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix=prefix, body=body,
+        )
+
+
 async def _record_cart_observation(
     session: AsyncSession, conv: Conversation
 ) -> None:
@@ -6525,10 +6591,11 @@ async def _try_negation_swap(
         return False
 
     cart = await _build_cart_summary(session, conv)
-    await _send_text(
+    await _send_cart_confirmation(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="negation-swap",
         body=f"Sure! Swapped {old_name} for {cands[0].name} ✅{_cart_tail(cart)}",
+        cart=cart,
     )
     return True
 
@@ -7480,8 +7547,10 @@ async def _dispatch_action(
             )
         if outcome in ("removed", "reduced"):
             await _record_cart_observation(session, conv)  # F66/W3
-        await _send_text(session, conv=conv, inbound=inbound,
-                         restaurant_id=restaurant_id, prefix="ai-remove", body=body)
+        await _send_cart_confirmation(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ai-remove", body=body, cart=cart,
+        )
         return
 
     if action == "update_qty":
@@ -7520,8 +7589,10 @@ async def _dispatch_action(
                 notes.append("that's a large quantity for " + ", ".join(too_many))
             if notes:
                 body = f"{body}\n\n({'; '.join(notes)})"
-            await _send_text(session, conv=conv, inbound=inbound,
-                             restaurant_id=restaurant_id, prefix="ai-qty-multi", body=body)
+            await _send_cart_confirmation(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="ai-qty-multi", body=body, cart=cart,
+            )
             return
 
         dish_query = data.get("dish_query", "") or (items[0].get("dish_query", "") if items else "")
@@ -7545,9 +7616,9 @@ async def _dispatch_action(
                 body = (
                     f"Got it! I've noted {clean} for your order 😊{_cart_tail(cart)}"
                 )
-                await _send_text(
+                await _send_cart_confirmation(
                     session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                    prefix="ai-set-note", body=body,
+                    prefix="ai-set-note", body=body, cart=cart,
                 )
                 return
         qty = int(raw_qty or 1)
@@ -7578,8 +7649,10 @@ async def _dispatch_action(
             )
         if outcome in ("updated", "removed"):
             await _record_cart_observation(session, conv)  # F66/W3
-        await _send_text(session, conv=conv, inbound=inbound,
-                         restaurant_id=restaurant_id, prefix="ai-qty", body=body)
+        await _send_cart_confirmation(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="ai-qty", body=body, cart=cart,
+        )
         return
 
     if action == "clear_cart":
@@ -8610,7 +8683,7 @@ async def _try_catalog_typed_order(
                                 )
                                 _cart_h = await _build_cart_summary(session, conv)
                                 await _record_cart_observation(session, conv)  # F66/W3
-                                await _send_text(
+                                await _send_cart_confirmation(
                                     session, conv=conv, inbound=inbound,
                                     restaurant_id=restaurant_id,
                                     prefix="catalog-typed-note",
@@ -8618,6 +8691,7 @@ async def _try_catalog_typed_order(
                                         f"Got it! {normalize_note(body)} for "
                                         f"{_its_h[0].dish_name} ✅{_cart_tail(_cart_h)}"
                                     ),
+                                    cart=_cart_h,
                                 )
                                 return True
             if dish is None:
@@ -8687,10 +8761,12 @@ async def _try_catalog_typed_order(
         _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
         cart = await _build_cart_summary(session, conv)
         await _record_cart_observation(session, conv)  # F66/W3
-        await _send_text(
+        upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+        await _send_buttons(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="catalog-typed-set-qty",
-            body=f"Got it! {dish.name} updated to {add_qty} ✅{_cart_tail(cart)}",
+            body=f"Got it! {dish.name} updated to {add_qty} ✅{_cart_tail(cart)}{upsell}",
+            buttons=buttons,
         )
         return True
 
@@ -8700,10 +8776,12 @@ async def _try_catalog_typed_order(
         _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
         cart = await _build_cart_summary(session, conv)
         await _record_cart_observation(session, conv)  # F66/W3
-        await _send_text(
+        upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+        await _send_buttons(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="catalog-typed-note",
-            body=f"Updated {dish.name}: {normalize_note(note)} ✅{_cart_tail(cart)}",
+            body=f"Updated {dish.name}: {normalize_note(note)} ✅{_cart_tail(cart)}{upsell}",
+            buttons=buttons,
         )
         return True
 
@@ -8723,10 +8801,12 @@ async def _try_catalog_typed_order(
                 ).limit(1)
             )
             _line_name = _alt_line or dish.name
-            await _send_text(
+            upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+            await _send_buttons(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="catalog-typed-note-partial",
-                body=f"Updated {_line_name}: {normalize_note(note)} ✅{_cart_tail(cart)}",
+                body=f"Updated {_line_name}: {normalize_note(note)} ✅{_cart_tail(cart)}{upsell}",
+                buttons=buttons,
             )
             return True
 
@@ -8907,6 +8987,18 @@ async def handle_inbound(
     _is_kw = is_stop_keyword(_opt_text)
     _is_nl = not _is_kw and is_optout_intent(_opt_text)
     if _is_kw or _is_nl:
+        # "cancel"/"stop" double as WhatsApp opt-out keywords AND order-cancel
+        # words. Order-cancel wins when the customer actually has an order to
+        # cancel — treating it as opt-out silently discarded the real intent
+        # (prod: cart had 1x Lemon mint, "Cancel" → "unsubscribed from
+        # marketing" instead of cancelling the order).
+        if _is_kw and _is_cancel_intent(_opt_text):
+            _cancel_target = await _resolve_order_for_cancel(
+                session, conv, inbound, restaurant_id
+            )
+            if _cancel_target is not None:
+                await _execute_cancel_order(session, conv, inbound, restaurant_id)
+                return
         await record_opt_out(
             session,
             restaurant_id=restaurant_id,

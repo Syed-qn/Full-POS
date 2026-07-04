@@ -2366,6 +2366,171 @@ async def test_add_confirmation_carries_quick_action_buttons(db_session, restaur
     assert all(len(t) <= 20 for t in titles)
 
 
+async def test_remove_confirmation_carries_quick_action_buttons(db_session, restaurant):
+    """A remove that leaves items in the cart must ALSO carry the quick-action
+    buttons (proceed/upsell/clear) — not just adds. Prod regression: after
+    'Remove paratha' left the cart with only Lemon Mint, no buttons were sent,
+    so the customer typed bare 'Cancel' next — which then hit the marketing
+    opt-out keyword instead of cancelling the order."""
+    from app.conversation.engine import handle_inbound
+    from app.outbox.models import OutboxMessage
+
+    phone = "+971501110202"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    await handle_inbound(
+        db_session, _msg_from("1 chicken biryani", phone, "wamid.rm-add"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    await handle_inbound(
+        db_session, _msg_from("1 lemon mint", phone, "wamid.rm-add2"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    before_ids = {
+        m.id for m in (await db_session.execute(select(OutboxMessage))).scalars().all()
+    }
+
+    await handle_inbound(
+        db_session, _msg_from("remove chicken biryani", phone, "wamid.rm-remove"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    msgs = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    new_msgs = [m for m in msgs if m.id not in before_ids]
+    assert new_msgs, "remove must send a confirmation"
+    btn_msgs = [m for m in new_msgs if m.payload.get("buttons")]
+    assert btn_msgs, "remove confirmation (cart still non-empty) must carry quick-action buttons"
+    ids = [b["id"] for b in btn_msgs[-1].payload["buttons"]]
+    assert "proceed_delivery" in ids
+    assert "clear_cart" in ids
+
+
+async def _new_button_msgs(db_session, before_ids):
+    msgs = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    new_msgs = [m for m in msgs if m.id not in before_ids]
+    return new_msgs, [m for m in new_msgs if m.payload.get("buttons")]
+
+
+async def _outbox_ids(db_session):
+    return {m.id for m in (await db_session.execute(select(OutboxMessage))).scalars().all()}
+
+
+async def test_qty_update_carries_quick_action_buttons(db_session, restaurant):
+    """'make it 2 chicken biryani' (update_qty) must carry the same quick-action
+    buttons as an add — every cart update, not just adds/removes."""
+    from app.conversation.engine import handle_inbound
+
+    phone = "+971501110203"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    before_ids = await _outbox_ids(db_session)
+
+    await handle_inbound(
+        db_session, _msg_from("make it 2 chicken biryani", phone, "wamid.qty1"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    new_msgs, btn_msgs = await _new_button_msgs(db_session, before_ids)
+    assert new_msgs, "qty update must send a confirmation"
+    assert btn_msgs, "qty update confirmation must carry quick-action buttons"
+    ids = [b["id"] for b in btn_msgs[-1].payload["buttons"]]
+    assert "proceed_delivery" in ids
+    assert "clear_cart" in ids
+
+
+async def test_negation_swap_carries_quick_action_buttons(db_session, restaurant):
+    """'No give me chicken soup' (negation swap) must carry quick-action buttons."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    phone = "+971501110204"
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=210,
+        name="Staff Chicken Biriyani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="staff chicken biriyani",
+    )
+    soup = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=211,
+        name="Chicken Soup", price_aed=Decimal("15.00"), category="Soup",
+        is_available=True, name_normalized="chicken soup",
+    )
+    db_session.add_all([biryani, soup])
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    customer = await get_or_create_customer(db_session, restaurant_id=restaurant.id, phone=phone)
+    order = await create_draft_order(db_session, restaurant_id=restaurant.id, customer_id=customer.id)
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+    before_ids = await _outbox_ids(db_session)
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for an explicit negation swap")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg_from("No give me chicken soup", phone, "wamid.swap-btn"),
+            restaurant.id, restaurant,
+        )
+    await db_session.commit()
+
+    new_msgs, btn_msgs = await _new_button_msgs(db_session, before_ids)
+    assert new_msgs, "swap must send a confirmation"
+    assert btn_msgs, "swap confirmation must carry quick-action buttons"
+    ids = [b["id"] for b in btn_msgs[-1].payload["buttons"]]
+    assert "proceed_delivery" in ids
+    assert "clear_cart" in ids
+
+
+async def test_catalog_typed_set_qty_carries_quick_action_buttons(db_session, restaurant):
+    """Catalogue-mode 'only 2 chicken biryani' (typed set-qty on existing line)
+    must carry quick-action buttons."""
+    from app.conversation.engine import handle_inbound
+
+    phone = "+971501110205"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    await handle_inbound(
+        db_session, _msg_from("1 chicken biryani", phone, "wamid.cts0"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    before_ids = await _outbox_ids(db_session)
+
+    await handle_inbound(
+        db_session, _msg_from("only 2 chicken biryani", phone, "wamid.cts1"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    new_msgs, btn_msgs = await _new_button_msgs(db_session, before_ids)
+    assert new_msgs, "catalog-typed set-qty must send a confirmation"
+    assert btn_msgs, "catalog-typed set-qty confirmation must carry quick-action buttons"
+    ids = [b["id"] for b in btn_msgs[-1].payload["buttons"]]
+    assert "proceed_delivery" in ids
+    assert "clear_cart" in ids
+
+
 async def test_proceed_delivery_button_starts_checkout(db_session, restaurant):
     """Tapping 'Proceed to delivery' == typing 'done' (address capture starts)."""
     from app.conversation.engine import handle_inbound

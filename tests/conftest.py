@@ -1,7 +1,18 @@
 # tests/conftest.py
 import os
 
-os.environ.setdefault("APP_DATABASE_URL", "postgresql+asyncpg://app:app@localhost:5433/restaurant_test")
+# pytest-xdist (-n auto) isolation: each worker gets its OWN Postgres database
+# (restaurant_test_gw0, _gw1, ...) so the session-scoped `engine` fixture's
+# drop_all/create_all in every worker process never races against another
+# worker's schema on the SAME database. PYTEST_XDIST_WORKER is set by xdist
+# itself (e.g. "gw0"); empty/absent when running without -n (single process,
+# plain "restaurant_test", unchanged behaviour).
+_XDIST_WORKER = os.environ.get("PYTEST_XDIST_WORKER", "")
+_TEST_DB_SUFFIX = f"_{_XDIST_WORKER}" if _XDIST_WORKER else ""
+os.environ.setdefault(
+    "APP_DATABASE_URL",
+    f"postgresql+asyncpg://app:app@localhost:5433/restaurant_test{_TEST_DB_SUFFIX}",
+)
 os.environ.setdefault("APP_LLM_PROVIDER", "fake")  # never hit real AI APIs in tests
 # Pin the WhatsApp provider for tests so they're deterministic regardless of the
 # runtime .env (which may be set to "cloud" for live WhatsApp). The simulator
@@ -71,8 +82,35 @@ def _reset_settings_cache():
     get_settings.cache_clear()
 
 
+async def _ensure_worker_database_exists() -> None:
+    """CREATE the per-xdist-worker test database if it doesn't exist yet.
+
+    Postgres has no CREATE DATABASE IF NOT EXISTS, and you can't CREATE DATABASE
+    inside a transaction — connect to the always-present `restaurant` admin DB
+    with autocommit-style DDL (asyncpg runs each statement outside an implicit
+    transaction) and swallow the duplicate-database error from a racing worker.
+    No-op when not running under xdist (single shared restaurant_test, already
+    created by the one-time CLAUDE.md bootstrap step).
+    """
+    if not _XDIST_WORKER:
+        return
+    import asyncpg
+
+    db_name = f"restaurant_test{_TEST_DB_SUFFIX}"
+    conn = await asyncpg.connect(
+        host="localhost", port=5433, user="app", password="app", database="restaurant"
+    )
+    try:
+        await conn.execute(f'CREATE DATABASE "{db_name}"')
+    except asyncpg.exceptions.DuplicateDatabaseError:
+        pass
+    finally:
+        await conn.close()
+
+
 @pytest.fixture(scope="session")
 async def engine():
+    await _ensure_worker_database_exists()
     eng = create_async_engine(os.environ["APP_DATABASE_URL"])
     async with eng.begin() as conn:
         # pg_trgm is created by migrations in prod; schema here is built via
@@ -124,7 +162,16 @@ from app.ratelimit.bucket import TokenBucketLimiter  # noqa: E402
 from app.ratelimit.deps import set_limiter  # noqa: E402
 
 # Dedicated redis logical DB for tests so limiter keys never collide with dev.
-_TEST_REDIS_URL = os.environ.get("APP_TEST_REDIS_URL", "redis://localhost:6380/9")
+# Under xdist, each worker's flushdb() would otherwise race on the same DB/9 —
+# spread workers across logical DBs 9-15 (redis default: 16 DBs, 0-15) by a
+# hash of the worker name; single-process runs keep the original DB 9.
+if _XDIST_WORKER:
+    _redis_db_num = 9 + (hash(_XDIST_WORKER) % 7)
+else:
+    _redis_db_num = 9
+_TEST_REDIS_URL = os.environ.get(
+    "APP_TEST_REDIS_URL", f"redis://localhost:6380/{_redis_db_num}"
+)
 
 
 @pytest.fixture

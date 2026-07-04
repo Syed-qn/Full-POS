@@ -150,3 +150,67 @@ async def test_issued_coupon_shows_option(db_session):
     await _send_order_summary(db_session, conv, _inb(r, c.phone, ""), r.id, o)
     body = await _last_outbound(db_session, conv.id)
     assert "coupon" in body.lower()
+
+
+async def test_single_assigned_coupon_auto_applies_no_code_needed(db_session):
+    """Prod feedback: 'why isn't there an auto-apply option — by option I mean
+    button' — there's no ambiguity to ask about: _redeem_context already scopes
+    coupons to Coupon.customer_id == this customer, so a single one is always
+    unambiguously theirs. Auto-apply it building the summary, never make them
+    type a code they didn't choose."""
+    r, c = await _seed(db_session)
+    coupon = await coupons.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id,
+                                        order_id=None, discount_aed=Decimal("10.00"))
+    o = await _order(db_session, r, c)
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=c.phone, counterpart="customer")
+    conv.state = {"dialogue_phase": "awaiting_confirmation", "pending_order_id": o.id}
+    await db_session.flush()
+
+    await _send_order_summary(db_session, conv, _inb(r, c.phone, ""), r.id, o)
+
+    body = (await _last_outbound(db_session, conv.id)).lower()
+    assert "coupon discount" in body
+    assert "send the code" not in body
+    refreshed = await db_session.get(Order, o.id)
+    assert refreshed.total == Decimal("50.00")  # 60 - 10 auto-applied
+    assert refreshed.coupon_id == coupon.id
+
+
+async def test_multiple_assigned_coupons_still_prompt_for_choice(db_session):
+    """Two+ active coupons → genuinely ambiguous which one to use; keep the
+    manual prompt instead of guessing."""
+    r, c = await _seed(db_session)
+    await coupons.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id,
+                               order_id=None, discount_aed=Decimal("10.00"))
+    await coupons.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id,
+                               order_id=None, discount_aed=Decimal("5.00"))
+    o = await _order(db_session, r, c)
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=c.phone, counterpart="customer")
+    conv.state = {"dialogue_phase": "awaiting_confirmation", "pending_order_id": o.id}
+    await db_session.flush()
+
+    await _send_order_summary(db_session, conv, _inb(r, c.phone, ""), r.id, o)
+
+    body = (await _last_outbound(db_session, conv.id)).lower()
+    assert "send the code" in body
+    refreshed = await db_session.get(Order, o.id)
+    assert refreshed.total == Decimal("60.00")  # unchanged — no auto-apply
+
+
+async def test_coupon_below_min_order_falls_back_to_prompt(db_session):
+    """A single assigned coupon that fails validation (e.g. below min_order) must
+    not crash the summary — it silently skips auto-apply and falls back to the
+    manual prompt, same as any other unmet-eligibility case."""
+    r, c = await _seed(db_session)
+    coupon = await coupons.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id,
+                                        order_id=None, discount_aed=Decimal("10.00"))
+    coupon.min_order_aed = Decimal("1000.00")
+    o = await _order(db_session, r, c)
+    conv = await get_or_create_conversation(db_session, restaurant_id=r.id, phone=c.phone, counterpart="customer")
+    conv.state = {"dialogue_phase": "awaiting_confirmation", "pending_order_id": o.id}
+    await db_session.flush()
+
+    await _send_order_summary(db_session, conv, _inb(r, c.phone, ""), r.id, o)
+
+    refreshed = await db_session.get(Order, o.id)
+    assert refreshed.total == Decimal("60.00")  # unchanged — auto-apply failed silently

@@ -9,6 +9,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Multi-tenant multilingual SaaS platform: restaurants run delivery operations entirely through WhatsApp — customer ordering, AI menu digitization, own-fleet rider dispatch with live tracking, smart batching under a hard 40-minute SLA, ML demand predictions, marketing automation, plus a React manager dashboard.
 
  read these pages https://www.anthropic.com/engineering/building-effective-agents https://www.anthropic.com/engineering/writing-tools-for-agents https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents and learn about evals https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents 
+ **Foundational Blog**  
+https://lilianweng.github.io/posts/2023-06-23-agent/
+
+**Core Papers**  
+https://arxiv.org/abs/2210.03629  
+https://arxiv.org/abs/2302.04761  
+https://arxiv.org/abs/2303.11366  
+https://github.com/noahshinn/reflexion  
+https://arxiv.org/abs/2305.16291  
+https://voyager.minedojo.org/  
+https://arxiv.org/abs/2304.03442  
+https://github.com/joonspk-research/generative_agents
+
+**Benchmarks**  
+https://arxiv.org/abs/2311.12983  
+https://huggingface.co/spaces/gaia-benchmark/leaderboard  
+https://arxiv.org/abs/2307.13854  
+https://arxiv.org/abs/2308.03688  
+https://github.com/THUDM/AgentBench
+
+**Best Free Course**  
+https://huggingface.co/learn/agents-course  
+https://github.com/huggingface/agents-course
+
+**Key Frameworks**  
+https://langchain-ai.github.io/langgraph/  
+https://microsoft.github.io/autogen/  
+https://docs.crewai.com/
+
+**Curated Lists**  
+https://github.com/hyp1231/awesome-llm-powered-agent  
+https://github.com/luo-junyu/awesome-agent-papers  
+https://github.com/Shubhamsaboo/awesome-llm-apps
+
+**Production / Advanced**  
+https://arxiv.org/abs/2504.19413
 
 **Read these before changing anything:**
 - Spec (single source of truth for business rules): `docs/superpowers/specs/2026-06-06-whatsapp-restaurant-platform-design.md`
