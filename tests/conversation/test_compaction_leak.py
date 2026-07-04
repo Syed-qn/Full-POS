@@ -63,6 +63,42 @@ async def test_build_history_puts_system_summary_as_system_role(db_session, rest
     )
 
 
+def test_dashboard_display_text_never_shows_raw_summary():
+    """Compaction rows must render as a neutral marker in every dashboard/API
+    view (chats, partner API, order-detail chat) — never as a giant outbound
+    bubble that looks like a message the customer received."""
+    from app.conversation.service import message_display_text
+
+    payload = {
+        "summary": "[Earlier conversation summary]\nOrder ref: 42\n- customer: hi",
+        "compacted_count": 30,
+        "preserved_recent": 20,
+    }
+    text = message_display_text(payload)
+    assert text is not None
+    assert "[Earlier conversation summary]" not in text
+    assert "Order ref" not in text
+    assert "summar" in text.lower()  # neutral marker mentions summarization
+
+
+def test_dashboard_view_payload_keeps_summary_but_neutral_text():
+    from app.conversation.service import message_view_payload
+
+    msg = Message(
+        conversation_id=1,
+        direction="outbound",
+        type="system_summary",
+        payload={
+            "summary": "[Earlier conversation summary]\nOrder ref: 42",
+            "compacted_count": 30,
+        },
+    )
+    view = message_view_payload(msg)
+    assert "[Earlier conversation summary]" not in (view.get("text") or "")
+    # Raw digest stays available for the frontend's expandable system note.
+    assert "Order ref: 42" in view["summary"]
+
+
 def test_is_internal_leak_detects_compaction_json():
     body = json.dumps({"summary": "[Earlier conversation summary]", "compacted_count": 32})
     assert _is_internal_leak(body) is True

@@ -120,3 +120,31 @@
 .outbound .time {
   color: rgba(255, 255, 255, 0.8);
 }
+
+.systemRow {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+.systemNote {
+  max-width: 80%;
+  background: var(--bg-surface-raised);
+  color: var(--text-muted);
+  border: 1px dashed var(--text-muted);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.systemLabel {
+  cursor: pointer;
+  user-select: none;
+}
+.systemBody {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  max-height: 240px;
+  overflow-y: auto;
+}

@@ -29,6 +29,11 @@ def message_display_text(payload: dict) -> str | None:
     payloads from reaching the dashboard as a raw JSON dump (MessageBubble's
     last-resort branch) — every stored type resolves to a human string.
     """
+    if "compacted_count" in payload and "summary" in payload:
+        # Compaction digest (system_summary row) — internal context for the LLM,
+        # never a message the customer received. Rendering the raw digest made the
+        # dashboard show a giant "outbound" bubble that WhatsApp never sent.
+        return "📋 Conversation summarized — older messages archived (internal note, not sent to customer)"
     for key in ("text", "body", "title", "caption", "display_text", "summary"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
