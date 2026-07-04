@@ -103,9 +103,8 @@ async def test_catalog_cart_creates_order_and_confirms(db_session, restaurant):
     )).one()
     body = msg.payload["body"]
     assert "Chicken Biryani" in body
-    # After the basket the customer is in the SAME flow as the text bot: send 'done'
-    # to continue to delivery (not a separate catalogue-only path).
-    assert "done" in body.lower()
+    assert msg.payload.get("buttons")
+    assert "proceed_delivery" in {b["id"] for b in msg.payload["buttons"]}
 
     # The basket filled the engine's conversation cart and left normal state.
     from app.conversation.models import Conversation
@@ -114,6 +113,27 @@ async def test_catalog_cart_creates_order_and_confirms(db_session, restaurant):
     )).one()
     assert conv.state.get("draft_order_id") == order.id
     assert conv.state.get("dialogue_state") == "collecting_items"
+
+
+async def test_catalog_basket_carries_quick_action_buttons(db_session, restaurant):
+    await _seed_catalog_menu(db_session, restaurant.id)
+    inbound = _order_inbound([
+        {"product_retailer_id": "nwb4pa5fbn", "quantity": "1",
+         "item_price": "20", "currency": "AED"},
+    ])
+    await handle_catalog_order(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    msg = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).one()
+    buttons = msg.payload.get("buttons") or []
+    assert buttons, "catalog basket must send quick-action buttons"
+    ids = {b["id"] for b in buttons}
+    assert "proceed_delivery" in ids
+    assert "clear_cart" in ids
+    assert any(i.startswith("upsell_add:") or i == "suggest_dishes" for i in ids)
+    assert "done" not in msg.payload.get("body", "").lower()
 
 
 async def test_unmapped_items_do_not_create_empty_order(db_session, restaurant):

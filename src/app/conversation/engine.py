@@ -965,6 +965,62 @@ async def _load_suggestion_candidates(
     return candidates[:_SUGGESTION_CANDIDATE_MAX]
 
 
+async def _handle_top_sellers(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+) -> None:
+    """Deterministic bestseller list for the Suggestions quick-action button."""
+    from app.menu.models import Dish
+    from app.ordering.models import Order
+
+    order_id = conv.state.get("draft_order_id") or conv.state.get("pending_order_id")
+    order = await session.get(Order, order_id) if order_id else None
+    in_cart: set[int] = set()
+    if order is not None:
+        in_cart = await _cart_dish_ids(session, order.id)
+
+    picks: list[Dish] = []
+    rows = await _top_seller_candidates(session, restaurant_id, limit=10)
+    for dish_id, _ in rows:
+        if dish_id in in_cart:
+            continue
+        d = await session.get(Dish, dish_id)
+        if d is None or not d.is_available:
+            continue
+        if not getattr(d, "whatsapp_enabled", True):
+            continue
+        if _SLUG_NAME.match(d.name or ""):
+            continue
+        if await _catalog_excludes_dish(session, restaurant_id, d):
+            continue
+        picks.append(d)
+        if len(picks) >= 3:
+            break
+
+    if not picks:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="top-sellers-none",
+            body="Tell us what you're in the mood for 😊",
+        )
+        await _send_menu_or_catalog(
+            session, conv, inbound, restaurant_id, prefix="top-sellers-menu",
+        )
+        return
+
+    lines = ["Here are our bestsellers 😊"]
+    for d in picks:
+        lines.append(f"• {d.name} — AED {_aed(d.price_aed)}")
+    lines.append("\nTell me what you'd like and I'll add it 😊")
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="top-sellers",
+        body="\n".join(lines),
+    )
+
+
 async def _handle_suggestions(
     session: AsyncSession,
     conv: Conversation,
@@ -4759,20 +4815,134 @@ def _cart_tail(cart: str) -> str:
     return f"\n\n🛒 {cart}" if cart else "\n\n🛒 Your cart is now empty."
 
 
+_MENU_SPECIAL_PHRASES: tuple[str, ...] = (
+    "chef special", "chef's special", "restaurant special", "house special",
+    "today's special", "todays special",
+)
+_UPSELL_VOLUME_DAYS = 30
+
+
+def _text_signals_menu_special(*, category: str | None, name: str, description: str | None) -> bool:
+    cat = (category or "").lower()
+    if "special" in cat or "specials" in cat:
+        return True
+    blob = f"{name} {description or ''}".lower()
+    return any(p in blob for p in _MENU_SPECIAL_PHRASES)
+
+
+async def _cart_dish_ids(session: AsyncSession, order_id: int) -> set[int]:
+    from app.ordering.models import OrderItem
+
+    return {
+        did
+        for (did,) in (
+            await session.execute(
+                select(OrderItem.dish_id).where(OrderItem.order_id == order_id)
+            )
+        ).all()
+    }
+
+
+async def _top_seller_candidates(
+    session: AsyncSession,
+    restaurant_id: int,
+    *,
+    limit: int = 10,
+):
+    from datetime import datetime, timedelta, timezone
+
+    from app.ordering.models import Order, OrderItem
+
+    since = (datetime.now(timezone.utc) - timedelta(days=_UPSELL_VOLUME_DAYS)).replace(
+        tzinfo=None
+    )
+    return (
+        await session.execute(
+            select(OrderItem.dish_id, func.sum(OrderItem.qty).label("units"))
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(
+                Order.restaurant_id == restaurant_id,
+                Order.status.notin_(("draft", "cancelled")),
+                Order.created_at >= since,
+                OrderItem.dish_id.isnot(None),
+            )
+            .group_by(OrderItem.dish_id)
+            .order_by(func.sum(OrderItem.qty).desc())
+            .limit(limit)
+        )
+    ).all()
+
+
+async def _menu_special_dish(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, order,
+):
+    """First available dish flagged as a menu special, not already in cart."""
+    from app.menu.models import Dish, Menu
+
+    in_cart = await _cart_dish_ids(session, order.id)
+    menu = await session.scalar(
+        select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
+    )
+    if menu is None:
+        return None
+    dishes = (
+        await session.scalars(
+            select(Dish).where(
+                Dish.menu_id == menu.id,
+                Dish.is_available == True,  # noqa: E712
+                Dish.meta_status == "active",
+            ).order_by(Dish.category, Dish.name)
+        )
+    ).all()
+    for dish in dishes:
+        if dish.id in in_cart:
+            continue
+        if not getattr(dish, "whatsapp_enabled", True):
+            continue
+        if _SLUG_NAME.match(dish.name or ""):
+            continue
+        if not _text_signals_menu_special(
+            category=dish.category, name=dish.name, description=dish.description
+        ):
+            continue
+        if await _catalog_excludes_dish(session, restaurant_id, dish):
+            continue
+        return dish
+    return None
+
+
+async def _top_seller_dish(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, order, *, limit: int = 10,
+):
+    from app.menu.models import Dish
+
+    in_cart = await _cart_dish_ids(session, order.id)
+    rows = await _top_seller_candidates(session, restaurant_id, limit=limit)
+    for dish_id, _units in rows:
+        if dish_id in in_cart:
+            continue
+        dish = await session.get(Dish, dish_id)
+        if dish is None or not dish.is_available:
+            continue
+        if not getattr(dish, "whatsapp_enabled", True):
+            continue
+        if _SLUG_NAME.match(dish.name or ""):
+            continue
+        if await _catalog_excludes_dish(session, restaurant_id, dish):
+            continue
+        return dish
+    return None
+
+
 async def _history_upsell_dish(
     session: AsyncSession, conv: Conversation, restaurant_id: int, order,
 ):
     """The customer's most-ordered PAST dish that isn't in the current cart.
 
     Grounded strictly in the DB (real dish, real price — spec R-003/R-005: never
-    invent): available today, orderable on WhatsApp, catalogue-allowed. Offered at
-    most once per draft order (state ``upsell_shown_for``) so it reads as a friendly
-    nudge, not a sales loop. Returns the Dish (and marks the state) or None."""
+    invent): available today, orderable on WhatsApp, catalogue-allowed. Tier-1 of
+    ``_upsell_dish_for_cart``; ``upsell_shown_for`` is set by the resolver."""
     try:
-        state = conv.state or {}
-        if state.get("upsell_shown_for") == order.id:
-            return None
-
         from app.menu.models import Dish
         from app.ordering.models import Customer, Order, OrderItem
 
@@ -4785,7 +4955,6 @@ async def _history_upsell_dish(
         if customer is None:
             return None
 
-        # Most-ordered dishes across PLACED past orders (draft/cancelled excluded).
         past_rows = (
             await session.execute(
                 select(OrderItem.dish_id, func.sum(OrderItem.qty).label("units"))
@@ -4805,14 +4974,7 @@ async def _history_upsell_dish(
         if not past_rows:
             return None
 
-        in_cart = {
-            did
-            for (did,) in (
-                await session.execute(
-                    select(OrderItem.dish_id).where(OrderItem.order_id == order.id)
-                )
-            ).all()
-        }
+        in_cart = await _cart_dish_ids(session, order.id)
 
         for dish_id, _units in past_rows:
             if dish_id in in_cart:
@@ -4827,7 +4989,6 @@ async def _history_upsell_dish(
                 continue
             if await _catalog_excludes_dish(session, restaurant_id, dish):
                 continue
-            _set_state(conv, upsell_shown_for=order.id)
             return dish
         return None
     except Exception:  # noqa: BLE001 — an upsell must never break an add
@@ -4835,12 +4996,35 @@ async def _history_upsell_dish(
         return None
 
 
+async def _upsell_dish_for_cart(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, order,
+) -> tuple[object | None, str]:
+    if conv.state.get("upsell_shown_for") == order.id:
+        return None, "none"
+    try:
+        dish = await _history_upsell_dish(session, conv, restaurant_id, order)
+        if dish is not None:
+            _set_state(conv, upsell_shown_for=order.id)
+            return dish, "history"
+        dish = await _menu_special_dish(session, conv, restaurant_id, order)
+        if dish is not None:
+            _set_state(conv, upsell_shown_for=order.id)
+            return dish, "menu_special"
+        dish = await _top_seller_dish(session, conv, restaurant_id, order)
+        if dish is not None:
+            _set_state(conv, upsell_shown_for=order.id)
+            return dish, "top_seller"
+    except Exception:  # noqa: BLE001
+        _logger.debug("upsell resolver failed", exc_info=True)
+    return None, "none"
+
+
 async def _history_upsell_line(
     session: AsyncSession, conv: Conversation, restaurant_id: int, order,
 ) -> str:
     """One-line history upsell for plain-text add confirmations ("" when none)."""
-    dish = await _history_upsell_dish(session, conv, restaurant_id, order)
-    if dish is None:
+    dish, source = await _upsell_dish_for_cart(session, conv, restaurant_id, order)
+    if dish is None or source != "history":
         return ""
     return (
         f"\n\nYou had {dish.name} (AED {_aed(dish.price_aed)}) last time. "
@@ -4855,16 +5039,21 @@ async def _post_add_extras(
 
     Buttons (WhatsApp max 3, titles ≤ 20 chars):
       1. Proceed to delivery  — same as typing 'done'
-      2. Add <history dish>   — or 'Suggestions' when there is no honest history pick
+      2. Add <upsell dish>    — or 'Suggestions' when no grounded pick
       3. Clear cart
     """
     upsell_line = ""
-    dish = await _history_upsell_dish(session, conv, restaurant_id, order)
+    dish, source = await _upsell_dish_for_cart(session, conv, restaurant_id, order)
     if dish is not None:
-        upsell_line = (
-            f"\n\nYou had {dish.name} (AED {_aed(dish.price_aed)}) last time. "
-            "Add one? 😊"
-        )
+        if source == "history":
+            upsell_line = (
+                f"\n\nYou had {dish.name} (AED {_aed(dish.price_aed)}) last time. "
+                "Add one? 😊"
+            )
+        else:
+            upsell_line = (
+                f"\n\nTry {dish.name} (AED {_aed(dish.price_aed)})? Add one? 😊"
+            )
         title = f"Add {dish.name}"
         if len(title) > 20:
             title = title[:20]
@@ -8804,11 +8993,11 @@ async def handle_inbound(
                         buttons=buttons,
                     )
                     return
-            # Stale/off dish → fall back to suggestions rather than a dead tap.
-            await _handle_suggestions(session, conv, inbound, restaurant_id)
+            # Stale/off dish → fall back to bestsellers rather than a dead tap.
+            await _handle_top_sellers(session, conv, inbound, restaurant_id)
             return
         if btn_id == "suggest_dishes":
-            await _handle_suggestions(session, conv, inbound, restaurant_id)
+            await _handle_top_sellers(session, conv, inbound, restaurant_id)
             return
         if btn_id == "clear_cart":
             from sqlalchemy import delete as sa_delete

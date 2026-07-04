@@ -1922,6 +1922,154 @@ async def test_history_upsell_no_history_is_silent(db_session, restaurant):
     assert line == ""
 
 
+async def test_menu_special_dish_picked_for_upsell(db_session, restaurant):
+    """Dish in a 'Chef Specials' category is upsell when customer has no history."""
+    from app.conversation.engine import _upsell_dish_for_cart
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    soup = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=10,
+        name="Chicken Soup", price_aed=Decimal("15.00"), category="Soup",
+        is_available=True, name_normalized="chicken soup",
+    )
+    special = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=20,
+        name="Chef Special Mandi", price_aed=Decimal("45.00"), category="Chef Specials",
+        is_available=True, name_normalized="chef special mandi",
+    )
+    db_session.add_all([soup, special])
+    await db_session.flush()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110301",
+        counterpart="customer",
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110301"
+    )
+    draft = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=draft, dish=soup, qty=1)
+    await db_session.commit()
+
+    dish, source = await _upsell_dish_for_cart(
+        db_session, conv, restaurant.id, draft
+    )
+    assert dish is not None
+    assert dish.id == special.id
+    assert source == "menu_special"
+
+
+async def test_top_seller_picked_when_no_history_or_special(db_session, restaurant):
+    from app.conversation.engine import _upsell_dish_for_cart
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import Order, OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    soup = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=10,
+        name="Chicken Soup", price_aed=Decimal("15.00"), category="Soup",
+        is_available=True, name_normalized="chicken soup",
+    )
+    mandi = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=30,
+        name="Mandi", price_aed=Decimal("45.00"), category="Rice",
+        is_available=True, name_normalized="mandi",
+    )
+    db_session.add_all([soup, mandi])
+    await db_session.flush()
+
+    cust_a = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110401"
+    )
+    past = Order(
+        restaurant_id=restaurant.id, customer_id=cust_a.id, order_number="R1-9001",
+        status="delivered", priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("45.00"), total=Decimal("45.00"),
+    )
+    db_session.add(past)
+    await db_session.flush()
+    db_session.add(OrderItem(
+        order_id=past.id, dish_id=mandi.id, dish_number=30, dish_name="Mandi",
+        qty=5, price_aed=Decimal("45.00"),
+    ))
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110402",
+        counterpart="customer",
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110402"
+    )
+    draft = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=draft, dish=soup, qty=1)
+    await db_session.commit()
+
+    dish, source = await _upsell_dish_for_cart(
+        db_session, conv, restaurant.id, draft
+    )
+    assert dish is not None
+    assert dish.id == mandi.id
+    assert source == "top_seller"
+
+
+async def test_history_still_wins_over_special_and_volume(db_session, restaurant):
+    """Personal history remains tier-1."""
+    from app.conversation.engine import _upsell_dish_for_cart
+
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, "+971501110403"
+    )
+    dish, source = await _upsell_dish_for_cart(
+        db_session, conv, restaurant.id, draft
+    )
+    assert dish is not None
+    assert dish.id == lemon_mint.id
+    assert source == "history"
+
+
+async def test_suggest_dishes_button_shows_top_sellers_not_llm(db_session, restaurant, monkeypatch):
+    from app.conversation.engine import handle_inbound
+    from app.outbox.models import OutboxMessage
+
+    def _boom():
+        raise AssertionError("LLM suggestion agent must not run for suggest_dishes button")
+
+    monkeypatch.setattr("app.llm.factory.get_suggestion_agent", _boom)
+
+    phone = "+971501110501"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    conv.state = {**conv.state, "upsell_shown_for": None}
+    await db_session.commit()
+
+    await handle_inbound(
+        db_session, _btn_msg("suggest_dishes", phone, "wamid.sug1"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    bodies = [
+        m.payload.get("body", "")
+        for m in (await db_session.scalars(select(OutboxMessage))).all()
+    ]
+    assert any("bestseller" in b.lower() for b in bodies), bodies
+    assert not any("having a moment" in b.lower() for b in bodies)
+
+
 def _btn_msg(btn_id: str, phone: str, wa_id: str = "wamid.btn1") -> InboundMessage:
     return InboundMessage(
         wa_message_id=wa_id,

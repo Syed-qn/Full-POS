@@ -538,7 +538,9 @@ async def handle_catalog_order(
     # everything is identical to the text flow: the customer sends 'done' and the
     # conversation engine drives delivery, confirmation, kitchen and dispatch. We reuse
     # the engine's helpers (lazy import) so behaviour cannot drift from the text path.
-    from app.conversation.engine import _build_cart_summary, _send_text, _set_state
+    from app.conversation.engine import (
+        _build_cart_summary, _post_add_extras, _send_buttons, _send_text, _set_state,
+    )
     from app.conversation.service import get_or_create_conversation, record_message
     from app.identity.phones import normalize_phone
 
@@ -703,11 +705,14 @@ async def handle_catalog_order(
     if oversized:
         notes.append("Quantity too large: " + "; ".join(oversized))
     extra = ("\n" + "\n".join(notes)) if notes else ""
-    await _send_text(
+    upsell_line, buttons = await _post_add_extras(
+        session, conv, restaurant_id, order
+    )
+    await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="catalog-cart",
-        body=(f"Got your basket 🎉\n\n🛒 {cart}{extra}\n\n"
-              f"Reply with more items, or send 'done' to proceed to delivery details."),
+        body=f"Got your basket 🎉\n\n🛒 {cart}{extra}{upsell_line}",
+        buttons=buttons,
     )
     logger.info(
         "catalog basket -> order %s for restaurant %s: %d line(s), subtotal %s",
