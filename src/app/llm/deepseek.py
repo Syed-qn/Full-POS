@@ -29,28 +29,32 @@ _logger = logging.getLogger(__name__)
 _BASE = "https://api.deepseek.com"
 _CHAT = f"{_BASE}/chat/completions"
 
-# Models that CANNOT do forced function-calling (tool_choice). The conversation agent
-# REQUIRES a structured take_action tool call every turn, so if one of these is
-# configured (e.g. someone sets APP_DEEPSEEK_MODEL=deepseek-reasoner) every inbound
-# message would error with "something went wrong". Guard: fall back to deepseek-chat and
-# log loudly instead of failing on the live customer path.
-_NON_TOOL_CALLING_MODELS = frozenset({
-    "deepseek-reasoner", "deepseek-r1", "deepseek-reasoner-r1", "deepseek-reasoning",
-})
+# The conversation agent REQUIRES a structured take_action tool call every turn, so the
+# model MUST support forced function-calling. DeepSeek's API only serves two chat-
+# completion models — deepseek-chat (tool-calling ✓) and deepseek-reasoner (no tools).
+# Misconfigs seen in prod: APP_DEEPSEEK_MODEL set to a reasoning model, or an invented
+# name like "deepseek-v4-flash" (no such model → the API 400s → every inbound message
+# errors). Guard with an ALLOWLIST: anything that isn't a known function-calling chat
+# model is downgraded to deepseek-chat and logged loudly, rather than failing live.
+_TOOL_CALLING_MODELS = frozenset({"deepseek-chat", "deepseek-coder"})
 _TOOL_CALLING_FALLBACK = "deepseek-chat"
 
 
 def _safe_tool_model(model: str) -> str:
-    """Return a model that supports function-calling; downgrade reasoning models to
-    deepseek-chat (with a loud log) so the conversation path never silently breaks."""
-    if (model or "").strip().lower() in _NON_TOOL_CALLING_MODELS:
-        _logger.error(
-            "deepseek_model=%r cannot do the function-calling the conversation agent "
-            "requires; falling back to %r. Set APP_DEEPSEEK_MODEL=deepseek-chat.",
-            model, _TOOL_CALLING_FALLBACK,
-        )
-        return _TOOL_CALLING_FALLBACK
-    return model
+    """Return a model that supports function-calling. Known chat models (or any DeepSeek
+    name that clearly denotes a chat, non-reasoner model, for forward-compat) pass
+    through; everything else (reasoners, invented names, other providers) is downgraded
+    to deepseek-chat with a loud log so the conversation path never silently breaks."""
+    m = (model or "").strip().lower()
+    if m in _TOOL_CALLING_MODELS or ("chat" in m and "reason" not in m):
+        return model
+    _logger.error(
+        "deepseek_model=%r is not a known function-calling chat model (DeepSeek serves "
+        "deepseek-chat / deepseek-reasoner only); falling back to %r. "
+        "Set APP_DEEPSEEK_MODEL=deepseek-chat.",
+        model, _TOOL_CALLING_FALLBACK,
+    )
+    return _TOOL_CALLING_FALLBACK
 
 
 def _headers(api_key: str) -> dict:
