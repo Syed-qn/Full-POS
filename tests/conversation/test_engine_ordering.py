@@ -208,6 +208,59 @@ def test_is_done_intent_variants():
         assert _is_done_intent(p) is False, p
 
 
+def test_is_done_intent_confirm_and_casual_variants():
+    """Prod transcript (Lim's Cafe): 'Confirm the order' and 'Ya that it' fell through
+    to the LLM, which errored and looped the canned 'having a moment' reply. Both are
+    unambiguous 'finish this order' phrasings and must check out deterministically."""
+    from app.conversation.engine import _is_done_intent
+
+    for p in [
+        "Confirm the order", "confirm order", "confirm my order", "Confirm it",
+        "confirm", "place my order",
+        "Ya that it", "that it", "Yes that it", "ya thats it",
+    ]:
+        assert _is_done_intent(p) is True, p
+    # Not checkout — real dish orders / open questions must still fall through.
+    for p in ["confirm chicken biryani please", "what does that include"]:
+        assert _is_done_intent(p) is False, p
+
+
+def test_uae_casual_checkout_and_ack_phrasings():
+    """UAE customers order friendly/casual — 'send it habibi', 'khalas', 'yalla', 'ok bro',
+    'tamam'. These must read as checkout / proceed, and a trailing vocative must never hide
+    the intent. A dish order with a vocative ('chicken biryani habibi') must NOT check out."""
+    from app.conversation.engine import _is_ack_proceed_intent, _is_done_intent
+
+    for p in [
+        "khalas", "yalla", "yallah", "yalla send", "done habibi", "that's all bro",
+        "send it habibi", "deliver it my friend", "yalla habibi", "khalas habibi",
+    ]:
+        assert _is_done_intent(p) is True, p
+    for p in ["ok habibi", "tamam", "ok bro", "tamam habibi", "sure akhi", "aiwa"]:
+        assert _is_ack_proceed_intent(p) is True, p
+    # Vocative must not turn a dish order / question into a checkout or ack.
+    for p in ["chicken biryani habibi", "do you have shawarma bro", "habibi"]:
+        assert _is_done_intent(p) is False, p
+        assert _is_ack_proceed_intent(p) is False, p
+
+
+def test_done_intent_word_cap_ignores_long_requests():
+    """A long, complex sentence that merely ENDS in a done-edge is a real request for the
+    LLM, not a bare checkout — the word cap prevents it being swallowed. Short edge-phrases
+    (incl. an angry prefix) still count."""
+    from app.conversation.engine import _is_done_intent
+
+    # Long requests ending in "that's all" → NOT checkout (go to the AI).
+    for p in [
+        "can you make it spicy and add fries and remove the soup that's all",
+        "also please add two cokes and one extra naan and that is all",
+    ]:
+        assert _is_done_intent(p) is False, p
+    # Short edge phrases still check out.
+    for p in ["motherfucker that's all", "ok that's it", "no more thanks"]:
+        assert _is_done_intent(p) is True, p
+
+
 def test_is_done_intent_delivery_phrasings():
     """Prod transcript: 'Send it to me brothrr' and 'Deliver the things I asked you to'
     fell through to the LLM which re-dumped the menu; customer gave up and cancelled.
@@ -280,6 +333,55 @@ async def test_thats_all_checks_out_without_calling_llm(db_session, restaurant):
     )).scalars().all()
     assert len(items) == 1 and items[0].qty == 1
     assert conv.state["dialogue_state"] == "address_capture"
+
+
+async def test_crashed_ai_turn_shows_cart_not_reset_prompt(db_session, restaurant):
+    """When the AI turn crashes and the customer has a live cart, the fallback must echo
+    the cart and offer the next step — not the context-blind 'Type the dish name or send
+    hi' that reads as the bot looping the same reply and forgetting the order."""
+    from app.conversation.engine import _contextual_error_body
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=210,
+        name="Arayes", price_aed=Decimal("25.00"), category="Grill",
+        is_available=True, name_normalized="arayes",
+    )
+    db_session.add(dish)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110002", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110002"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=dish, qty=5)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    # Cart-aware body echoes the basket and offers confirm.
+    body = await _contextual_error_body(db_session, conv)
+    assert "Arayes" in body and "confirm" in body.lower()
+    assert "send 'hi' to start" not in body
+
+    # Empty-cart still gets the plain prompt (nothing to preserve).
+    empty_conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110003", counterpart="customer"
+    )
+    empty_conv.state = {**empty_conv.state, "dialogue_phase": "ordering"}
+    assert "send 'hi' to start" in await _contextual_error_body(db_session, empty_conv)
 
 
 async def test_negation_swap_replaces_last_added_dish(db_session, restaurant):
@@ -696,6 +798,95 @@ async def test_multi_dish_make_it_sets_each_no_phantom(db_session, restaurant):
     assert by_num == {9: 5, 8: 2}  # Lemon Mint→5, Grill Mandi→2, no phantom line
     last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
     assert "Updated" in last and "and 2 grill mandi" not in last
+
+
+async def test_bare_make_it_n_sets_single_cart_line(db_session, restaurant):
+    """Prod (Lim's Cafe): "Make it 5" with ONE item in the cart returned "having a moment"
+    (punted to the flaky LLM), while "Make it 5 arayes" worked. A bare set-qty with a
+    single distinct cart line is unambiguous — resolve it deterministically. With TWO+
+    lines the bot asks which dish (never guesses, never crashes)."""
+    from app.catalog.models import CatalogProduct
+    from app.conversation.engine import _try_catalog_cart_edit
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    restaurant.settings = {
+        **restaurant.settings, "catalog_id": "CAT1", "catalog_ordering_enabled": True,
+    }
+    db_session.add_all([
+        CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id="arayes01", name="Arayes",
+            price_aed=Decimal("25.00"), currency="AED", availability="in stock",
+            category="Grill", is_active=True, raw={},
+        ),
+        CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id="mint01", name="Lemon Mint",
+            price_aed=Decimal("12.00"), currency="AED", availability="in stock",
+            category="Drinks", is_active=True, raw={},
+        ),
+    ])
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    arayes = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=210, name="Arayes",
+        price_aed=Decimal("25.00"), category="Grill", is_available=True,
+        name_normalized="arayes", catalog_retailer_id="arayes01",
+    )
+    mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=211, name="Lemon Mint",
+        price_aed=Decimal("12.00"), category="Drinks", is_available=True,
+        name_normalized="lemon mint", catalog_retailer_id="mint01",
+    )
+    db_session.add_all([arayes, mint])
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=arayes, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    # Single line → bare "make it 5" resolves to Arayes and SETS qty to 5 (not the LLM).
+    handled = await _try_catalog_cart_edit(
+        db_session, conv, _msg("make it 5", "wamid.bare5"), restaurant.id, restaurant
+    )
+    await db_session.commit()
+    assert handled is True
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1 and items[0].qty == 5
+    last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Updated" in last
+
+    # Add a second distinct line → bare "make it 3" is now ambiguous → ask which one
+    # (handled, no LLM), cart untouched.
+    await add_item(db_session, order=order, dish=mint, qty=1)
+    await db_session.commit()
+    handled2 = await _try_catalog_cart_edit(
+        db_session, conv, _msg("make it 3", "wamid.bare3"), restaurant.id, restaurant
+    )
+    await db_session.commit()
+    assert handled2 is True
+    which = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Which one" in which and "Arayes" in which and "Lemon Mint" in which
+    items2 = {i.dish_number: i.qty for i in (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()}
+    assert items2 == {210: 5, 211: 1}  # unchanged
 
 
 async def test_explicit_clear_still_empties_cart(db_session, restaurant):

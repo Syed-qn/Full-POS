@@ -4,6 +4,7 @@ All ports mirror the Claude implementations. Sync methods use httpx sync client;
 async methods (MenuExtractor) use httpx async client.
 """
 import json
+import logging
 import re as _re
 from functools import lru_cache
 
@@ -23,8 +24,37 @@ from app.llm.prompts_menu import (
 )
 from app.llm.prompts_router import COMPLETION_DETECT_TEMPLATE, ROUTER_CLASSIFY_TEMPLATE
 
+_logger = logging.getLogger(__name__)
+
 _BASE = "https://api.deepseek.com"
 _CHAT = f"{_BASE}/chat/completions"
+
+# The conversation agent REQUIRES a structured take_action tool call every turn, so the
+# model MUST support forced function-calling. DeepSeek's API only serves two chat-
+# completion models — deepseek-chat (tool-calling ✓) and deepseek-reasoner (no tools).
+# Misconfigs seen in prod: APP_DEEPSEEK_MODEL set to a reasoning model, or an invented
+# name like "deepseek-v4-flash" (no such model → the API 400s → every inbound message
+# errors). Guard with an ALLOWLIST: anything that isn't a known function-calling chat
+# model is downgraded to deepseek-chat and logged loudly, rather than failing live.
+_TOOL_CALLING_MODELS = frozenset({"deepseek-chat", "deepseek-coder"})
+_TOOL_CALLING_FALLBACK = "deepseek-chat"
+
+
+def _safe_tool_model(model: str) -> str:
+    """Return a model that supports function-calling. Known chat models (or any DeepSeek
+    name that clearly denotes a chat, non-reasoner model, for forward-compat) pass
+    through; everything else (reasoners, invented names, other providers) is downgraded
+    to deepseek-chat with a loud log so the conversation path never silently breaks."""
+    m = (model or "").strip().lower()
+    if m in _TOOL_CALLING_MODELS or ("chat" in m and "reason" not in m):
+        return model
+    _logger.error(
+        "deepseek_model=%r is not a known function-calling chat model (DeepSeek serves "
+        "deepseek-chat / deepseek-reasoner only); falling back to %r. "
+        "Set APP_DEEPSEEK_MODEL=deepseek-chat.",
+        model, _TOOL_CALLING_FALLBACK,
+    )
+    return _TOOL_CALLING_FALLBACK
 
 
 def _headers(api_key: str) -> dict:
@@ -245,7 +275,7 @@ class DeepSeekConversationAgent:
     def __init__(self, model: str | None = None) -> None:
         api_key, default_model = _get_deepseek_settings()
         self._api_key = api_key
-        self._model = model or default_model
+        self._model = _safe_tool_model(model or default_model)
 
     def _build_system(self, restaurant_name: str, dialogue_phase: str, context: dict) -> str:
         ctx = dict(context)
@@ -312,7 +342,7 @@ class DeepSeekCompletionDetector:
         if not text or not text.strip():
             return False
         api_key, default_model = _get_deepseek_settings()
-        model = self._model_override or default_model
+        model = _safe_tool_model(self._model_override or default_model)
         prompt = COMPLETION_DETECT_TEMPLATE.format(text=text)
         raw = await _async_chat(
             api_key, model,
@@ -337,7 +367,7 @@ class DeepSeekRouterClassifier:
         if not text or not text.strip():
             return IntentLabel.NON_ACTIONABLE
         api_key, default_model = _get_deepseek_settings()
-        model = self._model_override or default_model
+        model = _safe_tool_model(self._model_override or default_model)
         labels = ", ".join(label.value for label in IntentLabel)
         prompt = ROUTER_CLASSIFY_TEMPLATE.format(
             phase=phase,

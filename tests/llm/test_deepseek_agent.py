@@ -154,6 +154,26 @@ def test_salvage_raises_when_nothing_recoverable():
         ds._salvage_truncated_tool_args("garbage with no fields")
 
 
+def test_safe_tool_model_downgrades_non_tool_calling_models():
+    # Anything that isn't a known function-calling chat model must be downgraded to
+    # deepseek-chat (else every inbound message errors with "something went wrong").
+    # Covers reasoning models AND invented names (prod: "deepseek-v4-flash" 400s).
+    for bad in [
+        "deepseek-reasoner", "DeepSeek-Reasoner", "deepseek-r1",
+        "deepseek-v4-flash", "gemini-flash", "gpt-4o", "", "   ",
+    ]:
+        assert ds._safe_tool_model(bad) == "deepseek-chat"
+    # Known / clearly-chat models pass through unchanged (forward-compat for a future
+    # "deepseek-v4-chat", but never a reasoner).
+    for ok in ["deepseek-chat", "deepseek-coder", "deepseek-v4-chat"]:
+        assert ds._safe_tool_model(ok) == ok
+
+
+def test_conversation_agent_never_uses_non_tool_calling_model():
+    for bad in ["deepseek-reasoner", "deepseek-v4-flash"]:
+        assert DeepSeekConversationAgent(model=bad)._model == "deepseek-chat"
+
+
 class _FakeResp:
     def __init__(self, payload, status=200):
         self._payload = payload
