@@ -894,25 +894,57 @@ async def _dish_search_is_browse_only(
     return True
 
 
+# Filler openers stripped before a browse phrase is matched, so "can you suggest ..."
+# still counts while an off-topic sentence that merely CONTAINS the word does not.
+_BROWSE_LEAD_FILLER: tuple[str, ...] = (
+    "ok", "okay", "okey", "so", "hey", "hi", "hello", "yo", "please", "pls", "plz",
+    "can you", "can u", "could you", "could u", "would you", "will you", "pls can you",
+    "i want you to", "i want u to", "kindly", "just",
+)
+_BROWSE_START_PHRASES: tuple[str, ...] = (
+    "show me", "suggest", "recommend", "pick for me", "pick me", "surprise me",
+    "surprise", "what should i order", "what should i get", "what do you recommend",
+)
+
+
+def _strip_browse_lead_filler(text: str) -> str:
+    """Drop leading filler openers so a browse phrase can be matched at the START."""
+    t = _re.sub(r"[^\w ]", " ", (text or "").lower())
+    t = _re.sub(r"\s+", " ", t).strip()
+    changed = True
+    while changed:
+        changed = False
+        for f in _BROWSE_LEAD_FILLER:
+            if t == f:
+                return ""
+            if t.startswith(f + " "):
+                t = t[len(f) + 1:].strip()
+                changed = True
+    return t
+
+
 def _is_menu_browse_intent(text: str) -> bool:
-    """True for short browse/suggest messages that are not explicit menu keywords."""
+    """True for short browse/suggest messages that are not explicit menu keywords.
+
+    The browse phrase must be at the START (after simple filler like "can you") — a
+    longer sentence that merely mentions "suggest" ("I have fever can u suggest me a
+    tablet") is NOT a menu browse and falls through to the AI to handle in context.
+    """
     t = (text or "").strip().lower()
     if not t or len(t) > 45:
         return False
     if _is_menu_request(text):
         return True
-    browse_phrases = (
-        "show me", "ok show me", "suggest", "recommend", "pick for me",
-        "what should i order", "surprise me",
-    )
-    return any(p in t for p in browse_phrases)
+    stripped = _strip_browse_lead_filler(text)
+    return any(stripped.startswith(p) for p in _BROWSE_START_PHRASES)
 
 
 def _is_suggestion_browse_intent(text: str) -> bool:
-    """True when the customer wants curated picks, not a full menu dump."""
-    t = (text or "").strip().lower()
+    """True when the customer wants curated picks, not a full menu dump. Start-anchored
+    (after filler) so an off-topic sentence containing "suggest" isn't hijacked here."""
+    stripped = _strip_browse_lead_filler(text)
     return any(
-        p in t
+        stripped.startswith(p)
         for p in ("suggest", "recommend", "surprise", "pick for me", "pick me")
     )
 

@@ -57,6 +57,26 @@ def test_menu_browse_suggest():
     assert _is_menu_browse_intent("Suggest me something") is True
 
 
+def test_browse_intent_start_anchored_not_greedy():
+    """A genuine browse request (browse word at the start, after filler) counts; an
+    off-topic sentence that merely CONTAINS 'suggest' must NOT be hijacked into the menu
+    dump — prod: 'I have fever can u suggest me a tablet' dumped the full menu."""
+    from app.conversation.engine import _is_suggestion_browse_intent
+
+    for good in [
+        "suggest me something", "can you recommend a dish", "ok show me",
+        "surprise me", "what should I order", "pls suggest",
+    ]:
+        assert _is_menu_browse_intent(good) is True, good
+    for off_topic in [
+        "I have fever can u suggest me a tablet",
+        "my doctor said suggest rest",
+        "why did you recommend that dish to my friend",
+    ]:
+        assert _is_menu_browse_intent(off_topic) is False, off_topic
+        assert _is_suggestion_browse_intent(off_topic) is False, off_topic
+
+
 @pytest.mark.asyncio
 async def test_dish_search_sends_matching_dishes(db_session, restaurant, seeded_menu_with_chicken):
     """Text mode: inbound boneless query returns bullet list with at least one dish."""
