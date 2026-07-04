@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Multi-tenant multilingual SaaS platform: restaurants run delivery operations entirely through WhatsApp — customer ordering, AI menu digitization, own-fleet rider dispatch with live tracking, smart batching under a hard 40-minute SLA, ML demand predictions, marketing automation, plus a React manager dashboard.
 
- read these pages https://www.anthropic.com/engineering/building-effective-agents https://www.anthropic.com/engineering/writing-tools-for-agents and learn about evals https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+ read these pages https://www.anthropic.com/engineering/building-effective-agents https://www.anthropic.com/engineering/writing-tools-for-agents https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents and learn about evals https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents 
 
 **Read these before changing anything:**
 - Spec (single source of truth for business rules): `docs/superpowers/specs/2026-06-06-whatsapp-restaurant-platform-design.md`

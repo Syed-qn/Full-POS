@@ -176,6 +176,163 @@ async def test_post_webhook_dispatches_celery_task(client, db_session):
     assert rows[0].id in dispatched_ids
 
 
+def _confirm_button_payload(*, wa_id: str, from_digits: str = "971585997894") -> dict:
+    return {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {
+                                "display_phone_number": "+97141234567",
+                                "phone_number_id": "111",
+                            },
+                            "messages": [
+                                {
+                                    "id": wa_id,
+                                    "from": from_digits,
+                                    "timestamp": "1717660800",
+                                    "type": "interactive",
+                                    "interactive": {
+                                        "type": "button_reply",
+                                        "button_reply": {
+                                            "id": "confirm_order",
+                                            "title": "Confirm order",
+                                        },
+                                    },
+                                }
+                            ],
+                        },
+                        "field": "messages",
+                    }
+                ]
+            }
+        ],
+    }
+
+
+async def _seed_confirm_ready_state(db_session, restaurant_id: int) -> None:
+    """Customer at awaiting_confirmation with a pending order ready to confirm."""
+    from sqlalchemy import select
+
+    from app.conversation.models import Conversation
+    from app.menu.models import Dish
+    from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
+
+    customer = Customer(
+        restaurant_id=restaurant_id,
+        phone="+971585997894",
+        name="Syed",
+        usual_order_times={},
+        tags={},
+        total_orders=0,
+        total_spend=Decimal("0.00"),
+    )
+    db_session.add(customer)
+    await db_session.flush()
+    addr = CustomerAddress(
+        customer_id=customer.id,
+        latitude=25.21,
+        longitude=55.27,
+        room_apartment="816",
+        building="1-14",
+        receiver_name="Syed",
+        confirmed=True,
+    )
+    db_session.add(addr)
+    await db_session.flush()
+    order = Order(
+        restaurant_id=restaurant_id,
+        customer_id=customer.id,
+        order_number="R1-0140",
+        status="pending_confirmation",
+        priority="normal",
+        weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"),
+        subtotal=Decimal("15.00"),
+        total=Decimal("15.00"),
+        address_id=addr.id,
+        distance_km=1.5,
+    )
+    db_session.add(order)
+    await db_session.flush()
+    dish = (
+        await db_session.scalars(
+            select(Dish).where(
+                Dish.restaurant_id == restaurant_id, Dish.dish_number == 110
+            )
+        )
+    ).first()
+    db_session.add(
+        OrderItem(
+            order_id=order.id,
+            dish_id=dish.id,
+            dish_number=110,
+            dish_name="Chicken Soup",
+            price_aed=Decimal("15.00"),
+            qty=1,
+        )
+    )
+    conv = Conversation(
+        restaurant_id=restaurant_id,
+        phone="+971585997894",
+        counterpart="customer",
+        state={
+            "dialogue_phase": "awaiting_confirmation",
+            "dialogue_state": "order_confirmation",
+            "pending_order_id": order.id,
+        },
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+
+async def test_confirm_order_celery_enqueue_failure_no_error_apology(
+    client, db_session,
+):
+    """Order confirm must not send the generic apology when only delivery enqueue fails."""
+    from unittest.mock import patch
+
+    from sqlalchemy import select
+
+    from app.ordering.models import Order
+    from app.outbox.models import OutboxMessage
+
+    restaurant_id = await _seed_restaurant_and_menu(client, db_session)
+    await _seed_confirm_ready_state(db_session, restaurant_id)
+
+    payload = _confirm_button_payload(wa_id="wamid.confirm-0140")
+    body, sig = _signed_body(payload)
+
+    def _boom(*args, **kwargs):
+        raise ConnectionError("redis unavailable")
+
+    with patch(
+        "app.webhook.router.deliver_outbox_message.apply_async",
+        side_effect=_boom,
+    ):
+        resp = await client.post(
+            "/webhooks/whatsapp",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+        )
+    assert resp.status_code == 200
+
+    order = await db_session.scalar(
+        select(Order).where(Order.order_number == "R1-0140")
+    )
+    assert order is not None
+    assert order.status == "confirmed"
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    bodies = [r.payload.get("body", "") for r in rows]
+    assert any("Order confirmed" in b for b in bodies), bodies
+    assert not any(
+        "something went wrong on our end" in b.lower() for b in bodies
+    ), bodies
+
+
 async def test_post_webhook_sync_delivery_sends_in_request(client, db_session, monkeypatch):
     """With outbox_sync_delivery on, the reply is delivered IN the webhook request
     (no Celery worker) — the row ends up 'sent', not left pending/dispatching."""

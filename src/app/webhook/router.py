@@ -157,30 +157,17 @@ async def receive_webhook(
             )
             await session.commit()
 
-            from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
-
-            await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
-
-            if settings.outbox_sync_delivery:
-                # No worker: deliver each reply in-request on this same connection
-                # (mirrors the simulator's synchronous path). Bind a sessionmaker to
-                # this session's connection so _deliver_one reuses it.
-                from sqlalchemy.ext.asyncio import async_sessionmaker
-
-                from app.outbox.worker import _deliver_one
-                from app.whatsapp.factory import get_whatsapp_provider
-
-                provider = get_whatsapp_provider()
-                sync_factory = async_sessionmaker(
-                    bind=session.bind,
-                    expire_on_commit=False,
-                    join_transaction_mode="create_savepoint",
-                )
-                for outbox_id in claimed_ids:
-                    await _deliver_one(outbox_id, provider=provider, session_factory=sync_factory)
-            else:
-                for outbox_id in claimed_ids:
-                    deliver_outbox_message.apply_async(args=[outbox_id], queue="outbox")
+            # Post-commit delivery is best-effort only. The customer's turn (order
+            # placed, reply enqueued) is already durable — a Celery broker blip or a
+            # partner-webhook schedule failure must never send the generic "something
+            # went wrong" apology on top of a successful confirmation (prod: Order
+            # #R1-0140 got confirm + apology when apply_async raised here).
+            await _schedule_post_commit_delivery(
+                session,
+                restaurant_id=restaurant.id,
+                claimed_ids=claimed_ids,
+                outbox_sync_delivery=settings.outbox_sync_delivery,
+            )
 
         except IntegrityError:
             await session.rollback()
@@ -213,6 +200,66 @@ async def receive_webhook(
                              inbound.wa_message_id, exc_info=True)
 
     return {"status": "ok"}
+
+
+async def _schedule_post_commit_delivery(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    claimed_ids: list[int],
+    outbox_sync_delivery: bool,
+) -> None:
+    """Enqueue or deliver outbound replies after a successful webhook commit.
+
+    Isolated from the main processing try/except so infra failures here never
+    trigger the customer-facing error apology for a turn that already succeeded.
+    """
+    try:
+        from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
+
+        await flush_pending_partner_webhooks(session, restaurant_id=restaurant_id)
+    except Exception:
+        logger.error(
+            "partner webhook scheduling failed for restaurant %s",
+            restaurant_id,
+            exc_info=True,
+        )
+
+    try:
+        if outbox_sync_delivery:
+            from sqlalchemy.ext.asyncio import async_sessionmaker
+
+            from app.outbox.worker import _deliver_one
+            from app.whatsapp.factory import get_whatsapp_provider
+
+            provider = get_whatsapp_provider()
+            sync_factory = async_sessionmaker(
+                bind=session.bind,
+                expire_on_commit=False,
+                join_transaction_mode="create_savepoint",
+            )
+            for outbox_id in claimed_ids:
+                await _deliver_one(
+                    outbox_id, provider=provider, session_factory=sync_factory
+                )
+        else:
+            for outbox_id in claimed_ids:
+                try:
+                    deliver_outbox_message.apply_async(
+                        args=[outbox_id], queue="outbox"
+                    )
+                except Exception:
+                    logger.error(
+                        "failed to enqueue outbox delivery for id=%s",
+                        outbox_id,
+                        exc_info=True,
+                    )
+    except Exception:
+        logger.error(
+            "outbox delivery scheduling failed for restaurant %s",
+            restaurant_id,
+            exc_info=True,
+        )
 
 
 async def _send_error_apology(*, restaurant_phone: str, to_phone: str, wa_message_id: str) -> None:
