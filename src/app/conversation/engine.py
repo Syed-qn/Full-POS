@@ -407,6 +407,54 @@ def _is_restaurant_location_request(text: str | None) -> bool:
     return False
 
 
+# UAE PDPL (Federal Decree-Law No. 45 of 2021) data-subject-access detection.
+# Deterministic and conservative: personal-data phrasings only — plain "data" /
+# "privacy" words alone never trigger (they stay LLM-path on-topic keywords).
+_DATA_ACCESS_RE = _re.compile(
+    r"(?:\bmy\s+personal\s+(?:data|info(?:rmation)?)\b"
+    r"|\b(?:tell|show|give|send)\s+me\s+my\s+(?:data|info(?:rmation)?)\b"
+    r"|\bmy\s+(?:data|info(?:rmation)?)\s+(?:as\s+per|under|according)\b"
+    r"|\b(?:info(?:rmation)?|data)\s+(?:do\s+)?(?:you|u)\s+"
+    r"(?:store|have|keep|collect|hold|save)\b"
+    r"|\bwhat\s+(?:do\s+)?(?:you|u)\s+know\s+about\s+me\b"
+    r"|\b(?:delete|remove|erase|wipe)\s+my\s+"
+    r"(?:data|info(?:rmation)?|account|details|number)\b"
+    r"|\bmy\s+(?:data|info(?:rmation)?)\s+deleted\b"
+    r"|\bprivacy\s+policy\b|\bdata\s+protection\b|\bpersonal\s+data\b"
+    r"|\bpdpl\b|\bgdpr\b"
+    r"|\bright\s+to\s+(?:access|erasure|be\s+forgotten)\b)",
+    _re.IGNORECASE,
+)
+
+
+def _is_data_access_request(text: str | None) -> bool:
+    """True for a PDPL/GDPR data-subject request (access or deletion)."""
+    if not text:
+        return False
+    t = text.strip()
+    if not t or len(t) > 400:
+        return False
+    return bool(_DATA_ACCESS_RE.search(t))
+
+
+def _privacy_data_reply(restaurant_name: str) -> str:
+    """Static PDPL access-request answer: stored-data categories + rights."""
+    return (
+        f"🔒 *Your data with {restaurant_name}*\n\n"
+        "To run your delivery service we store:\n"
+        "• 📱 Your phone number & WhatsApp profile name\n"
+        "• 📍 Delivery addresses and location pins you share\n"
+        "• 🧾 Your order history (dishes, totals — cash on delivery only, "
+        "we never store card details)\n"
+        "• 💬 This chat history (older messages are archived as short summaries)\n"
+        "• 🛵 Rider location during your deliveries (kept 30 days, then deleted)\n\n"
+        "Under UAE data protection law (PDPL, Federal Decree-Law 45/2021) you can "
+        "ask for access, correction, or deletion of your data at any time. "
+        "To correct or delete anything, just reply here or call the restaurant "
+        "and we'll take care of it 😊"
+    )
+
+
 def _is_complaint(text: str | None) -> bool:
     """True for a post-delivery complaint about an order that already arrived.
 
@@ -9114,6 +9162,15 @@ async def handle_inbound(
     # reset to a fresh ordering session so the next dish pick is valid.
     if inbound.type == MessageType.TEXT:
         text = (inbound.payload.get("text") or "").strip().lower()
+        # PDPL data-subject request (access/deletion) → deterministic compliance
+        # reply in ANY phase, zero LLM dependency, no state mutation.
+        if _is_data_access_request(text):
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="data-access",
+                body=_privacy_data_reply(restaurant.name),
+            )
+            return
         if _is_menu_request(text):
             if _resolve_phase(conv) == "post_order":
                 _set_state(
