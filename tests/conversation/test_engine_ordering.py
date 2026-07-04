@@ -1814,3 +1814,215 @@ async def test_no_action_empty_reply_gets_contextual_clarify(db_session, restaur
     ]
     assert bodies, "customer must never get silence"
     assert any("Chicken Biryani" in b for b in bodies)  # references the cart
+
+
+async def _seed_history_customer(db_session, restaurant, phone):
+    """Customer with one delivered past order containing Lemon Mint + current
+    draft holding Chicken Biryani. Returns (conv, customer, draft, lemon_mint)."""
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+    from app.ordering.models import Order, OrderItem
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    lemon_mint = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=111,
+        name="Lemon Mint", price_aed=Decimal("8.00"), category="Drinks",
+        is_available=True, name_normalized="lemon mint",
+    )
+    db_session.add_all([biryani, lemon_mint])
+    await db_session.flush()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone=phone, counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone=phone
+    )
+    past = Order(
+        restaurant_id=restaurant.id, customer_id=customer.id, order_number="R1-0001",
+        status="delivered", priority="normal", weather_delay_disclosed=False,
+        delivery_fee_aed=Decimal("0.00"), subtotal=Decimal("8.00"), total=Decimal("8.00"),
+    )
+    db_session.add(past)
+    await db_session.flush()
+    db_session.add(OrderItem(
+        order_id=past.id, dish_id=lemon_mint.id, dish_number=111,
+        dish_name=lemon_mint.name, qty=2, price_aed=Decimal("8.00"),
+    ))
+    draft = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=draft, dish=biryani, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": draft.id,
+    }
+    await db_session.commit()
+    return conv, customer, draft, lemon_mint
+
+
+async def test_history_upsell_suggests_previously_ordered_dish(db_session, restaurant):
+    """After an add, suggest ONE dish from the customer's past orders that isn't
+    in the current cart — real name + real price, never invented."""
+    from app.conversation.engine import _history_upsell_line
+
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, "+971501110101"
+    )
+    line = await _history_upsell_line(db_session, conv, restaurant.id, draft)
+    assert "Lemon Mint" in line
+    assert "8" in line  # real price
+    await db_session.commit()
+
+    # Once per draft: second call must be silent.
+    line2 = await _history_upsell_line(db_session, conv, restaurant.id, draft)
+    assert line2 == ""
+
+
+async def test_history_upsell_skips_dishes_already_in_cart(db_session, restaurant):
+    """If the only historical dish is already in the cart, no upsell."""
+    from app.conversation.engine import _history_upsell_line
+    from app.ordering.service import add_item
+
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, "+971501110102"
+    )
+    await add_item(db_session, order=draft, dish=lemon_mint, qty=1)
+    await db_session.commit()
+    line = await _history_upsell_line(db_session, conv, restaurant.id, draft)
+    assert line == ""
+
+
+async def test_history_upsell_no_history_is_silent(db_session, restaurant):
+    """New customer, no past orders → no upsell, no invention."""
+    from app.conversation.engine import _history_upsell_line
+    from app.conversation.service import get_or_create_conversation
+    from app.ordering.service import create_draft_order, get_or_create_customer
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110103",
+        counterpart="customer",
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110103"
+    )
+    draft = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await db_session.commit()
+    line = await _history_upsell_line(db_session, conv, restaurant.id, draft)
+    assert line == ""
+
+
+def _btn_msg(btn_id: str, phone: str, wa_id: str = "wamid.btn1") -> InboundMessage:
+    return InboundMessage(
+        wa_message_id=wa_id,
+        from_phone=phone,
+        type=MessageType.BUTTON_REPLY,
+        payload={"id": btn_id, "title": btn_id},
+        restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+
+
+def _msg_from(text: str, phone: str, wa_id: str) -> InboundMessage:
+    return InboundMessage(
+        wa_message_id=wa_id,
+        from_phone=phone,
+        type=MessageType.TEXT,
+        payload={"text": text},
+        restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+
+
+async def test_add_confirmation_carries_quick_action_buttons(db_session, restaurant):
+    """Every added-to-cart message carries: proceed to delivery, upsell (history dish
+    when available), clear cart."""
+    from app.conversation.engine import handle_inbound
+    from app.outbox.models import OutboxMessage
+
+    phone = "+971501110201"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    # Typed add via the deterministic catalogue/typed path or AI path — use the
+    # engine entry so wiring is exercised end to end.
+    await handle_inbound(
+        db_session, _msg_from("1 chicken biryani", phone, "wamid.badd"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    msgs = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    btn_msgs = [m for m in msgs if m.payload.get("buttons")]
+    assert btn_msgs, "add confirmation must carry quick-action buttons"
+    ids = [b["id"] for b in btn_msgs[-1].payload["buttons"]]
+    assert "proceed_delivery" in ids
+    assert "clear_cart" in ids
+    assert any(i.startswith("upsell_add:") or i == "suggest_dishes" for i in ids)
+    assert len(ids) <= 3
+    titles = [b["title"] for b in btn_msgs[-1].payload["buttons"]]
+    assert all(len(t) <= 20 for t in titles)
+
+
+async def test_proceed_delivery_button_starts_checkout(db_session, restaurant):
+    """Tapping 'Proceed to delivery' == typing 'done' (address capture starts)."""
+    from app.conversation.engine import handle_inbound
+
+    phone = "+971501110202"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    await handle_inbound(
+        db_session, _btn_msg("proceed_delivery", phone, "wamid.bp"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    assert conv.state.get("dialogue_state") == "address_capture"
+
+
+async def test_clear_cart_button_empties_cart(db_session, restaurant):
+    from app.conversation.engine import handle_inbound
+    from app.ordering.models import OrderItem
+
+    phone = "+971501110203"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    await handle_inbound(
+        db_session, _btn_msg("clear_cart", phone, "wamid.bc"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == draft.id)
+    )).scalars().all()
+    assert items == []
+
+
+async def test_upsell_button_adds_the_dish(db_session, restaurant):
+    from app.conversation.engine import handle_inbound
+    from app.ordering.models import OrderItem
+
+    phone = "+971501110204"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    await handle_inbound(
+        db_session, _btn_msg(f"upsell_add:{lemon_mint.id}", phone, "wamid.bu"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == draft.id)
+    )).scalars().all()
+    assert any(i.dish_id == lemon_mint.id for i in items)

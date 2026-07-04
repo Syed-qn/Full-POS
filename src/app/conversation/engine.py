@@ -1,7 +1,7 @@
 import logging
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
@@ -2860,13 +2860,16 @@ async def _handle_collecting_items(
     _set_state(conv, dialogue_state="collecting_items")
 
     price = _aed(dish.price_aed)
-    await _send_text(
+    upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+    await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="item-added",
         body=(
             f"Added {qty}x {dish.name} (AED {price}).\n"
             f"Reply with more items, or send 'done' to proceed to delivery details."
+            f"{upsell}"
         ),
+        buttons=buttons,
     )
 
 
@@ -4756,6 +4759,126 @@ def _cart_tail(cart: str) -> str:
     return f"\n\n🛒 {cart}" if cart else "\n\n🛒 Your cart is now empty."
 
 
+async def _history_upsell_dish(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, order,
+):
+    """The customer's most-ordered PAST dish that isn't in the current cart.
+
+    Grounded strictly in the DB (real dish, real price — spec R-003/R-005: never
+    invent): available today, orderable on WhatsApp, catalogue-allowed. Offered at
+    most once per draft order (state ``upsell_shown_for``) so it reads as a friendly
+    nudge, not a sales loop. Returns the Dish (and marks the state) or None."""
+    try:
+        state = conv.state or {}
+        if state.get("upsell_shown_for") == order.id:
+            return None
+
+        from app.menu.models import Dish
+        from app.ordering.models import Customer, Order, OrderItem
+
+        customer = await session.scalar(
+            select(Customer).where(
+                Customer.restaurant_id == restaurant_id,
+                Customer.phone == conv.phone,
+            )
+        )
+        if customer is None:
+            return None
+
+        # Most-ordered dishes across PLACED past orders (draft/cancelled excluded).
+        past_rows = (
+            await session.execute(
+                select(OrderItem.dish_id, func.sum(OrderItem.qty).label("units"))
+                .join(Order, Order.id == OrderItem.order_id)
+                .where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.customer_id == customer.id,
+                    Order.id != order.id,
+                    Order.status.notin_(("draft", "cancelled")),
+                    OrderItem.dish_id.isnot(None),
+                )
+                .group_by(OrderItem.dish_id)
+                .order_by(func.sum(OrderItem.qty).desc())
+                .limit(5)
+            )
+        ).all()
+        if not past_rows:
+            return None
+
+        in_cart = {
+            did
+            for (did,) in (
+                await session.execute(
+                    select(OrderItem.dish_id).where(OrderItem.order_id == order.id)
+                )
+            ).all()
+        }
+
+        for dish_id, _units in past_rows:
+            if dish_id in in_cart:
+                continue
+            dish = await session.get(Dish, dish_id)
+            if (
+                dish is None
+                or not dish.is_available
+                or not getattr(dish, "whatsapp_enabled", True)
+                or _SLUG_NAME.match(dish.name or "")
+            ):
+                continue
+            if await _catalog_excludes_dish(session, restaurant_id, dish):
+                continue
+            _set_state(conv, upsell_shown_for=order.id)
+            return dish
+        return None
+    except Exception:  # noqa: BLE001 — an upsell must never break an add
+        _logger.debug("history upsell skipped", exc_info=True)
+        return None
+
+
+async def _history_upsell_line(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, order,
+) -> str:
+    """One-line history upsell for plain-text add confirmations ("" when none)."""
+    dish = await _history_upsell_dish(session, conv, restaurant_id, order)
+    if dish is None:
+        return ""
+    return (
+        f"\n\nYou had {dish.name} (AED {_aed(dish.price_aed)}) last time. "
+        "Add one? 😊"
+    )
+
+
+async def _post_add_extras(
+    session: AsyncSession, conv: Conversation, restaurant_id: int, order,
+) -> tuple[str, list[dict]]:
+    """(upsell_body_line, buttons) for every added-to-cart confirmation.
+
+    Buttons (WhatsApp max 3, titles ≤ 20 chars):
+      1. Proceed to delivery  — same as typing 'done'
+      2. Add <history dish>   — or 'Suggestions' when there is no honest history pick
+      3. Clear cart
+    """
+    upsell_line = ""
+    dish = await _history_upsell_dish(session, conv, restaurant_id, order)
+    if dish is not None:
+        upsell_line = (
+            f"\n\nYou had {dish.name} (AED {_aed(dish.price_aed)}) last time. "
+            "Add one? 😊"
+        )
+        title = f"Add {dish.name}"
+        if len(title) > 20:
+            title = title[:20]
+        upsell_btn = {"id": f"upsell_add:{dish.id}", "title": title}
+    else:
+        upsell_btn = {"id": "suggest_dishes", "title": "Suggestions"}
+    buttons = [
+        {"id": "proceed_delivery", "title": "Proceed to delivery"},
+        upsell_btn,
+        {"id": "clear_cart", "title": "Clear cart"},
+    ]
+    return upsell_line, buttons
+
+
 async def _record_cart_observation(
     session: AsyncSession, conv: Conversation
 ) -> None:
@@ -5526,9 +5649,11 @@ async def _handle_bundle_choice(
     _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items",
                awaiting_bundle=None)
     cart = await _build_cart_summary(session, conv)
-    await _send_text(
+    upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+    await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-        prefix="bundle-applied", body=f"Added {label} ✅{_cart_tail(cart)}",
+        prefix="bundle-applied", body=f"Added {label} ✅{_cart_tail(cart)}{upsell}",
+        buttons=buttons,
     )
     return True
 
@@ -5613,10 +5738,12 @@ async def _handle_size_choice(
     _set_state(conv, awaiting_size=None, dialogue_phase="ordering",
                dialogue_state="collecting_items")
     cart = await _build_cart_summary(session, conv)
-    await _send_text(
+    upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+    await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="size-applied",
-        body=f"Added {qty}x {dish.name} ({variant['name']}) ✅{_cart_tail(cart)}",
+        body=f"Added {qty}x {dish.name} ({variant['name']}) ✅{_cart_tail(cart)}{upsell}",
+        buttons=buttons,
     )
     return True
 
@@ -6854,8 +6981,22 @@ async def _dispatch_action(
                 )
             if notes:
                 body = f"{body}\n\n({'; '.join(notes)})"
-            await _send_text(session, conv=conv, inbound=inbound,
-                             restaurant_id=restaurant_id, prefix="ai-add-multi", body=body)
+            _multi_order = None
+            if added and (_mdid := conv.state.get("draft_order_id")):
+                from app.ordering.models import Order as _MultiOrder
+
+                _multi_order = await session.get(_MultiOrder, _mdid)
+            if _multi_order is not None:
+                upsell, buttons = await _post_add_extras(
+                    session, conv, restaurant_id, _multi_order
+                )
+                await _send_buttons(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="ai-add-multi", body=f"{body}{upsell}", buttons=buttons,
+                )
+            else:
+                await _send_text(session, conv=conv, inbound=inbound,
+                                 restaurant_id=restaurant_id, prefix="ai-add-multi", body=body)
             return
 
         # Single dish — named via the items list (length 1) or the flat dish_query.
@@ -6920,10 +7061,26 @@ async def _dispatch_action(
                 lead = _strip_money_claims(lead)  # R-067: never let the LLM state money
                 if not lead or _looks_like_menu(lead):
                     lead = "Got it! 😊"
-                body = f"{lead}{_cart_tail(cart)}"
+                _ups_order = None
+                _ups_did = conv.state.get("draft_order_id")
+                if _ups_did:
+                    from app.ordering.models import Order as _UpsOrder
+
+                    _ups_order = await session.get(_UpsOrder, _ups_did)
                 await _record_cart_observation(session, conv)  # F66/W3
-                await _send_text(session, conv=conv, inbound=inbound,
-                                 restaurant_id=restaurant_id, prefix="ai-add", body=body)
+                if _ups_order is not None:
+                    upsell, buttons = await _post_add_extras(
+                        session, conv, restaurant_id, _ups_order
+                    )
+                    await _send_buttons(
+                        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                        prefix="ai-add", body=f"{lead}{_cart_tail(cart)}{upsell}",
+                        buttons=buttons,
+                    )
+                else:
+                    await _send_text(session, conv=conv, inbound=inbound,
+                                     restaurant_id=restaurant_id, prefix="ai-add",
+                                     body=f"{lead}{_cart_tail(cart)}")
             elif status == "no_match":
                 if await _try_apply_kitchen_note_to_cart(
                     session, conv, inbound, restaurant_id,
@@ -8182,10 +8339,12 @@ async def _try_catalog_typed_order(
     cart = await _build_cart_summary(session, conv)
     await _record_cart_observation(session, conv)  # F66/W3
     note_label = f" — {note}" if note else ""
-    await _send_text(
+    upsell, buttons = await _post_add_extras(session, conv, restaurant_id, order)
+    await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="catalog-typed-add",
-        body=f"Added {add_qty}x {dish.name}{note_label} ✅{_cart_tail(cart)}",
+        body=f"Added {add_qty}x {dish.name}{note_label} ✅{_cart_tail(cart)}{upsell}",
+        buttons=buttons,
     )
     return True
 
@@ -8607,6 +8766,71 @@ async def handle_inbound(
             arg = btn_id.split(":", 1)[1]
             if arg.isdigit():
                 await _handle_resale_accept(session, conv, inbound, restaurant_id, int(arg))
+            return
+        # Post-add quick actions (every added-to-cart confirmation carries these).
+        if btn_id == "proceed_delivery":
+            await _handle_done_checkout(
+                session, conv, inbound, restaurant_id, restaurant=restaurant
+            )
+            return
+        if btn_id.startswith("upsell_add:"):
+            _uarg = btn_id.split(":", 1)[1]
+            if _uarg.isdigit():
+                from app.menu.models import Dish as _UpsellDish
+
+                _udish = await session.get(_UpsellDish, int(_uarg))
+                if (
+                    _udish is not None
+                    and _udish.restaurant_id == restaurant_id
+                    and _udish.is_available
+                ):
+                    from app.ordering.service import add_item
+
+                    _uorder = await _ensure_draft_order(
+                        session, conv, inbound, restaurant_id
+                    )
+                    await add_item(session, order=_uorder, dish=_udish, qty=1)
+                    _set_state(conv, dialogue_phase="ordering",
+                               dialogue_state="collecting_items")
+                    await _record_cart_observation(session, conv)
+                    cart = await _build_cart_summary(session, conv)
+                    upsell, buttons = await _post_add_extras(
+                        session, conv, restaurant_id, _uorder
+                    )
+                    await _send_buttons(
+                        session, conv=conv, inbound=inbound,
+                        restaurant_id=restaurant_id, prefix="upsell-added",
+                        body=f"Added 1x {_udish.name} ✅{_cart_tail(cart)}{upsell}",
+                        buttons=buttons,
+                    )
+                    return
+            # Stale/off dish → fall back to suggestions rather than a dead tap.
+            await _handle_suggestions(session, conv, inbound, restaurant_id)
+            return
+        if btn_id == "suggest_dishes":
+            await _handle_suggestions(session, conv, inbound, restaurant_id)
+            return
+        if btn_id == "clear_cart":
+            from sqlalchemy import delete as sa_delete
+
+            from app.ordering.models import Order as _CcOrder
+            from app.ordering.models import OrderItem as _CcItem
+
+            _ccid = conv.state.get("draft_order_id")
+            _ccorder = await session.get(_CcOrder, _ccid) if _ccid else None
+            if _ccorder is not None and str(_ccorder.status) == "draft":
+                await session.execute(
+                    sa_delete(_CcItem).where(_CcItem.order_id == _ccorder.id)
+                )
+                _ccorder.subtotal = Decimal("0.00")
+                _ccorder.total = _ccorder.delivery_fee_aed
+                await session.flush()
+                _set_state(conv, dialogue_state="collecting_items", abandoned_nudged=None)
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="clear-cart-btn",
+                body="Cleared your cart 🧹 What would you like to order?",
+            )
             return
         if btn_id == "use_saved_address":
             saved_id = conv.state.get("saved_address_id") or await _resolve_saved_address_id(
