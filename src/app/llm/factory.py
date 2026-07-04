@@ -6,11 +6,16 @@ from app.llm.port import MenuExtractor
 
 
 def _deepseek_fallback_model(settings) -> str | None:
-    """The previous/faster DeepSeek model to fall back to on the live path, or None.
+    """The previous/faster same-provider model to fall back to on the live path.
 
     Same provider (Claude is never used for conversation). Only active when a
-    fallback model is configured and it differs from the primary model.
+    fallback model is configured and it differs from the primary model. Resolves
+    Kimi's fallback model when APP_LLM_PROVIDER=kimi (the DeepSeek* classes serve
+    both OpenAI-compatible providers).
     """
+    if settings.llm_provider == "kimi":
+        fb = (settings.kimi_fallback_model or "").strip()
+        return fb if fb and fb != settings.kimi_model else None
     fb = (settings.deepseek_fallback_model or "").strip()
     if fb and fb != settings.deepseek_model:
         return fb
@@ -33,7 +38,7 @@ def get_menu_extractor() -> MenuExtractor:
     if provider == "claude":
         from app.llm.claude import ClaudeExtractor
         return ClaudeExtractor()
-    if provider == "deepseek":
+    if provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekExtractor
         return DeepSeekExtractor()
     if provider == "fake":
@@ -55,7 +60,7 @@ def get_describer():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeDescriber
         return ClaudeDescriber()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekDescriber
         return DeepSeekDescriber()
     from app.llm.fake import FakeDescriber
@@ -67,7 +72,7 @@ def get_intent_classifier():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeIntentClassifier
         return ClaudeIntentClassifier()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekIntentClassifier
         return DeepSeekIntentClassifier()
     from app.llm.fake import FakeIntentClassifier
@@ -79,7 +84,7 @@ def get_arbiter():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeArbiter
         return ClaudeArbiter()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekArbiter
         return DeepSeekArbiter()
     from app.llm.fake import FakeArbiter
@@ -91,7 +96,7 @@ def get_forecast_adjuster():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeForecastAdjuster
         return ClaudeForecastAdjuster()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekForecastAdjuster
         return DeepSeekForecastAdjuster()
     from app.llm.fake import FakeForecastAdjuster
@@ -108,7 +113,7 @@ def get_conversation_agent():
             return DeepSeekConversationAgent()
         from app.llm.claude import ClaudeConversationAgent
         return ClaudeConversationAgent()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekConversationAgent
         fb = _deepseek_fallback_model(settings)
         if fb:
@@ -129,7 +134,7 @@ def get_router_classifier():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeRouterClassifier
         return ClaudeRouterClassifier()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekRouterClassifier
         fb = _deepseek_fallback_model(settings)
         if fb:
@@ -149,7 +154,7 @@ def get_completion_detector():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeCompletionDetector
         return ClaudeCompletionDetector()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekCompletionDetector
         fb = _deepseek_fallback_model(settings)
         if fb:
@@ -169,7 +174,7 @@ def get_segment_compiler():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeSegmentCompiler
         return ClaudeSegmentCompiler()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekSegmentCompiler
         return DeepSeekSegmentCompiler()
     from app.llm.fake import FakeSegmentCompiler
@@ -182,7 +187,7 @@ def get_kitchen_summarizer():
     if settings.llm_provider == "claude":
         from app.llm.claude import ClaudeKitchenSummarizer
         return ClaudeKitchenSummarizer()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.deepseek import DeepSeekKitchenSummarizer
         return DeepSeekKitchenSummarizer()
     from app.llm.fake import FakeKitchenSummarizer
@@ -195,7 +200,7 @@ def get_complaint_summarizer():
     if settings.llm_provider == "claude":
         from app.llm.complaint_agent import ClaudeComplaintSummarizer
         return ClaudeComplaintSummarizer()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.complaint_agent import DeepSeekComplaintSummarizer
         return DeepSeekComplaintSummarizer()
     from app.llm.fake import FakeComplaintSummarizer
@@ -208,7 +213,7 @@ def get_modify_summarizer():
     if settings.llm_provider == "claude":
         from app.llm.modify_agent import ClaudeModifySummarizer
         return ClaudeModifySummarizer()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.modify_agent import DeepSeekModifySummarizer
         return DeepSeekModifySummarizer()
     from app.llm.fake import FakeModifySummarizer
@@ -221,7 +226,7 @@ def get_suggestion_agent():
     if settings.llm_provider == "claude":
         from app.llm.suggestion_agent import ClaudeSuggestionAgent
         return ClaudeSuggestionAgent()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.suggestion_agent import DeepSeekSuggestionAgent
         return DeepSeekSuggestionAgent()
     from app.llm.fake import FakeSuggestionAgent
@@ -234,7 +239,7 @@ def get_thought_evaluator():
     if settings.llm_provider == "claude":
         from app.llm.thought_evaluator import ClaudeThoughtEvaluator
         return ClaudeThoughtEvaluator()
-    if settings.llm_provider == "deepseek":
+    if settings.llm_provider in ("deepseek", "kimi"):
         from app.llm.thought_evaluator import DeepSeekThoughtEvaluator
         return DeepSeekThoughtEvaluator()
     from app.llm.fake import FakeThoughtEvaluator

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     jwt_issuer: str = "restaurant-platform"
     jwt_audience_manager: str = "manager"
     jwt_audience_rider: str = "rider"
-    llm_provider: str = "fake"  # fake | claude | deepseek
+    llm_provider: str = "fake"  # fake | claude | deepseek | kimi
     # W1 parity gate: ClaudeConversationAgent is schema-parity-complete but gated
     # behind an explicit ops flag so a future regression can't silently ship a
     # non-compliant Claude action surface. Flip to True once the offline parity
@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # errors on an inbound call (conversation agent, router, completion detector),
     # retry the same call against this faster/previous DeepSeek model. Empty = off.
     deepseek_fallback_model: str = ""  # e.g. "deepseek-chat"
+    # Kimi (Moonshot AI) — OpenAI-compatible chat provider served through the same
+    # adapter layer as DeepSeek (base https://api.moonshot.ai/v1). K2.6 constraints
+    # that shape payloads: temperature/top_p are FIXED by the API (custom values
+    # error), thinking mode restricts tool_choice to auto/none. Live path always
+    # disables thinking (latency + the forced take_action tool call must work).
+    kimi_api_key: SecretStr = SecretStr("")
+    kimi_model: str = "kimi-k2.6"
+    kimi_fallback_model: str = ""  # e.g. "kimi-k2-turbo-preview"
     # Seconds to wait on the primary model before cutting over to the fallback model.
     # Also caps a reasoning model's runaway think phase so one slow call can't stall a reply.
     llm_primary_timeout_s: float = 12.0

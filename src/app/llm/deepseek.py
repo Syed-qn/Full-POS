@@ -1,7 +1,15 @@
-"""DeepSeek LLM provider — OpenAI-compatible API via httpx.
+"""OpenAI-compatible chat providers — DeepSeek and Kimi (Moonshot AI) via httpx.
 
 All ports mirror the Claude implementations. Sync methods use httpx sync client;
 async methods (MenuExtractor) use httpx async client.
+
+Provider selection follows APP_LLM_PROVIDER: "deepseek" (api.deepseek.com) or
+"kimi" (api.moonshot.ai/v1, K2.6). Same wire format; per-provider differences
+are isolated in _chat_url / _sampling_params / _safe_tool_model:
+- Kimi fixes temperature/top_p server-side (custom values error) → kimi payloads
+  omit them and send {"thinking": {"type": "disabled"}} (thinking mode restricts
+  tool_choice to auto/none and adds latency the live path can't afford).
+- Kimi K2.6: 256K context, automatic context caching, parallel tool calls.
 """
 import json
 import logging
@@ -26,26 +34,68 @@ from app.llm.prompts_router import COMPLETION_DETECT_TEMPLATE, ROUTER_CLASSIFY_T
 
 _logger = logging.getLogger(__name__)
 
-_BASE = "https://api.deepseek.com"
-_CHAT = f"{_BASE}/chat/completions"
+_DS_BASE = "https://api.deepseek.com"
+_KIMI_BASE = "https://api.moonshot.ai/v1"
+
+
+@lru_cache
+def _get_chat_provider() -> str:
+    """Active OpenAI-compat chat provider: "kimi" or "deepseek" (default)."""
+    return "kimi" if get_settings().llm_provider == "kimi" else "deepseek"
+
+
+def _chat_url() -> str:
+    base = _KIMI_BASE if _get_chat_provider() == "kimi" else _DS_BASE
+    return f"{base}/chat/completions"
+
+
+def _sampling_params() -> dict:
+    """Per-provider sampling fields merged into every chat payload.
+
+    DeepSeek: deterministic temperature 0.0 (menu numbers, order actions).
+    Kimi: temperature/top_p are FIXED server-side — sending custom values errors —
+    so omit them entirely; explicitly disable thinking mode (it restricts
+    tool_choice to auto/none and adds seconds of latency per live turn)."""
+    if _get_chat_provider() == "kimi":
+        return {"thinking": {"type": "disabled"}}
+    return {"temperature": 0.0}
+
 
 # The conversation agent REQUIRES a structured take_action tool call every turn, so the
-# model MUST support forced function-calling. DeepSeek's API only serves two chat-
-# completion models — deepseek-chat (tool-calling ✓) and deepseek-reasoner (no tools).
-# Misconfigs seen in prod: APP_DEEPSEEK_MODEL set to a reasoning model, or an invented
-# name like "deepseek-v4-flash" (no such model → the API 400s → every inbound message
-# errors). Guard with an ALLOWLIST: anything that isn't a known function-calling chat
-# model is downgraded to deepseek-chat and logged loudly, rather than failing live.
+# model MUST support forced function-calling. DeepSeek serves deepseek-chat (tools ✓)
+# and deepseek-reasoner (no tools). Kimi serves kimi-k2.6/k2.5/k2-*-preview (tools ✓)
+# and kimi-k2-thinking* (tool_choice limited to auto/none — unusable for the forced
+# call). Misconfigs seen in prod: reasoning models, or invented names like
+# "deepseek-v4-flash" (API 400s → every inbound message errors). Guard with an
+# ALLOWLIST per provider: anything not a known function-calling chat model is
+# downgraded to the provider default and logged loudly, rather than failing live.
 _TOOL_CALLING_MODELS = frozenset({"deepseek-chat", "deepseek-coder"})
 _TOOL_CALLING_FALLBACK = "deepseek-chat"
+_KIMI_TOOL_MODELS = frozenset({
+    "kimi-k2.6", "kimi-k2.5", "kimi-k2-0905-preview", "kimi-k2-turbo-preview",
+})
+_KIMI_TOOL_FALLBACK = "kimi-k2.6"
 
 
 def _safe_tool_model(model: str) -> str:
-    """Return a model that supports function-calling. Known chat models (or any DeepSeek
-    name that clearly denotes a chat, non-reasoner model, for forward-compat) pass
-    through; everything else (reasoners, invented names, other providers) is downgraded
-    to deepseek-chat with a loud log so the conversation path never silently breaks."""
+    """Return a model that supports forced function-calling on the active provider.
+    Known chat models (or clearly chat-typed names, for forward-compat) pass through;
+    everything else (thinking/reasoner models, invented names, other providers') is
+    downgraded to the provider default with a loud log so the conversation path
+    never silently breaks."""
     m = (model or "").strip().lower()
+    if _get_chat_provider() == "kimi":
+        # Forward-compat limited to the kimi-k2 family (kimi-k2.7 etc.) — a fully
+        # invented name (cf. deepseek-v4-flash prod incident) must downgrade.
+        if m in _KIMI_TOOL_MODELS or (m.startswith("kimi-k2") and "thinking" not in m):
+            return model
+        _logger.error(
+            "kimi_model=%r is not a known function-calling Kimi chat model (thinking "
+            "models limit tool_choice to auto/none); falling back to %r. "
+            "Set APP_KIMI_MODEL=kimi-k2.6.",
+            model, _KIMI_TOOL_FALLBACK,
+        )
+        return _KIMI_TOOL_FALLBACK
     if m in _TOOL_CALLING_MODELS or ("chat" in m and "reason" not in m):
         return model
     _logger.error(
@@ -62,23 +112,29 @@ def _headers(api_key: str) -> dict:
 
 
 def _sync_chat(api_key: str, model: str, messages: list, max_tokens: int = 512, temperature: float = 0.0) -> str:
-    payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
-    r = httpx.post(_CHAT, headers=_headers(api_key), json=payload, timeout=30)
+    payload = {"model": model, "messages": messages, "max_tokens": max_tokens, **_sampling_params()}
+    r = httpx.post(_chat_url(), headers=_headers(api_key), json=payload, timeout=30)
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
 async def _async_chat(api_key: str, model: str, messages: list, max_tokens: int = 4096, temperature: float = 0.0) -> str:
-    payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
+    payload = {"model": model, "messages": messages, "max_tokens": max_tokens, **_sampling_params()}
     async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(_CHAT, headers=_headers(api_key), json=payload)
+        r = await client.post(_chat_url(), headers=_headers(api_key), json=payload)
         r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
 @lru_cache
 def _get_deepseek_settings():
+    """(api_key, model) for the active OpenAI-compat chat provider.
+
+    Name kept for the many import sites — resolves Kimi credentials when
+    APP_LLM_PROVIDER=kimi, DeepSeek's otherwise."""
     s = get_settings()
+    if _get_chat_provider() == "kimi":
+        return s.kimi_api_key.get_secret_value(), s.kimi_model
     return s.deepseek_api_key.get_secret_value(), s.deepseek_model
 
 
@@ -230,26 +286,48 @@ async def _async_chat_tools(
         "tools": tools,
         "tool_choice": {"type": "function", "function": {"name": tool_name}},
         "max_tokens": max_tokens,
-        "temperature": 0.0,
+        **_sampling_params(),
     }
     last_exc: Exception | None = None
-    for attempt in range(2):
+    forced_downgraded = False
+    for attempt in range(3):
         try:
             async with httpx.AsyncClient(timeout=60) as client:
-                r = await client.post(_CHAT, headers=_headers(api_key), json=payload)
+                r = await client.post(_chat_url(), headers=_headers(api_key), json=payload)
                 r.raise_for_status()
             break
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:
             last_exc = exc
-            # Retry once on transient network / 5xx / 429; give up on other 4xx.
             status = getattr(getattr(exc, "response", None), "status_code", None)
+            # A 400 on the FORCED tool_choice (provider/model combos that only
+            # accept auto/none) → retry once with auto; the salvage below still
+            # turns a tool-less answer into a usable no_action reply.
+            if status == 400 and not forced_downgraded and isinstance(
+                payload.get("tool_choice"), dict
+            ):
+                forced_downgraded = True
+                payload["tool_choice"] = "auto"
+                _logger.warning(
+                    "forced tool_choice rejected (400) by %s; retrying with auto",
+                    _chat_url(),
+                )
+                continue
+            # Retry once on transient network / 5xx / 429; give up on other 4xx.
             if attempt == 0 and (status is None or status == 429 or status >= 500):
                 continue
             raise
     else:  # pragma: no cover - loop always breaks or raises
         raise last_exc  # type: ignore[misc]
 
-    data = r.json()
+    return _parse_tool_response(r.json(), tool_name)
+
+
+def _parse_tool_response(data: dict, tool_name: str) -> dict:
+    """Extract the tool-call arguments; salvage truncation and tool-less answers.
+
+    A model that answers with plain content instead of the expected tool call
+    (auto tool_choice fallback, provider quirk) must still yield a usable
+    no_action reply — never a crash into the canned live-path error."""
     choice = data["choices"][0]
     tool_calls = choice["message"].get("tool_calls") or []
     for tc in tool_calls:
@@ -260,7 +338,10 @@ async def _async_chat_tools(
             except json.JSONDecodeError:
                 # Truncated at the token cap — salvage the action + partial reply.
                 return _salvage_truncated_tool_args(raw_args)
-    raise RuntimeError(f"DeepSeek returned no {tool_name!r} tool call")
+    content = (choice["message"].get("content") or "").strip()
+    if content:
+        return {"action": "no_action", "reply": content}
+    raise RuntimeError(f"provider returned no {tool_name!r} tool call and no content")
 
 
 # Tool definition is derived from the single-source-of-truth schema so providers

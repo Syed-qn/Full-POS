@@ -10,9 +10,10 @@ def _reset():
     # _get_deepseek_settings is lru_cached too — without clearing it, whichever
     # test touched DeepSeek first pins (api_key, model) for the whole session and
     # the fallback-model assertions flake in full-suite order.
-    from app.llm.deepseek import _get_deepseek_settings
+    from app.llm.deepseek import _get_chat_provider, _get_deepseek_settings
 
     _get_deepseek_settings.cache_clear()
+    _get_chat_provider.cache_clear()
 
 
 def test_unknown_extractor_provider_raises(monkeypatch):
