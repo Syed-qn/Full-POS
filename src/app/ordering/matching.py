@@ -233,6 +233,31 @@ async def find_dish_matches(
         if len(exact) == 1:
             return MatchResult(confidence=MatchConfidence.DIRECT, candidates=[exact[0]])
 
+    # --- Space/punctuation-insensitive exact match ---
+    # "7up" == "7 Up", "cocacola" == "Coca-Cola", "seven up" stays separate. A missing or
+    # extra space must never make a real dish unmatchable. This runs for EVERY path (add,
+    # remove, set-qty) since they all resolve dishes here. ASCII alphanumerics only, so a
+    # unicode name (Arabic, etc.) squashes to '' and is skipped — never a false match.
+    squashed_query = re.sub(r"[^a-z0-9]", "", normalized_query)
+    if squashed_query:
+        squashed_rows = (
+            await session.execute(
+                text("""
+                    SELECT d.id
+                    FROM dishes d
+                    WHERE d.menu_id = :mid
+                      AND d.is_available = true
+                      AND d.name_normalized IS NOT NULL
+                      AND regexp_replace(d.name_normalized, '[^a-z0-9]', '', 'g') = :sq
+                """),
+                {"mid": menu_id, "sq": squashed_query},
+            )
+        ).fetchall()
+        if len(squashed_rows) == 1:
+            dish = await session.get(Dish, squashed_rows[0].id)
+            if dish is not None:
+                return MatchResult(confidence=MatchConfidence.DIRECT, candidates=[dish])
+
     # --- Trigram word-similarity ---
     # word_similarity(query, name) scores how well the query matches any
     # contiguous extent within the dish name — better for "biriyani" vs

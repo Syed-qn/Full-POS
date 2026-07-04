@@ -889,6 +889,59 @@ async def test_bare_make_it_n_sets_single_cart_line(db_session, restaurant):
     assert items2 == {210: 5, 211: 1}  # unchanged
 
 
+async def test_spacing_insensitive_match_every_situation(db_session, restaurant):
+    """Prod: "Cancel 7up" left the "7 Up" line and re-showed the summary (loop) because
+    "7up" != "7 up" under normalization. Fixed CENTRALLY in find_dish_matches so it holds
+    for EVERY situation (add / remove / set-qty), not just the one pasted: a missing or
+    extra space must never make a real dish unmatchable."""
+    from app.conversation.engine import _execute_ai_remove_item
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.matching import MatchConfidence, find_dish_matches
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    seven_up = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=77, name="7 Up",
+        price_aed=Decimal("5.00"), category="Drinks", is_available=True,
+        name_normalized="7 up",
+    )
+    db_session.add(seven_up)
+    await db_session.commit()
+
+    # Central matcher: every spacing variant resolves to the one "7 Up" dish (this is the
+    # single fix that makes add, remove, and set-qty all work).
+    for variant in ["7up", "7 up", "7UP", "7-up"]:
+        res = await find_dish_matches(db_session, restaurant_id=restaurant.id, query=variant)
+        assert res.confidence == MatchConfidence.DIRECT, variant
+        assert res.candidates[0].name == "7 Up", variant
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110009", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110009"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=seven_up, qty=1)
+    conv.state = {**conv.state, "dialogue_phase": "ordering", "draft_order_id": order.id}
+    await db_session.commit()
+
+    # Remove path (uses the same central matcher) now clears the line instead of looping.
+    outcome, name = await _execute_ai_remove_item(db_session, conv, restaurant.id, "7up")
+    await db_session.commit()
+    assert outcome == "removed" and name == "7 Up"
+    remaining = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id, OrderItem.qty > 0)
+    )).scalars().all()
+    assert remaining == []
+
+
 async def test_explicit_clear_still_empties_cart(db_session, restaurant):
     """A genuine "clear my cart" must still empty the cart (guard doesn't over-fire)."""
     from types import SimpleNamespace
