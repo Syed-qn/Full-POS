@@ -70,7 +70,9 @@ def test_conversation_wrapped_when_fallback_model_set(monkeypatch):
         _reset()
         agent = get_conversation_agent()
         assert isinstance(agent, FallbackConversationAgent)
-        assert agent._primary._model == "deepseek-v4-flash"
+        # deepseek-v4-flash is not a real DeepSeek model — the allowlist guard
+        # (_safe_tool_model) downgrades it to deepseek-chat on the live path.
+        assert agent._primary._model == "deepseek-chat"
         assert agent._fallback._model == "deepseek-chat"
     finally:
         _reset()
