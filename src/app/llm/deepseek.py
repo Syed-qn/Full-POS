@@ -4,6 +4,7 @@ All ports mirror the Claude implementations. Sync methods use httpx sync client;
 async methods (MenuExtractor) use httpx async client.
 """
 import json
+import logging
 import re as _re
 from functools import lru_cache
 
@@ -23,8 +24,33 @@ from app.llm.prompts_menu import (
 )
 from app.llm.prompts_router import COMPLETION_DETECT_TEMPLATE, ROUTER_CLASSIFY_TEMPLATE
 
+_logger = logging.getLogger(__name__)
+
 _BASE = "https://api.deepseek.com"
 _CHAT = f"{_BASE}/chat/completions"
+
+# Models that CANNOT do forced function-calling (tool_choice). The conversation agent
+# REQUIRES a structured take_action tool call every turn, so if one of these is
+# configured (e.g. someone sets APP_DEEPSEEK_MODEL=deepseek-reasoner) every inbound
+# message would error with "something went wrong". Guard: fall back to deepseek-chat and
+# log loudly instead of failing on the live customer path.
+_NON_TOOL_CALLING_MODELS = frozenset({
+    "deepseek-reasoner", "deepseek-r1", "deepseek-reasoner-r1", "deepseek-reasoning",
+})
+_TOOL_CALLING_FALLBACK = "deepseek-chat"
+
+
+def _safe_tool_model(model: str) -> str:
+    """Return a model that supports function-calling; downgrade reasoning models to
+    deepseek-chat (with a loud log) so the conversation path never silently breaks."""
+    if (model or "").strip().lower() in _NON_TOOL_CALLING_MODELS:
+        _logger.error(
+            "deepseek_model=%r cannot do the function-calling the conversation agent "
+            "requires; falling back to %r. Set APP_DEEPSEEK_MODEL=deepseek-chat.",
+            model, _TOOL_CALLING_FALLBACK,
+        )
+        return _TOOL_CALLING_FALLBACK
+    return model
 
 
 def _headers(api_key: str) -> dict:
@@ -245,7 +271,7 @@ class DeepSeekConversationAgent:
     def __init__(self, model: str | None = None) -> None:
         api_key, default_model = _get_deepseek_settings()
         self._api_key = api_key
-        self._model = model or default_model
+        self._model = _safe_tool_model(model or default_model)
 
     def _build_system(self, restaurant_name: str, dialogue_phase: str, context: dict) -> str:
         ctx = dict(context)
@@ -312,7 +338,7 @@ class DeepSeekCompletionDetector:
         if not text or not text.strip():
             return False
         api_key, default_model = _get_deepseek_settings()
-        model = self._model_override or default_model
+        model = _safe_tool_model(self._model_override or default_model)
         prompt = COMPLETION_DETECT_TEMPLATE.format(text=text)
         raw = await _async_chat(
             api_key, model,
@@ -337,7 +363,7 @@ class DeepSeekRouterClassifier:
         if not text or not text.strip():
             return IntentLabel.NON_ACTIONABLE
         api_key, default_model = _get_deepseek_settings()
-        model = self._model_override or default_model
+        model = _safe_tool_model(self._model_override or default_model)
         labels = ", ".join(label.value for label in IntentLabel)
         prompt = ROUTER_CLASSIFY_TEMPLATE.format(
             phase=phase,
