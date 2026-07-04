@@ -31,6 +31,14 @@ from app.identity.models import Restaurant
 logger = logging.getLogger(__name__)
 
 
+def _rest_token(settings_dict: dict | None) -> str | None:
+    """A restaurant's OWN Meta access token (from onboarding its own Meta account), or
+    None to fall back to the global system-user token. Catalogs created under the
+    restaurant's own Business can only be reached with the restaurant's own token."""
+    tok = ((settings_dict or {}).get("wa_access_token") or "").strip()
+    return tok or None
+
+
 @dataclass
 class SyncResult:
     added: int = 0
@@ -162,7 +170,7 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
     if not catalog_id:
         raise CatalogReadError("Set a Catalog ID in Settings before syncing.")
 
-    products = await fetch_catalog_products(catalog_id)
+    products = await fetch_catalog_products(catalog_id, token=_rest_token(settings))
     now = datetime.now(timezone.utc)
 
     existing = {
@@ -371,7 +379,10 @@ async def push_dishes_to_meta(
         return SyncResult()
 
     try:
-        await push_products_batch(catalog_id, requests, wait_for_ingest=wait_for_ingest)
+        await push_products_batch(
+            catalog_id, requests, wait_for_ingest=wait_for_ingest,
+            token=_rest_token(settings_dict),
+        )
     except CatalogWriteError as exc:
         result = SyncResult()
         result.push_errors = [str(exc)]
@@ -498,7 +509,9 @@ async def sync_collections(session: AsyncSession, *, restaurant_id: int) -> dict
             groups.setdefault(name, []).append(rid)
     if not groups:
         return {"created": 0, "updated": 0, "failed": 0, "skipped": "no categorised dishes"}
-    return await upsert_product_sets(catalog_id, groups)
+    return await upsert_product_sets(
+        catalog_id, groups, token=_rest_token(rest.settings if rest else None)
+    )
 
 
 async def unpublish_from_meta(
@@ -530,6 +543,7 @@ async def unpublish_from_meta(
         await push_products_batch(
             catalog_id, [{"method": "DELETE", "retailer_id": rid, "data": {}}],
             wait_for_ingest=False,
+            token=_rest_token(rest.settings if rest else None),
         )
         return True
     except (CatalogReadError, CatalogWriteError) as exc:

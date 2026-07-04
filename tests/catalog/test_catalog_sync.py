@@ -24,7 +24,7 @@ def _mp(retailer_id, name, price, cat=None, *, image_url=None, fetch=None, revie
 
 
 def _patch_meta(monkeypatch, products):
-    async def _fake(catalog_id):  # noqa: ARG001
+    async def _fake(catalog_id, *, token=None):  # noqa: ARG001
         return products
     monkeypatch.setattr(sync_service, "fetch_catalog_products", _fake)
 
@@ -326,7 +326,7 @@ async def test_push_dishes_includes_required_meta_fields(db_session, restaurant,
 
     captured: list[dict] = []
 
-    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         captured.extend(requests)
         return {"handles": [], "validation_status": []}
 
@@ -425,7 +425,7 @@ async def test_push_uses_dish_image_and_sale_price(db_session, restaurant, monke
 
     captured: list[dict] = []
 
-    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         captured.extend(requests)
         return {"handles": [], "validation_status": []}
 
@@ -458,7 +458,7 @@ async def test_push_mirrors_local_catalog_without_meta_pull(db_session, restaura
     ))
     await db_session.commit()
 
-    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         return {"handles": [], "validation_status": []}
 
     monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
@@ -489,7 +489,7 @@ async def test_push_raises_on_meta_validation_errors(db_session, restaurant, mon
     ))
     await db_session.commit()
 
-    async def _bad_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _bad_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         raise CatalogWriteError("Meta rejected 1 item(s): rid: missing image_link")
 
     monkeypatch.setattr(sync_service, "push_products_batch", _bad_batch)
@@ -521,7 +521,7 @@ async def test_sync_full_bidirectional_pushes_then_repulls(db_session, restauran
     pull_calls = 0
     mint_rid: list[str] = []
 
-    async def _fake_pull(catalog_id):  # noqa: ARG001
+    async def _fake_pull(catalog_id, *, token=None):  # noqa: ARG001
         nonlocal pull_calls
         pull_calls += 1
         if pull_calls == 1:
@@ -529,7 +529,7 @@ async def test_sync_full_bidirectional_pushes_then_repulls(db_session, restauran
         rid = mint_rid[0] if mint_rid else "mint-rid"
         return [_mp("r1", "Biryani", 30, "Rice"), _mp(rid, "Mint", 12, "Drinks")]
 
-    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         for req in requests:
             if req.get("data", {}).get("title") == "Mint":
                 mint_rid.append(req["retailer_id"])
@@ -686,7 +686,7 @@ async def test_push_dedupes_duplicate_retailer_id(db_session, restaurant, monkey
     await db_session.commit()
 
     captured: list[dict] = []
-    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         captured.extend(requests)
         return {"handles": [], "validation_status": []}
     monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)
@@ -719,7 +719,7 @@ async def test_push_uses_upsert_update_for_unlinked_dish(db_session, restaurant,
     await db_session.commit()
 
     captured: list[dict] = []
-    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True):  # noqa: ARG001
+    async def _fake_batch(catalog_id, requests, *, wait_for_ingest=True, token=None):  # noqa: ARG001
         captured.extend(requests)
         return {"handles": [], "validation_status": []}
     monkeypatch.setattr(sync_service, "push_products_batch", _fake_batch)

@@ -37,6 +37,20 @@ _BATCH_POLL_INTERVAL_S = 2.0
 _BATCH_POLL_MAX_ATTEMPTS = 15
 
 
+def _resolve_token(token: str | None) -> str:
+    """Per-restaurant token wins; fall back to the global system-user token.
+
+    A restaurant that connected its OWN Meta account owns its catalog inside ITS
+    Business — the global ``APP_WA_CATALOG_TOKEN`` (a system user in OUR Business)
+    cannot cross into it (Graph error 100/33). So callers pass the restaurant's own
+    ``wa_access_token`` and we use it; only restaurants with no token of their own
+    (catalogs living in our Business) fall back to the global token.
+    """
+    if token:
+        return token
+    return get_settings().wa_catalog_token.get_secret_value()
+
+
 class CatalogReadError(RuntimeError):
     """Raised when the Graph API rejects the catalogue read (bad token / perms / id)."""
 
@@ -202,15 +216,17 @@ def _collect_batch_errors(data: dict) -> list[str]:
     return errors
 
 
-async def fetch_catalog_products(catalog_id: str) -> list[MetaProduct]:
+async def fetch_catalog_products(
+    catalog_id: str, *, token: str | None = None
+) -> list[MetaProduct]:
     """Read every product in ``catalog_id`` from Meta. Raises CatalogReadError on a
     Graph error (so the caller can surface a clear message). Returns [] for an empty
-    catalogue."""
+    catalogue. ``token`` (the restaurant's own access token) overrides the global one."""
     settings = get_settings()
-    token = settings.wa_catalog_token.get_secret_value()
+    token = _resolve_token(token)
     if not token:
         raise CatalogReadError(
-            "Catalogue sync is not configured (APP_WA_CATALOG_TOKEN is empty)."
+            "Catalogue sync is not configured (no catalog token for this restaurant)."
         )
     if not catalog_id:
         raise CatalogReadError("This restaurant has no catalog_id set.")
@@ -238,10 +254,12 @@ async def fetch_catalog_products(catalog_id: str) -> list[MetaProduct]:
     return products
 
 
-async def check_batch_request_status(catalog_id: str, handle: str) -> dict:
+async def check_batch_request_status(
+    catalog_id: str, handle: str, *, token: str | None = None
+) -> dict:
     """Poll Meta for async items_batch ingestion status."""
     settings = get_settings()
-    token = settings.wa_catalog_token.get_secret_value()
+    token = _resolve_token(token)
     base = f"https://graph.facebook.com/{settings.graph_api_version}"
     url = f"{base}/{catalog_id}/check_batch_request_status"
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -256,14 +274,16 @@ async def check_batch_request_status(catalog_id: str, handle: str) -> dict:
         return data
 
 
-async def wait_for_batch_handles(catalog_id: str, handles: list[str]) -> None:
+async def wait_for_batch_handles(
+    catalog_id: str, handles: list[str], *, token: str | None = None
+) -> None:
     """Wait until Meta finishes ingesting items_batch uploads (best-effort)."""
     if not handles:
         return
     for attempt in range(_BATCH_POLL_MAX_ATTEMPTS):
         pending = False
         for handle in handles:
-            status = await check_batch_request_status(catalog_id, handle)
+            status = await check_batch_request_status(catalog_id, handle, token=token)
             state = (status.get("status") or "").lower()
             if state in {"", "in_progress", "started"}:
                 pending = True
@@ -289,6 +309,7 @@ async def push_products_batch(
     requests: list[dict],
     *,
     wait_for_ingest: bool = True,
+    token: str | None = None,
 ) -> dict:
     """Push CREATE/UPDATE/DELETE batch to Meta ``/{catalog_id}/items_batch``.
 
@@ -309,10 +330,10 @@ async def push_products_batch(
         )
     requests = list(deduped.values())
     settings = get_settings()
-    token = settings.wa_catalog_token.get_secret_value()
+    token = _resolve_token(token)
     if not token:
         raise CatalogWriteError(
-            "Catalogue push is not configured (APP_WA_CATALOG_TOKEN is empty)."
+            "Catalogue push is not configured (no catalog token for this restaurant)."
         )
     if not catalog_id:
         raise CatalogWriteError("This restaurant has no catalog_id set.")
@@ -356,11 +377,13 @@ async def push_products_batch(
             )
         handles = data.get("handles") or []
         if wait_for_ingest and handles:
-            await wait_for_batch_handles(catalog_id, handles)
+            await wait_for_batch_handles(catalog_id, handles, token=token)
         return data
 
 
-async def upsert_product_sets(catalog_id: str, groups: dict[str, list[str]]) -> dict:
+async def upsert_product_sets(
+    catalog_id: str, groups: dict[str, list[str]], *, token: str | None = None
+) -> dict:
     """Create/update Meta product sets (a.k.a. "collections") — one per category — so the
     native WhatsApp catalogue groups the menu by category.
 
@@ -373,9 +396,9 @@ async def upsert_product_sets(catalog_id: str, groups: dict[str, list[str]]) -> 
     if not groups:
         return {"created": 0, "updated": 0, "failed": 0}
     settings = get_settings()
-    token = settings.wa_catalog_token.get_secret_value()
+    token = _resolve_token(token)
     if not token:
-        raise CatalogWriteError("Collections need APP_WA_CATALOG_TOKEN.")
+        raise CatalogWriteError("Collections need a catalog token for this restaurant.")
     if not catalog_id:
         raise CatalogWriteError("This restaurant has no catalog_id set.")
     base = f"https://graph.facebook.com/{settings.graph_api_version}"
