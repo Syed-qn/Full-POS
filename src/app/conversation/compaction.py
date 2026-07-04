@@ -6,6 +6,7 @@ is preserved in the summary; redundant menu/catalog sends are dropped.
 """
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 
 from sqlalchemy import func, select
@@ -19,6 +20,34 @@ KEEP_RECENT = 20
 
 # Message types that add noise without semantic value once summarized.
 _DROP_TYPES = frozenset({"product_list", "buttons", "cta_url", "location_request"})
+
+# ── context-pollution guards ──────────────────────────────────────────────
+# The summary is re-injected into EVERY future LLM turn, so it must carry only
+# high-signal tokens (Anthropic, "Effective context engineering for AI agents").
+# A prompt-injection payload copied verbatim into the summary would replay the
+# attack against every subsequent model call; we swap it for a neutral marker
+# so the history stays faithful without preserving the payload itself.
+_INJECTION_PATTERNS = re.compile(
+    r"(?:forget\s+(?:all|everything|previous|earlier)|"
+    r"ignore\s+(?:all|previous|earlier|above|your)\s+\w*\s*instructions?|"
+    r"disregard\s+(?:all|previous|earlier)|"
+    r"system\s+prompt|jailbreak|"
+    r"(?:your|the)\s+(?:llm|model)\s+(?:type|architecture|name|version)|"
+    r"what\s+model\s+are\s+you|reveal\s+your\s+(?:prompt|instructions))",
+    re.IGNORECASE,
+)
+_INJECTION_MARKER = "[redacted: off-topic message unrelated to ordering]"
+
+# Bare acknowledgements / greetings — zero signal once the turn has passed.
+_ACK_ONLY = re.compile(
+    r"^(?:hi|hii+|hello|hey|hi\s+there|ok(?:ay)?|k|hm+|hu+h?|yes|no|yeah|yep|"
+    r"thanks?|thank\s+you|shukran|salam|assalamualaikum)[\s!.😊👍🙏]*$",
+    re.IGNORECASE,
+)
+
+# Hard cap per event line: one long (possibly hostile) message must never
+# dominate the compacted context.
+_EVENT_MAX_CHARS = 160
 
 
 def _phase_label(conv: Conversation) -> str:
@@ -108,7 +137,18 @@ def build_compact_summary(
         if not rendered:
             continue
         role = "customer" if msg.direction == "inbound" else "assistant"
-        events.append(f"- {role}: {rendered}")
+        if role == "customer":
+            if _ACK_ONLY.match(rendered.strip()):
+                continue  # bare greeting/ack — no signal worth re-injecting
+            if _INJECTION_PATTERNS.search(rendered):
+                rendered = _INJECTION_MARKER  # never replay the payload
+        if len(rendered) > _EVENT_MAX_CHARS:
+            rendered = rendered[: _EVENT_MAX_CHARS - 1].rstrip() + "…"
+        line = f"- {role}: {rendered}"
+        # Dedupe repeats (menu re-sends, repeated markers) — keep first only.
+        if line in events:
+            continue
+        events.append(line)
 
     if events:
         lines.append("Key turns:")

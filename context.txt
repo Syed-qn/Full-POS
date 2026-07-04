@@ -1643,3 +1643,50 @@ def build_tool_properties() -> dict:
         "dish_query": {
             "type": "string",
             "description": "Dish name 
+
+================================================================================
+CONTEXT-ENGINEERING FAILURE MODE — TOOL-CALL TOKEN BUDGET (added 2026-07-04)
+ref: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+================================================================================
+Symptom (prod transcript): customer negated + asked for off-menu dish
+  ("No give me chicken soup") → bot replied canned
+  "Sorry, having a moment 😅 Type the dish name to order, or send 'hi' to start."
+  The LLM never got to answer that turn — the whole respond() call threw.
+
+Root cause: DeepSeek forced tool-call (`take_action`) ran with max_tokens=512.
+  The [OUTPUT] budget is SHARED between the `reply` string and the JSON tool
+  arguments. A negation + "we don't have X, but we have..." reply runs long →
+  finish_reason="length" → tool-call `arguments` JSON truncated mid-string →
+  json.loads() raised → agent.respond() threw → engine ai-fallback (was SILENT,
+  no log) sent the canned error.
+
+Context-engineering lesson: when the reply text and the structured action share
+  one token budget, size the budget for the WORST-CASE reply, and treat a
+  truncated payload as recoverable context, not a crash.
+
+Fixes (src/app/llm/deepseek.py, src/app/conversation/engine.py):
+  - conversation tool-call max_tokens 512 → 1024 (default raised too).
+  - _salvage_truncated_tool_args(): recover `action` + partial `reply` from a
+    cut-off arguments string instead of crashing (key-order-stable JSON).
+  - _async_chat_tools(): one retry on transient network / 429 / 5xx.
+  - engine ai-fallback now logs exc_info (was silent — invisible in prod).
+Regression tests: tests/llm/test_deepseek_agent.py
+  (salvage passthrough/recover/raise, truncated-json recovery, 5xx retry).
+
+================================================================================
+COMPACTION SUMMARY HYGIENE (added 2026-07-04)
+ref: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+================================================================================
+The [Earlier conversation summary] system_summary row is re-injected into EVERY
+future model call — it is the highest-leverage context surface in the system.
+Rules enforced in src/app/conversation/compaction.py:
+  1. NEVER replay prompt-injection payloads: customer turns matching
+     _INJECTION_PATTERNS become "[redacted: off-topic message unrelated to
+     ordering]" — faithful marker, zero payload.
+  2. Drop bare acks/greetings (hi/ok/hu/thanks/salam...) — zero-signal tokens.
+  3. Clamp each Key-turn line to 160 chars — one long hostile message must not
+     dominate the attention budget.
+  4. Dedupe identical event lines — prod summary carried "Here's our full menu"
+     6x, burning the 30-event cap with noise.
+Principle: summary = smallest set of high-signal tokens; authoritative state
+(order ref, cart, address progress) stays structured at the top.

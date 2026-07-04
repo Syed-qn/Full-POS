@@ -354,3 +354,21 @@ async def test_status_ping_is_recorded_in_conversation_chat(db_session):
         select(Message).where(Message.conversation_id == conv.id, Message.direction == "outbound")
     )).all()
     assert any("preparing" in (m.payload.get("body", "") or "").lower() for m in msgs)
+
+
+async def test_restaurant_cancel_notification_is_contextual(db_session):
+    """Prod: dashboard cancel pushed a bare 'This order was cancelled.' at 3AM with
+    no order number, no reason, no next step. The proactive cancel notification must
+    name the order, apologise, and tell the customer how to reorder."""
+    r, rider, o, batch, c = await _seed(db_session, status="cancelled")
+    await _notify_customer_status(
+        db_session, restaurant_id=r.id, order=o, status_key="cancelled"
+    )
+    await db_session.flush()
+    msgs = await _cust_msgs(db_session, c.phone)
+    assert len(msgs) == 1
+    body = msgs[0].payload["body"]
+    assert o.order_number in body           # names the order
+    assert "sorry" in body.lower()          # apologises
+    assert "hi" in body.lower()             # concrete next step to reorder
+    assert body != "This order was cancelled."

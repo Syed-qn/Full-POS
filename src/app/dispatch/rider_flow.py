@@ -56,6 +56,16 @@ async def _notify_customer_status(
         return
     if status_key == "near_door":
         body = "Keep an eye on the door — our rider is just around the corner!"
+    elif status_key == "cancelled":
+        # Proactive restaurant/dashboard cancel: the bare tracking string ("This
+        # order was cancelled.") landed with no order number, no apology and no
+        # next step (prod: 3 AM push that read like a bug). Name the order, own
+        # it, and give the reorder path. COD → nothing was charged.
+        body = (
+            f"We're sorry — your order #{order.order_number} was cancelled by "
+            "the restaurant 🙏 You haven't been charged (cash on delivery). "
+            "Send 'hi' whenever you'd like to order again 😊"
+        )
     else:
         body = await build_tracking_reply(session, order=order, geo=get_geo_provider())
     if status_key == "picked_up":

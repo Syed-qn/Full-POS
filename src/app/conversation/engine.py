@@ -1501,6 +1501,11 @@ async def _render_menu(
     return "\n".join(lines)
 
 
+# Minimum seconds between two full menu dumps to the same conversation. Within
+# this window a repeat request gets a one-line pointer instead.
+_MENU_RESEND_COOLDOWN_S = 120
+
+
 async def _send_menu_or_catalog(
     session: AsyncSession,
     conv: Conversation,
@@ -1513,8 +1518,27 @@ async def _send_menu_or_catalog(
 
     Customers always get one menu surface. Catalogue is preferred when a
     ``catalog_id`` is configured and products have been synced from Meta.
+
+    Cooldown: a second menu send within ``_MENU_RESEND_COOLDOWN_S`` gets a short
+    "menu's just above" pointer instead of the full dump (prod: two identical
+    full-menu messages in the same minute — noise for the customer AND for the
+    model's context, which then treats menu-dumping as the norm).
     """
+    import time as _time
+
     from app.identity.models import Restaurant
+
+    _now = _time.time()
+    _last = float((conv.state or {}).get("last_menu_sent_at") or 0)
+    if _now - _last < _MENU_RESEND_COOLDOWN_S:
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix=f"{prefix}-again",
+            body="The menu's just above 👆 Tell me the dish (or dish number) and I'll add it 😊",
+        )
+        _set_state(conv, dialogue_state="menu_sent", menu_in_context=True)
+        return False
+    _set_state(conv, last_menu_sent_at=_now)
 
     restaurant = await session.get(Restaurant, restaurant_id)
     settings = (restaurant.settings or {}) if restaurant is not None else {}
@@ -2245,6 +2269,29 @@ _DONE_EDGES: tuple[str, ...] = (
     "that is everything", "nothing else", "im done", "i am done", "that will be all",
 )
 
+# Negation swap (prod: "No give me chicken soup" straight after "Added 1x Staff
+# Chicken Biriyani" means REPLACE, not add-alongside — the LLM crashed on it and the
+# customer got the canned error). Explicit desire verb required: a bare "no <dish>"
+# stays ambiguous (could mean remove) and falls through to the existing paths.
+_NEGATION_SWAP_RE = _re.compile(
+    r"^no+[,.!\s]+(?:no+[,.!\s]+)*"
+    r"(?:give me|i want|i need|i said|get me|send me|bring me|make it)\s+"
+    r"(?P<rest>.+)$"
+)
+
+
+# Delivery-phrased checkout (prod: "Send it to me brothrr" / "Deliver the things I
+# asked you to" fell through to the LLM, which re-dumped the menu — customer gave up
+# and cancelled). Verb + order-object at the START of the message; the object set is
+# closed so "send me the menu", "deliver to <address>" and "do you deliver" never match.
+_SEND_ORDER_RE = _re.compile(
+    r"^(?:please |pls |now |ok |okay )*"
+    r"(?:send|deliver|bring|ship)\s+"
+    r"(?:it|them|that|this|everything|"
+    r"(?:the )?(?:things?|items?|stuff|food|order|dishes)|"
+    r"my (?:order|food|items?|stuff))\b"
+)
+
 
 def _is_done_intent(text: str) -> bool:
     """True for a 'that's all / done / nothing else' checkout phrase (AI path)."""
@@ -2256,6 +2303,8 @@ def _is_done_intent(text: str) -> bool:
         return False
     stripped = t[3:].strip() if t.startswith("no ") else t
     if t in _DONE_PHRASES or stripped in _DONE_PHRASES:
+        return True
+    if _SEND_ORDER_RE.match(stripped):
         return True
     # A clear done-phrase at the START or END of the message (e.g. angry prefix) counts;
     # matching only at the edges avoids false hits like the question "is that all you have".
@@ -5917,6 +5966,85 @@ async def _execute_ai_remove_item(
     return ("removed" if removed >= in_cart_units else "reduced", dish.name)
 
 
+async def _try_negation_swap(
+    session: AsyncSession, conv: Conversation, inbound: InboundMessage, restaurant_id: int,
+) -> bool:
+    """Handle "No give me <dish>" as a swap of the LAST cart line.
+
+    Returns True when the swap was executed and a reply sent. The new dish is
+    resolved BEFORE the cart is touched — an off-menu dish falls through (False)
+    with the cart intact, and a failed add restores the removed line."""
+    raw = (inbound.payload.get("text") or "").strip()
+    t = _re.sub(r"[’'`]", "", raw.lower())
+    t = _re.sub(r"\s+", " ", t).strip()
+    m = _NEGATION_SWAP_RE.match(t)
+    if not m:
+        return False
+    dish_q = m.group("rest").strip(" .!,?")
+    if not dish_q or "?" in raw or _is_menu_request(dish_q) or _is_done_intent(dish_q):
+        return False
+    from app.ordering.service import parse_qty_and_text
+
+    qty, rest = parse_qty_and_text(dish_q)
+    dish_q = (rest or dish_q).strip()
+    if not dish_q:
+        return False
+
+    from app.ordering.models import Order, OrderItem
+
+    draft_id = conv.state.get("draft_order_id")
+    if not draft_id:
+        return False
+    order = await session.get(Order, draft_id)
+    if order is None or str(order.status) != "draft":
+        return False
+    last_item = await session.scalar(
+        select(OrderItem)
+        .where(OrderItem.order_id == order.id)
+        .order_by(OrderItem.id.desc())
+        .limit(1)
+    )
+    if last_item is None:
+        return False
+
+    # Resolve the NEW dish first — never destroy the cart for an off-menu request.
+    result = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_q)
+    if result.confidence == MatchConfidence.NO_MATCH or not result.candidates:
+        return False
+    cands = await _catalog_filter_candidates(session, restaurant_id, result.candidates)
+    if not cands:
+        return False
+
+    from app.menu.models import Dish
+
+    old_dish = await session.get(Dish, last_item.dish_id)
+    old_name = old_dish.name if old_dish else "the last item"
+    old_qty = last_item.qty or 1
+    swap_qty = qty if qty and qty > 1 else old_qty
+
+    if old_dish is not None:
+        await _execute_ai_remove_item(session, conv, restaurant_id, old_dish.name)
+    status = await _execute_ai_add_item(
+        session, conv, inbound, restaurant_id, dish_q, swap_qty, "",
+        suppress_offers=True,
+    )
+    if status not in ("added", "updated_note"):
+        # Add failed after the remove — restore the old line, never silently empty.
+        if old_dish is not None:
+            from app.ordering.cart_service import CartService
+
+            await CartService(session).add(order=order, dish=old_dish, qty=old_qty)
+        return False
+
+    cart = await _build_cart_summary(session, conv)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="negation-swap",
+        body=f"Sure! Swapped {old_name} for {cands[0].name} ✅{_cart_tail(cart)}",
+    )
+    return True
+
+
 async def _execute_ai_update_qty(
     session: AsyncSession, conv: Conversation, inbound: InboundMessage,
     restaurant_id: int, dish_query: str, qty: int, *, suppress_offers: bool = False,
@@ -7110,6 +7238,26 @@ async def _dispatch_action(
     if reply:
         await _send_text(session, conv=conv, inbound=inbound,
                          restaurant_id=restaurant_id, prefix="ai-reply", body=reply)
+        return
+
+    # Empty no_action reply → NEVER silence. Clarify with real context: reference
+    # the cart when one exists (not another menu dump — the menu-as-universal-
+    # fallback loop drove a prod customer to give up and cancel).
+    cart = await _build_cart_summary(session, conv)
+    if cart:
+        body = (
+            f"Sorry, I didn't quite get that 😅 You have:{_cart_tail(cart)}\n\n"
+            "Add more items, tell me what to change, or say 'done' to check out."
+        )
+    else:
+        body = (
+            "Sorry, I didn't quite get that 😅 Tell me the dish you'd like, "
+            "or say 'menu' to see everything."
+        )
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="ai-clarify-empty", body=body,
+    )
 
 
 async def _handle_location_pin(
@@ -7337,6 +7485,17 @@ async def _handle_customer_ai(
             )
             return
 
+    # Negation swap: "No give me chicken soup" right after an add means REPLACE the
+    # last cart line with the named dish (prod: this crashed the LLM path and sent the
+    # canned error). Deterministic, and only for an explicit desire verb — a bare
+    # "no <dish>" stays with the existing remove/AI paths.
+    if (
+        phase == "ordering"
+        and inbound.type == MessageType.TEXT
+        and await _try_negation_swap(session, conv, inbound, restaurant_id)
+    ):
+        return
+
     # Keep-only: "only mandi" / "just the biryani" means prune the cart to that dish, NOT
     # wipe it (the LLM tagged "only mandi" as clear_cart and emptied everything). Handle
     # deterministically when the named dish is actually in the cart; else fall through.
@@ -7444,6 +7603,10 @@ async def _handle_customer_ai(
             context=context,
         )
     except Exception:
+        _logger.error(
+            "agent.respond failed for restaurant %s conv %s (phase=%s)",
+            restaurant_id, conv.id, phase, exc_info=True,
+        )
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ai-fallback",

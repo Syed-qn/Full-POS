@@ -208,6 +208,25 @@ def test_is_done_intent_variants():
         assert _is_done_intent(p) is False, p
 
 
+def test_is_done_intent_delivery_phrasings():
+    """Prod transcript: 'Send it to me brothrr' and 'Deliver the things I asked you to'
+    fell through to the LLM which re-dumped the menu; customer gave up and cancelled.
+    Delivery-phrased checkout must count as done. Menu/address/service questions must not."""
+    from app.conversation.engine import _is_done_intent
+
+    for p in [
+        "Send it to me brothrr", "send it", "deliver the things I asked you to",
+        "Deliver it", "deliver my order", "send the food", "bring it now",
+        "send them over", "deliver everything please",
+    ]:
+        assert _is_done_intent(p) is True, p
+    for p in [
+        "send me the menu", "do you deliver", "can you deliver to marina",
+        "deliver to Marina Tower apt 12", "send my location", "how long to deliver",
+    ]:
+        assert _is_done_intent(p) is False, p
+
+
 async def test_thats_all_checks_out_without_calling_llm(db_session, restaurant):
     """"No that's all" with a cart proceeds to checkout deterministically — the LLM is
     never called (it used to loop re-adding the item / sent a welcome mid-order)."""
@@ -261,6 +280,116 @@ async def test_thats_all_checks_out_without_calling_llm(db_session, restaurant):
     )).scalars().all()
     assert len(items) == 1 and items[0].qty == 1
     assert conv.state["dialogue_state"] == "address_capture"
+
+
+async def test_negation_swap_replaces_last_added_dish(db_session, restaurant):
+    """Prod transcript: customer added Staff Chicken Biriyani then said
+    'No give me chicken soup' — expected a swap, got the canned error. An explicit
+    desire verb after a leading 'no' swaps the last cart line deterministically."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Staff Chicken Biriyani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="staff chicken biriyani",
+    )
+    soup = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=111,
+        name="Chicken Soup", price_aed=Decimal("15.00"), category="Soup",
+        is_available=True, name_normalized="chicken soup",
+    )
+    db_session.add_all([biryani, soup])
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110077", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110077"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _boom(*a, **k):
+        raise AssertionError("LLM must not run for an explicit negation swap")
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _boom):
+        await _handle_customer_ai(
+            db_session, conv, _msg("No give me chicken soup", "wamid.swap"),
+            restaurant.id, restaurant,
+        )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1
+    assert items[0].dish_id == soup.id
+    assert items[0].qty == 1
+
+
+async def test_negation_swap_offmenu_dish_keeps_cart(db_session, restaurant):
+    """'No give me unicorn steak' (off-menu) must NOT destroy the cart — falls
+    through (LLM path) with the original line intact."""
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import OrderItem
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    biryani = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    db_session.add(biryani)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110078", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110078"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=biryani, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    await _handle_customer_ai(
+        db_session, conv, _msg("No give me unicorn steak", "wamid.swap2"),
+        restaurant.id, restaurant,
+    )
+    await db_session.commit()
+
+    items = (await db_session.execute(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    )).scalars().all()
+    assert len(items) == 1 and items[0].dish_id == biryani.id
 
 
 def test_is_clear_cart_command_precise():
@@ -1588,3 +1717,100 @@ async def test_fever_question_gets_warm_decline_not_menu(db_session, restaurant)
     assert "medical" in body.lower() or "doctor" in body.lower() or "feeling well" in body.lower()
     assert "Welcome! Here's our menu" not in body
     assert "• " not in body  # no menu bullet dump
+
+
+async def test_menu_not_redumped_within_cooldown(db_session, restaurant):
+    """Prod: two identical 'Here's our full menu' sends within the same minute.
+    A second menu request inside the cooldown gets a short pointer, not the dump."""
+    from app.conversation.engine import _send_menu_or_catalog
+    from app.conversation.service import get_or_create_conversation
+    from app.menu.models import Dish, Menu
+    from app.outbox.models import OutboxMessage
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    ))
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110099", counterpart="customer"
+    )
+    await db_session.commit()
+
+    await _send_menu_or_catalog(
+        db_session, conv, _msg("menu", "wamid.m1"), restaurant.id, prefix="show-menu"
+    )
+    await _send_menu_or_catalog(
+        db_session, conv, _msg("menu", "wamid.m2"), restaurant.id, prefix="show-menu"
+    )
+    await db_session.commit()
+
+    bodies = [
+        m.payload.get("body", "")
+        for m in (await db_session.execute(select(OutboxMessage))).scalars().all()
+    ]
+    full_dumps = [b for b in bodies if "Chicken Biryani: AED 22" in b]
+    assert len(full_dumps) == 1, bodies  # second send must NOT re-dump the menu
+    assert any("just above" in b for b in bodies)  # short pointer instead
+
+
+async def test_no_action_empty_reply_gets_contextual_clarify(db_session, restaurant):
+    """LLM returns no_action with an empty reply mid-ordering: customer must never
+    get silence. With items in the cart the clarify references the cart, not the menu."""
+    from unittest.mock import patch
+
+    from app.conversation.engine import _handle_customer_ai
+    from app.conversation.service import get_or_create_conversation
+    from app.llm.port import ConversationAgentResult
+    from app.menu.models import Dish, Menu
+    from app.outbox.models import OutboxMessage
+    from app.ordering.service import add_item, create_draft_order, get_or_create_customer
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=110,
+        name="Chicken Biryani", price_aed=Decimal("22.00"), category="Rice",
+        is_available=True, name_normalized="chicken biryani",
+    )
+    db_session.add(dish)
+    await db_session.commit()
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110088", counterpart="customer"
+    )
+    customer = await get_or_create_customer(
+        db_session, restaurant_id=restaurant.id, phone="+971501110088"
+    )
+    order = await create_draft_order(
+        db_session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    await add_item(db_session, order=order, dish=dish, qty=1)
+    conv.state = {
+        **conv.state, "dialogue_phase": "ordering",
+        "dialogue_state": "collecting_items", "draft_order_id": order.id,
+    }
+    await db_session.commit()
+
+    async def _empty(*a, **k):
+        return ConversationAgentResult(message="", action="no_action", action_data={})
+
+    with patch("app.llm.fake.FakeConversationAgent.respond", _empty):
+        await _handle_customer_ai(
+            db_session, conv, _msg("hmm what about the thing", "wamid.clarify"),
+            restaurant.id, restaurant,
+        )
+    await db_session.commit()
+
+    bodies = [
+        m.payload.get("body", "")
+        for m in (await db_session.execute(select(OutboxMessage))).scalars().all()
+    ]
+    assert bodies, "customer must never get silence"
+    assert any("Chicken Biryani" in b for b in bodies)  # references the cart

@@ -144,11 +144,56 @@ class DeepSeekForecastAdjuster:
         return _sanitise_effect(parsed)
 
 
+def _salvage_truncated_tool_args(raw: str) -> dict:
+    """Recover a usable dict from a tool-call arguments string that was cut off
+    by the token cap (finish_reason="length"). DeepSeek streams JSON key-order-
+    stable; the ``reply`` string is what runs long, so a truncated payload still
+    carries the leading ``action`` field. We parse as much as we can and default
+    the rest — a partial reply beats crashing into a canned error.
+    """
+    # Fast path: maybe it's actually complete.
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            return obj
+    except json.JSONDecodeError:
+        pass
+    # Pull the action verb (first string field) so the engine can still act.
+    action = None
+    m = _re.search(r'"action"\s*:\s*"([^"]*)"', raw)
+    if m:
+        action = m.group(1)
+    # Pull whatever of the reply text survived (may be an unterminated string).
+    reply = ""
+    m = _re.search(r'"reply"\s*:\s*"(.*)', raw, flags=_re.DOTALL)
+    if m:
+        # Cut at the last complete char; drop a dangling backslash escape.
+        reply = m.group(1).rstrip("\\")
+        # If the reply string was closed, stop at its closing quote.
+        end = _re.search(r'(?<!\\)"', reply)
+        if end:
+            reply = reply[: end.start()]
+        reply = reply.encode().decode("unicode_escape", errors="ignore")
+    out: dict = {}
+    if action:
+        out["action"] = action
+    if reply.strip():
+        out["reply"] = reply.strip()
+    if out:
+        return out
+    raise RuntimeError("DeepSeek tool call truncated beyond recovery")
+
+
 async def _async_chat_tools(
     api_key: str, model: str, system: str, messages: list,
-    tools: list, tool_name: str, max_tokens: int = 512,
+    tools: list, tool_name: str, max_tokens: int = 1024,
 ) -> dict:
-    """OpenAI-compatible tool-calling: returns parsed arguments dict of the forced tool call."""
+    """OpenAI-compatible tool-calling: returns parsed arguments dict of the forced tool call.
+
+    Resilient by design — this sits on the live customer path and a raw exception
+    surfaces as a canned "having a moment" error. Transient HTTP failures get one
+    retry; a token-truncated JSON payload is salvaged rather than crashing.
+    """
     payload = {
         "model": model,
         "messages": [{"role": "system", "content": system}] + messages,
@@ -157,14 +202,34 @@ async def _async_chat_tools(
         "max_tokens": max_tokens,
         "temperature": 0.0,
     }
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(_CHAT, headers=_headers(api_key), json=payload)
-        r.raise_for_status()
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(_CHAT, headers=_headers(api_key), json=payload)
+                r.raise_for_status()
+            break
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            last_exc = exc
+            # Retry once on transient network / 5xx / 429; give up on other 4xx.
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if attempt == 0 and (status is None or status == 429 or status >= 500):
+                continue
+            raise
+    else:  # pragma: no cover - loop always breaks or raises
+        raise last_exc  # type: ignore[misc]
+
     data = r.json()
-    tool_calls = data["choices"][0]["message"].get("tool_calls") or []
+    choice = data["choices"][0]
+    tool_calls = choice["message"].get("tool_calls") or []
     for tc in tool_calls:
         if tc.get("function", {}).get("name") == tool_name:
-            return json.loads(tc["function"]["arguments"])
+            raw_args = tc["function"]["arguments"]
+            try:
+                return json.loads(raw_args)
+            except json.JSONDecodeError:
+                # Truncated at the token cap — salvage the action + partial reply.
+                return _salvage_truncated_tool_args(raw_args)
     raise RuntimeError(f"DeepSeek returned no {tool_name!r} tool call")
 
 
@@ -220,7 +285,7 @@ class DeepSeekConversationAgent:
             messages,
             tools=[_DS_TOOL],
             tool_name="take_action",
-            max_tokens=512,
+            max_tokens=1024,
         )
 
         # Translate canonical action + payload to engine-legacy (action, action_data).
