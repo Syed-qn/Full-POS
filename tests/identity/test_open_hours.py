@@ -64,7 +64,8 @@ def test_settings_patch_accepts_valid_todays_special():
         "enabled": True, "template_id": 7, "lead_minutes": 20, "default_time": "9:05",
     })
     assert p.todays_special == {
-        "enabled": True, "template_id": 7, "lead_minutes": 20, "default_time": "09:05",
+        "enabled": True, "template_id": 7, "fallback_template_id": None,
+        "lead_minutes": 20, "default_time": "09:05",
     }
 
 

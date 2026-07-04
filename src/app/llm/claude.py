@@ -242,7 +242,6 @@ class ClaudeForecastAdjuster:
         self._client = _get_anthropic_client()
 
     def parse_override(self, text: str) -> dict:
-        import json
 
         prompt = FORECAST_OVERRIDE_TEMPLATE.format(text=text)
         try:
@@ -298,7 +297,6 @@ class ClaudeSegmentCompiler:
         self._client = _get_anthropic_client()
 
     def compile(self, text: str) -> dict:
-        import json
 
         from app.marketing.segments import validate_dsl
 

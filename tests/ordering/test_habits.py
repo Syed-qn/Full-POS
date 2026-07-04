@@ -1,6 +1,6 @@
 """Per-weekday, recency-weighted order-time habits (spec gap closure)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from app.ordering.habits import (
     build_usual_order_times,

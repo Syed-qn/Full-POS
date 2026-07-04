@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
 
 from app.marketing.automations import advance_recurring_state
 from app.marketing.models import RecurringMessageState

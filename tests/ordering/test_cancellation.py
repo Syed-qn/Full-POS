@@ -1,4 +1,3 @@
-import hashlib
 from decimal import Decimal
 
 import pytest

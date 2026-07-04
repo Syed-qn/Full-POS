@@ -10,7 +10,7 @@ from app.dispatch.delivery import advance_delivery
 from app.dispatch.models import Batch, BatchOrder, RiderLocation
 from app.dispatch.service import run_dispatch_engine
 from app.identity.models import Restaurant, Rider
-from app.ordering.models import Customer, CustomerAddress, Order
+from app.ordering.models import Customer, Order
 from app.partner.integration import apply_partner_settings
 from app.partner.webhooks.models import PartnerWebhookDelivery
 from tests.partner.test_partner_orders import _seed_confirmed_order

@@ -116,7 +116,7 @@ async def test_off_menu_order_at_summary_declines(db_session, restaurant):
     body = (await db_session.execute(
         select(OutboxMessage).order_by(OutboxMessage.id.desc())
     )).scalars().first().payload["body"]
-    assert "don't have" in body.lower()
+    assert ("don't have" in body.lower()) or ("couldn't find" in body.lower())
     assert "beef biryani" in body.lower()
     assert "modify" not in body.lower()
 

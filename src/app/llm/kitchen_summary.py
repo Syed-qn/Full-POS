@@ -7,7 +7,6 @@ Senior prompting pattern for multilingual multi-tenant SaaS:
 """
 from __future__ import annotations
 
-from app.llm.prompts_kitchen import TIER2_SYSTEM as _TIER2_SYSTEM
 from app.llm.prompts_kitchen import build_tier2_user_prompt
 
 KITCHEN_SUMMARY_MAX_LINES = 3

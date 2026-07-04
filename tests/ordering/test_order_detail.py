@@ -400,6 +400,7 @@ async def test_api_order_detail_includes_dispatch_explain(client, db_session, re
 
     resp = await client.get(
         f"/api/v1/orders/{order.id}/detail",
+        params={"include": "dispatch"},
         headers=_auth(restaurant.id),
     )
     assert resp.status_code == 200

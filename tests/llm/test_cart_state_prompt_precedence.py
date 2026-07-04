@@ -36,7 +36,6 @@ def test_deepseek_ordering_prompt_carries_cart_lines_and_precedence():
 def test_claude_ordering_prompt_carries_cart_lines_and_precedence():
     from app.llm.claude import _phase_guidance
     from app.llm.conversation_prompts import build_claude_system
-    import json
 
     sys = build_claude_system(
         "Testaurant",

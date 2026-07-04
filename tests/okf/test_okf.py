@@ -47,7 +47,6 @@ async def test_retrieval_finds_policy_and_dish(db_session):
     await producer.refresh_menu_and_policy(db_session, restaurant_id=r.id)
     # halal question -> should surface the dish doc (mentions halal)
     docs = await retrieval.retrieve(db_session, restaurant_id=r.id, query="is the chicken halal")
-    titles = " ".join(d.title.lower() for d in docs)
     bodies = " ".join(d.body.lower() for d in docs)
     assert "halal" in bodies  # grounded fact present
     # policy is always pinned

@@ -207,7 +207,7 @@ async def test_done_at_confirmation_with_address_reshows_summary_not_address(db_
     the address again — only re-show the order summary once."""
     from unittest.mock import AsyncMock, patch
 
-    from app.ordering.models import CustomerAddress, OrderItem
+    from app.ordering.models import CustomerAddress
     from app.ordering.service import add_item, create_draft_order, get_or_create_customer
 
     await _seed_menu(db_session, restaurant.id)

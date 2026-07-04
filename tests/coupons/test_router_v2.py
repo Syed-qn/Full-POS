@@ -57,7 +57,8 @@ async def test_list_coupons_by_phone(db_session, client, auth_headers):
     from app.ordering.models import Customer
     r = await db_session.scalar(select(Restaurant).where(Restaurant.phone == "+971501234567"))
     c = Customer(restaurant_id=r.id, phone="+971555999003", name="Gamma")
-    db_session.add(c); await db_session.flush()
+    db_session.add(c)
+    await db_session.flush()
     await csvc.issue_coupon(db_session, restaurant_id=r.id, customer_id=c.id, order_id=None,
                             discount_aed=Decimal("12.00"))
     await db_session.commit()

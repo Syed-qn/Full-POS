@@ -5,7 +5,6 @@ import pytest
 from app.llm.kitchen_summary import (
     build_tier2_prompt,
     parse_tier2_response,
-    render_structured_lines,
 )
 from app.llm.fake import FakeKitchenSummarizer
 

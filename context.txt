@@ -1690,3 +1690,19 @@ Rules enforced in src/app/conversation/compaction.py:
      6x, burning the 30-event cap with noise.
 Principle: summary = smallest set of high-signal tokens; authoritative state
 (order ref, cart, address progress) stays structured at the top.
+
+================================================================================
+POST-ADD UPSELL + QUICK-ACTION BUTTONS (added 2026-07-04)
+================================================================================
+Every added-to-cart confirmation carries three WhatsApp reply buttons:
+  proceed_delivery ("Proceed to delivery") -> same executor as typed 'done'
+  upsell_add:<dish_id> ("Add <dish>") -> history pick; falls back to
+  suggest_dishes ("Suggestions") when no honest history dish exists
+  clear_cart ("Clear cart") -> deterministic clear (same as text command)
+Upsell grounding rules (R-003/R-005 — never invent):
+  - dish comes ONLY from the customer's own placed orders (draft/cancelled excluded)
+  - must be is_available, whatsapp_enabled, catalogue-allowed, non-slug name
+  - not already in the current cart; offered ONCE per draft (state upsell_shown_for)
+  - price printed from DB (_aed), never from the LLM
+Buttons are intercepted deterministically in handle_inbound BEFORE the AI — a
+model mis-read can never drop a tap.

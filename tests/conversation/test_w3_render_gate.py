@@ -87,7 +87,7 @@ async def test_confirm_order_number_is_real(db_session, restaurant, seed_biryani
     from app.ordering.models import CustomerAddress, Order
     from sqlalchemy import select
 
-    res = await drive_turns(
+    await drive_turns(
         db_session,
         restaurant_id=restaurant.id,
         phone="+971500000073",

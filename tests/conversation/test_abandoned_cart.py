@@ -128,7 +128,9 @@ async def test_rearmed_cart_can_be_nudged_again(db_session, restaurant):
     conv = (await db_session.scalars(
         select(Conversation).where(Conversation.phone == "+971501110001")
     )).one()
-    st = dict(conv.state); st.pop("abandoned_nudged", None); conv.state = st
+    st = dict(conv.state)
+    st.pop("abandoned_nudged", None)
+    conv.state = st
     await db_session.commit()
 
     with patch.object(cart_worker, "async_session_factory", _make_session_factory(db_session)):

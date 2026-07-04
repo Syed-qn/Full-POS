@@ -691,7 +691,8 @@ async def test_cook_estimate_is_slowest_dish_with_default_fallback(db_session, r
 
     o_mix, o_unknown = _order("K1"), _order("K2")
     await db_session.flush()
-    _item(o_mix, slow); _item(o_mix, fast)   # max(22, 5) = 22
+    _item(o_mix, slow)
+    _item(o_mix, fast)  # max(22, 5) = 22
     _item(o_unknown, unknown)                 # falls back to default 15
     await db_session.flush()
 

@@ -64,10 +64,6 @@ async def test_catalogue_basket_double_masala_one_noted_line(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W3 render: qty edit must update the existing line, not create a duplicate",
-)
 async def test_confirm_time_edit_total_matches(db_session, restaurant, seed_biryani_menu):
     """Customer adds 1 chicken biryani then says 'make it 2 chicken biryani'.
     Engine today creates a second OrderItem instead of updating qty; the
@@ -118,10 +114,6 @@ async def test_voice_order_five_items_all_present(db_session, restaurant, seed_b
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W2 actions + W4 router: modify-flow remove must decrement, not duplicate",
-)
 async def test_modify_flow_remove_decrements(db_session, restaurant, seed_biryani_menu):
     """Add 2 lemon mints then 'remove 1 lemon mint'.  Today the engine either
     duplicates the line or fails to decrement — qty stays 2 or a new line appears."""
@@ -312,10 +304,6 @@ async def test_clear_cart_only_on_explicit_clear(db_session, restaurant, seed_bi
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W8 idempotency: replaying the same message must not double-add items",
-)
 async def test_idempotent_redelivery_same_wa_message_id(
     db_session, restaurant, seed_biryani_menu
 ):

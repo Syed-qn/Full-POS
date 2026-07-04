@@ -7,6 +7,12 @@ from app.llm.factory import get_conversation_agent, get_menu_extractor
 def _reset():
     get_settings.cache_clear()
     get_menu_extractor.cache_clear()
+    # _get_deepseek_settings is lru_cached too — without clearing it, whichever
+    # test touched DeepSeek first pins (api_key, model) for the whole session and
+    # the fallback-model assertions flake in full-suite order.
+    from app.llm.deepseek import _get_deepseek_settings
+
+    _get_deepseek_settings.cache_clear()
 
 
 def test_unknown_extractor_provider_raises(monkeypatch):
