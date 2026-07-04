@@ -105,6 +105,49 @@ async def test_build_history_maps_location_to_text(db_session, restaurant):
     assert "[customer shared location pin" in history[0]["content"]
 
 
+async def test_build_history_starts_fresh_after_long_gap(db_session, restaurant):
+    """A customer who chatted yesterday and returns after a long silence must NOT have
+    the old turns fed to the model — the memory starts fresh at the new session so a
+    stale request can't colour a brand-new order. (The draft cart has its own expiry.)"""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.conversation.engine import _build_history
+    from app.conversation.models import Message
+    from app.conversation.service import get_or_create_conversation, record_message
+
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971502223344", counterpart="customer"
+    )
+    # Yesterday's session
+    await record_message(db_session, conversation_id=conv.id, direction="inbound",
+                         wa_message_id="y1", msg_type="text",
+                         payload={"text": "do you have mutton biryani"})
+    await record_message(db_session, conversation_id=conv.id, direction="outbound",
+                         wa_message_id=None, msg_type="text",
+                         payload={"body": "Sorry, we don't have that."})
+    # Today's session
+    await record_message(db_session, conversation_id=conv.id, direction="inbound",
+                         wa_message_id="t1", msg_type="text",
+                         payload={"text": "one chicken biryani"})
+    await db_session.commit()
+
+    # Backdate the two "yesterday" rows by 5 hours (> 4h session gap); today's stays now.
+    msgs = (await db_session.scalars(
+        select(Message).where(Message.conversation_id == conv.id).order_by(Message.id)
+    )).all()
+    old = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=5)
+    msgs[0].created_at = old
+    msgs[1].created_at = old
+    await db_session.commit()
+
+    history = await _build_history(db_session, conv, limit=10)
+    joined = " ".join(h["content"] for h in history)
+    assert "mutton biryani" not in joined      # yesterday dropped (before the gap)
+    assert "one chicken biryani" in joined      # today kept
+
+
 def test_resolve_phase_maps_old_states():
     """_resolve_phase maps legacy dialogue_state values to new phases."""
     from app.conversation.engine import _resolve_phase

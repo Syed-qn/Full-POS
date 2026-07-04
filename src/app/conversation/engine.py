@@ -2319,11 +2319,31 @@ _DONE_PHRASES: frozenset[str] = frozenset({
     "finished", "im done", "i am done", "that will be all", "thats all", "that is all",
     "thats it", "that is it", "thats everything", "that is everything", "nothing else",
     "no more", "no more thanks", "complete order", "place order", "im good", "no thats all",
+    # Confirm-phrasings (prod: "Confirm the order" fell through to the LLM and looped
+    # the menu instead of advancing to checkout).
+    "confirm", "confirm order", "confirm the order", "confirm my order",
+    "confirm it", "place my order", "place the order",
+    # Casual "that's it" without the apostrophe-s ("ya that it", "that it") — common
+    # from non-native speakers; normalised text drops the apostrophe so "thats it"
+    # already matches, but the elided "that it" did not.
+    "that it", "ya that it", "yes that it", "ya thats it", "yes thats it",
+    # UAE / Gulf-casual "finish it": khalas (done/enough), yalla (let's go / send it).
+    "khalas", "khalas bas", "yalla", "yallah", "yala", "yalla send",
+    "yalla go", "send yalla",
+    # Common English "wrap it up" phrasings seen in chat orders.
+    "thats enough", "that is enough", "im finished", "i am finished",
+    "we are done", "were done", "we done", "all done", "all set", "thats all thanks",
+    "order it", "order now", "order please", "place it", "place order now",
+    "go ahead", "lets go", "let us go", "proceed please", "checkout please",
+    "send it now", "send now", "deliver now", "deliver please", "ready to checkout",
 })
 _DONE_EDGES: tuple[str, ...] = (
-    "thats all", "that is all", "thats it", "that is it", "thats everything",
+    "thats all", "that is all", "thats it", "that is it", "that it", "thats everything",
     "that is everything", "nothing else", "im done", "i am done", "that will be all",
 )
+# Beyond this many words, a message that only STARTS/ENDS with a done-edge is treated as
+# a real request for the LLM, not a bare checkout. Exact-phrase matches ignore this cap.
+_CHECKOUT_EDGE_MAX_WORDS = 6
 
 # Negation swap (prod: "No give me chicken soup" straight after "Added 1x Staff
 # Chicken Biriyani" means REPLACE, not add-alongside — the LLM crashed on it and the
@@ -2349,12 +2369,35 @@ _SEND_ORDER_RE = _re.compile(
 )
 
 
+# Friendly UAE vocatives customers tack onto an instruction ("done habibi", "ok bro",
+# "yalla akhi"). Stripped from the EDGES before intent matching so the vocative never
+# hides an otherwise-clear checkout/ack. Trailing "my" is also dropped so "that's all my
+# friend" resolves. Kept to address-terms only — never a dish word.
+_FRIENDLY_VOCATIVES: frozenset[str] = frozenset({
+    "habibi", "habib", "habibti", "bro", "bros", "brother", "brotha", "brothr",
+    "brothrr", "bruh", "bru", "akhi", "akhy", "khoya", "boss", "chief", "yaar",
+    "bhai", "dear", "friend", "man", "buddy", "sir", "madam",
+})
+
+
+def _strip_edge_vocatives(t: str) -> str:
+    """Drop leading/trailing friendly vocatives (and a trailing 'my') so a Gulf-casual
+    'ok habibi' / 'done my friend' still reads as its bare intent."""
+    words = t.split()
+    while words and words[0] in _FRIENDLY_VOCATIVES:
+        words.pop(0)
+    while words and (words[-1] in _FRIENDLY_VOCATIVES or words[-1] == "my"):
+        words.pop()
+    return " ".join(words)
+
+
 def _is_done_intent(text: str) -> bool:
     """True for a 'that's all / done / nothing else' checkout phrase (AI path)."""
     # Drop apostrophes FIRST so "that's" → "thats" (else the apostrophe becomes a space
     # and "that s all" never matches "thats all"), then punctuation → space, collapse.
     t = _re.sub(r"[’'`]", "", (text or "").lower())
     t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    t = _strip_edge_vocatives(t)
     if not t:
         return False
     stripped = t[3:].strip() if t.startswith("no ") else t
@@ -2364,6 +2407,11 @@ def _is_done_intent(text: str) -> bool:
         return True
     # A clear done-phrase at the START or END of the message (e.g. angry prefix) counts;
     # matching only at the edges avoids false hits like the question "is that all you have".
+    # Word cap: a long, complex sentence that merely ENDS in "that's all" ("can you make
+    # it spicy and add fries and remove the soup, that's all") is a real request for the
+    # LLM — not a bare checkout. Exact-phrase matches above are unbounded (finite + short).
+    if len(stripped.split()) > _CHECKOUT_EDGE_MAX_WORDS:
+        return False
     return stripped.startswith(_DONE_EDGES) or stripped.endswith(_DONE_EDGES)
 
 
@@ -2372,6 +2420,8 @@ def _is_done_intent(text: str) -> bool:
 # routes to the typed-add path (leading "ok" is stripped there as filler).
 _ACK_PROCEED_PHRASES: frozenset[str] = frozenset({
     "ok", "okay", "okey", "k", "sure", "yes", "yep", "yeah", "fine", "good", "great",
+    # UAE-casual affirmatives: tamam (ok/fine), sahi (right), zain (good), okok.
+    "tamam", "tmam", "sahi", "zain", "okok", "ok ok", "aiwa", "aywa", "perfect",
 })
 
 
@@ -2379,6 +2429,7 @@ def _is_ack_proceed_intent(text: str) -> bool:
     """True when the customer sends only a short ack meaning 'proceed / that's fine'."""
     t = _re.sub(r"[’'`]", "", (text or "").lower())
     t = _re.sub(r"\s+", " ", _re.sub(r"[^\w ]", " ", t)).strip()
+    t = _strip_edge_vocatives(t)
     return bool(t) and t in _ACK_PROCEED_PHRASES
 
 
@@ -4809,6 +4860,24 @@ async def _build_cart_summary(session: AsyncSession, conv) -> str:
     return ", ".join(lines) + f" | Subtotal: AED {_aed(order.subtotal)}"
 
 
+async def _contextual_error_body(session: AsyncSession, conv) -> str:
+    """Fallback text for a crashed AI/dispatch turn.
+
+    Context-aware on purpose: a bare "Type the dish name or send 'hi'" throws away
+    everything the customer already did and reads as the bot looping the same reply.
+    When there's a live cart we echo it and offer the next step (confirm / add more)
+    so a transient LLM hiccup doesn't strand a full basket.
+    """
+    cart = await _build_cart_summary(session, conv)
+    if cart:
+        return (
+            "Sorry, I had a brief hiccup 😅\n\n"
+            f"🛒 {cart}\n\n"
+            "Reply *confirm* to place your order, or tell me another dish to add."
+        )
+    return "Sorry, having a moment 😅 Type the dish name to order, or send 'hi' to start."
+
+
 def _cart_tail(cart: str) -> str:
     """Trailing cart line for edit confirmations so the customer always sees the
     current cart right after a remove / quantity change."""
@@ -5430,6 +5499,29 @@ async def _build_history(
         )
     ).all()
     rows = list(reversed(rows))  # oldest first
+
+    # Session freshness: if the customer returns after a long silence, drop everything
+    # before that gap so yesterday's chat can't colour a fresh order (the draft cart has
+    # its own separate expiry). Keep only the trailing run whose consecutive gaps are all
+    # under the threshold — the current session. 0 disables.
+    from app.config import get_settings as _get_settings_gap
+
+    _gap_min = _get_settings_gap().conversation_session_gap_minutes
+    if _gap_min and len(rows) > 1:
+        from datetime import timedelta, timezone
+
+        _gap = timedelta(minutes=_gap_min)
+        _cut = 0
+        for _i in range(len(rows) - 1, 0, -1):
+            _older, _newer = rows[_i - 1].created_at, rows[_i].created_at
+            if _older is not None and _newer is not None:
+                _a = _older if _older.tzinfo else _older.replace(tzinfo=timezone.utc)
+                _b = _newer if _newer.tzinfo else _newer.replace(tzinfo=timezone.utc)
+                if (_b - _a) > _gap:
+                    _cut = _i  # most recent session starts here
+                    break
+        if _cut:
+            rows = rows[_cut:]
 
     latest_cart_obs_idx = max(
         (i for i, msg in enumerate(rows) if msg.type == "cart_observation"),
@@ -7956,7 +8048,7 @@ async def _handle_customer_ai(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="ai-fallback",
-            body="Sorry, having a moment 😅 Type the dish name to order, or send 'hi' to start.",
+            body=await _contextual_error_body(session, conv),
         )
         return
 
@@ -7972,7 +8064,7 @@ async def _handle_customer_ai(
         await _send_text(
             session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
             prefix="action-fallback",
-            body="Sorry, having a moment 😅 Type the dish name to order, or send 'hi' to start.",
+            body=await _contextual_error_body(session, conv),
         )
 
 
@@ -8181,6 +8273,42 @@ async def _try_catalog_cart_edit(
         prefix = "catalog-cart-remove"
     else:
         assert setq_items is not None
+        # Bare "make it 5" (no dish named) — resolve deterministically instead of
+        # punting to the flaky LLM (prod: "Make it 5" on a single-line cart crashed to
+        # the canned error, while "Make it 5 arayes" worked):
+        #   • exactly ONE distinct dish in the cart → set that line (unambiguous)
+        #   • TWO+ distinct dishes → ask which one (never guess)
+        #   • empty cart → nothing to set → defer to the normal flow
+        if len(setq_items) == 1 and not setq_items[0][1]:
+            from app.ordering.models import OrderItem as _OI_setq
+
+            _rows = list(
+                (await session.scalars(
+                    select(_OI_setq).where(_OI_setq.order_id == order.id)
+                )).all()
+            )
+            _distinct: dict[int, str] = {}
+            for _r in _rows:
+                if _r.qty > 0:
+                    _distinct.setdefault(_r.dish_id, _r.dish_name)
+            _bare_qty = setq_items[0][0]
+            if not _distinct:
+                return False  # empty cart → let the normal flow reply
+            if len(_distinct) == 1:
+                setq_items = [(_bare_qty, next(iter(_distinct.values())))]
+            else:
+                _names = list(_distinct.values())
+                _list = f"{', '.join(_names[:-1])} or {_names[-1]}"
+                await _send_text(
+                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                    prefix="set-qty-which",
+                    body=(
+                        f"You've got {_list} in your cart 🛒 "
+                        f"Which one should I make {_bare_qty}? "
+                        f"Just say e.g. \"make it {_bare_qty} {_names[0].lower()}\" 😊"
+                    ),
+                )
+                return True
         changed: list[str] = []
         for sqty, sdish in setq_items:
             if not sdish:

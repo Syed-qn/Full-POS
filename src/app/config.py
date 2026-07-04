@@ -168,6 +168,11 @@ class Settings(BaseSettings):
     conversation_history_limit_ordering: int = 10
     conversation_history_limit_post_order: int = 5
     conversation_history_limit_address: int = 8
+    # Session freshness: if a customer returns after this many minutes of silence, the
+    # LLM memory starts fresh from the new session — older turns (e.g. yesterday's chat)
+    # are NOT fed to the model, so a stale request can't colour a brand-new order. The
+    # draft cart has its own separate expiry (cart_expiry_minutes). 0 disables the cut.
+    conversation_session_gap_minutes: int = 240
 
     # Vector KB over context.txt — inject retrieved prompt specs into the LLM system prompt.
     prompt_kb_enabled: bool = True
