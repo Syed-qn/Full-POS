@@ -220,9 +220,9 @@ export function SettingsScreen() {
     setResubscribing(true);
     try {
       await resubscribeMeta();
-      toast.success("WhatsApp webhooks re-subscribed — send a test message now.");
+      toast("WhatsApp webhooks re-subscribed — send a test message now.", "success");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Re-subscribe failed");
+      toast(e instanceof Error ? e.message : "Re-subscribe failed", "error");
     } finally {
       setResubscribing(false);
     }
@@ -697,7 +697,6 @@ export function SettingsScreen() {
             </div>
             <div className={s.actions}>
               <Button
-                variant="secondary"
                 onClick={onResubscribeWhatsApp}
                 disabled={resubscribing}
               >
