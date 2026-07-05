@@ -9,16 +9,26 @@ from app.menu.image_catalog import (
 )
 
 
-def _big_png() -> bytes:
-    img = Image.effect_noise((2400, 2400), 64).convert("RGB")
+def _compressible_png() -> bytes:
+    """Large dimensions — compress step must shrink for catalog cards."""
+    img = Image.new("RGB", (2400, 2400), color=(200, 100, 50))
     buf = BytesIO()
-    img.save(buf, format="PNG", compress_level=1)
+    img.save(buf, format="PNG")
     return buf.getvalue()
 
 
+def _uploadable_jpeg() -> bytes:
+    """Realistic phone JPEG under the 5 MB upload cap."""
+    img = Image.effect_noise((1200, 1200), 64).convert("RGB")
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=92)
+    raw = buf.getvalue()
+    assert len(raw) < 5 * 1024 * 1024
+    return raw
+
+
 def test_compress_shrinks_large_upload():
-    raw = _big_png()
-    assert len(raw) > 100_000  # realistic phone photo dimensions
+    raw = _compressible_png()
     out, ctype = compress_for_catalog_image(raw)
     assert ctype == "image/jpeg"
     assert len(out) <= CATALOG_IMAGE_MAX_BYTES
@@ -27,10 +37,10 @@ def test_compress_shrinks_large_upload():
 
 
 async def test_upload_dish_image_stores_jpeg(client, auth_headers):
-    raw = _big_png()
+    raw = _uploadable_jpeg()
     resp = await client.post(
         "/api/v1/dishes/image",
-        files=[("file", ("dish.png", raw, "image/png"))],
+        files=[("file", ("dish.jpg", raw, "image/jpeg"))],
         headers=auth_headers,
     )
     assert resp.status_code == 201
