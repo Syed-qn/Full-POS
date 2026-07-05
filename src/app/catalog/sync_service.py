@@ -7,7 +7,6 @@ from Meta (``meta_client.fetch_catalog_products``) and upserts one row per
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -26,43 +25,11 @@ from app.catalog.meta_client import (
     upsert_product_sets,
 )
 from app.catalog.models import CatalogProduct
+from app.catalog.tenant_scope import product_belongs_to_restaurant as _product_belongs_to_restaurant
 from app.config import get_settings
 from app.identity.models import Restaurant
 
 logger = logging.getLogger(__name__)
-
-_DISH_RETAILER_ID = re.compile(r"^dish-(\d+)-")
-
-
-async def _product_belongs_to_restaurant(
-    session: AsyncSession, *, restaurant_id: int, retailer_id: str
-) -> bool:
-    """True when a Meta catalogue product is owned by this tenant.
-
-    Shared WABA/catalogue containers (e.g. Feasto) hold every restaurant's products.
-    Pull must not mirror sibling tenants' rows into this restaurant — only import when
-    ``dish-{dish_id}-*`` references a ``dishes.id`` row for *this* restaurant, or the
-    retailer_id is already linked to one of its dishes (non-standard ids).
-    """
-    rid = (retailer_id or "").strip()
-    if not rid:
-        return False
-    from app.menu.models import Dish
-
-    m = _DISH_RETAILER_ID.match(rid)
-    if m:
-        dish_id = int(m.group(1))
-        owner = await session.scalar(
-            select(Dish.restaurant_id).where(Dish.id == dish_id).limit(1)
-        )
-        return owner == restaurant_id
-    linked = await session.scalar(
-        select(Dish.id).where(
-            Dish.restaurant_id == restaurant_id,
-            Dish.catalog_retailer_id == rid,
-        ).limit(1)
-    )
-    return linked is not None
 
 
 def _rest_token(settings_dict: dict | None) -> str | None:
@@ -638,12 +605,12 @@ async def unpublish_from_meta(
 async def list_catalog_products(
     session: AsyncSession, *, restaurant_id: int, active_only: bool = False
 ) -> list[CatalogProduct]:
-    """Synced products for the OPS catalogue view, newest-synced ordering by name."""
-    stmt = select(CatalogProduct).where(CatalogProduct.restaurant_id == restaurant_id)
-    if active_only:
-        stmt = stmt.where(CatalogProduct.is_active.is_(True))
-    stmt = stmt.order_by(CatalogProduct.category, CatalogProduct.name)
-    return list((await session.scalars(stmt)).all())
+    """Synced products for the OPS catalogue view — tenant-scoped on shared containers."""
+    from app.catalog.tenant_scope import list_tenant_catalog_products
+
+    return await list_tenant_catalog_products(
+        session, restaurant_id=restaurant_id, active_only=active_only
+    )
 
 
 async def is_catalog_fully_synced(session: AsyncSession, *, restaurant_id: int) -> bool:

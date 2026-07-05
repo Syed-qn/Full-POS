@@ -90,12 +90,21 @@ async def _canonical_dish_names(
 
     rest = await session.get(Restaurant, restaurant_id)
     if rest is not None and catalog_mode_enabled(rest.settings):
-        from app.catalog.models import CatalogProduct
-
+        # Tenant dishes are the orderable surface; shared-catalog mirrors may be polluted.
+        menu = await session.scalar(
+            select(Menu).where(
+                Menu.restaurant_id == restaurant_id,
+                Menu.status == "active",
+            )
+        )
+        if menu is None:
+            return frozenset()
         rows = await session.scalars(
-            select(CatalogProduct.name).where(
-                CatalogProduct.restaurant_id == restaurant_id,
-                CatalogProduct.is_active.is_(True),
+            select(Dish.name).where(
+                Dish.menu_id == menu.id,
+                Dish.is_available.is_(True),
+                Dish.meta_status == "active",
+                Dish.whatsapp_enabled.is_(True),
             )
         )
         return frozenset(n.strip().lower() for n in rows if n)
@@ -1566,18 +1575,9 @@ async def _render_catalog_menu(session: AsyncSession, restaurant_id: int) -> str
     In catalogue mode this is the bot's menu knowledge — so it only ever talks about /
     recommends products that are actually in the catalogue (never a text-menu dish the
     customer can't order)."""
-    from app.catalog.models import CatalogProduct
+    from app.catalog.tenant_scope import load_tenant_catalog_mirror
 
-    products = (
-        await session.scalars(
-            select(CatalogProduct)
-            .where(
-                CatalogProduct.restaurant_id == restaurant_id,
-                CatalogProduct.is_active.is_(True),
-            )
-            .order_by(CatalogProduct.category, CatalogProduct.name)
-        )
-    ).all()
+    _cid, products = await load_tenant_catalog_mirror(session, restaurant_id)
     if not products:
         return "Our catalogue is currently empty. Please try again later."
 

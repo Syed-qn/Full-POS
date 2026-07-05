@@ -76,82 +76,11 @@ async def _find_dish(session: AsyncSession, *, restaurant_id: int, retailer_id: 
     )
 
 
-async def _tenant_dish_retailer_ids(
-    session: AsyncSession, restaurant_id: int
-) -> frozenset[str]:
-    """Retailer ids on this tenant's live, WhatsApp-enabled dishes (push anchor)."""
-    from app.menu.models import Dish, Menu
-
-    menu = await session.scalar(
-        select(Menu).where(
-            Menu.restaurant_id == restaurant_id,
-            Menu.status == "active",
-        )
-    )
-    if menu is None:
-        return frozenset()
-    rows = await session.scalars(
-        select(Dish.catalog_retailer_id).where(
-            Dish.menu_id == menu.id,
-            Dish.is_available.is_(True),
-            Dish.meta_status == "active",
-            Dish.whatsapp_enabled.is_(True),
-            Dish.catalog_retailer_id.is_not(None),
-        )
-    )
-    return frozenset(r.strip() for r in rows if r and r.strip())
-
-
-async def _filter_tenant_catalog_products(
-    session: AsyncSession,
-    *,
-    restaurant_id: int,
-    products: list[CatalogProduct],
-) -> list[CatalogProduct]:
-    """Drop sibling-tenant rows from a shared Meta catalogue mirror (same rule as Pull)."""
-    from app.catalog.sync_service import _product_belongs_to_restaurant
-
-    kept: list[CatalogProduct] = []
-    for p in products:
-        rid = (p.retailer_id or "").strip()
-        if rid and await _product_belongs_to_restaurant(
-            session, restaurant_id=restaurant_id, retailer_id=rid
-        ):
-            kept.append(p)
-    return kept
-
-
-async def _load_tenant_catalog_mirror(
-    session: AsyncSession, restaurant_id: int
-) -> tuple[str | None, list[CatalogProduct]]:
-    """Active ``catalog_products`` for WhatsApp — tenant-scoped, dish-anchored when pushed."""
-    from app.identity.models import Restaurant
-
-    rest = await session.get(Restaurant, restaurant_id)
-    settings = (rest.settings or {}) if rest is not None else {}
-    catalog_id = (settings.get("catalog_id") or "").strip()
-    if not catalog_id:
-        return None, []
-
-    synced = list(
-        (
-            await session.scalars(
-                select(CatalogProduct)
-                .where(
-                    CatalogProduct.restaurant_id == restaurant_id,
-                    CatalogProduct.is_active.is_(True),
-                )
-                .order_by(CatalogProduct.category, CatalogProduct.name)
-            )
-        ).all()
-    )
-    synced = await _filter_tenant_catalog_products(
-        session, restaurant_id=restaurant_id, products=synced
-    )
-    anchor_rids = await _tenant_dish_retailer_ids(session, restaurant_id)
-    if anchor_rids:
-        synced = [p for p in synced if (p.retailer_id or "").strip() in anchor_rids]
-    return catalog_id, synced
+from app.catalog.tenant_scope import (
+    load_tenant_catalog_mirror as _load_tenant_catalog_mirror,
+    native_catalog_view_allowed,
+    product_belongs_to_restaurant,
+)
 
 
 async def send_catalog(
@@ -222,7 +151,9 @@ async def send_catalog(
 
     rest = await session.get(Restaurant, restaurant_id)
     settings = (rest.settings or {}) if rest is not None else {}
-    if settings.get("catalog_native_view"):
+    if await native_catalog_view_allowed(
+        session, restaurant_id=restaurant_id, settings=settings
+    ):
         await enqueue_message(
             session,
             restaurant_id=restaurant_id,
@@ -657,15 +588,13 @@ async def handle_catalog_order(
     unmapped: list[str] = []
     price_mismatch: list[str] = []  # tapped price drifted from the catalogue price
     oversized: list[str] = []  # per-line quantity over the tenant guard (R-050)
-    from app.catalog.sync_service import _product_belongs_to_restaurant
-
     for item in product_items:
         retailer_id = _retailer_id_from_item(item)
         try:
             qty = max(1, int(item.get("quantity", 1)))
         except (TypeError, ValueError):
             qty = 1
-        if not retailer_id or not await _product_belongs_to_restaurant(
+        if not retailer_id or not await product_belongs_to_restaurant(
             session, restaurant_id=restaurant_id, retailer_id=retailer_id
         ):
             price = _to_decimal(item.get("item_price"))
