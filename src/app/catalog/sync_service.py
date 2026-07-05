@@ -25,7 +25,10 @@ from app.catalog.meta_client import (
     upsert_product_sets,
 )
 from app.catalog.models import CatalogProduct
-from app.catalog.tenant_scope import product_belongs_to_restaurant as _product_belongs_to_restaurant
+from app.catalog.tenant_scope import (
+    build_tenant_catalog_gate,
+    prune_foreign_dishes,
+)
 from app.config import get_settings
 from app.identity.models import Restaurant
 
@@ -223,11 +226,14 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
     seen: set[str] = set()
     tenant_products: list = []
     result = SyncResult()
+    gate = await build_tenant_catalog_gate(
+        session,
+        restaurant_id,
+        extra_retailer_ids={(p.retailer_id or "").strip() for p in products},
+    )
 
     for p in products:
-        if not await _product_belongs_to_restaurant(
-            session, restaurant_id=restaurant_id, retailer_id=p.retailer_id
-        ):
+        if not gate.owns(p.retailer_id):
             continue
         tenant_products.append(p)
         seen.add(p.retailer_id)
@@ -306,9 +312,7 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
     result.linked, result.created = await _ensure_orderable_dishes(
         session, restaurant_id=restaurant_id, products=tenant_products
     )
-    from app.catalog.tenant_scope import prune_foreign_dishes
-
-    pruned = await prune_foreign_dishes(session, restaurant_id=restaurant_id)
+    pruned = await prune_foreign_dishes(session, restaurant_id=restaurant_id, gate=gate)
     if pruned:
         logger.info(
             "catalog sync restaurant %s: pruned %d foreign dish(es) from shared container",

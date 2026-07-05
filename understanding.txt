@@ -2170,3 +2170,5 @@
 - [2026-07-05 ~01:00 +0400] FIX: Revert shared-catalog block on Biryani `catalog_native_view` — Lims joining Feasto had forced Biryani hi/menu from native "View full menu" → browse-by-category picker (`catalog_browse_by_category=true`, 608 sendable). Biryani keeps native full menu via flag; Lims stays `catalog_native_view=false` + filtered cards. PROD: Lims 609 dishes re-polluted (Pull?) — cleanup needed; catalog mirror still 1 sendable.
 
 - [2026-07-05 ~01:15 +0400] FIX (root cause): Lims Pull re-imported 608 Biryani **dishes** while `catalog_products` stayed 1 — `_ensure_orderable_dishes` received the full Meta product list, not tenant-filtered. Now passes `tenant_products` only + `prune_foreign_dishes` after every Pull. Lims Pull safe after deploy; cleanup script still one-time for existing pollution.
+
+- [2026-07-05 ~01:30 +0400] PERF: Tenant filter was N+1 DB queries per product (608× on Biryani menu/Pull → multi-minute). `TenantCatalogGate` batches ownership in ~3 queries; skip filter entirely when `catalog_id` not shared. Restores ~1 min menu/Pull speed with gating intact.

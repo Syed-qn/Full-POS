@@ -3,10 +3,14 @@
 When Biryani and Lims share one ``catalog_id`` (Feasto), Meta's mirror and native UI
 contain every tenant's products. Every code path that shows, sends, or grounds on the
 menu must pass through these helpers — Pull, WhatsApp cards, text menu, LLM, OPS UI.
+
+Performance: ``TenantCatalogGate`` preloads ownership in O(1) queries — never N+1 per
+product. When only one tenant uses a ``catalog_id``, filtering is skipped entirely.
 """
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,29 +21,75 @@ from app.identity.models import Restaurant
 DISH_RETAILER_ID = re.compile(r"^dish-(\d+)-")
 
 
+@dataclass
+class TenantCatalogGate:
+    """Batched ownership lookups — one build, many O(1) ``owns()`` checks."""
+
+    restaurant_id: int
+    anchor_rids: frozenset[str] = field(default_factory=frozenset)
+    linked_rids: frozenset[str] = field(default_factory=frozenset)
+    dish_owners: dict[int, int] = field(default_factory=dict)
+
+    def owns(self, retailer_id: str) -> bool:
+        rid = (retailer_id or "").strip()
+        if not rid:
+            return False
+        m = DISH_RETAILER_ID.match(rid)
+        if m:
+            return self.dish_owners.get(int(m.group(1))) == self.restaurant_id
+        return rid in self.linked_rids
+
+
+def _dish_ids_from_rids(retailer_ids: set[str]) -> set[int]:
+    out: set[int] = set()
+    for rid in retailer_ids:
+        m = DISH_RETAILER_ID.match(rid)
+        if m:
+            out.add(int(m.group(1)))
+    return out
+
+
+async def build_tenant_catalog_gate(
+    session: AsyncSession,
+    restaurant_id: int,
+    *,
+    extra_retailer_ids: set[str] | None = None,
+) -> TenantCatalogGate:
+    """Preload dish owners + linked retailer_ids in a handful of queries."""
+    from app.menu.models import Dish
+
+    anchor_rids = await tenant_dish_retailer_ids(session, restaurant_id)
+    linked_rows = await session.scalars(
+        select(Dish.catalog_retailer_id).where(
+            Dish.restaurant_id == restaurant_id,
+            Dish.catalog_retailer_id.is_not(None),
+        )
+    )
+    linked_rids = frozenset(r.strip() for r in linked_rows if r and r.strip())
+    scan_rids = set(anchor_rids) | linked_rids | (extra_retailer_ids or set())
+    dish_ids = _dish_ids_from_rids(scan_rids)
+    dish_owners: dict[int, int] = {}
+    if dish_ids:
+        rows = await session.execute(
+            select(Dish.id, Dish.restaurant_id).where(Dish.id.in_(dish_ids))
+        )
+        dish_owners = {int(did): int(rid) for did, rid in rows.all()}
+    return TenantCatalogGate(
+        restaurant_id=restaurant_id,
+        anchor_rids=anchor_rids,
+        linked_rids=linked_rids,
+        dish_owners=dish_owners,
+    )
+
+
 async def product_belongs_to_restaurant(
     session: AsyncSession, *, restaurant_id: int, retailer_id: str
 ) -> bool:
     """True when a Meta product is owned by this tenant (not a sibling on shared Feasto)."""
-    rid = (retailer_id or "").strip()
-    if not rid:
-        return False
-    from app.menu.models import Dish
-
-    m = DISH_RETAILER_ID.match(rid)
-    if m:
-        dish_id = int(m.group(1))
-        owner = await session.scalar(
-            select(Dish.restaurant_id).where(Dish.id == dish_id).limit(1)
-        )
-        return owner == restaurant_id
-    linked = await session.scalar(
-        select(Dish.id).where(
-            Dish.restaurant_id == restaurant_id,
-            Dish.catalog_retailer_id == rid,
-        ).limit(1)
+    gate = await build_tenant_catalog_gate(
+        session, restaurant_id, extra_retailer_ids={(retailer_id or "").strip()},
     )
-    return linked is not None
+    return gate.owns(retailer_id)
 
 
 async def tenant_dish_retailer_ids(
@@ -68,42 +118,48 @@ async def tenant_dish_retailer_ids(
     return frozenset(r.strip() for r in rows if r and r.strip())
 
 
-async def filter_tenant_catalog_products(
-    session: AsyncSession,
-    *,
-    restaurant_id: int,
-    products: list[CatalogProduct],
-) -> list[CatalogProduct]:
-    """Drop sibling-tenant rows from a shared-catalog mirror."""
-    kept: list[CatalogProduct] = []
-    for p in products:
-        rid = (p.retailer_id or "").strip()
-        if rid and await product_belongs_to_restaurant(
-            session, restaurant_id=restaurant_id, retailer_id=rid
-        ):
-            kept.append(p)
-    return kept
-
-
-async def count_tenants_on_catalog(session: AsyncSession, catalog_id: str) -> int:
-    """How many restaurants share this Meta ``catalog_id``."""
-    cid = (catalog_id or "").strip()
-    if not cid:
-        return 0
-    n = 0
-    for rest in (await session.scalars(select(Restaurant))).all():
-        if ((rest.settings or {}).get("catalog_id") or "").strip() == cid:
-            n += 1
-    return n
-
-
 async def is_shared_catalog(session: AsyncSession, *, restaurant_id: int) -> bool:
     """True when this restaurant's catalog_id is used by more than one tenant."""
     rest = await session.get(Restaurant, restaurant_id)
     catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
     if not catalog_id:
         return False
-    return await count_tenants_on_catalog(session, catalog_id) > 1
+    n = 0
+    for row in (await session.scalars(select(Restaurant))).all():
+        if ((row.settings or {}).get("catalog_id") or "").strip() == catalog_id:
+            n += 1
+            if n > 1:
+                return True
+    return False
+
+
+def filter_products_with_gate(
+    products: list[CatalogProduct], gate: TenantCatalogGate
+) -> list[CatalogProduct]:
+    """In-memory filter using a prebuilt gate (no per-row DB)."""
+    kept = [p for p in products if gate.owns((p.retailer_id or "").strip())]
+    if gate.anchor_rids:
+        kept = [p for p in kept if (p.retailer_id or "").strip() in gate.anchor_rids]
+    return kept
+
+
+async def filter_tenant_catalog_products(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    products: list[CatalogProduct],
+) -> list[CatalogProduct]:
+    """Drop sibling-tenant rows from a shared-catalog mirror (batched, not N+1)."""
+    if not products:
+        return products
+    if not await is_shared_catalog(session, restaurant_id=restaurant_id):
+        return products
+    gate = await build_tenant_catalog_gate(
+        session,
+        restaurant_id,
+        extra_retailer_ids={(p.retailer_id or "").strip() for p in products},
+    )
+    return filter_products_with_gate(products, gate)
 
 
 async def native_catalog_view_allowed(
@@ -139,17 +195,20 @@ async def load_tenant_catalog_mirror(
     synced = await filter_tenant_catalog_products(
         session, restaurant_id=restaurant_id, products=synced
     )
-    anchor_rids = await tenant_dish_retailer_ids(session, restaurant_id)
-    if anchor_rids:
-        synced = [p for p in synced if (p.retailer_id or "").strip() in anchor_rids]
     return catalog_id, synced
 
 
-async def prune_foreign_dishes(session: AsyncSession, *, restaurant_id: int) -> int:
+async def prune_foreign_dishes(
+    session: AsyncSession, *, restaurant_id: int, gate: TenantCatalogGate | None = None
+) -> int:
     """Drop or unlink dishes that are not tenant-owned (stale shared-catalog Pull)."""
     from app.menu.models import Dish
     from app.ordering.models import OrderItem
 
+    if not await is_shared_catalog(session, restaurant_id=restaurant_id):
+        return 0
+    if gate is None:
+        gate = await build_tenant_catalog_gate(session, restaurant_id)
     dishes = list(
         (
             await session.scalars(
@@ -160,11 +219,7 @@ async def prune_foreign_dishes(session: AsyncSession, *, restaurant_id: int) -> 
     removed = 0
     for dish in dishes:
         rid = (dish.catalog_retailer_id or "").strip()
-        if not rid:
-            continue
-        if await product_belongs_to_restaurant(
-            session, restaurant_id=restaurant_id, retailer_id=rid
-        ):
+        if not rid or gate.owns(rid):
             continue
         has_orders = await session.scalar(
             select(OrderItem.id).where(OrderItem.dish_id == dish.id).limit(1)
@@ -189,10 +244,6 @@ async def list_tenant_catalog_products(
         stmt = stmt.where(CatalogProduct.is_active.is_(True))
     stmt = stmt.order_by(CatalogProduct.category, CatalogProduct.name)
     rows = list((await session.scalars(stmt)).all())
-    filtered = await filter_tenant_catalog_products(
+    return await filter_tenant_catalog_products(
         session, restaurant_id=restaurant_id, products=rows
     )
-    anchor_rids = await tenant_dish_retailer_ids(session, restaurant_id)
-    if anchor_rids:
-        filtered = [p for p in filtered if (p.retailer_id or "").strip() in anchor_rids]
-    return filtered

@@ -298,6 +298,11 @@ async def test_send_catalog_filters_sibling_tenant_products_in_shared_catalog(
             category="Rice", is_active=True, is_sendable=True, raw={},
         ),
     ])
+    restaurant.settings = {
+        **(restaurant.settings or {}),
+        "catalog_id": "SHARED",
+        "catalog_ordering_enabled": True,
+    }
     await db_session.commit()
 
     sent = await send_catalog(db_session, restaurant_id=lims.id, to_phone="+971501110001")
