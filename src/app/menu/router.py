@@ -212,7 +212,8 @@ async def upload_dish_image(
     URL to store on the dish (``image_url``) — Meta fetches it as the product image."""
     if (file.content_type or "") not in service.DISH_IMAGE_MIMES:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "Dish photo must be JPG or PNG"
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Dish photo must be an image (JPG, PNG, or WebP)",
         )
     content = await file.read()
     if len(content) > service.MAX_DISH_IMAGE_BYTES:

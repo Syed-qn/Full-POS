@@ -139,7 +139,7 @@ async def test_upload_dish_image_returns_servable_url(client, auth_headers):
     # The returned URL is publicly servable (Meta fetches it as image_link).
     served = await client.get(url[url.index("/media/") :])
     assert served.status_code == 200
-    assert served.headers["content-type"] == "image/png"
+    assert served.headers["content-type"] == "image/jpeg"
 
 
 async def test_upload_dish_image_rejects_non_image(client, auth_headers):

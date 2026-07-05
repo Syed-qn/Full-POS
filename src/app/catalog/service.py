@@ -36,19 +36,13 @@ _CAT_PAGE_SIZE = _LIST_MAX_ROWS - 1
 
 
 def _product_list_body(body: str, sendable: list[CatalogProduct]) -> str:
-    """Body for product_list — swipe hint + text dish list for small menus.
-
-    WhatsApp's carousel often shows fewer cards than sent (large images fail silently).
-    Listing every name in the body (≤10 items) guarantees the customer sees the full menu
-    even when a card does not render (prod Lims mutton biryani Jul 2026)."""
+    """Body for product_list — swipe hint when multiple catalog cards are sent."""
     text = body[:1024]
-    n = len(sendable)
-    if n > 1:
-        text = f"{text}\n\n👈 Swipe the cards to see all {n} items."
-    if n <= 10:
-        names = "\n".join(f"• {p.name}" for p in sendable)
-        text = f"{text}\n\n{names}"
-    return text[:1024]
+    if len(sendable) > 1:
+        text = (
+            f"{text}\n\n👈 Swipe the cards to see all {len(sendable)} items."
+        )[:1024]
+    return text
 
 
 def _aed(value) -> str:

@@ -473,6 +473,12 @@ async def push_dishes_to_meta(
         # "Duplicate retailer_id in batch api call". UPDATE/upsert never collides.
         method = "UPDATE"
         product_link = f"{base_url}/r/{restaurant_id}/menu#{rid}"
+        # Shrink oversized stored photos so WhatsApp product cards actually render.
+        from app.menu.service import ensure_stored_dish_image_compressed
+
+        await ensure_stored_dish_image_compressed(
+            session, image_url=getattr(dish, "image_url", None)
+        )
         # Per-dish photo (Meta REQUIRES an image); fall back to the shared placeholder
         # only when this dish has none, so a push never fails for a missing image.
         dish_image = (getattr(dish, "image_url", None) or "").strip() or image_link

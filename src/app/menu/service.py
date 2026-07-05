@@ -9,8 +9,8 @@ from app.menu.models import Dish, Menu, MenuFile
 from app.menu.storage import FileBlobStore
 from app.ordering.matching import normalize_name
 
-# Dish photo upload limits (Meta catalogue images): JPG/PNG, 5 MB cap.
-DISH_IMAGE_MIMES = {"image/jpeg", "image/png"}
+# Dish photo upload: accept phone photos up to 5 MB; stored compressed for catalog cards.
+DISH_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 MAX_DISH_IMAGE_BYTES = 5 * 1024 * 1024
 
 
@@ -32,10 +32,14 @@ async def store_dish_image(
     redeploys on ephemeral-disk hosts and is fetchable by Meta as the product
     ``image_link``. Caller commits."""
     from app.config import get_settings
+    from app.menu.image_catalog import compress_for_catalog_image
     from app.marketing.models import MarketingMedia
 
-    ext = "png" if content_type == "image/png" else "jpg"
-    rel = f"dishes/{restaurant_id}/{uuid.uuid4().hex}.{ext}"
+    try:
+        content, content_type = compress_for_catalog_image(content)
+    except Exception:
+        pass  # tiny/invalid — store as-is; push falls back to placeholder
+    rel = f"dishes/{restaurant_id}/{uuid.uuid4().hex}.jpg"
     session.add(
         MarketingMedia(
             restaurant_id=restaurant_id,
@@ -46,6 +50,34 @@ async def store_dish_image(
     )
     base = get_settings().public_base_url.rstrip("/")
     return f"{base}/media/{rel}"
+
+
+async def ensure_stored_dish_image_compressed(
+    session: AsyncSession, *, image_url: str | None
+) -> bool:
+    """Re-compress stored dish photos that are too large for WhatsApp catalog cards."""
+    from sqlalchemy import select
+
+    from app.menu.image_catalog import (
+        CATALOG_IMAGE_MAX_BYTES,
+        compress_for_catalog_image,
+        media_path_from_url,
+    )
+    from app.marketing.models import MarketingMedia
+
+    path = media_path_from_url(image_url)
+    if not path or not path.startswith("dishes/"):
+        return False
+    row = await session.scalar(
+        select(MarketingMedia).where(MarketingMedia.path == path).limit(1)
+    )
+    if row is None or len(row.data) <= CATALOG_IMAGE_MAX_BYTES:
+        return False
+    try:
+        row.data, row.content_type = compress_for_catalog_image(row.data)
+    except Exception:
+        return False
+    return True
 
 
 async def upload_with_diff(

@@ -2173,6 +2173,8 @@
 
 - [2026-07-05 ~01:30 +0400] PERF: Tenant filter was N+1 DB queries per product (608× on Biryani menu/Pull → multi-minute). `TenantCatalogGate` batches ownership in ~3 queries; skip filter entirely when `catalog_id` not shared. Restores ~1 min menu/Pull speed with gating intact.
 
+- [2026-07-06 ~02:30 +0400] FIX catalog cards (not text list): auto ``compress_for_catalog_image`` on dish upload + ``ensure_stored_dish_image_compressed`` before Meta Publish (≤450KB JPEG, max 1024px). Meta accepts 5MB PNGs but WhatsApp cards silently drop ~2MB images. Removed bullet dish list from product_list body. Script ``_lims_recompress_publish.py`` for prod Lims.
+
 - [2026-07-06 ~02:15 +0400] Lims 6 dishes / catalog shows 5: prod outbox sends all 6 rids incl ``dish-2961-36`` mutton biryani — server OK. Root cause: WhatsApp carousel + ~2MB PNG cards (all Lims images 1.9–2.3MB) silently skip render. Fix: ``_product_list_body`` lists every dish name in message body for ≤10 sendable (swipe hint + bullet list). Re-upload images &lt;500KB for reliable cards.
 
 - [2026-07-06 ~02:00 +0400] FIX: New dish works by text but missing from catalog cards — text uses ``dishes`` table; cards use ``catalog_products.is_sendable``. After Publish Meta approves async; mirror stayed ``in_review`` until manual Pull. ``refresh_pending_catalog_sendability`` on every ``send_catalog`` (menu) re-checks pending rows via ``fetch_catalog_products_by_retailer_ids`` (Chicken Biryani 3 pattern). Test ``test_send_catalog_refreshes_pending_sendability_before_cards``.
