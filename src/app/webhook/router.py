@@ -123,10 +123,26 @@ async def receive_webhook(
             # rider's "Orders Picked" tap sends the rider their next stop AND the
             # customer an "on the way" update; a per-sender claim would strand the
             # other recipient's message as pending forever (no beat sweeper here).
-            claimed_ids = await claim_pending_outbox_ids(
-                session,
-                restaurant_id=restaurant.id,
+            # Customer turns: deliver only THIS sender's pending rows so a "menu"
+            # reply isn't blocked behind hundreds of stale rows for other phones
+            # (Render sync-delivery holds the webhook open for every claimed send).
+            # Rider turns may fan out to customer + rider in one txn — flush all.
+            from app.conversation.engine import _resolve_counterpart
+            from app.identity.phones import normalize_phone
+
+            _counterpart, _ = await _resolve_counterpart(
+                session, restaurant.id, inbound.from_phone
             )
+            if _counterpart == "rider":
+                claimed_ids = await claim_pending_outbox_ids(
+                    session, restaurant_id=restaurant.id
+                )
+            else:
+                claimed_ids = await claim_pending_outbox_ids(
+                    session,
+                    restaurant_id=restaurant.id,
+                    to_phone=normalize_phone(inbound.from_phone),
+                )
             await session.commit()
 
             # Post-commit delivery is best-effort only. The customer's turn (order

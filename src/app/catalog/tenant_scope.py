@@ -120,17 +120,18 @@ async def tenant_dish_retailer_ids(
 
 async def is_shared_catalog(session: AsyncSession, *, restaurant_id: int) -> bool:
     """True when this restaurant's catalog_id is used by more than one tenant."""
+    from sqlalchemy import func, text
+
     rest = await session.get(Restaurant, restaurant_id)
     catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
     if not catalog_id:
         return False
-    n = 0
-    for row in (await session.scalars(select(Restaurant))).all():
-        if ((row.settings or {}).get("catalog_id") or "").strip() == catalog_id:
-            n += 1
-            if n > 1:
-                return True
-    return False
+    n = await session.scalar(
+        select(func.count())
+        .select_from(Restaurant)
+        .where(text("(settings->>'catalog_id') = :cid").bindparams(cid=catalog_id))
+    )
+    return int(n or 0) > 1
 
 
 def filter_products_with_gate(
