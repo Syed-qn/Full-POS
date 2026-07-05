@@ -59,12 +59,16 @@ async def test_list_catalog_products_is_tenant_scoped(db_session, restaurant):
     assert rows[0].retailer_id == "dish-l-1"
 
 
-async def test_native_catalog_view_blocked_on_shared_container(db_session, restaurant):
+async def test_native_catalog_view_follows_per_tenant_flag(db_session, restaurant):
     lims = await _seed_lims_shared(db_session, restaurant)
     assert await is_shared_catalog(db_session, restaurant_id=lims.id) is True
-    allowed = await native_catalog_view_allowed(
+    # Lims: flag off → no native view (filtered product_list cards instead).
+    assert await native_catalog_view_allowed(
+        db_session, restaurant_id=lims.id, settings={"catalog_native_view": False},
+    ) is False
+    # Biryani: flag on → native "View full menu" even on shared Feasto container.
+    assert await native_catalog_view_allowed(
         db_session,
-        restaurant_id=lims.id,
+        restaurant_id=restaurant.id,
         settings={"catalog_native_view": True, "catalog_id": "SHARED"},
-    )
-    assert allowed is False
+    ) is True

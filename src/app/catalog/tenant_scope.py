@@ -109,10 +109,9 @@ async def is_shared_catalog(session: AsyncSession, *, restaurant_id: int) -> boo
 async def native_catalog_view_allowed(
     session: AsyncSession, *, restaurant_id: int, settings: dict | None
 ) -> bool:
-    """WhatsApp native 'View full menu' cannot be tenant-filtered on a shared container."""
-    if not (settings or {}).get("catalog_native_view"):
-        return False
-    return not await is_shared_catalog(session, restaurant_id=restaurant_id)
+    """Per-tenant flag only. Lims keeps ``catalog_native_view=false`` (filtered cards);
+    Biryani keeps ``true`` (native full-menu button) even when both share Feasto."""
+    return bool((settings or {}).get("catalog_native_view"))
 
 
 async def load_tenant_catalog_mirror(
