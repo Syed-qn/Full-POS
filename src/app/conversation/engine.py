@@ -1018,6 +1018,7 @@ async def _handle_menu_browse(
 
 
 _SUGGESTION_CANDIDATE_MAX = 30
+_SUGGESTION_LIST_MAX = 10  # WhatsApp interactive list row cap
 
 
 async def _load_suggestion_candidates(
@@ -1114,7 +1115,7 @@ async def _handle_top_sellers(
         if await _catalog_excludes_dish(session, restaurant_id, d):
             continue
         picks.append(d)
-        if len(picks) >= 3:
+        if len(picks) >= _SUGGESTION_LIST_MAX:
             break
 
     if not picks:
@@ -1128,14 +1129,23 @@ async def _handle_top_sellers(
         )
         return
 
-    lines = ["Here are our bestsellers 😊"]
-    for d in picks:
-        lines.append(f"• {d.name} — AED {_aed(d.price_aed)}")
-    lines.append("\nTell me what you'd like and I'll add it 😊")
-    await _send_text(
-        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+    rows = [
+        {
+            "id": f"upsell_add:{d.id}",
+            "title": (d.name or "Dish")[:24],
+            "description": f"AED {_aed(d.price_aed)}"[:72],
+        }
+        for d in picks
+    ]
+    await _send_list(
+        session,
+        conv=conv,
+        inbound=inbound,
+        restaurant_id=restaurant_id,
         prefix="top-sellers",
-        body="\n".join(lines),
+        body="Here are our bestsellers 😊 Tap a dish to add it to your cart.",
+        button_label="Add to cart",
+        sections=[{"title": "Bestsellers", "rows": rows}],
     )
 
 
@@ -2199,6 +2209,31 @@ async def _send_buttons(
         to_phone=inbound.from_phone,
         msg_type=OutboundMessageType.BUTTONS,
         payload={"body": body, "buttons": buttons},
+        idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
+    )
+
+
+async def _send_list(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    prefix: str,
+    body: str,
+    button_label: str,
+    sections: list[dict],
+) -> None:
+    await enqueue_message(
+        session,
+        restaurant_id=restaurant_id,
+        to_phone=inbound.from_phone,
+        msg_type=OutboundMessageType.LIST,
+        payload={
+            "body": body,
+            "button_label": button_label,
+            "sections": sections,
+        },
         idempotency_key=f"{prefix}-{conv.id}-{inbound.wa_message_id}",
     )
 
@@ -5378,6 +5413,39 @@ async def _history_upsell_line(
         f"\n\nYou had {dish.name} (AED {_aed(dish.price_aed)}) last time. "
         "Add one? 😊"
     )
+
+
+async def _execute_upsell_add(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    dish_id: int,
+) -> bool:
+    """Add one unit of *dish_id* to the live cart and re-show quick-action buttons."""
+    from app.menu.models import Dish as _UpsellDish
+    from app.ordering.service import add_item
+
+    _udish = await session.get(_UpsellDish, dish_id)
+    if (
+        _udish is None
+        or _udish.restaurant_id != restaurant_id
+        or not _udish.is_available
+    ):
+        return False
+    _uorder = await _ensure_draft_order(session, conv, inbound, restaurant_id)
+    await add_item(session, order=_uorder, dish=_udish, qty=1)
+    _set_state(conv, dialogue_phase="ordering", dialogue_state="collecting_items")
+    await _record_cart_observation(session, conv)
+    cart = await _build_cart_summary(session, conv)
+    upsell, buttons = await _post_add_extras(session, conv, restaurant_id, _uorder)
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix="upsell-added",
+        body=f"Added 1x {_udish.name} ✅{_cart_tail(cart)}{upsell}",
+        buttons=buttons,
+    )
+    return True
 
 
 async def _post_add_extras(
@@ -9268,6 +9336,15 @@ async def handle_inbound(
     # the list in the first place), so it stays fully revertable.
     if inbound.type in (MessageType.LIST_REPLY, MessageType.BUTTON_REPLY):
         _iid = inbound.payload.get("id") or inbound.payload.get("button_id") or ""
+        if _iid.startswith("upsell_add:"):
+            _uarg = _iid.split(":", 1)[1]
+            if _uarg.isdigit():
+                if await _execute_upsell_add(
+                    session, conv, inbound, restaurant_id, int(_uarg),
+                ):
+                    return
+            await _handle_top_sellers(session, conv, inbound, restaurant_id)
+            return
         if _iid.startswith(("cat:", "catmore:", "catpage:")):
             from app.catalog.service import send_catalog_categories, send_catalog_category
 
@@ -9496,36 +9573,10 @@ async def handle_inbound(
             return
         if btn_id.startswith("upsell_add:"):
             _uarg = btn_id.split(":", 1)[1]
-            if _uarg.isdigit():
-                from app.menu.models import Dish as _UpsellDish
-
-                _udish = await session.get(_UpsellDish, int(_uarg))
-                if (
-                    _udish is not None
-                    and _udish.restaurant_id == restaurant_id
-                    and _udish.is_available
-                ):
-                    from app.ordering.service import add_item
-
-                    _uorder = await _ensure_draft_order(
-                        session, conv, inbound, restaurant_id
-                    )
-                    await add_item(session, order=_uorder, dish=_udish, qty=1)
-                    _set_state(conv, dialogue_phase="ordering",
-                               dialogue_state="collecting_items")
-                    await _record_cart_observation(session, conv)
-                    cart = await _build_cart_summary(session, conv)
-                    upsell, buttons = await _post_add_extras(
-                        session, conv, restaurant_id, _uorder
-                    )
-                    await _send_buttons(
-                        session, conv=conv, inbound=inbound,
-                        restaurant_id=restaurant_id, prefix="upsell-added",
-                        body=f"Added 1x {_udish.name} ✅{_cart_tail(cart)}{upsell}",
-                        buttons=buttons,
-                    )
-                    return
-            # Stale/off dish → fall back to bestsellers rather than a dead tap.
+            if _uarg.isdigit() and await _execute_upsell_add(
+                session, conv, inbound, restaurant_id, int(_uarg),
+            ):
+                return
             await _handle_top_sellers(session, conv, inbound, restaurant_id)
             return
         if btn_id == "suggest_dishes":

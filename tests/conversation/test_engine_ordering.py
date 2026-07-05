@@ -2306,12 +2306,71 @@ async def test_suggest_dishes_button_shows_top_sellers_not_llm(db_session, resta
     )
     await db_session.commit()
 
-    bodies = [
-        m.payload.get("body", "")
-        for m in (await db_session.scalars(select(OutboxMessage))).all()
-    ]
+    msgs = (await db_session.scalars(select(OutboxMessage))).all()
+    bodies = [m.payload.get("body", "") for m in msgs]
     assert any("bestseller" in b.lower() for b in bodies), bodies
     assert not any("having a moment" in b.lower() for b in bodies)
+    # Interactive pick-list — tap to add, not a type-your-order dead-end.
+    assert any(m.payload.get("type") == "list" for m in msgs), [
+        m.payload.get("type") for m in msgs
+    ]
+    list_msg = next(m for m in msgs if m.payload.get("type") == "list")
+    rows = list_msg.payload["sections"][0]["rows"]
+    assert rows and all(r["id"].startswith("upsell_add:") for r in rows)
+
+
+async def test_suggestion_list_tap_adds_dish_to_cart(db_session, restaurant, monkeypatch):
+    """Tapping a bestseller row adds 1x and re-shows cart quick-action buttons."""
+    from app.conversation.engine import handle_inbound
+    from app.ordering.models import OrderItem
+
+    def _boom():
+        raise AssertionError("LLM must not run for suggestion list tap")
+
+    monkeypatch.setattr("app.llm.factory.get_suggestion_agent", _boom)
+
+    phone = "+971501110502"
+    conv, customer, draft, lemon_mint = await _seed_history_customer(
+        db_session, restaurant, phone
+    )
+    conv.state = {**conv.state, "upsell_shown_for": None}
+    await db_session.commit()
+
+    await handle_inbound(
+        db_session, _btn_msg("suggest_dishes", phone, "wamid.sug-open"),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.flush()
+    list_msg = next(
+        m for m in (await db_session.scalars(select(OutboxMessage))).all()
+        if m.payload.get("type") == "list"
+    )
+    pick_id = list_msg.payload["sections"][0]["rows"][0]["id"]
+
+    await handle_inbound(
+        db_session,
+        InboundMessage(
+            wa_message_id="wamid.sug-pick",
+            from_phone=phone,
+            type=MessageType.LIST_REPLY,
+            payload={"id": pick_id, "title": "pick"},
+            restaurant_phone="+97141234567",
+            timestamp=1717660801,
+        ),
+        restaurant_id=restaurant.id,
+    )
+    await db_session.commit()
+
+    items = (await db_session.scalars(
+        select(OrderItem).where(OrderItem.order_id == draft.id)
+    )).all()
+    assert len(items) == 2  # biryani + tapped bestseller
+    btn_msgs = [
+        m for m in (await db_session.scalars(select(OutboxMessage))).all()
+        if m.payload.get("buttons")
+    ]
+    assert btn_msgs, "tap-add must re-show proceed/upsell/clear buttons"
+    assert any("Added 1x" in m.payload.get("body", "") for m in btn_msgs)
 
 
 def _btn_msg(btn_id: str, phone: str, wa_id: str = "wamid.btn1") -> InboundMessage:
