@@ -308,6 +308,12 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     """Disconnect clears creds, flips connected→false, and re-opens onboarding."""
     from app.identity import meta_embed
 
+    unsubscribed: list[tuple[str, str]] = []
+
+    async def fake_unsubscribe(waba_id, token):
+        unsubscribed.append((waba_id, token))
+        return True
+
     async def fake_exchange(code):
         return "EAA-token"
 
@@ -323,6 +329,7 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     async def fake_display(pid, token):
         return ""
 
+    monkeypatch.setattr(meta_embed, "unsubscribe_app_from_waba", fake_unsubscribe)
     monkeypatch.setattr(meta_embed, "exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(meta_embed, "register_phone_number", _ok_register)
     monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
@@ -341,6 +348,7 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     # Disconnect.
     r = await client.post("/api/v1/onboarding/meta-disconnect", headers=auth_headers)
     assert r.status_code == 200
+    assert unsubscribed == [("WABA-1", "EAA-token")]
     body = r.json()
     assert body["connected"] is False
     assert body["wa_phone_number_id"] == ""
@@ -350,6 +358,42 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     st = (await client.get("/api/v1/onboarding/status", headers=auth_headers)).json()
     assert st["complete"] is False
     assert st["has_meta"] is False
+
+
+async def test_meta_resubscribe_while_connected(client, auth_headers, monkeypatch):
+    """Re-subscribe fixes inbound without Embedded Signup when already connected."""
+    from app.identity import meta_embed
+
+    calls: list[tuple[str, str]] = []
+
+    async def fake_subscribe(waba_id, token):
+        calls.append((waba_id, token))
+        return True
+
+    async def _no_display(pid, token):
+        return ""
+
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", fake_subscribe)
+    monkeypatch.setattr(meta_embed, "fetch_display_phone_number", _no_display)
+
+    await client.patch(
+        "/api/v1/onboarding/meta-config",
+        headers=auth_headers,
+        json={
+            "wa_phone_number_id": "PID-R",
+            "wa_business_account_id": "WABA-R",
+            "wa_access_token": "TOK-R",
+        },
+    )
+    r = await client.post("/api/v1/onboarding/meta-resubscribe", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["connected"] is True
+    assert calls[-1] == ("WABA-R", "TOK-R")
+
+
+async def test_meta_resubscribe_requires_connection(client, auth_headers):
+    r = await client.post("/api/v1/onboarding/meta-resubscribe", headers=auth_headers)
+    assert r.status_code == 400
 
 
 async def test_onboarding_incomplete_until_meta_connected(db_session, restaurant):

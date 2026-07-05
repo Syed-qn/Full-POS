@@ -189,11 +189,45 @@ async def meta_disconnect(
     """Disconnect this restaurant's WhatsApp (Meta) account: clears its stored
     creds and re-opens onboarding. The manager must reconnect to operate again.
     Menu/catalogue/orders are untouched."""
-    from app.identity.meta_config import disconnect_meta
+    from app.identity.meta_config import disconnect_meta, meta_settings
+    from app.identity.meta_embed import unsubscribe_app_from_waba
 
+    cfg = meta_settings(restaurant)
+    if cfg["wa_business_account_id"] and cfg["wa_access_token"]:
+        await unsubscribe_app_from_waba(
+            cfg["wa_business_account_id"], cfg["wa_access_token"]
+        )
     disconnect_meta(restaurant)
     await session.commit()
     await session.refresh(restaurant)
+    return _meta_config_out(restaurant)
+
+
+@router.post("/onboarding/meta-resubscribe", response_model=MetaConfigOut)
+async def meta_resubscribe(
+    restaurant: Restaurant = Depends(current_restaurant),
+):
+    """Re-subscribe our app to this restaurant's WABA (fix inbound without ES popup).
+
+    Use when Embedded Signup says "already connected" but inbound webhooks are not
+    arriving — no disconnect or re-onboard required.
+    """
+    from app.identity.meta_config import meta_connected, meta_settings
+    from app.identity.meta_embed import subscribe_app_to_waba
+
+    if not meta_connected(restaurant):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "WhatsApp is not connected — use Connect with Facebook first.",
+        )
+    cfg = meta_settings(restaurant)
+    ok = await subscribe_app_to_waba(cfg["wa_business_account_id"], cfg["wa_access_token"])
+    if not ok:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Meta did not accept the webhook re-subscribe — try again or disconnect "
+            "and reconnect.",
+        )
     return _meta_config_out(restaurant)
 
 

@@ -60,6 +60,11 @@ export async function disconnectMeta(): Promise<MetaConfig> {
   return apiClient.post<MetaConfig>("/api/v1/onboarding/meta-disconnect", {});
 }
 
+/** Re-subscribe webhooks when Embedded Signup says "already connected". */
+export async function resubscribeMeta(): Promise<MetaConfig> {
+  return apiClient.post<MetaConfig>("/api/v1/onboarding/meta-resubscribe", {});
+}
+
 export interface MetaConnectPayload {
   code: string;
   phone_number_id: string;

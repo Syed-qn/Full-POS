@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
-import { disconnectMeta } from "../lib/onboardingApi";
+import { disconnectMeta, resubscribeMeta } from "../lib/onboardingApi";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import {
   createApiKey,
@@ -214,6 +214,19 @@ export function SettingsScreen() {
   // WhatsApp disconnect
   const [showDisconnect, setShowDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [resubscribing, setResubscribing] = useState(false);
+
+  async function onResubscribeWhatsApp() {
+    setResubscribing(true);
+    try {
+      await resubscribeMeta();
+      toast.success("WhatsApp webhooks re-subscribed — send a test message now.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Re-subscribe failed");
+    } finally {
+      setResubscribing(false);
+    }
+  }
 
   async function onDisconnectWhatsApp() {
     setDisconnecting(true);
@@ -683,6 +696,13 @@ export function SettingsScreen() {
               </span>
             </div>
             <div className={s.actions}>
+              <Button
+                variant="secondary"
+                onClick={onResubscribeWhatsApp}
+                disabled={resubscribing}
+              >
+                {resubscribing ? "Re-subscribing…" : "Fix inbound (re-subscribe)"}
+              </Button>
               <Button variant="ghost" onClick={() => setShowDisconnect(true)}>
                 Disconnect WhatsApp
               </Button>

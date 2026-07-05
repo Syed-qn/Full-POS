@@ -94,6 +94,35 @@ async def subscribe_app_to_waba(waba_id: str, access_token: str) -> bool:
         return False
 
 
+async def unsubscribe_app_from_waba(waba_id: str, access_token: str) -> bool:
+    """Remove our app from the WABA so Embedded Signup can connect again.
+
+    Meta's popup shows "already connected" while subscribed_apps still lists our app
+    — even after the dashboard disconnect clears local creds. Best-effort.
+    """
+    if not waba_id:
+        return False
+    url = f"{_graph_base()}/{waba_id}/subscribed_apps"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.delete(
+                url,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code == 200 and (resp.json() or {}).get("success"):
+            return True
+        logger.warning(
+            "unsubscribe_app_from_waba non-success waba=%s http=%s body=%s",
+            waba_id, resp.status_code, resp.text[:300],
+        )
+        return False
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "unsubscribe_app_from_waba request failed waba=%s: %s", waba_id, exc
+        )
+        return False
+
+
 async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
     """Return the Commerce catalog connected to the WABA, or '' if none/error.
 
