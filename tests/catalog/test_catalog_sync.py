@@ -104,6 +104,12 @@ async def test_sync_pull_skips_sibling_tenant_products_in_shared_catalog(
     assert len(rows) == 1
     assert rows[0].retailer_id == f"dish-{l_dish.id}-1"
     assert rows[0].name == "Lims Special"
+    lims_dishes = (
+        await db_session.scalars(select(Dish).where(Dish.restaurant_id == lims.id))
+    ).all()
+    assert len(lims_dishes) == 1
+    assert lims_dishes[0].name == "Lims Special"
+    assert res.created == 0
 
 
 async def test_sync_marks_unprocessed_product_in_review(db_session, restaurant, monkeypatch):

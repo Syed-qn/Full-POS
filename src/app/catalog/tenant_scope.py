@@ -145,6 +145,41 @@ async def load_tenant_catalog_mirror(
     return catalog_id, synced
 
 
+async def prune_foreign_dishes(session: AsyncSession, *, restaurant_id: int) -> int:
+    """Drop or unlink dishes that are not tenant-owned (stale shared-catalog Pull)."""
+    from app.menu.models import Dish
+    from app.ordering.models import OrderItem
+
+    dishes = list(
+        (
+            await session.scalars(
+                select(Dish).where(Dish.restaurant_id == restaurant_id)
+            )
+        ).all()
+    )
+    removed = 0
+    for dish in dishes:
+        rid = (dish.catalog_retailer_id or "").strip()
+        if not rid:
+            continue
+        if await product_belongs_to_restaurant(
+            session, restaurant_id=restaurant_id, retailer_id=rid
+        ):
+            continue
+        has_orders = await session.scalar(
+            select(OrderItem.id).where(OrderItem.dish_id == dish.id).limit(1)
+        )
+        if has_orders:
+            dish.catalog_retailer_id = None
+            dish.whatsapp_enabled = False
+        else:
+            await session.delete(dish)
+            removed += 1
+    if removed:
+        await session.flush()
+    return removed
+
+
 async def list_tenant_catalog_products(
     session: AsyncSession, *, restaurant_id: int, active_only: bool = False
 ) -> list[CatalogProduct]:

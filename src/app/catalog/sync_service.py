@@ -221,6 +221,7 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
         ).all()
     }
     seen: set[str] = set()
+    tenant_products: list = []
     result = SyncResult()
 
     for p in products:
@@ -228,6 +229,7 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
             session, restaurant_id=restaurant_id, retailer_id=p.retailer_id
         ):
             continue
+        tenant_products.append(p)
         seen.add(p.retailer_id)
         row = existing.get(p.retailer_id)
         if row is None:
@@ -299,11 +301,19 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
         await session.delete(row)
 
     result.total_active = len(seen)
-    # Make every synced product orderable (link/create its Dish) so a customer can type
-    # or tap it without manual wiring.
+    # Only tenant-owned products — passing the full Meta list used to auto-create every
+    # sibling dish on shared Feasto (Lims Pull → 608 Biryani rows in dishes table).
     result.linked, result.created = await _ensure_orderable_dishes(
-        session, restaurant_id=restaurant_id, products=products
+        session, restaurant_id=restaurant_id, products=tenant_products
     )
+    from app.catalog.tenant_scope import prune_foreign_dishes
+
+    pruned = await prune_foreign_dishes(session, restaurant_id=restaurant_id)
+    if pruned:
+        logger.info(
+            "catalog sync restaurant %s: pruned %d foreign dish(es) from shared container",
+            restaurant_id, pruned,
+        )
     logger.info(
         "catalog sync restaurant %s: +%d ~%d -%d (%d active); dishes linked %d created %d",
         restaurant_id, result.added, result.updated, result.deactivated,
