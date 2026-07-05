@@ -93,7 +93,8 @@ async def test_greeting_sends_catalog_when_mode_on(db_session, restaurant):
         select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
     )).all()
     types = [o.payload.get("type") for o in outs]
-    assert "product_list" in types  # catalogue cards, not the text menu
+    assert "text" in types  # immediate greeting ack (catalog delivery can fail async)
+    assert "product_list" in types  # catalogue cards, not the full text menu dump
 
 
 async def test_show_menu_sends_catalog_when_mode_on(db_session, restaurant):

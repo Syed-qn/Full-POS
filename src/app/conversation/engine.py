@@ -1811,6 +1811,18 @@ async def _handle_greeting(
     if restaurant is not None and catalog_mode_enabled(restaurant.settings):
         # Catalogue mode — strict. Send the cards; if they can't be sent, ask the
         # customer to type (the engine still parses typed items) but show NO text menu.
+        # Always ACK with a short text line FIRST: catalog cards are enqueued async and
+        # Meta can still reject delivery (#131009) after commerce is enabled, which used
+        # to leave the customer staring at ✓✓ with zero reply.
+        brand = (restaurant.name or "us").strip() or "us"
+        await _send_text(
+            session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+            prefix="greeting-catalog-ack",
+            body=(
+                f"Hi! Welcome to {brand} 👋\n\n"
+                "Sending our menu now — or just type what you'd like and I'll add it 😊"
+            ),
+        )
         from app.catalog.service import send_catalog
 
         sent = await send_catalog(
@@ -8910,6 +8922,77 @@ async def _try_catalog_typed_order(
                 "what", "how", "where", "why", "who", "when", "do", "does", "can",
                 "could", "is", "are", "tell", "show"}):
         return False
+
+    # ── Multi-item typed order ──────────────────────────────────────────────────
+    # Read the WHOLE sentence: "1 mojito and 1 chicken biryani", "coke, fries",
+    # "biryani & mojito" are TWO dishes, not one dish with a note. Split on
+    # conjunctions and add each line deterministically — but ONLY when EVERY segment
+    # is itself a real catalogue dish. A dish + modifier ("biryani and make it spicy")
+    # or a dish whose NAME contains "and" ("fish and chips") is NOT all-dishes, so it
+    # falls through to the single-item note logic below. Prod regression: the message
+    # became one line "Mojito — and 1 chicken biryani" (2nd dish buried as a note).
+    _whole = await find_dish_matches(session, restaurant_id=restaurant_id, query=dish_query)
+    _whole_exact = bool(
+        _whole.confidence == MatchConfidence.DIRECT and _whole.candidates
+        and _whole.candidates[0].name_normalized == normalize_name(dish_query)
+    )
+    _segments = [s.strip() for s in _CONJUNCTION_SPLIT.split(body) if s.strip()]
+    if not _whole_exact and len(_segments) >= 2:
+        _resolved: list[tuple] = []  # (dish, qty)
+        _all_dishes = True
+        for _seg in _segments:
+            _sq, _sname = parse_qty_and_text(_seg)
+            _sname = _sname.strip()
+            _sm = (
+                await find_dish_matches(session, restaurant_id=restaurant_id, query=_sname)
+                if _sname else None
+            )
+            if (_sm is not None and _sm.confidence == MatchConfidence.DIRECT
+                    and _sm.candidates
+                    and not await _catalog_excludes_dish(
+                        session, restaurant_id, _sm.candidates[0])):
+                _resolved.append((_sm.candidates[0], _sq or 1))
+            else:
+                _all_dishes = False
+                break
+        _maxq = _max_item_qty(restaurant)
+        if (_all_dishes and len(_resolved) >= 2
+                and all(q <= _maxq for _, q in _resolved)):
+            customer = await get_or_create_customer(
+                session, restaurant_id=restaurant_id, phone=inbound.from_phone
+            )
+            draft_order_id = conv.state.get("draft_order_id")
+            order = await session.get(Order, draft_order_id) if draft_order_id else None
+            if order is not None and str(order.status) != "draft":
+                order = None
+            if order is None:
+                order = await create_draft_order(
+                    session, restaurant_id=restaurant_id, customer_id=customer.id
+                )
+                _set_state(
+                    conv, draft_order_id=order.id, address_offer_made=None,
+                    saved_address_declined=None, saved_address_id=None,
+                    pin_lat=None, pin_lon=None, distance_km=None,
+                    distance_source=None, delivery_fee=None,
+                )
+            for _d, _q in _resolved:
+                await add_item(session, order=order, dish=_d, qty=_q, notes=None)
+            _set_state(
+                conv, dialogue_phase="ordering", dialogue_state="collecting_items"
+            )
+            cart = await _build_cart_summary(session, conv)
+            await _record_cart_observation(session, conv)  # F66/W3
+            upsell, buttons = await _post_add_extras(
+                session, conv, restaurant_id, order
+            )
+            _added = ", ".join(f"{_q}x {_d.name}" for _d, _q in _resolved)
+            await _send_buttons(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="catalog-typed-add-multi",
+                body=f"Added {_added} ✅{_cart_tail(cart)}{upsell}",
+                buttons=buttons,
+            )
+            return True
 
     # Split a modifier off the dish: prefer the LONGEST prefix that EXACTLY matches a
     # dish name, with the trailing words as the special note — "chicken biryani double
