@@ -139,6 +139,44 @@ async def _ensure_orderable_dishes(session: AsyncSession, *, restaurant_id: int,
     return linked, created
 
 
+async def _refresh_pushed_sendability(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    catalog_id: str,
+    retailer_ids: list[str],
+    token: str | None,
+) -> None:
+    """After a blocking push, flip mirror rows sendable when Meta has approved them."""
+    from app.catalog.meta_client import fetch_catalog_products, is_product_sendable
+
+    wanted = {r.strip() for r in retailer_ids if r and r.strip()}
+    if not wanted:
+        return
+    try:
+        meta_rows = await fetch_catalog_products(catalog_id, token=token)
+    except CatalogReadError:
+        return
+    by_rid = {p.retailer_id: p for p in meta_rows if p.retailer_id in wanted}
+    for rid, mp in by_rid.items():
+        row = await session.scalar(
+            select(CatalogProduct).where(
+                CatalogProduct.restaurant_id == restaurant_id,
+                CatalogProduct.retailer_id == rid,
+            ).limit(1)
+        )
+        if row is None:
+            continue
+        row.is_sendable = is_product_sendable(mp)
+        row.review_status = (
+            (mp.review_status or "").strip().lower() or None
+            if row.is_sendable
+            else "in_review"
+        )
+        if mp.image_url:
+            row.image_url = mp.image_url
+
+
 async def _mirror_dishes_to_catalog(
     session: AsyncSession,
     *,
@@ -429,6 +467,14 @@ async def push_dishes_to_meta(
     mirror_added, mirror_updated = await _mirror_dishes_to_catalog(
         session, restaurant_id=restaurant_id, dishes=pushed_dishes
     )
+    if wait_for_ingest:
+        await _refresh_pushed_sendability(
+            session,
+            restaurant_id=restaurant_id,
+            catalog_id=catalog_id,
+            retailer_ids=[(d.catalog_retailer_id or "").strip() for d in pushed_dishes],
+            token=_rest_token(settings_dict),
+        )
     result = SyncResult()
     result.pushed = sum(1 for r in requests if not r.get("_was_linked"))
     result.push_updated = sum(1 for r in requests if r.get("_was_linked"))

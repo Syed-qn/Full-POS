@@ -255,3 +255,60 @@ async def test_send_catalog_noop_without_catalog_id(db_session, restaurant):
     await db_session.commit()
     sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone="+971501110001")
     assert sent is False
+
+
+async def test_send_catalog_filters_sibling_tenant_products_in_shared_catalog(
+    db_session, restaurant,
+):
+    """Shared Feasto mirror: product_list cards only include this tenant's dishes."""
+    from app.identity.models import Restaurant
+
+    lims = Restaurant(
+        name="Lims", phone="+919344471586", password_hash="x", lat=25.0, lng=55.0,
+        settings={"catalog_id": "SHARED", "catalog_ordering_enabled": True},
+    )
+    db_session.add(lims)
+    await db_session.flush()
+    b_menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    l_menu = Menu(restaurant_id=lims.id, version=1, status="active", source_files=[])
+    db_session.add_all([b_menu, l_menu])
+    await db_session.flush()
+    b_dish = Dish(
+        menu_id=b_menu.id, restaurant_id=restaurant.id, dish_number=1, name="Biryani Plate",
+        price_aed=Decimal("50"), category="Rice", is_available=True,
+        name_normalized="biryani plate", catalog_retailer_id="dish-biryani-1",
+    )
+    l_dish = Dish(
+        menu_id=l_menu.id, restaurant_id=lims.id, dish_number=1, name="Lims Special",
+        price_aed=Decimal("40"), category="Rice", is_available=True,
+        name_normalized="lims special", catalog_retailer_id="dish-lims-1",
+    )
+    db_session.add_all([b_dish, l_dish])
+    await db_session.flush()
+    # Polluted Lims mirror: sibling Biryani row + own row (both sendable).
+    db_session.add_all([
+        CatalogProduct(
+            restaurant_id=lims.id, retailer_id="dish-biryani-1", name="Biryani Plate",
+            price_aed=Decimal("50"), currency="AED", availability="in stock",
+            category="Rice", is_active=True, is_sendable=True, raw={},
+        ),
+        CatalogProduct(
+            restaurant_id=lims.id, retailer_id="dish-lims-1", name="Lims Special",
+            price_aed=Decimal("40"), currency="AED", availability="in stock",
+            category="Rice", is_active=True, is_sendable=True, raw={},
+        ),
+    ])
+    await db_session.commit()
+
+    sent = await send_catalog(db_session, restaurant_id=lims.id, to_phone="+971501110001")
+    await db_session.commit()
+    assert sent is True
+    msg = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).one()
+    assert msg.payload["type"] == "product_list"
+    retailer_ids = {
+        it["product_retailer_id"]
+        for s in msg.payload["sections"] for it in s["product_items"]
+    }
+    assert retailer_ids == {"dish-lims-1"}
