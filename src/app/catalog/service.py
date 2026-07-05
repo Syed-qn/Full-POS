@@ -99,6 +99,9 @@ async def send_catalog(
     to catalog products (``catalog_retailer_id``), grouped by category. Returns False if
     the restaurant has no catalog id or no linked, available products. Caller commits.
     """
+    from app.catalog.sync_service import refresh_pending_catalog_sendability
+
+    await refresh_pending_catalog_sendability(session, restaurant_id=restaurant_id)
     catalog_id, synced = await _load_tenant_catalog_mirror(session, restaurant_id)
     if not catalog_id:
         logger.info("send_catalog skipped: no catalog_id for restaurant %s", restaurant_id)
@@ -145,8 +148,8 @@ async def send_catalog(
     # paginating cards 30 at a time, send ONE "View full menu" button that opens
     # WhatsApp's built-in catalogue UI. The customer browses EVERY product there — no
     # 30-card cap, no "Show more" — and Meta collections show as categories. Preferred
-    # when enabled; the product_list / category-picker paths below stay as fallbacks for
-    # clients where the catalogue button doesn't render. Default off → unchanged.
+    # when enabled (default ON); the product_list / category-picker paths below are
+    # fallbacks when native view is off or the catalogue button doesn't render.
     from app.identity.models import Restaurant
 
     rest = await session.get(Restaurant, restaurant_id)

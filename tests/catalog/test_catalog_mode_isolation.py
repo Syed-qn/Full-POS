@@ -317,6 +317,129 @@ async def test_catalog_typed_noncatalogue_item_answered_not_catalogue(db_session
         assert handled is False, f"{text!r} should fall through to the AI"
 
 
+async def _seed_two_catalogue_dishes(db_session, restaurant):
+    """Catalogue with TWO dishes (Chicken Biryani + Mojito) for multi-item tests."""
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "CAT1",
+        "catalog_ordering_enabled": True,
+    }
+    db_session.add_all([
+        CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id="biry01", name="Chicken Biryani",
+            price_aed=Decimal("20.00"), currency="AED", availability="in stock",
+            category="Rice", is_active=True, raw={},
+        ),
+        CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id="moji01", name="Mojito",
+            price_aed=Decimal("18.00"), currency="AED", availability="in stock",
+            category="Drinks", is_active=True, raw={},
+        ),
+    ])
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add_all([
+        Dish(
+            menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1,
+            name="Chicken Biryani", price_aed=Decimal("20.00"), category="Rice",
+            is_available=True, name_normalized="chicken biryani",
+            catalog_retailer_id="biry01",
+        ),
+        Dish(
+            menu_id=menu.id, restaurant_id=restaurant.id, dish_number=2,
+            name="Mojito", price_aed=Decimal("18.00"), category="Drinks",
+            is_available=True, name_normalized="mojito", catalog_retailer_id="moji01",
+        ),
+    ])
+    await db_session.commit()
+
+
+async def test_catalog_typed_multi_item_adds_both_lines(db_session, restaurant):
+    """Regression (real chat): '1 mojito and 1 chicken biryani' must add TWO separate
+    cart lines — not one line 'Mojito — and 1 chicken biryani' with the 2nd dish buried
+    as a note."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.ordering.models import OrderItem
+    from app.outbox.models import OutboxMessage
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    await _seed_two_catalogue_dishes(db_session, restaurant)
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110030", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "menu_sent"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.multi1", from_phone="+971501110030", type=MessageType.TEXT,
+        payload={"text": "1 mojito and 1 chicken biryani"},
+        restaurant_phone="+97141234567", timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    names = sorted((it.dish_name, it.qty) for it in items)
+    assert names == [("Chicken Biryani", 1), ("Mojito", 1)], names
+    # No dish was buried as a note.
+    assert all(not (it.notes or "").strip() for it in items)
+    body = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110030")
+    )).all()[-1].payload["body"]
+    assert "Mojito" in body and "Chicken Biryani" in body
+
+
+async def test_catalog_dish_name_with_and_not_split(db_session, restaurant):
+    """A single catalogue dish whose name contains 'and' must NOT be split into two —
+    only genuine multi-item messages (every segment a real dish) are split."""
+    from app.conversation.engine import handle_inbound
+    from app.conversation.models import Conversation
+    from app.menu.models import Dish
+    from app.ordering.models import OrderItem
+    from app.whatsapp.port import InboundMessage, MessageType
+    from sqlalchemy import select
+
+    restaurant.settings = {
+        **restaurant.settings, "catalog_id": "CAT1", "catalog_ordering_enabled": True,
+    }
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="fnc01", name="Fish and Chips",
+        price_aed=Decimal("25.00"), currency="AED", availability="in stock",
+        category="Mains", is_active=True, raw={},
+    ))
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    db_session.add(Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1,
+        name="Fish and Chips", price_aed=Decimal("25.00"), category="Mains",
+        is_available=True, name_normalized="fish and chips", catalog_retailer_id="fnc01",
+    ))
+    await db_session.commit()
+
+    conv = Conversation(
+        restaurant_id=restaurant.id, phone="+971501110031", counterpart="customer",
+        state={"dialogue_phase": "ordering", "dialogue_state": "menu_sent"},
+    )
+    db_session.add(conv)
+    await db_session.commit()
+
+    msg = InboundMessage(
+        wa_message_id="wamid.fnc1", from_phone="+971501110031", type=MessageType.TEXT,
+        payload={"text": "1 fish and chips"}, restaurant_phone="+97141234567",
+        timestamp=1717660800,
+    )
+    await handle_inbound(db_session, msg, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    items = (await db_session.scalars(select(OrderItem))).all()
+    assert len(items) == 1 and items[0].dish_name == "Fish and Chips" and items[0].qty == 1
+
+
 async def _seed_soup_cart(db_session, restaurant):
     """Catalogue with Chicken Soup (reproduces the live chat bug)."""
     restaurant.settings = {

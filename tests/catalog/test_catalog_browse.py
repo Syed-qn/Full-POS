@@ -14,8 +14,12 @@ PHONE = "+971501110001"
 
 
 async def _seed_big_catalogue(db_session, restaurant, *, browse: bool):
-    settings = {**restaurant.settings, "catalog_id": "1528685515412822",
-                "catalog_ordering_enabled": True}
+    settings = {
+        **restaurant.settings,
+        "catalog_id": "1528685515412822",
+        "catalog_ordering_enabled": True,
+        "catalog_native_view": False,
+    }
     if browse:
         settings["catalog_browse_by_category"] = True
     restaurant.settings = settings
@@ -88,9 +92,13 @@ async def test_category_tap_sends_that_categorys_cards(db_session, restaurant):
 
 
 async def _seed_many_categories(db_session, restaurant, *, n_cats: int, per_cat: int):
-    restaurant.settings = {**restaurant.settings, "catalog_id": "1528685515412822",
-                           "catalog_ordering_enabled": True,
-                           "catalog_browse_by_category": True}
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "1528685515412822",
+        "catalog_ordering_enabled": True,
+        "catalog_browse_by_category": True,
+        "catalog_native_view": False,
+    }
     for c in range(n_cats):
         for i in range(per_cat):
             db_session.add(CatalogProduct(
@@ -174,6 +182,22 @@ async def test_show_more_button_tap_routes_through_engine(db_session, restaurant
     assert len(out.payload["sections"][0]["product_items"]) == 5  # the remaining 5
 
 
+async def test_default_big_menu_uses_native_view_not_category_picker(db_session, restaurant):
+    """Default settings (native ON, browse OFF): 35+ dishes → catalog_message, not picker."""
+    await _seed_big_catalogue(db_session, restaurant, browse=False)
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_native_view": True,
+        "catalog_browse_by_category": False,
+    }
+    await db_session.commit()
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone=PHONE)
+    await db_session.commit()
+    assert sent is True
+    msg = await _last_out(db_session)
+    assert msg.payload.get("type") == "catalog_message"
+
+
 async def test_native_catalog_view_when_enabled(db_session, restaurant):
     """catalog_native_view ON → one "View full menu" catalog_message (the native browse),
     NOT a 30-card product_list. This is what makes all 586 reachable in a single tap."""
@@ -221,9 +245,13 @@ async def test_category_resolved_from_dish_when_mirror_null(db_session, restaura
     group by the DISH category, not collapse everything into one "Menu" bucket."""
     from app.menu.models import Dish, Menu
 
-    restaurant.settings = {**restaurant.settings, "catalog_id": "1528685515412822",
-                           "catalog_ordering_enabled": True,
-                           "catalog_browse_by_category": True}
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "1528685515412822",
+        "catalog_ordering_enabled": True,
+        "catalog_browse_by_category": True,
+        "catalog_native_view": False,
+    }
     menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
     db_session.add(menu)
     await db_session.flush()

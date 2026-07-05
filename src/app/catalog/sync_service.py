@@ -20,6 +20,7 @@ from app.catalog.meta_client import (
     _dish_retailer_id,
     build_catalog_item_data,
     fetch_catalog_products,
+    fetch_catalog_products_by_retailer_ids,
     is_product_sendable,
     push_products_batch,
     upsert_product_sets,
@@ -107,6 +108,71 @@ async def _ensure_orderable_dishes(session: AsyncSession, *, restaurant_id: int,
         ))
         created += 1
     return linked, created
+
+
+async def refresh_pending_catalog_sendability(
+    session: AsyncSession, *, restaurant_id: int
+) -> int:
+    """Re-check Meta for mirror rows still in review — no manual Pull click needed.
+
+    Text ordering uses the dish table (works immediately). WhatsApp catalog cards only
+    include ``is_sendable`` mirror rows; after Publish Meta approves asynchronously, so
+    we refresh pending rows here (e.g. on ``menu``) instead of leaving them stuck until
+    the manager runs Sync from Meta."""
+    rest = await session.get(Restaurant, restaurant_id)
+    settings = (rest.settings or {}) if rest is not None else {}
+    catalog_id = (settings.get("catalog_id") or "").strip()
+    if not catalog_id:
+        return 0
+    pending_rows = list(
+        (
+            await session.scalars(
+                select(CatalogProduct).where(
+                    CatalogProduct.restaurant_id == restaurant_id,
+                    CatalogProduct.is_active.is_(True),
+                    CatalogProduct.is_sendable.is_(False),
+                )
+            )
+        ).all()
+    )
+    if not pending_rows:
+        return 0
+    rids = [(r.retailer_id or "").strip() for r in pending_rows if r.retailer_id]
+    if not rids:
+        return 0
+    try:
+        meta_rows = await fetch_catalog_products_by_retailer_ids(
+            catalog_id, rids, token=_rest_token(settings)
+        )
+    except CatalogReadError:
+        return 0
+    by_rid = {(p.retailer_id or "").strip(): p for p in meta_rows}
+    flipped = 0
+    for row in pending_rows:
+        rid = (row.retailer_id or "").strip()
+        mp = by_rid.get(rid)
+        if mp is None:
+            continue
+        sendable = is_product_sendable(mp)
+        if sendable and not row.is_sendable:
+            flipped += 1
+        row.is_sendable = sendable
+        row.review_status = (
+            (mp.review_status or "").strip().lower() or None
+            if sendable
+            else "in_review"
+        )
+        if mp.image_url:
+            row.image_url = mp.image_url
+        if mp.meta_product_id:
+            row.meta_product_id = mp.meta_product_id
+    if flipped:
+        logger.info(
+            "refreshed catalog sendability restaurant %s: %d product(s) now sendable",
+            restaurant_id,
+            flipped,
+        )
+    return flipped
 
 
 async def _refresh_pushed_sendability(

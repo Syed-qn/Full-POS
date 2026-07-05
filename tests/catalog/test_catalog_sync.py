@@ -132,12 +132,77 @@ async def test_sync_marks_unprocessed_product_in_review(db_session, restaurant, 
     assert rows["pending"].review_status == "in_review"
 
 
-async def test_send_catalog_skips_in_review_products(db_session, restaurant):
+async def test_send_catalog_refreshes_pending_sendability_before_cards(
+    db_session, restaurant, monkeypatch,
+):
+    """After Meta approves a new dish, menu refresh flips mirror sendable — no manual Pull."""
+    from app.catalog.service import send_catalog
+
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "CAT1",
+        "catalog_ordering_enabled": True,
+        "catalog_native_view": False,
+    }
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="ready", name="Live",
+        price_aed=Decimal("30.00"), currency="AED", availability="in stock",
+        category="Rice", is_active=True, is_sendable=True, raw={},
+    ))
+    db_session.add(CatalogProduct(
+        restaurant_id=restaurant.id, retailer_id="new3", name="Chicken Biryani 3",
+        price_aed=Decimal("42.00"), currency="AED", availability="in stock",
+        category="Biryani", is_active=True, is_sendable=False, review_status="in_review",
+        raw={},
+    ))
+    await db_session.commit()
+
+    async def _fake_by_rid(catalog_id, retailer_ids, *, token=None):  # noqa: ARG001
+        return [
+            _mp("new3", "Chicken Biryani 3", 42, "Biryani", fetch="fetched", review="approved"),
+        ]
+
+    monkeypatch.setattr(
+        sync_service, "fetch_catalog_products_by_retailer_ids", _fake_by_rid
+    )
+
+    sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone="+971501110099")
+    await db_session.commit()
+    assert sent is True
+    row = await db_session.scalar(
+        select(CatalogProduct).where(
+            CatalogProduct.restaurant_id == restaurant.id,
+            CatalogProduct.retailer_id == "new3",
+        )
+    )
+    assert row.is_sendable is True
+    msg = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110099")
+    )).one()
+    retailer_ids = {
+        it["product_retailer_id"]
+        for s in msg.payload["sections"] for it in s["product_items"]
+    }
+    assert retailer_ids == {"ready", "new3"}
+
+
+async def test_send_catalog_skips_in_review_products(db_session, restaurant, monkeypatch):
     """The product_list contains ONLY sendable products; an in-review one is excluded."""
     from app.catalog.service import send_catalog
 
-    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
-                           "catalog_ordering_enabled": True}
+    async def _still_pending(catalog_id, retailer_ids, *, token=None):  # noqa: ARG001
+        return [_mp("pending", "Processing", 12, "Drinks", fetch="in_progress")]
+
+    monkeypatch.setattr(
+        sync_service, "fetch_catalog_products_by_retailer_ids", _still_pending
+    )
+
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "CAT1",
+        "catalog_ordering_enabled": True,
+        "catalog_native_view": False,
+    }
     db_session.add(CatalogProduct(
         restaurant_id=restaurant.id, retailer_id="ready", name="Live",
         price_aed=Decimal("30.00"), currency="AED", availability="in stock",
@@ -313,8 +378,12 @@ async def test_send_catalog_uses_synced_products(db_session, restaurant):
     of truth) — not from dish↔retailer_id links."""
     from app.catalog.service import send_catalog
 
-    restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1",
-                           "catalog_ordering_enabled": True}
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "CAT1",
+        "catalog_ordering_enabled": True,
+        "catalog_native_view": False,
+    }
     db_session.add(CatalogProduct(
         restaurant_id=restaurant.id, retailer_id="r1", name="Biryani",
         price_aed=Decimal("30.00"), currency="AED", availability="in stock",
@@ -348,6 +417,7 @@ async def test_send_catalog_small_menu_one_section(db_session, restaurant):
         **restaurant.settings,
         "catalog_id": "CAT1",
         "catalog_ordering_enabled": True,
+        "catalog_native_view": False,
     }
     for i, (rid, name, cat) in enumerate(
         (

@@ -163,12 +163,71 @@ async def filter_tenant_catalog_products(
     return filter_products_with_gate(products, gate)
 
 
+async def is_primary_catalog_tenant(
+    session: AsyncSession, *, restaurant_id: int
+) -> bool:
+    """True when this tenant owns the most active menu dishes on its ``catalog_id``.
+
+    On a shared Feasto container only the primary tenant may use native "View full menu"
+    — Meta's shop UI cannot filter siblings, so a secondary tenant (Lims) would leak the
+    primary menu (Biryani 600+) if native view were allowed there."""
+    from sqlalchemy import func, text
+
+    from app.menu.models import Dish, Menu
+
+    rest = await session.get(Restaurant, restaurant_id)
+    catalog_id = ((rest.settings or {}).get("catalog_id") or "").strip() if rest else ""
+    if not catalog_id:
+        return True
+    peers = list(
+        (
+            await session.scalars(
+                select(Restaurant.id).where(
+                    text("(settings->>'catalog_id') = :cid").bindparams(cid=catalog_id)
+                )
+            )
+        ).all()
+    )
+    if len(peers) <= 1:
+        return True
+    best_id = peers[0]
+    best_count = -1
+    for pid in peers:
+        n = await session.scalar(
+            select(func.count())
+            .select_from(Dish)
+            .join(Menu, Dish.menu_id == Menu.id)
+            .where(
+                Dish.restaurant_id == pid,
+                Menu.status == "active",
+                Dish.is_available.is_(True),
+                Dish.whatsapp_enabled.is_(True),
+                Dish.meta_status == "active",
+            )
+        )
+        count = int(n or 0)
+        if count > best_count or (count == best_count and int(pid) < int(best_id)):
+            best_count = count
+            best_id = pid
+    return int(restaurant_id) == int(best_id)
+
+
 async def native_catalog_view_allowed(
     session: AsyncSession, *, restaurant_id: int, settings: dict | None
 ) -> bool:
-    """Per-tenant flag only. Lims keeps ``catalog_native_view=false`` (filtered cards);
-    Biryani keeps ``true`` (native full-menu button) even when both share Feasto."""
-    return bool((settings or {}).get("catalog_native_view"))
+    """Native "View full menu" when safe (default ON for dedicated catalogues).
+
+    Shared ``catalog_id``: only the primary tenant (most active dishes) gets native view.
+    Secondaries (Lims on Feasto) are forced to tenant-filtered ``product_list`` cards so
+    Meta's unfiltered shop UI never leaks a sibling menu. Dedicated catalog_id + 100+
+    dishes → default native view like Biryani."""
+    if await is_shared_catalog(session, restaurant_id=restaurant_id):
+        if not await is_primary_catalog_tenant(session, restaurant_id=restaurant_id):
+            return False
+    s = settings or {}
+    if "catalog_native_view" in s:
+        return bool(s["catalog_native_view"])
+    return True
 
 
 async def load_tenant_catalog_mirror(

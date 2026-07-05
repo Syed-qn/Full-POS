@@ -62,7 +62,26 @@ def test_provider_builds_product_list_payload():
 
 
 async def test_send_catalog_groups_by_category(db_session, restaurant):
-    await _seed_linked_menu(db_session, restaurant)
+    """>10 sendable + native off → product_list grouped by category (legacy fallback)."""
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "1528685515412822",
+        "catalog_ordering_enabled": True,
+        "catalog_native_view": False,
+    }
+    for i in range(6):
+        db_session.add(CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id=f"bir{i}", name=f"Biryani {i}",
+            price_aed=Decimal("20.00"), currency="AED", availability="in stock",
+            category="Biryani", is_active=True, is_sendable=True, raw={},
+        ))
+    for i in range(6):
+        db_session.add(CatalogProduct(
+            restaurant_id=restaurant.id, retailer_id=f"drk{i}", name=f"Drink {i}",
+            price_aed=Decimal("8.00"), currency="AED", availability="in stock",
+            category="Drinks", is_active=True, is_sendable=True, raw={},
+        ))
+    await db_session.commit()
     sent = await send_catalog(db_session, restaurant_id=restaurant.id, to_phone="+971501110001")
     await db_session.commit()
     assert sent is True
@@ -94,7 +113,7 @@ async def test_greeting_sends_catalog_when_mode_on(db_session, restaurant):
     )).all()
     types = [o.payload.get("type") for o in outs]
     assert "text" in types  # immediate greeting ack (catalog delivery can fail async)
-    assert "product_list" in types  # catalogue cards, not the full text menu dump
+    assert "catalog_message" in types  # native "View full menu" (default), not text dump
 
 
 async def test_show_menu_sends_catalog_when_mode_on(db_session, restaurant):
@@ -116,7 +135,7 @@ async def test_show_menu_sends_catalog_when_mode_on(db_session, restaurant):
         select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
     )).all()
     types = [o.payload.get("type") for o in outs]
-    assert "product_list" in types  # catalogue cards, not the text menu
+    assert "catalog_message" in types  # native catalogue browse, not the text menu
 
 
 async def test_order_again_after_completed_order_sends_catalog(db_session, restaurant):
@@ -146,7 +165,7 @@ async def test_order_again_after_completed_order_sends_catalog(db_session, resta
         select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
     )).all()
     types = [o.payload.get("type") for o in outs]
-    assert "product_list" in types
+    assert "catalog_message" in types
 
 
 async def test_show_menu_falls_back_to_text_when_catalog_off(db_session, restaurant):
@@ -260,12 +279,17 @@ async def test_send_catalog_noop_without_catalog_id(db_session, restaurant):
 async def test_send_catalog_filters_sibling_tenant_products_in_shared_catalog(
     db_session, restaurant,
 ):
-    """Shared Feasto mirror: product_list cards only include this tenant's dishes."""
+    """Shared Feasto secondary: tenant-filtered product_list (native view blocked)."""
     from app.identity.models import Restaurant
 
     lims = Restaurant(
         name="Lims", phone="+919344471586", password_hash="x", lat=25.0, lng=55.0,
-        settings={"catalog_id": "SHARED", "catalog_ordering_enabled": True},
+        settings={
+            "catalog_id": "SHARED",
+            "catalog_ordering_enabled": True,
+            "catalog_native_view": True,
+            "catalog_browse_by_category": False,
+        },
     )
     db_session.add(lims)
     await db_session.flush()

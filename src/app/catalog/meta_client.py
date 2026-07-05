@@ -216,6 +216,59 @@ def _collect_batch_errors(data: dict) -> list[str]:
     return errors
 
 
+async def fetch_catalog_products_by_retailer_ids(
+    catalog_id: str,
+    retailer_ids: list[str],
+    *,
+    token: str | None = None,
+) -> list[MetaProduct]:
+    """Fetch only specific products (cheap refresh after Meta approves a new dish)."""
+    wanted = [r.strip() for r in retailer_ids if r and r.strip()]
+    if not wanted:
+        return []
+    settings = get_settings()
+    token = _resolve_token(token)
+    if not token:
+        raise CatalogReadError(
+            "Catalogue sync is not configured (no catalog token for this restaurant)."
+        )
+    if not catalog_id:
+        raise CatalogReadError("This restaurant has no catalog_id set.")
+
+    base = f"https://graph.facebook.com/{settings.graph_api_version}"
+    url = f"{base}/{catalog_id}/products"
+    filt = json.dumps(
+        {"retailer_id": {"is_any": wanted[:50]}}
+        if len(wanted) > 1
+        else {"retailer_id": {"eq": wanted[0]}}
+    )
+    params = {
+        "fields": _FIELDS,
+        "limit": min(len(wanted), _PER_PAGE),
+        "filter": filt,
+        "access_token": token,
+    }
+    products: list[MetaProduct] = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(url, params=params)
+        data = resp.json()
+        if resp.status_code >= 400 or "error" in data:
+            # Older Graph setups may reject filter — fall back to full read + subset.
+            logger.info(
+                "Meta filtered catalog read failed for %s (%s); falling back to full pull",
+                catalog_id,
+                (data.get("error") or {}).get("message", resp.status_code),
+            )
+            all_rows = await fetch_catalog_products(catalog_id, token=token)
+            wanted_set = set(wanted)
+            return [p for p in all_rows if p.retailer_id in wanted_set]
+        for p in data.get("data", []):
+            mp = _to_product(p)
+            if mp.retailer_id:
+                products.append(mp)
+    return products
+
+
 async def fetch_catalog_products(
     catalog_id: str, *, token: str | None = None
 ) -> list[MetaProduct]:

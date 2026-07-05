@@ -89,6 +89,12 @@ DEFAULT_SETTINGS: dict = {
     # cart from it, the catalog flow turns it into an order. Empty = not configured.
     "catalog_id": "",
     "catalog_ordering_enabled": True,
+    # Native WhatsApp "View full menu" — entire Meta catalogue in one tap (Biryani pattern).
+    # Default ON for dedicated catalogues. Shared-catalog secondaries are blocked in code
+    # (Meta shop cannot filter siblings). Give each brand its own catalog_id for native view.
+    "catalog_native_view": True,
+    # Category picker + paginated product_list — opt-in only; default off.
+    "catalog_browse_by_category": False,
     # False until signup onboarding (menu upload + Meta sync) is finished.
     "onboarding_complete": False,
     # Resale of cancelled-after-cooking orders (spec §3). When the kitchen has

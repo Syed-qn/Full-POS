@@ -40,7 +40,8 @@ async def biryani_scale_menu(db_session, restaurant):
     lims.settings = {
         "catalog_id": feasto,
         "catalog_ordering_enabled": True,
-        "catalog_native_view": False,
+        "catalog_native_view": True,
+        "catalog_browse_by_category": False,
     }
     await db_session.flush()
 

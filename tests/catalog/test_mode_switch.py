@@ -1,7 +1,7 @@
 """End-to-end: flipping catalog_ordering_enabled via the settings endpoint (what the
 Menu-page toggle calls) actually changes what the WhatsApp chat injects.
 
-Catalogue mode ON  -> greeting injects the catalogue (product_list).
+Catalogue mode ON  -> greeting injects the native catalogue (catalog_message).
 Catalogue mode OFF -> greeting injects the text menu (no product_list).
 """
 from decimal import Decimal
@@ -60,7 +60,7 @@ async def test_toggle_switches_chat_injection(client, db_session, auth_headers):
     await handle_inbound(db_session, _greet("+971500000001", "wamid.on"), restaurant_id=rest.id)
     await db_session.commit()
     types_a = await _types_to(db_session, "+971500000001")
-    assert "product_list" in types_a  # catalogue injected
+    assert "catalog_message" in types_a  # native catalogue injected (default)
     assert not any("Here's our menu" in (o.payload.get("body") or "")
                    for o in (await db_session.scalars(
                        select(OutboxMessage).where(OutboxMessage.to_phone == "+971500000001")

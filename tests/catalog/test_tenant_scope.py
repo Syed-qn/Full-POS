@@ -60,15 +60,44 @@ async def test_list_catalog_products_is_tenant_scoped(db_session, restaurant):
 
 
 async def test_native_catalog_view_follows_per_tenant_flag(db_session, restaurant):
+    from app.menu.models import Dish, Menu
+
     lims = await _seed_lims_shared(db_session, restaurant)
     assert await is_shared_catalog(db_session, restaurant_id=lims.id) is True
-    # Lims: flag off → no native view (filtered product_list cards instead).
+    # Primary on shared Feasto (more dishes) → native view allowed.
+    b_menu = await db_session.scalar(
+        select(Menu).where(Menu.restaurant_id == restaurant.id, Menu.status == "active")
+    )
+    for i in range(5):
+        db_session.add(
+            Dish(
+                menu_id=b_menu.id,
+                restaurant_id=restaurant.id,
+                dish_number=10 + i,
+                name=f"Extra {i}",
+                price_aed=Decimal("10"),
+                category="Rice",
+                is_available=True,
+                whatsapp_enabled=True,
+                meta_status="active",
+                name_normalized=f"extra {i}",
+                catalog_retailer_id=f"dish-b-extra-{i}",
+            )
+        )
+    await db_session.commit()
     assert await native_catalog_view_allowed(
-        db_session, restaurant_id=lims.id, settings={"catalog_native_view": False},
-    ) is False
-    # Biryani: flag on → native "View full menu" even on shared Feasto container.
+        db_session, restaurant_id=restaurant.id, settings={"catalog_id": "SHARED"},
+    ) is True
+    # Secondary on shared Feasto → native view blocked (even if flag true).
     assert await native_catalog_view_allowed(
         db_session,
-        restaurant_id=restaurant.id,
+        restaurant_id=lims.id,
         settings={"catalog_native_view": True, "catalog_id": "SHARED"},
+    ) is False
+    # Dedicated catalogue (no sibling) → default native view ON.
+    lims.settings = {"catalog_id": "LIMS-OWN", "catalog_ordering_enabled": True}
+    await db_session.commit()
+    assert await is_shared_catalog(db_session, restaurant_id=lims.id) is False
+    assert await native_catalog_view_allowed(
+        db_session, restaurant_id=lims.id, settings=lims.settings,
     ) is True

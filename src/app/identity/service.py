@@ -444,6 +444,8 @@ async def complete_onboarding(
         changes={
             "onboarding_complete": True,
             "catalog_ordering_enabled": True,
+            "catalog_native_view": True,
+            "catalog_browse_by_category": False,
         },
     )
 
