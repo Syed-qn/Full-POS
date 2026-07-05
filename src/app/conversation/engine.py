@@ -332,6 +332,14 @@ def _is_cart_query(text: str) -> bool:
         return False
     if any(w in t for w in ("cancel", "clear", "empty", "remove", "delete", "add ")):
         return False
+    # A QUESTION *about* the cart ("is my cart good for lunch", "should i add more")
+    # wants an ANSWER, not a raw dump — let the LLM handle it. Display requests never
+    # start with these evaluative interrogatives.
+    if t.startswith((
+        "is ", "are ", "was ", "were ", "should ", "would ", "could ", "do ",
+        "does ", "am ", "will ", "shall ", "how good", "how's my", "hows my",
+    )):
+        return False
     exact = {"cart", "my cart", "show cart", "show my cart", "view cart", "check cart",
              "check my cart", "cart?", "my cart?"}
     if t in exact:
@@ -791,18 +799,34 @@ def _parse_category_availability_query(text: str | None) -> str | None:
 
 # Ingredient / dish browse — "I want boneless chicken", "something with paneer".
 # Short filtered list or ONE category's catalogue cards — never the full menu.
+# Optional leading conversational filler so "And I want soup" / "ok show me curry
+# options" still parse (prod: "And I want soup u have" fell through to the LLM, which
+# gave a vague "let me check the menu" and never surfaced the soup). "i want/give me"
+# stay the trigger — filler here is only leading connectors/acks, never "i want ... to".
+_DISH_SEARCH_LEAD = (
+    r"(?:and|also|then|ok|okay|okey|so|ya+|yes|yeah|please|pls|plz|aa+h?|ah|hey|hmm+|"
+    r"um+|now|kindly)\s+"
+)
 _DISH_SEARCH_PATTERNS: tuple[str, ...] = (
-    r"^(?:i want|i'd like|id like|looking for|something with)\s+(.+?)[\?\.!]*$",
-    r"^(?:give me|show me)\s+(.+?)\s+options?[\?\.!]*$",
+    rf"^(?:{_DISH_SEARCH_LEAD})*(?:i want|i'd like|id like|looking for|something with)"
+    r"\s+(.+?)[\?\.!]*$",
+    rf"^(?:{_DISH_SEARCH_LEAD})*(?:give me|show me)\s+(.+?)\s+options?[\?\.!]*$",
 )
 _DISH_SEARCH_LEAD_FILLERS: tuple[str, ...] = (
     "to have ", "to get ", "to order ", "the ", "a ", "an ",
 )
+# Trailing "…do you have?", "…you got", "…available" question tails that pollute the
+# keyword ("soup u have" → "soup"). Read the whole phrase, then match on the real noun.
+_DISH_SEARCH_TRAIL_RE = _re.compile(
+    r"\s+(?:do\s+)?(?:you|u|ya)?\s*(?:have|got|available)(?:\s+any)?\s*\??$"
+)
 
 
 def _normalize_dish_search_keyword(raw: str) -> str:
-    """Strip filler from a parsed dish-search phrase."""
+    """Strip filler from a parsed dish-search phrase (leading articles + trailing
+    'do you have?' question tails), so the keyword is the real dish/ingredient noun."""
     t = _re.sub(r"\s+", " ", (raw or "").strip().lower()).strip("?.! ")
+    t = _DISH_SEARCH_TRAIL_RE.sub("", t).strip()
     for lead in _DISH_SEARCH_LEAD_FILLERS:
         if t.startswith(lead):
             t = t[len(lead):].strip()
@@ -2729,10 +2753,29 @@ _SET_QTY_PATTERNS: tuple[str, ...] = (
 )
 
 
+# Leading conversational filler stripped before a start-anchored cart-edit parser runs,
+# so "Aa pls make it 5" / "and cancel 7up" / "ok remove the soup" still fire (prod: "Aa
+# pls make it 5 chicken biryani" was mis-read as ADD 5 → 6). Excludes set-qty verbs like
+# "just"/"only" so "just 2 biryani" still SETS. Leading-run only; rest preserved verbatim
+# (so internal commas the item-splitter needs survive).
+_CART_EDIT_FILLER_RE = _re.compile(
+    r"^(?:\s*(?:aa+h?|ah|and|also|then|ok(?:ay|ey)?|so|ya+|ye(?:ah|p)?|yes|please|pls|"
+    r"plz|kindly|hmm+|um+|err|hey|now|can\s+(?:you|u)|could\s+(?:you|u)|would\s+you|"
+    r"i\s+want\s+(?:you\s+)?(?:u\s+)?to)\b[\s,.!]*)+",
+    _re.IGNORECASE,
+)
+
+
+def _strip_cart_edit_lead_filler(text: str) -> str:
+    """Drop a run of leading filler words ("Aa pls make it 5" → "make it 5") so a
+    start-anchored cart-edit parser still fires. Lowercased; rest kept verbatim."""
+    return _CART_EDIT_FILLER_RE.sub("", (text or "").strip()).strip().lower()
+
+
 def _parse_set_quantity(text: str) -> tuple[int, str] | None:
     """Detect a SET-quantity instruction → (qty, dish_query). dish_query may be '' when
     no dish is named ("make it 5"). Returns None when it isn't a set-quantity message."""
-    t = (text or "").strip().lower()
+    t = _strip_cart_edit_lead_filler(text)
     if not t:
         return None
     for pat in _SET_QTY_PATTERNS:
@@ -2757,7 +2800,7 @@ def _parse_set_quantity_items(text: str) -> list[tuple[int, str]] | None:
     "make it 5" → [(5, "")] (dish resolved by the caller). Returns None when it isn't a
     set-quantity, or a multi-segment can't be parsed cleanly (so we never invent a dish
     named "lemon mint and 2 grill mandi")."""
-    t = (text or "").strip().lower()
+    t = _strip_cart_edit_lead_filler(text)
     m = _SET_QTY_PREFIX.match(t)
     if not m:
         return None
@@ -2801,10 +2844,10 @@ def _parse_remove_item(text: str) -> tuple[int | None, str] | None:
     """Detect a REMOVE instruction → (qty, dish_query). ``qty=None`` removes all units
     of the dish. Returns None when it isn't a single-item remove (whole-cart clears are
     excluded)."""
-    t = (text or "").strip().lower()
+    t = _strip_cart_edit_lead_filler(text)
     if not t:
         return None
-    if _is_explicit_clear(t) or _is_clear_cart_command(t) or _is_cancel_intent(text):
+    if _is_explicit_clear(t) or _is_clear_cart_command(t) or _is_cancel_intent(t):
         return None
     for pat in _REMOVE_ITEM_PATTERNS:
         m = _re.match(pat, t)
@@ -2823,6 +2866,103 @@ def _parse_remove_item(text: str) -> tuple[int | None, str] | None:
             return None
         return qty, dish
     return None
+
+
+_REMOVE_VERB_PREFIX = _re.compile(
+    r"^(?:remove|delete|take off|take out|drop|minus|cancel)\s+"
+)
+
+# Nearest-context references — resolve against the MOST RECENTLY added cart line (what
+# the customer just touched) instead of a dish name: "remove it", "cancel that", "one
+# more", "another". Read the full sentence (whole-message match, filler stripped).
+_REMOVE_REF_RE = _re.compile(
+    r"^(?:"
+    r"(?:remove|delete|drop|cancel)\s+(?:it|that|this|the last(?: one| item| dish)?|that one|the last)"
+    r"|take\s+(?:it|that|this)\s+(?:off|out)"
+    r"|take\s+(?:off|out)\s+the\s+last(?: one)?"
+    r")\s*$"
+)
+_ADD_MORE_RE = _re.compile(
+    r"^(?:"
+    r"(?:add |get |give me )?(?:one|1|another)\s+more(?: please| pls)?"
+    r"|another(?: one| please)?"
+    r"|one more(?: one)?(?: please| pls)?"
+    r"|same again|same one more|more of (?:it|that|this)"
+    r")\s*$"
+)
+
+
+def _is_remove_reference(text: str) -> bool:
+    """True for a bare 'remove it / cancel that / take it off / remove the last one' —
+    a delete aimed at the most-recent cart line, no dish named."""
+    return bool(_REMOVE_REF_RE.match(_strip_cart_edit_lead_filler(text)))
+
+
+def _is_add_more_reference(text: str) -> bool:
+    """True for 'one more / another / same again' — add one of the most-recent dish."""
+    return bool(_ADD_MORE_RE.match(_strip_cart_edit_lead_filler(text)))
+
+
+async def _most_recent_cart_item(session: AsyncSession, order_id: int):
+    """The most recently added cart line (OrderItem with the highest id, qty>0) — the
+    nearest referent for a bare 'make it N' / 'remove it' / 'one more'. None if empty."""
+    from app.ordering.models import OrderItem
+
+    rows = [
+        r for r in (
+            await session.scalars(select(OrderItem).where(OrderItem.order_id == order_id))
+        ).all()
+        if r.qty > 0
+    ]
+    return max(rows, key=lambda r: r.id) if rows else None
+
+
+def _recent_proposed_name(proposed: list) -> str | None:
+    """Most-recent dish name in a modify 'proposed' list — the nearest referent for a
+    bare 'remove it' / 'make it N' during the modify/post-order flow."""
+    for item in reversed(proposed or []):
+        if isinstance(item, dict):
+            name = item.get("dish_name") or item.get("name")
+            if name:
+                return name
+    return None
+
+
+def _parse_remove_items(text: str) -> list[tuple[int | None, str]] | None:
+    """Split a REMOVE instruction into one or more (qty, dish) pairs, so "remove 1 lemon
+    mint and 1 7 up" takes off BOTH (prod: only the first came off). ``qty=None`` removes
+    all units of that dish. Mirrors _parse_set_quantity_items so remove handles multi-item
+    exactly like set-qty. Returns None for whole-cart clears / cancel-order / non-removes."""
+    t = _strip_cart_edit_lead_filler(text)
+    if not t:
+        return None
+    if _is_explicit_clear(t) or _is_clear_cart_command(t) or _is_cancel_intent(t):
+        return None
+    m = _REMOVE_VERB_PREFIX.match(t)
+    if not m:
+        return None
+    rest = t[m.end():].strip()
+    if not rest:
+        return None
+    segments = [s.strip() for s in _re.split(r"\s*(?:,|&|\+|\band\b)\s*", rest) if s.strip()]
+    if not segments:
+        return None
+    out: list[tuple[int | None, str]] = []
+    for seg in segments:
+        sm = _re.match(r"^(\d+)\s+(.+)$", seg)
+        if sm:
+            qty: int | None = int(sm.group(1))
+            dish = sm.group(2).strip()
+        else:
+            qty = None
+            dish = seg
+        dish = _re.sub(r"\b(please|pls|thanks|thank you)\b", "", dish).strip()
+        if not dish or dish in {"all", "everything", "it", "them", "that"}:
+            return None
+        if dish.startswith(("all ", "everything ")):
+            return None
+        out.append((qty, dish))
+    return out or None
 
 
 def _is_cart_edit_intent(text: str) -> bool:
@@ -4069,8 +4209,9 @@ async def _try_post_order_item_edit(
 
     text = (inbound.payload.get("text") or "").strip()
     keep_q = _parse_keep_only(text)
-    remove_parsed = _parse_remove_item(text)
-    if not keep_q and remove_parsed is None:
+    remove_items = _parse_remove_items(text)
+    _remove_ref = remove_items is None and _is_remove_reference(text)
+    if not keep_q and remove_items is None and not _remove_ref:
         return False
 
     order = await _resolve_order_for_modify(session, conv, inbound, restaurant_id)
@@ -4083,6 +4224,12 @@ async def _try_post_order_item_edit(
     proposed = list(conv.state.get("modify_proposed", []) or [])
     if not proposed:
         proposed = await _proposed_from_order(session, order.id)
+    # Nearest-context: bare "remove it" targets the most-recent line of the order.
+    if _remove_ref and remove_items is None:
+        _last_name = _recent_proposed_name(proposed)
+        if not _last_name:
+            return False
+        remove_items = [(None, _last_name)]
     if keep_q:
         proposed, label = await _modify_keep_only_proposed(
             session, restaurant_id, proposed, keep_q,
@@ -4090,11 +4237,16 @@ async def _try_post_order_item_edit(
         if label is None:
             return False
     else:
-        _rm_qty, rm_query = remove_parsed
-        proposed, label = await _modify_remove_from_proposed(
-            session, restaurant_id, proposed, rm_query,
-        )
-        if label is None:
+        # Multi-item remove ("cancel biryani and 7up") — loop so every named dish comes
+        # off, not just the first (matches the ordering-phase cart-edit path).
+        removed_any = False
+        for _rm_qty, rm_query in remove_items:
+            proposed, label = await _modify_remove_from_proposed(
+                session, restaurant_id, proposed, rm_query,
+            )
+            if label is not None:
+                removed_any = True
+        if not removed_any:
             return False
 
     _set_state(
@@ -4153,19 +4305,29 @@ async def _handle_modify_items(
             )
             return
 
-    remove_parsed = _parse_remove_item(text)
-    if remove_parsed is not None:
-        _rm_qty, rm_query = remove_parsed
-        new_prop, removed = await _modify_remove_from_proposed(
-            session, restaurant_id, proposed, rm_query,
-        )
-        if removed is not None:
+    remove_items = _parse_remove_items(text)
+    # Nearest-context: bare "remove it" targets the most-recent proposed line.
+    if remove_items is None and _is_remove_reference(text):
+        _last_name = _recent_proposed_name(proposed)
+        if _last_name:
+            remove_items = [(None, _last_name)]
+    if remove_items is not None:
+        # Multi-item remove ("remove biryani and 7up") — take off every named dish.
+        new_prop = proposed
+        removed_labels: list[str] = []
+        for _rm_qty, rm_query in remove_items:
+            new_prop, removed = await _modify_remove_from_proposed(
+                session, restaurant_id, new_prop, rm_query,
+            )
+            if removed is not None:
+                removed_labels.append(removed)
+        if removed_labels:
             _set_state(conv, dialogue_state="modify_items", modify_proposed=new_prop)
             await _send_text(
                 session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
                 prefix="modify-removed",
                 body=(
-                    f"Removed {removed} from your order.\n"
+                    f"Removed {', '.join(removed_labels)} from your order.\n"
                     "Reply with more changes, or send 'done' to review (SLA restarts on confirm)."
                 ),
             )
@@ -4177,7 +4339,10 @@ async def _handle_modify_items(
         changed: list[str] = []
         for sqty, sdish in setq_items:
             if not sdish:
-                continue
+                # Nearest-context: bare "make it N" targets the most-recent proposed line.
+                sdish = _recent_proposed_name(proposed) or ""
+                if not sdish:
+                    continue
             new_prop, name = await _modify_update_qty_in_proposed(
                 session, restaurant_id, new_prop, sdish, sqty,
             )
@@ -4202,7 +4367,7 @@ async def _handle_modify_items(
 
     _mod_done = (
         not keep_q
-        and remove_parsed is None
+        and remove_items is None
         and setq_items is None
         and (is_completion_intent(text) or _is_ack_proceed_intent(text))
     )
@@ -8379,9 +8544,17 @@ async def _try_catalog_cart_edit(
     if not text:
         return False
 
-    remove_parsed = _parse_remove_item(text)
-    setq_items = None if remove_parsed is not None else _parse_set_quantity_items(text)
-    if remove_parsed is None and setq_items is None:
+    remove_items = _parse_remove_items(text)
+    setq_items = None if remove_items is not None else _parse_set_quantity_items(text)
+    # Nearest-context references ("remove it", "one more") resolve to the most-recent line.
+    _remove_ref = (
+        remove_items is None and setq_items is None and _is_remove_reference(text)
+    )
+    _add_more = (
+        remove_items is None and setq_items is None and not _remove_ref
+        and _is_add_more_reference(text)
+    )
+    if remove_items is None and setq_items is None and not _remove_ref and not _add_more:
         return False
 
     draft_order_id = conv.state.get("draft_order_id") or conv.state.get("pending_order_id")
@@ -8401,27 +8574,63 @@ async def _try_catalog_cart_edit(
     prefix = "catalog-cart-edit"
     body: str
 
-    if remove_parsed is not None:
-        rm_qty, dish_query = remove_parsed
-        outcome, dish_name = await _execute_ai_remove_item(
-            session, conv, restaurant_id, dish_query, rm_qty,
-        )
+    # Resolve nearest-context references now that we have the order.
+    if _remove_ref or _add_more:
+        _recent = await _most_recent_cart_item(session, order.id)
+        if _recent is None:
+            return False  # nothing to reference → let the normal flow reply
+        if _remove_ref:
+            remove_items = [(None, _recent.dish_name)]  # remove the whole recent line
+        else:  # _add_more → add one of the most-recent dish
+            outcome = await _execute_ai_add_item(
+                session, conv, inbound, restaurant_id, _recent.dish_name, 1, "",
+                suppress_offers=True,
+            )
+            cart = await _build_cart_summary(session, conv)
+            body = (
+                f"Added 1x {_recent.dish_name} ✅{_cart_tail(cart)}"
+                if outcome == "added"
+                else f"🛒 {cart}" if cart else "Your cart is empty."
+            )
+            await _send_text(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="catalog-cart-add-more", body=body,
+            )
+            return True
+
+    if remove_items is not None:
+        # Multi-item remove: "remove 1 lemon mint and 1 7 up" takes off BOTH (prod bug:
+        # only the first came off). Each item resolved independently; report what came
+        # off and what couldn't be found.
+        removed_labels: list[str] = []
+        not_found: list[str] = []
+        for rm_qty, dish_query in remove_items:
+            outcome, dish_name = await _execute_ai_remove_item(
+                session, conv, restaurant_id, dish_query, rm_qty,
+            )
+            if outcome == "removed":
+                removed_labels.append(dish_name or dish_query)
+            elif outcome == "reduced":
+                removed_labels.append(f"{rm_qty}x {dish_name}")
+            else:
+                not_found.append(dish_name or dish_query)
         if phase == "awaiting_confirmation":
             _set_state(conv, dialogue_phase="awaiting_confirmation",
                        dialogue_state="order_confirmation")
             await _send_order_summary(session, conv, inbound, restaurant_id, order)
             return True
         cart = await _build_cart_summary(session, conv)
-        if outcome == "removed":
-            body = f"Done! Removed {dish_name} ✅{_cart_tail(cart)}"
-        elif outcome == "reduced":
-            body = f"Done! Removed {rm_qty}x {dish_name} ✅{_cart_tail(cart)}"
-        elif outcome == "not_in_cart":
-            body = f"{dish_name} isn't in your cart.{_cart_tail(cart)}"
+        if removed_labels and not not_found:
+            body = f"Done! Removed {', '.join(removed_labels)} ✅{_cart_tail(cart)}"
+        elif removed_labels:
+            body = (
+                f"Done! Removed {', '.join(removed_labels)} ✅ "
+                f"(couldn't find {', '.join(not_found)}){_cart_tail(cart)}"
+            )
         else:
             body = (
-                f"I couldn't find '{dish_query}' to remove. Tell me the dish name "
-                "and I'll take it off 😊"
+                f"I couldn't find {', '.join(not_found)} to remove. Tell me the dish "
+                "name and I'll take it off 😊"
             )
         prefix = "catalog-cart-remove"
     else:
@@ -8430,38 +8639,30 @@ async def _try_catalog_cart_edit(
         # punting to the flaky LLM (prod: "Make it 5" on a single-line cart crashed to
         # the canned error, while "Make it 5 arayes" worked):
         #   • exactly ONE distinct dish in the cart → set that line (unambiguous)
-        #   • TWO+ distinct dishes → ask which one (never guess)
+        #   • TWO+ distinct dishes → target the MOST RECENTLY added dish (nearest
+        #     context = what the customer just touched), not a "which one?" detour
         #   • empty cart → nothing to set → defer to the normal flow
         if len(setq_items) == 1 and not setq_items[0][1]:
             from app.ordering.models import OrderItem as _OI_setq
 
-            _rows = list(
-                (await session.scalars(
+            _rows = [
+                r for r in (await session.scalars(
                     select(_OI_setq).where(_OI_setq.order_id == order.id)
                 )).all()
-            )
-            _distinct: dict[int, str] = {}
-            for _r in _rows:
-                if _r.qty > 0:
-                    _distinct.setdefault(_r.dish_id, _r.dish_name)
+                if r.qty > 0
+            ]
             _bare_qty = setq_items[0][0]
-            if not _distinct:
+            if not _rows:
                 return False  # empty cart → let the normal flow reply
+            _distinct = {r.dish_id for r in _rows}
             if len(_distinct) == 1:
-                setq_items = [(_bare_qty, next(iter(_distinct.values())))]
+                setq_items = [(_bare_qty, _rows[0].dish_name)]
             else:
-                _names = list(_distinct.values())
-                _list = f"{', '.join(_names[:-1])} or {_names[-1]}"
-                await _send_text(
-                    session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                    prefix="set-qty-which",
-                    body=(
-                        f"You've got {_list} in your cart 🛒 "
-                        f"Which one should I make {_bare_qty}? "
-                        f"Just say e.g. \"make it {_bare_qty} {_names[0].lower()}\" 😊"
-                    ),
-                )
-                return True
+                # Nearest-context resolution: read the recent turn — "make it N" means
+                # the dish the customer MOST RECENTLY added/touched (last cart line by
+                # insertion), so we act instead of re-asking "which one?".
+                _recent = max(_rows, key=lambda r: r.id)
+                setq_items = [(_bare_qty, _recent.dish_name)]
         changed: list[str] = []
         for sqty, sdish in setq_items:
             if not sdish:
