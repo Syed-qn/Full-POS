@@ -194,13 +194,16 @@ def parse_cloud_payload(payload: dict) -> list[InboundMessage]:
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            raw_restaurant_phone = value.get("metadata", {}).get("display_phone_number", "")
+            metadata = value.get("metadata", {})
+            raw_restaurant_phone = metadata.get("display_phone_number", "")
             restaurant_phone = (
                 _normalize_phone(raw_restaurant_phone) if raw_restaurant_phone else ""
             )
+            phone_number_id = (metadata.get("phone_number_id") or "").strip()
             for msg in value.get("messages", []):
                 parsed = _parse_single_message(msg, restaurant_phone)
                 if parsed is not None:
+                    parsed.phone_number_id = phone_number_id
                     results.append(parsed)
     return results
 

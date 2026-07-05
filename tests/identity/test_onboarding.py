@@ -115,9 +115,16 @@ async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
     """Onboarding page saves the restaurant's Meta connection; token never echoed."""
     from app.identity import meta_embed
 
+    subscribed: list[tuple[str, str]] = []
+
+    async def _fake_subscribe(waba_id, access_token):
+        subscribed.append((waba_id, access_token))
+        return True
+
     async def _no_display(pid, token):
         return ""
 
+    monkeypatch.setattr(meta_embed, "subscribe_app_to_waba", _fake_subscribe)
     monkeypatch.setattr(meta_embed, "fetch_display_phone_number", _no_display)
 
     empty = await client.get("/api/v1/onboarding/meta-config", headers=auth_headers)
@@ -142,6 +149,7 @@ async def test_meta_config_save_and_read(client, auth_headers, monkeypatch):
     assert body["wa_access_token_set"] is True
     assert body["connected"] is True
     assert "wa_access_token" not in body  # secret never returned
+    assert subscribed == [("waba-1", "EAAsecret-token")]
 
     # Partial update keeps existing values.
     patched = await client.patch(

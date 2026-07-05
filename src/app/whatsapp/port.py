@@ -49,6 +49,7 @@ class InboundMessage:
     payload: dict          # raw content; keys depend on type
     restaurant_phone: str  # the WABA number that received this
     timestamp: int = 0     # unix epoch from Meta payload
+    phone_number_id: str = ""  # Meta Cloud API phone_number_id for tenant fallback
 
 
 class WhatsAppPort(Protocol):

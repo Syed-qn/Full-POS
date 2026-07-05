@@ -164,13 +164,14 @@ async def patch_meta_config(
     from app.identity.meta_config import apply_meta_settings
 
     apply_meta_settings(restaurant, body.model_dump(exclude_unset=True))
-    # Manual connect: sync the routing phone from the pasted number too (once both
-    # the number id and token are present), matching the popup's behaviour.
+    # Manual connect: subscribe WABA (same as Embedded Signup) and sync routing phone.
     from app.identity.meta_config import meta_settings
-    from app.identity.meta_embed import fetch_display_phone_number
+    from app.identity.meta_embed import fetch_display_phone_number, subscribe_app_to_waba
 
     cfg = meta_settings(restaurant)
     if cfg["wa_phone_number_id"] and cfg["wa_access_token"]:
+        if cfg["wa_business_account_id"]:
+            await subscribe_app_to_waba(cfg["wa_business_account_id"], cfg["wa_access_token"])
         display = await fetch_display_phone_number(
             cfg["wa_phone_number_id"], cfg["wa_access_token"]
         )

@@ -1,6 +1,8 @@
 # understanding.txt — running log of code changes + system understanding
 # Format: - [YYYY-MM-DD HH:MM] <change> — <why/impact>
 
+- [2026-07-05 18:30 +04] FIX Lims inbound not captured (prod diag). Root cause: Meta delivered customer ✓✓ to +919344471586 but server received zero Lims webhooks in 12h (only injected test); Biryani (32 events) used app-default callback with NO override_callback_uri while Lims had override — prod re-subscribe without override restored parity. Code: (1) `subscribe_app_to_waba` no longer sets per-WABA override (matches working Biryani); (2) manual `PATCH /onboarding/meta-config` now calls `subscribe_app_to_waba`; (3) `webhook/routing.py` resolves tenant by `phone_number_id` fallback when display_phone mismatches; (4) `InboundMessage.phone_number_id` from normalizer. Tests: `test_post_webhook_routes_by_phone_number_id_when_display_unknown`, `test_meta_config_save_and_read` subscribe assert. Scripts: `_lims_inbound_diag.py`, `_compare_waba_subs.py`.
+
 - [2026-07-03 12:45 +04] GIT: merged origin/main (9 partner API commits) with local Marketing Studio + habits work; resolved conflicts in `menu/service.py` (kept both `list_active_dishes_catalog` + `ensure_active_menu`) and `understanding.txt` (appended both sides, zero deletions). Pushed to origin/main.
 
 - [2026-07-03 12:20 +04] DOC: `docs/customer-order-habits.md` — feature guide for per-weekday recency-weighted order habits (`usual_order_times` JSONB), trust gates, marketing automation wiring (Today's Special / reorder / recurring habit drift), worked examples, test map.

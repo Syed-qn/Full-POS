@@ -14,6 +14,7 @@ from app.outbox.worker import claim_pending_outbox_ids, deliver_outbox_message
 from app.ratelimit.deps import rate_limit_webhook
 from app.webhook.models import WebhookEvent
 from app.webhook.normalizer import parse_cloud_payload, slice_message_payload
+from app.webhook.routing import resolve_restaurant_for_webhook
 from app.whatsapp.port import MessageType
 
 # Importing the configured Celery app sets it as the default, binding @shared_task
@@ -87,13 +88,16 @@ async def receive_webhook(
             logger.info("duplicate webhook event %s — skipping", inbound.wa_message_id)
             continue
 
-        restaurant = await session.scalar(
-            select(Restaurant).where(Restaurant.phone == inbound.restaurant_phone)
+        restaurant = await resolve_restaurant_for_webhook(
+            session,
+            restaurant_phone=inbound.restaurant_phone,
+            phone_number_id=inbound.phone_number_id,
         )
         if restaurant is None:
             logger.warning(
-                "webhook for unknown restaurant phone %s — skipping",
+                "webhook for unknown restaurant phone=%s phone_number_id=%s — skipping",
                 inbound.restaurant_phone,
+                inbound.phone_number_id or "(none)",
             )
             continue
 

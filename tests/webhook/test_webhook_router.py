@@ -373,6 +373,62 @@ async def test_confirm_order_celery_enqueue_failure_no_error_apology(
     ), bodies
 
 
+async def test_post_webhook_routes_by_phone_number_id_when_display_unknown(
+    client, db_session,
+):
+    """Inbound must not be dropped when Meta sends display_phone without '+' match."""
+    from sqlalchemy import select
+
+    from app.identity.models import Restaurant
+    from app.outbox.models import OutboxMessage
+
+    restaurant_id = await _seed_restaurant_and_menu(client, db_session)
+    rest = await db_session.get(Restaurant, restaurant_id)
+    rest.settings = {
+        **(rest.settings or {}),
+        "wa_phone_number_id": "lims-pid-999",
+    }
+    await db_session.commit()
+
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "metadata": {
+                                "display_phone_number": "0000000000",
+                                "phone_number_id": "lims-pid-999",
+                            },
+                            "messages": [
+                                {
+                                    "id": "wamid.lims-pid-route-001",
+                                    "from": "971509876543",
+                                    "timestamp": "1717660800",
+                                    "type": "text",
+                                    "text": {"body": "Hello"},
+                                }
+                            ],
+                        },
+                        "field": "messages",
+                    }
+                ]
+            }
+        ],
+    }
+    body, sig = _signed_body(payload)
+    resp = await client.post(
+        "/webhooks/whatsapp",
+        content=body,
+        headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+    )
+    assert resp.status_code == 200
+
+    rows = (await db_session.execute(select(OutboxMessage))).scalars().all()
+    assert len(rows) == 1
+
+
 async def test_post_webhook_sync_delivery_sends_in_request(client, db_session, monkeypatch):
     """With outbox_sync_delivery on, the reply is delivered IN the webhook request
     (no Celery worker) — the row ends up 'sent', not left pending/dispatching."""
