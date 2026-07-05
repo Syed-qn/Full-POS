@@ -505,10 +505,11 @@ async def auto_publish_to_meta(session: AsyncSession, *, restaurant_id: int) -> 
     if not catalog_id:
         return SyncResult()  # Meta not connected — nothing to publish to.
     try:
-        # Fire-and-forget: don't block the manager's dish edit on Meta ingest, and avoid
-        # overlapping in-flight batches when several edits happen quickly.
+        # Background task (not the HTTP request): wait for Meta ingest + refresh
+        # sendability so upload-menu / dish edits become WhatsApp cards without a
+        # manual "Pull from Meta". Inline dish saves still use wait_for_ingest=False.
         return await push_dishes_to_meta(
-            session, restaurant_id=restaurant_id, wait_for_ingest=False
+            session, restaurant_id=restaurant_id, wait_for_ingest=True
         )
     except (CatalogReadError, CatalogWriteError) as exc:
         logger.warning("auto-publish to Meta skipped for restaurant %s: %s", restaurant_id, exc)

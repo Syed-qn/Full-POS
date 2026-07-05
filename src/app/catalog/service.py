@@ -199,6 +199,11 @@ async def send_catalog(
         {"title": title, "product_items": items}
         for title, items in list(sections.items())[:10]
     ]
+    list_body = body[:1024]
+    if len(sendable) > 1:
+        list_body = (
+            f"{list_body}\n\n👈 Swipe the cards to see all {len(sendable)} items."
+        )[:1024]
     await enqueue_message(
         session,
         restaurant_id=restaurant_id,
@@ -206,7 +211,7 @@ async def send_catalog(
         msg_type=OutboundMessageType.PRODUCT_LIST,
         payload={
             "header": header[:60],
-            "body": body[:1024],
+            "body": list_body,
             "catalog_id": catalog_id,
             "sections": payload_sections,
         },
