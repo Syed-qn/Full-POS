@@ -55,6 +55,57 @@ def test_is_product_sendable_logic():
     ) is False
 
 
+async def test_sync_pull_skips_sibling_tenant_products_in_shared_catalog(
+    db_session, restaurant, monkeypatch,
+):
+    """Shared Meta catalogue: pull imports only products whose dish-{id}-* belongs here."""
+    from app.identity.models import Restaurant
+    from app.menu.models import Dish, Menu
+
+    lims = Restaurant(
+        name="Lims", phone="+919344471586", password_hash="x", lat=25.0, lng=55.0,
+        settings={"catalog_id": "SHARED", "catalog_ordering_enabled": True},
+    )
+    db_session.add(lims)
+    await db_session.flush()
+    b_menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    l_menu = Menu(restaurant_id=lims.id, version=1, status="active", source_files=[])
+    db_session.add_all([b_menu, l_menu])
+    await db_session.flush()
+    b_dish = Dish(
+        menu_id=b_menu.id, restaurant_id=restaurant.id, dish_number=1, name="Biryani Plate",
+        price_aed=Decimal("50"), category="Rice", is_available=True,
+        name_normalized="biryani plate", catalog_retailer_id=f"dish-{restaurant.id}-1",
+    )
+    db_session.add(b_dish)
+    await db_session.flush()
+    l_dish = Dish(
+        menu_id=l_menu.id, restaurant_id=lims.id, dish_number=1, name="Lims Special",
+        price_aed=Decimal("40"), category="Rice", is_available=True,
+        name_normalized="lims special",
+    )
+    db_session.add(l_dish)
+    await db_session.flush()
+    l_dish.catalog_retailer_id = f"dish-{l_dish.id}-1"
+    restaurant.settings = {**restaurant.settings, "catalog_id": "SHARED",
+                           "catalog_ordering_enabled": True}
+    await db_session.commit()
+
+    _patch_meta(monkeypatch, [
+        _mp(f"dish-{b_dish.id}-1", "Biryani Plate", 50, "Rice", fetch="fetched"),
+        _mp(f"dish-{l_dish.id}-1", "Lims Special", 40, "Rice", fetch="fetched"),
+    ])
+    res = await sync_catalog_from_meta(db_session, restaurant_id=lims.id)
+    await db_session.commit()
+    rows = (await db_session.scalars(
+        select(CatalogProduct).where(CatalogProduct.restaurant_id == lims.id)
+    )).all()
+    assert res.added == 1
+    assert len(rows) == 1
+    assert rows[0].retailer_id == f"dish-{l_dish.id}-1"
+    assert rows[0].name == "Lims Special"
+
+
 async def test_sync_marks_unprocessed_product_in_review(db_session, restaurant, monkeypatch):
     """Sync links (makes sendable) only products Meta has processed; the rest stay
     in review so they're kept off the WhatsApp product_list."""

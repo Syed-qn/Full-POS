@@ -7,6 +7,7 @@ from Meta (``meta_client.fetch_catalog_products``) and upserts one row per
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -29,6 +30,39 @@ from app.config import get_settings
 from app.identity.models import Restaurant
 
 logger = logging.getLogger(__name__)
+
+_DISH_RETAILER_ID = re.compile(r"^dish-(\d+)-")
+
+
+async def _product_belongs_to_restaurant(
+    session: AsyncSession, *, restaurant_id: int, retailer_id: str
+) -> bool:
+    """True when a Meta catalogue product is owned by this tenant.
+
+    Shared WABA/catalogue containers (e.g. Feasto) hold every restaurant's products.
+    Pull must not mirror sibling tenants' rows into this restaurant — only import when
+    ``dish-{dish_id}-*`` references a ``dishes.id`` row for *this* restaurant, or the
+    retailer_id is already linked to one of its dishes (non-standard ids).
+    """
+    rid = (retailer_id or "").strip()
+    if not rid:
+        return False
+    from app.menu.models import Dish
+
+    m = _DISH_RETAILER_ID.match(rid)
+    if m:
+        dish_id = int(m.group(1))
+        owner = await session.scalar(
+            select(Dish.restaurant_id).where(Dish.id == dish_id).limit(1)
+        )
+        return owner == restaurant_id
+    linked = await session.scalar(
+        select(Dish.id).where(
+            Dish.restaurant_id == restaurant_id,
+            Dish.catalog_retailer_id == rid,
+        ).limit(1)
+    )
+    return linked is not None
 
 
 def _rest_token(settings_dict: dict | None) -> str | None:
@@ -185,6 +219,10 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
     result = SyncResult()
 
     for p in products:
+        if not await _product_belongs_to_restaurant(
+            session, restaurant_id=restaurant_id, retailer_id=p.retailer_id
+        ):
+            continue
         seen.add(p.retailer_id)
         row = existing.get(p.retailer_id)
         if row is None:
