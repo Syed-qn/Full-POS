@@ -309,6 +309,7 @@ async def seed_biryani_menu(db_session, restaurant):
             availability="in stock",
             category="Biryani",
             is_active=True,
+            is_sendable=True,
             raw={},
         ),
         CatalogProduct(
@@ -320,6 +321,7 @@ async def seed_biryani_menu(db_session, restaurant):
             availability="in stock",
             category="Drinks",
             is_active=True,
+            is_sendable=True,
             raw={},
         ),
         CatalogProduct(
@@ -331,6 +333,7 @@ async def seed_biryani_menu(db_session, restaurant):
             availability="in stock",
             category="Mandi",
             is_active=True,
+            is_sendable=True,
             raw={},
         ),
         CatalogProduct(
@@ -342,6 +345,7 @@ async def seed_biryani_menu(db_session, restaurant):
             availability="in stock",
             category="Biryani",
             is_active=True,
+            is_sendable=True,
             raw={},
         ),
     ]

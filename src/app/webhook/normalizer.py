@@ -3,8 +3,13 @@ from app.identity.phones import normalize_phone as _normalize_phone
 from app.whatsapp.port import InboundMessage, MessageType
 
 
-def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage:
+def _parse_single_message(msg: dict, restaurant_phone: str) -> InboundMessage | None:
     msg_type = msg.get("type", "unknown")
+    if msg_type == "reaction":
+        # A 👍/❤️ reaction needs no reply and no state change. As UNKNOWN it fell
+        # through to the AI path, which answered a non-message with a canned
+        # error and could mutate the cart (F83). Drop it before the engine.
+        return None
     wa_id = msg["id"]
     from_phone = _normalize_phone(msg["from"])
     timestamp = int(msg.get("timestamp", 0))
@@ -194,5 +199,54 @@ def parse_cloud_payload(payload: dict) -> list[InboundMessage]:
                 _normalize_phone(raw_restaurant_phone) if raw_restaurant_phone else ""
             )
             for msg in value.get("messages", []):
-                results.append(_parse_single_message(msg, restaurant_phone))
+                parsed = _parse_single_message(msg, restaurant_phone)
+                if parsed is not None:
+                    results.append(parsed)
     return results
+
+
+def slice_message_payload(payload: dict, wa_message_id: str) -> dict:
+    """Return a minimal webhook payload containing only the one message row.
+
+    Storing the full Meta batch on every idempotency row bloats the table when a
+    single webhook carries many messages; each event only needs its own slice."""
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            for msg in value.get("messages", []):
+                if msg.get("id") == wa_message_id:
+                    slim_value = {
+                        k: v for k, v in value.items() if k != "messages"
+                    }
+                    slim_value["messages"] = [msg]
+                    return {
+                        "object": payload.get("object"),
+                        "entry": [{
+                            **{k: v for k, v in entry.items() if k != "changes"},
+                            "changes": [{
+                                "field": change.get("field"),
+                                "value": slim_value,
+                            }],
+                        }],
+                    }
+    return payload
+
+
+def parse_status_events(payload: dict) -> list[dict]:
+    """Extract delivery-status events (value.statuses) from a Cloud API payload.
+
+    Only ``failed`` matters operationally today — a message Meta accepted at send
+    time but could not deliver (closed 24h window, blocked recipient) previously
+    vanished without trace. Each event: {wa_message_id, status, error_code}.
+    """
+    events: list[dict] = []
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            for st in change.get("value", {}).get("statuses", []):
+                errors = st.get("errors") or []
+                events.append({
+                    "wa_message_id": st.get("id"),
+                    "status": st.get("status"),
+                    "error_code": errors[0].get("code") if errors else None,
+                })
+    return events

@@ -302,6 +302,12 @@ def _is_menu_request(text: str) -> bool:
     t = text.strip().lower()
     if not t or len(t) > 40:
         return False
+    # Bare intent words — EXACT match only (as substrings they'd turn
+    # "cancel my order" into a menu request). Absorbed from the deleted webhook
+    # _CATALOG_KEYWORDS shortcut so these route through the engine (takeover
+    # respected, turn recorded, phase-aware) instead of bypassing it.
+    if t in {"order", "items", "list", "order food", "place order", "order now"}:
+        return True
     if not any(k in t for k in _MENU_KEYWORDS):
         return False
     # Structural negation: substantial non-menu content means ordering, not catalogue.
@@ -5892,6 +5898,8 @@ _PHASE_MAP = {
 }
 
 _VALID_PHASES = frozenset({"ordering", "address_capture", "awaiting_confirmation", "post_order"})
+# Menu/catalog keyword sends must not hijack mid-checkout (address or confirm summary).
+_MENU_REQUEST_BLOCKED_PHASES = frozenset({"address_capture", "awaiting_confirmation"})
 
 # Single source of truth: derived from action_schema.LEGACY_PHASE_ACTIONS (W1) so
 # engine phase-guard and provider tool schemas can never drift.
@@ -5915,6 +5923,11 @@ def _resolve_phase(conv: Conversation) -> str:
         return state["dialogue_phase"]
     old_state = state.get("dialogue_state", "greeting")
     return _PHASE_MAP.get(old_state, "ordering")
+
+
+def _menu_catalog_intercept_allowed(conv: Conversation) -> bool:
+    """True when a menu/catalog keyword may replace the current checkout step."""
+    return _resolve_phase(conv) not in _MENU_REQUEST_BLOCKED_PHASES
 
 
 def _is_valid_action_for_phase(action: str, phase: str) -> bool:
@@ -7180,7 +7193,10 @@ async def _execute_confirm_order(
         )
     else:
         payment_line = f"Total: AED {_aed(order.total)} (COD, cash on delivery)\n"
-    await _send_text(
+    # Same rule as cart updates: every actionable state carries buttons. A plain
+    # confirmation left customers typing free text ("Cancel order", "where is my
+    # order") — the dead-end that caused the cancel/marketing-opt-out collision.
+    await _send_buttons(
         session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
         prefix="order-confirmed",
         body=(
@@ -7188,6 +7204,11 @@ async def _execute_confirm_order(
             f"{payment_line}"
             f"Your food will arrive within ~40 minutes. We'll keep you posted! 🛵"
         ),
+        buttons=[
+            {"id": "track_order", "title": "Track order"},
+            {"id": "modify_order", "title": "Modify order"},
+            {"id": "cancel_order", "title": "Cancel order"},
+        ],
     )
 
 
@@ -7427,7 +7448,10 @@ async def _dispatch_action(
         _lower = reply.lower()
         if any(p in _lower for p in _MENU_PROMISE_PATTERNS):
             _cart = await _build_cart_summary(session, conv)
-            if phase != "post_order" or not _cart:
+            if (
+                _menu_catalog_intercept_allowed(conv)
+                and (phase != "post_order" or not _cart)
+            ):
                 if phase == "post_order" and not _cart:
                     _maybe_reset_post_order_for_browse(conv, _raw_inbound_text)
                 await _send_menu_or_catalog(
@@ -7456,6 +7480,13 @@ async def _dispatch_action(
 
     # ── ordering actions ──────────────────────────────────────────────────
     if action == "show_menu":
+        if not _menu_catalog_intercept_allowed(conv):
+            if reply:
+                await _send_text(
+                    session, conv=conv, inbound=inbound,
+                    restaurant_id=restaurant_id, prefix="ai-reply", body=reply,
+                )
+            return
         if phase == "post_order":
             if await _build_cart_summary(session, conv):
                 if reply:
@@ -9607,6 +9638,14 @@ async def handle_inbound(
         if _btn_id == "cancel_order":
             await _execute_cancel_order(session, conv, inbound, restaurant_id)
             return
+        # Post-confirm quick actions — same deterministic executors as the typed
+        # "where is my order" / "modify my order" intents.
+        if _btn_id == "track_order":
+            await _handle_status_query(session, conv, inbound, restaurant_id)
+            return
+        if _btn_id == "modify_order":
+            await _handle_modify_intent(session, conv, inbound, restaurant_id)
+            return
 
     # Explicit menu request → render the REAL menu deterministically in ANY phase.
     # Outside the ordering phase the LLM has no show_menu action, so it emits
@@ -9624,7 +9663,7 @@ async def handle_inbound(
                 body=_privacy_data_reply(restaurant.name),
             )
             return
-        if _is_menu_request(text):
+        if _is_menu_request(text) and _menu_catalog_intercept_allowed(conv):
             if _resolve_phase(conv) == "post_order":
                 _set_state(
                     conv,
@@ -9663,7 +9702,11 @@ async def handle_inbound(
             return
         # "OK show me" → full menu; "suggest/recommend" → grounded suggestion sub-agent.
         _raw_browse = (inbound.payload.get("text") or "").strip()
-        if _is_menu_browse_intent(_raw_browse) and not _parse_dish_search_query(_raw_browse):
+        if (
+            _menu_catalog_intercept_allowed(conv)
+            and _is_menu_browse_intent(_raw_browse)
+            and not _parse_dish_search_query(_raw_browse)
+        ):
             _maybe_reset_post_order_for_browse(conv, _raw_browse)
             if _is_suggestion_browse_intent(_raw_browse):
                 await _handle_suggestions(session, conv, inbound, restaurant_id)

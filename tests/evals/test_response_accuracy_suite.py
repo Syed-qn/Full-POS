@@ -645,17 +645,14 @@ async def test_structured_cart_drives_correction(db_session, restaurant, seed_bi
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="W7b all-outbounds-recorded: catalog cards, STT-fail and error apology "
-           "must each create a Message row, not live only in the outbox",
-)
 async def test_all_customer_outbounds_recorded(db_session, restaurant, seed_biryani_menu):
     """Every customer-facing outbound is recorded in `messages` (DB-H3/4/5).
     Drive a keyword-catalog send and an STT-fail; assert both produced an outbound
     Message row (product_list and text)."""
     from sqlalchemy import select
+
     from app.conversation.models import Conversation, Message
+    from app.identity.phones import normalize_phone
 
     # (a) keyword catalog → product_list card send must be recorded
     await drive_turns(
@@ -670,7 +667,7 @@ async def test_all_customer_outbounds_recorded(db_session, restaurant, seed_biry
     conv = await db_session.scalar(
         select(Conversation).where(
             Conversation.restaurant_id == restaurant.id,
-            Conversation.phone == "971500000062",
+            Conversation.phone == normalize_phone("+971500000062"),
         )
     )
     assert conv is not None, "catalogue keyword path must land on a conversation thread"

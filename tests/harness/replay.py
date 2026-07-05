@@ -18,12 +18,10 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.catalog.service import handle_catalog_order, send_catalog
+from app.catalog.service import handle_catalog_order
 from app.conversation.engine import handle_inbound
 from app.conversation.models import Conversation, Message
-from app.identity.models import catalog_mode_enabled
 from app.ordering.models import Order, OrderItem
-from app.webhook.router import _CATALOG_KEYWORDS
 from app.whatsapp.port import InboundMessage, MessageType
 from tests.harness.result import OutboundCapture, TranscriptResult, TranscriptTurnResult
 
@@ -135,24 +133,13 @@ async def drive_turns(
         ) or 0
 
         inbound = _build_inbound(turn, phone, idx, restaurant_phone)
-        # Mirror the production webhook routing exactly (webhook/router.py lines 114–130):
-        #   1. MessageType.ORDER  → handle_catalog_order
-        #   2. TEXT whose normalised text is in _CATALOG_KEYWORDS AND catalog mode is on
-        #      → send_catalog (bypasses conversation engine entirely, as in production)
-        #   3. Everything else → handle_inbound
+        # Mirror production webhook routing (webhook/router.py):
+        #   1. MessageType.ORDER → handle_catalog_order
+        #   2. Everything else   → handle_inbound (the old _CATALOG_KEYWORDS
+        #      send_catalog bypass was deleted — menu keywords now route through
+        #      the engine's _is_menu_request → _send_menu_or_catalog path).
         if inbound.type == MessageType.ORDER:
             await handle_catalog_order(session, inbound, restaurant_id=restaurant_id)
-        elif (
-            inbound.type == MessageType.TEXT
-            and catalog_mode_enabled(getattr(restaurant, "settings", None))
-            and (inbound.payload or {}).get("text", "").strip().lower() in _CATALOG_KEYWORDS
-        ):
-            await send_catalog(
-                session,
-                restaurant_id=restaurant_id,
-                to_phone=inbound.from_phone,
-                idempotency_key=f"catalog-kw-{inbound.wa_message_id}",
-            )
         else:
             await handle_inbound(session, inbound, restaurant_id=restaurant_id)
         await session.flush()

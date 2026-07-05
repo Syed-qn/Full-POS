@@ -13,7 +13,7 @@ from app.identity.models import Restaurant
 from app.outbox.worker import claim_pending_outbox_ids, deliver_outbox_message
 from app.ratelimit.deps import rate_limit_webhook
 from app.webhook.models import WebhookEvent
-from app.webhook.normalizer import parse_cloud_payload
+from app.webhook.normalizer import parse_cloud_payload, slice_message_payload
 from app.whatsapp.port import MessageType
 
 # Importing the configured Celery app sets it as the default, binding @shared_task
@@ -23,34 +23,13 @@ import apps.workers.celery_app  # noqa: E402,F401
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webhook"])
 
-# Customer text that should surface the WhatsApp catalog (when the restaurant has
-# catalog ordering enabled). Kept here (webhook layer) so the conversation engine
-# is never touched.
-# F109 / R-028: include common misspellings so a typo never leaves the customer
-# staring at a blank response instead of the catalogue.
-_CATALOG_KEYWORDS = {
-    # canonical spellings
-    "menu", "catalog", "catalogue", "order", "items", "list",
-    # common misspellings (F109)
-    "catlog", "catlogue", "catalouge", "cataloge",
-}
-
-
-def _wants_catalog(inbound, restaurant) -> bool:
-    if inbound.type != MessageType.TEXT:
-        return False
-    from app.identity.models import catalog_mode_enabled
-
-    if not catalog_mode_enabled(getattr(restaurant, "settings", None)):
-        return False
-    text = (inbound.payload or {}).get("text", "")
-    # Delegate to engine _is_menu_request for longer natural-language menu phrases
-    # so we don't duplicate keyword tables; exact-match set handles short tokens here.
-    if text.strip().lower() in _CATALOG_KEYWORDS:
-        return True
-    from app.conversation.engine import _is_menu_request
-
-    return _is_menu_request(text.strip())
+# NOTE: the old _wants_catalog keyword shortcut (route "menu"/"order" texts
+# straight to send_catalog, bypassing the engine) was deleted deliberately: it
+# ignored manual takeover, recorded neither side of the turn in history, and
+# hijacked bare "order"/"list" mid-checkout. The engine's cross-phase
+# _is_menu_request → _send_menu_or_catalog path covers every keyword
+# (incl. misspellings + the bare intent words) with takeover, recording,
+# cooldown and phase-awareness.
 
 
 @router.get("/webhooks/whatsapp")
@@ -89,26 +68,24 @@ async def receive_webhook(
         except ValueError as exc:
             raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
 
+    # Delivery-status events (value.statuses). Previously dropped entirely — a
+    # message Meta accepted but later FAILED to deliver (closed 24h window,
+    # blocked recipient) vanished: bot believed it replied, customer saw nothing.
+    await _process_status_events(session, payload)
+
     inbound_messages = parse_cloud_payload(payload)
 
     for inbound in inbound_messages:
-        # Idempotency check
-        existing = await session.scalar(
-            select(WebhookEvent).where(
-                WebhookEvent.provider_event_id == inbound.wa_message_id
-            )
-        )
-        if existing is not None:
+        # Insert-first idempotency: claim the event BEFORE any engine work so a
+        # concurrent duplicate webhook never runs handle_inbound twice (the old
+        # check-then-insert let the loser do full processing, then roll back).
+        if not await _try_claim_webhook_event(
+            session,
+            provider_event_id=inbound.wa_message_id,
+            payload=slice_message_payload(payload, inbound.wa_message_id),
+        ):
             logger.info("duplicate webhook event %s — skipping", inbound.wa_message_id)
             continue
-
-        session.add(
-            WebhookEvent(
-                provider_event_id=inbound.wa_message_id,
-                payload=payload,
-                processed_at=datetime.now(timezone.utc),
-            )
-        )
 
         restaurant = await session.scalar(
             select(Restaurant).where(Restaurant.phone == inbound.restaurant_phone)
@@ -128,17 +105,6 @@ async def receive_webhook(
                 from app.catalog.service import handle_catalog_order
 
                 await handle_catalog_order(session, inbound, restaurant_id=restaurant.id)
-            elif _wants_catalog(inbound, restaurant):
-                # Customer asked for the catalog/menu and this restaurant has catalog
-                # ordering on → send tappable product cards instead of the text bot.
-                from app.catalog.service import send_catalog
-
-                await send_catalog(
-                    session,
-                    restaurant_id=restaurant.id,
-                    to_phone=inbound.from_phone,
-                    idempotency_key=f"catalog-kw-{inbound.wa_message_id}",
-                )
             else:
                 await handle_inbound(session, inbound, restaurant_id=restaurant.id)
 
@@ -200,6 +166,66 @@ async def receive_webhook(
                              inbound.wa_message_id, exc_info=True)
 
     return {"status": "ok"}
+
+
+async def _try_claim_webhook_event(
+    session: AsyncSession,
+    *,
+    provider_event_id: str,
+    payload: dict,
+) -> bool:
+    """Insert the idempotency row; return False when another worker already claimed it."""
+    try:
+        async with session.begin_nested():
+            session.add(
+                WebhookEvent(
+                    provider_event_id=provider_event_id,
+                    payload=payload,
+                    processed_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.flush()
+        return True
+    except IntegrityError:
+        return False
+
+
+async def _process_status_events(session: AsyncSession, payload: dict) -> None:
+    """Mark outbox rows dead when Meta reports a delivery FAILURE for them.
+
+    Best-effort: status handling must never block inbound message processing.
+    sent/delivered/read events are ignored (no read-receipt feature — YAGNI).
+    """
+    from app.outbox.models import OutboxMessage
+    from app.outbox.worker import _META_PERMANENT_CODES
+    from app.webhook.normalizer import parse_status_events
+
+    try:
+        for ev in parse_status_events(payload):
+            if ev["status"] != "failed" or not ev["wa_message_id"]:
+                continue
+            row = await session.scalar(
+                select(OutboxMessage).where(
+                    OutboxMessage.wa_message_id == ev["wa_message_id"]
+                )
+            )
+            if row is None:
+                logger.error(
+                    "Meta reported delivery FAILURE for unknown message %s (code=%s)",
+                    ev["wa_message_id"], ev["error_code"],
+                )
+                continue
+            reason = _META_PERMANENT_CODES.get(ev["error_code"], "delivery_failed")
+            row.status = "dead"
+            row.payload = {**row.payload, "fail_reason": reason}
+            logger.error(
+                "outbound %s to %s failed after send (code=%s reason=%s) — marked dead",
+                ev["wa_message_id"], row.to_phone, ev["error_code"], reason,
+            )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.error("status-event processing failed — continuing", exc_info=True)
 
 
 async def _schedule_post_commit_delivery(

@@ -123,6 +123,46 @@ async def test_post_webhook_processes_message_and_queues_outbox(client, db_sessi
     assert "Chicken Biryani: AED 22" in rows[0].payload["body"]
 
 
+async def test_post_webhook_duplicate_skips_engine_before_second_outbox(client, db_session):
+    """Insert-first idempotency: the duplicate must not enqueue a second reply."""
+    from unittest.mock import patch
+
+    from sqlalchemy import func, select
+
+    from app.webhook.models import WebhookEvent
+
+    await _seed_restaurant_and_menu(client, db_session)
+
+    calls: list[str] = []
+
+    async def _spy(session, inbound, restaurant_id):
+        calls.append(inbound.wa_message_id)
+        from app.conversation.engine import handle_inbound as real
+
+        return await real(session, inbound, restaurant_id=restaurant_id)
+
+    body, sig = _signed_body(_TEXT_PAYLOAD)
+    with patch("app.webhook.router.handle_inbound", side_effect=_spy):
+        await client.post(
+            "/webhooks/whatsapp",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+        )
+        await client.post(
+            "/webhooks/whatsapp",
+            content=body,
+            headers={"Content-Type": "application/json", "X-Hub-Signature-256": sig},
+        )
+
+    assert calls == ["wamid.unique-e2e-001"]
+    evt_count = await db_session.scalar(
+        select(func.count()).select_from(WebhookEvent).where(
+            WebhookEvent.provider_event_id == "wamid.unique-e2e-001"
+        )
+    )
+    assert evt_count == 1
+
+
 async def test_post_webhook_duplicate_event_is_ignored(client, db_session):
     from sqlalchemy import select
     from app.outbox.models import OutboxMessage

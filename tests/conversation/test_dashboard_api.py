@@ -350,3 +350,35 @@ async def test_send_message_unknown_conversation_is_404(client, auth_headers):
         json={"text": "hello"},
     )
     assert resp.status_code == 404
+
+
+async def test_delivery_failures_lists_dead_sends(client, auth_headers, db_session):
+    """Gap #10: permanently-failed (dead) outbound sends must be visible to the
+    manager instead of dying silently in the outbox table."""
+    from app.outbox.models import OutboxMessage
+
+    restaurant = await _restaurant(db_session)
+    db_session.add(OutboxMessage(
+        restaurant_id=restaurant.id, to_phone="+971500000077",
+        payload={"type": "text", "body": "Your food is on the way",
+                 "fail_reason": "24h_window"},
+        status="dead", attempts=1, idempotency_key="df-test-1",
+    ))
+    other = Restaurant(
+        name="Other R", phone="+97140000077", password_hash="x", lat=25.1, lng=55.1,
+    )
+    db_session.add(other)
+    await db_session.flush()
+    db_session.add(OutboxMessage(  # other tenant — must NOT leak
+        restaurant_id=other.id, to_phone="+971500000078",
+        payload={"type": "text", "body": "x"},
+        status="dead", attempts=3, idempotency_key="df-test-2",
+    ))
+    await db_session.flush()
+
+    resp = await client.get("/api/v1/conversations/delivery-failures", headers=auth_headers)
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert any(r["to_phone"] == "+971500000077" and r["fail_reason"] == "24h_window"
+               for r in rows)
+    assert not any(r["to_phone"] == "+971500000078" for r in rows)

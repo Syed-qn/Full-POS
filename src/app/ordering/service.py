@@ -865,7 +865,16 @@ async def finalize_confirmation(
     order: Order,
     actor: str = "customer",
 ) -> None:
-    """Move order draft → pending_confirmation → confirmed and start the SLA clock."""
+    """Move order draft → pending_confirmation → confirmed and start the SLA clock.
+
+    Idempotent: a replay on an anything-but-unconfirmed order is a pure no-op.
+    Without the guard, a second call silently RESTARTED the SLA clock,
+    re-applied the wallet hold and re-pushed to the partner. Modification's
+    SLA restart is deliberate and lives in its own path (confirm_modification),
+    never here.
+    """
+    if order.status not in (OrderStatus.DRAFT, OrderStatus.PENDING_CONFIRMATION):
+        return
     if order.status == OrderStatus.DRAFT:
         await fsm_transition(session, order, OrderStatus.PENDING_CONFIRMATION, actor=actor)
     if order.status == OrderStatus.PENDING_CONFIRMATION:

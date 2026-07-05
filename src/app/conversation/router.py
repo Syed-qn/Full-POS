@@ -289,3 +289,40 @@ async def send_message(
     await session.commit()
     await _dispatch_outbox(session, [outbox_id])
     return out
+
+
+@router.get("/delivery-failures")
+async def list_delivery_failures(
+    limit: int = 50,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Recent permanently-failed outbound messages (status=dead) so the manager
+    can see WhatsApp sends that never reached the customer — 24h-window closes,
+    undeliverable numbers, retry exhaustion. Previously these died silently."""
+    from sqlalchemy import select
+
+    from app.outbox.models import OutboxMessage
+
+    rows = (
+        await session.scalars(
+            select(OutboxMessage)
+            .where(
+                OutboxMessage.restaurant_id == restaurant.id,
+                OutboxMessage.status == "dead",
+            )
+            .order_by(OutboxMessage.id.desc())
+            .limit(min(limit, 200))
+        )
+    ).all()
+    return [
+        {
+            "id": r.id,
+            "to_phone": r.to_phone,
+            "fail_reason": r.payload.get("fail_reason", "retries_exhausted"),
+            "body": (r.payload.get("body") or "")[:120],
+            "attempts": r.attempts,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]

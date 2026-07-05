@@ -194,6 +194,39 @@ async def test_basket_accepts_alternate_retailer_id_keys(db_session, restaurant)
     assert sum(i.qty for i in items if i.dish_name == "Lemon Mint") == 3
 
 
+async def test_catalog_basket_respects_manual_takeover(db_session, restaurant):
+    """Manager takeover: record the basket inbound, never auto-reply (gap #3)."""
+    from app.conversation.models import Message
+    from app.conversation.service import get_or_create_conversation, set_manual_takeover
+
+    await _seed_catalog_menu(db_session, restaurant.id)
+    conv = await get_or_create_conversation(
+        db_session, restaurant_id=restaurant.id, phone="+971501110001", counterpart="customer",
+    )
+    await set_manual_takeover(db_session, conversation_id=conv.id, taken_over_by=1)
+    await db_session.commit()
+
+    inbound = _order_inbound([
+        {"product_retailer_id": "nwb4pa5fbn", "quantity": "1", "item_price": "20", "currency": "AED"},
+    ], wa_id="wamid.takeover-basket")
+    await handle_catalog_order(db_session, inbound, restaurant_id=restaurant.id)
+    await db_session.commit()
+
+    outs = (await db_session.scalars(
+        select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110001")
+    )).all()
+    assert outs == []
+
+    inbound_rows = (await db_session.scalars(
+        select(Message).where(
+            Message.conversation_id == conv.id, Message.direction == "inbound",
+        )
+    )).all()
+    assert len(inbound_rows) == 1
+    assert inbound_rows[0].type == "order"
+    assert inbound_rows[0].wa_message_id == "wamid.takeover-basket"
+
+
 async def test_partial_mapping_adds_known_and_lists_unknown(db_session, restaurant):
     await _seed_catalog_menu(db_session, restaurant.id)
     inbound = _order_inbound([

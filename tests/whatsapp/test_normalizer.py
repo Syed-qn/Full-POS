@@ -159,3 +159,68 @@ def test_parse_status_update_returns_empty():
         }, "field": "messages"}]}],
     }
     assert parse_cloud_payload(payload) == []
+
+
+_REACTION_PAYLOAD = {
+    "object": "whatsapp_business_account",
+    "entry": [{"changes": [{"value": {
+        "metadata": {"display_phone_number": "+97141234567", "phone_number_id": "111"},
+        "messages": [{"id": "wamid.REACT1", "from": "971509876543",
+                      "timestamp": "1717661100", "type": "reaction",
+                      "reaction": {"message_id": "wamid.HBgL", "emoji": "👍"}}],
+    }, "field": "messages"}]}],
+}
+
+
+def test_reaction_is_dropped_entirely():
+    """A 👍 reaction needs no reply and no processing — routing it as UNKNOWN
+    sent it into the AI path which answered with a canned error (F83)."""
+    assert parse_cloud_payload(_REACTION_PAYLOAD) == []
+
+
+_FAILED_STATUS_PAYLOAD = {
+    "object": "whatsapp_business_account",
+    "entry": [{"changes": [{"value": {
+        "metadata": {"display_phone_number": "+97141234567", "phone_number_id": "111"},
+        "statuses": [{"id": "wamid.OUT1", "status": "failed",
+                      "timestamp": "1717661200", "recipient_id": "971509876543",
+                      "errors": [{"code": 131047, "title": "Re-engagement message"}]}],
+    }, "field": "messages"}]}],
+}
+
+
+def test_slice_message_payload_keeps_one_message():
+    from app.webhook.normalizer import slice_message_payload
+
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [{
+            "id": "123",
+            "changes": [{
+                "field": "messages",
+                "value": {
+                    "metadata": {"display_phone_number": "+97141234567"},
+                    "messages": [
+                        {"id": "wamid.A", "from": "971501", "type": "text", "text": {"body": "hi"}},
+                        {"id": "wamid.B", "from": "971502", "type": "text", "text": {"body": "bye"}},
+                    ],
+                },
+            }],
+        }],
+    }
+    slim = slice_message_payload(payload, "wamid.B")
+    msgs = slim["entry"][0]["changes"][0]["value"]["messages"]
+    assert len(msgs) == 1
+    assert msgs[0]["id"] == "wamid.B"
+    assert "wamid.A" not in str(slim)
+
+
+def test_parse_status_events_extracts_failure():
+    from app.webhook.normalizer import parse_status_events
+
+    events = parse_status_events(_FAILED_STATUS_PAYLOAD)
+    assert events == [
+        {"wa_message_id": "wamid.OUT1", "status": "failed", "error_code": 131047}
+    ]
+    # Message parser still ignores status-only payloads.
+    assert parse_cloud_payload(_FAILED_STATUS_PAYLOAD) == []

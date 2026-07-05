@@ -29,6 +29,24 @@ def _is_permanent_failure(status_code: int) -> bool:
     return 400 <= status_code < 500 and status_code != 429
 
 
+# Meta error codes that can never succeed on retry for THIS message:
+# 131047 re-engagement required (24h customer-service window closed),
+# 131026 recipient cannot receive this message (undeliverable).
+_META_PERMANENT_CODES = {131047: "24h_window", 131026: "undeliverable"}
+
+
+def _permanent_meta_failure_reason(exc: Exception) -> str | None:
+    """Queryable reason when Meta's error body marks this send permanently dead."""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    try:
+        code = response.json().get("error", {}).get("code")
+    except Exception:  # noqa: BLE001 — non-JSON error body
+        return None
+    return _META_PERMANENT_CODES.get(code)
+
+
 async def claim_pending_outbox_ids(
     session: AsyncSession, *, restaurant_id: int, to_phone: str | None = None
 ) -> list[int]:
@@ -98,13 +116,28 @@ async def _deliver_one(
             OUTBOX_DELIVERIES.labels(status="sent").inc()
         except Exception as exc:
             row.attempts += 1
-            logger.warning("outbox delivery failed for id=%s: %s", outbox_id, exc)
-            if row.attempts >= _MAX_ATTEMPTS:
+            reason = _permanent_meta_failure_reason(exc)
+            if reason is not None:
+                # Meta rejected this message permanently (e.g. 131047: the 24h
+                # customer-service window closed — only an approved template can
+                # re-open the thread). Retrying can never succeed; mark dead NOW
+                # with a queryable fail_reason instead of burning retries and
+                # hiding the loss.
                 row.status = "dead"
+                row.payload = {**row.payload, "fail_reason": reason}
                 OUTBOX_DELIVERIES.labels(status="dead").inc()
+                logger.error(
+                    "outbox permanent Meta failure id=%s reason=%s to=%s",
+                    outbox_id, reason, row.to_phone,
+                )
             else:
-                row.status = "failed"
-                OUTBOX_DELIVERIES.labels(status="retry").inc()
+                logger.warning("outbox delivery failed for id=%s: %s", outbox_id, exc)
+                if row.attempts >= _MAX_ATTEMPTS:
+                    row.status = "dead"
+                    OUTBOX_DELIVERIES.labels(status="dead").inc()
+                else:
+                    row.status = "failed"
+                    OUTBOX_DELIVERIES.labels(status="retry").inc()
         await session.commit()
 
 

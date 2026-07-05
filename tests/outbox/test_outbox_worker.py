@@ -83,3 +83,36 @@ async def test_deliver_one_marks_dead_after_3_failures(db_session, restaurant):
     updated = await db_session.get(OutboxMessage, row.id)
     await db_session.refresh(updated)
     assert updated.status == "dead"
+
+
+async def test_deliver_one_24h_window_marks_dead_with_reason(db_session, restaurant):
+    """Meta error 131047 (re-engagement / 24h window closed) is permanent for this
+    message — retrying can never succeed. Mark dead immediately with a queryable
+    fail_reason instead of burning retries and hiding the loss."""
+    import httpx
+
+    row = await _seed_outbox(db_session, restaurant.id)
+    factory = async_sessionmaker(
+        bind=db_session.bind, expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+    provider = MockProvider()
+
+    async def _window_closed(msg, **kwargs):
+        request = httpx.Request("POST", "https://graph.facebook.com/v20.0/x/messages")
+        response = httpx.Response(
+            400,
+            request=request,
+            json={"error": {"code": 131047, "message": "Re-engagement message",
+                            "error_data": {"details": "24h customer service window expired"}}},
+        )
+        raise httpx.HTTPStatusError("400", request=request, response=response)
+
+    provider.send = _window_closed
+
+    await _deliver_one(row.id, provider=provider, session_factory=factory)
+
+    updated = await db_session.get(OutboxMessage, row.id)
+    await db_session.refresh(updated)
+    assert updated.status == "dead"
+    assert updated.payload.get("fail_reason") == "24h_window"

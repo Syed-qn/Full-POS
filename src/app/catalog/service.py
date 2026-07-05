@@ -551,6 +551,20 @@ async def handle_catalog_order(
     conv = await get_or_create_conversation(
         session, restaurant_id=restaurant_id, phone=_phone, counterpart="customer",
     )
+    # Manual takeover: a human runs this thread — record the basket so the
+    # manager sees it, but never auto-process or reply over them (same contract
+    # as handle_inbound; this path used to bypass takeover entirely).
+    if conv.manual_takeover:
+        await record_message(
+            session,
+            conversation_id=conv.id,
+            direction="inbound",
+            wa_message_id=inbound.wa_message_id,
+            msg_type=str(inbound.type),
+            payload=dict(payload),
+            ts=inbound.timestamp,
+        )
+        return
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=_phone
     )
