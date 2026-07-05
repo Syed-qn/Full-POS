@@ -32,7 +32,9 @@ export function MetaConnectPanel(
   const [waba, setWaba] = useState("");
   const [token, setToken] = useState("");
   const [catalog, setCatalog] = useState("");
+  const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
+  const [useManual, setUseManual] = useState(false);
   // POS API key auto-minted on connect — shown ONCE for the manager to hand to the POS.
   // While it's set we hold navigation so it can't be missed.
   const [posKey, setPosKey] = useState<string | null>(null);
@@ -158,6 +160,7 @@ export function MetaConnectPanel(
         catalog_id: catalog.trim(),
       };
       if (token.trim()) patch.wa_access_token = token.trim();
+      if (pin.trim()) patch.wa_2fa_pin = pin.trim();
       const c = await saveMetaConfig(patch);
       setCfg(c);
       setToken("");
@@ -186,7 +189,7 @@ export function MetaConnectPanel(
 
   // Manual entry is only a fallback for when the popup isn't configured — never
   // shown alongside the "Connect with Facebook" button.
-  const showManual = embed !== null && !embed.enabled;
+  const showManual = embed !== null && (!embed.enabled || useManual);
 
   // One-time POS key hand-off: shown right after connect, before we move on.
   if (posKey) {
@@ -276,7 +279,7 @@ export function MetaConnectPanel(
         )}
       </div>
 
-      {embed?.enabled && (
+      {embed?.enabled && !useManual && (
         <>
           <p style={{ fontSize: 13, color: "var(--muted, #94a3b8)", marginTop: 6 }}>
             Click below, log in to your Facebook Business, and pick your WhatsApp
@@ -307,11 +310,27 @@ export function MetaConnectPanel(
             <span style={{ fontSize: 18, fontWeight: 800 }}>f</span>
             {busy ? "Connecting…" : cfg?.connected ? "Reconnect with Facebook" : "Connect with Facebook"}
           </button>
+          <button
+            type="button"
+            onClick={() => setUseManual(true)}
+            style={{
+              marginTop: 10,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              color: "var(--muted, #94a3b8)",
+              fontSize: 13,
+              textDecoration: "underline",
+              cursor: "pointer",
+            }}
+          >
+            Popup blocked or &quot;already connected&quot;? Enter credentials manually
+          </button>
         </>
       )}
 
       {showManual && (
-        <div style={{ marginTop: embed?.enabled ? 12 : 6 }}>
+        <div style={{ marginTop: embed?.enabled && !useManual ? 12 : 6 }}>
           <p style={{ fontSize: 13, color: "var(--muted, #94a3b8)", marginTop: 6 }}>
             Paste from Meta Business Manager → WhatsApp → API Setup. The access token is
             stored securely and never shown again.
@@ -340,9 +359,38 @@ export function MetaConnectPanel(
             <span className="label-upper">Meta Catalog ID (optional)</span>
             <input style={input} value={catalog} onChange={(e) => setCatalog(e.target.value)} placeholder="catalog-id" />
           </label>
+          <label style={field}>
+            <span className="label-upper">2FA PIN (6 digits, for Pending numbers)</span>
+            <input
+              style={input}
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="From WhatsApp Manager → two-step verification"
+              maxLength={6}
+            />
+          </label>
           <Button onClick={saveManual} disabled={busy}>
             {busy ? "Saving…" : "Save connection"}
           </Button>
+          {embed?.enabled && useManual && (
+            <button
+              type="button"
+              onClick={() => setUseManual(false)}
+              style={{
+                marginTop: 10,
+                marginLeft: 10,
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                color: "var(--muted, #94a3b8)",
+                fontSize: 13,
+                textDecoration: "underline",
+                cursor: "pointer",
+              }}
+            >
+              Back to Connect with Facebook
+            </button>
+          )}
         </div>
       )}
     </div>

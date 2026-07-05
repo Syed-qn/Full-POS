@@ -34,6 +34,7 @@ export interface MetaConfigPatch {
   wa_business_account_id?: string;
   wa_access_token?: string;
   catalog_id?: string;
+  wa_2fa_pin?: string;
 }
 
 export async function fetchMetaConfig(): Promise<MetaConfig> {

@@ -72,6 +72,8 @@ class MetaConfigIn(BaseModel):
     wa_business_account_id: str | None = Field(default=None, max_length=64)
     wa_access_token: str | None = Field(default=None, max_length=1024)
     catalog_id: str | None = Field(default=None, max_length=64)
+    # Cloud API register pin (6 digits). Stored server-side only; never returned.
+    wa_2fa_pin: str | None = Field(default=None, max_length=6)
 
 
 class MetaConfigOut(BaseModel):

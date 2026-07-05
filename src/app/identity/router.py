@@ -166,12 +166,25 @@ async def patch_meta_config(
     apply_meta_settings(restaurant, body.model_dump(exclude_unset=True))
     # Manual connect: subscribe WABA (same as Embedded Signup) and sync routing phone.
     from app.identity.meta_config import meta_settings
-    from app.identity.meta_embed import fetch_display_phone_number, subscribe_app_to_waba
+    from app.identity.meta_embed import (
+        fetch_display_phone_number,
+        register_phone_number,
+        subscribe_app_to_waba,
+    )
 
     cfg = meta_settings(restaurant)
     if cfg["wa_phone_number_id"] and cfg["wa_access_token"]:
         if cfg["wa_business_account_id"]:
             await subscribe_app_to_waba(cfg["wa_business_account_id"], cfg["wa_access_token"])
+        pin = (restaurant.settings or {}).get("wa_2fa_pin", "") or ""
+        if pin:
+            registered = await register_phone_number(
+                cfg["wa_phone_number_id"], cfg["wa_access_token"], str(pin)
+            )
+            if registered:
+                settings = dict(restaurant.settings or {})
+                settings["wa_2fa_pin"] = pin
+                restaurant.settings = settings
         display = await fetch_display_phone_number(
             cfg["wa_phone_number_id"], cfg["wa_access_token"]
         )
