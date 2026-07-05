@@ -1143,9 +1143,47 @@ async def _handle_top_sellers(
         inbound=inbound,
         restaurant_id=restaurant_id,
         prefix="top-sellers",
-        body="Here are our bestsellers 😊 Tap a dish to add it to your cart.",
+        body=(
+            "Here are our bestsellers 😊\n\n"
+            "Tap *Add to cart* below, then pick a dish — you can add one at a "
+            "time and open the list again for more. When you're happy, tap "
+            "*Proceed to delivery* on the next message 👇"
+        ),
         button_label="Add to cart",
         sections=[{"title": "Bestsellers", "rows": rows}],
+    )
+    await _send_suggestion_companion_buttons(
+        session, conv, inbound, restaurant_id, prefix="top-sellers-nav",
+    )
+
+
+async def _send_suggestion_companion_buttons(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    prefix: str,
+) -> None:
+    """Follow the suggestion list — WhatsApp's list overlay has no checkout/skip.
+
+    Sent as a second message so the customer can proceed, decline more adds,
+    or clear without picking from the list."""
+    cart = await _build_cart_summary(session, conv)
+    body = (
+        f"🛒 {cart}\n\nAdd more from the list above, or continue 👇"
+        if cart
+        else "Pick from the list above to add, or continue 👇"
+    )
+    await _send_buttons(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=prefix,
+        body=body,
+        buttons=[
+            {"id": "proceed_delivery", "title": "Proceed to delivery"},
+            {"id": "suggest_done", "title": "I'm good"},
+            {"id": "clear_cart", "title": "Clear cart"},
+        ],
     )
 
 
@@ -9581,6 +9619,29 @@ async def handle_inbound(
             return
         if btn_id == "suggest_dishes":
             await _handle_top_sellers(session, conv, inbound, restaurant_id)
+            return
+        if btn_id == "suggest_done":
+            from app.ordering.models import Order as _SuggestDoneOrder
+
+            cart = await _build_cart_summary(session, conv)
+            _oid = conv.state.get("draft_order_id")
+            _order = await session.get(_SuggestDoneOrder, _oid) if _oid else None
+            if _order is not None and cart:
+                upsell, buttons = await _post_add_extras(
+                    session, conv, restaurant_id, _order,
+                )
+                body = f"Sounds good! 🛒 {cart}\n\nReady when you are 👇{upsell}"
+            else:
+                body = "Sounds good! Tell me what you'd like when you're ready 😊"
+                buttons = [
+                    {"id": "proceed_delivery", "title": "Proceed to delivery"},
+                    {"id": "suggest_dishes", "title": "Suggestions"},
+                    {"id": "clear_cart", "title": "Clear cart"},
+                ]
+            await _send_buttons(
+                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+                prefix="suggest-done", body=body, buttons=buttons,
+            )
             return
         if btn_id == "clear_cart":
             from sqlalchemy import delete as sa_delete

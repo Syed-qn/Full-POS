@@ -2317,6 +2317,12 @@ async def test_suggest_dishes_button_shows_top_sellers_not_llm(db_session, resta
     list_msg = next(m for m in msgs if m.payload.get("type") == "list")
     rows = list_msg.payload["sections"][0]["rows"]
     assert rows and all(r["id"].startswith("upsell_add:") for r in rows)
+    # Companion actions — proceed / skip without adding / clear (list overlay has no buttons).
+    btn_msg = next(m for m in msgs if m.payload.get("buttons"))
+    btn_ids = {b["id"] for b in btn_msg.payload["buttons"]}
+    assert "proceed_delivery" in btn_ids
+    assert "suggest_done" in btn_ids
+    assert "clear_cart" in btn_ids
 
 
 async def test_suggestion_list_tap_adds_dish_to_cart(db_session, restaurant, monkeypatch):
