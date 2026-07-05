@@ -69,6 +69,8 @@ async def receive_webhook(
         except ValueError as exc:
             raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc))
 
+    _log_webhook_summary(payload)
+
     # Delivery-status events (value.statuses). Previously dropped entirely — a
     # message Meta accepted but later FAILED to deliver (closed 24h window,
     # blocked recipient) vanished: bot believed it replied, customer saw nothing.
@@ -170,6 +172,38 @@ async def receive_webhook(
                              inbound.wa_message_id, exc_info=True)
 
     return {"status": "ok"}
+
+
+def _log_webhook_summary(payload: dict) -> None:
+    """Log every Meta POST so prod Render logs show which WABA/phone fired."""
+    parts: list[str] = []
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            meta = value.get("metadata", {})
+            pid = meta.get("phone_number_id") or "?"
+            disp = meta.get("display_phone_number") or "?"
+            msgs = value.get("messages") or []
+            stats = value.get("statuses") or []
+            if msgs:
+                for msg in msgs:
+                    text = (msg.get("text") or {}).get("body") or msg.get("type") or "?"
+                    parts.append(
+                        f"pid={pid} display={disp} IN from={msg.get('from')} "
+                        f"type={msg.get('type')} text={text!r}"
+                    )
+            if stats:
+                for st in stats:
+                    parts.append(
+                        f"pid={pid} display={disp} STATUS {st.get('status')} "
+                        f"to={st.get('recipient_id')}"
+                    )
+            if not msgs and not stats:
+                parts.append(f"pid={pid} display={disp} (empty change)")
+    if parts:
+        logger.info("whatsapp webhook batch: %s", " | ".join(parts))
+    else:
+        logger.info("whatsapp webhook batch: (no entry/changes)")
 
 
 async def _try_claim_webhook_event(
