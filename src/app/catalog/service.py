@@ -184,21 +184,34 @@ async def send_catalog(
             products=sendable, page=0, idempotency_key=idempotency_key,
         )
 
-    # Group into sections by category (WhatsApp limits: <=10 sections, <=30
-    # products total, section title <=24 chars). Stable, readable order.
-    sections: dict[str, list[dict]] = {}
-    total = 0
-    for p in sendable:
-        if total >= 30:
-            break
-        cat = _category_of(p)[:24]
-        sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
-        total += 1
-
-    payload_sections = [
-        {"title": title, "product_items": items}
-        for title, items in list(sections.items())[:10]
-    ]
+    # Small menus (e.g. Lims with 4 dishes): ONE section only. WhatsApp's product_list
+    # UI often shows the first section's carousel only — a 4th dish in a second
+    # section (e.g. "Biryani" vs "Fried Chicken") never appears unless the customer
+    # discovers the section switch, so they count 3 instead of 4 (prod Lims Jul 2026).
+    if len(sendable) <= 10:
+        payload_sections = [
+            {
+                "title": "Menu",
+                "product_items": [
+                    {"product_retailer_id": p.retailer_id} for p in sendable[:30]
+                ],
+            }
+        ]
+    else:
+        # Group into sections by category (WhatsApp limits: <=10 sections, <=30
+        # products total, section title <=24 chars). Stable, readable order.
+        sections: dict[str, list[dict]] = {}
+        total = 0
+        for p in sendable:
+            if total >= 30:
+                break
+            cat = _category_of(p)[:24]
+            sections.setdefault(cat, []).append({"product_retailer_id": p.retailer_id})
+            total += 1
+        payload_sections = [
+            {"title": title, "product_items": items}
+            for title, items in list(sections.items())[:10]
+        ]
     list_body = body[:1024]
     if len(sendable) > 1:
         list_body = (
@@ -219,7 +232,7 @@ async def send_catalog(
     )
     logger.info(
         "sent catalog to %s for restaurant %s: %d product(s) in %d section(s)",
-        to_phone, restaurant_id, total, len(payload_sections),
+        to_phone, restaurant_id, len(sendable), len(payload_sections),
     )
     return True
 

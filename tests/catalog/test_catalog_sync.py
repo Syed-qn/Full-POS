@@ -340,6 +340,55 @@ async def test_send_catalog_uses_synced_products(db_session, restaurant):
     assert retailer_ids == {"r1"}  # only the ACTIVE synced product
 
 
+async def test_send_catalog_small_menu_one_section(db_session, restaurant):
+    """<=10 sendable items → single 'Menu' section so WhatsApp shows every card."""
+    from app.catalog.service import send_catalog
+
+    restaurant.settings = {
+        **restaurant.settings,
+        "catalog_id": "CAT1",
+        "catalog_ordering_enabled": True,
+    }
+    for i, (rid, name, cat) in enumerate(
+        (
+            ("r1", "Bite Box", "Fried Chicken"),
+            ("r2", "Jumbo Meal", "Fried Chicken"),
+            ("r3", "Party Meal", "Fried Chicken"),
+            ("r4", "Chicken Biryani 2", "Biryani"),
+        )
+    ):
+        db_session.add(
+            CatalogProduct(
+                restaurant_id=restaurant.id,
+                retailer_id=rid,
+                name=name,
+                price_aed=Decimal("25.00"),
+                currency="AED",
+                availability="in stock",
+                category=cat,
+                is_active=True,
+                is_sendable=True,
+                raw={},
+            )
+        )
+    await db_session.commit()
+
+    sent = await send_catalog(
+        db_session, restaurant_id=restaurant.id, to_phone="+971501110099"
+    )
+    await db_session.commit()
+    assert sent is True
+    msg = (
+        await db_session.scalars(
+            select(OutboxMessage).where(OutboxMessage.to_phone == "+971501110099")
+        )
+    ).one()
+    sections = msg.payload["sections"]
+    assert len(sections) == 1
+    assert sections[0]["title"] == "Menu"
+    assert len(sections[0]["product_items"]) == 4
+
+
 async def test_sync_endpoint_and_list(client, db_session, monkeypatch, auth_headers):
     """POST /catalog/sync pulls + returns products; GET /catalog/products lists them."""
     from app.identity.models import Restaurant
