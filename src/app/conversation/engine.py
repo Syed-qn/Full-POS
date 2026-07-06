@@ -794,12 +794,31 @@ _FULL_MENU_TEXT_CAP = 40
 def _normalize_category_keyword(raw: str) -> str:
     """Strip filler and simple plurals from a parsed category phrase."""
     t = _re.sub(r"\s+", " ", (raw or "").strip().lower()).strip("?.! ")
-    for lead in ("the ", "a ", "an ", "any ", "some "):
-        if t.startswith(lead):
+    # Follow-up leads too ("any other drink" -> "drink") so a customer asking for
+    # more of a category still resolves to that category (prod: "any other drink"
+    # replied "we don't have other drink"). Loop so "any other" strips both.
+    for lead in ("the ", "a ", "an ", "any ", "some ", "other ", "another ",
+                 "more ", "else "):
+        while t.startswith(lead):
             t = t[len(lead):].strip()
+    # A bare follow-up word with no noun ("any other" -> "other") names no category —
+    # collapse to empty so the caller returns None and the AI answers in context
+    # instead of "we don't have other on the menu" (prod).
+    if t in ("other", "another", "more", "else", "one", "ones", "thing", "things"):
+        return ""
     if t.endswith("s") and t[:-1] in _CATEGORY_ALIASES:
         t = t[:-1]
     return t
+
+
+# Bare browse words for the drink family — "drink"/"beverage" on their own is a
+# request to SEE drinks, never a single addable dish, so it lists options instead of
+# "Sorry, we don't have Drink on our menu" (prod). Deliberately NOT food words: a bare
+# "biryani"/"pizza" stays a normal dish order, not a category dump.
+_BARE_DRINK_BROWSE: frozenset[str] = frozenset({
+    "drink", "beverage", "beverages", "cold drink", "cold drinks",
+    "soft drink", "soft drinks", "something to drink", "anything to drink",
+})
 
 
 def _category_match_needles(keyword: str) -> tuple[str, ...]:
@@ -821,6 +840,9 @@ def _parse_category_availability_query(text: str | None) -> str | None:
     t = _re.sub(r"\s+", " ", text.strip().lower()).replace("'", "'")
     if not t or len(t) > 80:
         return None
+    # A bare drink-family word ("drink", "beverage") is a browse request, not a dish.
+    if _normalize_category_keyword(t) in _BARE_DRINK_BROWSE:
+        return "drink"
     for pat in _CATEGORY_AVAIL_PATTERNS:
         m = _re.match(pat, t)
         if m:
@@ -5613,6 +5635,31 @@ async def _record_cart_observation(
     )
 
 
+async def _send_cart_view(
+    session: AsyncSession,
+    conv: Conversation,
+    inbound: InboundMessage,
+    restaurant_id: int,
+    *,
+    prefix: str,
+) -> None:
+    """Deterministic cart render — the REAL cart, never an LLM guess.
+
+    Shared by the English fast-path (``_is_cart_query``) and the language-agnostic
+    router ``SHOW_CART`` intent, so a "show my cart" in ANY language/phrasing always
+    lists the actual items (prod: the LLM path ad-libbed "Here's your cart so far"
+    with no items). Kept in one place so the two entry points can never drift."""
+    cart = await _build_cart_summary(session, conv)
+    await _send_text(
+        session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
+        prefix=prefix,
+        body=(f"🛒 Here's your cart:\n\n{cart}\n\nReply with more items, "
+              "or send 'done' to check out 😊")
+        if cart else
+        "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+    )
+
+
 def _cart_expired(order, restaurant) -> bool:
     """True if a draft cart has been quiet past the restaurant's cart_expiry_minutes —
     used so a returning customer's stale cart is started fresh rather than resumed."""
@@ -9929,14 +9976,8 @@ async def handle_inbound(
         # "What's in my cart / show my order" → show the REAL cart deterministically,
         # in ANY mode, so the model can never mishandle it (e.g. re-send the catalogue).
         if _is_cart_query(text):
-            cart = await _build_cart_summary(session, conv)
-            await _send_text(
-                session, conv=conv, inbound=inbound, restaurant_id=restaurant_id,
-                prefix="cart-query",
-                body=(f"🛒 Here's your cart:\n\n{cart}\n\nReply with more items, "
-                      "or send 'done' to check out 😊")
-                if cart else
-                "Your cart is empty right now 🛒 Tell me what you'd like to add 😊",
+            await _send_cart_view(
+                session, conv, inbound, restaurant_id, prefix="cart-query"
             )
             return
         # "Done" at the confirm step must NOT re-ask for an address that's already on
@@ -10103,6 +10144,16 @@ async def handle_inbound(
     elif _router_intent == IntentLabel.CHECKOUT:
         await _handle_done_checkout(
             session, conv, inbound, restaurant_id, restaurant=restaurant,
+        )
+        return
+
+    # Language-agnostic "show me my cart" the router recognized (any language /
+    # phrasing the English fast-path above missed) → same deterministic render, so
+    # the customer always sees the REAL items, never an LLM ad-lib. Showing the cart
+    # never mutates, so this is safe before the cart-mutation fast-paths below.
+    if _router_intent == IntentLabel.SHOW_CART:
+        await _send_cart_view(
+            session, conv, inbound, restaurant_id, prefix="cart-query-router"
         )
         return
 

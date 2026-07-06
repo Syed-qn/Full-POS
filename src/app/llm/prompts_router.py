@@ -21,6 +21,8 @@ Valid intents: {labels}
 - Questions naming a dish or quantity are question or complaint, never mutation
 - checkout = done/that's all/proceed in any language
 - clear = explicit empty-cart or fresh-start request only, never "only X"
+- show_cart = wants to SEE the current cart/order contents in ANY language
+  ("what's in my cart", "show my order", "mera cart dikhao", "قائمة طلبي"), never a change
 - non_actionable = reactions, emoji, system noise
 - unknown if genuinely unclear
 
