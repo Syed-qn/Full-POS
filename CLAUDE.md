@@ -91,7 +91,47 @@ docker compose exec db psql -U app -d restaurant -c "CREATE DATABASE restaurant_
 # run
 .venv/bin/uvicorn app.main:app --reload --port 8000
 .venv/bin/celery -A apps.workers.celery_app:celery_app worker --loglevel=info
+
+# frontend (manager dashboard — React/Vite in frontend/)
+cd frontend && npm install
+cd frontend && npm run dev          # local UI :5173
+cd frontend && npm test             # vitest unit tests
+cd frontend && npm run lint         # tsc --noEmit
+
+# playwright e2e — ALWAYS use vendored install (do NOT npm install from registry/git URL)
+# Source: https://github.com/microsoft/playwright.git → vendor/playwright (built monorepo)
+# frontend links @playwright/test via file:../vendor/playwright/packages/playwright-test
+cd vendor/playwright && npm ci && npm run build   # first-time / after git pull
+cd frontend && npm install                        # relink local packages
+cd frontend && npx playwright install             # browser binaries (once per version)
+cd frontend && npm run e2e                        # all e2e specs (frontend/e2e/)
+cd frontend && npx playwright test --list         # discover tests
+cd frontend && npx playwright test e2e/smoke.spec.ts  # single file
+cd frontend && npx playwright test --ui           # interactive runner
 ```
+
+### Playwright (vendored) — mandatory for dashboard E2E
+
+Use the **local clone** at `vendor/playwright` sourced from [microsoft/playwright](https://github.com/microsoft/playwright.git). The dashboard (`frontend/`) depends on it through `file:` paths in `frontend/package.json` (with `overrides` for `playwright` + `playwright-core`).
+
+**Do not** install Playwright via `npm install @playwright/test` or `github:microsoft/playwright#path:…` — the monorepo root resolves incorrectly and breaks `playwright.config.ts`.
+
+**First-time setup (or fresh clone):**
+```bash
+git clone --depth 1 https://github.com/microsoft/playwright.git vendor/playwright
+cd vendor/playwright && npm ci && npm run build
+cd ../../frontend && npm install && npx playwright install
+```
+
+**Update to latest upstream main:**
+```bash
+cd vendor/playwright && git pull && npm ci && npm run build
+cd ../../frontend && npm install && npx playwright install
+```
+
+**E2E layout:** specs in `frontend/e2e/`, config in `frontend/playwright.config.ts` (preview server on `:4173`). Requires Node ≥20 for the vendored build.
+
+**Developing Playwright itself:** see `vendor/playwright/CONTRIBUTING.md` and skills under `vendor/playwright/.claude/skills/` (`playwright-dev`, `playwright-triage`, `playwright-devops`).
 
 ## Architecture
 
@@ -104,6 +144,7 @@ Modular monolith (FastAPI, async SQLAlchemy 2, Celery) — see spec §2 for full
 - Multi-tenancy: every tenant table carries `restaurant_id`; routes resolve tenant via `identity/deps.py:current_restaurant` (JWT bearer). Restaurant row IS the manager account (no separate users table yet).
 - Audit: every state change calls `audit/service.py:record_audit` in the same transaction. Append-only.
 - Migrations: alembic autogenerate; new model modules must be imported in BOTH `alembic/env.py` and `tests/conftest.py` to register metadata.
+- Frontend: `frontend/` — React manager dashboard; unit tests via Vitest, E2E via vendored Playwright (`vendor/playwright` → `frontend/e2e/`).
 
 ## Non-negotiable business rules (from spec)
 

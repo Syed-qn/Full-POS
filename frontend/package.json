@@ -21,8 +21,12 @@
     "react-router-dom": "^6.26.2",
     "recharts": "^3.8.1"
   },
+  "overrides": {
+    "playwright": "file:../vendor/playwright/packages/playwright",
+    "playwright-core": "file:../vendor/playwright/packages/playwright-core"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.47.2",
+    "@playwright/test": "file:../vendor/playwright/packages/playwright-test",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
