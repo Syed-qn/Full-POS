@@ -345,6 +345,18 @@ def _is_cart_query(text: str) -> bool:
     t = text.strip().lower()
     if not t or len(t) > 45:
         return False
+    # Strip polite/filler lead-ins so "ok show my cart", "can you show my cart",
+    # "pls show cart" resolve the same as the bare phrase. Prod regression: these
+    # fell through to the LLM, which ad-libbed "Here's your cart so far 😊" with NO
+    # items instead of the deterministic render below.
+    for _lead in ("please ", "pls ", "plz ", "kindly ", "can you ", "could you ",
+                  "can u ", "could u ", "would you ", "ok ", "okay ", "so ", "hey ",
+                  "yo ", "just ", "now "):
+        while t.startswith(_lead):
+            t = t[len(_lead):].strip()
+    t = t.lstrip(",.:;! ").strip()
+    if not t:
+        return False
     if any(w in t for w in ("cancel", "clear", "empty", "remove", "delete", "add ")):
         return False
     # A QUESTION *about* the cart ("is my cart good for lunch", "should i add more")
@@ -353,14 +365,20 @@ def _is_cart_query(text: str) -> bool:
     if t.startswith((
         "is ", "are ", "was ", "were ", "should ", "would ", "could ", "do ",
         "does ", "am ", "will ", "shall ", "how good", "how's my", "hows my",
+        "what do you think", "what do u think", "what you think",
     )):
         return False
     exact = {"cart", "my cart", "show cart", "show my cart", "view cart", "check cart",
-             "check my cart", "cart?", "my cart?"}
+             "check my cart", "cart?", "my cart?", "basket", "my basket", "my order"}
     if t in exact:
         return True
+    # Targeted LISTING phrases only — never a bare "my cart" substring, which would
+    # swallow opinion questions like "what do you think of my cart" (must reach the LLM).
     return any(p in t for p in (
         "what's in my cart", "whats in my cart", "what is in my cart", "in my cart",
+        "show my cart", "check my cart", "view my cart", "show me my cart", "see my cart",
+        "what my cart", "whats my cart", "show me the cart", "see the cart",
+        "in my basket", "show my basket",
         "what's in my order", "whats in my order", "my current order", "current order",
         "what did i order", "show my order", "what's my order", "my order so far",
     ))

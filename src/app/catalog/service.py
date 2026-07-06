@@ -36,13 +36,8 @@ _CAT_PAGE_SIZE = _LIST_MAX_ROWS - 1
 
 
 def _product_list_body(body: str, sendable: list[CatalogProduct]) -> str:
-    """Body for product_list — swipe hint when multiple catalog cards are sent."""
-    text = body[:1024]
-    if len(sendable) > 1:
-        text = (
-            f"{text}\n\n👈 Swipe the cards to see all {len(sendable)} items."
-        )[:1024]
-    return text
+    """Body for product_list. The swipe hint was removed at the owner's request."""
+    return body[:1024]
 
 
 def _aed(value) -> str:

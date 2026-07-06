@@ -457,7 +457,8 @@ async def test_send_catalog_small_menu_one_section(db_session, restaurant):
     assert len(sections) == 1
     assert sections[0]["title"] == "Menu"
     assert len(sections[0]["product_items"]) == 4
-    assert "Swipe the cards to see all 4" in msg.payload["body"]
+    # Swipe hint removed at owner's request — body must NOT carry it.
+    assert "Swipe the cards" not in msg.payload["body"]
 
 
 async def test_sync_endpoint_and_list(client, db_session, monkeypatch, auth_headers):
