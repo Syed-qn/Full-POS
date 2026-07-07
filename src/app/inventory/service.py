@@ -1,10 +1,12 @@
 from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.inventory.models import DishIngredient, Ingredient, WasteLog
+from app.audit.service import record_audit
+from app.inventory.models import DishIngredient, Ingredient, IngredientBatch, WasteLog
 from app.ordering.models import OrderItem
 
 
@@ -58,3 +60,49 @@ async def record_waste(
     session.add(log)
     await session.flush()
     return log
+
+
+async def record_stock_count(
+    session: AsyncSession, *, restaurant_id: int, ingredient_id: int, counted_qty: Decimal,
+) -> dict:
+    ingredient = await session.get(Ingredient, ingredient_id)
+    if ingredient is None or ingredient.restaurant_id != restaurant_id:
+        raise ValueError("ingredient not found")
+
+    previous_stock = ingredient.current_stock
+    variance = counted_qty - previous_stock
+    ingredient.current_stock = counted_qty
+
+    await record_audit(
+        session, actor="manager", entity="ingredient", entity_id=str(ingredient_id),
+        action="stock_count", restaurant_id=restaurant_id,
+        before={"current_stock": str(previous_stock)},
+        after={"current_stock": str(counted_qty), "variance": str(variance)},
+    )
+    await session.flush()
+    return {"variance": variance, "previous_stock": previous_stock, "counted_stock": counted_qty}
+
+
+async def add_batch(
+    session: AsyncSession, *, restaurant_id: int, ingredient_id: int, qty: Decimal, expiry_date: date,
+) -> IngredientBatch:
+    batch = IngredientBatch(
+        restaurant_id=restaurant_id, ingredient_id=ingredient_id, qty=qty,
+        expiry_date=expiry_date, received_at=datetime.now(timezone.utc),
+    )
+    session.add(batch)
+    await session.flush()
+    return batch
+
+
+async def list_expiring_soon(
+    session: AsyncSession, *, restaurant_id: int, within_days: int = 3,
+) -> list[IngredientBatch]:
+    cutoff = date.today() + timedelta(days=within_days)
+    rows = (await session.scalars(
+        select(IngredientBatch).where(
+            IngredientBatch.restaurant_id == restaurant_id,
+            IngredientBatch.expiry_date <= cutoff,
+        )
+    )).all()
+    return list(rows)

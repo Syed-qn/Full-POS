@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -37,3 +38,68 @@ class WasteIn(BaseModel):
 
 class RestockIn(BaseModel):
     quantity: Decimal
+
+
+class StockCountIn(BaseModel):
+    counted_qty: Decimal
+
+
+class StockCountOut(BaseModel):
+    variance: Decimal
+    previous_stock: Decimal
+    counted_stock: Decimal
+
+
+class BatchIn(BaseModel):
+    qty: Decimal
+    expiry_date: date
+
+
+class BatchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    ingredient_id: int
+    qty: Decimal
+    expiry_date: date
+    received_at: datetime
+
+
+class VendorIn(BaseModel):
+    name: str
+    phone: str | None = None
+    email: str | None = None
+
+
+class VendorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    phone: str | None = None
+    email: str | None = None
+
+
+class PurchaseOrderLineIn(BaseModel):
+    ingredient_id: int
+    qty_ordered: Decimal
+    unit_cost_aed: Decimal
+
+
+class PurchaseOrderIn(BaseModel):
+    vendor_id: int
+    lines: list[PurchaseOrderLineIn]
+
+
+class PurchaseOrderLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    ingredient_id: int
+    qty_ordered: Decimal
+    unit_cost_aed: Decimal
+
+
+class PurchaseOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    vendor_id: int
+    status: str
+    lines: list[PurchaseOrderLineOut] = []
