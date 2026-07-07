@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.reports.analytics import inventory_usage, item_performance, labor_hours, table_turn_time
 from app.reports.zreport import build_z_report
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
@@ -32,3 +33,41 @@ async def z_report(
             for s in report["drawer_sessions"]
         ],
     }
+
+
+@router.get("/item-performance")
+async def item_performance_report(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await item_performance(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
+    return [{**r, "revenue_aed": str(r["revenue_aed"])} for r in rows]
+
+
+@router.get("/inventory-usage")
+async def inventory_usage_report(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await inventory_usage(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
+    return [{**r, "quantity_used": str(r["quantity_used"])} for r in rows]
+
+
+@router.get("/table-turn-time")
+async def table_turn_time_report(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await table_turn_time(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
+
+
+@router.get("/labor-hours")
+async def labor_hours_report(
+    target_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await labor_hours(session, restaurant_id=restaurant.id, target_date=target_date)
