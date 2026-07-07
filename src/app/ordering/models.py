@@ -44,6 +44,9 @@ class Customer(Base, TimestampMixin):
     loyalty_tier_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     loyalty_tier_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     loyalty_reward_anchor: Mapped[int] = mapped_column(Integer, default=0)
+    # Referral program: who referred this customer, set once at signup/first-order
+    # time by app.loyalty.referrals.redeem_referral and never changed after.
+    referred_by_customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
 
 
 class CustomerAddress(Base, TimestampMixin):

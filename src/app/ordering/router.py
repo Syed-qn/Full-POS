@@ -28,6 +28,7 @@ from app.ordering.detail_schemas import (
     OrderDetailOut,
 )
 from app.ordering.fsm import IllegalTransitionError
+from app.loyalty.schemas import NpsResponseIn, NpsResponseOut
 from app.ordering.service import (
     advance_kitchen_status,
     cancel_order,
@@ -608,5 +609,32 @@ async def list_orders(
 
         preview = await preview_batch_groups(session, restaurant_id=restaurant.id)
     return await _enrich_orders_bulk(session, orders, batch_preview=preview)
+
+
+@router.post("/{order_id}/nps", response_model=NpsResponseOut, status_code=201)
+async def submit_nps_response(
+    order_id: int,
+    body: NpsResponseIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> NpsResponseOut:
+    """Post-delivery NPS survey response (0-10) tied to a tenant order."""
+    from app.loyalty import nps as nps_service
+
+    order = await get_order_for_tenant(session, restaurant_id=restaurant.id, order_id=order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    try:
+        resp = await nps_service.record_nps_response(
+            session, restaurant_id=restaurant.id, customer_id=body.customer_id,
+            order_id=order_id, score=body.score, comment=body.comment,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await session.commit()
+    return NpsResponseOut(
+        id=resp.id, order_id=resp.order_id, customer_id=resp.customer_id,
+        score=resp.score, comment=resp.comment, created_at=resp.created_at,
+    )
 
 

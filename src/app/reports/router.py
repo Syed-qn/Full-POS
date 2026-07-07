@@ -153,3 +153,16 @@ async def retention_endpoint(
     session: AsyncSession = Depends(get_session),
 ):
     return await retention_report(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
+
+
+@router.get("/nps-summary")
+async def nps_summary_report(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.loyalty.nps import nps_summary
+
+    return await nps_summary(
+        session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
+    )

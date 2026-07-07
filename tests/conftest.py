@@ -77,6 +77,7 @@ import app.staff.models  # noqa: F401
 import app.staff.scheduling  # noqa: F401
 import app.organizations.models  # noqa: F401
 import app.payments.models  # noqa: F401
+import app.loyalty.models  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

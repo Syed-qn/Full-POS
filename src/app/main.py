@@ -188,6 +188,10 @@ def create_app() -> FastAPI:
     app.include_router(organizations_router)
     app.include_router(stock_transfer_router)
     app.include_router(giftcards_router)
+
+    from app.loyalty.referral_router import router as referral_router
+
+    app.include_router(referral_router)
     app.include_router(payments_router)
     app.include_router(aggregators_router)
     app.include_router(dispatch_router)
@@ -224,6 +228,10 @@ def create_app() -> FastAPI:
     from app.wallet.router import router as wallet_router
 
     app.include_router(wallet_router)
+
+    from app.loyalty.referral_router import router as referral_router
+
+    app.include_router(referral_router)
 
     from app.coupons.router import router as coupons_router
 
