@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import { autoUpdater } from "electron-updater";
 import path from "path";
 import { openLocalDb, initSchema } from "./db";
 import { startSyncScheduler } from "./scheduler";
 import { enqueueOp } from "./pendingOps";
 import { initAuthTokenStore, getAuthToken, setAuthToken } from "./authToken";
+import { initAutoUpdater } from "./updater";
 
 export function createMainWindow(loadUrl: string): BrowserWindow {
   const win = new BrowserWindow({
@@ -83,6 +85,8 @@ if (require.main === module) {
         .prepare(`SELECT id, entity, path FROM pending_ops WHERE status = 'conflict'`)
         .all();
     });
+
+    initAutoUpdater(autoUpdater);
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

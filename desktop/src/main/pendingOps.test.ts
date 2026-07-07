@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { openLocalDb, initSchema } from "./db";
 import { enqueueOp, readPendingOps, markOpStatus } from "./pendingOps";
 import type Database from "better-sqlite3";
@@ -34,8 +34,11 @@ describe("pendingOps", () => {
   });
 
   it("preserves insertion order when created_at timestamps collide", () => {
-    const originalNow = Date.now;
-    Date.now = () => 1_700_000_000_000; // freeze the clock: identical ISO timestamps
+    // vi.useFakeTimers virtualizes `new Date()` itself (not just Date.now()) —
+    // overriding Date.now alone doesn't reliably freeze `new Date().toISOString()`
+    // across engines, which made this test flake by ~1ms occasionally.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2023-11-14T22:13:20.000Z"));
     let id1: string;
     let id2: string;
     let id3: string;
@@ -65,7 +68,7 @@ describe("pendingOps", () => {
         payload: {},
       });
     } finally {
-      Date.now = originalNow;
+      vi.useRealTimers();
     }
     const rows = readPendingOps(db);
     expect(rows.map((r) => r.createdAt)).toEqual([

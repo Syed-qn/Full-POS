@@ -14,3 +14,12 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+# Auto-update feed: restaurants' installed .exes poll this URL for new releases
+# (electron-updater, wired in src/main/updater.ts). Set POS_UPDATE_URL at build
+# time once a real update host is chosen (S3/generic HTTP/GitHub Releases) — a
+# generic HTTP host just needs the built installer + the auto-generated
+# latest.yml uploaded after each release. Until POS_UPDATE_URL is set this
+# resolves to an empty/invalid URL and checkForUpdatesAndNotify() no-ops.
+publish:
+  provider: generic
+  url: "${env.POS_UPDATE_URL}"
