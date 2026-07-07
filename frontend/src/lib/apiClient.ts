@@ -22,6 +22,22 @@ async function request<T>(
   body?: unknown,
   isForm = false,
 ): Promise<T> {
+  const bridge = (globalThis as typeof globalThis & {
+    window?: { posBridge?: { request: (m: string, p: string, b: unknown) => Promise<{ status: number; body: unknown }> } };
+  }).window?.posBridge;
+
+  if (bridge) {
+    const { status, body: responseBody } = await bridge.request(method, path, body);
+    if (status >= 400) {
+      const detail =
+        typeof (responseBody as { detail?: unknown })?.detail === "string"
+          ? (responseBody as { detail: string }).detail
+          : JSON.stringify(responseBody);
+      throw new ApiError(status, detail);
+    }
+    return responseBody as T;
+  }
+
   const headers: Record<string, string> = { ...authHeaders() };
   let payload: BodyInit | undefined;
   if (body !== undefined) {

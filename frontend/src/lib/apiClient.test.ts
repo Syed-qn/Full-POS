@@ -71,3 +71,28 @@ describe("apiClient", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 });
+
+describe("apiClient inside Electron shell", () => {
+  const originalWindow = globalThis.window;
+
+  afterEach(() => {
+    // @ts-expect-error test cleanup
+    globalThis.window = originalWindow;
+  });
+
+  it("routes GET requests through window.posBridge when present", async () => {
+    const posBridgeRequest = vi.fn().mockResolvedValue({
+      status: 200,
+      body: { id: 1, name: "Test Rider" },
+    });
+    // @ts-expect-error augmenting window for this test only
+    globalThis.window.posBridge = { request: posBridgeRequest };
+
+    const result = await apiClient.get("/api/v1/riders/1");
+
+    expect(posBridgeRequest).toHaveBeenCalledWith("GET", "/api/v1/riders/1", undefined);
+    expect(result).toEqual({ id: 1, name: "Test Rider" });
+    // @ts-expect-error test cleanup
+    delete globalThis.window.posBridge;
+  });
+});

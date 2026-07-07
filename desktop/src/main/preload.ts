@@ -1,5 +1,6 @@
-// Populated in Task 4 with the posBridge IPC surface. Empty context-isolated
-// bridge for now so contextIsolation:true doesn't break window creation.
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
-contextBridge.exposeInMainWorld("posBridge", {});
+contextBridge.exposeInMainWorld("posBridge", {
+  request: (method: string, path: string, body: unknown) =>
+    ipcRenderer.invoke("pos-api-request", { method, path, body }),
+});
