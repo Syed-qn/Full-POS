@@ -11,6 +11,7 @@ import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
 import { CustomerProfileScreen } from "./screens/CustomerProfileScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
+import { KdsScreen } from "./screens/KdsScreen";
 import { LiveOpsScreen } from "./screens/LiveOpsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { MenuManagerScreen } from "./screens/MenuManagerScreen";
@@ -68,6 +69,7 @@ export default function App() {
       <Route path="/customers/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
       <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
+      <Route path="/kds/:stationId" element={<Guarded><KdsScreen /></Guarded>} />
       <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
       <Route path="/tickets" element={<Guarded><TicketsScreen /></Guarded>} />
