@@ -40,7 +40,7 @@ export function enqueueOp(db: Database.Database, newOp: NewPendingOp): string {
 
 export function readPendingOps(db: Database.Database): PendingOp[] {
   const rows = db
-    .prepare(`SELECT * FROM pending_ops ORDER BY created_at ASC`)
+    .prepare(`SELECT * FROM pending_ops ORDER BY created_at ASC, rowid ASC`)
     .all() as Array<{
     id: string;
     entity: string;
