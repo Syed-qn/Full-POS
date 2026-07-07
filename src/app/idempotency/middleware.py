@@ -25,6 +25,7 @@ connection that can't see uncommitted rows from that savepoint and would trip
 the ``restaurant_id`` foreign key. Going through the same override keeps the
 middleware inside the test's transaction like every route handler.
 """
+import logging
 from contextlib import asynccontextmanager
 
 from sqlalchemy import select
@@ -36,6 +37,8 @@ from starlette.responses import Response
 from app.db import get_session
 from app.identity.auth import decode_access_token
 from app.idempotency.models import IdempotencyKey
+
+logger = logging.getLogger(__name__)
 
 _MUTATING_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 
@@ -89,26 +92,42 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             body = b"".join(body_chunks)
             response.body_iterator = _aiter([body])
 
-            async with asynccontextmanager(session_dep)() as session:
-                session.add(
-                    IdempotencyKey(
-                        restaurant_id=restaurant_id,
-                        key=key,
-                        method=method,
-                        path=path,
-                        response_status=response.status_code,
-                        response_body=body.decode(),
+            try:
+                async with asynccontextmanager(session_dep)() as session:
+                    session.add(
+                        IdempotencyKey(
+                            restaurant_id=restaurant_id,
+                            key=key,
+                            method=method,
+                            path=path,
+                            response_status=response.status_code,
+                            response_body=body.decode(),
+                        )
                     )
+                    try:
+                        await session.commit()
+                    except IntegrityError:
+                        # Concurrent duplicate: another in-flight request for the same
+                        # (restaurant_id, key, method, path) won the race and already
+                        # inserted a row. Our own response is still a valid first
+                        # application of the mutation (we didn't replay anything) —
+                        # just let it through unmodified rather than erroring the caller.
+                        await session.rollback()
+            except Exception:
+                # The mutation itself already succeeded (call_next returned 2xx) —
+                # a transient failure recording the dedup bookkeeping (e.g. a dropped
+                # DB connection) must never turn a completed mutation into a
+                # client-visible 500. Worst case: this one write isn't deduped against
+                # on a future retry, which is strictly better than either erroring a
+                # succeeded request or silently double-applying it.
+                logger.exception(
+                    "idempotency bookkeeping write failed after a successful mutation "
+                    "(restaurant_id=%s, method=%s, path=%s) — returning the original "
+                    "response anyway",
+                    restaurant_id,
+                    method,
+                    path,
                 )
-                try:
-                    await session.commit()
-                except IntegrityError:
-                    # Concurrent duplicate: another in-flight request for the same
-                    # (restaurant_id, key, method, path) won the race and already
-                    # inserted a row. Our own response is still a valid first
-                    # application of the mutation (we didn't replay anything) —
-                    # just let it through unmodified rather than erroring the caller.
-                    await session.rollback()
 
         return response
 
