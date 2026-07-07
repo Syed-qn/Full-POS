@@ -42,6 +42,9 @@ class Dish(Base, TimestampMixin):
     price_aed: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     category: Mapped[str | None] = mapped_column(String(128))
     description: Mapped[str | None] = mapped_column(String(2000))
+    # KDS station routing: explicit per-dish override; falls back to a
+    # category-level default, then a restaurant's auto-created "Main" station.
+    station_id: Mapped[int | None] = mapped_column(ForeignKey("kitchen_stations.id"))
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     # Optional serving-size variants, e.g. Chicken Biryani → 1 serve / 4 serve, each
     # with its own price. Empty list = flat dish (today's behaviour, base price_aed
