@@ -32,10 +32,15 @@ export async function pullSync(
   const url = new URL("/api/v1/menu/dishes", apiBase);
   if (cursor) url.searchParams.set("updated_since", cursor);
 
-  const resp = await fetchImpl(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!resp.ok) return; // offline or server error — leave cache as-is, retried next tick
+  let resp: Response;
+  try {
+    resp = await fetchImpl(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return; // offline — leave cache as-is, retried next tick
+  }
+  if (!resp.ok) return; // server error — leave cache as-is, retried next tick
 
   const dishes = (await resp.json()) as DishPayload[];
   const upsert = db.prepare(
@@ -67,7 +72,10 @@ export async function pushSync(
   fetchImpl: typeof fetch,
   token: string,
 ): Promise<void> {
-  const ops = readPendingOps(db).filter((op) => op.status === "pending");
+  // "failed" is retried (transient/offline errors) — only "conflict" is terminal.
+  const ops = readPendingOps(db).filter(
+    (op) => op.status === "pending" || op.status === "failed",
+  );
   for (const op of ops) {
     await pushOne(db, apiBase, fetchImpl, token, op);
   }

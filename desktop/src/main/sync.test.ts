@@ -41,6 +41,13 @@ describe("pullSync", () => {
       }),
     );
   });
+
+  it("does not throw when offline (fetch rejects)", async () => {
+    const fakeFetch = vi.fn().mockRejectedValue(new Error("network down"));
+    await expect(
+      pullSync(db, "http://api.test", fakeFetch as unknown as typeof fetch, "tok"),
+    ).resolves.toBeUndefined();
+  });
 });
 
 describe("pushSync", () => {
@@ -87,5 +94,27 @@ describe("pushSync", () => {
 
     const rows = readPendingOps(db);
     expect(rows.find((r) => r.id === id)?.status).toBe("conflict");
+  });
+
+  it("retries a failed op on the next pushSync call (not stranded forever)", async () => {
+    const id = enqueueOp(db, {
+      entity: "orders",
+      entityId: 9,
+      op: "update",
+      method: "PATCH",
+      path: "/api/v1/orders/9/status",
+      payload: { status: "preparing" },
+    });
+    const flakyFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+
+    await pushSync(db, "http://api.test", flakyFetch as unknown as typeof fetch, "tok");
+    expect(readPendingOps(db).find((r) => r.id === id)?.status).toBe("failed");
+
+    await pushSync(db, "http://api.test", flakyFetch as unknown as typeof fetch, "tok");
+    expect(readPendingOps(db).find((r) => r.id === id)?.status).toBe("synced");
+    expect(flakyFetch).toHaveBeenCalledTimes(2);
   });
 });
