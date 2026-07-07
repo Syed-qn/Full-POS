@@ -18,7 +18,9 @@ export function createMainWindow(loadUrl: string): BrowserWindow {
 // Real app bootstrap — not exercised by the unit test (mocked `app`/`BrowserWindow`).
 if (require.main === module) {
   app.whenReady().then(() => {
-    const target = process.env.POS_SHELL_URL ?? "http://localhost:5173";
+    const target =
+      process.env.POS_SHELL_URL ??
+      `file://${path.join(process.resourcesPath, "frontend", "dist", "index.html")}`;
     createMainWindow(target);
   });
   app.on("window-all-closed", () => {

@@ -1,0 +1,16 @@
+appId: com.catalystiq.fullpos.desktop
+productName: Full POS
+directories:
+  output: dist_installer
+  buildResources: build
+files:
+  - dist/main/**/*
+extraResources:
+  - from: "../frontend/dist"
+    to: "frontend/dist"
+win:
+  target: nsis
+  artifactName: "FullPOS-Setup-${version}.exe"
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "npm run build && electron dist/main/main.js",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder --win",
+    "postinstall": "echo 'desktop/: run npm run build before npm start/dist; npm run dist targets Windows (nsis) explicitly via electron-builder --win regardless of host OS, per electron-builder.yml at the project root'"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
