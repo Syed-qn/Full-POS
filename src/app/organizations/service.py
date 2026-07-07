@@ -49,3 +49,41 @@ async def rollup_sales(session: AsyncSession, *, organization_id: int, target_da
         total += report["gross_sales_aed"]
 
     return {"total_gross_sales_aed": total, "branches": breakdown}
+
+
+async def branch_comparison(
+    session: AsyncSession, *, org_id: int, start_date: date, end_date: date
+) -> list[dict]:
+    """Order count + revenue per branch of `org_id` over [start_date, end_date]
+    (inclusive), sorted by revenue descending. Revenue counts delivered orders
+    only (consistent with rollup_sales' gross_sales_aed), order_count counts
+    all orders placed in the window regardless of status.
+    """
+    from datetime import datetime, time
+
+    from app.ordering.models import Order
+
+    day_start = datetime.combine(start_date, time.min)
+    day_end = datetime.combine(end_date, time.max)
+
+    branches = await list_branches(session, organization_id=org_id)
+    results = []
+    for branch in branches:
+        orders = (await session.scalars(
+            select(Order).where(
+                Order.restaurant_id == branch.id,
+                Order.created_at >= day_start,
+                Order.created_at <= day_end,
+            )
+        )).all()
+        delivered = [o for o in orders if o.status == "delivered"]
+        revenue = sum((o.total for o in delivered), Decimal("0.00"))
+        results.append({
+            "restaurant_id": branch.id,
+            "restaurant_name": branch.name,
+            "order_count": len(orders),
+            "revenue_aed": revenue,
+        })
+
+    results.sort(key=lambda r: r["revenue_aed"], reverse=True)
+    return results
