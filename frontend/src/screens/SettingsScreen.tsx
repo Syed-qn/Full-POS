@@ -12,12 +12,18 @@ import {
   type ApiKey,
 } from "../lib/partnerApi";
 import type { LoyaltyConfig, LoyaltyTierThreshold, RestaurantOut } from "../lib/types";
+import {
+  deletePaymentCredentials,
+  getPaymentCredentials,
+  setPaymentCredentials,
+  type CredentialsStatus,
+} from "../lib/paymentsApi";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
 
-type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "resale" | "loyalty" | "dispatch" | "integrations";
+type Tab = "general" | "fees" | "hours" | "batching" | "cart" | "resale" | "loyalty" | "dispatch" | "integrations" | "payments";
 
 interface ResaleConfig {
   enabled: boolean;
@@ -52,6 +58,8 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
   { key: "integrations", label: "API Keys", icon: "🔑", desc: "Partner access",
     title: "Partner API Keys", blurb: "Issue keys so a partner system (e.g. a POS) can pull your data read-only." },
+  { key: "payments", label: "Payments", icon: "💳", desc: "Card processor",
+    title: "Payment Processing", blurb: "Connect your own Stripe account to accept card payments. Without one, card charges run in test/mock mode." },
 ];
 
 // "Max items per order" isn't enforced by the backend yet — hidden until it is.
@@ -1321,6 +1329,7 @@ export function SettingsScreen() {
       )}
 
           {tab === "integrations" && <ApiKeysSection />}
+          {tab === "payments" && <PaymentsSection />}
           </>
           )}
         </div>
@@ -1521,6 +1530,97 @@ function ApiKeysSection() {
           busy={revoking}
           onConfirm={onRevoke}
           onCancel={() => !revoking && setPendingRevoke(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function PaymentsSection() {
+  const [status, setStatus] = useState<CredentialsStatus | null>(null);
+  const [secretKey, setSecretKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  function reload() {
+    getPaymentCredentials().then(setStatus).catch(() => setStatus({ provider: "mock", configured: false }));
+  }
+  useEffect(() => { reload(); }, []);
+
+  async function onSave() {
+    const key = secretKey.trim();
+    if (!key) {
+      toast("Paste your Stripe secret key first.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      await setPaymentCredentials("stripe", key);
+      setSecretKey("");
+      reload();
+      toast("Stripe connected. Card payments now run against your account.", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not save credentials.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onDelete() {
+    setDeleting(true);
+    try {
+      await deletePaymentCredentials();
+      reload();
+      toast("Stripe disconnected. Card payments will run in test/mock mode.");
+      setPendingDelete(false);
+    } catch {
+      toast("Could not disconnect.", "error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  if (status === null) {
+    return <div className={s.section} aria-busy="true">Loading…</div>;
+  }
+
+  return (
+    <div className={s.section}>
+      <p className={s.rowHint}>
+        Status: {status.configured
+          ? <strong>Stripe connected</strong>
+          : <strong>Not connected — card charges run in mock/test mode</strong>}
+      </p>
+
+      <div className={s.apiCreateRow}>
+        <input
+          className={s.input}
+          type="password"
+          placeholder="sk_live_… or sk_test_…"
+          value={secretKey}
+          onChange={(e) => setSecretKey(e.target.value)}
+        />
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? "Saving…" : status.configured ? "Update key" : "Connect Stripe"}
+        </Button>
+      </div>
+
+      {status.configured && (
+        <Button variant="ghost" onClick={() => setPendingDelete(true)}>
+          Disconnect
+        </Button>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Disconnect Stripe?"
+          message="Card payments will fall back to mock/test mode until you connect a new key."
+          confirmLabel="Disconnect"
+          danger
+          busy={deleting}
+          onConfirm={onDelete}
+          onCancel={() => !deleting && setPendingDelete(false)}
         />
       )}
     </div>

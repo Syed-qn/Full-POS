@@ -70,6 +70,9 @@ class Settings(BaseSettings):
 
     # WhatsApp
     whatsapp_provider: str = "mock"  # mock | cloud
+    payment_provider: str = "mock"  # mock | stripe
+    stripe_secret_key: SecretStr = SecretStr("")
+    aggregator_provider: str = "mock"  # mock | talabat | deliveroo | careem
     wa_verify_token: str = "dev-verify-token"
     wa_access_token: SecretStr = SecretStr("")
     wa_phone_number_id: str = ""

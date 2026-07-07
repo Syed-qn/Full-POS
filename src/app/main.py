@@ -15,6 +15,7 @@ from app.kds.router import router as kds_router
 from app.reports.router import router as reports_router
 from app.giftcards.router import router as giftcards_router
 from app.organizations.router import router as organizations_router
+from app.payments.router import router as payments_router
 from app.staff.router import router as staff_router
 from app.tables.router import router as tables_router
 from app.config import get_settings
@@ -176,6 +177,7 @@ def create_app() -> FastAPI:
     app.include_router(staff_router)
     app.include_router(organizations_router)
     app.include_router(giftcards_router)
+    app.include_router(payments_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
     app.include_router(rider_app_router)
