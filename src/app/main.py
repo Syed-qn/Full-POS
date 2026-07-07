@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from app.aggregators.router import router as aggregators_router
 from app.cashdrawer.router import router as cashdrawer_router
 from app.cod.router import router as cod_router
 from app.inventory.router import router as inventory_router
@@ -178,6 +179,7 @@ def create_app() -> FastAPI:
     app.include_router(organizations_router)
     app.include_router(giftcards_router)
     app.include_router(payments_router)
+    app.include_router(aggregators_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
     app.include_router(rider_app_router)

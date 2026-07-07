@@ -86,6 +86,9 @@ class Order(Base, TimestampMixin):
     table_id: Mapped[int | None] = mapped_column(ForeignKey("tables.id"))
     # Sales-per-server attribution — null when no staff member is tracked (e.g. self-service).
     staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
+    # Third-party channel this order arrived through. Null = native WhatsApp order.
+    aggregator_source: Mapped[str | None] = mapped_column(String(24))
+    aggregator_order_ref: Mapped[str | None] = mapped_column(String(128))
     additional_details: Mapped[str | None] = mapped_column(Text)
 
     # Dispatch (Phase 4): nullable until the dispatch engine assigns a rider.
