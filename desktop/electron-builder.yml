@@ -6,7 +6,12 @@ directories:
 files:
   - dist/main/**/*
 extraResources:
-  - from: "../frontend/dist"
+  # dist-electron (not dist/) — built via `npm run build:electron` in frontend/,
+  # which sets base: "./" so asset paths resolve correctly under Electron's
+  # file:// loading. The plain `dist/` build (base: "/") is for the hosted web
+  # deployment and renders BLANK under file:// (absolute "/assets/..." paths
+  # resolve against the filesystem root, not index.html's directory).
+  - from: "../frontend/dist-electron"
     to: "frontend/dist"
 win:
   target: nsis
@@ -18,8 +23,9 @@ nsis:
 # (electron-updater, wired in src/main/updater.ts). Set POS_UPDATE_URL at build
 # time once a real update host is chosen (S3/generic HTTP/GitHub Releases) — a
 # generic HTTP host just needs the built installer + the auto-generated
-# latest.yml uploaded after each release. Until POS_UPDATE_URL is set this
-# resolves to an empty/invalid URL and checkForUpdatesAndNotify() no-ops.
+# latest.yml uploaded after each release. electron-builder ERRORS (not a soft
+# no-op) if POS_UPDATE_URL is unset when this config is read — always export a
+# value (even a placeholder) when building locally/in CI before that's decided.
 publish:
   provider: generic
   url: "${env.POS_UPDATE_URL}"
