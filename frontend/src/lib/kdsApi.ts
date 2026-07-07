@@ -8,6 +8,19 @@ export interface KdsTicketItem {
   qty: number;
   kitchen_status: string;
   notes: string | null;
+  created_at: string;
+}
+
+export type TicketUrgency = "ok" | "warning" | "late";
+
+const WARNING_AFTER_MINUTES = 8;
+const LATE_AFTER_MINUTES = 15;
+
+export function ticketUrgency(createdAt: string, now: Date = new Date()): TicketUrgency {
+  const ageMinutes = (now.getTime() - new Date(createdAt).getTime()) / 60000;
+  if (ageMinutes >= LATE_AFTER_MINUTES) return "late";
+  if (ageMinutes >= WARNING_AFTER_MINUTES) return "warning";
+  return "ok";
 }
 
 export function fetchStationTickets(stationId: number) {

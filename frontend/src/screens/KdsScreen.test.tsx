@@ -18,7 +18,7 @@ describe("KdsScreen", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify([
-              { id: 1, order_id: 10, dish_name: "Kebab", variant_name: null, qty: 2, kitchen_status: "received", notes: null },
+              { id: 1, order_id: 10, dish_name: "Kebab", variant_name: null, qty: 2, kitchen_status: "received", notes: null, created_at: new Date().toISOString() },
             ]),
             { status: 200 },
           ),

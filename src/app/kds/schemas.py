@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -24,6 +26,7 @@ class TicketItemOut(BaseModel):
     qty: int
     kitchen_status: str
     notes: str | None
+    created_at: datetime
 
 
 class PrintJobOut(BaseModel):
