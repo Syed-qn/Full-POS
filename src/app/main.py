@@ -3,12 +3,14 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.aggregators.router import router as aggregators_router
+from app.audit.router import router as audit_router
 from app.cashdrawer.router import router as cashdrawer_router
 from app.cod.router import router as cod_router
 from app.inventory.router import router as inventory_router
@@ -23,7 +25,7 @@ from app.staff.router import router as staff_router
 from app.tables.router import router as tables_router
 from app.config import get_settings
 from app.conversation.router import router as conversation_router
-from app.db import get_engine
+from app.db import get_engine, get_session
 from app.dispatch.rider_app_router import router as rider_app_router
 from app.dispatch.router import router as dispatch_router
 from app.dispatch.tracking_router import router as tracking_router
@@ -180,6 +182,7 @@ def create_app() -> FastAPI:
     app.include_router(cod_router)
     app.include_router(kds_router)
     app.include_router(cashdrawer_router)
+    app.include_router(audit_router)
     app.include_router(reports_router)
     app.include_router(tables_router)
     app.include_router(inventory_router)
@@ -248,6 +251,26 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok"}
+
+    @app.get("/api/v1/health")
+    async def health_v1(session: AsyncSession = Depends(get_session)) -> dict:
+        # What an external uptime monitor (UptimeRobot, etc.) polls: unlike the
+        # bare liveness ping above, this confirms the DB is actually reachable.
+        from datetime import datetime, timezone
+
+        from sqlalchemy import text
+
+        db_status = "ok"
+        try:
+            await session.execute(text("SELECT 1"))
+        except Exception:  # noqa: BLE001 — any DB failure marks the check degraded
+            db_status = "error"
+
+        return {
+            "status": "ok" if db_status == "ok" else "degraded",
+            "db": db_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     @app.get("/version")
     async def version() -> dict:
