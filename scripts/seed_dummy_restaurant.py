@@ -49,6 +49,7 @@ from app.tickets.models import Ticket  # noqa: E402
 from app.wallet.models import WalletAccount, WalletEntry  # noqa: E402
 
 DUMMY_PHONE = "+971500001234"
+DUMMY_EMAIL = "demo@alfanargrill.test"
 DUMMY_NAME = "Al Fanar Grill (Demo)"
 LAT, LNG = 25.2048, 55.2708  # Downtown Dubai
 
@@ -70,6 +71,7 @@ async def main() -> None:
         # ---- Restaurant ----
         rest = Restaurant(
             name=DUMMY_NAME,
+            email=DUMMY_EMAIL,
             phone=DUMMY_PHONE,
             password_hash=hash_password("Demo@1234"),
             lat=LAT,
@@ -83,7 +85,7 @@ async def main() -> None:
         )
         session.add(rest)
         await session.flush()
-        print(f"Restaurant id={rest.id}  phone={DUMMY_PHONE}  password=Demo@1234")
+        print(f"Restaurant id={rest.id}  email={DUMMY_EMAIL}  password=Demo@1234")
 
         # ---- Menu ----
         menu = Menu(restaurant_id=rest.id, version=1, status="active", source_files=[])
@@ -444,7 +446,8 @@ async def main() -> None:
     print()
     print("=" * 60)
     print(f"Dummy restaurant ready: {DUMMY_NAME}")
-    print(f"  phone:    {DUMMY_PHONE}")
+    print(f"  login email: {DUMMY_EMAIL}")
+    print(f"  phone (WhatsApp): {DUMMY_PHONE}")
     print("  password: Demo@1234")
     print("  6 orders across every FSM status, 3 riders, 5 customers,")
     print("  10 dishes, coupons, wallet, tickets, marketing, predictions.")
