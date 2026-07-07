@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { readPendingOps, markOpStatus, type PendingOp } from "./pendingOps";
 
 interface DishPayload {
   id: number;
@@ -58,4 +59,47 @@ export async function pullSync(
   tx(dishes);
 
   if (maxUpdatedAt) setCursor(db, "menu", maxUpdatedAt);
+}
+
+export async function pushSync(
+  db: Database.Database,
+  apiBase: string,
+  fetchImpl: typeof fetch,
+  token: string,
+): Promise<void> {
+  const ops = readPendingOps(db).filter((op) => op.status === "pending");
+  for (const op of ops) {
+    await pushOne(db, apiBase, fetchImpl, token, op);
+  }
+}
+
+async function pushOne(
+  db: Database.Database,
+  apiBase: string,
+  fetchImpl: typeof fetch,
+  token: string,
+  op: PendingOp,
+): Promise<void> {
+  try {
+    const resp = await fetchImpl(new URL(op.path, apiBase).toString(), {
+      method: op.method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Idempotency-Key": op.id,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(op.payload),
+    });
+    if (resp.status === 409) {
+      markOpStatus(db, op.id, "conflict");
+      return;
+    }
+    if (!resp.ok) {
+      markOpStatus(db, op.id, "failed"); // retried next tick, see Task 9 scheduler
+      return;
+    }
+    markOpStatus(db, op.id, "synced");
+  } catch {
+    markOpStatus(db, op.id, "failed"); // network error — offline, retried next tick
+  }
 }

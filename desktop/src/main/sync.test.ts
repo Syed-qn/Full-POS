@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { openLocalDb, initSchema } from "./db";
-import { pullSync } from "./sync";
+import { pullSync, pushSync } from "./sync";
+import { enqueueOp, readPendingOps } from "./pendingOps";
 import type Database from "better-sqlite3";
 
 let db: Database.Database;
@@ -39,5 +40,52 @@ describe("pullSync", () => {
         headers: expect.objectContaining({ Authorization: "Bearer tok" }),
       }),
     );
+  });
+});
+
+describe("pushSync", () => {
+  it("replays a pending op with an Idempotency-Key header and marks it synced", async () => {
+    const id = enqueueOp(db, {
+      entity: "orders",
+      entityId: 7,
+      op: "update",
+      method: "PATCH",
+      path: "/api/v1/orders/7/status",
+      payload: { status: "preparing" },
+    });
+    const fakeFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    await pushSync(db, "http://api.test", fakeFetch as unknown as typeof fetch, "tok");
+
+    expect(fakeFetch).toHaveBeenCalledWith(
+      "http://api.test/api/v1/orders/7/status",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({
+          Authorization: "Bearer tok",
+          "Idempotency-Key": id,
+          "Content-Type": "application/json",
+        }),
+      }),
+    );
+    const rows = readPendingOps(db);
+    expect(rows.find((r) => r.id === id)?.status).toBe("synced");
+  });
+
+  it("marks an op conflict (not retried) on a 409 response", async () => {
+    const id = enqueueOp(db, {
+      entity: "orders",
+      entityId: 8,
+      op: "update",
+      method: "PATCH",
+      path: "/api/v1/orders/8/status",
+      payload: { status: "preparing" },
+    });
+    const fakeFetch = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+
+    await pushSync(db, "http://api.test", fakeFetch as unknown as typeof fetch, "tok");
+
+    const rows = readPendingOps(db);
+    expect(rows.find((r) => r.id === id)?.status).toBe("conflict");
   });
 });
