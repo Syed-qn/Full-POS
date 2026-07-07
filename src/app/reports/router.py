@@ -42,7 +42,10 @@ async def item_performance_report(
     session: AsyncSession = Depends(get_session),
 ):
     rows = await item_performance(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
-    return [{**r, "revenue_aed": str(r["revenue_aed"])} for r in rows]
+    return [
+        {**r, "revenue_aed": str(r["revenue_aed"]), "food_cost_aed": str(r["food_cost_aed"]), "margin_aed": str(r["margin_aed"])}
+        for r in rows
+    ]
 
 
 @router.get("/inventory-usage")

@@ -6,7 +6,7 @@ from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.inventory.models import DishIngredient, Ingredient
-from app.inventory.schemas import IngredientIn, IngredientOut, RecipeLinkIn, RestockIn, WasteIn
+from app.inventory.schemas import CostIn, IngredientIn, IngredientOut, RecipeLinkIn, RestockIn, WasteIn
 from app.inventory.service import list_low_stock, record_waste
 
 router = APIRouter(prefix="/api/v1/ingredients", tags=["inventory"])
@@ -102,6 +102,26 @@ async def restock(
         session, actor="manager", entity="ingredient", entity_id=str(ingredient_id),
         action="restock", restaurant_id=restaurant.id, before=None,
         after={"quantity": str(body.quantity)},
+    )
+    await session.commit()
+    await session.refresh(ingredient)
+    return ingredient
+
+
+@router.patch("/{ingredient_id}/cost", response_model=IngredientOut)
+async def update_cost(
+    ingredient_id: int,
+    body: CostIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    ingredient = await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
+    before = str(ingredient.cost_per_unit_aed)
+    ingredient.cost_per_unit_aed = body.cost_per_unit_aed
+    await record_audit(
+        session, actor="manager", entity="ingredient", entity_id=str(ingredient_id),
+        action="cost_update", restaurant_id=restaurant.id,
+        before={"cost_per_unit_aed": before}, after={"cost_per_unit_aed": str(body.cost_per_unit_aed)},
     )
     await session.commit()
     await session.refresh(ingredient)

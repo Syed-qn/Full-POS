@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.models import AuditLog
+from app.inventory.costing import dish_cost
 from app.inventory.models import DishIngredient
 from app.ordering.models import Order, OrderItem
 
@@ -33,9 +34,22 @@ async def item_performance(
 
     by_dish: dict[str, dict] = {}
     for item in items:
-        row = by_dish.setdefault(item.dish_name, {"dish_name": item.dish_name, "order_count": 0, "revenue_aed": Decimal("0.00")})
+        row = by_dish.setdefault(
+            item.dish_name,
+            {"dish_id": item.dish_id, "dish_name": item.dish_name, "order_count": 0, "revenue_aed": Decimal("0.00")},
+        )
         row["order_count"] += item.qty
         row["revenue_aed"] += item.price_aed * item.qty
+
+    for row in by_dish.values():
+        unit_cost = await dish_cost(session, dish_id=row["dish_id"])
+        cost_total = unit_cost * row["order_count"]
+        row["food_cost_aed"] = cost_total.quantize(Decimal("0.01"))
+        row["margin_aed"] = (row["revenue_aed"] - cost_total).quantize(Decimal("0.01"))
+        row["margin_pct"] = (
+            round(float((row["revenue_aed"] - cost_total) / row["revenue_aed"] * 100), 2)
+            if row["revenue_aed"] > 0 else 0.0
+        )
 
     return sorted(by_dish.values(), key=lambda r: r["revenue_aed"], reverse=True)
 

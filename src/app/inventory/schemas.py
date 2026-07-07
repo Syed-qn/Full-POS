@@ -8,6 +8,7 @@ class IngredientIn(BaseModel):
     unit: str
     current_stock: Decimal = Decimal("0.000")
     low_stock_threshold: Decimal = Decimal("0.000")
+    cost_per_unit_aed: Decimal = Decimal("0.0000")
 
 
 class IngredientOut(BaseModel):
@@ -17,6 +18,11 @@ class IngredientOut(BaseModel):
     unit: str
     current_stock: Decimal
     low_stock_threshold: Decimal
+    cost_per_unit_aed: Decimal
+
+
+class CostIn(BaseModel):
+    cost_per_unit_aed: Decimal
 
 
 class RecipeLinkIn(BaseModel):

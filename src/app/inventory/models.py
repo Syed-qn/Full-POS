@@ -15,6 +15,8 @@ class Ingredient(Base, TimestampMixin):
     unit: Mapped[str] = mapped_column(String(16))
     current_stock: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("0.000"))
     low_stock_threshold: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("0.000"))
+    # Cost basis for food-cost/margin reporting — what THIS restaurant pays per unit.
+    cost_per_unit_aed: Mapped[Decimal] = mapped_column(Numeric(10, 4), default=Decimal("0.0000"))
 
 
 class DishIngredient(Base, TimestampMixin):
