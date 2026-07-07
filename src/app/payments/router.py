@@ -13,6 +13,7 @@ from app.payments.service import (
     refund_transaction,
     total_paid,
 )
+from app.staff.deps import require_role
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -44,7 +45,7 @@ async def charge(
 async def refund(
     transaction_id: int,
     body: RefundIn,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     gateway = get_payment_port(restaurant)

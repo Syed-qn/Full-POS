@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.identity.auth import hash_password
+from app.identity.auth import create_access_token, hash_password, verify_password
 from app.identity.deps import current_restaurant
 from app.staff.models import StaffMember
-from app.staff.schemas import ClockIn, StaffIn, StaffOut
+from app.staff.schemas import ClockIn, StaffIn, StaffLoginIn, StaffOut
 from app.staff.service import (
     AlreadyClockedInError,
     NotClockedInError,
@@ -19,6 +19,15 @@ from app.staff.service import (
 )
 
 router = APIRouter(prefix="/api/v1/staff", tags=["staff"])
+
+
+@router.post("/login")
+async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_session)):
+    staff = await session.get(StaffMember, body.staff_id)
+    if staff is None or not verify_password(body.pin, staff.pin_hash):
+        raise HTTPException(status_code=401, detail="invalid staff_id or pin")
+    token = create_access_token(staff_id=staff.id, audience="staff", extra_claims={"role": staff.role})
+    return {"access_token": token, "token_type": "bearer", "role": staff.role}
 
 
 async def _get_owned_staff(session: AsyncSession, *, staff_id: int, restaurant_id: int) -> StaffMember:

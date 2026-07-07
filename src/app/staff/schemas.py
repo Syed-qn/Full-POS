@@ -18,3 +18,8 @@ class StaffOut(BaseModel):
 
 class ClockIn(BaseModel):
     type: str  # clock_in | clock_out
+
+
+class StaffLoginIn(BaseModel):
+    staff_id: int
+    pin: str

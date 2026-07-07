@@ -29,15 +29,18 @@ def create_access_token(
     restaurant_id: int | None = None,
     rider_id: int | None = None,
     org_id: int | None = None,
+    staff_id: int | None = None,
     audience: str = "manager",
+    extra_claims: dict | None = None,
 ) -> str:
     s = get_settings()
-    sub = str(next(v for v in (restaurant_id, rider_id, org_id) if v is not None))
+    sub = str(next(v for v in (restaurant_id, rider_id, org_id, staff_id) if v is not None))
     payload = {
         "sub": sub,
         "aud": audience,
         "iss": s.jwt_issuer,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=s.jwt_ttl_minutes),
+        **(extra_claims or {}),
     }
     return jwt.encode(payload, s.jwt_secret.get_secret_value(), algorithm=_ALGO)
 
