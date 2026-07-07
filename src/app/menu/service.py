@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -241,6 +242,37 @@ async def list_active_dishes_catalog(
         )
     ).all()
     return [{"id": d.id, "name": d.name} for d in rows]
+
+
+async def list_dishes(
+    session: AsyncSession,
+    restaurant_id: int,
+    updated_since: datetime | None = None,
+) -> list[Dish]:
+    """Dish list for the restaurant's active menu, hiding archived (soft-deleted) dishes.
+
+    Used by the desktop pull-sync client (Task 8): with ``updated_since`` set, only rows
+    whose ``updated_at`` is strictly after the given cursor are returned, so an incremental
+    sync only pulls what changed. Omitting it returns the full active-menu dish list,
+    matching today's behaviour.
+    """
+    menu = await get_active_menu(session, restaurant_id)
+    if menu is None:
+        return []
+    stmt = (
+        select(Dish)
+        .where(Dish.menu_id == menu.id, Dish.meta_status != "archived")
+        .order_by(Dish.dish_number)
+    )
+    if updated_since is not None:
+        # updated_at is stored naive UTC (see CLAUDE.md conventions); strip any tzinfo
+        # from a caller-supplied offset-aware timestamp so asyncpg doesn't choke on a
+        # naive/aware mismatch.
+        if updated_since.tzinfo is not None:
+            updated_since = updated_since.astimezone(timezone.utc).replace(tzinfo=None)
+        stmt = stmt.where(Dish.updated_at > updated_since)
+    result = await session.scalars(stmt)
+    return list(result)
 
 
 async def ensure_active_menu(session: AsyncSession, restaurant_id: int) -> Menu:

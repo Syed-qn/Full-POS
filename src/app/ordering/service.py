@@ -212,11 +212,14 @@ async def list_orders_for_tenant(
     from_date: str | None = None,
     to_date: str | None = None,
     q: str | None = None,
+    updated_since: datetime | None = None,
 ) -> list[Order]:
     """List orders for the tenant, newest first, with optional server-side filters.
 
     ``limit`` is clamped to [1, 100]. ``offset`` is clamped to >= 0.
     Date bounds use Asia/Dubai calendar days on ``created_at``.
+    ``updated_since`` (used by the desktop pull-sync client) restricts results to rows
+    with ``updated_at`` strictly after the given timestamp.
     """
     from sqlalchemy import or_
 
@@ -229,6 +232,12 @@ async def list_orders_for_tenant(
         stmt = stmt.where(Order.created_at >= _dubai_day_start(from_date))
     if to_date:
         stmt = stmt.where(Order.created_at < _dubai_day_end_exclusive(to_date))
+    if updated_since is not None:
+        # updated_at is stored naive UTC; strip tzinfo from an offset-aware caller value
+        # so asyncpg doesn't choke on a naive/aware comparison mismatch.
+        if updated_since.tzinfo is not None:
+            updated_since = updated_since.astimezone(timezone.utc).replace(tzinfo=None)
+        stmt = stmt.where(Order.updated_at > updated_since)
     if q:
         term = q.strip().lstrip("#")
         if term:

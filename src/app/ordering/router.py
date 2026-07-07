@@ -1,5 +1,6 @@
 # src/app/ordering/router.py
 from collections import defaultdict
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -418,6 +419,7 @@ async def list_orders(
     from_date: str | None = None,
     to_date: str | None = None,
     q: str | None = None,
+    updated_since: datetime | None = Query(default=None),
     preview_batch: bool = Query(default=True),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
@@ -431,6 +433,7 @@ async def list_orders(
         from_date=from_date,
         to_date=to_date,
         q=q,
+        updated_since=updated_since,
     )
     preview: dict[int, str] = {}
     if preview_batch:
