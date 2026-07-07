@@ -260,6 +260,7 @@ async def create_manual_order_endpoint(
             delivery_fee_aed=body.delivery_fee_aed,
             latitude=body.address.latitude,
             longitude=body.address.longitude,
+            scheduled_for=body.scheduled_for,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -459,6 +460,7 @@ async def list_orders(
     q: str | None = None,
     updated_since: datetime | None = Query(default=None),
     preview_batch: bool = Query(default=True),
+    scheduled_only: bool = Query(default=False),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
@@ -472,6 +474,7 @@ async def list_orders(
         to_date=to_date,
         q=q,
         updated_since=updated_since,
+        scheduled_only=scheduled_only,
     )
     preview: dict[int, str] = {}
     if preview_batch:

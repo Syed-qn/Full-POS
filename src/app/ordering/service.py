@@ -213,6 +213,7 @@ async def list_orders_for_tenant(
     to_date: str | None = None,
     q: str | None = None,
     updated_since: datetime | None = None,
+    scheduled_only: bool = False,
 ) -> list[Order]:
     """List orders for the tenant, newest first, with optional server-side filters.
 
@@ -228,6 +229,8 @@ async def list_orders_for_tenant(
     stmt = select(Order).where(Order.restaurant_id == restaurant_id)
     if status:
         stmt = stmt.where(Order.status == status)
+    if scheduled_only:
+        stmt = stmt.where(Order.scheduled_for.is_not(None))
     if from_date:
         stmt = stmt.where(Order.created_at >= _dubai_day_start(from_date))
     if to_date:
@@ -1442,6 +1445,7 @@ async def create_manual_order(
     delivery_fee_aed: Decimal,
     latitude: float | None = None,
     longitude: float | None = None,
+    scheduled_for: datetime | None = None,
 ) -> "Order":
     """Create a confirmed delivery order on behalf of a walk-in/phone customer.
 
@@ -1518,6 +1522,7 @@ async def create_manual_order(
     )
     order.delivery_fee_aed = delivery_fee_aed
     order.address_id = address.id
+    order.scheduled_for = scheduled_for
     await session.flush()
 
     # 6. Add items (each call recalculates subtotal)

@@ -92,6 +92,7 @@ class ManualOrderIn(BaseModel):
     items: list[ManualOrderItemIn] = Field(min_length=1)
     address: ManualOrderAddressIn
     delivery_fee_aed: Decimal = Decimal("0.00")
+    scheduled_for: datetime | None = None
 
 
 class CustomerLookupOut(BaseModel):
