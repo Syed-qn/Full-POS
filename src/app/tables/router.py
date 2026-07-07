@@ -6,12 +6,13 @@ from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.tables.models import DiningTable
-from app.tables.schemas import StatusIn, TableIn, TableOut, TransferIn
+from app.tables.schemas import StatusIn, TableIn, TableOut, TablePositionIn, TransferIn
 from app.tables.service import (
     InvalidTableTransitionError,
     TableNotFoundError,
     transfer_order,
     transition_status,
+    update_table_position,
 )
 
 router = APIRouter(prefix="/api/v1/tables", tags=["tables"])
@@ -63,6 +64,25 @@ async def update_table_status(
         action="status_change", restaurant_id=restaurant.id,
         before={"status": before_status}, after={"status": table.status},
     )
+    await session.commit()
+    await session.refresh(table)
+    return table
+
+
+@router.patch("/{table_id}/position", response_model=TableOut)
+async def update_table_position_endpoint(
+    table_id: int,
+    body: TablePositionIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        table = await update_table_position(
+            session, restaurant_id=restaurant.id, table_id=table_id,
+            pos_x=body.pos_x, pos_y=body.pos_y,
+        )
+    except TableNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
     await session.refresh(table)
     return table

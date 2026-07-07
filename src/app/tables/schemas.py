@@ -18,6 +18,11 @@ class TableOut(BaseModel):
     status: str
 
 
+class TablePositionIn(BaseModel):
+    pos_x: float
+    pos_y: float
+
+
 class StatusIn(BaseModel):
     status: str
 

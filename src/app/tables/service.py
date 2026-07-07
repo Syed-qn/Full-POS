@@ -33,6 +33,18 @@ async def transition_status(
     return table
 
 
+async def update_table_position(
+    session: AsyncSession, *, restaurant_id: int, table_id: int, pos_x: float, pos_y: float
+) -> DiningTable:
+    table = await session.get(DiningTable, table_id)
+    if table is None or table.restaurant_id != restaurant_id:
+        raise TableNotFoundError(f"table {table_id} not found")
+    table.pos_x = pos_x
+    table.pos_y = pos_y
+    await session.flush()
+    return table
+
+
 async def transfer_order(
     session: AsyncSession, *, order_id: int, restaurant_id: int, to_table_id: int
 ) -> Order:

@@ -66,3 +66,36 @@ async def test_transfer_order_endpoint(client, auth_headers, db_session):
     )
     assert resp.status_code == 200
     assert resp.json()["table_id"] == t2_id
+
+
+@pytest.mark.anyio
+async def test_update_table_position_endpoint(client, auth_headers):
+    created = await client.post(
+        "/api/v1/tables", json={"label": "T9"}, headers=auth_headers,
+    )
+    table_id = created.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/tables/{table_id}/position",
+        json={"pos_x": 42.5, "pos_y": 17.0},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["pos_x"] == 42.5
+    assert resp.json()["pos_y"] == 17.0
+
+    listing = await client.get("/api/v1/tables", headers=auth_headers)
+    assert any(
+        t["id"] == table_id and t["pos_x"] == 42.5 and t["pos_y"] == 17.0
+        for t in listing.json()
+    )
+
+
+@pytest.mark.anyio
+async def test_update_table_position_missing_table_returns_404(client, auth_headers):
+    resp = await client.patch(
+        "/api/v1/tables/999999/position",
+        json={"pos_x": 1.0, "pos_y": 1.0},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
