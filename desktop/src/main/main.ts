@@ -3,6 +3,7 @@ import path from "path";
 import { openLocalDb, initSchema } from "./db";
 import { startSyncScheduler } from "./scheduler";
 import { enqueueOp } from "./pendingOps";
+import { initAuthTokenStore, getAuthToken, setAuthToken } from "./authToken";
 
 export function createMainWindow(loadUrl: string): BrowserWindow {
   const win = new BrowserWindow({
@@ -28,19 +29,25 @@ if (require.main === module) {
 
     const db = openLocalDb(path.join(app.getPath("userData"), "pos-cache.sqlite"));
     initSchema(db);
+    initAuthTokenStore(path.join(app.getPath("userData"), "auth-token.txt"));
+
     startSyncScheduler(
       db,
       process.env.POS_API_BASE ?? "https://api.fullpos.example",
       fetch,
-      () => process.env.POS_AUTH_TOKEN ?? "", // replaced by real auth-token storage in Task 10
+      getAuthToken,
       15000,
     );
+
+    ipcMain.handle("pos-set-auth-token", (_event, token: string | null) => {
+      setAuthToken(token ?? "");
+    });
 
     ipcMain.handle(
       "pos-api-request",
       async (_event, { method, path: reqPath, body }: { method: string; path: string; body: unknown }) => {
         const apiBase = process.env.POS_API_BASE ?? "https://api.fullpos.example";
-        const token = process.env.POS_AUTH_TOKEN ?? "";
+        const token = getAuthToken();
         try {
           const resp = await fetch(new URL(reqPath, apiBase).toString(), {
             method,

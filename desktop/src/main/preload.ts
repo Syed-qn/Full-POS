@@ -4,4 +4,5 @@ contextBridge.exposeInMainWorld("posBridge", {
   request: (method: string, path: string, body: unknown) =>
     ipcRenderer.invoke("pos-api-request", { method, path, body }),
   listConflicts: () => ipcRenderer.invoke("pos-list-conflicts"),
+  setAuthToken: (token: string | null) => ipcRenderer.invoke("pos-set-auth-token", token),
 });
