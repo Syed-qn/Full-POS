@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.reports.analytics import (
+    avg_prep_time_by_item,
+    avg_prep_time_by_staff,
     inventory_usage,
     item_performance,
     labor_hours,
@@ -95,6 +97,28 @@ async def table_turn_time_report(
     session: AsyncSession = Depends(get_session),
 ):
     return await table_turn_time(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
+
+
+@router.get("/prep-time-by-item")
+async def prep_time_by_item_report(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await avg_prep_time_by_item(
+        session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
+    )
+
+
+@router.get("/prep-time-by-staff")
+async def prep_time_by_staff_report(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await avg_prep_time_by_staff(
+        session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
+    )
 
 
 @router.get("/labor-hours")

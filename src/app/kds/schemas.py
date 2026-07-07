@@ -36,3 +36,13 @@ class PrintJobOut(BaseModel):
     order_id: int
     payload: str
     status: str
+
+
+class PrinterHeartbeatIn(BaseModel):
+    healthy: bool = True
+
+
+class PrinterStatusOut(BaseModel):
+    station_id: int
+    healthy: bool
+    last_heartbeat_at: datetime

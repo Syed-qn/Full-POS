@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -131,6 +131,95 @@ async def table_turn_time(
                 results.append({"table_id": int(table_id), "turn_minutes": round(minutes, 2)})
                 seated_at = None
     return results
+
+
+def _prep_minutes(item: OrderItem) -> float:
+    """OrderItem.created_at is stored naive UTC (TimestampMixin); bumped_at is
+    stored tz-aware UTC (DateTime(timezone=True)). Normalize both to aware UTC
+    before subtracting — project convention, see e.g. app.sla.monitor."""
+    created_at = item.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    bumped_at = item.bumped_at
+    if bumped_at.tzinfo is None:
+        bumped_at = bumped_at.replace(tzinfo=timezone.utc)
+    return (bumped_at - created_at).total_seconds() / 60.0
+
+
+async def _prep_time_rows(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> list[OrderItem]:
+    day_start, day_end = _day_window(start_date, end_date)
+    orders = (await session.scalars(
+        select(Order).where(
+            Order.restaurant_id == restaurant_id,
+            Order.created_at >= day_start, Order.created_at <= day_end,
+        )
+    )).all()
+    order_ids = [o.id for o in orders]
+    if not order_ids:
+        return []
+    items = (await session.scalars(
+        select(OrderItem).where(
+            OrderItem.order_id.in_(order_ids),
+            OrderItem.bumped_at.is_not(None),
+        )
+    )).all()
+    return list(items)
+
+
+async def avg_prep_time_by_item(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> list[dict]:
+    """Prep time = OrderItem.created_at (ticket fired) -> OrderItem.bumped_at
+    (marked ready in KDS), grouped by dish name."""
+    items = await _prep_time_rows(
+        session, restaurant_id=restaurant_id, start_date=start_date, end_date=end_date
+    )
+    by_dish: dict[str, list[float]] = defaultdict(list)
+    for item in items:
+        by_dish[item.dish_name].append(_prep_minutes(item))
+
+    return [
+        {
+            "key": key,
+            "avg_prep_minutes": round(sum(minutes) / len(minutes), 2),
+            "ticket_count": len(minutes),
+        }
+        for key, minutes in by_dish.items()
+    ]
+
+
+async def avg_prep_time_by_staff(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> list[dict]:
+    """Grouped by whichever kitchen station handled the ticket — there is no
+    per-staff bump attribution on OrderItem today, so the station that owned
+    the ticket (OrderItem.station_id_snapshot) is used as the "staff" key."""
+    from app.kds.models import KitchenStation
+
+    items = await _prep_time_rows(
+        session, restaurant_id=restaurant_id, start_date=start_date, end_date=end_date
+    )
+    station_ids = {item.station_id_snapshot for item in items if item.station_id_snapshot is not None}
+    stations = (await session.scalars(
+        select(KitchenStation).where(KitchenStation.id.in_(station_ids))
+    )).all() if station_ids else []
+    station_names = {s.id: s.name for s in stations}
+
+    by_station: dict[str, list[float]] = defaultdict(list)
+    for item in items:
+        key = station_names.get(item.station_id_snapshot, "Unassigned")
+        by_station[key].append(_prep_minutes(item))
+
+    return [
+        {
+            "key": key,
+            "avg_prep_minutes": round(sum(minutes) / len(minutes), 2),
+            "ticket_count": len(minutes),
+        }
+        for key, minutes in by_station.items()
+    ]
 
 
 async def labor_hours(session: AsyncSession, *, restaurant_id: int, target_date: date) -> list[dict]:

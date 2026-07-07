@@ -8,7 +8,15 @@ from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.kds.models import KitchenStation, PrintJob
-from app.kds.schemas import PrintJobOut, StationIn, StationOut, TicketItemOut
+from app.kds.printer_status import get_printer_status, record_printer_heartbeat
+from app.kds.schemas import (
+    PrinterHeartbeatIn,
+    PrinterStatusOut,
+    PrintJobOut,
+    StationIn,
+    StationOut,
+    TicketItemOut,
+)
 from app.ordering.models import Order, OrderItem
 
 router = APIRouter(prefix="/api/v1/kds", tags=["kds"])
@@ -140,3 +148,33 @@ async def update_print_job_status(
     await session.commit()
     await session.refresh(job)
     return job
+
+
+@router.post(
+    "/stations/{station_id}/printer-heartbeat",
+    response_model=PrinterStatusOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def printer_heartbeat(
+    station_id: int,
+    body: PrinterHeartbeatIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Called periodically by a printer/kiosk client to report itself alive.
+    Knowing a printer died is the prerequisite for falling back to another one."""
+    await _get_owned_station(session, station_id=station_id, restaurant_id=restaurant.id)
+    await record_printer_heartbeat(
+        session, restaurant_id=restaurant.id, station_id=station_id, healthy=body.healthy,
+    )
+    await session.commit()
+    statuses = await get_printer_status(session, restaurant_id=restaurant.id)
+    return next(s for s in statuses if s["station_id"] == station_id)
+
+
+@router.get("/printer-status", response_model=list[PrinterStatusOut])
+async def printer_status(
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await get_printer_status(session, restaurant_id=restaurant.id)

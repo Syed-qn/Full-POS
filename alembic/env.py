@@ -29,6 +29,8 @@ import app.okf.models  # noqa: F401
 import app.catalog.models  # noqa: F401
 import app.idempotency.models  # noqa: F401
 import app.kds.models  # noqa: F401
+import app.kds.printer_status  # noqa: F401
+import app.kds.printer_status  # noqa: F401
 import app.cashdrawer.models  # noqa: F401
 import app.tables.models  # noqa: F401
 import app.inventory.models  # noqa: F401
