@@ -50,6 +50,14 @@ async def advance_delivery(
     now = datetime.now(timezone.utc)
     order.status = to_status
 
+    if to_status == "arriving":
+        # Courier is about to hand off — this is when we'd text the customer
+        # their delivery confirmation code. Additive/informational only: see
+        # app.dispatch.delivery_proof (verification never gates this FSM).
+        from app.dispatch.delivery_proof import generate_delivery_otp
+
+        await generate_delivery_otp(session, order=order)
+
     if to_status == "delivered":
         order.delivered_at = now
         if order.sla_deadline is not None:

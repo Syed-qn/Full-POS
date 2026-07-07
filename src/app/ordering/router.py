@@ -16,11 +16,13 @@ from app.ordering.schemas import (
     CancelOrderIn,
     CancelOrderItemIn,
     CustomerLookupOut,
+    DeliveryPhotoIn,
     EditOrderItemIn,
     ManualOrderIn,
     OrderItemOut,
     OrderOut,
     ReassignOrderIn,
+    VerifyDeliveryOtpIn,
 )
 from app.ordering.detail_schemas import (
     OrderDetailOut,
@@ -455,6 +457,61 @@ async def reassign_order_endpoint(
     await deliver_pending(session, restaurant.id)
     await session.refresh(order)
     return await _enrich(session, order)
+
+
+@router.post("/{order_id}/delivery-photo", response_model=OrderOut)
+async def set_delivery_photo_endpoint(
+    order_id: int,
+    body: DeliveryPhotoIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Attach a rider proof-of-delivery photo URL to an in-flight order.
+
+    Legal any time from rider-assignment up to (not including) delivered —
+    same status set the delivery FSM itself allows forward transitions from.
+    """
+    from app.dispatch.delivery_proof import DeliveryPhotoError, set_delivery_photo
+
+    try:
+        order = await set_delivery_photo(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            photo_url=body.photo_url,
+        )
+    except DeliveryPhotoError as exc:
+        msg = str(exc)
+        code = 404 if "not found" in msg else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    await session.refresh(order)
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/verify-delivery-otp")
+async def verify_delivery_otp_endpoint(
+    order_id: int,
+    body: VerifyDeliveryOtpIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Check a customer-provided OTP against the code texted at hand-off time.
+
+    Informational only — it does not gate or advance the delivery FSM.
+    """
+    from app.dispatch.delivery_proof import OtpVerificationError, verify_delivery_otp
+
+    try:
+        verified = await verify_delivery_otp(
+            session, restaurant_id=restaurant.id, order_id=order_id, otp=body.otp
+        )
+    except OtpVerificationError as exc:
+        msg = str(exc)
+        code = 404 if "not found" in msg else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    return {"verified": verified}
 
 
 @router.delete("/{order_id}", status_code=204)

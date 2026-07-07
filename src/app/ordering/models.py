@@ -122,6 +122,15 @@ class Order(Base, TimestampMixin):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     late: Mapped[bool | None] = mapped_column(Boolean)
 
+    # Delivery proof (additive, informational — neither gates the delivery FSM).
+    # A URL/path string the rider app uploads to; no blob-storage vendor is wired
+    # in yet, so this just stores whatever URL string is handed to us.
+    delivery_photo_url: Mapped[str | None] = mapped_column(String(512))
+    # 4-digit code, auto-generated when the order reaches "arriving" (see
+    # app.dispatch.delivery.advance_delivery). Verifying it is informational only.
+    delivery_otp: Mapped[str | None] = mapped_column(String(4))
+    delivery_otp_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     coupon_id: Mapped[int | None] = mapped_column(BigInteger)
     # Coupon discount applied to this order (AED). Persisted so ``recompute_order_total``
     # can re-apply it verbatim on every modify/redeem without re-deriving from the coupon

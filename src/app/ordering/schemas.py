@@ -117,3 +117,11 @@ class CancelOrderItemIn(BaseModel):
 class EditOrderItemIn(BaseModel):
     qty: int | None = Field(default=None, ge=1, le=50)
     notes: str | None = Field(default=None, max_length=512)
+
+
+class DeliveryPhotoIn(BaseModel):
+    photo_url: str = Field(min_length=1, max_length=512)
+
+
+class VerifyDeliveryOtpIn(BaseModel):
+    otp: str = Field(min_length=4, max_length=4)
