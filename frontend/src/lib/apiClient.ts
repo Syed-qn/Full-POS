@@ -26,7 +26,12 @@ async function request<T>(
     window?: { posBridge?: { request: (m: string, p: string, b: unknown) => Promise<{ status: number; body: unknown }> } };
   }).window?.posBridge;
 
-  if (bridge) {
+  // FormData/File can't cross Electron's IPC structured-clone boundary — fall through
+  // to plain fetch even inside the shell (the renderer can still reach the real
+  // backend directly over HTTPS; only mutating-queue/idempotency coverage is lost
+  // for uploads, which is acceptable since binary uploads aren't part of the
+  // offline write queue's scope).
+  if (bridge && !isForm) {
     const { status, body: responseBody } = await bridge.request(method, path, body);
     if (status >= 400) {
       const detail =

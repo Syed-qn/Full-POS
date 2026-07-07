@@ -95,4 +95,25 @@ describe("apiClient inside Electron shell", () => {
     // @ts-expect-error test cleanup
     delete globalThis.window.posBridge;
   });
+
+  it("postForm bypasses the bridge (FormData can't cross Electron IPC) and uses plain fetch instead", async () => {
+    const posBridgeRequest = vi.fn();
+    // @ts-expect-error augmenting window for this test only
+    globalThis.window.posBridge = { request: posBridgeRequest };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const form = new FormData();
+    form.append("file", new Blob(["x"]), "dish.jpg");
+    await apiClient.postForm("/api/v1/dishes/image", form);
+
+    expect(posBridgeRequest).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalled();
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.body).toBe(form);
+    // @ts-expect-error test cleanup
+    delete globalThis.window.posBridge;
+  });
 });

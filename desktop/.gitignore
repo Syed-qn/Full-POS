@@ -3,3 +3,6 @@ dist/
 dist_installer/
 *.tsbuildinfo
 *.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm

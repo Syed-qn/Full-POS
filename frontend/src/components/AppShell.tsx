@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavSidebar } from "./NavSidebar";
 import { SectionBanner } from "./SectionBanner";
+import { SyncConflictBanner } from "./SyncConflictBanner";
 import { TopBar } from "./TopBar";
 import s from "./AppShell.module.css";
 
@@ -19,6 +20,7 @@ export function AppShell({
       <div className={s.content}>
         <TopBar />
         <main className={s.main}>
+          <SyncConflictBanner />
           {connectionDown && (
             <SectionBanner tone="warning">
               Live updates paused — reconnecting.
