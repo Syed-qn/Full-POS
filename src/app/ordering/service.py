@@ -1023,6 +1023,151 @@ async def modify_order(
     )
 
 
+async def _recompute_totals_excluding_cancelled(session: "AsyncSession", order: Order) -> None:
+    """Recompute subtotal/total from persisted, non-cancelled items (add_item/remove_item
+    pattern — no coupon/wallet re-application here, matching those existing helpers)."""
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
+    ).all()
+    subtotal = sum(
+        (i.price_aed * i.qty for i in items if not i.cancelled), Decimal("0.00")
+    )
+    order.subtotal = subtotal
+    order.total = subtotal + order.delivery_fee_aed
+    await session.flush()
+
+
+async def _get_order_item_for_tenant(
+    session: "AsyncSession", *, restaurant_id: int, order_id: int, order_item_id: int
+) -> tuple[Order, OrderItem]:
+    """Fetch (order, item) scoped to the tenant. Raises ValueError if either is missing
+    or the item does not belong to the order."""
+    order = await get_order_for_tenant(session, restaurant_id=restaurant_id, order_id=order_id)
+    if order is None:
+        raise ValueError("Order not found")
+    item = await session.get(OrderItem, order_item_id)
+    if item is None or item.order_id != order.id:
+        raise ValueError("Order item not found")
+    return order, item
+
+
+def _assert_order_modifiable(order: Order) -> None:
+    if order.status in _NON_MODIFIABLE_STATUSES:
+        raise ValueError(
+            f"Order modification not allowed at status '{order.status}'. "
+            f"Modifications are blocked once an order reaches 'ready'."
+        )
+
+
+async def cancel_order_item(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+    order_item_id: int,
+    reason: str | None,
+    actor: str,
+) -> OrderItem:
+    """Cancel a single line item on an order (partial cancellation), without voiding
+    the whole order. Allowed only before the order reaches 'ready' (same gate as
+    ``modify_order``). Recomputes subtotal/total excluding cancelled items. Caller commits.
+    """
+    order, item = await _get_order_item_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=order_id, order_item_id=order_item_id
+    )
+    _assert_order_modifiable(order)
+    if item.cancelled:
+        raise ValueError("Order item is already cancelled")
+
+    before_snapshot = {
+        "qty": item.qty,
+        "cancelled": item.cancelled,
+        "subtotal": str(order.subtotal),
+        "total": str(order.total),
+    }
+
+    item.cancelled = True
+    item.cancelled_reason = reason
+    await session.flush()
+
+    await _recompute_totals_excluding_cancelled(session, order)
+
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=order.restaurant_id,
+        entity="order_item",
+        entity_id=str(item.id),
+        action="order_item_cancelled",
+        before=before_snapshot,
+        after={
+            "cancelled": True,
+            "cancelled_reason": reason,
+            "subtotal": str(order.subtotal),
+            "total": str(order.total),
+        },
+    )
+    return item
+
+
+async def edit_order_item(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+    order_item_id: int,
+    new_qty: int | None,
+    new_notes: str | None,
+    actor: str,
+) -> OrderItem:
+    """Edit qty and/or notes on an existing (unfired) line item, only while the order is
+    still pre-'ready' (same gate as ``modify_order``). Recomputes totals when qty changes.
+    Caller commits.
+    """
+    order, item = await _get_order_item_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=order_id, order_item_id=order_item_id
+    )
+    _assert_order_modifiable(order)
+    if item.cancelled:
+        raise ValueError("Cannot edit a cancelled order item")
+    if new_qty is not None and new_qty <= 0:
+        raise ValueError("Quantity must be at least 1")
+
+    before_snapshot = {
+        "qty": item.qty,
+        "notes": item.notes,
+        "subtotal": str(order.subtotal),
+        "total": str(order.total),
+    }
+
+    qty_changed = new_qty is not None and new_qty != item.qty
+    if new_qty is not None:
+        item.qty = new_qty
+    if new_notes is not None:
+        item.notes = new_notes
+    await session.flush()
+
+    if qty_changed:
+        await _recompute_totals_excluding_cancelled(session, order)
+
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=order.restaurant_id,
+        entity="order_item",
+        entity_id=str(item.id),
+        action="order_item_edited",
+        before=before_snapshot,
+        after={
+            "qty": item.qty,
+            "notes": item.notes,
+            "subtotal": str(order.subtotal),
+            "total": str(order.total),
+        },
+    )
+    return item
+
+
 # Customer self-cancel via WhatsApp — only before the order leaves the kitchen flow.
 _CUSTOMER_CANCELLABLE_STATUSES = {
     OrderStatus.DRAFT,

@@ -167,6 +167,11 @@ class OrderItem(Base, TimestampMixin):
     price_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2))
     qty: Mapped[int] = mapped_column(Integer, default=1)
     notes: Mapped[str | None] = mapped_column(String(512))  # verbatim special request
+    # Partial cancellation: a manager can cancel a single line without voiding the
+    # whole order. Cancelled items are excluded from order.subtotal/total but kept
+    # on the row (audit trail) rather than deleted.
+    cancelled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    cancelled_reason: Mapped[str | None] = mapped_column(String(256))
     # Snapshot of chosen modifiers at order time — [{"name": str, "price_delta_aed": str}, ...].
     selected_modifiers: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     # KDS: per-item kitchen ticket status (received|preparing|ready|bumped).

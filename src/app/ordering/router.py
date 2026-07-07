@@ -14,7 +14,9 @@ from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import (
     AddressOut,
     CancelOrderIn,
+    CancelOrderItemIn,
     CustomerLookupOut,
+    EditOrderItemIn,
     ManualOrderIn,
     OrderItemOut,
     OrderOut,
@@ -27,8 +29,10 @@ from app.ordering.fsm import IllegalTransitionError
 from app.ordering.service import (
     advance_kitchen_status,
     cancel_order,
+    cancel_order_item,
     create_manual_order,
     delete_order,
+    edit_order_item,
     get_last_address,
     get_order_detail,
     get_order_for_tenant,
@@ -47,6 +51,8 @@ def _order_item_out(i: OrderItem) -> OrderItemOut:
         price_aed=str(i.price_aed),
         variant_name=i.variant_name,
         notes=i.notes,
+        cancelled=i.cancelled,
+        cancelled_reason=i.cancelled_reason,
     )
 
 
@@ -354,6 +360,67 @@ async def cancel_order_endpoint(
     await deliver_pending(session, restaurant.id)
     await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
     await session.refresh(order)
+    return await _enrich(session, order)
+
+
+def _item_mutation_status_code(msg: str) -> int:
+    return 404 if msg in ("Order not found", "Order item not found") else 422
+
+
+@router.post("/{order_id}/items/{item_id}/cancel", response_model=OrderOut)
+async def cancel_order_item_endpoint(
+    order_id: int,
+    item_id: int,
+    body: CancelOrderItemIn | None = None,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Cancel a single line item without voiding the whole order — manager approval
+    required. Legal only before the order reaches 'ready' (same gate as order
+    modification). 404 if the order/item doesn't exist for this tenant, 422 if the
+    order has passed the modifiable window or the item is already cancelled."""
+    try:
+        await cancel_order_item(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            order_item_id=item_id,
+            reason=(body.reason if body else None),
+            actor="manager",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=_item_mutation_status_code(str(exc)), detail=str(exc))
+    await session.commit()
+    order = await get_order_for_tenant(session, restaurant_id=restaurant.id, order_id=order_id)
+    return await _enrich(session, order)
+
+
+@router.patch("/{order_id}/items/{item_id}", response_model=OrderOut)
+async def edit_order_item_endpoint(
+    order_id: int,
+    item_id: int,
+    body: EditOrderItemIn,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Edit qty and/or notes on an unfired line item — manager approval required.
+    Legal only before the order reaches 'ready' (same gate as order modification).
+    404 if the order/item doesn't exist for this tenant, 422 if the order has passed
+    the modifiable window or the requested qty is invalid."""
+    try:
+        await edit_order_item(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            order_item_id=item_id,
+            new_qty=body.qty,
+            new_notes=body.notes,
+            actor="manager",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=_item_mutation_status_code(str(exc)), detail=str(exc))
+    await session.commit()
+    order = await get_order_for_tenant(session, restaurant_id=restaurant.id, order_id=order_id)
     return await _enrich(session, order)
 
 

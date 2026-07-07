@@ -15,6 +15,8 @@ class OrderItemOut(BaseModel):
     price_aed: str     # serialised as string for JS safety
     variant_name: Optional[str] = None  # serving size, if any
     notes: Optional[str] = None          # special request (e.g. "double masala") — for kitchen
+    cancelled: bool = False              # partial cancellation — item struck without voiding order
+    cancelled_reason: Optional[str] = None
 
 
 class OrderOut(BaseModel):
@@ -106,3 +108,12 @@ class CancelOrderIn(BaseModel):
 
 class ReassignOrderIn(BaseModel):
     rider_id: int
+
+
+class CancelOrderItemIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class EditOrderItemIn(BaseModel):
+    qty: int | None = Field(default=None, ge=1, le=50)
+    notes: str | None = Field(default=None, max_length=512)
