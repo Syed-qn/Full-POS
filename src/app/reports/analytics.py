@@ -2,13 +2,24 @@ from collections import defaultdict
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.models import AuditLog
 from app.inventory.costing import dish_cost
 from app.inventory.models import DishIngredient
 from app.ordering.models import Order, OrderItem
+
+# Orders in these statuses never represent realized sales / customer activity.
+_EXCLUDED_STATUSES = ("cancelled", "draft")
+
+_ROLLUP_GRANULARITIES = ("hourly", "daily", "weekly", "monthly")
+_GRANULARITY_TO_TRUNC = {
+    "hourly": "hour",
+    "daily": "day",
+    "weekly": "week",
+    "monthly": "month",
+}
 
 
 def _day_window(start_date: date, end_date: date) -> tuple[datetime, datetime]:
@@ -137,3 +148,72 @@ async def labor_hours(session: AsyncSession, *, restaurant_id: int, target_date:
         if hours > 0:
             results.append({"staff_id": staff.id, "name": staff.name, "hours": round(hours, 2)})
     return results
+
+
+async def sales_rollup(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date, granularity: str
+) -> list[dict]:
+    if granularity not in _ROLLUP_GRANULARITIES:
+        raise ValueError(
+            f"Invalid granularity {granularity!r}; must be one of {_ROLLUP_GRANULARITIES}"
+        )
+    day_start, day_end = _day_window(start_date, end_date)
+    trunc_unit = _GRANULARITY_TO_TRUNC[granularity]
+    bucket = func.date_trunc(trunc_unit, Order.created_at).label("bucket")
+
+    rows = (await session.execute(
+        select(
+            bucket,
+            func.count(Order.id).label("order_count"),
+            func.coalesce(func.sum(Order.total), Decimal("0.00")).label("revenue_aed"),
+        ).where(
+            Order.restaurant_id == restaurant_id,
+            Order.created_at >= day_start, Order.created_at <= day_end,
+            Order.status.notin_(_EXCLUDED_STATUSES),
+        ).group_by(bucket).order_by(bucket)
+    )).all()
+
+    return [
+        {
+            "bucket": row.bucket.isoformat(),
+            "order_count": row.order_count,
+            "revenue_aed": row.revenue_aed,
+        }
+        for row in rows
+    ]
+
+
+async def retention_report(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> dict:
+    day_start, day_end = _day_window(start_date, end_date)
+    orders = (await session.scalars(
+        select(Order).where(
+            Order.restaurant_id == restaurant_id,
+            Order.created_at >= day_start, Order.created_at <= day_end,
+            Order.status.notin_(_EXCLUDED_STATUSES),
+        )
+    )).all()
+    customer_ids = {o.customer_id for o in orders}
+    if not customer_ids:
+        return {"new_customers": 0, "returning_customers": 0, "repeat_rate_pct": 0.0}
+
+    prior_customer_ids = set((await session.scalars(
+        select(Order.customer_id).where(
+            Order.restaurant_id == restaurant_id,
+            Order.customer_id.in_(customer_ids),
+            Order.created_at < day_start,
+            Order.status.notin_(_EXCLUDED_STATUSES),
+        ).distinct()
+    )).all())
+
+    returning_customers = len(customer_ids & prior_customer_ids)
+    new_customers = len(customer_ids) - returning_customers
+    total = len(customer_ids)
+    repeat_rate_pct = round((returning_customers / total) * 100, 2) if total else 0.0
+
+    return {
+        "new_customers": new_customers,
+        "returning_customers": returning_customers,
+        "repeat_rate_pct": repeat_rate_pct,
+    }

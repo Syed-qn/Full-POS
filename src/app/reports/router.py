@@ -1,12 +1,19 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
-from app.reports.analytics import inventory_usage, item_performance, labor_hours, table_turn_time
+from app.reports.analytics import (
+    inventory_usage,
+    item_performance,
+    labor_hours,
+    retention_report,
+    sales_rollup,
+    table_turn_time,
+)
 from app.reports.csv_export import rows_to_csv
 from app.reports.zreport import build_z_report
 
@@ -97,3 +104,28 @@ async def labor_hours_report(
     session: AsyncSession = Depends(get_session),
 ):
     return await labor_hours(session, restaurant_id=restaurant.id, target_date=target_date)
+
+
+@router.get("/sales-rollup")
+async def sales_rollup_report(
+    start_date: date, end_date: date, granularity: str = "daily",
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        rows = await sales_rollup(
+            session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date,
+            granularity=granularity,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return [{**r, "revenue_aed": str(r["revenue_aed"])} for r in rows]
+
+
+@router.get("/retention")
+async def retention_endpoint(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await retention_report(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
