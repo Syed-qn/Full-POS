@@ -1,6 +1,7 @@
 import io
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -168,6 +169,18 @@ async def get_unified_menu(
     return await build_unified_menu(
         session, restaurant_id=restaurant.id, catalog_id=catalog_id
     )
+
+
+@router.get("/menu/dishes", response_model=list[DishOut])
+async def list_dishes(
+    updated_since: datetime | None = Query(default=None),
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> list[Dish]:
+    """Flat dish list for the active menu — used by the desktop client's pull sync
+    (Task 8). ``updated_since`` filters to rows changed after that cursor timestamp;
+    omitting it returns every non-archived dish on the active menu."""
+    return await service.list_dishes(session, restaurant.id, updated_since=updated_since)
 
 
 @router.get("/menus/active", response_model=MenuOut)
