@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant, Rider
+from app.staff.deps import require_role
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import (
     AddressOut,
@@ -297,13 +298,14 @@ async def advance_order(
 async def cancel_order_endpoint(
     order_id: int,
     body: CancelOrderIn | None = None,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
-    """Cancel an order (MANAGER/restaurant-initiated). Legal through ``arriving`` —
-    any active pre-delivery status. Restaurant cancellation never resells the food
-    (assumed unavailable/unfit) — resale only happens on a CUSTOMER cancel of a cooking
-    order. ``delivered`` and terminal states return 422."""
+    """Cancel/void an order — manager approval required (restaurant owner token
+    always passes; a staff token must carry the "manager" role). Legal through
+    ``arriving`` — any active pre-delivery status. Restaurant cancellation never
+    resells the food (assumed unavailable/unfit) — resale only happens on a
+    CUSTOMER cancel of a cooking order. ``delivered`` and terminal states return 422."""
     order = await get_order_for_tenant(
         session, restaurant_id=restaurant.id, order_id=order_id
     )
