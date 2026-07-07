@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.models import AuditLog
 from app.inventory.costing import dish_cost
 from app.inventory.models import DishIngredient
+from app.ordering.fsm import OrderStatus
 from app.ordering.models import Order, OrderItem
 
 # Orders in these statuses never represent realized sales / customer activity.
@@ -24,6 +25,25 @@ _GRANULARITY_TO_TRUNC = {
 
 def _day_window(start_date: date, end_date: date) -> tuple[datetime, datetime]:
     return datetime.combine(start_date, time.min), datetime.combine(end_date, time.max)
+
+
+# Orders in these statuses have had a tax invoice issued (VAT snapshotted at
+# confirm time — see app.ordering.tax.apply_vat) and haven't since been voided.
+# DRAFT/PENDING_CONFIRMATION never got an invoice number "used" for a real sale,
+# and CANCELLED/UNDELIVERABLE/ON_RESALE/RESOLD/WRITTEN_OFF are out of scope here
+# (crediting/voiding an issued invoice is a separate concern) — so gaps caused by
+# those are expected and must not be flagged by the sequence-gap check below.
+_INVOICED_STATUSES = frozenset(
+    {
+        OrderStatus.CONFIRMED,
+        OrderStatus.PREPARING,
+        OrderStatus.READY,
+        OrderStatus.ASSIGNED,
+        OrderStatus.PICKED_UP,
+        OrderStatus.ARRIVING,
+        OrderStatus.DELIVERED,
+    }
+)
 
 
 async def item_performance(
@@ -305,4 +325,69 @@ async def retention_report(
         "new_customers": new_customers,
         "returning_customers": returning_customers,
         "repeat_rate_pct": repeat_rate_pct,
+    }
+
+
+async def invoice_sequence_report(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> dict:
+    """FTA audit artifact: confirm the tax-invoice number sequence has no gaps.
+
+    ``Order.order_number`` (format ``R{restaurant_id}-{seq:04d}``) is already
+    allocated gap-free/collision-free for concurrently-created orders by the
+    advisory-lock allocator in ``create_draft_order`` (see service.py) — the FTA
+    requirement this satisfies is that once a tax invoice IS issued (order reaches
+    ``confirmed`` or later, see ``_INVOICED_STATUSES``), its number must be part of
+    an unbroken numeric run with no skipped/reused invoice numbers. This walks the
+    already-allocated numbers for invoiced orders in the given date range and
+    surfaces any missing suffixes an FTA auditor would flag.
+
+    Draft orders that never got invoiced (deleted, abandoned) legitimately "use up"
+    a number without becoming an invoice — that is NOT a gap for this check.
+    """
+    day_start, day_end = _day_window(start_date, end_date)
+    orders = (await session.scalars(
+        select(Order).where(
+            Order.restaurant_id == restaurant_id,
+            Order.created_at >= day_start, Order.created_at <= day_end,
+            Order.status.in_([s.value for s in _INVOICED_STATUSES]),
+        )
+    )).all()
+
+    parsed: list[tuple[int, str, str, int]] = []  # (seq, prefix, order_number, suffix_width)
+    for order in orders:
+        number = str(order.order_number)
+        if "-" not in number:
+            continue
+        prefix, suffix = number.rsplit("-", 1)
+        if not suffix.isdigit():
+            continue
+        parsed.append((int(suffix), prefix, number, len(suffix)))
+
+    if not parsed:
+        return {
+            "first_invoice": None,
+            "last_invoice": None,
+            "expected_count": 0,
+            "actual_count": 0,
+            "gaps_detected": [],
+        }
+
+    parsed.sort(key=lambda row: row[0])
+    first_seq, prefix, first_invoice, suffix_width = parsed[0]
+    last_seq, _, last_invoice, _ = parsed[-1]
+    actual_seqs = {row[0] for row in parsed}
+    expected_count = last_seq - first_seq + 1
+    gaps_detected = [
+        f"{prefix}-{seq:0{suffix_width}d}"
+        for seq in range(first_seq, last_seq + 1)
+        if seq not in actual_seqs
+    ]
+
+    return {
+        "first_invoice": first_invoice,
+        "last_invoice": last_invoice,
+        "expected_count": expected_count,
+        "actual_count": len(parsed),
+        "gaps_detected": gaps_detected,
     }

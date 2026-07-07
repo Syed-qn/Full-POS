@@ -10,6 +10,7 @@ from app.reports.analytics import (
     avg_prep_time_by_item,
     avg_prep_time_by_staff,
     inventory_usage,
+    invoice_sequence_report,
     item_performance,
     labor_hours,
     retention_report,
@@ -164,5 +165,16 @@ async def nps_summary_report(
     from app.loyalty.nps import nps_summary
 
     return await nps_summary(
+        session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
+    )
+
+
+@router.get("/invoice-sequence-check")
+async def invoice_sequence_check(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await invoice_sequence_report(
         session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
     )

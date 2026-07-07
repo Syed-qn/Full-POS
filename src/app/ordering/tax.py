@@ -15,6 +15,7 @@ def apply_vat(order, vat_rate: Decimal = DEFAULT_UAE_VAT_RATE) -> None:
 async def build_tax_invoice(session: AsyncSession, *, order_id: int, restaurant_id: int) -> dict:
     from app.identity.models import Restaurant
     from app.ordering.models import Order, OrderItem
+    from app.ordering.receipt_i18n import bilingual_labels
 
     order = await session.get(Order, order_id)
     if order is None or order.restaurant_id != restaurant_id:
@@ -42,4 +43,8 @@ async def build_tax_invoice(session: AsyncSession, *, order_id: int, restaurant_
         "vat_rate": str(order.vat_rate),
         "vat_amount_aed": str(order.vat_amount_aed),
         "total_aed": str(order.total),
+        # Fixed structural labels only (English is implicit in the field names
+        # above) — dynamic data such as dish_name/restaurant_name is never
+        # translated here, see receipt_i18n module docstring.
+        "labels_ar": bilingual_labels()["ar"],
     }
