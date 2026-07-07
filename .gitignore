@@ -26,6 +26,10 @@ graphify-out/cost.json
 # Python build artifacts
 build/
 *.egg-info/
+# ...except the Electron app's icon source assets (desktop/build/ is
+# electron-builder's buildResources dir, not a Python build artifact).
+!desktop/build/
+!desktop/build/*
 
 # Firebase service-account key (FCM) — never commit
 *firebase-adminsdk*.json
