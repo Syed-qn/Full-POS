@@ -27,6 +27,7 @@ import app.okf.models  # noqa: F401
 import app.catalog.models  # noqa: F401
 import app.idempotency.models  # noqa: F401
 import app.kds.models  # noqa: F401
+import app.cashdrawer.models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
