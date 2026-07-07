@@ -902,6 +902,10 @@ async def finalize_confirmation(
     from app.partner.orders_api import push_order_to_partner
 
     await push_order_to_partner(session, order=order)
+
+    from app.kds.service import create_tickets_for_order
+
+    await create_tickets_for_order(session, restaurant_id=order.restaurant_id, order=order)
     await session.flush()
 
 
