@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from app.cashdrawer.router import router as cashdrawer_router
 from app.cod.router import router as cod_router
 from app.kds.router import router as kds_router
 from app.config import get_settings
@@ -162,6 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(cod_router)
     app.include_router(kds_router)
+    app.include_router(cashdrawer_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
     app.include_router(rider_app_router)
