@@ -294,6 +294,28 @@ async def advance_order(
     return await _enrich(session, order)
 
 
+@router.post("/{order_id}/duplicate")
+async def duplicate_order_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Repeat/duplicate an existing order (any status) into a fresh draft."""
+    from app.ordering.duplicate import duplicate_order
+
+    try:
+        new_order = await duplicate_order(session, restaurant_id=restaurant.id, order_id=order_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    await session.commit()
+    return {
+        "id": new_order.id,
+        "order_number": new_order.order_number,
+        "status": new_order.status,
+        "total_aed": str(new_order.total),
+    }
+
+
 @router.post("/{order_id}/cancel", response_model=OrderOut)
 async def cancel_order_endpoint(
     order_id: int,
