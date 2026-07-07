@@ -21,6 +21,17 @@ async def test_updated_since_filters_out_older_dishes(client, auth_headers, acti
 
 
 @pytest.mark.anyio
+async def test_dish_response_includes_updated_at(client, auth_headers, active_menu_with_dish):
+    """Desktop pull-sync (sync.ts pullSync) reads `updated_at` off each dish to advance its
+    cursor and to populate the NOT NULL local_menu.updated_at column — must be present."""
+    resp = await client.get("/api/v1/menu/dishes", headers=auth_headers)
+    assert resp.status_code == 200
+    dishes = resp.json()
+    assert len(dishes) >= 1
+    assert dishes[0]["updated_at"] is not None
+
+
+@pytest.mark.anyio
 async def test_updated_since_filters_out_older_orders(db_session, restaurant):
     """Service-level check (mirrors tests/ordering/test_manual_order.py's direct-model
     style) — avoids depending on the manual-order HTTP flow's geocoding for a filter

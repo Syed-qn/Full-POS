@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -76,6 +77,7 @@ class DishOut(BaseModel):
     brand: str | None = None
     whatsapp_enabled: bool = True
     variants: list[VariantOut] = []
+    updated_at: datetime
 
 
 class MenuOut(BaseModel):
