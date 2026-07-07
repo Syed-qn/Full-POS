@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsScreen } from "./SettingsScreen";
+import { renderWithProviders as render } from "../test/render";
 
 // Mock Leaflet — jsdom has no map support; LocationPicker imports it dynamically.
 vi.mock("leaflet", () => {

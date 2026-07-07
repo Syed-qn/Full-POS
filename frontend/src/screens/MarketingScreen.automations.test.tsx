@@ -112,7 +112,7 @@ describe("MarketingScreen automation tab", () => {
       expect(screen.getByText(/welcome offer/i)).toBeInTheDocument(),
     );
     expect(screen.getByText(/recurring promo/i)).toBeInTheDocument();
-    expect(screen.getByText(/win-back/i)).toBeInTheDocument();
+    expect(screen.getByText(/win back/i)).toBeInTheDocument();
     expect(screen.getByText(/reorder reminder/i)).toBeInTheDocument();
   });
 

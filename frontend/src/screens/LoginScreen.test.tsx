@@ -14,7 +14,7 @@ describe("LoginScreen — login", () => {
   it("submits credentials and stores token", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(tokenResponse()));
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
-    await userEvent.type(screen.getByLabelText(/phone/i), "+97150000000");
+    await userEvent.type(screen.getByLabelText(/email/i), "owner@biryanihouse.test");
     await userEvent.type(screen.getByLabelText(/password/i), "password1");
     // "Sign In" submit button (title-case) vs "SIGN IN" tab — exact match distinguishes them
     await userEvent.click(screen.getByRole("button", { name: "Sign In" }));
@@ -29,7 +29,7 @@ describe("LoginScreen — login", () => {
       ),
     );
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
-    await userEvent.type(screen.getByLabelText(/phone/i), "+97150000000");
+    await userEvent.type(screen.getByLabelText(/email/i), "owner@biryanihouse.test");
     await userEvent.type(screen.getByLabelText(/password/i), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Sign In" }));
     await waitFor(() => expect(screen.getByText(/bad credentials/i)).toBeInTheDocument());
@@ -60,7 +60,7 @@ describe("LoginScreen — signup", () => {
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await clickSignUpTab();
     await userEvent.type(screen.getByLabelText(/restaurant name/i), "Biryani House");
-    await userEvent.type(screen.getByLabelText(/phone/i), "+97150000000");
+    await userEvent.type(screen.getByLabelText(/email/i), "owner@biryanihouse.test");
     await userEvent.type(screen.getByLabelText(/password/i), "Admin@1234");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
 
@@ -71,7 +71,7 @@ describe("LoginScreen — signup", () => {
   it("shows error when restaurant name is empty on signup", async () => {
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await clickSignUpTab();
-    await userEvent.type(screen.getByLabelText(/phone/i), "+97150000000");
+    await userEvent.type(screen.getByLabelText(/email/i), "owner@biryanihouse.test");
     await userEvent.type(screen.getByLabelText(/password/i), "Admin@1234");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
     await waitFor(() =>
