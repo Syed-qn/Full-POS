@@ -1,11 +1,13 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.reports.analytics import inventory_usage, item_performance, labor_hours, table_turn_time
+from app.reports.csv_export import rows_to_csv
 from app.reports.zreport import build_z_report
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
@@ -46,6 +48,27 @@ async def item_performance_report(
         {**r, "revenue_aed": str(r["revenue_aed"]), "food_cost_aed": str(r["food_cost_aed"]), "margin_aed": str(r["margin_aed"])}
         for r in rows
     ]
+
+
+@router.get("/item-performance.csv")
+async def item_performance_csv(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await item_performance(session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date)
+    csv_rows = [
+        {
+            "dish_name": r["dish_name"], "order_count": r["order_count"],
+            "revenue_aed": str(r["revenue_aed"]), "food_cost_aed": str(r["food_cost_aed"]),
+            "margin_aed": str(r["margin_aed"]), "margin_pct": r["margin_pct"],
+        }
+        for r in rows
+    ]
+    return PlainTextResponse(
+        rows_to_csv(csv_rows), media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=item-performance-{start_date}-to-{end_date}.csv"},
+    )
 
 
 @router.get("/inventory-usage")
