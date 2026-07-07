@@ -13,6 +13,7 @@ from app.cod.router import router as cod_router
 from app.inventory.router import router as inventory_router
 from app.kds.router import router as kds_router
 from app.reports.router import router as reports_router
+from app.staff.router import router as staff_router
 from app.tables.router import router as tables_router
 from app.config import get_settings
 from app.conversation.router import router as conversation_router
@@ -170,6 +171,7 @@ def create_app() -> FastAPI:
     app.include_router(reports_router)
     app.include_router(tables_router)
     app.include_router(inventory_router)
+    app.include_router(staff_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
     app.include_router(rider_app_router)

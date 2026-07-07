@@ -84,6 +84,8 @@ class Order(Base, TimestampMixin):
     # Dine-in binding — null for delivery orders. Set when an order is opened
     # against a physical table (see app.tables).
     table_id: Mapped[int | None] = mapped_column(ForeignKey("tables.id"))
+    # Sales-per-server attribution — null when no staff member is tracked (e.g. self-service).
+    staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
     additional_details: Mapped[str | None] = mapped_column(Text)
 
     # Dispatch (Phase 4): nullable until the dispatch engine assigns a rider.
@@ -122,6 +124,11 @@ class Order(Base, TimestampMixin):
     # Wallet store-credit applied to this order (held at confirm, captured on
     # delivery, released on cancel). COD due = total - wallet_applied_aed.
     wallet_applied_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
+
+    # UAE VAT — snapshotted at confirm time so a later platform rate change
+    # never retroactively alters an already-issued invoice.
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=Decimal("0.0500"))
+    vat_amount_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
 
     # Resale fields
     resale_of_order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"))
