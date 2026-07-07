@@ -14,8 +14,21 @@ extraResources:
   - from: "../frontend/dist-electron"
     to: "frontend/dist"
 win:
-  target: nsis
+  # Restaurant PCs are overwhelmingly x64 (Intel/AMD), not arm64 — pin it
+  # explicitly so a build run on an Apple Silicon Mac (or any arm64 host)
+  # doesn't silently auto-detect the HOST arch and ship an arm64 .exe that
+  # won't run on a normal Windows PC.
+  target:
+    - target: nsis
+      arch:
+        - x64
   artifactName: "FullPOS-Setup-${version}.exe"
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  artifactName: "FullPOS-${version}-${arch}.${ext}"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
