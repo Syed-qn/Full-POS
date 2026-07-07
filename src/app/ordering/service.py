@@ -906,6 +906,10 @@ async def finalize_confirmation(
     from app.kds.service import create_tickets_for_order
 
     await create_tickets_for_order(session, restaurant_id=order.restaurant_id, order=order)
+
+    from app.inventory.service import deduct_for_order
+
+    await deduct_for_order(session, restaurant_id=order.restaurant_id, order=order)
     await session.flush()
 
 
