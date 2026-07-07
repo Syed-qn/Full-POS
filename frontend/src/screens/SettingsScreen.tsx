@@ -217,6 +217,7 @@ export function SettingsScreen() {
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
+  const [trn, setTrn] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
   // WhatsApp disconnect
@@ -311,6 +312,7 @@ export function SettingsScreen() {
       setLat(String(r.lat));
       setLng(String(r.lng));
       const sset = r.settings as Record<string, unknown>;
+      if (typeof sset.trn === "string") setTrn(sset.trn);
       if (typeof sset.max_orders_per_batch === "number") setOrdersPerBatch(sset.max_orders_per_batch);
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
       if (typeof sset.max_item_qty === "number") setMaxItemQty(sset.max_item_qty);
@@ -391,7 +393,10 @@ export function SettingsScreen() {
         lat: latNum,
         lng: lngNum,
       });
-      setMe(updated);
+      const withTrn = await apiClient.patch<RestaurantOut>("/api/v1/settings", {
+        trn: trn.trim(),
+      });
+      setMe(withTrn);
       setLat(String(updated.lat));
       setLng(String(updated.lng));
       flash();
@@ -640,6 +645,18 @@ export function SettingsScreen() {
                 maxLength={255}
                 className={s.input}
               />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>TRN (Tax Registration Number)</span>
+              <input
+                type="text"
+                value={trn}
+                onChange={(e) => setTrn(e.target.value)}
+                maxLength={32}
+                placeholder="100123456700003"
+                className={s.input}
+              />
+              <span className={s.rowHint}>Printed on tax invoices. Leave blank if not VAT-registered.</span>
             </label>
             <label className={s.col}>
               <span className={s.rowName}>Phone (WABA number)</span>

@@ -158,6 +158,8 @@ class RiderLocationOut(BaseModel):
 
 
 class SettingsPatch(BaseModel):
+    # UAE Tax Registration Number — printed on tax invoices (app.ordering.tax).
+    trn: str | None = Field(default=None, max_length=32)
     max_orders_per_batch: int | None = Field(default=None, ge=1, le=6)
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
     # Single-line quantity above which the bot escalates to a human (anomaly guard).
