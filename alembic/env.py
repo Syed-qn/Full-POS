@@ -11,6 +11,7 @@ import app.audit.models  # noqa: F401  (register tables; later modules append im
 import app.identity.models  # noqa: F401
 import app.menu.models  # noqa: F401
 import app.menu.modifiers  # noqa: F401
+import app.menu.combos  # noqa: F401
 import app.webhook.models   # noqa: F401
 import app.outbox.models    # noqa: F401
 import app.conversation.models  # noqa: F401
@@ -32,6 +33,7 @@ import app.cashdrawer.models  # noqa: F401
 import app.tables.models  # noqa: F401
 import app.inventory.models  # noqa: F401
 import app.staff.models  # noqa: F401
+import app.staff.scheduling  # noqa: F401
 import app.organizations.models  # noqa: F401
 import app.payments.models  # noqa: F401
 
