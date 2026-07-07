@@ -70,6 +70,12 @@ if (require.main === module) {
         }
       },
     );
+
+    ipcMain.handle("pos-list-conflicts", () => {
+      return db
+        .prepare(`SELECT id, entity, path FROM pending_ops WHERE status = 'conflict'`)
+        .all();
+    });
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
