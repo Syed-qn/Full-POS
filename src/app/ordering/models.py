@@ -162,6 +162,8 @@ class OrderItem(Base, TimestampMixin):
     price_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2))
     qty: Mapped[int] = mapped_column(Integer, default=1)
     notes: Mapped[str | None] = mapped_column(String(512))  # verbatim special request
+    # Snapshot of chosen modifiers at order time — [{"name": str, "price_delta_aed": str}, ...].
+    selected_modifiers: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     # KDS: per-item kitchen ticket status (received|preparing|ready|bumped).
     kitchen_status: Mapped[str] = mapped_column(String(16), default="received")
     bumped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

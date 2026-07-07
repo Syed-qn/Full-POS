@@ -27,6 +27,7 @@ from app.dispatch.router import router as dispatch_router
 from app.dispatch.tracking_router import router as tracking_router
 from app.identity.router import router as identity_router
 from app.idempotency.middleware import IdempotencyMiddleware
+from app.menu.modifier_router import router as menu_modifier_router
 from app.menu.router import router as menu_router
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.timing import ResponseTimingMiddleware
@@ -165,6 +166,7 @@ def create_app() -> FastAPI:
 
     app.include_router(identity_router)
     app.include_router(menu_router)
+    app.include_router(menu_modifier_router)
     app.include_router(ordering_router)
     app.include_router(customer_router)
     app.include_router(conversation_router)
