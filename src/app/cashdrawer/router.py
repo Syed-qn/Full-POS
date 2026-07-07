@@ -52,10 +52,13 @@ async def add_drawer_event(
     restaurant=Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    event = await add_event(
-        session, session_id=session_id, restaurant_id=restaurant.id, type=body.type,
-        amount_aed=body.amount_aed, reason=body.reason, created_by="manager",
-    )
+    try:
+        event = await add_event(
+            session, session_id=session_id, restaurant_id=restaurant.id, type=body.type,
+            amount_aed=body.amount_aed, reason=body.reason, created_by="manager",
+        )
+    except DrawerNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
     return {"id": event.id, "type": event.type, "amount_aed": str(event.amount_aed)}
 

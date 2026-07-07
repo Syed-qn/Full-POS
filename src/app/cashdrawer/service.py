@@ -43,6 +43,9 @@ async def add_event(
     session: AsyncSession, *, session_id: int, restaurant_id: int, type: str,
     amount_aed: Decimal, reason: str | None, created_by: str,
 ) -> CashDrawerEvent:
+    drawer = await session.get(CashDrawerSession, session_id)
+    if drawer is None or drawer.restaurant_id != restaurant_id:
+        raise DrawerNotFoundError(f"drawer session {session_id} not found")
     event = CashDrawerEvent(
         restaurant_id=restaurant_id, session_id=session_id, type=type,
         amount_aed=amount_aed, reason=reason, created_by=created_by,

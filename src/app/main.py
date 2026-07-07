@@ -12,6 +12,7 @@ from app.cashdrawer.router import router as cashdrawer_router
 from app.cod.router import router as cod_router
 from app.kds.router import router as kds_router
 from app.reports.router import router as reports_router
+from app.tables.router import router as tables_router
 from app.config import get_settings
 from app.conversation.router import router as conversation_router
 from app.db import get_engine
@@ -166,6 +167,7 @@ def create_app() -> FastAPI:
     app.include_router(kds_router)
     app.include_router(cashdrawer_router)
     app.include_router(reports_router)
+    app.include_router(tables_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
     app.include_router(rider_app_router)

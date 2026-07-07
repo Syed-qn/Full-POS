@@ -17,11 +17,17 @@ async def test_create_station_and_list(client, auth_headers):
 
 
 @pytest.mark.anyio
-async def test_bump_then_recall_item(client, auth_headers, db_session, restaurant):
+async def test_bump_then_recall_item(client, auth_headers, db_session):
+    from sqlalchemy import select
+
+    from app.identity.models import Restaurant
     from app.kds.models import KitchenStation
     from app.menu.models import Dish, Menu
     from app.ordering.models import Customer, Order, OrderItem
 
+    restaurant = await db_session.scalar(
+        select(Restaurant).where(Restaurant.email == "owner@biryani.ae")
+    )
     station = KitchenStation(restaurant_id=restaurant.id, name="Grill")
     db_session.add(station)
     await db_session.flush()

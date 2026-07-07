@@ -9,7 +9,7 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.kds.models import KitchenStation, PrintJob
 from app.kds.schemas import PrintJobOut, StationIn, StationOut, TicketItemOut
-from app.ordering.models import OrderItem
+from app.ordering.models import Order, OrderItem
 
 router = APIRouter(prefix="/api/v1/kds", tags=["kds"])
 
@@ -38,12 +38,30 @@ async def list_stations(
     return list(rows)
 
 
+async def _get_owned_station(session: AsyncSession, *, station_id: int, restaurant_id: int) -> KitchenStation:
+    station = await session.get(KitchenStation, station_id)
+    if station is None or station.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=404, detail="station not found")
+    return station
+
+
+async def _get_owned_item(session: AsyncSession, *, item_id: int, restaurant_id: int) -> OrderItem:
+    item = await session.get(OrderItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="item not found")
+    order = await session.get(Order, item.order_id)
+    if order is None or order.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=404, detail="item not found")
+    return item
+
+
 @router.get("/stations/{station_id}/tickets", response_model=list[TicketItemOut])
 async def station_tickets(
     station_id: int,
     restaurant=Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
+    await _get_owned_station(session, station_id=station_id, restaurant_id=restaurant.id)
     rows = await session.scalars(
         select(OrderItem).where(
             OrderItem.station_id_snapshot == station_id,
@@ -59,9 +77,7 @@ async def bump_item(
     restaurant=Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    item = await session.get(OrderItem, item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="item not found")
+    item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
     before = {"kitchen_status": item.kitchen_status}
     item.kitchen_status = "ready"
     item.bumped_at = datetime.now(timezone.utc)
@@ -81,9 +97,7 @@ async def recall_item(
     restaurant=Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
-    item = await session.get(OrderItem, item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="item not found")
+    item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
     before = {"kitchen_status": item.kitchen_status}
     item.kitchen_status = "received"
     item.bumped_at = None
@@ -118,7 +132,7 @@ async def update_print_job_status(
     session: AsyncSession = Depends(get_session),
 ):
     job = await session.get(PrintJob, job_id)
-    if job is None:
+    if job is None or job.restaurant_id != restaurant.id:
         raise HTTPException(status_code=404, detail="print job not found")
     job.status = new_status
     if new_status == "failed":
