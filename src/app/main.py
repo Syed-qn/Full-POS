@@ -16,6 +16,7 @@ from app.dispatch.rider_app_router import router as rider_app_router
 from app.dispatch.router import router as dispatch_router
 from app.dispatch.tracking_router import router as tracking_router
 from app.identity.router import router as identity_router
+from app.idempotency.middleware import IdempotencyMiddleware
 from app.menu.router import router as menu_router
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.timing import ResponseTimingMiddleware
@@ -138,6 +139,9 @@ def create_app() -> FastAPI:
     # so the last call here executes FIRST on the request path.
     # SecurityHeadersMiddleware runs last on request / first on response.
     app.add_middleware(ResponseTimingMiddleware)
+    # Runs innermost (closest to routing): dedupes replayed mutating requests
+    # carrying an Idempotency-Key header before/after the route handler.
+    app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.hsts_enabled)
     # CORSMiddleware runs first on request (handles pre-flight) / last on response.
     if settings.cors_allow_origins:
