@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -23,3 +25,17 @@ class ClockIn(BaseModel):
 class StaffLoginIn(BaseModel):
     staff_id: int
     pin: str
+
+
+class ShiftIn(BaseModel):
+    staff_id: int
+    scheduled_start: datetime
+    scheduled_end: datetime
+
+
+class ShiftOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    staff_id: int
+    scheduled_start: datetime
+    scheduled_end: datetime
