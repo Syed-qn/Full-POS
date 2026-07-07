@@ -6,6 +6,8 @@ import { startSyncScheduler } from "./scheduler";
 import { enqueueOp } from "./pendingOps";
 import { initAuthTokenStore, getAuthToken, setAuthToken } from "./authToken";
 import { initAutoUpdater } from "./updater";
+import { pollAndPrint } from "./printJobPoller";
+import { NotImplementedPrinter } from "./native/printer";
 
 export function createMainWindow(loadUrl: string): BrowserWindow {
   const win = new BrowserWindow({
@@ -33,13 +35,18 @@ if (require.main === module) {
     initSchema(db);
     initAuthTokenStore(path.join(app.getPath("userData"), "auth-token.txt"));
 
-    startSyncScheduler(
-      db,
-      process.env.POS_API_BASE ?? "https://api.fullpos.example",
-      fetch,
-      getAuthToken,
-      15000,
-    );
+    const apiBase = process.env.POS_API_BASE ?? "https://api.fullpos.example";
+    startSyncScheduler(db, apiBase, fetch, getAuthToken, 15000);
+
+    // Printer driver is a stub until real hardware is available to test against
+    // (see docs/superpowers/specs/2026-07-07-kitchen-kds-design.md §3 step 4).
+    // The polling loop itself is real and wired end-to-end.
+    const printer = new NotImplementedPrinter();
+    setInterval(() => {
+      pollAndPrint(apiBase, fetch, getAuthToken(), printer).catch(() => {
+        // never let a poll failure kill the interval — retried next tick
+      });
+    }, 10000);
 
     ipcMain.handle("pos-set-auth-token", (_event, token: string | null) => {
       setAuthToken(token ?? "");
