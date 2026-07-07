@@ -28,10 +28,11 @@ def create_access_token(
     *,
     restaurant_id: int | None = None,
     rider_id: int | None = None,
+    org_id: int | None = None,
     audience: str = "manager",
 ) -> str:
     s = get_settings()
-    sub = str(restaurant_id if restaurant_id is not None else rider_id)
+    sub = str(next(v for v in (restaurant_id, rider_id, org_id) if v is not None))
     payload = {
         "sub": sub,
         "aud": audience,

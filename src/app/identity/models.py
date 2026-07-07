@@ -167,6 +167,9 @@ class Restaurant(Base, TimestampMixin):
     lat: Mapped[float] = mapped_column(Float)
     lng: Mapped[float] = mapped_column(Float)
     settings: Mapped[dict] = mapped_column(JSONB, default=lambda: copy.deepcopy(DEFAULT_SETTINGS))
+    # Multi-branch grouping — null for today's standalone restaurants, set when
+    # a branch is added under an Organization (see app.organizations).
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
 
 
 class Rider(Base, TimestampMixin):
