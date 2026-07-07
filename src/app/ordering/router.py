@@ -397,6 +397,20 @@ async def get_order_detail_endpoint(
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@router.get("/{order_id}/tax-invoice")
+async def get_tax_invoice(
+    order_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.ordering.tax import build_tax_invoice
+
+    try:
+        return await build_tax_invoice(session, order_id=order_id, restaurant_id=restaurant.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order(
     order_id: int,
