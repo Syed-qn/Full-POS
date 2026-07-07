@@ -72,6 +72,7 @@ from app.marketing.window import is_within_uae_window
 from app.ordering.models import Customer, Order
 from app.ordering.service import predict_order_time
 from app.outbox.service import enqueue_message
+from app.sms.port import SmsPort
 from app.whatsapp.port import OutboundMessageType
 
 _DUBAI = ZoneInfo("Asia/Dubai")
@@ -278,6 +279,33 @@ async def create_campaign(
         after={"type": type, "status": status},
     )
     return camp
+
+
+# ---------------------------------------------------------------------------
+# SMS channel (Task: sms port) — a lightweight sibling to the WhatsApp
+# template send pipeline above. No compliance gate (opt-out/window/cap) yet —
+# this is a direct one-off send, scoped to whatever ships the SmsPort
+# abstraction; the full compliant pipeline stays WhatsApp-only for now.
+# ---------------------------------------------------------------------------
+async def send_sms_campaign(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    customer_id: int,
+    body: str,
+    gateway: SmsPort,
+) -> str:
+    """Send a one-off SMS to a customer via the given ``SmsPort``.
+
+    Resolves the customer's phone the same way the WhatsApp send pipeline
+    does (``Customer.phone``), then delegates to the gateway. Returns the
+    provider message id. Raises ``ValueError`` if the customer doesn't
+    belong to this restaurant.
+    """
+    customer = await session.get(Customer, customer_id)
+    if customer is None or customer.restaurant_id != restaurant_id:
+        raise ValueError(f"customer {customer_id} not found for restaurant")
+    return await gateway.send(to_phone=customer.phone, body=body)
 
 
 _SCHEDULE_MIN_LEAD = timedelta(minutes=5)

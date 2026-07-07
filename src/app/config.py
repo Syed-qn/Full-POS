@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     whatsapp_provider: str = "mock"  # mock | cloud
     payment_provider: str = "mock"  # mock | stripe
     stripe_secret_key: SecretStr = SecretStr("")
+    # SMS channel for marketing (future Twilio etc). No real vendor account
+    # exists yet — "mock" is the only implemented provider.
+    sms_provider: str = "mock"  # mock
     aggregator_provider: str = "mock"  # mock | talabat | deliveroo | careem
     wa_verify_token: str = "dev-verify-token"
     wa_access_token: SecretStr = SecretStr("")
