@@ -538,14 +538,20 @@ async def test_caps_insensitive_dish_match(db_session, restaurant, seed_biryani_
 async def test_english_menu_request_updates_dialogue_state(
     db_session, restaurant, seed_biryani_menu
 ):
-    """'menu' keyword must trigger send_catalog and enqueue a product_list.
+    """'menu' keyword must trigger send_catalog and enqueue a catalog message.
 
     After I-2 driver fix: the harness now mirrors production routing — a TEXT message
     whose normalised text is in _CATALOG_KEYWORDS and whose restaurant has catalog mode
     on is routed directly to send_catalog (bypassing handle_inbound), exactly as
-    webhook/router.py does.  In this path, dialogue_state is NOT written to
-    'menu_sent'; instead we assert that an OutboxMessage of type product_list was
-    enqueued (the production-faithful signal that the menu was sent)."""
+    webhook/router.py does. In this path, dialogue_state is NOT written to
+    'menu_sent'; instead we assert that an OutboxMessage was enqueued (the
+    production-faithful signal that the menu was sent).
+
+    Type is 'catalog_message' (native "View full menu" button), not 'product_list'
+    (paginated cards) — send_catalog's native-catalogue-view path is the default-ON
+    preferred path (see app/catalog/service.py:send_catalog's own comment: "Preferred
+    when enabled (default ON)"); product_list is only a fallback when native view is
+    off or the catalogue button doesn't render."""
     from app.outbox.models import OutboxMessage
     from sqlalchemy import select
 
@@ -561,9 +567,9 @@ async def test_english_menu_request_updates_dialogue_state(
         )
     ).all()
     # OutboxMessage stores the type inside payload["type"] (not a top-level column).
-    product_list_msgs = [m for m in outbox if m.payload.get("type") == "product_list"]
-    assert product_list_msgs, (
-        f"'menu' keyword did not trigger send_catalog product_list; "
+    catalog_msgs = [m for m in outbox if m.payload.get("type") == "catalog_message"]
+    assert catalog_msgs, (
+        f"'menu' keyword did not trigger send_catalog catalog_message; "
         f"outbox: {[(m.payload.get('type'), m.payload) for m in outbox]}"
     )
 
@@ -648,13 +654,13 @@ async def test_structured_cart_drives_correction(db_session, restaurant, seed_bi
 async def test_all_customer_outbounds_recorded(db_session, restaurant, seed_biryani_menu):
     """Every customer-facing outbound is recorded in `messages` (DB-H3/4/5).
     Drive a keyword-catalog send and an STT-fail; assert both produced an outbound
-    Message row (product_list and text)."""
+    Message row (catalog_message and text)."""
     from sqlalchemy import select
 
     from app.conversation.models import Conversation, Message
     from app.identity.phones import normalize_phone
 
-    # (a) keyword catalog → product_list card send must be recorded
+    # (a) keyword catalog → native "View full menu" catalog_message send must be recorded
     await drive_turns(
         db_session, restaurant_id=restaurant.id, phone="+971500000062",
         turns=[{"type": "text", "text": "menu"}],
@@ -677,7 +683,7 @@ async def test_all_customer_outbounds_recorded(db_session, restaurant, seed_biry
         )
     )).all()
     types = {m.type for m in out}
-    assert "product_list" in types, f"catalog cards not recorded; types={types}"
+    assert "catalog_message" in types, f"catalog send not recorded; types={types}"
     bodies = " ".join((m.payload or {}).get("body", "") for m in out).lower()
     assert "catch that" in bodies or "type it" in bodies, (
         f"STT-fail apology not recorded in messages; bodies={bodies!r}"

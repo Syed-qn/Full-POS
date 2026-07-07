@@ -28,6 +28,7 @@ from app.catalog.meta_client import (
 from app.catalog.models import CatalogProduct
 from app.catalog.tenant_scope import (
     build_tenant_catalog_gate,
+    is_shared_catalog,
     prune_foreign_dishes,
 )
 from app.config import get_settings
@@ -292,14 +293,26 @@ async def sync_catalog_from_meta(session: AsyncSession, *, restaurant_id: int) -
     seen: set[str] = set()
     tenant_products: list = []
     result = SyncResult()
-    gate = await build_tenant_catalog_gate(
-        session,
-        restaurant_id,
-        extra_retailer_ids={(p.retailer_id or "").strip() for p in products},
+    # Only build + apply the ownership gate when this catalog_id is actually SHARED
+    # by more than one restaurant — matches the same guard every other tenant-scope
+    # call site uses (filter_tenant_catalog_products, prune_foreign_dishes). Without
+    # it, a dedicated (non-shared) catalog_id's own products — which never carry the
+    # dish-anchored `dish-{id}-...` retailer_id convention on first sync, before any
+    # dish has been linked yet — would all be rejected as "not owned", since an empty
+    # gate has no dish_owners/linked_rids to match against.
+    shared = await is_shared_catalog(session, restaurant_id=restaurant_id)
+    gate = (
+        await build_tenant_catalog_gate(
+            session,
+            restaurant_id,
+            extra_retailer_ids={(p.retailer_id or "").strip() for p in products},
+        )
+        if shared
+        else None
     )
 
     for p in products:
-        if not gate.owns(p.retailer_id):
+        if gate is not None and not gate.owns(p.retailer_id):
             continue
         tenant_products.append(p)
         seen.add(p.retailer_id)

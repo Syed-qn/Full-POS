@@ -872,8 +872,10 @@ async def test_bare_make_it_n_sets_single_cart_line(db_session, restaurant):
     last = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
     assert "Updated" in last
 
-    # Add a second distinct line → bare "make it 3" is now ambiguous → ask which one
-    # (handled, no LLM), cart untouched.
+    # Add a second distinct line → bare "make it 3" now uses nearest-context
+    # resolution: targets the MOST RECENTLY added dish (Lemon Mint) rather than
+    # asking "which one?" (deterministic, no LLM) — see the "Nearest-context
+    # resolution" comment on _try_catalog_cart_edit for the prod rationale.
     await add_item(db_session, order=order, dish=mint, qty=1)
     await db_session.commit()
     handled2 = await _try_catalog_cart_edit(
@@ -881,12 +883,12 @@ async def test_bare_make_it_n_sets_single_cart_line(db_session, restaurant):
     )
     await db_session.commit()
     assert handled2 is True
-    which = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
-    assert "Which one" in which and "Arayes" in which and "Lemon Mint" in which
+    updated = (await db_session.execute(select(OutboxMessage))).scalars().all()[-1].payload["body"]
+    assert "Updated" in updated and "Lemon Mint" in updated
     items2 = {i.dish_number: i.qty for i in (await db_session.execute(
         select(OrderItem).where(OrderItem.order_id == order.id)
     )).scalars().all()}
-    assert items2 == {210: 5, 211: 1}  # unchanged
+    assert items2 == {210: 5, 211: 3}  # Arayes unchanged, Lemon Mint (most recent) set to 3
 
 
 async def test_spacing_insensitive_match_every_situation(db_session, restaurant):
