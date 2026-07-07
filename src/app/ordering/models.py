@@ -81,6 +81,9 @@ class Order(Base, TimestampMixin):
     priority: Mapped[str] = mapped_column(String(16), default="normal")
 
     address_id: Mapped[int | None] = mapped_column(ForeignKey("customer_addresses.id"))
+    # Dine-in binding — null for delivery orders. Set when an order is opened
+    # against a physical table (see app.tables).
+    table_id: Mapped[int | None] = mapped_column(ForeignKey("tables.id"))
     additional_details: Mapped[str | None] = mapped_column(Text)
 
     # Dispatch (Phase 4): nullable until the dispatch engine assigns a rider.
