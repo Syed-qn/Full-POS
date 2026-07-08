@@ -10,7 +10,7 @@ export function StaffScreen() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [clockedIn, setClockedIn] = useState<Record<number, boolean>>({});
+  const [clockStatuses, setClockStatuses] = useState<Record<number, "clocked_out" | "clocked_in" | "on_break">>({});
   const [hours, setHours] = useState<Record<number, number>>({});
 
   const [name, setName] = useState("");
@@ -35,15 +35,17 @@ export function StaffScreen() {
       members.map(async (m) => {
         try {
           const { status: clockStatus } = await getClockStatus(m.id);
-          return [m.id, clockStatus === "clocked_in" || clockStatus === "on_break"] as const;
+          const normalized =
+            clockStatus === "clocked_in" || clockStatus === "on_break" ? clockStatus : "clocked_out";
+          return [m.id, normalized] as const;
         } catch {
-          return [m.id, false] as const;
+          return [m.id, "clocked_out"] as const;
         }
       }),
     );
-    setClockedIn((prev) => {
+    setClockStatuses((prev) => {
       const next = { ...prev };
-      for (const [id, isIn] of results) next[id] = isIn;
+      for (const [id, status] of results) next[id] = status;
       return next;
     });
   }
@@ -89,14 +91,17 @@ export function StaffScreen() {
   }
 
   async function toggleClock(member: StaffMember) {
-    const isIn = clockedIn[member.id] ?? false;
+    const status = clockStatuses[member.id] ?? "clocked_out";
+    const eventType = status === "clocked_in" ? "clock_out" : status === "on_break" ? "break_end" : "clock_in";
+    const nextStatus = eventType === "clock_out" ? "clocked_out" : eventType === "break_end" ? "clocked_in" : "clocked_in";
     try {
-      await clockStaff(member.id, isIn ? "clock_out" : "clock_in");
-      setClockedIn((prev) => ({ ...prev, [member.id]: !isIn }));
+      await clockStaff(member.id, eventType);
+      setClockStatuses((prev) => ({ ...prev, [member.id]: nextStatus }));
       const today = new Date().toISOString().slice(0, 10);
       const h = await getHours(member.id, today);
       setHours((prev) => ({ ...prev, [member.id]: h.hours }));
-      toast(`${member.name} clocked ${isIn ? "out" : "in"}.`);
+      const label = eventType === "clock_out" ? "clocked out" : eventType === "break_end" ? "back from break" : "clocked in";
+      toast(`${member.name} ${label}.`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not update clock status.", "error");
     }
@@ -208,7 +213,11 @@ export function StaffScreen() {
                 <td>{hours[m.id] !== undefined ? hours[m.id].toFixed(2) : "—"}</td>
                 <td>
                   <Button type="button" variant="ghost" onClick={() => void toggleClock(m)}>
-                    {clockedIn[m.id] ? "Clock out" : "Clock in"}
+                    {clockStatuses[m.id] === "clocked_in"
+                      ? "Clock out"
+                      : clockStatuses[m.id] === "on_break"
+                        ? "End break"
+                        : "Clock in"}
                   </Button>
                 </td>
               </tr>

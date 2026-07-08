@@ -61,6 +61,21 @@ describe("StaffScreen", () => {
     expect(screen.queryByText(/clock in/i)).not.toBeInTheDocument();
   });
 
+  it("shows an End break action (not a guaranteed-409 Clock out) for a staff member on break", async () => {
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      if (String(url).includes("/status")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ staff_id: 1, status: "on_break" }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify(staff), { status: 200 }));
+    });
+    render(<StaffScreen />);
+    await waitFor(() => expect(screen.getByRole("cell", { name: "Ahmed" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/end break/i)).toBeInTheDocument());
+    expect(screen.queryByText(/^clock out$/i)).not.toBeInTheDocument();
+  });
+
   it("shows the tip pool for a date range", async () => {
     vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
       if (String(url).includes("/tip-pool")) {
