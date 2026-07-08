@@ -16,6 +16,7 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
   { to: "/new-order", label: "New Order", icon: "➕" },
   { to: "/menu", label: "Menu", icon: "🍽️" },
   { to: "/riders", label: "Riders", icon: "🛵" },
+  { to: "/staff", label: "Staff", icon: "🧑‍🍳" },
   { to: "/conversations", label: "Chats", icon: "💬" },
   { to: "/tickets", label: "Complaints", icon: "🎫" },
   { to: "/coupons", label: "Coupons", icon: "🏷️" },

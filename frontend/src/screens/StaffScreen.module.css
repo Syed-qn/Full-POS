@@ -1,0 +1,8 @@
+.root { padding: 24px; }
+.card { background: var(--surface, #fff); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.cardTitle { margin: 0 0 12px; font-size: 15px; }
+.form { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border, #eee); }
+.loading, .error, .empty { padding: 16px; }
