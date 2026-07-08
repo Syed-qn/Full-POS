@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
-from app.inventory.service import daily_stock_closing
+from app.inventory.service import daily_stock_closing, inventory_valuation
 from app.reports.analytics import (
     avg_prep_time_by_item,
     avg_prep_time_by_staff,
@@ -190,6 +190,26 @@ async def daily_stock_closing_report(
 ):
     rows = await daily_stock_closing(session, restaurant_id=restaurant.id, target_date=target_date)
     return [{**r, "closing_stock": str(r["closing_stock"])} for r in rows]
+
+
+@router.get("/inventory-valuation")
+async def inventory_valuation_report(
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    report = await inventory_valuation(session, restaurant_id=restaurant.id)
+    return {
+        "total_value_aed": str(report["total_value_aed"]),
+        "rows": [
+            {
+                **row,
+                "current_stock": str(row["current_stock"]),
+                "cost_per_unit_aed": str(row["cost_per_unit_aed"]),
+                "value_aed": str(row["value_aed"]),
+            }
+            for row in report["rows"]
+        ],
+    }
 
 
 @router.get("/invoice-sequence-check")

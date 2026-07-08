@@ -91,3 +91,18 @@ class IngredientSubstitute(Base, TimestampMixin):
     ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"), index=True)
     substitute_ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"), index=True)
     notes: Mapped[str | None] = mapped_column(String(256))
+
+
+class StockAdjustmentRequest(Base, TimestampMixin):
+    __tablename__ = "stock_adjustment_requests"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"), index=True)
+    requested_qty: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    previous_qty_snapshot: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    reason: Mapped[str | None] = mapped_column(String(256))
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    requested_by: Mapped[str] = mapped_column(String(64))
+    approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

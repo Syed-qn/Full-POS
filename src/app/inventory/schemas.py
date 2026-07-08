@@ -146,3 +146,50 @@ class StockClosingOut(BaseModel):
     ingredient_name: str
     closing_stock: Decimal
     unit: str
+
+
+class VendorPriceComparisonOut(BaseModel):
+    vendor_id: int
+    vendor_name: str
+    unit_cost_aed: Decimal
+    purchase_order_id: int
+    purchase_order_line_id: int
+
+
+class InventoryValuationRowOut(BaseModel):
+    ingredient_id: int
+    ingredient_name: str
+    unit: str
+    current_stock: Decimal
+    cost_per_unit_aed: Decimal
+    value_aed: Decimal
+
+
+class InventoryValuationOut(BaseModel):
+    total_value_aed: Decimal
+    rows: list[InventoryValuationRowOut]
+
+
+class StockAdjustmentIn(BaseModel):
+    requested_qty: Decimal
+    reason: str | None = None
+    requested_by: str = "manager"
+
+
+class StockAdjustmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    ingredient_id: int
+    requested_qty: Decimal
+    previous_qty_snapshot: Decimal
+    reason: str | None = None
+    status: str
+    requested_by: str
+    approved_by: str | None = None
+    decided_at: datetime | None = None
+
+
+class LowStockAlertOut(BaseModel):
+    enqueued: bool
+    reason: str | None = None
+    outbox_id: int | None = None

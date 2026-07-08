@@ -14,25 +14,35 @@ from app.inventory.schemas import (
     CostIn,
     IngredientIn,
     IngredientOut,
+    LowStockAlertOut,
     RecipeLinkIn,
     ReorderSuggestionOut,
     RestockIn,
+    StockAdjustmentIn,
+    StockAdjustmentOut,
     StockCountIn,
     StockCountOut,
     SubstituteIn,
     SubstituteOut,
     WasteIn,
+    VendorPriceComparisonOut,
 )
 from app.inventory.service import (
     add_batch,
     add_substitute,
+    approve_stock_adjustment,
     flag_stock_anomaly,
+    list_stock_adjustments,
     list_expiring_soon,
     list_low_stock,
     list_substitutes,
+    low_stock_alert,
     record_stock_count,
     record_waste,
+    reject_stock_adjustment,
+    request_stock_adjustment,
     suggest_reorder_quantities,
+    vendor_price_comparison,
 )
 
 router = APIRouter(prefix="/api/v1/ingredients", tags=["inventory"])
@@ -94,6 +104,66 @@ async def reorder_suggestions(
     return await suggest_reorder_quantities(session, restaurant_id=restaurant.id)
 
 
+@router.get("/stock-adjustments", response_model=list[StockAdjustmentOut])
+async def stock_adjustments(
+    status: str | None = None,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await list_stock_adjustments(
+        session, restaurant_id=restaurant.id, status=status,
+    )
+
+
+@router.post("/stock-adjustments/{adjustment_id}/approve", response_model=StockAdjustmentOut)
+async def approve_stock_adjustment_endpoint(
+    adjustment_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        adjustment = await approve_stock_adjustment(
+            session, restaurant_id=restaurant.id, adjustment_id=adjustment_id,
+            approved_by="manager",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(adjustment)
+    return adjustment
+
+
+@router.post("/stock-adjustments/{adjustment_id}/reject", response_model=StockAdjustmentOut)
+async def reject_stock_adjustment_endpoint(
+    adjustment_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        adjustment = await reject_stock_adjustment(
+            session, restaurant_id=restaurant.id, adjustment_id=adjustment_id,
+            approved_by="manager",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(adjustment)
+    return adjustment
+
+
+@router.post("/low-stock-alert", response_model=LowStockAlertOut)
+async def send_low_stock_alert(
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        result = await low_stock_alert(session, restaurant=restaurant)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    return result
+
+
 @router.post("/{ingredient_id}/recipe-links", status_code=status.HTTP_201_CREATED)
 async def link_recipe(
     ingredient_id: int,
@@ -108,6 +178,44 @@ async def link_recipe(
     session.add(link)
     await session.commit()
     return {"id": link.id, "dish_id": link.dish_id, "ingredient_id": link.ingredient_id}
+
+
+@router.get("/{ingredient_id}/vendor-price-comparison", response_model=list[VendorPriceComparisonOut])
+async def get_vendor_price_comparison(
+    ingredient_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await vendor_price_comparison(
+            session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{ingredient_id}/stock-adjustments",
+    response_model=StockAdjustmentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_stock_adjustment(
+    ingredient_id: int,
+    body: StockAdjustmentIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        adjustment = await request_stock_adjustment(
+            session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
+            requested_qty=body.requested_qty, reason=body.reason,
+            requested_by=body.requested_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    await session.refresh(adjustment)
+    return adjustment
 
 
 @router.post("/{ingredient_id}/waste", response_model=IngredientOut)
