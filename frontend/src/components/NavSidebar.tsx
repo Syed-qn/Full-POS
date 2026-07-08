@@ -20,7 +20,8 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
   { to: "/tickets", label: "Complaints", icon: "🎫" },
   { to: "/coupons", label: "Coupons", icon: "🏷️" },
   { to: "/marketing", label: "Marketing", icon: "📣" },
-  { to: "/analytics", label: "Reports", icon: "📊" },
+  { to: "/analytics", label: "Analytics", icon: "📊" },
+  { to: "/reports", label: "Reports", icon: "📈" },
   { to: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
