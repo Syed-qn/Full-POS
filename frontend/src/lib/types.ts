@@ -526,3 +526,43 @@ export interface CouponCreateIn {
   expires_at?: string;
   code?: string;
 }
+
+export interface StaffMember {
+  id: number;
+  name: string;
+  phone: string | null;
+  role: string;
+}
+
+export interface StaffCreateIn {
+  name: string;
+  phone?: string;
+  role?: string;
+  pin: string;
+}
+
+export interface ClockEventOut {
+  id: number;
+  type: string;
+  at: string;
+}
+
+export interface StaffHoursOut {
+  staff_id: number;
+  date: string;
+  hours: number;
+  overtime_hours: number;
+}
+
+export interface Shift {
+  id: number;
+  staff_id: number;
+  scheduled_start: string;
+  scheduled_end: string;
+}
+
+export interface ShiftCreateIn {
+  staff_id: number;
+  scheduled_start: string;
+  scheduled_end: string;
+}
