@@ -35,6 +35,7 @@ from app.menu.combo_router import router as menu_combo_router
 from app.menu.modifier_router import router as menu_modifier_router
 from app.menu.router import router as menu_router
 from app.menu.upsell_router import router as menu_upsell_router
+from app.menu.pricing_router import router as menu_pricing_router
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.timing import ResponseTimingMiddleware
 from app.ordering.customer_router import router as customer_router
@@ -175,6 +176,7 @@ def create_app() -> FastAPI:
     app.include_router(menu_modifier_router)
     app.include_router(menu_combo_router)
     app.include_router(menu_upsell_router)
+    app.include_router(menu_pricing_router)
     app.include_router(ordering_router)
     app.include_router(customer_router)
     app.include_router(conversation_router)

@@ -7,10 +7,13 @@ external AI dependency).
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.menu.models import Dish
+from app.menu.service import is_dish_currently_available
 from app.ordering.models import Order, OrderItem
 
 # Statuses that count as "a real order happened" — mirrors
@@ -78,7 +81,10 @@ async def compute_co_purchase_scores(
             )
         )
     ).all()
-    dish_by_id = {d.id: d for d in available_dishes}
+    today = datetime.now(timezone.utc).date()
+    dish_by_id = {
+        d.id: d for d in available_dishes if is_dish_currently_available(d, today=today)
+    }
 
     results: list[dict] = []
     for dish_id, count in rows:

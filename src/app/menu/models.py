@@ -1,8 +1,10 @@
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     ForeignKey,
     Integer,
     Numeric,
@@ -23,7 +25,14 @@ class Menu(Base, TimestampMixin):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(32), default="pending_confirmation")
-    # pending_confirmation | active | superseded
+    # pending_confirmation | pending_approval | active | superseded
+    # pending_approval is the menu-approval-workflow gate (submit_menu_for_approval /
+    # approve_menu in service.py): a manager pushes a reviewed draft into this state and
+    # a (role-gated) approver flips it to active. It is DISTINCT from
+    # pending_confirmation, which is the post-upload/diff-review state before a manager
+    # has looked at the extraction at all — reusing pending_confirmation for both would
+    # conflate "just extracted" with "reviewed, awaiting sign-off".
+    approved_by: Mapped[str | None] = mapped_column(String(255))
     source_files: Mapped[list] = mapped_column(JSONB, default=list)
 
     dishes: Mapped[list["Dish"]] = relationship(
@@ -46,6 +55,13 @@ class Dish(Base, TimestampMixin):
     # category-level default, then a restaurant's auto-created "Main" station.
     station_id: Mapped[int | None] = mapped_column(ForeignKey("kitchen_stations.id"))
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Seasonal menu scheduling window (both nullable = always available once
+    # is_available=True). Checked by menu/service.py:is_dish_currently_available and
+    # wired into the ordering-facing availability lookups (matching.py, place_manual_order,
+    # upsell, marketing segment compile) so a dish outside its window is excluded from
+    # orders even while is_available itself stays True.
+    available_from: Mapped[date | None] = mapped_column(Date)
+    available_until: Mapped[date | None] = mapped_column(Date)
     # Optional serving-size variants, e.g. Chicken Biryani → 1 serve / 4 serve, each
     # with its own price. Empty list = flat dish (today's behaviour, base price_aed
     # applies). Element shape: {"name": str, "price_aed": decimal-string, "dish_number": int|null}.

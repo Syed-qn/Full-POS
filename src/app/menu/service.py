@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -217,6 +217,23 @@ async def create_menu_from_upload(
     return menu
 
 
+def is_dish_currently_available(dish: Dish, *, today: date) -> bool:
+    """Pure function: is ``dish`` orderable today?
+
+    True only if ``is_available`` is set AND (if a seasonal window is configured)
+    ``today`` falls within ``[available_from, available_until]`` (both inclusive;
+    either bound may be None meaning "no limit on that side"). A dish with no window
+    set is available on every day once ``is_available`` is True (today's behaviour,
+    unchanged)."""
+    if not dish.is_available:
+        return False
+    if dish.available_from is not None and today < dish.available_from:
+        return False
+    if dish.available_until is not None and today > dish.available_until:
+        return False
+    return True
+
+
 async def get_active_menu(session: AsyncSession, restaurant_id: int) -> Menu | None:
     return await session.scalar(
         select(Menu).where(Menu.restaurant_id == restaurant_id, Menu.status == "active")
@@ -238,10 +255,14 @@ async def list_active_dishes_catalog(
             select(Dish)
             .where(Dish.menu_id == menu.id, Dish.is_available.is_(True))
             .order_by(Dish.dish_number)
-            .limit(limit)
         )
     ).all()
-    return [{"id": d.id, "name": d.name} for d in rows]
+    today = datetime.now(timezone.utc).date()
+    return [
+        {"id": d.id, "name": d.name}
+        for d in rows
+        if is_dish_currently_available(d, today=today)
+    ][:limit]
 
 
 async def list_dishes(
@@ -297,6 +318,64 @@ async def ensure_active_menu(session: AsyncSession, restaurant_id: int) -> Menu:
 
 class MenuIncompleteError(Exception):
     pass
+
+
+class MenuApprovalError(Exception):
+    pass
+
+
+async def submit_menu_for_approval(
+    session: AsyncSession, *, restaurant_id: int, menu_id: int
+) -> Menu:
+    """Move a menu into ``pending_approval`` so a manager-role approver signs off before
+    it can go live. Only a ``pending_confirmation`` draft (a menu nobody has activated
+    yet) can be submitted — an already-active or superseded menu has nothing to approve."""
+    menu = await session.get(Menu, menu_id)
+    if menu is None or menu.restaurant_id != restaurant_id:
+        raise MenuApprovalError("menu not found")
+    if menu.status != "pending_confirmation":
+        raise MenuApprovalError(
+            f"cannot submit menu in status '{menu.status}' for approval "
+            "(must be pending_confirmation)"
+        )
+    menu.status = "pending_approval"
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant_id, entity="menu",
+        entity_id=str(menu.id), action="submitted_for_approval",
+        after={"version": menu.version},
+    )
+    await session.flush()
+    return menu
+
+
+async def approve_menu(
+    session: AsyncSession, *, restaurant_id: int, menu_id: int, approved_by: str
+) -> Menu:
+    """Approve a ``pending_approval`` menu and activate it (reuses ``activate_menu``'s
+    completeness check + active-menu handoff so an approved menu goes live exactly like
+    a directly-activated one). Caller (router) is responsible for role-gating who may
+    call this — this function only enforces the state machine."""
+    menu = await session.get(Menu, menu_id)
+    if menu is None or menu.restaurant_id != restaurant_id:
+        raise MenuApprovalError("menu not found")
+    if menu.status != "pending_approval":
+        raise MenuApprovalError(
+            f"cannot approve menu in status '{menu.status}' (must be pending_approval)"
+        )
+    menu.approved_by = approved_by
+    await record_audit(
+        session, actor=approved_by, restaurant_id=restaurant_id, entity="menu",
+        entity_id=str(menu.id), action="approved",
+        after={"version": menu.version, "approved_by": approved_by},
+    )
+    await session.flush()
+    try:
+        return await activate_menu(session, menu)
+    except MenuIncompleteError:
+        # Roll the state machine back so the menu can be fixed and resubmitted rather
+        # than getting stuck in pending_approval with no way to correct it.
+        menu.status = "pending_approval"
+        raise
 
 
 def _variants_incomplete(dish: Dish) -> bool:
