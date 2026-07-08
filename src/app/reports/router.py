@@ -9,6 +9,7 @@ from app.identity.deps import current_restaurant
 from app.reports.analytics import (
     avg_prep_time_by_item,
     avg_prep_time_by_staff,
+    driver_performance_report,
     inventory_usage,
     invoice_sequence_report,
     item_performance,
@@ -165,6 +166,17 @@ async def nps_summary_report(
     from app.loyalty.nps import nps_summary
 
     return await nps_summary(
+        session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
+    )
+
+
+@router.get("/driver-performance")
+async def driver_performance_endpoint(
+    start_date: date, end_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await driver_performance_report(
         session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
     )
 
