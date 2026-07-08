@@ -192,3 +192,7 @@ class OrderItem(Base, TimestampMixin):
     # Station resolved at ticket-creation time — snapshotted so a later station
     # reassignment doesn't retroactively move an in-flight ticket.
     station_id_snapshot: Mapped[int | None] = mapped_column(ForeignKey("kitchen_stations.id"))
+    # Dine-in seat assignment for split-by-seat billing. Null = unassigned/shared
+    # (e.g. a shared appetizer). Only meaningful on orders bound to a table
+    # (Order.table_id) but not enforced at the DB level.
+    seat_number: Mapped[int | None] = mapped_column(Integer)

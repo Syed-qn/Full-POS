@@ -19,9 +19,13 @@ from app.ordering.schemas import (
     DeliveryPhotoIn,
     EditOrderItemIn,
     ManualOrderIn,
+    MergeOrdersIn,
     OrderItemOut,
     OrderOut,
     ReassignOrderIn,
+    SplitOrderByItemsIn,
+    SplitOrderBySeatIn,
+    TransferOrderStaffIn,
     VerifyDeliveryOtpIn,
 )
 from app.ordering.detail_schemas import (
@@ -40,7 +44,11 @@ from app.ordering.service import (
     get_order_detail,
     get_order_for_tenant,
     list_orders_for_tenant,
+    merge_orders,
     parse_detail_includes,
+    split_order_by_items,
+    split_order_by_seat,
+    transfer_order_staff,
 )
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
@@ -280,6 +288,31 @@ async def create_manual_order_endpoint(
     return await _enrich(session, order)
 
 
+@router.post("/merge", response_model=OrderOut)
+async def merge_orders_endpoint(
+    body: MergeOrdersIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Merge all items from ``secondary_order_id`` onto ``primary_order_id`` and
+    cancel the now-empty secondary. 404 if either order doesn't exist for this
+    tenant; 422 if either isn't in a mergeable (pre-'ready') status."""
+    try:
+        order = await merge_orders(
+            session,
+            restaurant_id=restaurant.id,
+            primary_order_id=body.primary_order_id,
+            secondary_order_id=body.secondary_order_id,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if msg == "Order not found" else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    await session.refresh(order)
+    return await _enrich(session, order)
+
+
 @router.post("/{order_id}/advance", response_model=OrderOut)
 async def advance_order(
     order_id: int,
@@ -424,6 +457,83 @@ async def edit_order_item_endpoint(
         raise HTTPException(status_code=_item_mutation_status_code(str(exc)), detail=str(exc))
     await session.commit()
     order = await get_order_for_tenant(session, restaurant_id=restaurant.id, order_id=order_id)
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/split-by-items", response_model=OrderOut)
+async def split_order_by_items_endpoint(
+    order_id: int,
+    body: SplitOrderByItemsIn,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Split the given line items off onto a new draft order (same customer/table)
+    — manager approval required. Returns the NEW split-off order. 404 if the source
+    order doesn't exist for this tenant; 422 if past the modifiable window or any
+    item_id doesn't belong to this order."""
+    try:
+        new_order = await split_order_by_items(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            item_ids=body.item_ids,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if msg == "Order not found" else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    await session.refresh(new_order)
+    return await _enrich(session, new_order)
+
+
+@router.post("/{order_id}/split-by-seat", response_model=OrderOut)
+async def split_order_by_seat_endpoint(
+    order_id: int,
+    body: SplitOrderBySeatIn,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Split every item assigned to ``seat_number`` off onto a new draft order —
+    manager approval required. Returns the NEW split-off order. 404 if the source
+    order doesn't exist for this tenant; 422 if past the modifiable window or no
+    items carry that seat number."""
+    try:
+        new_order = await split_order_by_seat(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            seat_number=body.seat_number,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if msg == "Order not found" else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    await session.refresh(new_order)
+    return await _enrich(session, new_order)
+
+
+@router.patch("/{order_id}/transfer-staff", response_model=OrderOut)
+async def transfer_order_staff_endpoint(
+    order_id: int,
+    body: TransferOrderStaffIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Reassign sales-per-server attribution to another staff member of this
+    tenant. 404 if the order or staff member doesn't exist for this tenant."""
+    try:
+        order = await transfer_order_staff(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            new_staff_id=body.staff_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    await session.commit()
+    await session.refresh(order)
     return await _enrich(session, order)
 
 
