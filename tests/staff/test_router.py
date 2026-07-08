@@ -73,3 +73,34 @@ async def test_break_start_and_end_via_router(client, auth_headers):
     assert start.status_code == 200
     end = await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "break_end"}, headers=auth_headers)
     assert end.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_create_staff_writes_audit_log(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Tariq", "pin": "2468"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+
+    audit_resp = await client.get(
+        f"/api/v1/audit-log?entity=staff_member", headers=auth_headers,
+    )
+    assert audit_resp.status_code == 200
+    rows = audit_resp.json()["rows"]
+    assert any(r["action"] == "staff_created" and r["entity_id"] == str(staff_id) for r in rows)
+
+
+@pytest.mark.anyio
+async def test_clock_in_writes_audit_log(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Salma", "pin": "3579"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+    await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
+
+    audit_resp = await client.get(
+        f"/api/v1/audit-log?entity=clock_event", headers=auth_headers,
+    )
+    assert audit_resp.status_code == 200
+    rows = audit_resp.json()["rows"]
+    assert any(r["action"] == "clock_in" and r["entity_id"] == str(staff_id) for r in rows)

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit.service import record_audit
 from app.db import get_session
 from app.identity.auth import create_access_token, hash_password, verify_password
 from app.identity.deps import current_restaurant
@@ -56,6 +57,16 @@ async def create_staff(
         pin_hash=hash_password(body.pin),
     )
     session.add(staff)
+    await session.flush()
+    await record_audit(
+        session,
+        actor=f"restaurant:{restaurant.id}",
+        restaurant_id=restaurant.id,
+        entity="staff_member",
+        entity_id=str(staff.id),
+        action="staff_created",
+        after={"name": staff.name, "role": staff.role},
+    )
     await session.commit()
     await session.refresh(staff)
     return staff
@@ -100,6 +111,15 @@ async def clock(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except NotOnBreakError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await record_audit(
+        session,
+        actor=f"staff:{staff_id}",
+        restaurant_id=restaurant.id,
+        entity="clock_event",
+        entity_id=str(staff_id),
+        action=body.type,
+        after={"at": now.isoformat()},
+    )
     await session.commit()
     return {"id": event.id, "type": event.type, "at": event.at.isoformat()}
 
@@ -143,6 +163,15 @@ async def create_shift_endpoint(
     shift = await create_shift(
         session, restaurant_id=restaurant.id, staff_id=body.staff_id,
         scheduled_start=body.scheduled_start, scheduled_end=body.scheduled_end,
+    )
+    await record_audit(
+        session,
+        actor=f"restaurant:{restaurant.id}",
+        restaurant_id=restaurant.id,
+        entity="shift",
+        entity_id=str(shift.id),
+        action="shift_created",
+        after={"staff_id": body.staff_id, "scheduled_start": body.scheduled_start.isoformat()},
     )
     await session.commit()
     await session.refresh(shift)
