@@ -49,4 +49,18 @@ describe("ReportsScreen", () => {
     fireEvent.click(screen.getByText(/load z-report/i));
     await waitFor(() => expect(screen.getByText(/gross sales: AED 500.00/i)).toBeInTheDocument());
   });
+
+  it("shows retention metrics", async () => {
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      if (String(url).includes("/retention")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ repeat_rate_pct: 42, new_customers: 3, returning_customers: 7 }), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
+    render(<ReportsScreen />);
+    fireEvent.click(screen.getByText(/load retention/i));
+    await waitFor(() => expect(screen.getByText(/42%/)).toBeInTheDocument());
+  });
 });

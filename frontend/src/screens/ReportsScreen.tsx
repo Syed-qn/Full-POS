@@ -4,11 +4,12 @@ import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
   getItemPerformance,
+  getRetention,
   getSalesRollup,
   getZReport,
   itemPerformanceCsvUrl,
 } from "../lib/reportsApi";
-import type { ItemPerformanceRow, SalesRollupRow, ZReport } from "../lib/types";
+import type { ItemPerformanceRow, RetentionReport, SalesRollupRow, ZReport } from "../lib/types";
 import s from "./ReportsScreen.module.css";
 
 function defaultRange() {
@@ -26,6 +27,7 @@ export function ReportsScreen() {
   const [items, setItems] = useState<ItemPerformanceRow[]>([]);
   const [zDate, setZDate] = useState(end);
   const [zReport, setZReport] = useState<ZReport | null>(null);
+  const [retention, setRetention] = useState<RetentionReport | null>(null);
 
   async function reload() {
     try {
@@ -51,6 +53,15 @@ export function ReportsScreen() {
       setZReport(report);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not load Z-report.", "error");
+    }
+  }
+
+  async function loadRetention() {
+    try {
+      const report = await getRetention(startDate, endDate);
+      setRetention(report);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not load retention report.", "error");
     }
   }
 
@@ -124,6 +135,20 @@ export function ReportsScreen() {
             <li>Gross sales: AED {Number(zReport.gross_sales_aed).toFixed(2)}</li>
             <li>Discounts: AED {Number(zReport.total_discounts_aed).toFixed(2)}</li>
             <li>COD collected: AED {Number(zReport.cod_collected_aed).toFixed(2)}</li>
+          </ul>
+        )}
+      </section>
+
+      <section className={s.card}>
+        <h3 className={s.cardTitle}>Customer retention</h3>
+        <Button type="button" variant="ghost" onClick={() => void loadRetention()}>
+          Load retention
+        </Button>
+        {retention && (
+          <ul>
+            <li>Repeat rate: {retention.repeat_rate_pct}%</li>
+            <li>New customers: {retention.new_customers}</li>
+            <li>Returning customers: {retention.returning_customers}</li>
           </ul>
         )}
       </section>
