@@ -125,6 +125,19 @@ async def test_double_break_start_rejected(db_session, restaurant):
 
 
 @pytest.mark.anyio
+async def test_clock_in_while_on_break_rejected(db_session, restaurant):
+    staff = StaffMember(restaurant_id=restaurant.id, name="Tariq", pin_hash="x")
+    db_session.add(staff)
+    await db_session.flush()
+    await clock_in(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    await start_break(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    with pytest.raises(AlreadyClockedInError):
+        await clock_in(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+
+
+@pytest.mark.anyio
 async def test_break_end_without_break_start_rejected(db_session, restaurant):
     staff = StaffMember(restaurant_id=restaurant.id, name="Rania", pin_hash="x")
     db_session.add(staff)

@@ -37,7 +37,7 @@ async def _last_event(session: AsyncSession, *, staff_id: int, restaurant_id: in
 
 async def clock_in(session: AsyncSession, *, staff_id: int, restaurant_id: int, at: datetime) -> ClockEvent:
     last = await _last_event(session, staff_id=staff_id, restaurant_id=restaurant_id)
-    if last is not None and last.type == "clock_in":
+    if last is not None and last.type in ("clock_in", "break_start"):
         raise AlreadyClockedInError(f"staff {staff_id} is already clocked in")
     event = ClockEvent(restaurant_id=restaurant_id, staff_id=staff_id, type="clock_in", at=at)
     session.add(event)
