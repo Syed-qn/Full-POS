@@ -1,11 +1,12 @@
 from collections import defaultdict
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.kds.models import CategoryStationDefault, KitchenStation, PrintJob
 from app.menu.models import Dish
-from app.ordering.models import OrderItem
+from app.ordering.models import Order, OrderItem
 
 
 async def get_or_create_main_station(session: AsyncSession, *, restaurant_id: int) -> KitchenStation:
@@ -61,3 +62,58 @@ async def create_tickets_for_order(session: AsyncSession, *, restaurant_id: int,
             restaurant_id=restaurant_id, station_id=station_id, order_id=order.id,
             payload=payload, status="pending",
         ))
+
+
+async def _get_tenant_order_item(
+    session: AsyncSession, *, restaurant_id: int, order_item_id: int
+) -> OrderItem:
+    item = await session.get(OrderItem, order_item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="item not found")
+    order = await session.get(Order, item.order_id)
+    if order is None or order.restaurant_id != restaurant_id:
+        raise HTTPException(status_code=404, detail="item not found")
+    return item
+
+
+async def mark_packaging_checked(
+    session: AsyncSession, *, restaurant_id: int, order_item_id: int
+) -> OrderItem:
+    item = await _get_tenant_order_item(
+        session, restaurant_id=restaurant_id, order_item_id=order_item_id
+    )
+    item.packaging_checked = True
+    await session.flush()
+    return item
+
+
+async def mark_quality_checked(
+    session: AsyncSession, *, restaurant_id: int, order_item_id: int
+) -> OrderItem:
+    item = await _get_tenant_order_item(
+        session, restaurant_id=restaurant_id, order_item_id=order_item_id
+    )
+    item.quality_checked = True
+    await session.flush()
+    return item
+
+
+async def list_ready_for_pickup(
+    session: AsyncSession, *, restaurant_id: int
+) -> dict[int, list[OrderItem]]:
+    """Ready-but-not-yet-picked-up items, grouped by order id, for the tenant.
+
+    "Ready" reuses the existing kitchen_status FSM value set by bump_item — no new
+    status string is introduced. bump_item leaves items at "ready" until dispatch/
+    pickup moves the order itself along; this just lists what's currently sitting there.
+    """
+    rows = (await session.scalars(
+        select(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Order.restaurant_id == restaurant_id, OrderItem.kitchen_status == "ready")
+        .order_by(OrderItem.order_id, OrderItem.id)
+    )).all()
+    by_order: dict[int, list[OrderItem]] = defaultdict(list)
+    for item in rows:
+        by_order[item.order_id].append(item)
+    return by_order

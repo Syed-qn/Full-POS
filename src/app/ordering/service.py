@@ -674,6 +674,7 @@ async def add_item(
             price_aed=unit_price,
             qty=qty,
             notes=notes,
+            allergens_snapshot=list(dish.allergens or []),
         )
         session.add(item)
     await session.flush()
@@ -987,6 +988,7 @@ async def modify_order(
             price_aed=unit_price,
             qty=qty,
             notes=notes,
+            allergens_snapshot=list(dish.allergens or []),
         )
         session.add(item)
         subtotal += unit_price * qty

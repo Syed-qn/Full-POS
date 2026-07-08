@@ -7,12 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.kds import service as kds_service
 from app.kds.models import KitchenStation, PrintJob
 from app.kds.printer_status import get_printer_status, record_printer_heartbeat
 from app.kds.schemas import (
+    PackagingCheckOut,
     PrinterHeartbeatIn,
     PrinterStatusOut,
     PrintJobOut,
+    QualityCheckOut,
+    ReadyForPickupOrderOut,
     StationIn,
     StationOut,
     TicketItemOut,
@@ -117,6 +121,53 @@ async def recall_item(
     await session.commit()
     await session.refresh(item)
     return item
+
+
+@router.post("/items/{item_id}/packaging-check", response_model=PackagingCheckOut)
+async def packaging_check(
+    item_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
+    updated = await kds_service.mark_packaging_checked(
+        session, restaurant_id=restaurant.id, order_item_id=item.id
+    )
+    await session.commit()
+    await session.refresh(updated)
+    return updated
+
+
+@router.post("/items/{item_id}/quality-check", response_model=QualityCheckOut)
+async def quality_check(
+    item_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
+    updated = await kds_service.mark_quality_checked(
+        session, restaurant_id=restaurant.id, order_item_id=item.id
+    )
+    await session.commit()
+    await session.refresh(updated)
+    return updated
+
+
+@router.get("/ready-for-pickup", response_model=list[ReadyForPickupOrderOut])
+async def ready_for_pickup(
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    by_order = await kds_service.list_ready_for_pickup(session, restaurant_id=restaurant.id)
+    result = []
+    for order_id, items in by_order.items():
+        order = await session.get(Order, order_id)
+        result.append({
+            "order_id": order_id,
+            "order_number": order.order_number if order else "",
+            "items": items,
+        })
+    return result
 
 
 @router.get("/print-jobs/pending", response_model=list[PrintJobOut])

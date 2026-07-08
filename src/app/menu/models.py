@@ -105,6 +105,11 @@ class Dish(Base, TimestampMixin):
     # POS. Null for manually-managed dishes. The POS sync owns ONLY dishes with this set;
     # it never touches manual dishes. Stable match key across syncs.
     pos_product_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Free-text allergen tags, e.g. ["nuts", "dairy", "gluten"]. No fixed enum — kitchen
+    # staff and customers just need the raw list. Snapshotted onto OrderItem at
+    # ticket-creation time (see OrderItem.allergens_snapshot) so a later menu edit never
+    # retroactively changes an already-placed order's ticket.
+    allergens: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
 

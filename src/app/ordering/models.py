@@ -196,3 +196,11 @@ class OrderItem(Base, TimestampMixin):
     # (e.g. a shared appetizer). Only meaningful on orders bound to a table
     # (Order.table_id) but not enforced at the DB level.
     seat_number: Mapped[int | None] = mapped_column(Integer)
+    # Allergen tags snapshotted from Dish.allergens at add-item time (same pattern as
+    # dish_name/price_aed above) so a later menu edit never retroactively changes an
+    # already-placed order's ticket. KDS renders this as a warning badge.
+    allergens_snapshot: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # KDS packaging/quality checklist (Phase: KDS enhancements). Both default False;
+    # set true via dedicated endpoints once kitchen staff confirm each step.
+    packaging_checked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    quality_checked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
