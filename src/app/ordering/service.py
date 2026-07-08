@@ -1358,6 +1358,225 @@ async def cancel_order(
     return None
 
 
+# Orders eligible to be split or merged — same pre-kitchen-lock gate as
+# modify_order/cancel_order_item (spec §4.5: modification blocked once 'ready').
+_MERGEABLE_STATUSES = {
+    OrderStatus.DRAFT,
+    OrderStatus.PENDING_CONFIRMATION,
+    OrderStatus.CONFIRMED,
+}
+
+
+async def split_order_by_items(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+    item_ids: list[int],
+) -> Order:
+    """Move the given ``OrderItem`` rows off ``order_id`` onto a NEW draft order for
+    the same customer/table, recomputing both orders' subtotal/total. Used for
+    "split the bill by item" at dine-in tables. Only legal before the source order
+    reaches 'ready' (same gate as ``modify_order``). Caller commits.
+    """
+    if not item_ids:
+        raise ValueError("item_ids must not be empty")
+
+    order = await get_order_for_tenant(session, restaurant_id=restaurant_id, order_id=order_id)
+    if order is None:
+        raise ValueError("Order not found")
+    _assert_order_modifiable(order)
+
+    unique_ids = set(item_ids)
+    items = (
+        await session.scalars(
+            select(OrderItem).where(
+                OrderItem.id.in_(unique_ids), OrderItem.order_id == order.id
+            )
+        )
+    ).all()
+    if len(items) != len(unique_ids):
+        raise ValueError("One or more items do not belong to this order")
+
+    new_order = await create_draft_order(
+        session, restaurant_id=restaurant_id, customer_id=order.customer_id
+    )
+    new_order.table_id = order.table_id
+    new_order.staff_id = order.staff_id
+    await session.flush()
+
+    for item in items:
+        item.order_id = new_order.id
+    await session.flush()
+
+    await _recompute_totals_excluding_cancelled(session, order)
+    await _recompute_totals_excluding_cancelled(session, new_order)
+
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="order_split_by_items",
+        before={"item_ids": sorted(unique_ids)},
+        after={
+            "new_order_id": new_order.id,
+            "new_order_number": new_order.order_number,
+            "remaining_total": str(order.total),
+            "new_total": str(new_order.total),
+        },
+    )
+    return new_order
+
+
+async def split_order_by_seat(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+    seat_number: int,
+) -> Order:
+    """Split off every item assigned to ``seat_number`` (``OrderItem.seat_number``)
+    onto a new draft order — "split the bill by seat" for dine-in. Raises ValueError
+    if no items on the order carry that seat number. Same mechanics/gate as
+    ``split_order_by_items``. Caller commits.
+    """
+    order = await get_order_for_tenant(session, restaurant_id=restaurant_id, order_id=order_id)
+    if order is None:
+        raise ValueError("Order not found")
+    _assert_order_modifiable(order)
+
+    items = (
+        await session.scalars(
+            select(OrderItem).where(
+                OrderItem.order_id == order.id, OrderItem.seat_number == seat_number
+            )
+        )
+    ).all()
+    if not items:
+        raise ValueError(f"No items found for seat {seat_number}")
+
+    return await split_order_by_items(
+        session,
+        restaurant_id=restaurant_id,
+        order_id=order_id,
+        item_ids=[i.id for i in items],
+    )
+
+
+async def merge_orders(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    primary_order_id: int,
+    secondary_order_id: int,
+) -> Order:
+    """Move all items from ``secondary_order_id`` onto ``primary_order_id``,
+    recompute the primary's totals, and cancel the (now-empty) secondary order
+    via the existing ``cancel_order`` path — never an invented status.
+
+    Both orders must be in a mergeable status (draft/pending_confirmation/
+    confirmed — same pre-'ready' gate as ``modify_order``); otherwise raises
+    ValueError. Caller commits.
+    """
+    if primary_order_id == secondary_order_id:
+        raise ValueError("Cannot merge an order into itself")
+
+    primary = await get_order_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=primary_order_id
+    )
+    secondary = await get_order_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=secondary_order_id
+    )
+    if primary is None or secondary is None:
+        raise ValueError("Order not found")
+
+    if (
+        OrderStatus(primary.status) not in _MERGEABLE_STATUSES
+        or OrderStatus(secondary.status) not in _MERGEABLE_STATUSES
+    ):
+        raise ValueError(
+            f"Orders must be in draft/pending_confirmation/confirmed status to merge "
+            f"(primary={primary.status!r}, secondary={secondary.status!r})"
+        )
+
+    before_snapshot = {
+        "primary_total": str(primary.total),
+        "secondary_total": str(secondary.total),
+        "secondary_status": str(secondary.status),
+    }
+
+    items = (
+        await session.scalars(select(OrderItem).where(OrderItem.order_id == secondary.id))
+    ).all()
+    for item in items:
+        item.order_id = primary.id
+    await session.flush()
+
+    await _recompute_totals_excluding_cancelled(session, primary)
+
+    await cancel_order(
+        session,
+        order=secondary,
+        actor="manager",
+        reason=f"Merged into order {primary.order_number}",
+    )
+
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(primary.id),
+        action="order_merged",
+        before=before_snapshot,
+        after={
+            "primary_total": str(primary.total),
+            "secondary_order_id": secondary.id,
+            "secondary_status": str(secondary.status),
+        },
+    )
+    return primary
+
+
+async def transfer_order_staff(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+    new_staff_id: int,
+) -> Order:
+    """Reassign sales-per-server attribution (``Order.staff_id``) to another staff
+    member of the same tenant. Audit-logs the before/after. Caller commits.
+    """
+    from app.staff.models import StaffMember
+
+    order = await get_order_for_tenant(session, restaurant_id=restaurant_id, order_id=order_id)
+    if order is None:
+        raise ValueError("Order not found")
+
+    staff = await session.get(StaffMember, new_staff_id)
+    if staff is None or staff.restaurant_id != restaurant_id:
+        raise ValueError("Staff member not found")
+
+    before_staff_id = order.staff_id
+    order.staff_id = new_staff_id
+    await session.flush()
+
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="order_staff_transferred",
+        before={"staff_id": before_staff_id},
+        after={"staff_id": new_staff_id},
+    )
+    return order
+
+
 async def delete_order(
     session: "AsyncSession", *, restaurant_id: int, order_id: int
 ) -> bool:

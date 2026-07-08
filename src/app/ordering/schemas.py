@@ -114,6 +114,23 @@ class CancelOrderItemIn(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class SplitOrderByItemsIn(BaseModel):
+    item_ids: list[int] = Field(min_length=1)
+
+
+class SplitOrderBySeatIn(BaseModel):
+    seat_number: int
+
+
+class MergeOrdersIn(BaseModel):
+    primary_order_id: int
+    secondary_order_id: int
+
+
+class TransferOrderStaffIn(BaseModel):
+    staff_id: int
+
+
 class EditOrderItemIn(BaseModel):
     qty: int | None = Field(default=None, ge=1, le=50)
     notes: str | None = Field(default=None, max_length=512)
