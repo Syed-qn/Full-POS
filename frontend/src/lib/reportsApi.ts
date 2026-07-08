@@ -1,4 +1,4 @@
-import { apiClient } from "./apiClient";
+import { apiClient, ApiError, TOKEN_KEY } from "./apiClient";
 import type {
   ItemPerformanceRow,
   LaborHoursRow,
@@ -7,6 +7,8 @@ import type {
   SalesRollupRow,
   ZReport,
 } from "./types";
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export async function getSalesRollup(
   startDate: string,
@@ -26,6 +28,30 @@ export async function getItemPerformance(startDate: string, endDate: string): Pr
 
 export function itemPerformanceCsvUrl(startDate: string, endDate: string): string {
   return `/api/v1/reports/item-performance.csv?start_date=${startDate}&end_date=${endDate}`;
+}
+
+/**
+ * Fetches the item-performance CSV export with the same Bearer auth header
+ * apiClient uses, since apiClient only supports JSON responses. A plain
+ * anchor `href` to the endpoint sends no credentials (auth here is a
+ * localStorage token, not a cookie) and always 401s.
+ */
+export async function fetchItemPerformanceCsv(startDate: string, endDate: string): Promise<Blob> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const resp = await fetch(`${API_BASE}${itemPerformanceCsvUrl(startDate, endDate)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const data = await resp.json();
+      detail = typeof data.detail === "string" ? data.detail : detail;
+    } catch {
+      /* non-JSON */
+    }
+    throw new ApiError(resp.status, detail);
+  }
+  return resp.blob();
 }
 
 export async function getZReport(targetDate: string): Promise<ZReport> {

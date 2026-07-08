@@ -3,6 +3,7 @@ import { Button } from "../components/Button";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
+  fetchItemPerformanceCsv,
   getItemPerformance,
   getLaborHours,
   getPrepTimeByItem,
@@ -10,7 +11,6 @@ import {
   getRetention,
   getSalesRollup,
   getZReport,
-  itemPerformanceCsvUrl,
 } from "../lib/reportsApi";
 import type {
   ItemPerformanceRow,
@@ -42,6 +42,7 @@ export function ReportsScreen() {
   const [laborHours, setLaborHours] = useState<LaborHoursRow[]>([]);
   const [prepByItem, setPrepByItem] = useState<PrepTimeRow[]>([]);
   const [prepByStaff, setPrepByStaff] = useState<PrepTimeRow[]>([]);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   async function reload() {
     try {
@@ -53,6 +54,25 @@ export function ReportsScreen() {
       setItems(itemRows);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not load reports.", "error");
+    }
+  }
+
+  async function exportCsv() {
+    setExportingCsv(true);
+    try {
+      const blob = await fetchItemPerformanceCsv(startDate, endDate);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `item-performance-${startDate}-to-${endDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not export CSV.", "error");
+    } finally {
+      setExportingCsv(false);
     }
   }
 
@@ -142,9 +162,9 @@ export function ReportsScreen() {
 
       <section className={s.card}>
         <h3 className={s.cardTitle}>Item performance</h3>
-        <a href={itemPerformanceCsvUrl(startDate, endDate)} target="_blank" rel="noreferrer">
-          Export CSV
-        </a>
+        <Button type="button" variant="ghost" disabled={exportingCsv} onClick={() => void exportCsv()}>
+          {exportingCsv ? "Exporting…" : "Export CSV"}
+        </Button>
         <table className={s.table}>
           <thead><tr><th>Dish</th><th>Orders</th><th>Revenue</th><th>Margin</th></tr></thead>
           <tbody>

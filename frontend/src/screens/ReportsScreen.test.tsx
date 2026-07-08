@@ -95,6 +95,40 @@ describe("ReportsScreen", () => {
     await waitFor(() => expect(screen.getByText(/Biryani/)).toBeInTheDocument());
   });
 
+  it("exports item performance CSV via an authenticated fetch, not a bare link", async () => {
+    localStorage.setItem("ops_token", "test-token");
+    // jsdom doesn't implement these — stub before spying.
+    if (!URL.createObjectURL) URL.createObjectURL = () => "";
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = () => {};
+    const createObjectURLSpy = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:mock-url");
+    const revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
+      if (String(url).includes("/item-performance.csv")) {
+        const headers = init?.headers as Record<string, string> | undefined;
+        expect(headers?.Authorization).toBe("Bearer test-token");
+        return Promise.resolve(new Response("dish,orders\nBiryani,5", { status: 200 }));
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
+
+    render(<ReportsScreen />);
+    // Plain anchor with href would always 401 (no cookie auth) — must not exist.
+    expect(screen.queryByRole("link", { name: /export csv/i })).not.toBeInTheDocument();
+
+    const exportButton = await screen.findByRole("button", { name: /export csv/i });
+    fireEvent.click(exportButton);
+
+    await waitFor(() => expect(createObjectURLSpy).toHaveBeenCalled());
+    expect(clickSpy).toHaveBeenCalled();
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock-url");
+
+    localStorage.removeItem("ops_token");
+  });
+
   it("shows prep time by staff", async () => {
     vi.mocked(fetch).mockImplementation((url: string) => {
       if (String(url).includes("/prep-time-by-staff")) {
