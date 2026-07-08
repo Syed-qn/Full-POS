@@ -63,4 +63,52 @@ describe("ReportsScreen", () => {
     fireEvent.click(screen.getByText(/load retention/i));
     await waitFor(() => expect(screen.getByText(/42%/)).toBeInTheDocument());
   });
+
+  it("shows labor hours for a chosen date", async () => {
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      if (String(url).includes("/labor-hours")) {
+        return Promise.resolve(
+          new Response(JSON.stringify([{ staff_id: 1, name: "Amina", hours: 7.5 }]), { status: 200 }),
+        );
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
+    render(<ReportsScreen />);
+    fireEvent.click(screen.getByText(/load labor hours/i));
+    await waitFor(() => expect(screen.getByText(/Amina/)).toBeInTheDocument());
+  });
+
+  it("shows prep time by item", async () => {
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      if (String(url).includes("/prep-time-by-item")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ key: "Biryani", avg_prep_minutes: 12.5, ticket_count: 8 }]),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
+    render(<ReportsScreen />);
+    fireEvent.click(screen.getByText(/load prep time by item/i));
+    await waitFor(() => expect(screen.getByText(/Biryani/)).toBeInTheDocument());
+  });
+
+  it("shows prep time by staff", async () => {
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      if (String(url).includes("/prep-time-by-staff")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ key: "Grill Station", avg_prep_minutes: 9.1, ticket_count: 20 }]),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
+    render(<ReportsScreen />);
+    fireEvent.click(screen.getByText(/load prep time by staff/i));
+    await waitFor(() => expect(screen.getByText(/Grill Station/)).toBeInTheDocument());
+  });
 });

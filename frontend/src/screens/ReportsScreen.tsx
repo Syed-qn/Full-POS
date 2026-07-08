@@ -4,12 +4,22 @@ import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
   getItemPerformance,
+  getLaborHours,
+  getPrepTimeByItem,
+  getPrepTimeByStaff,
   getRetention,
   getSalesRollup,
   getZReport,
   itemPerformanceCsvUrl,
 } from "../lib/reportsApi";
-import type { ItemPerformanceRow, RetentionReport, SalesRollupRow, ZReport } from "../lib/types";
+import type {
+  ItemPerformanceRow,
+  LaborHoursRow,
+  PrepTimeRow,
+  RetentionReport,
+  SalesRollupRow,
+  ZReport,
+} from "../lib/types";
 import s from "./ReportsScreen.module.css";
 
 function defaultRange() {
@@ -28,6 +38,10 @@ export function ReportsScreen() {
   const [zDate, setZDate] = useState(end);
   const [zReport, setZReport] = useState<ZReport | null>(null);
   const [retention, setRetention] = useState<RetentionReport | null>(null);
+  const [laborDate, setLaborDate] = useState(end);
+  const [laborHours, setLaborHours] = useState<LaborHoursRow[]>([]);
+  const [prepByItem, setPrepByItem] = useState<PrepTimeRow[]>([]);
+  const [prepByStaff, setPrepByStaff] = useState<PrepTimeRow[]>([]);
 
   async function reload() {
     try {
@@ -62,6 +76,33 @@ export function ReportsScreen() {
       setRetention(report);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not load retention report.", "error");
+    }
+  }
+
+  async function loadLaborHours() {
+    try {
+      const rows = await getLaborHours(laborDate);
+      setLaborHours(rows);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not load labor hours.", "error");
+    }
+  }
+
+  async function loadPrepTimeByItem() {
+    try {
+      const rows = await getPrepTimeByItem(startDate, endDate);
+      setPrepByItem(rows);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not load prep time by item.", "error");
+    }
+  }
+
+  async function loadPrepTimeByStaff() {
+    try {
+      const rows = await getPrepTimeByStaff(startDate, endDate);
+      setPrepByStaff(rows);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not load prep time by staff.", "error");
     }
   }
 
@@ -150,6 +191,64 @@ export function ReportsScreen() {
             <li>New customers: {retention.new_customers}</li>
             <li>Returning customers: {retention.returning_customers}</li>
           </ul>
+        )}
+      </section>
+
+      <section className={s.card}>
+        <h3 className={s.cardTitle}>Labor hours</h3>
+        <div className={s.form}>
+          <label className={s.field}>
+            <span>Date</span>
+            <input aria-label="Labor hours date" type="date" value={laborDate} onChange={(e) => setLaborDate(e.target.value)} />
+          </label>
+          <Button type="button" variant="ghost" onClick={() => void loadLaborHours()}>
+            Load labor hours
+          </Button>
+        </div>
+        {laborHours.length > 0 && (
+          <ul>
+            {laborHours.map((row) => (
+              <li key={row.staff_id}>
+                {row.name}: {row.hours}h
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className={s.card}>
+        <h3 className={s.cardTitle}>Prep time</h3>
+        <div className={s.form}>
+          <Button type="button" variant="ghost" onClick={() => void loadPrepTimeByItem()}>
+            Load prep time by item
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => void loadPrepTimeByStaff()}>
+            Load prep time by staff
+          </Button>
+        </div>
+        {prepByItem.length > 0 && (
+          <>
+            <h4>By item</h4>
+            <ul>
+              {prepByItem.map((row) => (
+                <li key={row.key}>
+                  {row.key}: {row.avg_prep_minutes} min avg ({row.ticket_count} tickets)
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {prepByStaff.length > 0 && (
+          <>
+            <h4>By staff/station</h4>
+            <ul>
+              {prepByStaff.map((row) => (
+                <li key={row.key}>
+                  {row.key}: {row.avg_prep_minutes} min avg ({row.ticket_count} tickets)
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
     </div>

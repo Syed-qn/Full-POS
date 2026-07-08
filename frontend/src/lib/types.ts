@@ -563,3 +563,15 @@ export interface RetentionReport {
   returning_customers: number;
   [key: string]: unknown;
 }
+
+export interface LaborHoursRow {
+  staff_id: number;
+  name: string;
+  hours: number;
+}
+
+export interface PrepTimeRow {
+  key: string;
+  avg_prep_minutes: number;
+  ticket_count: number;
+}

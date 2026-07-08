@@ -1,5 +1,12 @@
 import { apiClient } from "./apiClient";
-import type { ItemPerformanceRow, RetentionReport, SalesRollupRow, ZReport } from "./types";
+import type {
+  ItemPerformanceRow,
+  LaborHoursRow,
+  PrepTimeRow,
+  RetentionReport,
+  SalesRollupRow,
+  ZReport,
+} from "./types";
 
 export async function getSalesRollup(
   startDate: string,
@@ -31,14 +38,18 @@ export async function getRetention(startDate: string, endDate: string): Promise<
   );
 }
 
-export async function getLaborHours(targetDate: string): Promise<unknown> {
-  return apiClient.get(`/api/v1/reports/labor-hours?target_date=${targetDate}`);
+export async function getLaborHours(targetDate: string): Promise<LaborHoursRow[]> {
+  return apiClient.get<LaborHoursRow[]>(`/api/v1/reports/labor-hours?target_date=${targetDate}`);
 }
 
-export async function getPrepTimeByItem(startDate: string, endDate: string): Promise<unknown> {
-  return apiClient.get(`/api/v1/reports/prep-time-by-item?start_date=${startDate}&end_date=${endDate}`);
+export async function getPrepTimeByItem(startDate: string, endDate: string): Promise<PrepTimeRow[]> {
+  return apiClient.get<PrepTimeRow[]>(
+    `/api/v1/reports/prep-time-by-item?start_date=${startDate}&end_date=${endDate}`,
+  );
 }
 
-export async function getPrepTimeByStaff(startDate: string, endDate: string): Promise<unknown> {
-  return apiClient.get(`/api/v1/reports/prep-time-by-staff?start_date=${startDate}&end_date=${endDate}`);
+export async function getPrepTimeByStaff(startDate: string, endDate: string): Promise<PrepTimeRow[]> {
+  return apiClient.get<PrepTimeRow[]>(
+    `/api/v1/reports/prep-time-by-staff?start_date=${startDate}&end_date=${endDate}`,
+  );
 }
