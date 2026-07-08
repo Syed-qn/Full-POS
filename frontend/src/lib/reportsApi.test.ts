@@ -8,7 +8,7 @@ describe("reportsApi", () => {
       vi.fn().mockImplementation((url: string) => {
         if (String(url).includes("/sales-rollup")) {
           return Promise.resolve(
-            new Response(JSON.stringify([{ period: "2026-07-08", revenue_aed: "500.00", order_count: 10 }]), { status: 200 }),
+            new Response(JSON.stringify([{ bucket: "2026-07-08", revenue_aed: "500.00", order_count: 10 }]), { status: 200 }),
           );
         }
         if (String(url).includes("/item-performance")) {
@@ -35,6 +35,7 @@ describe("reportsApi", () => {
 
   it("gets sales rollup", async () => {
     const rows = await getSalesRollup("2026-07-01", "2026-07-08", "daily");
+    expect(rows[0].bucket).toBe("2026-07-08");
     expect(rows[0].revenue_aed).toBe("500.00");
   });
 

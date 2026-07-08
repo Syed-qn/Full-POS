@@ -528,7 +528,7 @@ export interface CouponCreateIn {
 }
 
 export interface SalesRollupRow {
-  period: string;
+  bucket: string;
   revenue_aed: string;
   order_count: number;
 }
