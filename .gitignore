@@ -44,3 +44,5 @@ scripts/demo_*.py
 frontend/understanding.txt
 terminals/
 releases/
+
+.worktrees/
