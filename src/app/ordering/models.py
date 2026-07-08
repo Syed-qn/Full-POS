@@ -47,6 +47,16 @@ class Customer(Base, TimestampMixin):
     # Referral program: who referred this customer, set once at signup/first-order
     # time by app.loyalty.referrals.redeem_referral and never changed after.
     referred_by_customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"))
+    # House account (run-a-tab, VIP/corporate): a running balance the customer
+    # OWES the restaurant, settled later — the inverse of the wallet ledger in
+    # app.wallet (store CREDIT the customer already paid for). Deliberately a
+    # plain running total, not an append-only ledger like the wallet, since
+    # there is no hold/capture/release model here — just charge and settle.
+    house_account_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    house_account_balance_aed: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.00"))
+    # Optional per-customer credit ceiling for the house-account tab; null = no
+    # limit. Enforced in app.payments.service.charge_to_house_account.
+    house_account_credit_limit_aed: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
 
 class CustomerAddress(Base, TimestampMixin):
@@ -119,6 +129,11 @@ class Order(Base, TimestampMixin):
     # sla_deadline) still only kick in once the order is actually confirmed for
     # cooking near scheduled_for — that trigger is a follow-up, not this field.
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Advance/deposit charged before the order is fully prepared (pre-orders /
+    # scheduled_for orders). Distinct from `total` — never subtracted from it
+    # automatically; payments/service.total_paid() still sums PaymentTransaction
+    # rows (the deposit txn included), this column is just a convenience mirror.
+    deposit_paid_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
     # Estimated minutes to cook this order (slowest dish gates readiness). With
     # prep_deadline it yields "start cooking by" = prep_deadline − cook_estimate_minutes.
     cook_estimate_minutes: Mapped[int | None] = mapped_column(Integer)

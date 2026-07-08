@@ -21,6 +21,8 @@ from app.giftcards.router import router as giftcards_router
 from app.organizations.router import router as organizations_router
 from app.organizations.router import stock_transfer_router
 from app.payments.router import router as payments_router
+from app.payments.router import customers_router as payments_customers_router
+from app.payments.router import orders_router as payments_orders_router
 from app.staff.router import router as staff_router
 from app.tables.router import router as tables_router
 from app.config import get_settings
@@ -198,6 +200,8 @@ def create_app() -> FastAPI:
 
     app.include_router(referral_router)
     app.include_router(payments_router)
+    app.include_router(payments_customers_router)
+    app.include_router(payments_orders_router)
     app.include_router(aggregators_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)

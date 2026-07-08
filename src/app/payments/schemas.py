@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChargeIn(BaseModel):
@@ -17,3 +17,20 @@ class RefundIn(BaseModel):
 class CredentialsIn(BaseModel):
     provider: str  # stripe
     secret_key: str
+
+
+class CreditNoteIn(BaseModel):
+    amount_aed: Decimal = Field(gt=0)
+    reason: str | None = None
+
+
+class DepositIn(BaseModel):
+    amount_aed: Decimal = Field(gt=0)
+
+
+class HouseAccountChargeIn(BaseModel):
+    amount_aed: Decimal = Field(gt=0)
+
+
+class HouseAccountSettleIn(BaseModel):
+    amount_aed: Decimal = Field(gt=0)
