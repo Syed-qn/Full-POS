@@ -125,6 +125,36 @@ async def advance_delivery(
     return order
 
 
+async def mark_delivery_failed(
+    session: AsyncSession, *, restaurant_id: int, order_id: int, reason: str
+) -> Order:
+    """Record why a delivery attempt failed and move the order to the FSM's
+    existing ``undeliverable`` terminal status (spec §3 — reused, not invented).
+
+    Legal from any status the FSM already allows an ``undeliverable`` transition
+    from (``picked_up`` / ``arriving`` — see app.ordering.fsm.OrderFSM). Raises
+    ``ValueError`` if the order doesn't exist for this tenant or the transition is
+    illegal. Caller must commit.
+    """
+    from app.ordering.fsm import IllegalTransitionError, OrderStatus
+    from app.ordering.fsm import transition as fsm_transition
+
+    order = await session.scalar(
+        select(Order).where(Order.id == order_id, Order.restaurant_id == restaurant_id)
+    )
+    if order is None:
+        raise ValueError(f"order {order_id} not found")
+
+    order.delivery_failure_reason = reason
+    try:
+        await fsm_transition(
+            session, order, OrderStatus.UNDELIVERABLE, actor="manager"
+        )
+    except IllegalTransitionError as exc:
+        raise ValueError(str(exc)) from exc
+    return order
+
+
 async def stamp_batch_stop_handled(
     session: AsyncSession, order: Order, now: datetime
 ) -> int | None:

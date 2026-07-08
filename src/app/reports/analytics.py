@@ -259,6 +259,61 @@ async def labor_hours(session: AsyncSession, *, restaurant_id: int, target_date:
     return results
 
 
+async def driver_performance_report(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> list[dict]:
+    """Per-rider delivery stats over a date range (bucketed by ``delivered_at``).
+
+    "delivery time" = ``delivered_at - sla_confirmed_at`` (the SLA-clock-start field,
+    see app.ordering.models.Order). "late" = ``Order.late is True`` (set by the
+    delivery FSM in app.dispatch.delivery.advance_delivery against ``sla_deadline``).
+    Riders with zero deliveries in the range are omitted.
+    """
+    day_start, day_end = _day_window(start_date, end_date)
+    orders = (await session.scalars(
+        select(Order).where(
+            Order.restaurant_id == restaurant_id,
+            Order.status == OrderStatus.DELIVERED,
+            Order.delivered_at.isnot(None),
+            Order.rider_id.isnot(None),
+            Order.delivered_at >= day_start, Order.delivered_at <= day_end,
+        )
+    )).all()
+    if not orders:
+        return []
+
+    rider_ids = {o.rider_id for o in orders}
+    from app.identity.models import Rider
+
+    riders = (await session.scalars(
+        select(Rider).where(Rider.id.in_(rider_ids))
+    )).all()
+    rider_names = {r.id: r.name for r in riders}
+
+    by_rider: dict[int, list[Order]] = defaultdict(list)
+    for order in orders:
+        by_rider[order.rider_id].append(order)
+
+    results = []
+    for rider_id, rider_orders in by_rider.items():
+        durations = [
+            (o.delivered_at - o.sla_confirmed_at).total_seconds() / 60.0
+            for o in rider_orders
+            if o.sla_confirmed_at is not None
+        ]
+        late_count = sum(1 for o in rider_orders if o.late)
+        delivery_count = len(rider_orders)
+        results.append({
+            "rider_id": rider_id,
+            "rider_name": rider_names.get(rider_id, "Unknown"),
+            "delivery_count": delivery_count,
+            "avg_delivery_minutes": round(sum(durations) / len(durations), 2) if durations else None,
+            "late_count": late_count,
+            "late_pct": round(late_count / delivery_count * 100, 2) if delivery_count else 0.0,
+        })
+    return sorted(results, key=lambda r: r["rider_name"] or "")
+
+
 async def sales_rollup(
     session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date, granularity: str
 ) -> list[dict]:

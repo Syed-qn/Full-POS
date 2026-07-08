@@ -142,3 +142,7 @@ class DeliveryPhotoIn(BaseModel):
 
 class VerifyDeliveryOtpIn(BaseModel):
     otp: str = Field(min_length=4, max_length=4)
+
+
+class DeliveryFailedIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=256)

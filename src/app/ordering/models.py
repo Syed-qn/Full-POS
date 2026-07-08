@@ -158,6 +158,11 @@ class Order(Base, TimestampMixin):
     cancellation_reason: Mapped[str | None] = mapped_column(String(256))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Why a delivery attempt failed (order transitioned to UNDELIVERABLE — spec §3's
+    # existing failure status, see app.ordering.fsm.OrderStatus). Set by
+    # app.dispatch.delivery.mark_delivery_failed.
+    delivery_failure_reason: Mapped[str | None] = mapped_column(String(256))
+
     # Partner POS sync (Phase 1): POS ack + push tracking.
     pos_order_id: Mapped[str | None] = mapped_column(String(64))
     pos_pushed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
