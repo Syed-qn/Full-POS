@@ -8,7 +8,6 @@ Router level: POST /api/v1/orders/{order_id}/delivery-failed
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
 
 from app.dispatch.delivery import mark_delivery_failed
 from app.identity.models import Restaurant, Rider

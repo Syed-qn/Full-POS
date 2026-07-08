@@ -4,7 +4,7 @@ Adds ingredients.par_level (target restock-up-to level, distinct from
 low_stock_threshold which is the trigger point) and a new ingredient_substitutes
 table used to suggest swap-ins when the primary ingredient is out of stock.
 
-Revision ID: u2v3w4x5y6z7
+Revision ID: x5y6z7a8b9c0
 Revises: 122f2270dfbc
 Create Date: 2026-07-08
 """
@@ -14,7 +14,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = 'u2v3w4x5y6z7'
+revision: str = 'x5y6z7a8b9c0'
 down_revision: Union[str, Sequence[str], None] = '122f2270dfbc'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

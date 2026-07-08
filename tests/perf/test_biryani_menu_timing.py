@@ -1,7 +1,6 @@
 """Perf: Biryani 'menu' path at prod scale (608 products, shared Feasto)."""
 from __future__ import annotations
 
-import os
 import time
 from decimal import Decimal
 

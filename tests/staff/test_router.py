@@ -83,7 +83,7 @@ async def test_create_staff_writes_audit_log(client, auth_headers):
     staff_id = resp.json()["id"]
 
     audit_resp = await client.get(
-        f"/api/v1/audit-log?entity=staff_member", headers=auth_headers,
+        "/api/v1/audit-log?entity=staff_member", headers=auth_headers,
     )
     assert audit_resp.status_code == 200
     rows = audit_resp.json()["rows"]
@@ -99,7 +99,7 @@ async def test_clock_in_writes_audit_log(client, auth_headers):
     await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
 
     audit_resp = await client.get(
-        f"/api/v1/audit-log?entity=clock_event", headers=auth_headers,
+        "/api/v1/audit-log?entity=clock_event", headers=auth_headers,
     )
     assert audit_resp.status_code == 200
     rows = audit_resp.json()["rows"]
