@@ -192,3 +192,11 @@ class OrderItem(Base, TimestampMixin):
     # Station resolved at ticket-creation time — snapshotted so a later station
     # reassignment doesn't retroactively move an in-flight ticket.
     station_id_snapshot: Mapped[int | None] = mapped_column(ForeignKey("kitchen_stations.id"))
+    # Allergen tags snapshotted from Dish.allergens at add-item time (same pattern as
+    # dish_name/price_aed above) so a later menu edit never retroactively changes an
+    # already-placed order's ticket. KDS renders this as a warning badge.
+    allergens_snapshot: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # KDS packaging/quality checklist (Phase: KDS enhancements). Both default False;
+    # set true via dedicated endpoints once kitchen staff confirm each step.
+    packaging_checked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    quality_checked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
