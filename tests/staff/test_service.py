@@ -15,6 +15,7 @@ from app.staff.service import (
     end_break,
     compute_hours,
     compute_sales,
+    get_current_status,
 )
 
 
@@ -146,3 +147,65 @@ async def test_break_end_without_break_start_rejected(db_session, restaurant):
     await db_session.commit()
     with pytest.raises(NotOnBreakError):
         await end_break(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+
+
+@pytest.mark.anyio
+async def test_get_current_status_no_events_is_clocked_out(db_session, restaurant):
+    staff = StaffMember(restaurant_id=restaurant.id, name="Zaid", pin_hash="x")
+    db_session.add(staff)
+    await db_session.flush()
+    await db_session.commit()
+    status = await get_current_status(db_session, staff_id=staff.id, restaurant_id=restaurant.id)
+    assert status == "clocked_out"
+
+
+@pytest.mark.anyio
+async def test_get_current_status_after_clock_in_is_clocked_in(db_session, restaurant):
+    staff = StaffMember(restaurant_id=restaurant.id, name="Maha", pin_hash="x")
+    db_session.add(staff)
+    await db_session.flush()
+    await clock_in(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    status = await get_current_status(db_session, staff_id=staff.id, restaurant_id=restaurant.id)
+    assert status == "clocked_in"
+
+
+@pytest.mark.anyio
+async def test_get_current_status_after_clock_out_is_clocked_out(db_session, restaurant):
+    staff = StaffMember(restaurant_id=restaurant.id, name="Jamal", pin_hash="x")
+    db_session.add(staff)
+    await db_session.flush()
+    await clock_in(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    await clock_out(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    status = await get_current_status(db_session, staff_id=staff.id, restaurant_id=restaurant.id)
+    assert status == "clocked_out"
+
+
+@pytest.mark.anyio
+async def test_get_current_status_on_break_is_on_break(db_session, restaurant):
+    staff = StaffMember(restaurant_id=restaurant.id, name="Iman", pin_hash="x")
+    db_session.add(staff)
+    await db_session.flush()
+    await clock_in(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    await start_break(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    status = await get_current_status(db_session, staff_id=staff.id, restaurant_id=restaurant.id)
+    assert status == "on_break"
+
+
+@pytest.mark.anyio
+async def test_get_current_status_after_break_end_is_clocked_in(db_session, restaurant):
+    staff = StaffMember(restaurant_id=restaurant.id, name="Widad", pin_hash="x")
+    db_session.add(staff)
+    await db_session.flush()
+    await clock_in(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    await start_break(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    await end_break(db_session, staff_id=staff.id, restaurant_id=restaurant.id, at=datetime.now(timezone.utc))
+    await db_session.commit()
+    status = await get_current_status(db_session, staff_id=staff.id, restaurant_id=restaurant.id)
+    assert status == "clocked_in"

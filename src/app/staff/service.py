@@ -77,6 +77,19 @@ async def end_break(session: AsyncSession, *, staff_id: int, restaurant_id: int,
     return event
 
 
+async def get_current_status(session: AsyncSession, *, staff_id: int, restaurant_id: int) -> str:
+    """Current clock state derived from the last clock event.
+
+    Returns one of "clocked_out", "clocked_in", "on_break".
+    """
+    last = await _last_event(session, staff_id=staff_id, restaurant_id=restaurant_id)
+    if last is None or last.type == "clock_out":
+        return "clocked_out"
+    if last.type == "break_start":
+        return "on_break"
+    return "clocked_in"
+
+
 async def compute_hours(session: AsyncSession, *, staff_id: int, restaurant_id: int, target_date: date) -> float:
     day_start = datetime.combine(target_date, time.min)
     day_end = datetime.combine(target_date, time.max)

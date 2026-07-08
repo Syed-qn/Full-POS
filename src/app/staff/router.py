@@ -22,6 +22,7 @@ from app.staff.service import (
     compute_hours,
     compute_overtime_hours,
     compute_sales,
+    get_current_status,
     start_break,
     end_break,
 )
@@ -122,6 +123,17 @@ async def clock(
     )
     await session.commit()
     return {"id": event.id, "type": event.type, "at": event.at.isoformat()}
+
+
+@router.get("/{staff_id}/status")
+async def status_endpoint(
+    staff_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    await _get_owned_staff(session, staff_id=staff_id, restaurant_id=restaurant.id)
+    current_status = await get_current_status(session, staff_id=staff_id, restaurant_id=restaurant.id)
+    return {"staff_id": staff_id, "status": current_status}
 
 
 @router.get("/{staff_id}/hours")

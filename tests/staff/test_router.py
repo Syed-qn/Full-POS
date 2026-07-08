@@ -104,3 +104,48 @@ async def test_clock_in_writes_audit_log(client, auth_headers):
     assert audit_resp.status_code == 200
     rows = audit_resp.json()["rows"]
     assert any(r["action"] == "clock_in" and r["entity_id"] == str(staff_id) for r in rows)
+
+
+@pytest.mark.anyio
+async def test_status_endpoint_reports_clocked_out_when_no_events(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Dana", "pin": "1357"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+
+    status_resp = await client.get(f"/api/v1/staff/{staff_id}/status", headers=auth_headers)
+    assert status_resp.status_code == 200
+    assert status_resp.json() == {"staff_id": staff_id, "status": "clocked_out"}
+
+
+@pytest.mark.anyio
+async def test_status_endpoint_reports_clocked_in_after_clock_in(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Rami", "pin": "2468"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+    await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
+
+    status_resp = await client.get(f"/api/v1/staff/{staff_id}/status", headers=auth_headers)
+    assert status_resp.status_code == 200
+    assert status_resp.json() == {"staff_id": staff_id, "status": "clocked_in"}
+
+
+@pytest.mark.anyio
+async def test_status_endpoint_reports_on_break(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Huda", "pin": "8642"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+    await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
+    await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "break_start"}, headers=auth_headers)
+
+    status_resp = await client.get(f"/api/v1/staff/{staff_id}/status", headers=auth_headers)
+    assert status_resp.status_code == 200
+    assert status_resp.json() == {"staff_id": staff_id, "status": "on_break"}
+
+
+@pytest.mark.anyio
+async def test_status_endpoint_404_for_unowned_staff(client, auth_headers):
+    status_resp = await client.get("/api/v1/staff/999999/status", headers=auth_headers)
+    assert status_resp.status_code == 404
