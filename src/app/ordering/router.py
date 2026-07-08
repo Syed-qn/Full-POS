@@ -16,6 +16,7 @@ from app.ordering.schemas import (
     CancelOrderIn,
     CancelOrderItemIn,
     CustomerLookupOut,
+    DeliveryFailedIn,
     DeliveryPhotoIn,
     EditOrderItemIn,
     ManualOrderIn,
@@ -513,6 +514,31 @@ async def verify_delivery_otp_endpoint(
         raise HTTPException(status_code=code, detail=msg)
     await session.commit()
     return {"verified": verified}
+
+
+@router.post("/{order_id}/delivery-failed", response_model=OrderOut)
+async def mark_delivery_failed_endpoint(
+    order_id: int,
+    body: DeliveryFailedIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Record why a delivery attempt failed and move the order to the FSM's
+    existing ``undeliverable`` status. Legal only from ``picked_up`` / ``arriving``
+    (whatever the FSM already allows into ``undeliverable``) — 422 otherwise."""
+    from app.dispatch.delivery import mark_delivery_failed
+
+    try:
+        order = await mark_delivery_failed(
+            session, restaurant_id=restaurant.id, order_id=order_id, reason=body.reason
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if "not found" in msg else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    await session.refresh(order)
+    return await _enrich(session, order)
 
 
 @router.delete("/{order_id}", status_code=204)
