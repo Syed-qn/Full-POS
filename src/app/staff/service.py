@@ -15,6 +15,17 @@ class NotClockedInError(Exception):
     pass
 
 
+class AlreadyOnBreakError(Exception):
+    pass
+
+
+class NotOnBreakError(Exception):
+    pass
+
+
+OVERTIME_THRESHOLD_HOURS = 8.0
+
+
 async def _last_event(session: AsyncSession, *, staff_id: int, restaurant_id: int) -> ClockEvent | None:
     return await session.scalar(
         select(ClockEvent)
@@ -36,9 +47,31 @@ async def clock_in(session: AsyncSession, *, staff_id: int, restaurant_id: int, 
 
 async def clock_out(session: AsyncSession, *, staff_id: int, restaurant_id: int, at: datetime) -> ClockEvent:
     last = await _last_event(session, staff_id=staff_id, restaurant_id=restaurant_id)
-    if last is None or last.type != "clock_in":
+    if last is None or last.type not in ("clock_in", "break_end"):
         raise NotClockedInError(f"staff {staff_id} is not clocked in")
     event = ClockEvent(restaurant_id=restaurant_id, staff_id=staff_id, type="clock_out", at=at)
+    session.add(event)
+    await session.flush()
+    return event
+
+
+async def start_break(session: AsyncSession, *, staff_id: int, restaurant_id: int, at: datetime) -> ClockEvent:
+    last = await _last_event(session, staff_id=staff_id, restaurant_id=restaurant_id)
+    if last is None or last.type == "clock_out":
+        raise NotClockedInError(f"staff {staff_id} is not clocked in")
+    if last.type == "break_start":
+        raise AlreadyOnBreakError(f"staff {staff_id} is already on break")
+    event = ClockEvent(restaurant_id=restaurant_id, staff_id=staff_id, type="break_start", at=at)
+    session.add(event)
+    await session.flush()
+    return event
+
+
+async def end_break(session: AsyncSession, *, staff_id: int, restaurant_id: int, at: datetime) -> ClockEvent:
+    last = await _last_event(session, staff_id=staff_id, restaurant_id=restaurant_id)
+    if last is None or last.type != "break_start":
+        raise NotOnBreakError(f"staff {staff_id} is not on break")
+    event = ClockEvent(restaurant_id=restaurant_id, staff_id=staff_id, type="break_end", at=at)
     session.add(event)
     await session.flush()
     return event
@@ -57,7 +90,9 @@ async def compute_hours(session: AsyncSession, *, staff_id: int, restaurant_id: 
     )).all()
 
     total_seconds = 0.0
+    break_seconds = 0.0
     open_in: datetime | None = None
+    open_break: datetime | None = None
     for event in events:
         at = event.at.replace(tzinfo=None) if event.at.tzinfo else event.at
         if event.type == "clock_in":
@@ -65,7 +100,16 @@ async def compute_hours(session: AsyncSession, *, staff_id: int, restaurant_id: 
         elif event.type == "clock_out" and open_in is not None:
             total_seconds += (at - open_in).total_seconds()
             open_in = None
-    return total_seconds / 3600.0
+        elif event.type == "break_start":
+            open_break = at
+        elif event.type == "break_end" and open_break is not None:
+            break_seconds += (at - open_break).total_seconds()
+            open_break = None
+    return (total_seconds - break_seconds) / 3600.0
+
+
+def compute_overtime_hours(worked_hours: float) -> float:
+    return max(0.0, worked_hours - OVERTIME_THRESHOLD_HOURS)
 
 
 async def compute_sales(session: AsyncSession, *, staff_id: int, restaurant_id: int, target_date: date) -> Decimal:

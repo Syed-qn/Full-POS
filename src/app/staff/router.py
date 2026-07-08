@@ -13,11 +13,16 @@ from app.staff.scheduling import create_shift, list_shifts_for_week
 from app.staff.schemas import ClockIn, ShiftIn, ShiftOut, StaffIn, StaffLoginIn, StaffOut
 from app.staff.service import (
     AlreadyClockedInError,
+    AlreadyOnBreakError,
     NotClockedInError,
+    NotOnBreakError,
     clock_in,
     clock_out,
     compute_hours,
+    compute_overtime_hours,
     compute_sales,
+    start_break,
+    end_break,
 )
 from app.staff.tips import distribute_tip_pool
 
@@ -81,11 +86,19 @@ async def clock(
             event = await clock_in(session, staff_id=staff_id, restaurant_id=restaurant.id, at=now)
         elif body.type == "clock_out":
             event = await clock_out(session, staff_id=staff_id, restaurant_id=restaurant.id, at=now)
+        elif body.type == "break_start":
+            event = await start_break(session, staff_id=staff_id, restaurant_id=restaurant.id, at=now)
+        elif body.type == "break_end":
+            event = await end_break(session, staff_id=staff_id, restaurant_id=restaurant.id, at=now)
         else:
-            raise HTTPException(status_code=422, detail="type must be clock_in or clock_out")
+            raise HTTPException(status_code=422, detail="type must be clock_in, clock_out, break_start, or break_end")
     except AlreadyClockedInError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except NotClockedInError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AlreadyOnBreakError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except NotOnBreakError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await session.commit()
     return {"id": event.id, "type": event.type, "at": event.at.isoformat()}
@@ -100,7 +113,12 @@ async def hours(
 ):
     await _get_owned_staff(session, staff_id=staff_id, restaurant_id=restaurant.id)
     total = await compute_hours(session, staff_id=staff_id, restaurant_id=restaurant.id, target_date=target_date)
-    return {"staff_id": staff_id, "date": target_date.isoformat(), "hours": round(total, 2)}
+    return {
+        "staff_id": staff_id,
+        "date": target_date.isoformat(),
+        "hours": round(total, 2),
+        "overtime_hours": round(compute_overtime_hours(total), 2),
+    }
 
 
 @router.get("/{staff_id}/sales")

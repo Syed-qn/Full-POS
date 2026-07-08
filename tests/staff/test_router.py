@@ -47,3 +47,29 @@ async def test_double_clock_in_returns_409(client, auth_headers):
     await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
     second = await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
     assert second.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_hours_endpoint_reports_overtime(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Fatima", "pin": "9999"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+
+    clock_start = await client.post(
+        f"/api/v1/staff/{staff_id}/clock", json={"type": "break_start"}, headers=auth_headers,
+    )
+    assert clock_start.status_code == 409  # not clocked in yet
+
+
+@pytest.mark.anyio
+async def test_break_start_and_end_via_router(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/staff", json={"name": "Karim", "pin": "1111"}, headers=auth_headers,
+    )
+    staff_id = resp.json()["id"]
+    await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
+    start = await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "break_start"}, headers=auth_headers)
+    assert start.status_code == 200
+    end = await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "break_end"}, headers=auth_headers)
+    assert end.status_code == 200
