@@ -27,6 +27,10 @@ export async function getHours(staffId: number, targetDate: string): Promise<Sta
   return apiClient.get<StaffHoursOut>(`/api/v1/staff/${staffId}/hours?target_date=${targetDate}`);
 }
 
+export async function getClockStatus(staffId: number): Promise<{ staff_id: number; status: string }> {
+  return apiClient.get<{ staff_id: number; status: string }>(`/api/v1/staff/${staffId}/status`);
+}
+
 export async function getSales(staffId: number, targetDate: string): Promise<{ staff_id: number; date: string; sales_aed: string }> {
   return apiClient.get(`/api/v1/staff/${staffId}/sales?target_date=${targetDate}`);
 }

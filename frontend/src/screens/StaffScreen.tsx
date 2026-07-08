@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
-import { clockStaff, createShift, createStaff, getHours, getTipPool, listShifts, listStaff } from "../lib/staffApi";
+import { clockStaff, createShift, createStaff, getClockStatus, getHours, getTipPool, listShifts, listStaff } from "../lib/staffApi";
 import type { Shift, ShiftCreateIn, StaffCreateIn, StaffMember } from "../lib/types";
 import s from "./StaffScreen.module.css";
 
@@ -30,11 +30,30 @@ export function StaffScreen() {
   const [weekStart, setWeekStart] = useState("");
   const [shifts, setShifts] = useState<Shift[] | null>(null);
 
+  async function loadClockStatuses(members: StaffMember[]) {
+    const results = await Promise.all(
+      members.map(async (m) => {
+        try {
+          const { status: clockStatus } = await getClockStatus(m.id);
+          return [m.id, clockStatus === "clocked_in" || clockStatus === "on_break"] as const;
+        } catch {
+          return [m.id, false] as const;
+        }
+      }),
+    );
+    setClockedIn((prev) => {
+      const next = { ...prev };
+      for (const [id, isIn] of results) next[id] = isIn;
+      return next;
+    });
+  }
+
   async function reload() {
     setLoadError(null);
     try {
       const rows = await listStaff();
       setStaff(rows);
+      void loadClockStatuses(rows);
     } catch (e) {
       setStaff([]);
       setLoadError(e instanceof Error ? e.message : "Could not load staff.");
