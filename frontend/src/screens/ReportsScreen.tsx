@@ -35,16 +35,23 @@ export function ReportsScreen() {
   const [endDate, setEndDate] = useState(end);
   const [rollup, setRollup] = useState<SalesRollupRow[]>([]);
   const [items, setItems] = useState<ItemPerformanceRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [zDate, setZDate] = useState(end);
   const [zReport, setZReport] = useState<ZReport | null>(null);
   const [retention, setRetention] = useState<RetentionReport | null>(null);
+  const [retentionLoaded, setRetentionLoaded] = useState(false);
   const [laborDate, setLaborDate] = useState(end);
   const [laborHours, setLaborHours] = useState<LaborHoursRow[]>([]);
+  const [laborLoaded, setLaborLoaded] = useState(false);
   const [prepByItem, setPrepByItem] = useState<PrepTimeRow[]>([]);
+  const [prepByItemLoaded, setPrepByItemLoaded] = useState(false);
   const [prepByStaff, setPrepByStaff] = useState<PrepTimeRow[]>([]);
+  const [prepByStaffLoaded, setPrepByStaffLoaded] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
 
   async function reload() {
+    setLoadError(null);
     try {
       const [rollupRows, itemRows] = await Promise.all([
         getSalesRollup(startDate, endDate, "daily"),
@@ -53,7 +60,12 @@ export function ReportsScreen() {
       setRollup(rollupRows);
       setItems(itemRows);
     } catch (e) {
+      setRollup([]);
+      setItems([]);
+      setLoadError(e instanceof Error ? e.message : "Could not load reports.");
       toast(e instanceof Error ? e.message : "Could not load reports.", "error");
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -95,7 +107,10 @@ export function ReportsScreen() {
       const report = await getRetention(startDate, endDate);
       setRetention(report);
     } catch (e) {
+      setRetention(null);
       toast(e instanceof Error ? e.message : "Could not load retention report.", "error");
+    } finally {
+      setRetentionLoaded(true);
     }
   }
 
@@ -104,7 +119,10 @@ export function ReportsScreen() {
       const rows = await getLaborHours(laborDate);
       setLaborHours(rows);
     } catch (e) {
+      setLaborHours([]);
       toast(e instanceof Error ? e.message : "Could not load labor hours.", "error");
+    } finally {
+      setLaborLoaded(true);
     }
   }
 
@@ -113,7 +131,10 @@ export function ReportsScreen() {
       const rows = await getPrepTimeByItem(startDate, endDate);
       setPrepByItem(rows);
     } catch (e) {
+      setPrepByItem([]);
       toast(e instanceof Error ? e.message : "Could not load prep time by item.", "error");
+    } finally {
+      setPrepByItemLoaded(true);
     }
   }
 
@@ -122,7 +143,10 @@ export function ReportsScreen() {
       const rows = await getPrepTimeByStaff(startDate, endDate);
       setPrepByStaff(rows);
     } catch (e) {
+      setPrepByStaff([]);
       toast(e instanceof Error ? e.message : "Could not load prep time by staff.", "error");
+    } finally {
+      setPrepByStaffLoaded(true);
     }
   }
 
@@ -131,6 +155,9 @@ export function ReportsScreen() {
   return (
     <div className={s.root}>
       <PageHeader title="Reports" subtitle="Sales, item performance, and cash closing" />
+
+      {!loaded && <p className={s.loading}>Loading reports…</p>}
+      {loadError && <p className={s.error} role="alert">{loadError}</p>}
 
       <section className={s.card}>
         <h3 className={s.cardTitle}>Sales rollup</h3>
@@ -146,18 +173,22 @@ export function ReportsScreen() {
           <Button type="button" onClick={() => void reload()}>Refresh</Button>
         </div>
         <p>Total revenue: AED {totalRevenue.toFixed(2)}</p>
-        <table className={s.table}>
-          <thead><tr><th>Period</th><th>Revenue</th><th>Orders</th></tr></thead>
-          <tbody>
-            {rollup.map((r) => (
-              <tr key={r.bucket}>
-                <td>{r.bucket}</td>
-                <td>AED {Number(r.revenue_aed).toFixed(2)}</td>
-                <td>{r.order_count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loaded && !loadError && rollup.length === 0 ? (
+          <p className={s.empty}>No data for this range.</p>
+        ) : (
+          <table className={s.table}>
+            <thead><tr><th>Period</th><th>Revenue</th><th>Orders</th></tr></thead>
+            <tbody>
+              {rollup.map((r) => (
+                <tr key={r.bucket}>
+                  <td>{r.bucket}</td>
+                  <td>AED {Number(r.revenue_aed).toFixed(2)}</td>
+                  <td>{r.order_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section className={s.card}>
@@ -165,19 +196,23 @@ export function ReportsScreen() {
         <Button type="button" variant="ghost" disabled={exportingCsv} onClick={() => void exportCsv()}>
           {exportingCsv ? "Exporting…" : "Export CSV"}
         </Button>
-        <table className={s.table}>
-          <thead><tr><th>Dish</th><th>Orders</th><th>Revenue</th><th>Margin</th></tr></thead>
-          <tbody>
-            {items.map((it) => (
-              <tr key={it.dish_name}>
-                <td>{it.dish_name}</td>
-                <td>{it.order_count}</td>
-                <td>AED {Number(it.revenue_aed).toFixed(2)}</td>
-                <td>AED {Number(it.margin_aed).toFixed(2)} ({it.margin_pct}%)</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loaded && !loadError && items.length === 0 ? (
+          <p className={s.empty}>No data for this range.</p>
+        ) : (
+          <table className={s.table}>
+            <thead><tr><th>Dish</th><th>Orders</th><th>Revenue</th><th>Margin</th></tr></thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.dish_name}>
+                  <td>{it.dish_name}</td>
+                  <td>{it.order_count}</td>
+                  <td>AED {Number(it.revenue_aed).toFixed(2)}</td>
+                  <td>AED {Number(it.margin_aed).toFixed(2)} ({it.margin_pct}%)</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section className={s.card}>
@@ -212,6 +247,7 @@ export function ReportsScreen() {
             <li>Returning customers: {retention.returning_customers}</li>
           </ul>
         )}
+        {retentionLoaded && !retention && <p className={s.empty}>No data for this range.</p>}
       </section>
 
       <section className={s.card}>
@@ -234,6 +270,7 @@ export function ReportsScreen() {
             ))}
           </ul>
         )}
+        {laborLoaded && laborHours.length === 0 && <p className={s.empty}>No data for this date.</p>}
       </section>
 
       <section className={s.card}>
@@ -246,6 +283,8 @@ export function ReportsScreen() {
             Load prep time by staff
           </Button>
         </div>
+        {prepByItemLoaded && prepByItem.length === 0 && <p className={s.empty}>No prep-time data by item for this range.</p>}
+        {prepByStaffLoaded && prepByStaff.length === 0 && <p className={s.empty}>No prep-time data by staff for this range.</p>}
         {prepByItem.length > 0 && (
           <>
             <h4>By item</h4>

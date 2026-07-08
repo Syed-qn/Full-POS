@@ -129,6 +129,45 @@ describe("ReportsScreen", () => {
     localStorage.removeItem("ops_token");
   });
 
+  it("shows a loading indicator while the initial reload is in flight, then hides it", async () => {
+    render(<ReportsScreen />);
+    expect(screen.getByText(/loading reports/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/loading reports/i)).not.toBeInTheDocument());
+  });
+
+  it("shows an empty-state message when the sales rollup and item performance have no rows", async () => {
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(new Response("[]", { status: 200 })));
+    render(<ReportsScreen />);
+    await waitFor(() => expect(screen.queryByText(/loading reports/i)).not.toBeInTheDocument());
+    expect(screen.getAllByText(/no data for this range/i).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows an empty-state message for retention when the load returns no data", async () => {
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      if (String(url).includes("/retention")) {
+        return Promise.resolve(new Response("null", { status: 200 }));
+      }
+      if (String(url).includes("/sales-rollup")) {
+        return Promise.resolve(
+          new Response(JSON.stringify([{ bucket: "2026-07-08", revenue_aed: "500.00", order_count: 10 }]), { status: 200 }),
+        );
+      }
+      if (String(url).includes("/item-performance")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ dish_name: "Biryani", order_count: 5, revenue_aed: "100.00", food_cost_aed: "40.00", margin_aed: "60.00", margin_pct: 60 }]),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
+    render(<ReportsScreen />);
+    await waitFor(() => expect(screen.queryByText(/loading reports/i)).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText(/load retention/i));
+    await waitFor(() => expect(screen.getByText(/no data for this range/i)).toBeInTheDocument());
+  });
+
   it("shows prep time by staff", async () => {
     vi.mocked(fetch).mockImplementation((url: string) => {
       if (String(url).includes("/prep-time-by-staff")) {
