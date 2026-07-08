@@ -7,18 +7,33 @@ from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.inventory.models import DishIngredient, Ingredient
 from app.inventory.schemas import (
+    AnomalyCheckIn,
+    AnomalyCheckOut,
     BatchIn,
     BatchOut,
     CostIn,
     IngredientIn,
     IngredientOut,
     RecipeLinkIn,
+    ReorderSuggestionOut,
     RestockIn,
     StockCountIn,
     StockCountOut,
+    SubstituteIn,
+    SubstituteOut,
     WasteIn,
 )
-from app.inventory.service import add_batch, list_expiring_soon, list_low_stock, record_stock_count, record_waste
+from app.inventory.service import (
+    add_batch,
+    add_substitute,
+    flag_stock_anomaly,
+    list_expiring_soon,
+    list_low_stock,
+    list_substitutes,
+    record_stock_count,
+    record_waste,
+    suggest_reorder_quantities,
+)
 
 router = APIRouter(prefix="/api/v1/ingredients", tags=["inventory"])
 
@@ -69,6 +84,14 @@ async def low_stock(
     session: AsyncSession = Depends(get_session),
 ):
     return await list_low_stock(session, restaurant_id=restaurant.id)
+
+
+@router.get("/reorder-suggestions", response_model=list[ReorderSuggestionOut])
+async def reorder_suggestions(
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await suggest_reorder_quantities(session, restaurant_id=restaurant.id)
 
 
 @router.post("/{ingredient_id}/recipe-links", status_code=status.HTTP_201_CREATED)
@@ -178,3 +201,47 @@ async def create_batch(
     await session.commit()
     await session.refresh(batch)
     return batch
+
+
+@router.post("/{ingredient_id}/check-anomaly", response_model=AnomalyCheckOut | None)
+async def check_anomaly(
+    ingredient_id: int,
+    body: AnomalyCheckIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
+    result = await flag_stock_anomaly(
+        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
+        expected_qty=body.expected_qty, actual_qty=body.actual_qty,
+        threshold_pct=body.threshold_pct,
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{ingredient_id}/substitutes", response_model=SubstituteOut, status_code=status.HTTP_201_CREATED)
+async def create_substitute(
+    ingredient_id: int,
+    body: SubstituteIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
+    substitute = await add_substitute(
+        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
+        substitute_ingredient_id=body.substitute_ingredient_id, notes=body.notes,
+    )
+    await session.commit()
+    await session.refresh(substitute)
+    return substitute
+
+
+@router.get("/{ingredient_id}/substitutes", response_model=list[SubstituteOut])
+async def get_substitutes(
+    ingredient_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
+    return await list_substitutes(session, restaurant_id=restaurant.id, ingredient_id=ingredient_id)

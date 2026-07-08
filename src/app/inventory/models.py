@@ -16,6 +16,9 @@ class Ingredient(Base, TimestampMixin):
     unit: Mapped[str] = mapped_column(String(16))
     current_stock: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("0.000"))
     low_stock_threshold: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("0.000"))
+    # Target stock level to restock UP TO (distinct from low_stock_threshold, which is the
+    # trigger point that flags an ingredient as "low").
+    par_level: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("0.000"))
     # Cost basis for food-cost/margin reporting — what THIS restaurant pays per unit.
     cost_per_unit_aed: Mapped[Decimal] = mapped_column(Numeric(10, 4), default=Decimal("0.0000"))
 
@@ -78,3 +81,13 @@ class IngredientBatch(Base, TimestampMixin):
     qty: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     expiry_date: Mapped[date] = mapped_column(Date)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class IngredientSubstitute(Base, TimestampMixin):
+    __tablename__ = "ingredient_substitutes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"), index=True)
+    substitute_ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"), index=True)
+    notes: Mapped[str | None] = mapped_column(String(256))

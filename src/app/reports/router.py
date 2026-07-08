@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.inventory.service import daily_stock_closing
 from app.reports.analytics import (
     avg_prep_time_by_item,
     avg_prep_time_by_staff,
@@ -167,6 +168,16 @@ async def nps_summary_report(
     return await nps_summary(
         session, restaurant_id=restaurant.id, start_date=start_date, end_date=end_date
     )
+
+
+@router.get("/daily-stock-closing")
+async def daily_stock_closing_report(
+    target_date: date,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await daily_stock_closing(session, restaurant_id=restaurant.id, target_date=target_date)
+    return [{**r, "closing_stock": str(r["closing_stock"])} for r in rows]
 
 
 @router.get("/invoice-sequence-check")

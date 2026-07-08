@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
-from app.inventory.models import DishIngredient, Ingredient, IngredientBatch, WasteLog
+from app.inventory.models import DishIngredient, Ingredient, IngredientBatch, IngredientSubstitute, WasteLog
 from app.ordering.models import OrderItem
 
 
@@ -106,3 +106,96 @@ async def list_expiring_soon(
         )
     )).all()
     return list(rows)
+
+
+async def suggest_reorder_quantities(session: AsyncSession, *, restaurant_id: int) -> list[dict]:
+    """For every ingredient currently at/below its low_stock_threshold, suggest an order
+    quantity that restocks it up to its par_level (the target stock level)."""
+    rows = (await session.scalars(
+        select(Ingredient).where(Ingredient.restaurant_id == restaurant_id)
+    )).all()
+    suggestions = []
+    for ingredient in rows:
+        if ingredient.current_stock <= ingredient.low_stock_threshold:
+            suggestions.append({
+                "ingredient_id": ingredient.id,
+                "ingredient_name": ingredient.name,
+                "current_stock": ingredient.current_stock,
+                "par_level": ingredient.par_level,
+                "suggested_order_qty": ingredient.par_level - ingredient.current_stock,
+            })
+    return suggestions
+
+
+async def flag_stock_anomaly(
+    session: AsyncSession, *, restaurant_id: int, ingredient_id: int,
+    expected_qty: Decimal, actual_qty: Decimal, threshold_pct: float = 15.0,
+) -> dict | None:
+    """Compare expected (recipe-derived) usage against actual deduction and flag possible
+    over-portioning / theft-loss if the variance exceeds threshold_pct."""
+    ingredient = await session.get(Ingredient, ingredient_id)
+    if ingredient is None or ingredient.restaurant_id != restaurant_id:
+        raise ValueError("ingredient not found")
+
+    if expected_qty == 0:
+        variance_pct = 0.0 if actual_qty == 0 else 100.0
+    else:
+        variance_pct = float(abs(actual_qty - expected_qty) / expected_qty * 100)
+
+    if variance_pct <= threshold_pct:
+        return None
+
+    return {
+        "ingredient_id": ingredient_id,
+        "expected_qty": expected_qty,
+        "actual_qty": actual_qty,
+        "variance_pct": variance_pct,
+    }
+
+
+async def add_substitute(
+    session: AsyncSession, *, restaurant_id: int, ingredient_id: int,
+    substitute_ingredient_id: int, notes: str | None = None,
+) -> IngredientSubstitute:
+    substitute = IngredientSubstitute(
+        restaurant_id=restaurant_id, ingredient_id=ingredient_id,
+        substitute_ingredient_id=substitute_ingredient_id, notes=notes,
+    )
+    session.add(substitute)
+    await session.flush()
+    return substitute
+
+
+async def list_substitutes(
+    session: AsyncSession, *, restaurant_id: int, ingredient_id: int,
+) -> list[IngredientSubstitute]:
+    rows = (await session.scalars(
+        select(IngredientSubstitute).where(
+            IngredientSubstitute.restaurant_id == restaurant_id,
+            IngredientSubstitute.ingredient_id == ingredient_id,
+        )
+    )).all()
+    return list(rows)
+
+
+async def daily_stock_closing(
+    session: AsyncSession, *, restaurant_id: int, target_date: date,
+) -> list[dict]:
+    """Closing stock snapshot per ingredient as of end-of-day target_date.
+
+    Limitation: reflects CURRENT stock, not a true point-in-time historical snapshot,
+    since no stock-ledger table exists yet. target_date is accepted for API shape/future
+    compatibility but does not affect the result today.
+    """
+    rows = (await session.scalars(
+        select(Ingredient).where(Ingredient.restaurant_id == restaurant_id)
+    )).all()
+    return [
+        {
+            "ingredient_id": r.id,
+            "ingredient_name": r.name,
+            "closing_stock": r.current_stock,
+            "unit": r.unit,
+        }
+        for r in rows
+    ]
