@@ -4,14 +4,14 @@ Manager can record why a delivery attempt failed (app.dispatch.delivery.
 mark_delivery_failed) when transitioning an order into the FSM's existing
 `undeliverable` terminal status (spec §3 — no new status invented).
 
-Revision ID: u2v3w4x5y6z7
+Revision ID: w4x5y6z7a8b9
 Revises: 122f2270dfbc
 Create Date: 2026-07-08
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "u2v3w4x5y6z7"
+revision = "w4x5y6z7a8b9"
 down_revision = "122f2270dfbc"
 branch_labels = None
 depends_on = None
