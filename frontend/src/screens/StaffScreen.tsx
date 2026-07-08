@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
-import { clockStaff, createStaff, getHours, listStaff } from "../lib/staffApi";
+import { clockStaff, createStaff, getHours, getTipPool, listStaff } from "../lib/staffApi";
 import type { StaffCreateIn, StaffMember } from "../lib/types";
 import s from "./StaffScreen.module.css";
 
@@ -18,6 +18,10 @@ export function StaffScreen() {
   const [pin, setPin] = useState("");
   const [role, setRole] = useState("staff");
   const [submitting, setSubmitting] = useState(false);
+
+  const [tipPoolStart, setTipPoolStart] = useState("");
+  const [tipPoolEnd, setTipPoolEnd] = useState("");
+  const [tipPool, setTipPool] = useState<Record<string, string> | null>(null);
 
   async function reload() {
     setLoadError(null);
@@ -69,6 +73,19 @@ export function StaffScreen() {
       toast(`${member.name} clocked ${isIn ? "out" : "in"}.`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not update clock status.", "error");
+    }
+  }
+
+  async function loadTipPool() {
+    if (!tipPoolStart || !tipPoolEnd) {
+      toast("Pick a start and end date.", "error");
+      return;
+    }
+    try {
+      const pool = await getTipPool(tipPoolStart, tipPoolEnd);
+      setTipPool(pool);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not load tip pool.", "error");
     }
   }
 
@@ -136,6 +153,35 @@ export function StaffScreen() {
           </tbody>
         </table>
       )}
+
+      <section className={s.card}>
+        <h3 className={s.cardTitle}>Tip pool</h3>
+        <div className={s.form}>
+          <label className={s.field}>
+            <span>Start date</span>
+            <input aria-label="Tip pool start date" type="date" value={tipPoolStart} onChange={(e) => setTipPoolStart(e.target.value)} />
+          </label>
+          <label className={s.field}>
+            <span>End date</span>
+            <input aria-label="Tip pool end date" type="date" value={tipPoolEnd} onChange={(e) => setTipPoolEnd(e.target.value)} />
+          </label>
+        </div>
+        <Button type="button" variant="ghost" onClick={() => void loadTipPool()}>
+          Load tip pool
+        </Button>
+        {tipPool && (
+          <ul>
+            {Object.entries(tipPool).map(([staffId, amount]) => {
+              const member = staff.find((m) => String(m.id) === staffId);
+              return (
+                <li key={staffId}>
+                  {member?.name ?? `Staff #${staffId}`}: AED {amount}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

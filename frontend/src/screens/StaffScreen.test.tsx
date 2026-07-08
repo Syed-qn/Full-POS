@@ -45,4 +45,25 @@ describe("StaffScreen", () => {
     fireEvent.click(screen.getByText(/clock in/i));
     await waitFor(() => expect(screen.getByText(/clock out/i)).toBeInTheDocument());
   });
+
+  it("shows the tip pool for a date range", async () => {
+    vi.mocked(fetch).mockImplementation((url: string, init?: RequestInit) => {
+      if (String(url).includes("/tip-pool")) {
+        return Promise.resolve(new Response(JSON.stringify({ "1": "25.00" }), { status: 200 }));
+      }
+      if (String(url).includes("/shifts")) {
+        return Promise.resolve(new Response("[]", { status: 200 }));
+      }
+      if (init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({ id: 2, name: "Bilal", phone: null, role: "staff" }), { status: 201 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(staff), { status: 200 }));
+    });
+    render(<StaffScreen />);
+    await waitFor(() => expect(screen.getByText("Ahmed")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/tip pool start date/i), { target: { value: "2026-07-01" } });
+    fireEvent.change(screen.getByLabelText(/tip pool end date/i), { target: { value: "2026-07-08" } });
+    fireEvent.click(screen.getByText(/load tip pool/i));
+    await waitFor(() => expect(screen.getByText(/AED 25.00/)).toBeInTheDocument());
+  });
 });
