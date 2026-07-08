@@ -1618,7 +1618,10 @@ async def create_manual_order(
         raise ValueError("Cannot place an order with no items")
 
     # 2. Validate all dishes upfront
+    from app.menu.service import is_dish_currently_available
+
     validated: list[tuple] = []
+    today = datetime.now(timezone.utc).date()
     for item in items:
         dish = await session.scalar(
             select(Dish).where(
@@ -1627,6 +1630,12 @@ async def create_manual_order(
                 Dish.is_available.is_(True),
             )
         )
+        # Seasonal window check (Dish.available_from/available_until): the SQL filter
+        # above only enforces the is_available flag, so a dish outside its seasonal
+        # window (but still flagged available) is caught here too — never let a
+        # manual/phone order sneak past the same rule the WhatsApp flow enforces.
+        if dish is not None and not is_dish_currently_available(dish, today=today):
+            dish = None
         if not dish:
             raise ValueError(f"Dish {item['dish_id']} not found or unavailable")
         validated.append((dish, item["qty"], item.get("notes")))

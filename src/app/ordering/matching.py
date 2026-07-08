@@ -6,12 +6,27 @@ from difflib import SequenceMatcher
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, or_, select, text
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.menu.models import Dish, Menu
+
+
+def _seasonal_ok():
+    """Seasonal window predicate (mirrors menu/service.py:is_dish_currently_available)
+    for the ORM-built queries below: an "available" dish is also excluded here if today
+    falls outside its available_from/available_until window. Built as raw SQLAlchemy
+    conditions (rather than fetching + calling the pure function) so the DB does the
+    filtering for the trigram/exact-match candidate sets, matching the existing
+    `Dish.is_available == True` style already used in this module. The equivalent
+    condition is duplicated inline in the raw text() SQL queries below (CURRENT_DATE)
+    since those can't reference ORM column expressions."""
+    return and_(
+        or_(Dish.available_from.is_(None), Dish.available_from <= func.current_date()),
+        or_(Dish.available_until.is_(None), Dish.available_until >= func.current_date()),
+    )
 
 # word_similarity(query, name) finds the best match of the query within the name
 # string — much better than similarity() when the customer types a partial name
@@ -206,6 +221,7 @@ async def find_dish_matches(
                 Dish.menu_id == menu_id,
                 Dish.dish_number == int(query),
                 Dish.is_available == True,  # noqa: E712
+                _seasonal_ok(),
             )
         )
         if dish:
@@ -227,6 +243,7 @@ async def find_dish_matches(
                     Dish.menu_id == menu_id,
                     Dish.is_available == True,  # noqa: E712
                     Dish.name_normalized == normalized_query,
+                    _seasonal_ok(),
                 )
             )
         ).all()
