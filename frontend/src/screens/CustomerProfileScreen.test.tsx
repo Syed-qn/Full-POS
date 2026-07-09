@@ -131,7 +131,7 @@ describe("CustomerProfileScreen", () => {
     renderProfile();
     await waitFor(() => screen.getByText("Khalid Hassan"));
 
-    expect(screen.getByText("AED 99.00")).toBeInTheDocument();
+    expect(screen.getAllByText("AED 99.00").length).toBeGreaterThanOrEqual(1);
   });
 
   // 9. Marketing toggle can be flipped, enabling save

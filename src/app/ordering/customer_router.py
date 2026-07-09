@@ -96,6 +96,48 @@ async def list_customers(
     return CustomerListOut(items=items, limit=limit, offset=offset)
 
 
+@router.get("/high-value", response_model=CustomerListOut)
+async def list_high_value_customers(
+    min_spend_aed: float = 200,
+    min_orders: int = 3,
+    limit: int = 50,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> CustomerListOut:
+    """High-value / champions list (spend + order floor)."""
+    from decimal import Decimal
+
+    from app.loyalty.crm import compute_aov_clv, high_value_customers
+
+    rows = await high_value_customers(
+        session,
+        restaurant_id=restaurant.id,
+        min_spend_aed=Decimal(str(min_spend_aed)),
+        min_orders=min_orders,
+        limit=limit,
+    )
+    items = []
+    for c in rows:
+        metrics = compute_aov_clv(c)
+        items.append(
+            CustomerDetailOut(
+                id=c.id,
+                name=c.name,
+                phone=c.phone,
+                total_orders=c.total_orders,
+                total_spend=c.total_spend,
+                first_order_at=c.first_order_at,
+                last_order_at=c.last_order_at,
+                marketing_opted_in=True,
+                is_vip=bool(getattr(c, "is_vip", False)),
+                loyalty_points=int(getattr(c, "loyalty_points", 0) or 0),
+                average_order_value_aed=metrics["average_order_value_aed"],
+                customer_lifetime_value_aed=metrics["customer_lifetime_value_aed"],
+            )
+        )
+    return CustomerListOut(items=items, limit=limit, offset=0)
+
+
 @router.get("/{customer_id}", response_model=CustomerProfileOut)
 async def get_customer_profile(
     customer_id: int,
@@ -148,6 +190,32 @@ async def get_customer_profile(
                 profile_name = a.receiver_name.strip()
                 break
 
+    from app.loyalty.crm import (
+        compute_aov_clv,
+        get_or_create_stamp_card,
+        list_favorites,
+        list_phone_history,
+    )
+    from app.loyalty.models import ReferralCode
+    from app.ordering.detail_schemas import FavoriteOut, PhoneHistoryOut, StampCardOut
+
+    metrics = compute_aov_clv(customer)
+    favs = await list_favorites(
+        session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    phones = await list_phone_history(
+        session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    stamp = await get_or_create_stamp_card(
+        session, restaurant_id=restaurant.id, customer_id=customer.id
+    )
+    ref = await session.scalar(
+        select(ReferralCode).where(
+            ReferralCode.restaurant_id == restaurant.id,
+            ReferralCode.customer_id == customer.id,
+        )
+    )
+
     return CustomerProfileOut(
         id=customer.id,
         name=profile_name,
@@ -158,6 +226,14 @@ async def get_customer_profile(
         last_order_at=customer.last_order_at,
         usual_order_time=usual_order_time,
         marketing_opted_in=not opted_out,
+        allergy_notes=customer.allergy_notes,
+        notes=getattr(customer, "notes", None),
+        birthday=getattr(customer, "birthday", None),
+        anniversary=getattr(customer, "anniversary", None),
+        is_vip=bool(getattr(customer, "is_vip", False)),
+        loyalty_points=int(getattr(customer, "loyalty_points", 0) or 0),
+        average_order_value_aed=metrics["average_order_value_aed"],
+        customer_lifetime_value_aed=metrics["customer_lifetime_value_aed"],
         tags=customer.tags if customer.tags is not None else {},
         loyalty_tier=customer.loyalty_tier,
         loyalty_tier_locked=customer.loyalty_tier_locked,
@@ -184,6 +260,20 @@ async def get_customer_profile(
             )
             for o in recent_orders_rows
         ],
+        favorites=[
+            FavoriteOut(dish_id=f.dish_id, dish_name=f.dish_name, order_count=f.order_count)
+            for f in favs
+        ],
+        phone_history=[
+            PhoneHistoryOut(phone=p.phone, changed_by=p.changed_by, created_at=p.created_at)
+            for p in phones
+        ],
+        stamp_card=StampCardOut(
+            stamps=stamp.stamps,
+            stamps_required=stamp.stamps_required,
+            rewards_redeemed=stamp.rewards_redeemed,
+        ),
+        referral_code=ref.code if ref else None,
     )
 
 
@@ -226,6 +316,8 @@ async def patch_customer_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> CustomerDetailOut:
     try:
+        from app.loyalty.crm import compute_aov_clv
+
         customer = await patch_customer(
             session,
             restaurant_id=restaurant.id,
@@ -233,9 +325,16 @@ async def patch_customer_endpoint(
             name=body.name,
             phone=body.phone,
             marketing_opted_in=body.marketing_opted_in,
+            allergy_notes=body.allergy_notes,
+            notes=body.notes,
+            birthday=body.birthday,
+            anniversary=body.anniversary,
+            is_vip=body.is_vip,
+            tags=body.tags,
         )
         await session.commit()
         opted_out = await is_opted_out(session, restaurant_id=restaurant.id, phone=customer.phone)
+        metrics = compute_aov_clv(customer)
         return CustomerDetailOut(
             id=customer.id,
             name=customer.name,
@@ -245,6 +344,14 @@ async def patch_customer_endpoint(
             first_order_at=customer.first_order_at,
             last_order_at=customer.last_order_at,
             marketing_opted_in=not opted_out,
+            allergy_notes=customer.allergy_notes,
+            notes=getattr(customer, "notes", None),
+            birthday=getattr(customer, "birthday", None),
+            anniversary=getattr(customer, "anniversary", None),
+            is_vip=bool(getattr(customer, "is_vip", False)),
+            loyalty_points=int(getattr(customer, "loyalty_points", 0) or 0),
+            average_order_value_aed=metrics["average_order_value_aed"],
+            customer_lifetime_value_aed=metrics["customer_lifetime_value_aed"],
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -266,6 +373,7 @@ async def patch_address_endpoint(
             address_id=address_id,
             room_apartment=body.room_apartment,
             building=body.building,
+            floor=body.floor,
             receiver_name=body.receiver_name,
             additional_details=body.additional_details,
         )
@@ -274,6 +382,7 @@ async def patch_address_endpoint(
             id=addr.id,
             room_apartment=addr.room_apartment,
             building=addr.building,
+            floor=getattr(addr, "floor", None),
             receiver_name=addr.receiver_name,
             additional_details=addr.additional_details,
             latitude=addr.latitude,
@@ -370,3 +479,86 @@ async def delete_customer(
     await session.delete(customer)
     await session.commit()
     return Response(status_code=204)
+
+
+@router.post("/{customer_id}/stamp-card/redeem")
+async def redeem_stamps(
+    customer_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.loyalty.crm import redeem_stamp_reward
+
+    try:
+        card, coupon = await redeem_stamp_reward(
+            session, restaurant_id=restaurant.id, customer_id=customer_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return {
+        "stamps": card.stamps,
+        "stamps_required": card.stamps_required,
+        "rewards_redeemed": card.rewards_redeemed,
+        "coupon_code": getattr(coupon, "code", None),
+    }
+
+
+@router.post("/{customer_id}/loyalty-points/redeem")
+async def redeem_points(
+    customer_id: int,
+    body: dict,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.loyalty.crm import redeem_loyalty_points
+
+    points = int(body.get("points") or 0)
+    try:
+        bal = await redeem_loyalty_points(
+            session,
+            restaurant_id=restaurant.id,
+            customer_id=customer_id,
+            points=points,
+            reason=str(body.get("reason") or "redeem"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return {"loyalty_points": bal}
+
+
+@router.post("/{customer_id}/reorder-last")
+async def reorder_last(
+    customer_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Duplicate the customer's most recent non-resale order into a new draft."""
+    from app.ordering.duplicate import duplicate_order
+
+    last = await session.scalar(
+        select(Order)
+        .where(
+            Order.customer_id == customer_id,
+            Order.restaurant_id == restaurant.id,
+            Order.resale_of_order_id.is_(None),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+    if last is None:
+        raise HTTPException(status_code=404, detail="no prior order to reorder")
+    try:
+        new_order = await duplicate_order(
+            session, restaurant_id=restaurant.id, order_id=last.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return {
+        "id": new_order.id,
+        "order_number": new_order.order_number,
+        "status": new_order.status,
+        "source_order_id": last.id,
+    }

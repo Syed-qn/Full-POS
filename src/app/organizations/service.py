@@ -19,9 +19,28 @@ async def signup_organization(
 
 
 async def add_branch(
-    session: AsyncSession, *, organization_id: int, name: str, lat: float, lng: float
+    session: AsyncSession,
+    *,
+    organization_id: int,
+    name: str,
+    lat: float,
+    lng: float,
+    region: str | None = None,
+    currency: str = "AED",
+    locale: str = "en",
+    is_central_kitchen: bool = False,
 ) -> Restaurant:
-    branch = Restaurant(name=name, lat=lat, lng=lng, password_hash="", organization_id=organization_id)
+    branch = Restaurant(
+        name=name,
+        lat=lat,
+        lng=lng,
+        password_hash="",
+        organization_id=organization_id,
+        region=region,
+        currency=(currency or "AED").upper()[:8],
+        locale=locale or "en",
+        is_central_kitchen=is_central_kitchen,
+    )
     session.add(branch)
     await session.flush()
     return branch

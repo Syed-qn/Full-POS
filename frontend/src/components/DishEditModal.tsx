@@ -79,6 +79,19 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [salePrice, setSalePrice] = useState(d?.sale_price_aed ?? "");
+  const [nameAr, setNameAr] = useState(d?.name_ar ?? "");
+  const [allergens, setAllergens] = useState((d?.allergens ?? []).join(", "));
+  const [calories, setCalories] = useState(
+    d?.nutrition?.calories != null ? String(d.nutrition.calories) : "",
+  );
+  const [channels, setChannels] = useState((d?.channels_allowed ?? []).join(", "));
+  const [brandMenu, setBrandMenu] = useState(d?.brand_menu_code ?? "");
+  const [stockRemaining, setStockRemaining] = useState(
+    d?.stock_remaining != null ? String(d.stock_remaining) : "",
+  );
+  const [autoHide, setAutoHide] = useState(Boolean(d?.auto_hide_when_oos));
+  const [availableFrom, setAvailableFrom] = useState(d?.available_from ?? "");
+  const [availableUntil, setAvailableUntil] = useState(d?.available_until ?? "");
 
   async function onPickImage(file: File | undefined) {
     if (!file) return;
@@ -176,6 +189,21 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
       image_url: imageUrl.trim() || null,
       sale_price_aed: salePrice.trim() || null,
       variants: variants.map((v) => ({ name: v.name.trim(), price_aed: v.price_aed.trim() })),
+      name_ar: nameAr.trim() || null,
+      allergens: allergens
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean),
+      nutrition: calories.trim() ? { calories: Number(calories) } : {},
+      channels_allowed: channels
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean),
+      brand_menu_code: brandMenu.trim() || null,
+      stock_remaining: stockRemaining.trim() === "" ? null : Number(stockRemaining),
+      auto_hide_when_oos: autoHide,
+      available_from: availableFrom || null,
+      available_until: availableUntil || null,
     };
     try {
       const saved = isNew
@@ -226,6 +254,106 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               autoFocus
             />
           </label>
+
+          <label className={s.field}>
+            <span className={s.label}>Name (Arabic)</span>
+            <input
+              className={s.input}
+              value={nameAr}
+              onChange={(e) => setNameAr(e.target.value)}
+              placeholder="برياني دجاج"
+              dir="rtl"
+            />
+          </label>
+
+          <label className={s.field}>
+            <span className={s.label}>Allergens (comma-separated)</span>
+            <input
+              className={s.input}
+              value={allergens}
+              onChange={(e) => setAllergens(e.target.value)}
+              placeholder="nuts, dairy, gluten"
+            />
+          </label>
+
+          <label className={s.field}>
+            <span className={s.label}>Calories</span>
+            <input
+              className={s.input}
+              value={calories}
+              onChange={(e) => setCalories(e.target.value)}
+              placeholder="450"
+              type="number"
+              min={0}
+            />
+          </label>
+
+          <label className={s.field}>
+            <span className={s.label}>
+              Channels allowed (empty = all; e.g. delivery, dine_in, qr, takeaway)
+            </span>
+            <input
+              className={s.input}
+              value={channels}
+              onChange={(e) => setChannels(e.target.value)}
+              placeholder="delivery, whatsapp"
+            />
+          </label>
+
+          <label className={s.field}>
+            <span className={s.label}>Cloud kitchen brand code</span>
+            <input
+              className={s.input}
+              value={brandMenu}
+              onChange={(e) => setBrandMenu(e.target.value)}
+              placeholder="brand-a"
+            />
+          </label>
+
+          <div className={s.row} style={{ display: "flex", gap: 12 }}>
+            <label className={s.field} style={{ flex: 1 }}>
+              <span className={s.label}>Stock remaining (countdown)</span>
+              <input
+                className={s.input}
+                value={stockRemaining}
+                onChange={(e) => setStockRemaining(e.target.value)}
+                placeholder="unlimited"
+                type="number"
+                min={0}
+              />
+            </label>
+            <label className={s.field} style={{ flex: 1, alignSelf: "end" }}>
+              <span className={s.label}>
+                <input
+                  type="checkbox"
+                  checked={autoHide}
+                  onChange={(e) => setAutoHide(e.target.checked)}
+                />{" "}
+                Auto-hide when out of stock
+              </span>
+            </label>
+          </div>
+
+          <div className={s.row} style={{ display: "flex", gap: 12 }}>
+            <label className={s.field} style={{ flex: 1 }}>
+              <span className={s.label}>Seasonal from</span>
+              <input
+                className={s.input}
+                type="date"
+                value={availableFrom ?? ""}
+                onChange={(e) => setAvailableFrom(e.target.value)}
+              />
+            </label>
+            <label className={s.field} style={{ flex: 1 }}>
+              <span className={s.label}>Seasonal until</span>
+              <input
+                className={s.input}
+                type="date"
+                value={availableUntil ?? ""}
+                onChange={(e) => setAvailableUntil(e.target.value)}
+              />
+            </label>
+          </div>
 
           <div className={s.field}>
             <span className={s.label}>Photo {isNew ? "*" : ""}</span>

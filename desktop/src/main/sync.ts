@@ -1,9 +1,17 @@
 import type Database from "better-sqlite3";
 import { readPendingOps, markOpStatus, type PendingOp } from "./pendingOps";
+import { setNetworkOnline } from "./offlineStore";
 
 interface DishPayload {
   id: number;
   updated_at: string;
+  [key: string]: unknown;
+}
+
+interface OrderPayload {
+  id: number;
+  updated_at?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -28,6 +36,16 @@ export async function pullSync(
   fetchImpl: typeof fetch,
   token: string,
 ): Promise<void> {
+  await pullMenu(db, apiBase, fetchImpl, token);
+  await pullOrders(db, apiBase, fetchImpl, token);
+}
+
+async function pullMenu(
+  db: Database.Database,
+  apiBase: string,
+  fetchImpl: typeof fetch,
+  token: string,
+): Promise<void> {
   const cursor = getCursor(db, "menu");
   const url = new URL("/api/v1/menu/dishes", apiBase);
   if (cursor) url.searchParams.set("updated_since", cursor);
@@ -37,10 +55,12 @@ export async function pullSync(
     resp = await fetchImpl(url.toString(), {
       headers: { Authorization: `Bearer ${token}` },
     });
-  } catch {
-    return; // offline — leave cache as-is, retried next tick
+    setNetworkOnline(db, true);
+  } catch (e) {
+    setNetworkOnline(db, false, e instanceof Error ? e.message : "offline");
+    return;
   }
-  if (!resp.ok) return; // server error — leave cache as-is, retried next tick
+  if (!resp.ok) return;
 
   const dishes = (await resp.json()) as DishPayload[];
   const upsert = db.prepare(
@@ -66,13 +86,55 @@ export async function pullSync(
   if (maxUpdatedAt) setCursor(db, "menu", maxUpdatedAt);
 }
 
+async function pullOrders(
+  db: Database.Database,
+  apiBase: string,
+  fetchImpl: typeof fetch,
+  token: string,
+): Promise<void> {
+  const cursor = getCursor(db, "orders");
+  const url = new URL("/api/v1/orders", apiBase);
+  url.searchParams.set("limit", "100");
+  if (cursor) url.searchParams.set("updated_since", cursor);
+
+  let resp: Response;
+  try {
+    resp = await fetchImpl(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return;
+  }
+  if (!resp.ok) return;
+
+  const orders = (await resp.json()) as OrderPayload[];
+  const upsert = db.prepare(
+    `INSERT INTO local_orders (order_id, payload, updated_at, offline_created)
+     VALUES (@order_id, @payload, @updated_at, 0)
+     ON CONFLICT(order_id) DO UPDATE SET payload = @payload, updated_at = @updated_at`,
+  );
+  let maxCursor = cursor;
+  const tx = db.transaction((rows: OrderPayload[]) => {
+    for (const order of rows) {
+      const updated = order.updated_at || order.created_at || new Date().toISOString();
+      upsert.run({
+        order_id: order.id,
+        payload: JSON.stringify(order),
+        updated_at: updated,
+      });
+      if (!maxCursor || updated > maxCursor) maxCursor = updated;
+    }
+  });
+  tx(orders);
+  if (maxCursor) setCursor(db, "orders", maxCursor);
+}
+
 export async function pushSync(
   db: Database.Database,
   apiBase: string,
   fetchImpl: typeof fetch,
   token: string,
 ): Promise<void> {
-  // "failed" is retried (transient/offline errors) — only "conflict" is terminal.
   const ops = readPendingOps(db).filter(
     (op) => op.status === "pending" || op.status === "failed",
   );
@@ -98,16 +160,27 @@ async function pushOne(
       },
       body: JSON.stringify(op.payload),
     });
+    setNetworkOnline(db, true);
     if (resp.status === 409) {
       markOpStatus(db, op.id, "conflict");
       return;
     }
     if (!resp.ok) {
-      markOpStatus(db, op.id, "failed"); // retried next tick, see Task 9 scheduler
+      markOpStatus(db, op.id, "failed");
       return;
     }
     markOpStatus(db, op.id, "synced");
-  } catch {
-    markOpStatus(db, op.id, "failed"); // network error — offline, retried next tick
+    // mark local offline payment applied
+    if (op.path.includes("offline-payments")) {
+      const pid = (op.payload as { client_payment_id?: string })?.client_payment_id;
+      if (pid) {
+        db.prepare(`UPDATE local_payments SET status = 'synced' WHERE client_payment_id = ?`).run(
+          pid,
+        );
+      }
+    }
+  } catch (e) {
+    setNetworkOnline(db, false, e instanceof Error ? e.message : "offline");
+    markOpStatus(db, op.id, "failed");
   }
 }

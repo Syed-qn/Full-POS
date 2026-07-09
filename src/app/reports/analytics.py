@@ -81,6 +81,10 @@ async def item_performance(
             round(float((row["revenue_aed"] - cost_total) / row["revenue_aed"] * 100), 2)
             if row["revenue_aed"] > 0 else 0.0
         )
+        row["food_cost_pct"] = (
+            round(float(cost_total / row["revenue_aed"] * 100), 2)
+            if row["revenue_aed"] > 0 else 0.0
+        )
 
     return sorted(by_dish.values(), key=lambda r: r["revenue_aed"], reverse=True)
 
@@ -213,24 +217,42 @@ async def avg_prep_time_by_item(
 async def avg_prep_time_by_staff(
     session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
 ) -> list[dict]:
-    """Grouped by whichever kitchen station handled the ticket — there is no
-    per-staff bump attribution on OrderItem today, so the station that owned
-    the ticket (OrderItem.station_id_snapshot) is used as the "staff" key."""
+    """Grouped by ``OrderItem.bumped_by_staff_id`` when set; otherwise falls
+    back to kitchen station name (legacy tickets without staff attribution)."""
     from app.kds.models import KitchenStation
+    from app.staff.models import StaffMember
 
     items = await _prep_time_rows(
         session, restaurant_id=restaurant_id, start_date=start_date, end_date=end_date
     )
-    station_ids = {item.station_id_snapshot for item in items if item.station_id_snapshot is not None}
-    stations = (await session.scalars(
-        select(KitchenStation).where(KitchenStation.id.in_(station_ids))
-    )).all() if station_ids else []
-    station_names = {s.id: s.name for s in stations}
+    staff_ids = {i.bumped_by_staff_id for i in items if getattr(i, "bumped_by_staff_id", None)}
+    staff_names: dict[int, str] = {}
+    if staff_ids:
+        for s in (
+            await session.scalars(select(StaffMember).where(StaffMember.id.in_(staff_ids)))
+        ).all():
+            staff_names[s.id] = s.name
 
-    by_station: dict[str, list[float]] = defaultdict(list)
+    station_ids = {
+        item.station_id_snapshot
+        for item in items
+        if item.station_id_snapshot is not None and not getattr(item, "bumped_by_staff_id", None)
+    }
+    station_names: dict[int, str] = {}
+    if station_ids:
+        for s in (
+            await session.scalars(select(KitchenStation).where(KitchenStation.id.in_(station_ids)))
+        ).all():
+            station_names[s.id] = s.name
+
+    by_key: dict[str, list[float]] = defaultdict(list)
     for item in items:
-        key = station_names.get(item.station_id_snapshot, "Unassigned")
-        by_station[key].append(_prep_minutes(item))
+        sid = getattr(item, "bumped_by_staff_id", None)
+        if sid is not None:
+            key = staff_names.get(sid, f"staff:{sid}")
+        else:
+            key = station_names.get(item.station_id_snapshot, "Unassigned")
+        by_key[key].append(_prep_minutes(item))
 
     return [
         {
@@ -238,7 +260,7 @@ async def avg_prep_time_by_staff(
             "avg_prep_minutes": round(sum(minutes) / len(minutes), 2),
             "ticket_count": len(minutes),
         }
-        for key, minutes in by_station.items()
+        for key, minutes in by_key.items()
     ]
 
 

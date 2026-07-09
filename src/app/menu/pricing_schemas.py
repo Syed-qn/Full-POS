@@ -13,6 +13,7 @@ class PriceRuleIn(BaseModel):
     end_time: time | None = None
     days_of_week: list[int] | None = None
     channel: str | None = None
+    branch_id: int | None = None
 
     @field_validator("rule_type")
     @classmethod
@@ -33,9 +34,11 @@ class PriceRuleOut(BaseModel):
     end_time: time | None = None
     days_of_week: list[int] | None = None
     channel: str | None = None
+    branch_id: int | None = None
 
 
 class EffectivePriceOut(BaseModel):
     dish_id: int
     price_aed: Decimal
     channel: str | None = None
+    branch_id: int | None = None

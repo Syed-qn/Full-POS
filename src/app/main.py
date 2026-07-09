@@ -9,7 +9,11 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.aggregators.public_router import router as public_store_router
 from app.aggregators.router import router as aggregators_router
+from app.reliability.router import router as reliability_router
+from app.compliance.router import router as compliance_router
+from app.ai.router import router as ai_router
 from app.audit.router import router as audit_router
 from app.cashdrawer.router import router as cashdrawer_router
 from app.cod.router import router as cod_router
@@ -23,6 +27,7 @@ from app.organizations.router import stock_transfer_router
 from app.payments.router import router as payments_router
 from app.payments.router import customers_router as payments_customers_router
 from app.payments.router import orders_router as payments_orders_router
+from app.payments.router import public_router as payments_public_router
 from app.staff.router import router as staff_router
 from app.tables.router import router as tables_router
 from app.config import get_settings
@@ -42,6 +47,7 @@ from app.menu.pricing_router import router as menu_pricing_router
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.timing import ResponseTimingMiddleware
 from app.ordering.customer_router import router as customer_router
+from app.ordering.public_router import router as public_qr_router
 from app.ordering.router import router as ordering_router
 from app.webhook.router import router as webhook_router
 
@@ -182,6 +188,8 @@ def create_app() -> FastAPI:
     app.include_router(menu_upsell_router)
     app.include_router(menu_pricing_router)
     app.include_router(ordering_router)
+    app.include_router(public_qr_router)
+    app.include_router(public_store_router)
     app.include_router(customer_router)
     app.include_router(conversation_router)
     app.include_router(webhook_router)
@@ -204,7 +212,11 @@ def create_app() -> FastAPI:
     app.include_router(payments_router)
     app.include_router(payments_customers_router)
     app.include_router(payments_orders_router)
+    app.include_router(payments_public_router)
     app.include_router(aggregators_router)
+    app.include_router(reliability_router)
+    app.include_router(compliance_router)
+    app.include_router(ai_router)
     app.include_router(dispatch_router)
     app.include_router(tracking_router)
     app.include_router(rider_app_router)
@@ -274,10 +286,22 @@ def create_app() -> FastAPI:
         except Exception:  # noqa: BLE001 — any DB failure marks the check degraded
             db_status = "error"
 
+        from app.reliability.service import extended_health
+
+        try:
+            ext = await extended_health(session)
+        except Exception:  # noqa: BLE001
+            ext = {"backup_storage": "unknown"}
         return {
             "status": "ok" if db_status == "ok" else "degraded",
             "db": db_status,
+            "backup_storage": ext.get("backup_storage"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "uptime_components": {
+                "api": "ok",
+                "db": db_status,
+                "backup_storage": ext.get("backup_storage"),
+            },
         }
 
     @app.get("/version")

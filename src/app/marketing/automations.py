@@ -35,7 +35,7 @@ from app.ordering.service import predict_order_time
 
 _DUBAI = ZoneInfo("Asia/Dubai")
 
-PRESET_KEYS = ("welcome", "winback", "reorder", "recurring")
+PRESET_KEYS = ("welcome", "winback", "reorder", "recurring", "birthday", "review_request")
 
 PRESET_DEFAULTS: dict[str, dict] = {
     "welcome": {
@@ -58,6 +58,16 @@ PRESET_DEFAULTS: dict[str, dict] = {
         "description": "Nudge habitual customers before their usual order time.",
         "config": {"lead_minutes": 15},
     },
+    "birthday": {
+        "title": "Birthday offer",
+        "description": "Send a birthday coupon to customers on their birthday.",
+        "config": {"discount_aed": 15, "cooldown_days": 360},
+    },
+    "review_request": {
+        "title": "Review request",
+        "description": "Ask for NPS/feedback 2 hours after delivery.",
+        "config": {"delay_hours": 2},
+    },
 }
 
 WINBACK_DSL: dict = {
@@ -77,7 +87,60 @@ def clamp_config(preset_key: str, config: dict | None) -> dict:
     elif preset_key == "winback":
         out["lapsed_days"] = max(30, min(180, int(out.get("lapsed_days", 60))))
         out["cooldown_days"] = max(30, min(180, int(out.get("cooldown_days", 60))))
+    elif preset_key == "birthday":
+        out["discount_aed"] = max(5, min(100, int(out.get("discount_aed", 15))))
+        out["cooldown_days"] = max(300, min(400, int(out.get("cooldown_days", 360))))
+    elif preset_key == "review_request":
+        out["delay_hours"] = max(1, min(48, int(out.get("delay_hours", 2))))
     return out
+
+
+async def birthday_customer_ids(
+    session: AsyncSession, *, restaurant_id: int, automation: MarketingAutomation
+) -> list[int]:
+    """Customers with birthday today (for birthday offer automation)."""
+    from app.loyalty.crm import birthday_customer_ids as _ids
+
+    return await _ids(session, restaurant_id=restaurant_id)
+
+
+async def review_request_customer_order_ids(
+    session: AsyncSession, *, restaurant_id: int, automation: MarketingAutomation
+) -> list[tuple[int, int]]:
+    """(customer_id, order_id) pairs delivered delay_hours ago without NPS yet."""
+    from app.loyalty.models import NpsResponse
+
+    cfg = clamp_config("review_request", automation.config)
+    delay = int(cfg.get("delay_hours", 2))
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(hours=delay + 2)
+    window_end = now - timedelta(hours=delay)
+    orders = list(
+        (
+            await session.scalars(
+                select(Order).where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.status == "delivered",
+                    Order.delivered_at.is_not(None),
+                    Order.delivered_at >= window_start.replace(tzinfo=None),
+                    Order.delivered_at <= window_end.replace(tzinfo=None),
+                )
+            )
+        ).all()
+    )
+    if not orders:
+        return []
+    order_ids = [o.id for o in orders]
+    already = set(
+        (
+            await session.scalars(
+                select(NpsResponse.order_id).where(NpsResponse.order_id.in_(order_ids))
+            )
+        ).all()
+    )
+    return [
+        (o.customer_id, o.id) for o in orders if o.id not in already and o.customer_id
+    ]
 
 
 def _minute_to_hhmm(minute: int) -> str:

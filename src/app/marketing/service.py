@@ -37,8 +37,10 @@ from app.marketing.automations import (
     PRESET_DEFAULTS,
     PRESET_KEYS,
     advance_recurring_state,
+    birthday_customer_ids,
     clamp_config,
     record_automation_send,
+    review_request_customer_order_ids,
     upsert_recurring_state,
     winback_customer_ids,
 )
@@ -2027,6 +2029,134 @@ async def run_automation_tick(
             )
         ).all()
         for cid in sent_customers:
+            await record_automation_send(
+                session,
+                restaurant_id=auto.restaurant_id,
+                automation_id=auto.id,
+                customer_id=cid,
+                campaign_id=camp.id,
+                sent_at=now_utc,
+            )
+        _bump_automation_stats(auto, summary)
+        auto.last_run_at = now_utc
+
+    # --- Birthday offers (once per Dubai calendar day) ---
+    birthday_autos = (
+        await session.scalars(
+            select(MarketingAutomation).where(
+                MarketingAutomation.preset_key == "birthday",
+                MarketingAutomation.enabled.is_(True),
+            )
+        )
+    ).all()
+    totals.setdefault("birthday", 0)
+    for auto in birthday_autos:
+        if auto.template_id is None:
+            continue
+        if auto.last_run_at:
+            last_local = auto.last_run_at.astimezone(_DUBAI)
+            if last_local.date() >= local.date():
+                continue
+        tpl = await session.get(WaTemplate, auto.template_id)
+        if tpl is None or tpl.status != "approved":
+            continue
+        ids = await birthday_customer_ids(
+            session, restaurant_id=auto.restaurant_id, automation=auto
+        )
+        if not ids:
+            auto.last_run_at = now_utc
+            continue
+        camp = await create_campaign(
+            session,
+            restaurant_id=auto.restaurant_id,
+            type="automation",
+            template_id=auto.template_id,
+            segment_id=auto.segment_id,
+        )
+        camp.status = "sending"
+        camp.stats = {
+            "audience_ids": ids,
+            "automation_id": auto.id,
+            "preset_key": "birthday",
+        }
+        summary = await run_campaign_send(
+            session,
+            campaign=camp,
+            provider=provider,
+            now_utc=now_utc,
+            audience_ids=ids,
+        )
+        totals["queued"] += summary.get("queued", 0)
+        totals["birthday"] += summary.get("queued", 0)
+        for cid in ids:
+            # Issue birthday coupon as personalized offer
+            cfg = clamp_config("birthday", auto.config)
+            try:
+                await issue_coupon(
+                    session,
+                    restaurant_id=auto.restaurant_id,
+                    customer_id=cid,
+                    order_id=None,
+                    discount_aed=Decimal(str(cfg.get("discount_aed", 15))),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            await record_automation_send(
+                session,
+                restaurant_id=auto.restaurant_id,
+                automation_id=auto.id,
+                customer_id=cid,
+                campaign_id=camp.id,
+                sent_at=now_utc,
+            )
+        _bump_automation_stats(auto, summary)
+        auto.last_run_at = now_utc
+
+    # --- Review request after delivery ---
+    review_autos = (
+        await session.scalars(
+            select(MarketingAutomation).where(
+                MarketingAutomation.preset_key == "review_request",
+                MarketingAutomation.enabled.is_(True),
+            )
+        )
+    ).all()
+    totals.setdefault("review_request", 0)
+    for auto in review_autos:
+        if auto.template_id is None:
+            continue
+        tpl = await session.get(WaTemplate, auto.template_id)
+        if tpl is None or tpl.status != "approved":
+            continue
+        pairs = await review_request_customer_order_ids(
+            session, restaurant_id=auto.restaurant_id, automation=auto
+        )
+        if not pairs:
+            continue
+        ids = list({cid for cid, _ in pairs})
+        camp = await create_campaign(
+            session,
+            restaurant_id=auto.restaurant_id,
+            type="automation",
+            template_id=auto.template_id,
+            segment_id=auto.segment_id,
+        )
+        camp.status = "sending"
+        camp.stats = {
+            "audience_ids": ids,
+            "automation_id": auto.id,
+            "preset_key": "review_request",
+        }
+        summary = await run_campaign_send(
+            session,
+            campaign=camp,
+            provider=provider,
+            now_utc=now_utc,
+            audience_ids=ids,
+        )
+        totals["queued"] += summary.get("queued", 0)
+        totals["review_request"] += summary.get("queued", 0)
+        for cid in ids:
             await record_automation_send(
                 session,
                 restaurant_id=auto.restaurant_id,

@@ -31,11 +31,14 @@ class CostIn(BaseModel):
 class RecipeLinkIn(BaseModel):
     dish_id: int
     quantity_per_dish: Decimal
+    yield_pct: Decimal = Decimal("100.00")
 
 
 class WasteIn(BaseModel):
     quantity: Decimal
     reason: str | None = None
+    reason_type: str = "wastage"  # wastage | spoilage | theft | over_portion | other
+    batch_id: int | None = None
 
 
 class RestockIn(BaseModel):
@@ -50,11 +53,13 @@ class StockCountOut(BaseModel):
     variance: Decimal
     previous_stock: Decimal
     counted_stock: Decimal
+    variance_pct: float | None = None
 
 
 class BatchIn(BaseModel):
     qty: Decimal
     expiry_date: date
+    location_id: int | None = None
 
 
 class BatchOut(BaseModel):
@@ -62,14 +67,25 @@ class BatchOut(BaseModel):
     id: int
     ingredient_id: int
     qty: Decimal
+    qty_remaining: Decimal | None = None
     expiry_date: date
     received_at: datetime
+    location_id: int | None = None
 
 
 class VendorIn(BaseModel):
     name: str
     phone: str | None = None
     email: str | None = None
+    notes: str | None = None
+
+
+class VendorPatch(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    notes: str | None = None
+    is_active: bool | None = None
 
 
 class VendorOut(BaseModel):
@@ -78,6 +94,8 @@ class VendorOut(BaseModel):
     name: str
     phone: str | None = None
     email: str | None = None
+    notes: str | None = None
+    is_active: bool = True
 
 
 class PurchaseOrderLineIn(BaseModel):
@@ -89,6 +107,7 @@ class PurchaseOrderLineIn(BaseModel):
 class PurchaseOrderIn(BaseModel):
     vendor_id: int
     lines: list[PurchaseOrderLineIn]
+    notes: str | None = None
 
 
 class PurchaseOrderLineOut(BaseModel):
@@ -96,6 +115,7 @@ class PurchaseOrderLineOut(BaseModel):
     id: int
     ingredient_id: int
     qty_ordered: Decimal
+    qty_received: Decimal = Decimal("0")
     unit_cost_aed: Decimal
 
 
@@ -104,7 +124,45 @@ class PurchaseOrderOut(BaseModel):
     id: int
     vendor_id: int
     status: str
+    notes: str | None = None
     lines: list[PurchaseOrderLineOut] = []
+
+
+class GrnLineIn(BaseModel):
+    po_line_id: int
+    qty_received: Decimal
+    unit_cost_aed: Decimal | None = None
+    expiry_date: date | None = None
+
+
+class GrnIn(BaseModel):
+    po_id: int
+    lines: list[GrnLineIn]
+    notes: str | None = None
+
+
+class GrnOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    po_id: int
+    grn_number: str
+    received_by: str
+    notes: str | None = None
+
+
+class StockLocationIn(BaseModel):
+    name: str
+    code: str
+    kitchen_role: str = "branch"  # branch | central | commissary
+
+
+class StockLocationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    code: str
+    kitchen_role: str
+    is_active: bool = True
 
 
 class ReorderSuggestionOut(BaseModel):
@@ -131,6 +189,8 @@ class AnomalyCheckOut(BaseModel):
 class SubstituteIn(BaseModel):
     substitute_ingredient_id: int
     notes: str | None = None
+    conversion_factor: Decimal = Decimal("1")
+    priority: int = 0
 
 
 class SubstituteOut(BaseModel):
@@ -139,6 +199,8 @@ class SubstituteOut(BaseModel):
     ingredient_id: int
     substitute_ingredient_id: int
     notes: str | None = None
+    conversion_factor: Decimal | None = None
+    priority: int | None = None
 
 
 class StockClosingOut(BaseModel):

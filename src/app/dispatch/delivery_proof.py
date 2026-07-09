@@ -1,29 +1,28 @@
 """Delivery proof: rider-uploaded photo + OTP confirmation.
 
-Both are additive/informational evidence attached to a delivery in progress —
-neither is a hard gate on the ``advance_delivery`` FSM in ``delivery.py``. The
-OTP is generated automatically when an order reaches ``arriving`` (see
-``advance_delivery``); verifying it does not block the ``delivered``
-transition, it's just recorded for ops visibility.
+OTP is generated when an order reaches ``arriving``. When restaurant settings
+``delivery.require_otp_on_deliver`` is true (snapshotted on order as
+``otp_required_at_deliver``), verification **gates** the delivered transition.
 
-No real blob-storage vendor is wired into this repo yet — ``delivery_photo_url``
-just stores whatever URL string the rider app hands us.
+Photos may be a remote URL or base64 payload stored under media/delivery_proofs/.
 """
 from __future__ import annotations
 
+import base64
+import re
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dispatch.delivery import _DELIVERY_FSM
 from app.ordering.models import Order
 
-# Orders in any of these statuses are still "in flight" to the customer — a
-# rider proof photo may be attached any time from rider-assignment up to (but
-# not including) delivered. Sourced from the FSM's own transition table so
-# this can never drift from the real delivery states.
 DELIVERABLE_STATUSES = set(_DELIVERY_FSM.keys())
+
+_PROOF_ROOT = Path("media/delivery_proofs")
+_DATA_URL_RE = re.compile(r"^data:image/(png|jpeg|jpg|webp);base64,(.+)$", re.I)
 
 
 class DeliveryPhotoError(ValueError):
@@ -34,10 +33,19 @@ class OtpVerificationError(ValueError):
     """Raised when a delivery OTP is submitted but does not match."""
 
 
+class OtpRequiredError(ValueError):
+    """Raised when deliver is attempted without a verified OTP and OTP is required."""
+
+
 async def set_delivery_photo(
-    session: AsyncSession, *, restaurant_id: int, order_id: int, photo_url: str
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    order_id: int,
+    photo_url: str | None = None,
+    photo_base64: str | None = None,
 ) -> Order:
-    """Attach a rider-uploaded proof-of-delivery photo URL to an in-flight order."""
+    """Attach proof-of-delivery photo (URL and/or base64 upload)."""
     order = await session.get(Order, order_id)
     if order is None or order.restaurant_id != restaurant_id:
         raise DeliveryPhotoError(f"order {order_id} not found")
@@ -46,7 +54,32 @@ async def set_delivery_photo(
             f"cannot attach a delivery photo to order {order_id} in status "
             f"{order.status!r}"
         )
-    order.delivery_photo_url = photo_url
+    if not photo_url and not photo_base64:
+        raise DeliveryPhotoError("photo_url or photo_base64 is required")
+
+    if photo_base64:
+        raw = photo_base64.strip()
+        ext = "jpg"
+        m = _DATA_URL_RE.match(raw)
+        if m:
+            ext = "png" if m.group(1).lower() == "png" else "jpg"
+            raw = m.group(2)
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise DeliveryPhotoError("invalid photo_base64") from exc
+        if len(data) > 8 * 1024 * 1024:
+            raise DeliveryPhotoError("photo too large (max 8MB)")
+        dest_dir = _PROOF_ROOT / str(restaurant_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        fname = f"{order_id}_{secrets.token_hex(6)}.{ext}"
+        path = dest_dir / fname
+        path.write_bytes(data)
+        order.delivery_photo_path = str(path)
+        # Public-relative URL for clients that only understand URLs.
+        order.delivery_photo_url = photo_url or f"/media/delivery_proofs/{restaurant_id}/{fname}"
+    else:
+        order.delivery_photo_url = photo_url
     return order
 
 
@@ -61,12 +94,7 @@ async def generate_delivery_otp(session: AsyncSession, *, order: Order) -> str:
 async def verify_delivery_otp(
     session: AsyncSession, *, restaurant_id: int, order_id: int, otp: str
 ) -> bool:
-    """Check a submitted OTP against the order's stored code.
-
-    Informational only — never gates the delivery FSM. Raises
-    ``OtpVerificationError`` (with a clear message) on a missing order, a
-    tenant mismatch, or a non-matching code.
-    """
+    """Check a submitted OTP against the order's stored code."""
     order = await session.get(Order, order_id)
     if order is None or order.restaurant_id != restaurant_id:
         raise OtpVerificationError(f"order {order_id} not found")
@@ -74,3 +102,11 @@ async def verify_delivery_otp(
         raise OtpVerificationError("delivery OTP does not match")
     order.delivery_otp_verified_at = datetime.now(timezone.utc)
     return True
+
+
+def assert_otp_satisfied(order: Order) -> None:
+    """Raise if OTP is required but not verified."""
+    if getattr(order, "otp_required_at_deliver", False) and not order.delivery_otp_verified_at:
+        raise OtpRequiredError(
+            f"order {order.id} requires OTP verification before delivery"
+        )

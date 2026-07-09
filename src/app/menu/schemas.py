@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -78,6 +78,18 @@ class DishOut(BaseModel):
     whatsapp_enabled: bool = True
     variants: list[VariantOut] = []
     updated_at: datetime
+    # Cat-3 menu control
+    allergens: list = []
+    name_ar: str | None = None
+    description_ar: str | None = None
+    nutrition: dict = {}
+    channels_allowed: list = []
+    brand_menu_code: str | None = None
+    stock_remaining: int | None = None
+    auto_hide_when_oos: bool = False
+    available_from: date | None = None
+    available_until: date | None = None
+    category_id: int | None = None
 
 
 class MenuOut(BaseModel):
@@ -128,6 +140,17 @@ class DishIn(BaseModel):
     # Content ID override; blank/None → auto-generated on push.
     catalog_retailer_id: str | None = None
     variants: list[VariantIn] = []
+    allergens: list[str] = []
+    name_ar: str | None = None
+    description_ar: str | None = None
+    nutrition: dict | None = None
+    channels_allowed: list[str] = []
+    brand_menu_code: str | None = None
+    stock_remaining: int | None = None
+    auto_hide_when_oos: bool = False
+    available_from: date | None = None
+    available_until: date | None = None
+    category_id: int | None = None
 
     @field_validator("condition")
     @classmethod
@@ -167,6 +190,17 @@ class DishPatch(BaseModel):
     whatsapp_enabled: bool | None = None
     catalog_retailer_id: str | None = None
     variants: list[VariantIn] | None = None
+    allergens: list[str] | None = None
+    name_ar: str | None = None
+    description_ar: str | None = None
+    nutrition: dict | None = None
+    channels_allowed: list[str] | None = None
+    brand_menu_code: str | None = None
+    stock_remaining: int | None = None
+    auto_hide_when_oos: bool | None = None
+    available_from: date | None = None
+    available_until: date | None = None
+    category_id: int | None = None
 
     @field_validator("condition")
     @classmethod
@@ -197,6 +231,47 @@ class DiffOut(BaseModel):
     added: list[dict]
     removed: list[dict]
     conflicts: list[dict]
+
+
+class BulkPriceUpdateIn(BaseModel):
+    """Bulk price update: either absolute price or percent delta."""
+
+    dish_ids: list[int]
+    price_aed: Decimal | None = None
+    percent_delta: Decimal | None = None  # e.g. 10 = +10%, -5 = -5%
+
+
+class BulkPriceUpdateOut(BaseModel):
+    updated: int
+    dish_ids: list[int]
+
+
+class BulkCsvImportOut(BaseModel):
+    created: int
+    updated: int
+    errors: list[str]
+
+
+class SellRuleIn(BaseModel):
+    rule_kind: str  # upsell | cross_sell
+    suggest_dish_id: int
+    trigger_dish_id: int | None = None
+    trigger_category: str | None = None
+    message: str | None = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class SellRuleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    rule_kind: str
+    trigger_dish_id: int | None
+    trigger_category: str | None
+    suggest_dish_id: int
+    message: str | None
+    sort_order: int
+    is_active: bool
 
 
 class MenuWithDiffOut(MenuOut):

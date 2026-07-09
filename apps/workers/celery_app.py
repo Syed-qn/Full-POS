@@ -117,10 +117,15 @@ celery_app.conf.update(
             "task": "loyalty.recompute_all_tenants",
             "schedule": crontab(hour=4, minute=0),  # 4am Asia/Dubai (after reconcile)
         },
+        "ordering-release-scheduled": {
+            "task": "ordering.release_due_scheduled",
+            "schedule": 60.0,  # every minute — kitchen kickoff for pre-orders
+        },
     },
 )
 celery_app.autodiscover_tasks(
     ["app.outbox", "app.sla", "app.predictions", "app.marketing", "app.conversation",
-     "app.dispatch", "app.wallet", "app.loyalty", "app.pos", "app.partner.webhooks"],
+     "app.dispatch", "app.wallet", "app.loyalty", "app.pos", "app.partner.webhooks",
+     "app.ordering"],
     related_name="worker",
 )

@@ -46,14 +46,22 @@ async def advance_delivery(
             f"cannot move order {order_id} from {order.status} to {to_status}"
         )
 
+    # OTP gate must run before mutating status (require_otp_on_deliver).
+    if to_status == "delivered":
+        from app.dispatch.delivery_proof import OtpRequiredError, assert_otp_satisfied
+
+        try:
+            assert_otp_satisfied(order)
+        except OtpRequiredError as exc:
+            raise InvalidTransitionError(str(exc)) from exc
+
     before = {"status": order.status}
     now = datetime.now(timezone.utc)
     order.status = to_status
 
     if to_status == "arriving":
         # Courier is about to hand off — this is when we'd text the customer
-        # their delivery confirmation code. Additive/informational only: see
-        # app.dispatch.delivery_proof (verification never gates this FSM).
+        # their delivery confirmation code.
         from app.dispatch.delivery_proof import generate_delivery_otp
 
         await generate_delivery_otp(session, order=order)
@@ -104,6 +112,11 @@ async def advance_delivery(
                 await loyalty.earn(session, order=order, settings=settings)
                 await loyalty.recompute_tier(session, customer=customer, settings=settings)
                 await loyalty.maybe_issue_recurring_reward(session, customer=customer, settings=settings)
+                from app.loyalty.crm import on_delivery_crm_hooks
+
+                await on_delivery_crm_hooks(
+                    session, order=order, customer=customer, settings=settings
+                )
         except Exception:  # noqa: BLE001 — loyalty never blocks delivery
             pass
 
@@ -123,6 +136,18 @@ async def advance_delivery(
     except Exception:  # noqa: BLE001 — POS notify must never block delivery
         pass
     return order
+
+
+# Canonical failure reasons for undeliverable deliveries.
+DELIVERY_FAILURE_REASONS = frozenset(
+    {
+        "customer_unreachable",
+        "wrong_address",
+        "refused",
+        "unsafe",
+        "other",
+    }
+)
 
 
 async def mark_delivery_failed(
@@ -145,7 +170,14 @@ async def mark_delivery_failed(
     if order is None:
         raise ValueError(f"order {order_id} not found")
 
-    order.delivery_failure_reason = reason
+    cleaned = (reason or "").strip()
+    if not cleaned:
+        raise ValueError("delivery failure reason is required")
+    # Allow free-form but prefer canonical codes; prefix free-form as other:
+    key = cleaned.lower().replace(" ", "_")
+    if key not in DELIVERY_FAILURE_REASONS and not cleaned.startswith("other"):
+        cleaned = f"other:{cleaned}"
+    order.delivery_failure_reason = cleaned
     try:
         await fsm_transition(
             session, order, OrderStatus.UNDELIVERABLE, actor="manager"

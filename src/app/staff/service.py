@@ -134,6 +134,20 @@ async def compute_sales(session: AsyncSession, *, staff_id: int, restaurant_id: 
         select(Order).where(
             Order.staff_id == staff_id, Order.restaurant_id == restaurant_id,
             Order.created_at >= day_start, Order.created_at <= day_end,
+            Order.is_training.is_(False),
         )
     )).all()
     return sum((o.total for o in orders), Decimal("0.00"))
+
+
+async def set_training_mode(
+    session: AsyncSession, *, restaurant_id: int, staff_id: int, training_mode: bool
+):
+    from app.staff.models import StaffMember
+
+    staff = await session.get(StaffMember, staff_id)
+    if staff is None or staff.restaurant_id != restaurant_id:
+        raise ValueError("staff member not found")
+    staff.training_mode = training_mode
+    await session.flush()
+    return staff

@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Date,
     Boolean,
     DateTime,
     ForeignKey,
@@ -57,6 +58,49 @@ class Customer(Base, TimestampMixin):
     # Optional per-customer credit ceiling for the house-account tab; null = no
     # limit. Enforced in app.payments.service.charge_to_house_account.
     house_account_credit_limit_aed: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    # Free-form allergy profile for the customer (CRM). Snapshotted onto Order at place.
+    allergy_notes: Mapped[str | None] = mapped_column(String(512))
+    # Free-form CRM notes (manager/staff).
+    notes: Mapped[str | None] = mapped_column(String(1024))
+    birthday: Mapped[date | None] = mapped_column(Date)
+    anniversary: Mapped[date | None] = mapped_column(Date)
+    # First-class VIP flag (also mirrored into tags["vip"] on patch).
+    is_vip: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Points balance (parallel to wallet AED cashback).
+    loyalty_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class CustomerPhoneHistory(Base, TimestampMixin):
+    """Append-only history of phone number changes for a customer."""
+
+    __tablename__ = "customer_phone_history"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    phone: Mapped[str] = mapped_column(String(32))
+    changed_by: Mapped[str] = mapped_column(String(64), default="manager")
+
+
+class CustomerFavorite(Base, TimestampMixin):
+    """Most-ordered dishes per customer (denormalized from order history)."""
+
+    __tablename__ = "customer_favorites"
+    __table_args__ = (
+        UniqueConstraint(
+            "restaurant_id",
+            "customer_id",
+            "dish_id",
+            name="uq_customer_favorites_rest_cust_dish",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"), nullable=True)
+    dish_name: Mapped[str] = mapped_column(String(128))
+    order_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class CustomerAddress(Base, TimestampMixin):
@@ -69,6 +113,7 @@ class CustomerAddress(Base, TimestampMixin):
     longitude: Mapped[float | None] = mapped_column()
     room_apartment: Mapped[str | None] = mapped_column(String(128))
     building: Mapped[str | None] = mapped_column(String(128))
+    floor: Mapped[str | None] = mapped_column(String(64))
     receiver_name: Mapped[str | None] = mapped_column(String(128))
     additional_details: Mapped[str | None] = mapped_column(String(512))
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -92,6 +137,19 @@ class Order(Base, TimestampMixin):
     order_number: Mapped[str] = mapped_column(String(32), index=True)
     status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
     priority: Mapped[str] = mapped_column(String(16), default="normal")
+    # Fulfillment / channel type — see app.ordering.order_types.ORDER_TYPES.
+    # Default "delivery" preserves legacy WhatsApp/COD behaviour.
+    order_type: Mapped[str] = mapped_column(String(24), default="delivery", server_default="delivery")
+    # POS park/hold — when set, the ticket is held (not open for kitchen release).
+    # Status stays on the normal FSM; held_at is the hold flag (no extra status).
+    held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    held_reason: Mapped[str | None] = mapped_column(String(256))
+    # Snapshot of customer allergy notes at place-time (never mutate retroactively).
+    customer_allergy_notes: Mapped[str | None] = mapped_column(String(512))
+    # True when this is an explicit pre-order (usually with scheduled_for + optional deposit).
+    is_preorder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # True once scheduled/pre-order has been released to kitchen (finalize path ran).
+    scheduled_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     address_id: Mapped[int | None] = mapped_column(ForeignKey("customer_addresses.id"))
     # Dine-in binding — null for delivery orders. Set when an order is opened
@@ -99,9 +157,16 @@ class Order(Base, TimestampMixin):
     table_id: Mapped[int | None] = mapped_column(ForeignKey("tables.id"))
     # Sales-per-server attribution — null when no staff member is tracked (e.g. self-service).
     staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
+    # Tip attributed to a specific staff member (Category 9); null = pool only.
+    tip_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
+    # Training-mode order — excluded from real sales/performance KPIs.
+    is_training: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Third-party channel this order arrived through. Null = native WhatsApp order.
     aggregator_source: Mapped[str | None] = mapped_column(String(24))
     aggregator_order_ref: Mapped[str | None] = mapped_column(String(128))
+    # Explicit inbox/report channel key (whatsapp|talabat|website|qr|kiosk|…).
+    # Category 8 — preferred over inferring from order_type alone.
+    source_channel: Mapped[str | None] = mapped_column(String(32), index=True)
     additional_details: Mapped[str | None] = mapped_column(Text)
 
     # Dispatch (Phase 4): nullable until the dispatch engine assigns a rider.
@@ -134,6 +199,26 @@ class Order(Base, TimestampMixin):
     # automatically; payments/service.total_paid() still sums PaymentTransaction
     # rows (the deposit txn included), this column is just a convenience mirror.
     deposit_paid_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
+    # Category 5 billing composition (service / packaging / min-order / till discounts).
+    service_charge_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
+    packaging_charge_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
+    manager_discount_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
+    staff_discount_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
+    min_order_surcharge_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
+    # cod | pay_later | prepaid | room_charge | split (informational)
+    payment_terms: Mapped[str | None] = mapped_column(String(24))
+    room_number: Mapped[str | None] = mapped_column(String(32))
+    pay_later_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Estimated minutes to cook this order (slowest dish gates readiness). With
     # prep_deadline it yields "start cooking by" = prep_deadline − cook_estimate_minutes.
     cook_estimate_minutes: Mapped[int | None] = mapped_column(Integer)
@@ -144,10 +229,17 @@ class Order(Base, TimestampMixin):
     # A URL/path string the rider app uploads to; no blob-storage vendor is wired
     # in yet, so this just stores whatever URL string is handed to us.
     delivery_photo_url: Mapped[str | None] = mapped_column(String(512))
+    # Local filesystem path when photo was uploaded as base64 (proof storage).
+    delivery_photo_path: Mapped[str | None] = mapped_column(String(512))
     # 4-digit code, auto-generated when the order reaches "arriving" (see
-    # app.dispatch.delivery.advance_delivery). Verifying it is informational only.
+    # app.dispatch.delivery.advance_delivery). When restaurant requires OTP
+    # on deliver, verification gates the delivered transition.
     delivery_otp: Mapped[str | None] = mapped_column(String(4))
     delivery_otp_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Snapshotted from restaurant settings at assign/arriving time.
+    otp_required_at_deliver: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     coupon_id: Mapped[int | None] = mapped_column(BigInteger)
     # Coupon discount applied to this order (AED). Persisted so ``recompute_order_total``
@@ -164,6 +256,14 @@ class Order(Base, TimestampMixin):
     # never retroactively alters an already-issued invoice.
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=Decimal("0.0500"))
     vat_amount_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0.00"))
+    # simplified_tax_invoice | tax_invoice — set at confirm from buyer TRN / total.
+    invoice_kind: Mapped[str] = mapped_column(
+        String(32), default="simplified_tax_invoice", server_default="simplified_tax_invoice"
+    )
+    # exclusive | inclusive — snapshotted from restaurant tax settings at confirm.
+    tax_pricing_mode: Mapped[str] = mapped_column(
+        String(16), default="exclusive", server_default="exclusive"
+    )
 
     # Resale fields
     resale_of_order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id"))
@@ -198,6 +298,13 @@ class OrderItem(Base, TimestampMixin):
     variant_name: Mapped[str | None] = mapped_column(String(128))
     price_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2))
     qty: Mapped[int] = mapped_column(Integer, default=1)
+    # Per-line UAE VAT (multi-rate support) — snapshotted at confirm.
+    vat_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), default=Decimal("0.0500"), server_default="0.0500"
+    )
+    vat_amount_aed: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2), default=Decimal("0.00"), server_default="0"
+    )
     notes: Mapped[str | None] = mapped_column(String(512))  # verbatim special request
     # Partial cancellation: a manager can cancel a single line without voiding the
     # whole order. Cancelled items are excluded from order.subtotal/total but kept
@@ -209,13 +316,30 @@ class OrderItem(Base, TimestampMixin):
     # KDS: per-item kitchen ticket status (received|preparing|ready|bumped).
     kitchen_status: Mapped[str] = mapped_column(String(16), default="received")
     bumped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Who bumped the ticket (for avg prep time by staff). Null = anonymous kitchen.
+    bumped_by_staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
+    # When the ticket was first shown to kitchen (ticket creation).
+    kitchen_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Station resolved at ticket-creation time — snapshotted so a later station
     # reassignment doesn't retroactively move an in-flight ticket.
     station_id_snapshot: Mapped[int | None] = mapped_column(ForeignKey("kitchen_stations.id"))
+    # Multi-kitchen snapshot of KitchenStation.kitchen_code at ticket time.
+    kitchen_code_snapshot: Mapped[str | None] = mapped_column(String(32))
+    # Missing-item confirmation at packing (KDS checklist).
+    missing_item_confirmed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    missing_item_note: Mapped[str | None] = mapped_column(String(256))
     # Dine-in seat assignment for split-by-seat billing. Null = unassigned/shared
     # (e.g. a shared appetizer). Only meaningful on orders bound to a table
     # (Order.table_id) but not enforced at the DB level.
     seat_number: Mapped[int | None] = mapped_column(Integer)
+    # Course-wise ordering: 1 = first course (default), 2 = mains, 3 = desserts, …
+    course_number: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # When True the line is held for a later "fire course" — KDS tickets skip it
+    # until fire_course clears this flag and stamps fired_at.
+    course_held: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Allergen tags snapshotted from Dish.allergens at add-item time (same pattern as
     # dish_name/price_aed above) so a later menu edit never retroactively changes an
     # already-placed order's ticket. KDS renders this as a warning badge.

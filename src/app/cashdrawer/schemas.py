@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class OpenSessionIn(BaseModel):
     opening_float_aed: Decimal
+    staff_id: int | None = None  # assign drawer to a cashier
 
 
 class EventIn(BaseModel):
@@ -21,6 +22,7 @@ class SessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     opened_by: str
+    staff_id: int | None = None
     opening_float_aed: Decimal
     closed_by: str | None
     closing_count_aed: Decimal | None

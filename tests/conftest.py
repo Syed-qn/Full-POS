@@ -77,7 +77,14 @@ import app.staff.models  # noqa: F401
 import app.staff.scheduling  # noqa: F401
 import app.organizations.models  # noqa: F401
 import app.payments.models  # noqa: F401
+import app.giftcards.models  # noqa: F401
 import app.loyalty.models  # noqa: F401
+import app.aggregators.models  # noqa: F401
+import app.reports.models  # noqa: F401
+import app.reliability.models  # noqa: F401
+import app.compliance.models  # noqa: F401
+import app.ai.models  # noqa: F401
+# org franchise tables live in app.organizations.models (already imported)
 
 
 @pytest.fixture(autouse=True)

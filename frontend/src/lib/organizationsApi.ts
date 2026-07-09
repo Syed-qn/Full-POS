@@ -151,3 +151,197 @@ export function createStockTransfer(organizationId: number, body: StockTransferI
 export function completeStockTransfer(transferId: number): Promise<StockTransferOut> {
   return request<StockTransferOut>("POST", `/api/v1/stock-transfers/${transferId}/complete`);
 }
+
+export function getOrgMe() {
+  return request<{
+    id: number;
+    name: string;
+    royalty_pct: string;
+    default_currency: string;
+    default_locale: string;
+    settings: Record<string, unknown>;
+  }>("GET", "/api/v1/organizations/me");
+}
+
+export function patchOrgMe(body: {
+  royalty_pct?: string | number;
+  default_currency?: string;
+  default_locale?: string;
+  settings?: Record<string, unknown>;
+}) {
+  return request("PATCH", "/api/v1/organizations/me", body);
+}
+
+export function patchBranch(
+  restaurantId: number,
+  body: {
+    name?: string;
+    region?: string;
+    currency?: string;
+    locale?: string;
+    is_central_kitchen?: boolean;
+  },
+) {
+  return request("PATCH", `/api/v1/organizations/branches/${restaurantId}`, body);
+}
+
+export function createOrgMenuItem(body: {
+  name: string;
+  base_price_aed: string;
+  category?: string;
+  name_ar?: string;
+  dish_number?: number;
+}) {
+  return request<{ id: number; name: string; base_price_aed: string }>(
+    "POST",
+    "/api/v1/organizations/menu-items",
+    body,
+  );
+}
+
+export function listOrgMenuItems() {
+  return request<
+    Array<{
+      id: number;
+      name: string;
+      name_ar?: string | null;
+      category?: string | null;
+      base_price_aed: string;
+      is_active: boolean;
+    }>
+  >("GET", "/api/v1/organizations/menu-items");
+}
+
+export function setBranchPrice(body: {
+  org_menu_item_id: number;
+  restaurant_id: number;
+  price_aed: string;
+}) {
+  return request("POST", "/api/v1/organizations/branch-prices", body);
+}
+
+export function requestMenuPublish(body?: {
+  target_restaurant_ids?: number[];
+  org_menu_item_ids?: number[];
+  notes?: string;
+}) {
+  return request<{ id: number; status: string }>("POST", "/api/v1/organizations/menu-publish", body ?? {});
+}
+
+export function decideMenuPublish(jobId: number, approve: boolean) {
+  return request<{ id: number; status: string; result?: Record<string, unknown> }>(
+    "POST",
+    `/api/v1/organizations/menu-publish/${jobId}/decide`,
+    { approve, approved_by: "hq" },
+  );
+}
+
+export function getRoyaltyReport(startDate: string, endDate: string) {
+  return request<{
+    royalty_pct: number;
+    total_revenue_aed: string;
+    total_royalty_aed: string;
+    branches: Array<{
+      restaurant_name: string;
+      revenue_aed: string;
+      royalty_aed: string;
+    }>;
+  }>("GET", `/api/v1/organizations/royalty${query({ start_date: startDate, end_date: endDate })}`);
+}
+
+export function getRegionReport(startDate: string, endDate: string) {
+  return request<
+    Array<{
+      region: string;
+      branch_count: number;
+      order_count: number;
+      revenue_aed: string;
+    }>
+  >("GET", `/api/v1/organizations/region-report${query({ start_date: startDate, end_date: endDate })}`);
+}
+
+export function createOrgCustomer(body: { phone: string; name?: string; preferred_locale?: string }) {
+  return request("POST", "/api/v1/organizations/customers", body);
+}
+
+export function listOrgCustomers() {
+  return request<
+    Array<{
+      id: number;
+      phone: string;
+      name?: string | null;
+      loyalty_points: number;
+      total_spend_aed: string;
+    }>
+  >("GET", "/api/v1/organizations/customers");
+}
+
+export function creditOrgLoyalty(body: { phone: string; points: number; spend_aed?: string }) {
+  return request("POST", "/api/v1/organizations/loyalty/credit", body);
+}
+
+export function createOrgPromotion(body: {
+  code: string;
+  title: string;
+  discount_aed: string;
+  target_restaurant_ids?: number[];
+}) {
+  return request<{ id: number; code: string }>("POST", "/api/v1/organizations/promotions", body);
+}
+
+export function pushOrgPromotion(promoId: number) {
+  return request("POST", `/api/v1/organizations/promotions/${promoId}/push`);
+}
+
+export function createOrgMember(body: {
+  email: string;
+  name: string;
+  role: string;
+  branch_ids?: number[];
+}) {
+  return request("POST", "/api/v1/organizations/members", body);
+}
+
+export function listOrgMembers() {
+  return request<
+    Array<{ id: number; email: string; name: string; role: string; branch_ids: number[] }>
+  >("GET", "/api/v1/organizations/members");
+}
+
+export function createCentralKitchenRequest(body: {
+  from_restaurant_id: number;
+  items: Array<Record<string, unknown>>;
+  notes?: string;
+}) {
+  return request<{ id: number; status: string }>(
+    "POST",
+    "/api/v1/organizations/central-kitchen/requests",
+    body,
+  );
+}
+
+export function listCentralKitchenRequests() {
+  return request<
+    Array<{
+      id: number;
+      status: string;
+      from_restaurant_id: number;
+      central_kitchen_id: number;
+      items: unknown[];
+    }>
+  >("GET", "/api/v1/organizations/central-kitchen/requests");
+}
+
+export function updateCentralKitchenStatus(requestId: number, status: string) {
+  return request("POST", `/api/v1/organizations/central-kitchen/requests/${requestId}/status`, {
+    status,
+  });
+}
+
+export function bulkUpdateBranches(body: {
+  restaurant_ids: number[];
+  action: string;
+  payload: Record<string, unknown>;
+}) {
+  return request("POST", "/api/v1/organizations/bulk-update", body);
+}

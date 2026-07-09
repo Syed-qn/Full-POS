@@ -119,6 +119,32 @@ async def transition(
     OrderFSM.validate(order.status, new_status)  # raises on illegal
     before = order.status
     order.status = new_status
+
+    # Cat 1 aggregator orders: push status to marketplace (mock or live HTTP).
+    if order.aggregator_source and order.aggregator_order_ref:
+        try:
+            from app.aggregators.live import MARKETPLACE_STATUS_MAP
+            from app.aggregators.factory import get_aggregator_port
+            from app.identity.models import Restaurant
+
+            rest = await session.get(Restaurant, order.restaurant_id)
+            gw = get_aggregator_port(
+                order.aggregator_source,
+                restaurant_settings=rest.settings if rest else None,
+            )
+            mp_status = MARKETPLACE_STATUS_MAP.get(
+                new_status.value if hasattr(new_status, "value") else str(new_status),
+                str(new_status),
+            )
+            push = getattr(gw, "push_order_status", None)
+            if push is not None:
+                await push(
+                    provider_order_ref=order.aggregator_order_ref,
+                    status=mp_status,
+                )
+        except Exception:  # noqa: BLE001 — never block kitchen FSM on partner API
+            pass
+
     await record_audit(
         session,
         actor=actor,

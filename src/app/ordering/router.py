@@ -19,11 +19,17 @@ from app.ordering.schemas import (
     DeliveryFailedIn,
     DeliveryPhotoIn,
     EditOrderItemIn,
+    FireCourseIn,
+    HoldOrderIn,
     ManualOrderIn,
     MergeOrdersIn,
     OrderItemOut,
     OrderOut,
+    PosOrderIn,
+    PriorityIn,
     ReassignOrderIn,
+    RefundOrderIn,
+    RepeatLastOrderIn,
     SplitOrderByItemsIn,
     SplitOrderBySeatIn,
     TransferOrderStaffIn,
@@ -65,6 +71,9 @@ def _order_item_out(i: OrderItem) -> OrderItemOut:
         notes=i.notes,
         cancelled=i.cancelled,
         cancelled_reason=i.cancelled_reason,
+        course_number=getattr(i, "course_number", 1) or 1,
+        course_held=bool(getattr(i, "course_held", False)),
+        seat_number=getattr(i, "seat_number", None),
     )
 
 
@@ -219,6 +228,25 @@ async def _enrich_orders_bulk(
                 batch_size=(len(batch_order_numbers) or None),
                 batch_order_numbers=batch_order_numbers,
                 batch_preview=preview.get(order.id),
+                order_type=getattr(order, "order_type", None) or "delivery",
+                priority=getattr(order, "priority", None) or "normal",
+                held_at=order.held_at.isoformat() if getattr(order, "held_at", None) else None,
+                held_reason=getattr(order, "held_reason", None),
+                table_id=getattr(order, "table_id", None),
+                staff_id=getattr(order, "staff_id", None),
+                scheduled_for=(
+                    order.scheduled_for.isoformat()
+                    if getattr(order, "scheduled_for", None)
+                    else None
+                ),
+                is_preorder=bool(getattr(order, "is_preorder", False)),
+                customer_allergy_notes=getattr(order, "customer_allergy_notes", None),
+                aggregator_source=getattr(order, "aggregator_source", None),
+                aggregator_order_ref=getattr(order, "aggregator_order_ref", None),
+                source_channel=(
+                    getattr(order, "source_channel", None)
+                    or getattr(order, "aggregator_source", None)
+                ),
             )
         )
     return out
@@ -264,22 +292,54 @@ async def create_manual_order_endpoint(
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
+    # Prefer unified POS create when order_type is non-delivery or table-bound;
+    # keep legacy create_manual_order path for pure delivery (back-compat).
+    from app.ordering.order_types import ORDER_TYPE_DELIVERY
+    from app.ordering.pos_orders import create_pos_order
+
     try:
-        order = await create_manual_order(
-            session,
-            restaurant_id=restaurant.id,
-            customer_phone=body.customer_phone,
-            customer_name=body.customer_name,
-            items=[i.model_dump() for i in body.items],
-            apt_room=body.address.apt_room,
-            building=body.address.building,
-            receiver_name=body.address.receiver_name,
-            address_notes=body.address.notes,
-            delivery_fee_aed=body.delivery_fee_aed,
-            latitude=body.address.latitude,
-            longitude=body.address.longitude,
-            scheduled_for=body.scheduled_for,
-        )
+        if body.order_type != ORDER_TYPE_DELIVERY or body.table_id is not None:
+            order = await create_pos_order(
+                session,
+                restaurant_id=restaurant.id,
+                order_type=body.order_type,
+                customer_phone=body.customer_phone,
+                customer_name=body.customer_name,
+                items=[i.model_dump() for i in body.items],
+                table_id=body.table_id,
+                staff_id=body.staff_id,
+                apt_room=body.address.apt_room,
+                building=body.address.building,
+                receiver_name=body.address.receiver_name,
+                address_notes=body.address.notes,
+                delivery_fee_aed=body.delivery_fee_aed,
+                latitude=body.address.latitude,
+                longitude=body.address.longitude,
+                scheduled_for=body.scheduled_for,
+                is_preorder=body.is_preorder,
+                priority=body.priority,
+                customer_allergy_notes=body.customer_allergy_notes,
+            )
+        else:
+            order = await create_manual_order(
+                session,
+                restaurant_id=restaurant.id,
+                customer_phone=body.customer_phone,
+                customer_name=body.customer_name,
+                items=[i.model_dump() for i in body.items],
+                apt_room=body.address.apt_room,
+                building=body.address.building,
+                receiver_name=body.address.receiver_name,
+                address_notes=body.address.notes,
+                delivery_fee_aed=body.delivery_fee_aed,
+                latitude=body.address.latitude,
+                longitude=body.address.longitude,
+                scheduled_for=body.scheduled_for,
+            )
+            order.priority = body.priority
+            order.is_preorder = body.is_preorder or body.scheduled_for is not None
+            if body.customer_allergy_notes:
+                order.customer_allergy_notes = body.customer_allergy_notes
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await session.commit()
@@ -287,6 +347,216 @@ async def create_manual_order_endpoint(
 
     await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)
     return await _enrich(session, order)
+
+
+@router.post("/pos", response_model=OrderOut)
+async def create_pos_order_endpoint(
+    body: PosOrderIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Unified create for dine-in / takeaway / drive-thru / delivery / online / tableside."""
+    from app.ordering.pos_orders import create_pos_order
+
+    addr = body.address
+    try:
+        order = await create_pos_order(
+            session,
+            restaurant_id=restaurant.id,
+            order_type=body.order_type,
+            customer_phone=body.customer_phone,
+            customer_name=body.customer_name,
+            items=[i.model_dump() for i in body.items],
+            table_id=body.table_id,
+            staff_id=body.staff_id,
+            apt_room=addr.apt_room if addr else None,
+            building=addr.building if addr else None,
+            receiver_name=addr.receiver_name if addr else None,
+            address_notes=addr.notes if addr else None,
+            latitude=addr.latitude if addr else None,
+            longitude=addr.longitude if addr else None,
+            delivery_fee_aed=body.delivery_fee_aed,
+            scheduled_for=body.scheduled_for,
+            is_preorder=body.is_preorder,
+            priority=body.priority,
+            customer_allergy_notes=body.customer_allergy_notes,
+            auto_confirm=body.auto_confirm,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/repeat-last", response_model=OrderOut)
+async def repeat_last_order_endpoint(
+    body: RepeatLastOrderIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    from app.ordering.pos_orders import repeat_last_order
+
+    try:
+        order = await repeat_last_order(
+            session,
+            restaurant_id=restaurant.id,
+            customer_phone=body.customer_phone,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/release-scheduled")
+async def release_scheduled_endpoint(
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Release due scheduled/pre-orders to kitchen for this restaurant."""
+    from app.ordering.scheduled import release_due_scheduled_orders
+
+    released = await release_due_scheduled_orders(session, restaurant_id=restaurant.id)
+    await session.commit()
+    return {
+        "released_count": len(released),
+        "order_ids": [o.id for o in released],
+        "order_numbers": [o.order_number for o in released],
+    }
+
+
+@router.post("/{order_id}/hold", response_model=OrderOut)
+async def hold_order_endpoint(
+    order_id: int,
+    body: HoldOrderIn | None = None,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    from app.ordering.pos_orders import hold_order
+
+    try:
+        order = await hold_order(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            reason=body.reason if body else None,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        raise HTTPException(status_code=404 if msg == "Order not found" else 422, detail=msg)
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/unhold", response_model=OrderOut)
+async def unhold_order_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    from app.ordering.pos_orders import unhold_order
+
+    try:
+        order = await unhold_order(
+            session, restaurant_id=restaurant.id, order_id=order_id
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        raise HTTPException(status_code=404 if msg == "Order not found" else 422, detail=msg)
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.patch("/{order_id}/priority", response_model=OrderOut)
+async def set_priority_endpoint(
+    order_id: int,
+    body: PriorityIn,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    from app.ordering.pos_orders import set_order_priority
+
+    try:
+        order = await set_order_priority(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            priority=body.priority,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        raise HTTPException(status_code=404 if msg == "Order not found" else 422, detail=msg)
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/rush", response_model=OrderOut)
+async def rush_order_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    from app.ordering.pos_orders import mark_rush
+
+    try:
+        order = await mark_rush(
+            session, restaurant_id=restaurant.id, order_id=order_id
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        raise HTTPException(status_code=404 if msg == "Order not found" else 422, detail=msg)
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/fire-course", response_model=OrderOut)
+async def fire_course_endpoint(
+    order_id: int,
+    body: FireCourseIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    from app.ordering.pos_orders import fire_course
+
+    try:
+        await fire_course(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            course_number=body.course_number,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        raise HTTPException(status_code=404 if msg == "Order not found" else 422, detail=msg)
+    await session.commit()
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/refund-order")
+async def refund_order_endpoint(
+    order_id: int,
+    body: RefundOrderIn | None = None,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Full remaining refund across all succeeded payments on the order."""
+    from app.ordering.pos_orders import refund_order
+
+    try:
+        result = await refund_order(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            reason=body.reason if body else None,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        raise HTTPException(status_code=404 if msg == "Order not found" else 422, detail=msg)
+    await session.commit()
+    return result
 
 
 @router.post("/merge", response_model=OrderOut)
@@ -372,6 +642,9 @@ async def cancel_order_endpoint(
     ``arriving`` — any active pre-delivery status. Restaurant cancellation never
     resells the food (assumed unavailable/unfit) — resale only happens on a
     CUSTOMER cancel of a cooking order. ``delivered`` and terminal states return 422."""
+    from app.staff.approvals import create_approval_request, raise_suspicious
+    from app.staff.mistakes import record_mistake
+
     order = await get_order_for_tenant(
         session, restaurant_id=restaurant.id, order_id=order_id
     )
@@ -388,6 +661,35 @@ async def cancel_order_endpoint(
         raise HTTPException(
             status_code=422,
             detail=f"Order in status '{order.status}' can no longer be cancelled.",
+        )
+    # Category 9 — void approval trail + optional mistake attribution
+    await create_approval_request(
+        session,
+        restaurant_id=restaurant.id,
+        action_type="void",
+        order_id=order_id,
+        amount_aed=order.total,
+        reason=(body.reason if body else None),
+        status="approved",
+        payload={"order_number": order.order_number, "status_before_cancel": "voided"},
+    )
+    if order.staff_id is not None:
+        await record_mistake(
+            session,
+            restaurant_id=restaurant.id,
+            staff_id=order.staff_id,
+            mistake_type="void",
+            order_id=order_id,
+            amount_aed=order.total,
+            notes=(body.reason if body else None),
+        )
+        await raise_suspicious(
+            session,
+            restaurant_id=restaurant.id,
+            alert_type="order_voided",
+            severity="medium",
+            staff_id=order.staff_id,
+            detail={"order_id": order_id, "total": str(order.total)},
         )
     await session.commit()
     # Flush cancellation customer ping + partner webhook now, not on background poll.
@@ -571,6 +873,35 @@ async def reassign_order_endpoint(
     return await _enrich(session, order)
 
 
+@router.post("/{order_id}/assign", response_model=OrderOut)
+async def assign_order_endpoint(
+    order_id: int,
+    body: ReassignOrderIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Manually assign an unassigned ready/preparing order to a chosen rider."""
+    from app.dispatch.service import assign_order
+
+    try:
+        order = await assign_order(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            rider_id=body.rider_id,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if msg in ("Order not found", "Rider not found") else 422
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    from app.outbox.service import deliver_pending
+
+    await deliver_pending(session, restaurant.id)
+    await session.refresh(order)
+    return await _enrich(session, order)
+
+
 @router.post("/{order_id}/delivery-photo", response_model=OrderOut)
 async def set_delivery_photo_endpoint(
     order_id: int,
@@ -591,6 +922,7 @@ async def set_delivery_photo_endpoint(
             restaurant_id=restaurant.id,
             order_id=order_id,
             photo_url=body.photo_url,
+            photo_base64=body.photo_base64,
         )
     except DeliveryPhotoError as exc:
         msg = str(exc)
@@ -686,13 +1018,23 @@ async def get_order_detail_endpoint(
 @router.get("/{order_id}/tax-invoice")
 async def get_tax_invoice(
     order_id: int,
+    document_type: str | None = None,
+    buyer_trn: str | None = None,
+    buyer_name: str | None = None,
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
     from app.ordering.tax import build_tax_invoice
 
     try:
-        return await build_tax_invoice(session, order_id=order_id, restaurant_id=restaurant.id)
+        return await build_tax_invoice(
+            session,
+            order_id=order_id,
+            restaurant_id=restaurant.id,
+            document_type=document_type,
+            buyer_trn=buyer_trn,
+            buyer_name=buyer_name,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -722,6 +1064,10 @@ async def list_orders(
     updated_since: datetime | None = Query(default=None),
     preview_batch: bool = Query(default=True),
     scheduled_only: bool = Query(default=False),
+    open_only: bool = Query(default=False),
+    held_only: bool = Query(default=False),
+    order_type: str | None = Query(default=None),
+    channel: str | None = Query(default=None, description="source_channel / aggregator filter"),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
@@ -736,6 +1082,10 @@ async def list_orders(
         q=q,
         updated_since=updated_since,
         scheduled_only=scheduled_only,
+        open_only=open_only,
+        held_only=held_only,
+        order_type=order_type,
+        channel=channel,
     )
     preview: dict[int, str] = {}
     if preview_batch:

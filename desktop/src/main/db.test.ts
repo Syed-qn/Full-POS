@@ -24,8 +24,11 @@ describe("initSchema", () => {
       expect.arrayContaining([
         "local_menu",
         "local_orders",
+        "local_payments",
+        "local_print_jobs",
         "pending_ops",
         "sync_state",
+        "network_state",
       ]),
     );
     db.close();

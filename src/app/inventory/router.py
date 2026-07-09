@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
-from app.inventory.models import DishIngredient, Ingredient
+from app.inventory.models import DishIngredient, Ingredient, StockLocation
 from app.inventory.schemas import (
     AnomalyCheckIn,
     AnomalyCheckOut,
@@ -22,6 +24,8 @@ from app.inventory.schemas import (
     StockAdjustmentOut,
     StockCountIn,
     StockCountOut,
+    StockLocationIn,
+    StockLocationOut,
     SubstituteIn,
     SubstituteOut,
     WasteIn,
@@ -31,7 +35,9 @@ from app.inventory.service import (
     add_batch,
     add_substitute,
     approve_stock_adjustment,
+    ensure_default_location,
     flag_stock_anomaly,
+    list_anomaly_alerts,
     list_stock_adjustments,
     list_expiring_soon,
     list_low_stock,
@@ -41,7 +47,10 @@ from app.inventory.service import (
     record_waste,
     reject_stock_adjustment,
     request_stock_adjustment,
+    spoilage_report,
+    stock_variance_report,
     suggest_reorder_quantities,
+    take_stock_closing_snapshot,
     vendor_price_comparison,
 )
 
@@ -102,6 +111,106 @@ async def reorder_suggestions(
     session: AsyncSession = Depends(get_session),
 ):
     return await suggest_reorder_quantities(session, restaurant_id=restaurant.id)
+
+
+@router.get("/reports/variance")
+async def variance_report_endpoint(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await stock_variance_report(
+        session,
+        restaurant_id=restaurant.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/reports/spoilage")
+async def spoilage_report_endpoint(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    return await spoilage_report(
+        session,
+        restaurant_id=restaurant.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@router.get("/reports/anomaly-alerts")
+async def anomaly_alerts_endpoint(
+    status_filter: str | None = Query(default="open", alias="status"),
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await list_anomaly_alerts(
+        session, restaurant_id=restaurant.id, status=status_filter
+    )
+    return [
+        {
+            "id": r.id,
+            "ingredient_id": r.ingredient_id,
+            "alert_type": r.alert_type,
+            "expected_qty": str(r.expected_qty),
+            "actual_qty": str(r.actual_qty),
+            "variance_pct": str(r.variance_pct),
+            "status": r.status,
+            "message": r.message,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/reports/closing-snapshot")
+async def closing_snapshot_endpoint(
+    target_date: date | None = Query(default=None),
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await take_stock_closing_snapshot(
+        session, restaurant_id=restaurant.id, target_date=target_date
+    )
+    await session.commit()
+    return rows
+
+
+@router.post("/locations", response_model=StockLocationOut, status_code=201)
+async def create_location(
+    body: StockLocationIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    loc = StockLocation(
+        restaurant_id=restaurant.id,
+        name=body.name,
+        code=body.code,
+        kitchen_role=body.kitchen_role,
+    )
+    session.add(loc)
+    await session.commit()
+    await session.refresh(loc)
+    return loc
+
+
+@router.get("/locations", response_model=list[StockLocationOut])
+async def list_locations(
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    await ensure_default_location(session, restaurant_id=restaurant.id, kitchen_role="branch")
+    await ensure_default_location(session, restaurant_id=restaurant.id, kitchen_role="central")
+    await ensure_default_location(session, restaurant_id=restaurant.id, kitchen_role="commissary")
+    await session.commit()
+    rows = await session.scalars(
+        select(StockLocation).where(StockLocation.restaurant_id == restaurant.id)
+    )
+    return list(rows)
 
 
 @router.get("/stock-adjustments", response_model=list[StockAdjustmentOut])
@@ -173,11 +282,19 @@ async def link_recipe(
 ):
     await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
     link = DishIngredient(
-        dish_id=body.dish_id, ingredient_id=ingredient_id, quantity_per_dish=body.quantity_per_dish,
+        dish_id=body.dish_id,
+        ingredient_id=ingredient_id,
+        quantity_per_dish=body.quantity_per_dish,
+        yield_pct=body.yield_pct,
     )
     session.add(link)
     await session.commit()
-    return {"id": link.id, "dish_id": link.dish_id, "ingredient_id": link.ingredient_id}
+    return {
+        "id": link.id,
+        "dish_id": link.dish_id,
+        "ingredient_id": link.ingredient_id,
+        "yield_pct": str(link.yield_pct),
+    }
 
 
 @router.get("/{ingredient_id}/vendor-price-comparison", response_model=list[VendorPriceComparisonOut])
@@ -227,13 +344,23 @@ async def log_waste(
 ):
     await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
     await record_waste(
-        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
-        quantity=body.quantity, reason=body.reason, recorded_by="manager",
+        session,
+        restaurant_id=restaurant.id,
+        ingredient_id=ingredient_id,
+        quantity=body.quantity,
+        reason=body.reason,
+        recorded_by="manager",
+        reason_type=body.reason_type,
+        batch_id=body.batch_id,
     )
     await record_audit(
         session, actor="manager", entity="ingredient", entity_id=str(ingredient_id),
         action="waste", restaurant_id=restaurant.id, before=None,
-        after={"quantity": str(body.quantity), "reason": body.reason},
+        after={
+            "quantity": str(body.quantity),
+            "reason": body.reason,
+            "reason_type": body.reason_type,
+        },
     )
     await session.commit()
     ingredient = await session.get(Ingredient, ingredient_id)
@@ -303,8 +430,13 @@ async def create_batch(
 ):
     await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
     batch = await add_batch(
-        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
-        qty=body.qty, expiry_date=body.expiry_date,
+        session,
+        restaurant_id=restaurant.id,
+        ingredient_id=ingredient_id,
+        qty=body.qty,
+        expiry_date=body.expiry_date,
+        location_id=body.location_id,
+        update_stock=True,
     )
     await session.commit()
     await session.refresh(batch)
@@ -337,8 +469,13 @@ async def create_substitute(
 ):
     await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
     substitute = await add_substitute(
-        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
-        substitute_ingredient_id=body.substitute_ingredient_id, notes=body.notes,
+        session,
+        restaurant_id=restaurant.id,
+        ingredient_id=ingredient_id,
+        substitute_ingredient_id=body.substitute_ingredient_id,
+        notes=body.notes,
+        conversion_factor=body.conversion_factor,
+        priority=body.priority,
     )
     await session.commit()
     await session.refresh(substitute)

@@ -23,10 +23,21 @@ async def open_drawer_session(
     restaurant=Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
+    opened_by = "manager"
+    if body.staff_id is not None:
+        from app.staff.models import StaffMember
+
+        staff = await session.get(StaffMember, body.staff_id)
+        if staff is None or staff.restaurant_id != restaurant.id:
+            raise HTTPException(status_code=404, detail="staff member not found")
+        opened_by = f"staff:{staff.id}:{staff.name}"
     try:
         drawer = await open_session(
-            session, restaurant_id=restaurant.id, opened_by="manager",
+            session,
+            restaurant_id=restaurant.id,
+            opened_by=opened_by,
             opening_float_aed=body.opening_float_aed,
+            staff_id=body.staff_id,
         )
     except DrawerAlreadyOpenError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -1,20 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   approveStockAdjustment,
+  createGrn,
   createIngredient,
   createPurchaseOrder,
   createStockAdjustment,
   createVendor,
+  getAnomalyAlerts,
   getDailyStockClosing,
   getInventoryValuation,
   getReorderSuggestions,
+  getSpoilageReport,
+  getStockVarianceReport,
   getVendorPriceComparison,
+  listExpiringSoon,
+  listGrns,
   listIngredients,
   listLowStock,
   listStockAdjustments,
+  listStockLocations,
+  listVendors,
   receivePurchaseOrder,
   restockIngredient,
   sendLowStockAlert,
+  takeClosingSnapshot,
   wasteIngredient,
 } from "./inventoryApi";
 
@@ -124,5 +133,39 @@ describe("inventoryApi", () => {
     expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/purchase-orders");
     expect(bodyOf(fetchMock.mock.calls[1][1])).toMatchObject({ vendor_id: 11 });
     expect(fetchMock.mock.calls[2][0]).toBe("/api/v1/purchase-orders/33/receive");
+  });
+
+  it("wires category-4 inventory endpoints (GRN, variance, spoilage, locations, FEFO)", async () => {
+    await listVendors(false);
+    await listStockLocations();
+    await getStockVarianceReport("2026-07-01", "2026-07-09");
+    await getSpoilageReport("2026-07-01", "2026-07-09");
+    await getAnomalyAlerts("open");
+    await takeClosingSnapshot("2026-07-09");
+    await listExpiringSoon(5);
+    await createGrn({
+      po_id: 9,
+      lines: [{ po_line_id: 1, qty_received: "2.000", unit_cost_aed: "1.5", expiry_date: "2026-08-01" }],
+    });
+    await listGrns(9);
+    await wasteIngredient(7, { quantity: "0.5", reason: "rot", reason_type: "spoilage" });
+
+    const urls = fetchMock.mock.calls.map((call) => call[0]);
+    expect(urls).toEqual([
+      "/api/v1/vendors?active_only=false",
+      "/api/v1/ingredients/locations",
+      "/api/v1/ingredients/reports/variance?start_date=2026-07-01&end_date=2026-07-09",
+      "/api/v1/ingredients/reports/spoilage?start_date=2026-07-01&end_date=2026-07-09",
+      "/api/v1/ingredients/reports/anomaly-alerts?status=open",
+      "/api/v1/ingredients/reports/closing-snapshot?target_date=2026-07-09",
+      "/api/v1/ingredients/expiring-soon?within_days=5",
+      "/api/v1/grn",
+      "/api/v1/grn?po_id=9",
+      "/api/v1/ingredients/7/waste",
+    ]);
+    expect(bodyOf(fetchMock.mock.calls[9][1])).toMatchObject({
+      quantity: "0.5",
+      reason_type: "spoilage",
+    });
   });
 });

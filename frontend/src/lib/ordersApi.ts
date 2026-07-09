@@ -50,6 +50,8 @@ export type FetchOrdersOpts = {
   fromDate?: string;
   toDate?: string;
   q?: string;
+  /** Category 8 — filter by source_channel / aggregator_source */
+  channel?: string;
 };
 
 export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
@@ -60,6 +62,7 @@ export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
   if (opts?.fromDate) params.set("from_date", opts.fromDate);
   if (opts?.toDate) params.set("to_date", opts.toDate);
   if (opts?.q) params.set("q", opts.q);
+  if (opts?.channel) params.set("channel", opts.channel);
   if (opts?.previewBatch === false) params.set("preview_batch", "false");
   const qs = params.toString();
   const path = qs ? `/api/v1/orders?${qs}` : "/api/v1/orders";
@@ -79,6 +82,18 @@ export async function cancelOrder(id: number, reason?: string): Promise<OrderOut
 
 export async function reassignOrder(id: number, riderId: number): Promise<OrderOut> {
   return apiClient.post<OrderOut>(`/api/v1/orders/${id}/reassign`, { rider_id: riderId });
+}
+
+export async function assignOrder(id: number, riderId: number): Promise<OrderOut> {
+  return apiClient.post<OrderOut>(`/api/v1/orders/${id}/assign`, { rider_id: riderId });
+}
+
+export async function setOrderPriority(id: number, priority: string): Promise<OrderOut> {
+  return apiClient.patch<OrderOut>(`/api/v1/orders/${id}/priority`, { priority });
+}
+
+export async function markDeliveryFailed(id: number, reason: string): Promise<OrderOut> {
+  return apiClient.post<OrderOut>(`/api/v1/orders/${id}/delivery-failed`, { reason });
 }
 
 export async function fetchOrder(id: number): Promise<OrderOut> {

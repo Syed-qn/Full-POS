@@ -17,15 +17,18 @@ describe("InventoryScreen", () => {
         const path = String(url);
         if (path.endsWith("/api/v1/ingredients") && init?.method === "POST") {
           return Promise.resolve(
-            json({
-              id: 3,
-              name: "Mint",
-              unit: "bunch",
-              current_stock: "2.000",
-              low_stock_threshold: "1.000",
-              par_level: "8.000",
-              cost_per_unit_aed: "0.5000",
-            }, 201),
+            json(
+              {
+                id: 3,
+                name: "Mint",
+                unit: "bunch",
+                current_stock: "2.000",
+                low_stock_threshold: "1.000",
+                par_level: "8.000",
+                cost_per_unit_aed: "0.5000",
+              },
+              201,
+            ),
           );
         }
         if (path.endsWith("/api/v1/ingredients")) {
@@ -124,14 +127,111 @@ describe("InventoryScreen", () => {
             ]),
           );
         }
-        return Promise.resolve(json({}));
+        if (path.includes("/reports/variance")) return Promise.resolve(json([]));
+        if (path.includes("/reports/anomaly-alerts")) return Promise.resolve(json([]));
+        if (path.includes("/reports/spoilage")) return Promise.resolve(json([]));
+        if (path.includes("/reports/closing-snapshot")) return Promise.resolve(json([]));
+        if (path.includes("/locations")) {
+          return Promise.resolve(
+            json([
+              { id: 1, name: "Main branch", code: "branch", kitchen_role: "branch", is_active: true },
+              { id: 2, name: "Central kitchen", code: "central", kitchen_role: "central", is_active: true },
+              { id: 3, name: "Commissary", code: "commissary", kitchen_role: "commissary", is_active: true },
+            ]),
+          );
+        }
+        if (path.includes("/expiring-soon")) return Promise.resolve(json([]));
+        if (path.endsWith("/api/v1/vendors") && init?.method === "POST") {
+          return Promise.resolve(json({ id: 9, name: "Fresh Co", phone: "+9715000999" }, 201));
+        }
+        if (path.includes("/api/v1/vendors")) {
+          return Promise.resolve(json([{ id: 5, name: "Spice Co", phone: "+9715000001" }]));
+        }
+        if (path.includes("/purchase-orders") && init?.method === "POST") {
+          return Promise.resolve(
+            json(
+              {
+                id: 40,
+                vendor_id: 5,
+                status: "draft",
+                lines: [{ id: 1, ingredient_id: 1, qty_ordered: "5.000", unit_cost_aed: "1.0000" }],
+              },
+              201,
+            ),
+          );
+        }
+        if (path.includes("/purchase-orders") && path.includes("/receive")) {
+          return Promise.resolve(json({ id: 40, vendor_id: 5, status: "received", lines: [] }));
+        }
+        if (path.includes("/purchase-orders")) {
+          return Promise.resolve(
+            json([
+              {
+                id: 40,
+                vendor_id: 5,
+                status: "draft",
+                lines: [{ id: 1, ingredient_id: 1, qty_ordered: "5.000", unit_cost_aed: "1.0000" }],
+              },
+            ]),
+          );
+        }
+        if (path.includes("/api/v1/grn")) return Promise.resolve(json([]));
+        if (path.includes("/waste")) {
+          return Promise.resolve(
+            json({
+              id: 1,
+              name: "Tomato",
+              unit: "kg",
+              current_stock: "4.000",
+              low_stock_threshold: "2.000",
+              par_level: "10.000",
+              cost_per_unit_aed: "3.0000",
+            }),
+          );
+        }
+        if (path.includes("/restock")) {
+          return Promise.resolve(
+            json({
+              id: 1,
+              name: "Tomato",
+              unit: "kg",
+              current_stock: "6.000",
+              low_stock_threshold: "2.000",
+              par_level: "10.000",
+              cost_per_unit_aed: "3.0000",
+            }),
+          );
+        }
+        if (path.includes("/stock-count")) {
+          return Promise.resolve(
+            json({
+              variance: "-1.000",
+              previous_stock: "5.000",
+              counted_stock: "4.000",
+              variance_pct: 20,
+            }),
+          );
+        }
+        if (path.includes("/batches")) {
+          return Promise.resolve(
+            json({
+              id: 99,
+              ingredient_id: 1,
+              qty: "2.000",
+              qty_remaining: "2.000",
+              expiry_date: "2026-08-01",
+              received_at: "2026-07-09T00:00:00Z",
+            }, 201),
+          );
+        }
+        return Promise.resolve(json([]));
       }),
     );
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("shows valuation, low stock, and pending adjustment approvals", async () => {
+  it("shows valuation, low stock, locations, and pending adjustment approvals", async () => {
     renderWithProviders(<InventoryScreen />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Inventory" })).toBeInTheDocument());
@@ -139,6 +239,8 @@ describe("InventoryScreen", () => {
     expect(screen.getByRole("cell", { name: "Tomato" })).toBeInTheDocument();
     expect(screen.getByText(/Cheese needs 5.000 kg/i)).toBeInTheDocument();
     expect(screen.getByText(/closing count/i)).toBeInTheDocument();
+    expect(screen.getByText(/Central kitchen/i)).toBeInTheDocument();
+    expect(screen.getByText(/Vendor: Spice Co/i)).toBeInTheDocument();
   });
 
   it("creates ingredients, approves adjustments, and sends low-stock alerts", async () => {
@@ -162,6 +264,30 @@ describe("InventoryScreen", () => {
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/ingredients/low-stock-alert"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("logs spoilage and creates a vendor/PO from the inventory screen", async () => {
+    renderWithProviders(<InventoryScreen />);
+    await screen.findByRole("cell", { name: "Tomato" });
+
+    fireEvent.change(screen.getByLabelText("Ops quantity"), { target: { value: "1.000" } });
+    fireEvent.change(screen.getByLabelText("Waste reason type"), { target: { value: "spoilage" } });
+    fireEvent.click(screen.getByRole("button", { name: /log waste\/spoilage/i }));
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/ingredients/1/waste"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Vendor name"), { target: { value: "Fresh Co" } });
+    fireEvent.click(screen.getByRole("button", { name: /add vendor/i }));
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/vendors"),
         expect.objectContaining({ method: "POST" }),
       ),
     );

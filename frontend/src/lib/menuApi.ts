@@ -54,6 +54,16 @@ export interface DishInput {
   brand?: string | null;
   catalog_retailer_id?: string | null;
   variants?: VariantInput[];
+  allergens?: string[];
+  name_ar?: string | null;
+  description_ar?: string | null;
+  nutrition?: Record<string, number | string>;
+  channels_allowed?: string[];
+  brand_menu_code?: string | null;
+  stock_remaining?: number | null;
+  auto_hide_when_oos?: boolean;
+  available_from?: string | null;
+  available_until?: string | null;
 }
 
 export type DishPatchInput = Partial<DishInput>;
@@ -78,6 +88,54 @@ export async function patchDish(
   return apiClient.patch<DishOut>(`/api/v1/menus/${menuId}/dishes/${dishId}`, body);
 }
 
+export async function submitMenuForApproval(menuId: number): Promise<MenuOut> {
+  return apiClient.post<MenuOut>(`/api/v1/menus/${menuId}/submit-for-approval`);
+}
+
+export async function approveMenu(menuId: number): Promise<MenuOut> {
+  return apiClient.post<MenuOut>(`/api/v1/menus/${menuId}/approve`);
+}
+
+export async function bulkPriceUpdate(
+  menuId: number,
+  body: { dish_ids: number[]; price_aed?: string; percent_delta?: string },
+): Promise<{ updated: number; dish_ids: number[] }> {
+  return apiClient.post(`/api/v1/menus/${menuId}/bulk-price-update`, body);
+}
+
+export async function bulkCsvImport(
+  menuId: number,
+  file: File,
+): Promise<{ created: number; updated: number; errors: string[] }> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiClient.postForm(`/api/v1/menus/${menuId}/bulk-csv-import`, form);
+}
+
+export async function createCategory(body: {
+  name: string;
+  sort_order?: number;
+  parent_id?: number | null;
+}): Promise<{ id: number; name: string; sort_order: number; parent_id: number | null }> {
+  return apiClient.post("/api/v1/categories", body);
+}
+
+export async function listCategories(): Promise<
+  Array<{ id: number; name: string; sort_order: number; parent_id: number | null }>
+> {
+  return apiClient.get("/api/v1/categories");
+}
+
+export async function createSellRule(body: {
+  rule_kind: "upsell" | "cross_sell";
+  suggest_dish_id: number;
+  trigger_dish_id?: number | null;
+  trigger_category?: string | null;
+  message?: string | null;
+}): Promise<unknown> {
+  return apiClient.post("/api/v1/menus/sell-rules", body);
+}
+
 export async function deleteDish(menuId: number, dishId: number): Promise<void> {
   await apiClient.delete<void>(`/api/v1/menus/${menuId}/dishes/${dishId}`);
 }
@@ -89,17 +147,6 @@ export async function fetchActiveMenu(): Promise<MenuOut | null> {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
-}
-
-/** Move a draft (``pending_confirmation``) menu into ``pending_approval`` so a
- *  manager-role approver can sign off before it goes live. */
-export async function submitMenuForApproval(menuId: number): Promise<MenuOut> {
-  return apiClient.post<MenuOut>(`/api/v1/menus/${menuId}/submit-for-approval`);
-}
-
-/** Approve a ``pending_approval`` menu, activating it in the same call. */
-export async function approveMenu(menuId: number): Promise<MenuOut> {
-  return apiClient.post<MenuOut>(`/api/v1/menus/${menuId}/approve`);
 }
 
 // ── Dish price rules (time/channel/branch overrides) ─────────────────────────

@@ -16,6 +16,7 @@ class TableOut(BaseModel):
     pos_x: float
     pos_y: float
     status: str
+    qr_token: str | None = None
 
 
 class TablePositionIn(BaseModel):

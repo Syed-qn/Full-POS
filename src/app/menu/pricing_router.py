@@ -42,6 +42,7 @@ async def create_price_rule_endpoint(
         end_time=body.end_time,
         days_of_week=body.days_of_week,
         channel=body.channel,
+        branch_id=body.branch_id,
     )
     await session.commit()
     return rule
@@ -77,11 +78,18 @@ async def delete_price_rule_endpoint(
 async def get_effective_price_endpoint(
     dish_id: int,
     channel: str | None = Query(default=None),
+    branch_id: int | None = Query(default=None),
     restaurant: Restaurant = Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
     await _load_dish(dish_id, restaurant, session)
     price = await resolve_dish_price(
-        session, dish_id=dish_id, at=datetime.now(timezone.utc), channel=channel
+        session,
+        dish_id=dish_id,
+        at=datetime.now(timezone.utc),
+        channel=channel,
+        branch_id=branch_id or restaurant.id,
     )
-    return EffectivePriceOut(dish_id=dish_id, price_aed=price, channel=channel)
+    return EffectivePriceOut(
+        dish_id=dish_id, price_aed=price, channel=channel, branch_id=branch_id
+    )

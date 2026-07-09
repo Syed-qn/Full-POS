@@ -9,6 +9,8 @@ class DispatchKpisOut(BaseModel):
     batch_rate_pct: float
     avg_stops: float
     engine_fallback_pct: float
+    avg_delivery_minutes: float | None = None
+    delivered_count: int = 0
     window: str = "today"
 
 

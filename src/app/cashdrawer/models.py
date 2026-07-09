@@ -13,6 +13,8 @@ class CashDrawerSession(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     opened_by: Mapped[str] = mapped_column(String(64))
+    # Category 9 — assigned cashier staff member (nullable for legacy sessions).
+    staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"), index=True)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     opening_float_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2))
     closed_by: Mapped[str | None] = mapped_column(String(64))

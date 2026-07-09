@@ -266,19 +266,29 @@ async def rider_app_delivered(
     )
 
 
+class NotDeliveredIn(BaseModel):
+    reason: str = "customer_unreachable"
+
+
 @router.post(
     "/api/v1/rider-app/orders/{order_id}/not-delivered", response_model=DeliveredOut
 )
 async def rider_app_not_delivered(
     order_id: int,
+    body: NotDeliveredIn | None = None,
     rider: Rider = Depends(_current_rider),
     session: AsyncSession = Depends(get_session),
 ):
-    """Customer unreachable: mark undeliverable, no COD, close the stop, advance run."""
+    """Mark undeliverable with required reason code, no COD, close the stop, advance run."""
     from app.dispatch.rider_actions import NotDeliveredOutcome, mark_order_not_delivered
 
+    reason = (body.reason if body else None) or "customer_unreachable"
     result = await mark_order_not_delivered(
-        session, restaurant_id=rider.restaurant_id, rider=rider, order_id=order_id
+        session,
+        restaurant_id=rider.restaurant_id,
+        rider=rider,
+        order_id=order_id,
+        reason=reason,
     )
     if result.outcome is NotDeliveredOutcome.IGNORED:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "order not found")

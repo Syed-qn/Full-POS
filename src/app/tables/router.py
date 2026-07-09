@@ -108,3 +108,54 @@ async def transfer_order_to_table(
     )
     await session.commit()
     return {"order_id": order.id, "table_id": order.table_id}
+
+
+@router.post("/{table_id}/qr-token")
+async def issue_table_qr_token(
+    table_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Issue (or return existing) QR token for tableside/QR ordering."""
+    from app.ordering.qr_orders import ensure_table_qr_token
+
+    try:
+        table = await ensure_table_qr_token(
+            session, restaurant_id=restaurant.id, table_id=table_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await session.commit()
+    return {
+        "table_id": table.id,
+        "label": table.label,
+        "qr_token": table.qr_token,
+        "order_path": f"/api/v1/public/qr/{table.qr_token}/orders",
+    }
+
+
+@router.post("/{table_id}/tableside-order")
+async def tableside_order_endpoint(
+    table_id: int,
+    body: dict,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Waiter tableside order entry for a physical table."""
+    from app.ordering.qr_orders import create_tableside_order
+    from app.ordering.router import _enrich
+
+    try:
+        order = await create_tableside_order(
+            session,
+            restaurant_id=restaurant.id,
+            table_id=table_id,
+            staff_id=body.get("staff_id"),
+            customer_phone=body["customer_phone"],
+            customer_name=body.get("customer_name"),
+            items=body.get("items") or [],
+        )
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return await _enrich(session, order)

@@ -46,6 +46,8 @@ export function RiderCard({
   onDelete,
   onEdit,
   onInviteApp,
+  onSettleCod,
+  settleBusy = false,
   stale = false,
 }: {
   rider: RiderOut;
@@ -54,6 +56,8 @@ export function RiderCard({
   onDelete: (id: number) => void;
   onEdit?: (rider: RiderOut) => void;
   onInviteApp?: (id: number) => void;
+  onSettleCod?: (id: number) => void;
+  settleBusy?: boolean;
   stale?: boolean;
 }) {
   const offShift = rider.status === "off_shift";
@@ -198,6 +202,15 @@ export function RiderCard({
             {onInviteApp && (
               <Button variant="ghost" onClick={() => onInviteApp(rider.id)}>
                 Send app link
+              </Button>
+            )}
+            {onSettleCod && (
+              <Button
+                variant="ghost"
+                disabled={settleBusy}
+                onClick={() => onSettleCod(rider.id)}
+              >
+                {settleBusy ? "Settling…" : "Settle COD"}
               </Button>
             )}
           </>

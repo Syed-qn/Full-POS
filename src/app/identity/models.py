@@ -130,6 +130,8 @@ DEFAULT_SETTINGS: dict = {
         },
         "demotion_grace_days": 30,         # anti-thrash before dropping a tier
         "scope_includes_catalog": True,    # earn/tier on catalog orders too
+        "stamp_card_required": 10,         # stamps needed for one free reward
+        "points_per_aed": 1,               # loyalty points earned per AED subtotal
     },
 }
 
@@ -167,9 +169,19 @@ class Restaurant(Base, TimestampMixin):
     lat: Mapped[float] = mapped_column(Float)
     lng: Mapped[float] = mapped_column(Float)
     settings: Mapped[dict] = mapped_column(JSONB, default=lambda: copy.deepcopy(DEFAULT_SETTINGS))
+    # Public storefront / QR / kiosk / social order-link slug (Category 8).
+    # Unique when set; null until manager enables website/mobile/channel links.
+    public_slug: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     # Multi-branch grouping — null for today's standalone restaurants, set when
     # a branch is added under an Organization (see app.organizations).
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
+    # Category 11 franchise / multi-branch
+    region: Mapped[str | None] = mapped_column(String(64), index=True)
+    currency: Mapped[str] = mapped_column(String(8), default="AED", server_default="AED")
+    locale: Mapped[str] = mapped_column(String(16), default="en", server_default="en")
+    is_central_kitchen: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
 
 class Rider(Base, TimestampMixin):

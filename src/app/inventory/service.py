@@ -14,6 +14,10 @@ from app.inventory.models import (
     PurchaseOrder,
     PurchaseOrderLine,
     StockAdjustmentRequest,
+    StockAnomalyAlert,
+    StockClosingSnapshot,
+    StockCountLog,
+    StockLocation,
     Vendor,
     WasteLog,
 )
@@ -22,9 +26,83 @@ from app.ordering.models import OrderItem
 MONEY = Decimal("0.01")
 
 
+async def _deduct_fefo_batches(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    qty: Decimal,
+) -> Decimal:
+    """Consume batch qty FEFO (earliest expiry first). Returns remaining unfilled qty."""
+    remaining = qty
+    batches = (
+        await session.scalars(
+            select(IngredientBatch)
+            .where(
+                IngredientBatch.restaurant_id == restaurant_id,
+                IngredientBatch.ingredient_id == ingredient_id,
+                IngredientBatch.qty_remaining > 0,
+            )
+            .order_by(IngredientBatch.expiry_date.asc(), IngredientBatch.id.asc())
+        )
+    ).all()
+    for batch in batches:
+        if remaining <= 0:
+            break
+        take = min(batch.qty_remaining, remaining)
+        batch.qty_remaining -= take
+        remaining -= take
+    return remaining
+
+
+async def _apply_substitutes(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    shortfall: Decimal,
+    ingredients_by_id: dict[int, Ingredient],
+) -> Decimal:
+    """Try substitutes when primary is short. Returns still-unfilled amount."""
+    if shortfall <= 0:
+        return Decimal("0.000")
+    subs = (
+        await session.scalars(
+            select(IngredientSubstitute)
+            .where(
+                IngredientSubstitute.restaurant_id == restaurant_id,
+                IngredientSubstitute.ingredient_id == ingredient_id,
+            )
+            .order_by(IngredientSubstitute.priority.asc(), IngredientSubstitute.id.asc())
+        )
+    ).all()
+    still = shortfall
+    for sub in subs:
+        if still <= 0:
+            break
+        alt = ingredients_by_id.get(sub.substitute_ingredient_id)
+        if alt is None:
+            alt = await session.get(Ingredient, sub.substitute_ingredient_id)
+            if alt is not None:
+                ingredients_by_id[alt.id] = alt
+        if alt is None or alt.current_stock <= 0:
+            continue
+        factor = sub.conversion_factor or Decimal("1")
+        need_alt = (still * factor).quantize(Decimal("0.001"))
+        take = min(alt.current_stock, need_alt)
+        alt.current_stock -= take
+        await _deduct_fefo_batches(
+            session, restaurant_id=restaurant_id, ingredient_id=alt.id, qty=take
+        )
+        covered = (take / factor).quantize(Decimal("0.001")) if factor else take
+        still -= covered
+    return max(still, Decimal("0.000"))
+
+
 async def deduct_for_order(session: AsyncSession, *, restaurant_id: int, order) -> None:
+    """Deduct recipe stock with yield, FEFO batch consumption, and auto-substitute."""
     items = (await session.scalars(
-        select(OrderItem).where(OrderItem.order_id == order.id)
+        select(OrderItem).where(OrderItem.order_id == order.id, OrderItem.cancelled.is_(False))
     )).all()
     if not items:
         return
@@ -41,13 +119,70 @@ async def deduct_for_order(session: AsyncSession, *, restaurant_id: int, order) 
     for item in items:
         qty_by_dish[item.dish_id] += item.qty
     for recipe in recipe_rows:
-        needed[recipe.ingredient_id] += recipe.quantity_per_dish * qty_by_dish[recipe.dish_id]
+        # Yield < 100% means more raw ingredient is required.
+        yield_pct = getattr(recipe, "yield_pct", None) or Decimal("100")
+        if yield_pct <= 0:
+            yield_pct = Decimal("100")
+        factor = Decimal("100") / yield_pct
+        needed[recipe.ingredient_id] += (
+            recipe.quantity_per_dish * qty_by_dish[recipe.dish_id] * factor
+        )
 
     ingredients = (await session.scalars(
         select(Ingredient).where(Ingredient.id.in_(needed.keys()))
     )).all()
-    for ingredient in ingredients:
-        ingredient.current_stock -= needed[ingredient.id]
+    ingredients_by_id = {i.id: i for i in ingredients}
+    oos_ingredient_ids: set[int] = set()
+    for ingredient_id, need_qty in needed.items():
+        ingredient = ingredients_by_id.get(ingredient_id)
+        if ingredient is None:
+            continue
+        available = ingredient.current_stock
+        take = min(available, need_qty)
+        ingredient.current_stock -= take
+        await _deduct_fefo_batches(
+            session, restaurant_id=restaurant_id, ingredient_id=ingredient.id, qty=take
+        )
+        shortfall = need_qty - take
+        if shortfall > 0:
+            still = await _apply_substitutes(
+                session,
+                restaurant_id=restaurant_id,
+                ingredient_id=ingredient_id,
+                shortfall=shortfall,
+                ingredients_by_id=ingredients_by_id,
+            )
+            if still > 0:
+                # Allow negative stock to record theoretical usage gap.
+                ingredient.current_stock -= still
+        if ingredient.current_stock <= 0:
+            oos_ingredient_ids.add(ingredient.id)
+
+    if oos_ingredient_ids:
+        from app.menu.models import Dish
+
+        affected_recipes = (
+            await session.scalars(
+                select(DishIngredient).where(
+                    DishIngredient.ingredient_id.in_(oos_ingredient_ids)
+                )
+            )
+        ).all()
+        affected_dish_ids = {r.dish_id for r in affected_recipes}
+        if affected_dish_ids:
+            dishes = (
+                await session.scalars(
+                    select(Dish).where(
+                        Dish.id.in_(affected_dish_ids),
+                        Dish.restaurant_id == restaurant_id,
+                        Dish.auto_hide_when_oos.is_(True),
+                    )
+                )
+            ).all()
+            for d in dishes:
+                d.is_available = False
+                if d.stock_remaining is not None:
+                    d.stock_remaining = 0
     await session.flush()
 
 
@@ -59,23 +194,61 @@ async def list_low_stock(session: AsyncSession, *, restaurant_id: int) -> list[I
 
 
 async def record_waste(
-    session: AsyncSession, *, restaurant_id: int, ingredient_id: int,
-    quantity: Decimal, reason: str | None, recorded_by: str,
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    quantity: Decimal,
+    reason: str | None,
+    recorded_by: str,
+    reason_type: str = "wastage",
+    batch_id: int | None = None,
 ) -> WasteLog:
+    from app.inventory.models import WASTE_REASON_TYPES
+
+    rt = (reason_type or "wastage").strip().lower()
+    if rt not in WASTE_REASON_TYPES:
+        rt = "other"
     ingredient = await session.get(Ingredient, ingredient_id)
     if ingredient is not None and ingredient.restaurant_id == restaurant_id:
         ingredient.current_stock -= quantity
+        await _deduct_fefo_batches(
+            session, restaurant_id=restaurant_id, ingredient_id=ingredient_id, qty=quantity
+        )
     log = WasteLog(
-        restaurant_id=restaurant_id, ingredient_id=ingredient_id, quantity=quantity,
-        reason=reason, recorded_by=recorded_by,
+        restaurant_id=restaurant_id,
+        ingredient_id=ingredient_id,
+        quantity=quantity,
+        reason=reason,
+        reason_type=rt,
+        recorded_by=recorded_by,
+        batch_id=batch_id,
     )
     session.add(log)
+    if rt in ("theft", "over_portion"):
+        session.add(
+            StockAnomalyAlert(
+                restaurant_id=restaurant_id,
+                ingredient_id=ingredient_id,
+                alert_type="theft_loss" if rt == "theft" else "over_portion",
+                expected_qty=Decimal("0"),
+                actual_qty=quantity,
+                variance_pct=Decimal("100"),
+                message=reason or rt,
+            )
+        )
     await session.flush()
     return log
 
 
 async def record_stock_count(
-    session: AsyncSession, *, restaurant_id: int, ingredient_id: int, counted_qty: Decimal,
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    counted_qty: Decimal,
+    counted_by: str = "manager",
+    anomaly_threshold_pct: float = 15.0,
 ) -> dict:
     ingredient = await session.get(Ingredient, ingredient_id)
     if ingredient is None or ingredient.restaurant_id != restaurant_id:
@@ -85,24 +258,75 @@ async def record_stock_count(
     variance = counted_qty - previous_stock
     ingredient.current_stock = counted_qty
 
+    session.add(
+        StockCountLog(
+            restaurant_id=restaurant_id,
+            ingredient_id=ingredient_id,
+            previous_stock=previous_stock,
+            counted_stock=counted_qty,
+            variance=variance,
+            counted_by=counted_by,
+        )
+    )
+
+    # Persist count variance alert when large swing
+    if previous_stock != 0:
+        variance_pct = float(abs(variance) / abs(previous_stock) * 100)
+    else:
+        variance_pct = 100.0 if variance != 0 else 0.0
+    if variance_pct > anomaly_threshold_pct:
+        alert_type = "theft_loss" if variance < 0 else "count_variance"
+        session.add(
+            StockAnomalyAlert(
+                restaurant_id=restaurant_id,
+                ingredient_id=ingredient_id,
+                alert_type=alert_type,
+                expected_qty=previous_stock,
+                actual_qty=counted_qty,
+                variance_pct=Decimal(str(round(variance_pct, 2))),
+                message=f"Stock count variance {variance_pct:.1f}%",
+            )
+        )
+
     await record_audit(
-        session, actor="manager", entity="ingredient", entity_id=str(ingredient_id),
+        session, actor=counted_by, entity="ingredient", entity_id=str(ingredient_id),
         action="stock_count", restaurant_id=restaurant_id,
         before={"current_stock": str(previous_stock)},
         after={"current_stock": str(counted_qty), "variance": str(variance)},
     )
     await session.flush()
-    return {"variance": variance, "previous_stock": previous_stock, "counted_stock": counted_qty}
+    return {
+        "variance": variance,
+        "previous_stock": previous_stock,
+        "counted_stock": counted_qty,
+        "variance_pct": variance_pct,
+    }
 
 
 async def add_batch(
-    session: AsyncSession, *, restaurant_id: int, ingredient_id: int, qty: Decimal, expiry_date: date,
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    qty: Decimal,
+    expiry_date: date,
+    location_id: int | None = None,
+    update_stock: bool = True,
 ) -> IngredientBatch:
     batch = IngredientBatch(
-        restaurant_id=restaurant_id, ingredient_id=ingredient_id, qty=qty,
-        expiry_date=expiry_date, received_at=datetime.now(timezone.utc),
+        restaurant_id=restaurant_id,
+        ingredient_id=ingredient_id,
+        qty=qty,
+        qty_remaining=qty,
+        expiry_date=expiry_date,
+        received_at=datetime.now(timezone.utc),
+        location_id=location_id,
     )
     session.add(batch)
+    if update_stock:
+        ingredient = await session.get(Ingredient, ingredient_id)
+        if ingredient is not None and ingredient.restaurant_id == restaurant_id:
+            ingredient.current_stock += qty
     await session.flush()
     return batch
 
@@ -140,11 +364,16 @@ async def suggest_reorder_quantities(session: AsyncSession, *, restaurant_id: in
 
 
 async def flag_stock_anomaly(
-    session: AsyncSession, *, restaurant_id: int, ingredient_id: int,
-    expected_qty: Decimal, actual_qty: Decimal, threshold_pct: float = 15.0,
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    expected_qty: Decimal,
+    actual_qty: Decimal,
+    threshold_pct: float = 15.0,
+    persist: bool = True,
 ) -> dict | None:
-    """Compare expected (recipe-derived) usage against actual deduction and flag possible
-    over-portioning / theft-loss if the variance exceeds threshold_pct."""
+    """Compare expected vs actual usage; flag over-portioning / theft-loss."""
     ingredient = await session.get(Ingredient, ingredient_id)
     if ingredient is None or ingredient.restaurant_id != restaurant_id:
         raise ValueError("ingredient not found")
@@ -157,21 +386,47 @@ async def flag_stock_anomaly(
     if variance_pct <= threshold_pct:
         return None
 
-    return {
+    alert_type = "over_portion" if actual_qty > expected_qty else "theft_loss"
+    result = {
         "ingredient_id": ingredient_id,
         "expected_qty": expected_qty,
         "actual_qty": actual_qty,
         "variance_pct": variance_pct,
+        "alert_type": alert_type,
     }
+    if persist:
+        session.add(
+            StockAnomalyAlert(
+                restaurant_id=restaurant_id,
+                ingredient_id=ingredient_id,
+                alert_type=alert_type,
+                expected_qty=expected_qty,
+                actual_qty=actual_qty,
+                variance_pct=Decimal(str(round(variance_pct, 2))),
+                message=f"{alert_type}: {variance_pct:.1f}% variance",
+            )
+        )
+        await session.flush()
+    return result
 
 
 async def add_substitute(
-    session: AsyncSession, *, restaurant_id: int, ingredient_id: int,
-    substitute_ingredient_id: int, notes: str | None = None,
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    ingredient_id: int,
+    substitute_ingredient_id: int,
+    notes: str | None = None,
+    conversion_factor: Decimal = Decimal("1"),
+    priority: int = 0,
 ) -> IngredientSubstitute:
     substitute = IngredientSubstitute(
-        restaurant_id=restaurant_id, ingredient_id=ingredient_id,
-        substitute_ingredient_id=substitute_ingredient_id, notes=notes,
+        restaurant_id=restaurant_id,
+        ingredient_id=ingredient_id,
+        substitute_ingredient_id=substitute_ingredient_id,
+        notes=notes,
+        conversion_factor=conversion_factor,
+        priority=priority,
     )
     session.add(substitute)
     await session.flush()
@@ -190,27 +445,201 @@ async def list_substitutes(
     return list(rows)
 
 
+async def take_stock_closing_snapshot(
+    session: AsyncSession, *, restaurant_id: int, target_date: date | None = None,
+) -> list[dict]:
+    """Persist a true EOD snapshot for every ingredient (idempotent per day)."""
+    target = target_date or date.today()
+    rows = (
+        await session.scalars(
+            select(Ingredient).where(Ingredient.restaurant_id == restaurant_id)
+        )
+    ).all()
+    result = []
+    for r in rows:
+        existing = await session.scalar(
+            select(StockClosingSnapshot).where(
+                StockClosingSnapshot.restaurant_id == restaurant_id,
+                StockClosingSnapshot.ingredient_id == r.id,
+                StockClosingSnapshot.closing_date == target,
+            )
+        )
+        val = (r.current_stock * r.cost_per_unit_aed).quantize(MONEY)
+        if existing is None:
+            snap = StockClosingSnapshot(
+                restaurant_id=restaurant_id,
+                ingredient_id=r.id,
+                closing_date=target,
+                closing_stock=r.current_stock,
+                unit=r.unit,
+                valuation_aed=val,
+            )
+            session.add(snap)
+        else:
+            existing.closing_stock = r.current_stock
+            existing.unit = r.unit
+            existing.valuation_aed = val
+        result.append(
+            {
+                "ingredient_id": r.id,
+                "ingredient_name": r.name,
+                "closing_stock": r.current_stock,
+                "unit": r.unit,
+                "valuation_aed": val,
+                "closing_date": target.isoformat(),
+            }
+        )
+    await session.flush()
+    return result
+
+
 async def daily_stock_closing(
     session: AsyncSession, *, restaurant_id: int, target_date: date,
 ) -> list[dict]:
-    """Closing stock snapshot per ingredient as of end-of-day target_date.
+    """Return stored EOD snapshot for target_date; if none, take one now (today)."""
+    snaps = (
+        await session.scalars(
+            select(StockClosingSnapshot).where(
+                StockClosingSnapshot.restaurant_id == restaurant_id,
+                StockClosingSnapshot.closing_date == target_date,
+            )
+        )
+    ).all()
+    if snaps:
+        names = {}
+        ing_ids = [s.ingredient_id for s in snaps]
+        for i in (
+            await session.scalars(select(Ingredient).where(Ingredient.id.in_(ing_ids)))
+        ).all():
+            names[i.id] = i.name
+        return [
+            {
+                "ingredient_id": s.ingredient_id,
+                "ingredient_name": names.get(s.ingredient_id, ""),
+                "closing_stock": s.closing_stock,
+                "unit": s.unit,
+                "valuation_aed": s.valuation_aed,
+                "closing_date": s.closing_date.isoformat(),
+            }
+            for s in snaps
+        ]
+    # No snapshot yet — capture current levels as the closing for that date.
+    return await take_stock_closing_snapshot(
+        session, restaurant_id=restaurant_id, target_date=target_date
+    )
 
-    Limitation: reflects CURRENT stock, not a true point-in-time historical snapshot,
-    since no stock-ledger table exists yet. target_date is accepted for API shape/future
-    compatibility but does not affect the result today.
-    """
-    rows = (await session.scalars(
-        select(Ingredient).where(Ingredient.restaurant_id == restaurant_id)
-    )).all()
+
+async def stock_variance_report(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict]:
+    """Historical stock-count variance rows."""
+    q = select(StockCountLog).where(StockCountLog.restaurant_id == restaurant_id)
+    if start_date is not None:
+        q = q.where(StockCountLog.created_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date is not None:
+        q = q.where(
+            StockCountLog.created_at
+            < datetime.combine(end_date + timedelta(days=1), datetime.min.time())
+        )
+    rows = (await session.scalars(q.order_by(StockCountLog.id.desc()).limit(500))).all()
+    names = {}
+    ids = {r.ingredient_id for r in rows}
+    if ids:
+        for i in (
+            await session.scalars(select(Ingredient).where(Ingredient.id.in_(ids)))
+        ).all():
+            names[i.id] = i.name
     return [
         {
-            "ingredient_id": r.id,
-            "ingredient_name": r.name,
-            "closing_stock": r.current_stock,
-            "unit": r.unit,
+            "id": r.id,
+            "ingredient_id": r.ingredient_id,
+            "ingredient_name": names.get(r.ingredient_id, ""),
+            "previous_stock": r.previous_stock,
+            "counted_stock": r.counted_stock,
+            "variance": r.variance,
+            "counted_by": r.counted_by,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows
     ]
+
+
+async def list_anomaly_alerts(
+    session: AsyncSession, *, restaurant_id: int, status: str | None = "open"
+) -> list[StockAnomalyAlert]:
+    q = select(StockAnomalyAlert).where(StockAnomalyAlert.restaurant_id == restaurant_id)
+    if status:
+        q = q.where(StockAnomalyAlert.status == status)
+    return list(
+        (await session.scalars(q.order_by(StockAnomalyAlert.id.desc()).limit(200))).all()
+    )
+
+
+async def spoilage_report(
+    session: AsyncSession, *, restaurant_id: int, start_date: date, end_date: date
+) -> list[dict]:
+    rows = (
+        await session.scalars(
+            select(WasteLog).where(
+                WasteLog.restaurant_id == restaurant_id,
+                WasteLog.reason_type == "spoilage",
+                WasteLog.created_at
+                >= datetime.combine(start_date, datetime.min.time()),
+                WasteLog.created_at
+                < datetime.combine(end_date + timedelta(days=1), datetime.min.time()),
+            )
+        )
+    ).all()
+    names: dict[int, str] = {}
+    ids = {r.ingredient_id for r in rows}
+    if ids:
+        for i in (
+            await session.scalars(select(Ingredient).where(Ingredient.id.in_(ids)))
+        ).all():
+            names[i.id] = i.name
+    return [
+        {
+            "id": r.id,
+            "ingredient_id": r.ingredient_id,
+            "ingredient_name": names.get(r.ingredient_id, ""),
+            "quantity": r.quantity,
+            "reason": r.reason,
+            "reason_type": r.reason_type,
+            "recorded_by": r.recorded_by,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+async def ensure_default_location(
+    session: AsyncSession, *, restaurant_id: int, kitchen_role: str = "branch"
+) -> StockLocation:
+    code = {"branch": "main", "central": "central", "commissary": "commissary"}.get(
+        kitchen_role, "main"
+    )
+    existing = await session.scalar(
+        select(StockLocation).where(
+            StockLocation.restaurant_id == restaurant_id, StockLocation.code == code
+        )
+    )
+    if existing:
+        return existing
+    loc = StockLocation(
+        restaurant_id=restaurant_id,
+        name={"branch": "Main Store", "central": "Central Kitchen", "commissary": "Commissary"}[
+            kitchen_role if kitchen_role in ("branch", "central", "commissary") else "branch"
+        ],
+        code=code,
+        kitchen_role=kitchen_role if kitchen_role in ("branch", "central", "commissary") else "branch",
+    )
+    session.add(loc)
+    await session.flush()
+    return loc
 
 
 async def vendor_price_comparison(

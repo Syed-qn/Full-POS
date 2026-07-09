@@ -43,7 +43,15 @@ async def build_z_report(session: AsyncSession, *, restaurant_id: int, target_da
         "order_count": len(orders),
         "delivered_order_count": len(delivered),
         "gross_sales_aed": sum((o.total for o in delivered), Decimal("0.00")),
-        "total_discounts_aed": sum((o.coupon_discount_aed for o in delivered), Decimal("0.00")),
+        "total_discounts_aed": sum(
+            (
+                (o.coupon_discount_aed or Decimal("0"))
+                + (getattr(o, "manager_discount_aed", None) or Decimal("0"))
+                + (getattr(o, "staff_discount_aed", None) or Decimal("0"))
+                for o in delivered
+            ),
+            Decimal("0.00"),
+        ),
         "cod_collected_aed": sum((c.amount_aed for c in collections), Decimal("0.00")),
         "drawer_sessions": [
             {

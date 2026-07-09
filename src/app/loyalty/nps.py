@@ -37,6 +37,22 @@ async def record_nps_response(
         entity="nps_response", entity_id=str(row.id), action="recorded",
         before=None, after={"order_id": order_id, "score": score},
     )
+    # Negative review escalation: detractors (0-6) auto-open a complaint ticket.
+    if score <= _DETRACTOR_MAX:
+        try:
+            from app.tickets.service import create_ticket
+
+            await create_ticket(
+                session,
+                restaurant_id=restaurant_id,
+                customer_id=customer_id,
+                order_id=order_id,
+                source_message=comment or f"NPS detractor score {score}",
+                evidence=[{"kind": "nps", "score": score, "comment": comment}],
+                category="quality",
+            )
+        except Exception:  # noqa: BLE001 — escalation must never fail NPS capture
+            pass
     return row
 
 

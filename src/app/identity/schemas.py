@@ -160,6 +160,17 @@ class RiderLocationOut(BaseModel):
 class SettingsPatch(BaseModel):
     # UAE Tax Registration Number — printed on tax invoices (app.ordering.tax).
     trn: str | None = Field(default=None, max_length=32)
+    # Category 13 — UAE tax / e-invoice compliance settings.
+    legal_name: str | None = Field(default=None, max_length=255)
+    legal_name_ar: str | None = Field(default=None, max_length=255)
+    tax_pricing_mode: Literal["inclusive", "exclusive"] | None = None
+    default_vat_rate: float | None = Field(default=None, ge=0, le=1)
+    simplified_invoice_threshold_aed: float | None = Field(default=None, ge=0)
+    data_retention_days: int | None = Field(default=None, ge=30, le=3650)
+    buyer_trn_required_for_b2b: bool | None = None
+    e_invoice_enabled: bool | None = None
+    asp_provider: str | None = Field(default=None, max_length=64)
+    asp_api_key: str | None = Field(default=None, max_length=256)
     max_orders_per_batch: int | None = Field(default=None, ge=1, le=6)
     max_items_per_order: int | None = Field(default=None, ge=1, le=100)
     # Single-line quantity above which the bot escalates to a human (anomaly guard).

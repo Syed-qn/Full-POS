@@ -13,16 +13,19 @@ router = APIRouter(prefix="/api/v1/categories", tags=["categories"])
 class CategoryIn(BaseModel):
     name: str
     sort_order: int = 0
+    parent_id: int | None = None  # subcategory when set
 
 
 class CategoryPatch(BaseModel):
     name: str
+    parent_id: int | None = None
 
 
 class CategoryOut(BaseModel):
     id: int
     name: str
     sort_order: int
+    parent_id: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -35,12 +38,21 @@ async def create_category_endpoint(
 ):
     try:
         cat = await create_category(
-            session, restaurant_id=restaurant.id, name=body.name, sort_order=body.sort_order
+            session,
+            restaurant_id=restaurant.id,
+            name=body.name,
+            sort_order=body.sort_order,
+            parent_id=body.parent_id,
         )
         await session.commit()
         return cat
     except ValueError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        code = (
+            status.HTTP_404_NOT_FOUND
+            if "parent" in str(exc)
+            else status.HTTP_409_CONFLICT
+        )
+        raise HTTPException(code, str(exc)) from exc
 
 
 @router.get("", response_model=list[CategoryOut])

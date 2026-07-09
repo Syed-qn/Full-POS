@@ -1,0 +1,214 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  min-height: 100%;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.select {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tab {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.tabActive {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 12px;
+  border: 1px solid #334155;
+  border-left-width: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.dish {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #7f1d1d;
+  color: #fecaca;
+  margin-right: 4px;
+}
+
+.badgeWarn {
+  background: #78350f;
+  color: #fde68a;
+}
+
+.badgeOk {
+  background: #14532d;
+  color: #bbf7d0;
+}
+
+.badgeInfo {
+  background: #1e3a8a;
+  color: #bfdbfe;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.timerLate {
+  color: #f87171;
+}
+
+.timerWarn {
+  color: #fbbf24;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.btnPrimary {
+  background: #16a34a;
+  color: white;
+}
+
+.btnDanger {
+  background: #dc2626;
+  color: white;
+}
+
+.btnGhost {
+  background: transparent;
+  border: 1px solid #475569;
+}
+
+.section {
+  margin-top: 8px;
+}
+
+.sectionTitle {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.empty {
+  color: #64748b;
+  padding: 24px;
+  text-align: center;
+}
+
+.pickupCard {
+  background: #172554;
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.perfGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  background: #1e293b;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #334155;
+}
+
+.metricValue {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.metricLabel {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.printerOk {
+  color: #4ade80;
+}
+
+.printerBad {
+  color: #f87171;
+}

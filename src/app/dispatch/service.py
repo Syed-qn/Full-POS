@@ -1774,3 +1774,104 @@ async def reassign_order(
 
     await invalidate_preview_cache(restaurant_id)
     return order
+
+
+async def assign_order(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    order_id: int,
+    rider_id: int,
+    actor: str = "manager",
+) -> Order:
+    """Manually assign an unassigned ready (or preparing) order to a rider.
+
+    Creates a single-order batch + Assignment with manual_assign score, transitions
+    the order to ``assigned``, marks rider on_delivery, notifies rider. Caller commits.
+    """
+    from app.ordering.fsm import transition as fsm_transition
+
+    order = await session.get(Order, order_id)
+    if order is None or order.restaurant_id != restaurant_id:
+        raise ValueError("Order not found")
+    if order.rider_id is not None or str(order.status) == str(OrderStatus.ASSIGNED):
+        # Already assigned — use reassign path
+        return await reassign_order(
+            session,
+            restaurant_id=restaurant_id,
+            order_id=order_id,
+            new_rider_id=rider_id,
+            actor=actor,
+        )
+    if str(order.status) not in (
+        str(OrderStatus.READY),
+        str(OrderStatus.PREPARING),
+        str(OrderStatus.CONFIRMED),
+    ):
+        raise ValueError(
+            f"Only ready/preparing/confirmed unassigned orders can be assigned "
+            f"(current: '{order.status}')."
+        )
+    rider = await session.get(Rider, rider_id)
+    if rider is None or rider.restaurant_id != restaurant_id:
+        raise ValueError("Rider not found")
+    if rider.status == "deactivated":
+        raise ValueError("Cannot assign to a deactivated rider.")
+    if not rider.on_duty:
+        raise ValueError("Cannot assign to an off-duty rider — they must go on duty first.")
+
+    batch = Batch(
+        restaurant_id=restaurant_id,
+        rider_id=rider_id,
+        status="planned",
+        route={},
+    )
+    session.add(batch)
+    await session.flush()
+    session.add(BatchOrder(batch_id=batch.id, order_id=order.id, sequence=1))
+
+    if str(order.status) != str(OrderStatus.ASSIGNED):
+        await fsm_transition(session, order, OrderStatus.ASSIGNED, actor=actor)
+    order.rider_id = rider_id
+
+    # Snapshot OTP requirement from restaurant settings
+    restaurant_row = await session.get(Restaurant, restaurant_id)
+    settings = (restaurant_row.settings if restaurant_row else None) or {}
+    delivery_cfg = settings.get("delivery") if isinstance(settings.get("delivery"), dict) else {}
+    order.otp_required_at_deliver = bool(delivery_cfg.get("require_otp_on_deliver", False))
+
+    session.add(
+        Assignment(
+            order_id=order.id,
+            rider_id=rider_id,
+            batch_id=batch.id,
+            assigned_at=datetime.now(timezone.utc),
+            algorithm_score={"manual_assign": True, "actor": actor},
+        )
+    )
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="manual_assign",
+        before={"rider_id": None, "status": "unassigned"},
+        after={"rider_id": rider_id},
+    )
+    # Re-load rider after transition side-effects; always pin on_delivery last.
+    rider = await session.get(Rider, rider_id)
+    if rider is not None and rider.status != "deactivated":
+        rider.status = "on_delivery"
+    from app.dispatch.rider_app import notify_rider_assigned
+
+    try:
+        if rider is not None:
+            await notify_rider_assigned(session, rider=rider, order_count=1)
+    except Exception:  # noqa: BLE001
+        _logger.exception("manual assign push failed for rider %s", rider_id)
+    from app.dispatch.preview_cache import invalidate_preview_cache
+
+    await invalidate_preview_cache(restaurant_id)
+    await session.flush()
+    return order

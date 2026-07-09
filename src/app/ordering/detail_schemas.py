@@ -1,6 +1,7 @@
 # src/app/ordering/detail_schemas.py
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, computed_field
 
@@ -25,6 +26,7 @@ class AddressDetailOut(BaseModel):
     id: int
     room_apartment: str | None
     building: str | None
+    floor: str | None = None
     receiver_name: str | None
     additional_details: str | None
     latitude: float | None
@@ -42,6 +44,14 @@ class CustomerDetailOut(BaseModel):
     first_order_at: datetime | None
     last_order_at: datetime | None
     marketing_opted_in: bool
+    allergy_notes: str | None = None
+    notes: str | None = None
+    birthday: date | None = None
+    anniversary: date | None = None
+    is_vip: bool = False
+    loyalty_points: int = 0
+    average_order_value_aed: Decimal | None = None
+    customer_lifetime_value_aed: Decimal | None = None
 
     model_config = {"from_attributes": True}
 
@@ -102,11 +112,18 @@ class CustomerPatchIn(BaseModel):
     name: str | None = None
     phone: str | None = None
     marketing_opted_in: bool | None = None
+    allergy_notes: str | None = None
+    notes: str | None = None
+    birthday: date | None = None
+    anniversary: date | None = None
+    is_vip: bool | None = None
+    tags: dict[str, Any] | None = None
 
 
 class AddressPatchIn(BaseModel):
     room_apartment: str | None = None
     building: str | None = None
+    floor: str | None = None
     receiver_name: str | None = None
     additional_details: str | None = None
 
@@ -122,6 +139,24 @@ class OrderSummaryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FavoriteOut(BaseModel):
+    dish_id: int | None = None
+    dish_name: str
+    order_count: int
+
+
+class PhoneHistoryOut(BaseModel):
+    phone: str
+    changed_by: str
+    created_at: datetime | None = None
+
+
+class StampCardOut(BaseModel):
+    stamps: int
+    stamps_required: int
+    rewards_redeemed: int
+
+
 class CustomerProfileOut(BaseModel):
     id: int
     name: str | None
@@ -132,11 +167,23 @@ class CustomerProfileOut(BaseModel):
     last_order_at: datetime | None
     usual_order_time: str | None = None
     marketing_opted_in: bool
+    allergy_notes: str | None = None
+    notes: str | None = None
+    birthday: date | None = None
+    anniversary: date | None = None
+    is_vip: bool = False
+    loyalty_points: int = 0
+    average_order_value_aed: Decimal | None = None
+    customer_lifetime_value_aed: Decimal | None = None
     tags: dict
     loyalty_tier: str | None = None
     loyalty_tier_locked: bool = False
     addresses: list[AddressDetailOut]
     recent_orders: list[OrderSummaryOut]
+    favorites: list[FavoriteOut] = []
+    phone_history: list[PhoneHistoryOut] = []
+    stamp_card: StampCardOut | None = None
+    referral_code: str | None = None
 
     model_config = {"from_attributes": True}
 

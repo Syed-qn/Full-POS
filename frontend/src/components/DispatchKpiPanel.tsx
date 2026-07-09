@@ -36,7 +36,7 @@ export function DispatchKpiPanel({ kpis: kpisProp }: { kpis?: DispatchKpisOut })
   if (loading) {
     return (
       <div className={s.panel} aria-busy="true" aria-label="Loading dispatch KPIs">
-        {Array.from({ length: 3 }).map((_, i) => (
+        {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className={s.skTile} />
         ))}
       </div>
@@ -69,6 +69,13 @@ export function DispatchKpiPanel({ kpis: kpisProp }: { kpis?: DispatchKpisOut })
         label="Engine fallback"
         value={`${kpis.engine_fallback_pct.toFixed(0)}%`}
         accent={kpis.engine_fallback_pct > 15 ? "var(--sla-warn)" : "var(--sla-safe)"}
+      />
+      <KPITile
+        label="Avg delivery min"
+        value={
+          kpis.avg_delivery_minutes != null ? String(kpis.avg_delivery_minutes) : "—"
+        }
+        accent="var(--chart-1, #0ea5e9)"
       />
     </div>
   );

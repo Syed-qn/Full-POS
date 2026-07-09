@@ -21,6 +21,68 @@ from app.ordering.models import Order, OrderItem
 _REAL_ORDER_STATUSES = ("confirmed", "ready", "assigned", "out_for_delivery", "delivered")
 
 
+async def _configured_sell_rules(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    dish_ids: list[int],
+    limit: int,
+) -> list[dict]:
+    """Manager-configured upsell/cross-sell rules (MenuSellRule), preferred over
+    market-basket stats when present."""
+    from datetime import date
+
+    from app.menu.models import MenuSellRule
+
+    cart = set(dish_ids)
+    rules = (
+        await session.scalars(
+            select(MenuSellRule)
+            .where(
+                MenuSellRule.restaurant_id == restaurant_id,
+                MenuSellRule.is_active.is_(True),
+            )
+            .order_by(MenuSellRule.sort_order, MenuSellRule.id)
+        )
+    ).all()
+    if not rules:
+        return []
+    cart_dishes = (
+        await session.scalars(select(Dish).where(Dish.id.in_(dish_ids)))
+    ).all() if dish_ids else []
+    cart_cats = {d.category for d in cart_dishes if d.category}
+    out: list[dict] = []
+    seen: set[int] = set()
+    today = date.today()
+    for rule in rules:
+        if rule.suggest_dish_id in cart or rule.suggest_dish_id in seen:
+            continue
+        fires = False
+        if rule.trigger_dish_id is not None and rule.trigger_dish_id in cart:
+            fires = True
+        if rule.trigger_category and rule.trigger_category in cart_cats:
+            fires = True
+        if not fires:
+            continue
+        dish = await session.get(Dish, rule.suggest_dish_id)
+        if dish is None or not is_dish_currently_available(dish, today=today):
+            continue
+        seen.add(dish.id)
+        out.append(
+            {
+                "dish_id": dish.id,
+                "dish_name": dish.name,
+                "price_aed": str(dish.price_aed) if dish.price_aed is not None else None,
+                "co_occurrence_count": None,
+                "source": rule.rule_kind,
+                "message": rule.message,
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 async def compute_co_purchase_scores(
     session: AsyncSession,
     *,
@@ -30,14 +92,17 @@ async def compute_co_purchase_scores(
 ) -> list[dict]:
     """Rank dishes most frequently co-ordered with ``dish_ids`` historically.
 
-    Finds every real order (for this restaurant) that contained at least one of
-    ``dish_ids``, counts how often each OTHER dish appeared alongside it, and
-    returns the top ``limit`` ranked descending by co-occurrence count. Dishes
-    already in the cart and unavailable dishes are excluded. Cold start (no
-    matching order history) returns an empty list — never a fabricated fallback.
+    Prefers manager-configured MenuSellRule rows (upsell/cross_sell). Falls back
+    to market-basket co-purchase stats. Cold start returns empty list.
     """
     if not dish_ids:
         return []
+
+    configured = await _configured_sell_rules(
+        session, restaurant_id=restaurant_id, dish_ids=dish_ids, limit=limit
+    )
+    if configured:
+        return configured
 
     cart_dish_ids = set(dish_ids)
 

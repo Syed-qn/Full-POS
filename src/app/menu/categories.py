@@ -11,7 +11,12 @@ from app.menu.models import Category, Dish
 
 
 async def create_category(
-    session: AsyncSession, *, restaurant_id: int, name: str, sort_order: int = 0
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    name: str,
+    sort_order: int = 0,
+    parent_id: int | None = None,
 ) -> Category:
     name = name.strip()
     existing = await session.scalar(
@@ -19,12 +24,19 @@ async def create_category(
     )
     if existing is not None:
         raise ValueError(f"category '{name}' already exists")
-    row = Category(restaurant_id=restaurant_id, name=name, sort_order=sort_order)
+    if parent_id is not None:
+        parent = await session.get(Category, parent_id)
+        if parent is None or parent.restaurant_id != restaurant_id:
+            raise ValueError("parent category not found")
+    row = Category(
+        restaurant_id=restaurant_id, name=name, sort_order=sort_order, parent_id=parent_id
+    )
     session.add(row)
     await session.flush()
     await record_audit(
         session, actor="manager", restaurant_id=restaurant_id, entity="category",
-        entity_id=str(row.id), action="created", before=None, after={"name": name},
+        entity_id=str(row.id), action="created",
+        before=None, after={"name": name, "parent_id": parent_id},
     )
     return row
 

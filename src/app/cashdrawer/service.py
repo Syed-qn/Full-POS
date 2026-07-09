@@ -25,14 +25,23 @@ async def get_current_session(session: AsyncSession, *, restaurant_id: int) -> C
 
 
 async def open_session(
-    session: AsyncSession, *, restaurant_id: int, opened_by: str, opening_float_aed: Decimal
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    opened_by: str,
+    opening_float_aed: Decimal,
+    staff_id: int | None = None,
 ) -> CashDrawerSession:
     existing = await get_current_session(session, restaurant_id=restaurant_id)
     if existing is not None:
         raise DrawerAlreadyOpenError(f"restaurant {restaurant_id} already has an open drawer session")
     row = CashDrawerSession(
-        restaurant_id=restaurant_id, opened_by=opened_by, opened_at=datetime.now(timezone.utc),
-        opening_float_aed=opening_float_aed, status="open",
+        restaurant_id=restaurant_id,
+        opened_by=opened_by,
+        staff_id=staff_id,
+        opened_at=datetime.now(timezone.utc),
+        opening_float_aed=opening_float_aed,
+        status="open",
     )
     session.add(row)
     await session.flush()

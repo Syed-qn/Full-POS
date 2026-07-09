@@ -16,12 +16,17 @@ from app.menu.models import Dish, Menu
 from app.ordering.matching import normalize_name
 from app.menu.schemas import (
     AvailabilityIn,
+    BulkCsvImportOut,
+    BulkPriceUpdateIn,
+    BulkPriceUpdateOut,
     DiffOut,
     DishIn,
     DishOut,
     DishPatch,
     MenuOut,
     MenuWithDiffOut,
+    SellRuleIn,
+    SellRuleOut,
     WhatsappToggleIn,
     serialize_variants,
 )
@@ -262,6 +267,8 @@ async def add_dish(
     data = body.model_dump()
     # JSONB can't store Decimal — store variants with string prices (canonical shape).
     data["variants"] = serialize_variants(body.variants)
+    if data.get("nutrition") is None:
+        data["nutrition"] = {}
     dish = Dish(menu_id=menu.id, restaurant_id=restaurant.id, **data)
     dish.name_normalized = normalize_name(dish.name)
     session.add(dish)
@@ -532,3 +539,193 @@ async def reextract_menu(
             conflicts=report.conflicts,
         )
     return out
+
+
+@router.post("/menus/{menu_id}/bulk-price-update", response_model=BulkPriceUpdateOut)
+async def bulk_price_update(
+    menu_id: int,
+    body: BulkPriceUpdateIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Bulk set absolute prices or apply a percent delta to many dishes."""
+    from decimal import Decimal
+
+    menu = await _load_menu(menu_id, restaurant, session)
+    if not body.dish_ids:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "dish_ids required")
+    if body.price_aed is None and body.percent_delta is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "price_aed or percent_delta required"
+        )
+    dishes = (
+        await session.scalars(
+            select(Dish).where(
+                Dish.menu_id == menu.id,
+                Dish.restaurant_id == restaurant.id,
+                Dish.id.in_(body.dish_ids),
+            )
+        )
+    ).all()
+    updated_ids: list[int] = []
+    for dish in dishes:
+        before = str(dish.price_aed)
+        if body.price_aed is not None:
+            dish.price_aed = body.price_aed
+        elif body.percent_delta is not None and dish.price_aed is not None:
+            factor = Decimal("1") + (body.percent_delta / Decimal("100"))
+            dish.price_aed = (dish.price_aed * factor).quantize(Decimal("0.01"))
+        updated_ids.append(dish.id)
+        await record_audit(
+            session,
+            actor="manager",
+            restaurant_id=restaurant.id,
+            entity="dish",
+            entity_id=str(dish.id),
+            action="bulk_price_update",
+            before={"price_aed": before},
+            after={"price_aed": str(dish.price_aed)},
+        )
+    await session.commit()
+    return BulkPriceUpdateOut(updated=len(updated_ids), dish_ids=updated_ids)
+
+
+@router.post("/menus/{menu_id}/bulk-csv-import", response_model=BulkCsvImportOut)
+async def bulk_csv_import(
+    menu_id: int,
+    file: UploadFile,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """CSV bulk menu import.
+
+    Columns (header row required): dish_number,name,price_aed,category,description,
+    name_ar,allergens (pipe-separated),channels_allowed (pipe-separated),stock_remaining,
+    brand_menu_code,available_from,available_until
+    """
+    import csv
+    from decimal import Decimal, InvalidOperation
+    from datetime import date as date_cls
+
+    menu = await _load_menu(menu_id, restaurant, session)
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+    reader = csv.DictReader(io.StringIO(text))
+    created = 0
+    updated = 0
+    errors: list[str] = []
+    for i, row in enumerate(reader, start=2):
+        try:
+            num = int(str(row.get("dish_number") or "").strip())
+            name = (row.get("name") or "").strip()
+            if not name:
+                raise ValueError("name required")
+            price = Decimal(str(row.get("price_aed") or "0").strip())
+            dish = await session.scalar(
+                select(Dish).where(Dish.menu_id == menu.id, Dish.dish_number == num)
+            )
+            allergens = [
+                a.strip() for a in (row.get("allergens") or "").split("|") if a.strip()
+            ]
+            channels = [
+                c.strip()
+                for c in (row.get("channels_allowed") or "").split("|")
+                if c.strip()
+            ]
+            stock_raw = (row.get("stock_remaining") or "").strip()
+            stock = int(stock_raw) if stock_raw else None
+            af = (row.get("available_from") or "").strip() or None
+            au = (row.get("available_until") or "").strip() or None
+            available_from = date_cls.fromisoformat(af) if af else None
+            available_until = date_cls.fromisoformat(au) if au else None
+            if dish is None:
+                dish = Dish(
+                    menu_id=menu.id,
+                    restaurant_id=restaurant.id,
+                    dish_number=num,
+                    name=name,
+                    price_aed=price,
+                    category=(row.get("category") or None),
+                    description=(row.get("description") or None),
+                    name_ar=(row.get("name_ar") or None),
+                    allergens=allergens,
+                    channels_allowed=channels,
+                    stock_remaining=stock,
+                    brand_menu_code=(row.get("brand_menu_code") or None),
+                    available_from=available_from,
+                    available_until=available_until,
+                    name_normalized=normalize_name(name),
+                )
+                session.add(dish)
+                created += 1
+            else:
+                dish.name = name
+                dish.price_aed = price
+                dish.category = row.get("category") or dish.category
+                dish.description = row.get("description") or dish.description
+                dish.name_ar = row.get("name_ar") or dish.name_ar
+                if allergens:
+                    dish.allergens = allergens
+                if channels:
+                    dish.channels_allowed = channels
+                if stock is not None:
+                    dish.stock_remaining = stock
+                if row.get("brand_menu_code"):
+                    dish.brand_menu_code = row["brand_menu_code"]
+                dish.available_from = available_from
+                dish.available_until = available_until
+                dish.name_normalized = normalize_name(name)
+                updated += 1
+        except (ValueError, InvalidOperation, KeyError) as exc:
+            errors.append(f"row {i}: {exc}")
+    await session.commit()
+    return BulkCsvImportOut(created=created, updated=updated, errors=errors)
+
+
+@router.post("/menus/sell-rules", response_model=SellRuleOut, status_code=201)
+async def create_sell_rule(
+    body: SellRuleIn,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.menu.models import MenuSellRule
+
+    if body.rule_kind not in ("upsell", "cross_sell"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "rule_kind must be upsell|cross_sell")
+    if not body.trigger_dish_id and not body.trigger_category:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "trigger_dish_id or trigger_category required",
+        )
+    rule = MenuSellRule(
+        restaurant_id=restaurant.id,
+        rule_kind=body.rule_kind,
+        trigger_dish_id=body.trigger_dish_id,
+        trigger_category=body.trigger_category,
+        suggest_dish_id=body.suggest_dish_id,
+        message=body.message,
+        sort_order=body.sort_order,
+        is_active=body.is_active,
+    )
+    session.add(rule)
+    await session.commit()
+    await session.refresh(rule)
+    return rule
+
+
+@router.get("/menus/sell-rules", response_model=list[SellRuleOut])
+async def list_sell_rules(
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.menu.models import MenuSellRule
+
+    rows = await session.scalars(
+        select(MenuSellRule)
+        .where(MenuSellRule.restaurant_id == restaurant.id)
+        .order_by(MenuSellRule.sort_order, MenuSellRule.id)
+    )
+    return list(rows)

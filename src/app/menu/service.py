@@ -217,19 +217,35 @@ async def create_menu_from_upload(
     return menu
 
 
-def is_dish_currently_available(dish: Dish, *, today: date) -> bool:
-    """Pure function: is ``dish`` orderable today?
+def is_dish_currently_available(
+    dish: Dish,
+    *,
+    today: date,
+    channel: str | None = None,
+    brand_menu_code: str | None = None,
+) -> bool:
+    """Pure function: is ``dish`` orderable today (and optionally on a channel)?
 
     True only if ``is_available`` is set AND (if a seasonal window is configured)
     ``today`` falls within ``[available_from, available_until]`` (both inclusive;
-    either bound may be None meaning "no limit on that side"). A dish with no window
-    set is available on every day once ``is_available`` is True (today's behaviour,
-    unchanged)."""
+    either bound may be None meaning "no limit on that side"). Empty
+    ``channels_allowed`` means all channels. Item countdown: stock_remaining is 0
+    blocks the dish. brand_menu_code filters cloud-kitchen brand menus when set.
+    """
     if not dish.is_available:
         return False
     if dish.available_from is not None and today < dish.available_from:
         return False
     if dish.available_until is not None and today > dish.available_until:
+        return False
+    remaining = getattr(dish, "stock_remaining", None)
+    if remaining is not None and remaining <= 0:
+        return False
+    channels = list(getattr(dish, "channels_allowed", None) or [])
+    if channel and channels and channel not in channels:
+        return False
+    dish_brand = getattr(dish, "brand_menu_code", None)
+    if brand_menu_code is not None and dish_brand and dish_brand != brand_menu_code:
         return False
     return True
 

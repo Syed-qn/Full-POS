@@ -33,8 +33,8 @@ describe("StaffScreen", () => {
   it("creates a staff member", async () => {
     render(<StaffScreen />);
     await waitFor(() => expect(screen.getByRole("cell", { name: "Ahmed" })).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bilal" } });
-    fireEvent.change(screen.getByLabelText(/pin/i), { target: { value: "4321" } });
+    fireEvent.change(screen.getByLabelText(/^Name$/i), { target: { value: "Bilal" } });
+    fireEvent.change(screen.getByLabelText(/new staff pin/i), { target: { value: "4321" } });
     fireEvent.click(screen.getByText(/add staff/i));
     await waitFor(() => expect(screen.getByRole("cell", { name: "Bilal" })).toBeInTheDocument());
   });

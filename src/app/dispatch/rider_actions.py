@@ -299,14 +299,15 @@ async def mark_order_not_delivered(
     restaurant_id: int,
     rider: Rider,
     order_id: int,
+    reason: str = "customer_unreachable",
 ) -> NotDeliveredResult:
-    """Mark a stop as undeliverable (customer unreachable): transition the order,
+    """Mark a stop as undeliverable: transition the order, store failure reason,
     release any wallet hold, stop live tracking, notify the customer, close the
     batch stop, and resolve the next stop / batch completion. No COD is recorded.
     Rider-facing messaging is the caller's job."""
     from datetime import datetime, timezone
 
-    from app.dispatch.delivery import stamp_batch_stop_handled
+    from app.dispatch.delivery import DELIVERY_FAILURE_REASONS, stamp_batch_stop_handled
     from app.dispatch.rider_flow import _notify_customer_status
     from app.dispatch.tracking_live import TRACKING_STOPPED, stop_tracking_session
     from app.ordering.fsm import OrderStatus, transition as fsm_transition
@@ -319,6 +320,12 @@ async def mark_order_not_delivered(
         return NotDeliveredResult(
             NotDeliveredOutcome.INVALID_STATUS, order=order
         )
+
+    cleaned = (reason or "customer_unreachable").strip()
+    key = cleaned.lower().replace(" ", "_")
+    if key not in DELIVERY_FAILURE_REASONS and not cleaned.startswith("other"):
+        cleaned = f"other:{cleaned}"
+    order.delivery_failure_reason = cleaned
 
     await fsm_transition(
         session, order, OrderStatus.UNDELIVERABLE, actor="rider"

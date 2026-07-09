@@ -175,6 +175,8 @@ type DeliveryZone = {
   center_lat: number;
   center_lng: number;
   radius_km: number;
+  /** Optional zone fee (AED) — when set, overrides distance tiers inside the zone. */
+  fee_aed?: number | null;
 };
 
 const DISPATCH_PRESET_BUTTONS: {
@@ -218,6 +220,8 @@ export function SettingsScreen() {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [trn, setTrn] = useState("");
+  const [taxPricingMode, setTaxPricingMode] = useState<"exclusive" | "inclusive">("exclusive");
+  const [legalNameAr, setLegalNameAr] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
   // WhatsApp disconnect
@@ -313,6 +317,10 @@ export function SettingsScreen() {
       setLng(String(r.lng));
       const sset = r.settings as Record<string, unknown>;
       if (typeof sset.trn === "string") setTrn(sset.trn);
+      if (sset.tax_pricing_mode === "inclusive" || sset.tax_pricing_mode === "exclusive") {
+        setTaxPricingMode(sset.tax_pricing_mode);
+      }
+      if (typeof sset.legal_name_ar === "string") setLegalNameAr(sset.legal_name_ar);
       if (typeof sset.max_orders_per_batch === "number") setOrdersPerBatch(sset.max_orders_per_batch);
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
       if (typeof sset.max_item_qty === "number") setMaxItemQty(sset.max_item_qty);
@@ -395,6 +403,8 @@ export function SettingsScreen() {
       });
       const withTrn = await apiClient.patch<RestaurantOut>("/api/v1/settings", {
         trn: trn.trim(),
+        tax_pricing_mode: taxPricingMode,
+        legal_name_ar: legalNameAr.trim() || null,
       });
       setMe(withTrn);
       setLat(String(updated.lat));
@@ -656,7 +666,28 @@ export function SettingsScreen() {
                 placeholder="100123456700003"
                 className={s.input}
               />
-              <span className={s.rowHint}>Printed on tax invoices. Leave blank if not VAT-registered.</span>
+              <span className={s.rowHint}>Printed on tax invoices. Leave blank if not VAT-registered. Full compliance hub: Compliance nav.</span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Tax pricing mode</span>
+              <select
+                className={s.input}
+                value={taxPricingMode}
+                onChange={(e) => setTaxPricingMode(e.target.value as "exclusive" | "inclusive")}
+              >
+                <option value="exclusive">Exclusive (VAT added on top)</option>
+                <option value="inclusive">Inclusive (VAT extracted from prices)</option>
+              </select>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Legal name (Arabic)</span>
+              <input
+                type="text"
+                value={legalNameAr}
+                onChange={(e) => setLegalNameAr(e.target.value)}
+                className={s.input}
+                dir="rtl"
+              />
             </label>
             <label className={s.col}>
               <span className={s.rowName}>Phone (WABA number)</span>
@@ -1291,6 +1322,23 @@ export function SettingsScreen() {
                   className={`${s.input} ${s.inputNum}`}
                   value={zone.radius_km}
                   onChange={(e) => updateDeliveryZone(idx, { radius_km: Number(e.target.value) })}
+                />
+              </label>
+              <label className={s.col}>
+                <span className={s.rowName}>Zone fee (AED)</span>
+                <input
+                  aria-label={`zone ${idx + 1} fee aed`}
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  className={`${s.input} ${s.inputNum}`}
+                  value={zone.fee_aed ?? ""}
+                  placeholder="distance tiers"
+                  onChange={(e) =>
+                    updateDeliveryZone(idx, {
+                      fee_aed: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
                 />
               </label>
               <button type="button" className={s.chip} onClick={() => removeDeliveryZone(idx)}>

@@ -20,7 +20,13 @@ import {
 } from "../lib/orderDetailApi";
 import { perfMark, perfNow } from "../lib/perf";
 import { useOrderDetailQuery } from "../lib/queries/dashboard";
-import { cancelOrder, reassignOrder } from "../lib/ordersApi";
+import {
+  assignOrder,
+  cancelOrder,
+  markDeliveryFailed,
+  reassignOrder,
+  setOrderPriority,
+} from "../lib/ordersApi";
 import { fetchRiders } from "../lib/ridersApi";
 import type {
   AddressDetailOut,
@@ -119,6 +125,21 @@ export function OrderDetailDrawer({
 
   const loading = isPending && detail === null;
   const error = isError && detail === null ? "Failed to load order details" : null;
+
+  async function assignAction() {
+    if (!basicOrder || reassignTo === "") return;
+    setReassigning(true);
+    setActionError(null);
+    try {
+      const updated = await assignOrder(basicOrder.id, Number(reassignTo));
+      onOrderUpdated?.(updated);
+      setReassignTo("");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to assign");
+    } finally {
+      setReassigning(false);
+    }
+  }
 
   async function reassignAction() {
     if (!basicOrder || reassignTo === "") return;
@@ -258,6 +279,54 @@ export function OrderDetailDrawer({
             </div>
           )}
 
+          {(detail.status === "ready" ||
+            detail.status === "preparing" ||
+            detail.status === "confirmed") &&
+            !detail.rider && (
+              <div className={s.actionBar}>
+                <select
+                  className={s.reassignSelect}
+                  value={reassignTo}
+                  onChange={(e) =>
+                    setReassignTo(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  disabled={reassigning}
+                  aria-label="Assign to rider"
+                >
+                  <option value="">Assign rider…</option>
+                  {riders
+                    .filter((r) => r.status !== "deactivated")
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.status.replace(/_/g, " ")})
+                      </option>
+                    ))}
+                </select>
+                <Button onClick={assignAction} disabled={reassigning || reassignTo === ""}>
+                  {reassigning ? "Assigning…" : "Assign rider"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={async () => {
+                    if (!basicOrder) return;
+                    try {
+                      const updated = await setOrderPriority(basicOrder.id, "priority");
+                      onOrderUpdated?.(updated);
+                    } catch (e) {
+                      setActionError(e instanceof Error ? e.message : "Priority failed");
+                    }
+                  }}
+                >
+                  Mark priority
+                </Button>
+                {actionError && (
+                  <span style={{ color: "var(--danger, #dc2626)", fontSize: "13px" }}>
+                    {actionError}
+                  </span>
+                )}
+              </div>
+            )}
+
           {detail.status === "assigned" && (
             <div className={s.actionBar}>
               <select
@@ -281,11 +350,60 @@ export function OrderDetailDrawer({
               <Button onClick={reassignAction} disabled={reassigning || reassignTo === ""}>
                 {reassigning ? "Reassigning…" : "Reassign rider"}
               </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  if (!basicOrder) return;
+                  try {
+                    const updated = await setOrderPriority(basicOrder.id, "priority");
+                    onOrderUpdated?.(updated);
+                  } catch (e) {
+                    setActionError(e instanceof Error ? e.message : "Priority failed");
+                  }
+                }}
+              >
+                Priority
+              </Button>
               {actionError && (
                 <span style={{ color: "var(--danger, #dc2626)", fontSize: "13px" }}>
                   {actionError}
                 </span>
               )}
+            </div>
+          )}
+
+          {(detail.status === "picked_up" || detail.status === "arriving") && (
+            <div className={s.actionBar}>
+              <select
+                className={s.reassignSelect}
+                aria-label="Delivery failure reason"
+                defaultValue="customer_unreachable"
+                id="fail-reason"
+              >
+                <option value="customer_unreachable">Customer unreachable</option>
+                <option value="wrong_address">Wrong address</option>
+                <option value="refused">Refused</option>
+                <option value="unsafe">Unsafe</option>
+                <option value="other">Other</option>
+              </select>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  if (!basicOrder) return;
+                  const sel = document.getElementById("fail-reason") as HTMLSelectElement | null;
+                  try {
+                    const updated = await markDeliveryFailed(
+                      basicOrder.id,
+                      sel?.value || "customer_unreachable",
+                    );
+                    onOrderUpdated?.(updated);
+                  } catch (e) {
+                    setActionError(e instanceof Error ? e.message : "Fail failed");
+                  }
+                }}
+              >
+                Mark undeliverable
+              </Button>
             </div>
           )}
 

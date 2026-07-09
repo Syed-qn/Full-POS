@@ -59,7 +59,9 @@ async def test_tax_invoice_includes_arabic_labels(client, auth_headers, db_sessi
     resp = await client.get(f"/api/v1/orders/{order.id}/tax-invoice", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["labels_ar"]["title"] == "فاتورة ضريبية"
+    # Small B2C orders resolve to simplified tax invoice (Cat 13).
+    assert body["labels_ar"]["title"] in ("فاتورة ضريبية", "فاتورة ضريبية مبسطة")
     assert body["labels_ar"]["total"] == "الإجمالي"
+    assert body["document_type"] in ("tax_invoice", "simplified_tax_invoice")
     # Dynamic data (dish names) must NOT be translated — out of scope.
     assert body["line_items"][0]["dish_name"] == "Kebab"

@@ -17,6 +17,9 @@ class OrderItemOut(BaseModel):
     notes: Optional[str] = None          # special request (e.g. "double masala") — for kitchen
     cancelled: bool = False              # partial cancellation — item struck without voiding order
     cancelled_reason: Optional[str] = None
+    course_number: int = 1
+    course_held: bool = False
+    seat_number: Optional[int] = None
 
 
 class OrderOut(BaseModel):
@@ -49,6 +52,20 @@ class OrderOut(BaseModel):
     batch_preview: Optional[str] = None
     # Set on resale copies (…-RS rows). Null on the cancelled original.
     resale_of_order_id: Optional[int] = None
+    # Category-1 POS fields
+    order_type: Optional[str] = "delivery"
+    priority: Optional[str] = "normal"
+    held_at: Optional[str] = None
+    held_reason: Optional[str] = None
+    table_id: Optional[int] = None
+    staff_id: Optional[int] = None
+    scheduled_for: Optional[str] = None
+    is_preorder: bool = False
+    customer_allergy_notes: Optional[str] = None
+    # Category-8 channel inbox
+    aggregator_source: Optional[str] = None
+    aggregator_order_ref: Optional[str] = None
+    source_channel: Optional[str] = None
 
 
 class CustomerOut(BaseModel):
@@ -95,6 +112,65 @@ class ManualOrderIn(BaseModel):
     address: ManualOrderAddressIn
     delivery_fee_aed: Decimal = Decimal("0.00")
     scheduled_for: datetime | None = None
+    order_type: str = "delivery"
+    priority: str = "normal"
+    is_preorder: bool = False
+    table_id: int | None = None
+    staff_id: int | None = None
+    customer_allergy_notes: str | None = None
+
+
+class PosOrderItemIn(BaseModel):
+    dish_id: int
+    qty: int = Field(ge=1, le=50)
+    notes: str | None = None
+    course_number: int = Field(default=1, ge=1, le=20)
+    course_held: bool = False
+    seat_number: int | None = Field(default=None, ge=1, le=50)
+
+
+class PosOrderIn(BaseModel):
+    """Unified POS create for dine-in / takeaway / drive-thru / delivery / online / tableside."""
+
+    order_type: str
+    customer_phone: str = Field(min_length=7)
+    customer_name: str | None = None
+    items: list[PosOrderItemIn] = Field(min_length=1)
+    table_id: int | None = None
+    staff_id: int | None = None
+    address: ManualOrderAddressIn | None = None
+    delivery_fee_aed: Decimal = Decimal("0.00")
+    scheduled_for: datetime | None = None
+    is_preorder: bool = False
+    priority: str = "normal"
+    customer_allergy_notes: str | None = None
+    auto_confirm: bool = True
+
+
+class HoldOrderIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=256)
+
+
+class PriorityIn(BaseModel):
+    priority: str = Field(min_length=1, max_length=16)
+
+
+class FireCourseIn(BaseModel):
+    course_number: int = Field(ge=1, le=20)
+
+
+class RepeatLastOrderIn(BaseModel):
+    customer_phone: str = Field(min_length=7)
+
+
+class RefundOrderIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class QrOrderIn(BaseModel):
+    customer_phone: str = Field(min_length=7)
+    customer_name: str | None = None
+    items: list[PosOrderItemIn] = Field(min_length=1)
 
 
 class CustomerLookupOut(BaseModel):
@@ -137,7 +213,8 @@ class EditOrderItemIn(BaseModel):
 
 
 class DeliveryPhotoIn(BaseModel):
-    photo_url: str = Field(min_length=1, max_length=512)
+    photo_url: str | None = Field(default=None, max_length=512)
+    photo_base64: str | None = None
 
 
 class VerifyDeliveryOtpIn(BaseModel):

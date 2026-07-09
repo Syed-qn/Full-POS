@@ -56,6 +56,20 @@ async def compute_prep_deadline(
 
     geo = get_geo_provider()
     dist_km = geo.distance_km(restaurant.lat, restaurant.lng, addr.latitude, addr.longitude)
+    # Prefer zone pricing when a delivery zone with fee_aed matches the drop-off.
+    try:
+        from app.geo.fees import resolve_delivery_fee
+
+        _zone_fee = resolve_delivery_fee(
+            dist_km,
+            drop_lat=addr.latitude,
+            drop_lon=addr.longitude,
+            restaurant_settings=restaurant.settings if hasattr(restaurant, "settings") else None,
+        )
+        # Stash on address object for callers that recompute fee immediately after.
+        setattr(addr, "_resolved_delivery_fee", _zone_fee)
+    except Exception:  # noqa: BLE001
+        pass
     drive_min = geo.eta_minutes(dist_km, buffer_minutes=0)
 
     rs = restaurant.settings or {}
@@ -214,6 +228,10 @@ async def list_orders_for_tenant(
     q: str | None = None,
     updated_since: datetime | None = None,
     scheduled_only: bool = False,
+    open_only: bool = False,
+    held_only: bool = False,
+    order_type: str | None = None,
+    channel: str | None = None,
 ) -> list[Order]:
     """List orders for the tenant, newest first, with optional server-side filters.
 
@@ -221,8 +239,11 @@ async def list_orders_for_tenant(
     Date bounds use Asia/Dubai calendar days on ``created_at``.
     ``updated_since`` (used by the desktop pull-sync client) restricts results to rows
     with ``updated_at`` strictly after the given timestamp.
+    ``channel`` filters by source_channel or aggregator_source (Category 8 inbox).
     """
     from sqlalchemy import or_
+
+    from app.ordering.order_types import OPEN_ORDER_STATUSES
 
     limit = min(max(limit, 1), 100)
     offset = max(offset, 0)
@@ -231,6 +252,23 @@ async def list_orders_for_tenant(
         stmt = stmt.where(Order.status == status)
     if scheduled_only:
         stmt = stmt.where(Order.scheduled_for.is_not(None))
+    if open_only:
+        stmt = stmt.where(
+            Order.status.in_(sorted(OPEN_ORDER_STATUSES)),
+            Order.held_at.is_(None),
+        )
+    if held_only:
+        stmt = stmt.where(Order.held_at.is_not(None))
+    if order_type:
+        stmt = stmt.where(Order.order_type == order_type)
+    if channel:
+        ch = channel.strip().lower()
+        stmt = stmt.where(
+            or_(
+                Order.source_channel == ch,
+                Order.aggregator_source == ch,
+            )
+        )
     if from_date:
         stmt = stmt.where(Order.created_at >= _dubai_day_start(from_date))
     if to_date:
@@ -606,7 +644,7 @@ async def _next_order_seq(session: "AsyncSession", restaurant_id: int) -> int:
 
 
 def _effective_unit_price(dish: "Dish", variant: dict | None = None) -> Decimal:
-    """Price charged for one unit of a cart line.
+    """Price charged for one unit of a cart line (without time/channel rules).
 
     A chosen serving-size variant carries its own price. Otherwise the flat dish is
     charged at its SALE price when one is set and valid (0 < sale < base) — so a dish
@@ -633,20 +671,77 @@ async def add_item(
     notes: str | None = None,
     variant: dict | None = None,
     price_aed_override: Decimal | None = None,
+    course_number: int = 1,
+    course_held: bool = False,
+    selected_modifier_ids: list[int] | None = None,
+    skip_modifier_validation: bool = False,
 ) -> OrderItem:
-    # When a serving-size variant is chosen, snapshot its name + price; otherwise the
-    # dish is charged at its sale price when set (else base price). A caller may pass
-    # ``price_aed_override`` to snapshot an externally-authoritative unit price (e.g. the
-    # tapped Meta catalogue ``item_price``) instead of the local Dish.price_aed (R-051).
+    """Add a dish line to the order.
+
+    Applies DishPriceRule (happy hour / channel / branch) when no override/variant.
+    Enforces forced modifiers unless ``skip_modifier_validation`` is True.
+    Decrements dish.stock_remaining countdown when set; auto-hides OOS dishes.
+    """
+    from datetime import datetime, timezone
+
+    from app.menu.modifier_service import validate_forced_modifiers
+    from app.menu.pricing import resolve_dish_price
+
+    if not skip_modifier_validation:
+        await validate_forced_modifiers(
+            session, dish_id=dish.id, selected_modifier_ids=selected_modifier_ids
+        )
+
     variant_name = variant.get("name") if variant else None
     if price_aed_override is not None and variant is None:
         unit_price = Decimal(str(price_aed_override))
-    else:
+    elif variant:
         unit_price = _effective_unit_price(dish, variant)
+    else:
+        # Time / channel / branch pricing rules (happy hour, delivery channel, etc.)
+        channel = getattr(order, "order_type", None) or "delivery"
+        # Map whatsapp-native to delivery channel for rules
+        if channel in ("online",):
+            channel = "online"
+        try:
+            unit_price = await resolve_dish_price(
+                session,
+                dish_id=dish.id,
+                at=datetime.now(timezone.utc),
+                channel=channel,
+                branch_id=order.restaurant_id,
+            )
+            # Prefer sale_price when lower than rule/base and no explicit rule matched
+            # would already return the rule price; still apply sale when base was returned.
+            sale = getattr(dish, "sale_price_aed", None)
+            if sale is not None and dish.price_aed is not None and unit_price == dish.price_aed:
+                sale_dec = Decimal(str(sale))
+                if 0 < sale_dec < dish.price_aed:
+                    unit_price = sale_dec
+        except ValueError:
+            unit_price = _effective_unit_price(dish, variant)
 
-    # Merge into an existing line for the same dish + variant + notes so the cart shows
-    # "2x Mango Lassi" instead of two separate "1x" lines (matches how real ordering
-    # apps present a cart). A different variant is a separate line.
+    # Snapshot selected modifiers for KDS / ticket
+    selected_modifiers: list = []
+    if selected_modifier_ids:
+        from app.menu.modifiers import Modifier
+
+        mods = (
+            await session.scalars(
+                select(Modifier).where(Modifier.id.in_(selected_modifier_ids))
+            )
+        ).all()
+        selected_modifiers = [
+            {"id": m.id, "name": m.name, "price_delta_aed": str(m.price_delta_aed)}
+            for m in mods
+        ]
+        unit_price = unit_price + sum(
+            (m.price_delta_aed for m in mods), Decimal("0.00")
+        )
+
+    notes_match = (
+        OrderItem.notes.is_(None) if not notes else OrderItem.notes == notes
+    )
     existing_line = (
         await session.scalars(
             select(OrderItem).where(
@@ -655,12 +750,14 @@ async def add_item(
                 OrderItem.variant_name.is_(variant_name)
                 if variant_name is None
                 else OrderItem.variant_name == variant_name,
+                OrderItem.course_number == course_number,
+                notes_match,
+                OrderItem.cancelled.is_(False),
             )
         )
     ).first()
     if existing_line is not None:
         existing_line.qty += qty
-        # Non-empty incoming note wins; empty preserves existing (R-002)
         if notes:
             existing_line.notes = notes
         item = existing_line
@@ -675,10 +772,20 @@ async def add_item(
             qty=qty,
             notes=notes,
             allergens_snapshot=list(dish.allergens or []),
+            course_number=course_number,
+            course_held=course_held,
+            selected_modifiers=selected_modifiers,
         )
         session.add(item)
+
+    # Item countdown + auto-hide out-of-stock
+    remaining = getattr(dish, "stock_remaining", None)
+    if remaining is not None:
+        dish.stock_remaining = max(0, remaining - qty)
+        if dish.stock_remaining <= 0 and getattr(dish, "auto_hide_when_oos", False):
+            dish.is_available = False
+
     await session.flush()
-    # Recalculate order totals from persisted items.
     existing = (
         await session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))
     ).all()
@@ -899,9 +1006,11 @@ async def finalize_confirmation(
     order.prep_deadline = await compute_prep_deadline(session, order, now)
     order.cook_estimate_minutes = await compute_cook_estimate(session, order)
 
-    from app.ordering.tax import apply_vat
+    from app.identity.models import Restaurant
+    from app.ordering.tax import apply_order_vat_from_settings
 
-    apply_vat(order)
+    restaurant = await session.get(Restaurant, order.restaurant_id)
+    await apply_order_vat_from_settings(session, order=order, restaurant=restaurant)
 
     # Auto-apply any available wallet store credit: holds it against this order so
     # COD due = total - wallet_applied (settled on delivery, released on cancel).
@@ -1898,6 +2007,9 @@ async def create_manual_order(
     order.delivery_fee_aed = delivery_fee_aed
     order.address_id = address.id
     order.scheduled_for = scheduled_for
+    order.order_type = "delivery"
+    if scheduled_for is not None:
+        order.is_preorder = True
     await session.flush()
 
     # 6. Add items (each call recalculates subtotal)
@@ -1908,24 +2020,44 @@ async def create_manual_order(
     order.total = order.subtotal + delivery_fee_aed
     await session.flush()
 
-    # 8. Confirm order (draft → pending_confirmation → confirmed, starts SLA)
-    await finalize_confirmation(session, order=order, actor="manager")
+    # 8. Confirm order (draft → pending_confirmation → confirmed, starts SLA).
+    # Future scheduled/pre-orders stay draft until release_due_scheduled_orders.
+    now = datetime.now(timezone.utc)
+    defer = scheduled_for is not None and scheduled_for > now
+    if not defer:
+        await finalize_confirmation(session, order=order, actor="manager")
+        if scheduled_for is not None:
+            order.scheduled_released_at = now
 
-    # 9. Enqueue WhatsApp confirmation to customer
-    await enqueue_message(
-        session,
-        restaurant_id=restaurant_id,
-        to_phone=customer_phone,
-        msg_type=OutboundMessageType.TEXT,
-        payload={
-            "body": (
-                f"Your order {order.order_number} has been placed! "
-                f"Total: AED {order.total} (COD). "
-                f"Your food will arrive in ~40 minutes \U0001f6f5"
-            )
-        },
-        idempotency_key=f"manual-order-confirm-{order.id}",
-    )
+        # 9. Enqueue WhatsApp confirmation to customer
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=customer_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": (
+                    f"Your order {order.order_number} has been placed! "
+                    f"Total: AED {order.total} (COD). "
+                    f"Your food will arrive in ~40 minutes \U0001f6f5"
+                )
+            },
+            idempotency_key=f"manual-order-confirm-{order.id}",
+        )
+    else:
+        await enqueue_message(
+            session,
+            restaurant_id=restaurant_id,
+            to_phone=customer_phone,
+            msg_type=OutboundMessageType.TEXT,
+            payload={
+                "body": (
+                    f"Your pre-order {order.order_number} is scheduled. "
+                    f"Total: AED {order.total} (COD)."
+                )
+            },
+            idempotency_key=f"manual-order-scheduled-{order.id}",
+        )
 
     return order
 
@@ -2272,8 +2404,14 @@ async def patch_customer(
     name: str | None,
     phone: str | None,
     marketing_opted_in: bool | None,
+    allergy_notes: str | None = None,
+    notes: str | None = None,
+    birthday=None,
+    anniversary=None,
+    is_vip: bool | None = None,
+    tags: dict | None = None,
 ) -> Customer:
-    """Update customer name/phone and/or marketing opt preference."""
+    """Update customer identity/CRM fields and/or marketing opt preference."""
     from sqlalchemy import select as sa_select
     from app.marketing.optout import record_opt_in, record_opt_out
 
@@ -2291,8 +2429,43 @@ async def patch_customer(
 
     if name is not None:
         customer.name = name
-    if phone is not None:
+    if phone is not None and phone != customer.phone:
+        from app.loyalty.crm import record_phone_change
+
+        await record_phone_change(
+            session,
+            restaurant_id=restaurant_id,
+            customer_id=customer.id,
+            old_phone=customer.phone,
+            changed_by="manager",
+        )
         customer.phone = phone
+        # Keep effective_phone as the ORIGINAL number so simultaneous
+        # marketing_opted_in updates still target the pre-change phone
+        # (see test_patch_customer_opt_out_targets_original_phone).
+    elif phone is not None:
+        customer.phone = phone
+    if allergy_notes is not None:
+        # Empty string clears the field.
+        customer.allergy_notes = allergy_notes or None
+    if notes is not None:
+        customer.notes = notes or None
+    if birthday is not None:
+        customer.birthday = birthday or None
+    if anniversary is not None:
+        customer.anniversary = anniversary or None
+    if is_vip is not None:
+        customer.is_vip = bool(is_vip)
+        tags_map = dict(customer.tags or {})
+        if customer.is_vip:
+            tags_map["vip"] = True
+        else:
+            tags_map.pop("vip", None)
+        customer.tags = tags_map
+    if tags is not None:
+        customer.tags = tags
+        if tags.get("vip") is True:
+            customer.is_vip = True
     if marketing_opted_in is True:
         await record_opt_in(session, restaurant_id=restaurant_id, phone=effective_phone)
     elif marketing_opted_in is False:
@@ -2315,6 +2488,7 @@ async def patch_address(
     building: str | None,
     receiver_name: str | None,
     additional_details: str | None,
+    floor: str | None = None,
 ) -> CustomerAddress:
     """Update address fields. Raises ValueError if address not owned by customer."""
     from sqlalchemy import select as sa_select
@@ -2341,6 +2515,8 @@ async def patch_address(
 
     if room_apartment is not None:
         addr.room_apartment = room_apartment
+    if floor is not None:
+        addr.floor = floor or None
     if building is not None:
         addr.building = building
     if receiver_name is not None:

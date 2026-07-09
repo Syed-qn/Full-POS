@@ -68,6 +68,17 @@ export interface DishOut {
   /** Manager's WhatsApp switch: false → unlinked & hidden from the WhatsApp catalogue. */
   whatsapp_enabled?: boolean;
   variants?: VariantOut[];
+  allergens?: string[];
+  name_ar?: string | null;
+  description_ar?: string | null;
+  nutrition?: Record<string, number | string>;
+  channels_allowed?: string[];
+  brand_menu_code?: string | null;
+  stock_remaining?: number | null;
+  auto_hide_when_oos?: boolean;
+  available_from?: string | null;
+  available_until?: string | null;
+  category_id?: number | null;
 }
 
 export interface DiffOut {
@@ -158,6 +169,12 @@ export interface OrderOut {
    *  orders that will batch together by proximity. Null when it would ride alone. */
   batch_preview?: string | null;
   resale_of_order_id?: number | null;
+  /** Category 1+8 POS / channel fields */
+  order_type?: string | null;
+  priority?: string | null;
+  source_channel?: string | null;
+  aggregator_source?: string | null;
+  aggregator_order_ref?: string | null;
 }
 
 export interface ConversationOut {
@@ -209,6 +226,14 @@ export interface CustomerDetailOut {
   first_order_at: string | null;
   last_order_at: string | null;
   marketing_opted_in: boolean;
+  allergy_notes?: string | null;
+  notes?: string | null;
+  birthday?: string | null;
+  anniversary?: string | null;
+  is_vip?: boolean;
+  loyalty_points?: number;
+  average_order_value_aed?: string | null;
+  customer_lifetime_value_aed?: string | null;
 }
 
 export interface RiderDetailOut {
@@ -291,8 +316,20 @@ export interface DispatchKpisOut {
   avg_stops: number;
   /** Share of assignments that fell back to greedy engine (0–100). */
   engine_fallback_pct: number;
+  /** Fleet average minutes from SLA confirm to delivered. */
+  avg_delivery_minutes?: number | null;
+  delivered_count?: number;
   /** Optional reporting window label from the API (e.g. "today"). */
   window?: string;
+}
+
+export interface DriverPerformanceRow {
+  rider_id: number;
+  rider_name: string | null;
+  delivery_count: number;
+  avg_delivery_minutes: number | null;
+  late_count: number;
+  late_pct: number;
 }
 
 export interface LiveMapStopOut {
@@ -363,6 +400,12 @@ export interface CustomerPatchIn {
   name?: string | null;
   phone?: string | null;
   marketing_opted_in?: boolean | null;
+  allergy_notes?: string | null;
+  notes?: string | null;
+  birthday?: string | null;
+  anniversary?: string | null;
+  is_vip?: boolean | null;
+  tags?: Record<string, unknown> | null;
 }
 
 export interface AddressPatchIn {
@@ -381,6 +424,24 @@ export interface OrderSummaryOut {
   resale_of_order_id?: number | null;
 }
 
+export interface FavoriteOut {
+  dish_id: number | null;
+  dish_name: string;
+  order_count: number;
+}
+
+export interface PhoneHistoryOut {
+  phone: string;
+  changed_by: string;
+  created_at?: string | null;
+}
+
+export interface StampCardOut {
+  stamps: number;
+  stamps_required: number;
+  rewards_redeemed: number;
+}
+
 export interface CustomerProfileOut extends CustomerDetailOut {
   usual_order_time: string | null;
   tags: Record<string, unknown>;
@@ -390,6 +451,10 @@ export interface CustomerProfileOut extends CustomerDetailOut {
   loyalty_tier?: string | null;
   /** True when a manager has pinned the tier (auto-recompute paused). */
   loyalty_tier_locked?: boolean;
+  favorites?: FavoriteOut[];
+  phone_history?: PhoneHistoryOut[];
+  stamp_card?: StampCardOut | null;
+  referral_code?: string | null;
 }
 
 // ── Loyalty (settings) ───────────────────────────────────────────────────────
@@ -549,6 +614,8 @@ export interface StaffMember {
   name: string;
   phone: string | null;
   role: string;
+  is_active?: boolean;
+  training_mode?: boolean;
 }
 
 export interface StaffCreateIn {
@@ -576,6 +643,9 @@ export interface Shift {
   staff_id: number;
   scheduled_start: string;
   scheduled_end: string;
+  status?: string;
+  actual_start?: string | null;
+  actual_end?: string | null;
 }
 
 export interface ShiftCreateIn {
@@ -614,6 +684,8 @@ export interface RestockIn {
 export interface WasteIn {
   quantity: DecimalString;
   reason?: string | null;
+  reason_type?: "wastage" | "spoilage" | "theft" | "over_portion" | "other";
+  batch_id?: number | null;
 }
 
 export interface StockCountIn {
@@ -624,29 +696,36 @@ export interface StockCountOut {
   variance: DecimalString;
   previous_stock: DecimalString;
   counted_stock: DecimalString;
+  variance_pct?: number | null;
 }
 
 export interface RecipeLinkIn {
   dish_id: number;
   quantity_per_dish: DecimalString;
+  yield_pct?: DecimalString;
 }
 
 export interface BatchIn {
   qty: DecimalString;
   expiry_date: string;
+  location_id?: number | null;
 }
 
 export interface BatchOut {
   id: number;
   ingredient_id: number;
   qty: DecimalString;
+  qty_remaining?: DecimalString | null;
   expiry_date: string;
   received_at: string;
+  location_id?: number | null;
 }
 
 export interface SubstituteIn {
   substitute_ingredient_id: number;
   notes?: string | null;
+  conversion_factor?: DecimalString;
+  priority?: number;
 }
 
 export interface SubstituteOut {
@@ -654,6 +733,8 @@ export interface SubstituteOut {
   ingredient_id: number;
   substitute_ingredient_id: number;
   notes?: string | null;
+  conversion_factor?: DecimalString | null;
+  priority?: number | null;
 }
 
 export interface CostIn {
@@ -679,6 +760,7 @@ export interface VendorIn {
   name: string;
   phone?: string | null;
   email?: string | null;
+  notes?: string | null;
 }
 
 export interface VendorOut {
@@ -686,6 +768,8 @@ export interface VendorOut {
   name: string;
   phone?: string | null;
   email?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
 }
 
 export interface PurchaseOrderLineIn {
@@ -697,12 +781,14 @@ export interface PurchaseOrderLineIn {
 export interface PurchaseOrderIn {
   vendor_id: number;
   lines: PurchaseOrderLineIn[];
+  notes?: string | null;
 }
 
 export interface PurchaseOrderLineOut {
   id: number;
   ingredient_id: number;
   qty_ordered: DecimalString;
+  qty_received?: DecimalString;
   unit_cost_aed: DecimalString;
 }
 
@@ -710,7 +796,46 @@ export interface PurchaseOrderOut {
   id: number;
   vendor_id: number;
   status: string;
+  notes?: string | null;
   lines: PurchaseOrderLineOut[];
+}
+
+export interface GrnOut {
+  id: number;
+  po_id: number;
+  grn_number: string;
+  received_by: string;
+  notes?: string | null;
+}
+
+export interface StockLocationOut {
+  id: number;
+  name: string;
+  code: string;
+  kitchen_role: string;
+  is_active: boolean;
+}
+
+export interface StockVarianceRow {
+  id: number;
+  ingredient_id: number;
+  ingredient_name: string;
+  previous_stock: DecimalString;
+  counted_stock: DecimalString;
+  variance: DecimalString;
+  counted_by: string;
+  created_at: string | null;
+}
+
+export interface StockAnomalyAlertOut {
+  id: number;
+  ingredient_id: number;
+  alert_type: string;
+  expected_qty: DecimalString;
+  actual_qty: DecimalString;
+  variance_pct: DecimalString;
+  status: string;
+  message: string | null;
 }
 
 export interface VendorPriceComparisonOut {
@@ -765,11 +890,21 @@ export interface OrganizationBranchIn {
   name: string;
   lat: number;
   lng: number;
+  region?: string;
+  currency?: string;
+  locale?: string;
+  is_central_kitchen?: boolean;
 }
 
 export interface OrganizationBranchOut {
   id: number;
   name: string;
+  region?: string | null;
+  currency?: string;
+  locale?: string;
+  is_central_kitchen?: boolean;
+  lat?: number;
+  lng?: number;
 }
 
 export interface OrganizationRollupBranchOut {

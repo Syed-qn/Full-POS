@@ -17,15 +17,25 @@ async def duplicate_order(session: AsyncSession, *, restaurant_id: int, order_id
     new_order.subtotal = source.subtotal
     new_order.delivery_fee_aed = source.delivery_fee_aed
     new_order.total = source.total
+    new_order.order_type = getattr(source, "order_type", None) or "delivery"
+    new_order.table_id = source.table_id
+    new_order.customer_allergy_notes = source.customer_allergy_notes
 
     source_items = (await session.scalars(
-        select(OrderItem).where(OrderItem.order_id == source.id)
+        select(OrderItem).where(
+            OrderItem.order_id == source.id,
+            OrderItem.cancelled.is_(False),
+        )
     )).all()
     for item in source_items:
         session.add(OrderItem(
             order_id=new_order.id, dish_id=item.dish_id, dish_number=item.dish_number,
             dish_name=item.dish_name, variant_name=item.variant_name, price_aed=item.price_aed,
             qty=item.qty, notes=item.notes,
+            course_number=getattr(item, "course_number", 1) or 1,
+            seat_number=getattr(item, "seat_number", None),
+            selected_modifiers=list(getattr(item, "selected_modifiers", None) or []),
+            allergens_snapshot=list(getattr(item, "allergens_snapshot", None) or []),
         ))
     await session.flush()
     return new_order

@@ -52,21 +52,57 @@ async def reconcile_shift(
     restaurant_id: int,
     rider_id: int,
     shift_date: date,
+    declared_collected_aed: Decimal | None = None,
 ) -> RiderShiftReconciliation:
-    """Sum a rider's collections for shift_date; write reconciliation with variance.
+    """Reconcile a rider's COD for a shift date.
 
-    Caller commits. COD-only platform: the expected total is the sum of the
-    rider's recorded collections for the date (a balanced shift sums equal).
+    **Expected** = sum of door COD due (order.total − wallet) for orders
+    *delivered* that day by this rider (not merely recorded collections).
+    **Collected** = sum of ``CodCollection`` rows for the day, or the
+    manager-declared cash count when provided (till hand-in).
+
+    Variance = collected − expected. Status ``balanced`` when zero.
+    Caller commits.
     """
-    collected = await session.scalar(
+    from app.ordering.models import Order
+    from app.ordering.payments import cod_due_aed
+
+    # Delivered orders on this shift (UTC date of delivered_at).
+    orders = list(
+        (
+            await session.scalars(
+                select(Order).where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.rider_id == rider_id,
+                    Order.status == "delivered",
+                    Order.delivered_at.is_not(None),
+                    func.date(Order.delivered_at) == shift_date,
+                )
+            )
+        ).all()
+    )
+    expected = sum((cod_due_aed(o) for o in orders), Decimal("0.00")).quantize(
+        Decimal("0.01")
+    )
+
+    ledger_collected = await session.scalar(
         select(func.coalesce(func.sum(CodCollection.amount_aed), 0)).where(
             CodCollection.restaurant_id == restaurant_id,
             CodCollection.rider_id == rider_id,
             func.date(CodCollection.collected_at) == shift_date,
         )
     )
-    collected = Decimal(collected).quantize(Decimal("0.01"))
-    expected = collected
+    ledger_collected = Decimal(ledger_collected).quantize(Decimal("0.01"))
+    collected = (
+        Decimal(declared_collected_aed).quantize(Decimal("0.01"))
+        if declared_collected_aed is not None
+        else ledger_collected
+    )
+    # If no deliveries but collections exist, fall back so empty days stay balanced
+    # when both are zero; when only collections exist, expected=ledger for safety.
+    if not orders and declared_collected_aed is None:
+        expected = ledger_collected
+
     variance = (collected - expected).quantize(Decimal("0.01"))
     rec = RiderShiftReconciliation(
         rider_id=rider_id,

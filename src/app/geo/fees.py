@@ -38,3 +38,48 @@ def delivery_fee_aed(distance_km: float) -> Decimal:
     raise OutOfRadiusError(
         f"Distance {distance_km:.2f} km exceeds {MAX_RADIUS_KM} km service radius"
     )
+
+
+def zone_fee_aed(
+    lat: float,
+    lon: float,
+    zones: list[dict] | None,
+    *,
+    distance_km: float | None = None,
+) -> Decimal | None:
+    """If drop-off falls in a zone with ``fee_aed``, return that fee (zone pricing).
+
+    Zones without fee_aed are ignored (still used for batching only).
+    Returns None when no priced zone matches — caller falls back to distance tiers.
+    """
+    if not zones:
+        return None
+    from app.dispatch.zones import zone_for_point
+
+    name = zone_for_point(lat, lon, zones)
+    if name is None:
+        return None
+    for zone in zones:
+        if zone.get("name") == name and zone.get("fee_aed") is not None:
+            return Decimal(str(zone["fee_aed"])).quantize(Decimal("0.01"))
+    return None
+
+
+def resolve_delivery_fee(
+    distance_km: float,
+    *,
+    drop_lat: float | None = None,
+    drop_lon: float | None = None,
+    restaurant_settings: dict | None = None,
+) -> Decimal:
+    """Prefer zone fee when configured; else distance tiers from settings/spec."""
+    settings = restaurant_settings or {}
+    zones = settings.get("delivery_zones") or []
+    if drop_lat is not None and drop_lon is not None and zones:
+        zfee = zone_fee_aed(drop_lat, drop_lon, zones, distance_km=distance_km)
+        if zfee is not None:
+            return zfee
+    from app.ordering.fees import calculate_fee, fee_settings_from_restaurant
+
+    fee_cfg = fee_settings_from_restaurant(settings)
+    return calculate_fee(distance_km, fee_cfg)

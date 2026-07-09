@@ -75,6 +75,7 @@ export function OrdersScreen() {
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   // "all" | "single" | a batch label ("A", "B", …) present in the current orders.
   const [batchFilter, setBatchFilter] = useState<string>("all");
+  const [channelFilter, setChannelFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [preset, setPreset] = useState<PresetKey>("all");
@@ -94,10 +95,11 @@ export function OrdersScreen() {
       fromDate: fromDate || undefined,
       toDate: toDate || undefined,
       q: debouncedSearch.trim() || undefined,
+      channel: channelFilter === "all" ? undefined : channelFilter,
       page,
       limit: PAGE_SIZE,
     }),
-    [statusFilter, fromDate, toDate, debouncedSearch, page],
+    [statusFilter, fromDate, toDate, debouncedSearch, channelFilter, page],
   );
 
   const { data: orders = [], isLoading, isFetching, isError } = useOrdersQuery(listFilters);
@@ -159,7 +161,7 @@ export function OrdersScreen() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, fromDate, toDate]);
+  }, [debouncedSearch, statusFilter, fromDate, toDate, channelFilter]);
 
   const hasNextPage = orders.length === PAGE_SIZE;
   const pageRows = filtered;
@@ -187,6 +189,15 @@ export function OrdersScreen() {
       },
     },
     { key: "total", header: "Total", render: (o) => <span className={s.mono}>AED {o.total_aed}</span> },
+    {
+      key: "channel",
+      header: "Channel",
+      render: (o) => (
+        <span className={s.mono} title={o.aggregator_order_ref ?? undefined}>
+          {o.source_channel || o.aggregator_source || o.order_type || "—"}
+        </span>
+      ),
+    },
     {
       key: "rider",
       header: "Rider",
@@ -292,6 +303,31 @@ export function OrdersScreen() {
               {batchLabels.map((b) => (
                 <option key={b} value={b}>🔗 Batch {b}</option>
               ))}
+            </select>
+          </div>
+          <div className={s.filterGroup}>
+            <span className={s.filterLabel}>Channel</span>
+            <select
+              className={s.statusSelect}
+              aria-label="Filter by channel"
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value)}
+            >
+              <option value="all">All channels</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="talabat">Talabat</option>
+              <option value="deliveroo">Deliveroo</option>
+              <option value="careem">Careem</option>
+              <option value="ubereats">Uber Eats</option>
+              <option value="noon">Noon</option>
+              <option value="zomato">Zomato</option>
+              <option value="website">Website</option>
+              <option value="mobile_app">Mobile app</option>
+              <option value="instagram">Instagram</option>
+              <option value="google_business">Google Business</option>
+              <option value="qr">QR table</option>
+              <option value="kiosk">Kiosk</option>
+              <option value="call_center">Call center</option>
             </select>
           </div>
         </div>

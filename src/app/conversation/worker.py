@@ -127,15 +127,23 @@ async def _run_sweep() -> int:
             # value and won't qualify — that's the re-engagement guard.
             if reminder_on and quiet >= recovery_min and not state.get("abandoned_nudged"):
                 # Show the actual cart + a concrete next step, not a dead-end yes/no.
+                # Cat 14: AI abandoned-recovery copy (deterministic offline).
                 from app.conversation.engine import _build_cart_summary
 
                 cart = await _build_cart_summary(session, conv)
-                body = (
-                    "Hi 👋 You still have items in your cart:\n\n"
-                    f"🛒 {cart}\n\n"
-                    "Say *done* whenever you're ready to check out, "
-                    "or tell me anything else you'd like to add 😊"
-                ) if cart else _NUDGE_BODY
+                try:
+                    from app.ai.marketing_ai import abandoned_recovery_copy
+
+                    body = (await abandoned_recovery_copy(cart_summary=cart or None))[
+                        "body"
+                    ]
+                except Exception:  # noqa: BLE001
+                    body = (
+                        "Hi 👋 You still have items in your cart:\n\n"
+                        f"🛒 {cart}\n\n"
+                        "Say *done* whenever you're ready to check out, "
+                        "or tell me anything else you'd like to add 😊"
+                    ) if cart else _NUDGE_BODY
                 # Key per NUDGE, not just per cart: outbox.idempotency_key is unique,
                 # so a bare "abandoned-{conv}-{draft}" can be sent only once ever — a
                 # re-armed cart (customer came back, then went quiet again) would

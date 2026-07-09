@@ -9,6 +9,7 @@ import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { ApiError, apiClient } from "../lib/apiClient";
 import { useRidersQuery } from "../lib/queries/dashboard";
+import { reconcileRiderCod } from "../lib/dispatchApi";
 import { deleteRider, setRiderDuty, setRiderStatus } from "../lib/ridersApi";
 import type { RestaurantOut, RiderOut, RiderStatus } from "../lib/types";
 import s from "./RidersScreen.module.css";
@@ -31,6 +32,7 @@ export function RidersScreen() {
   const [restaurantPhone, setRestaurantPhone] = useState<string | null>(null);
   const [removeFlow, setRemoveFlow] = useState<RemoveFlow | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
+  const [settleBusy, setSettleBusy] = useState<number | null>(null);
 
   useEffect(() => {
     apiClient
@@ -66,6 +68,20 @@ export function RidersScreen() {
     const rider = riders.find((r) => r.id === id);
     if (!rider) return;
     setRemoveFlow({ step: "confirm", id, name: rider.name });
+  }
+
+  async function onSettleCod(id: number) {
+    setSettleBusy(id);
+    try {
+      const rec = await reconcileRiderCod(id);
+      toast(
+        `COD settle ${rec.status}: expected ${rec.expected_total_aed}, collected ${rec.collected_total_aed}, variance ${rec.variance_aed}`,
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "COD settle failed", "error");
+    } finally {
+      setSettleBusy(null);
+    }
   }
 
   async function confirmRemove() {
@@ -155,6 +171,8 @@ export function RidersScreen() {
             onDelete={onDelete}
             onEdit={setEditing}
             onInviteApp={onInviteApp}
+            onSettleCod={onSettleCod}
+            settleBusy={settleBusy === r.id}
           />
         ))}
       </div>

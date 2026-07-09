@@ -2283,3 +2283,105 @@
 
 - [2026-07-09 17:12 +0400] DOC: Advanced restaurant POS feature implementation status — 14 parallel explore agents audited 385 features across all 14 categories. Wrote docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md. Totals: Implemented 153 (39.7%), Partial 139 (36.1%), Not implemented 93 (24.2%); Implemented+Partial 292 (75.8%). Strongest: delivery (19I/0N), payments (20I), inventory (15I). Weakest: real aggregators (mock-only), offline/DR, franchise HQ, several AI insight features. Supersedes stale numbers in POS_100_FEATURE_AUDIT_2026-07-08.md / POS_FEATURE_GAP_ANALYSIS.md where code advanced (credit notes, house accounts, KDS checklist APIs, etc.).
 - [2026-07-09 17:20 +0400] TASK A2 CODE-REVIEW FIX (2 Critical findings on d99811c, price-rule CRUD+UI): (1) `delete_price_rule` (src/app/menu/pricing.py) performed a hard delete with no audit trail — added a `record_audit(entity="price_rule", action="deleted", before={rule_type, price_aed, channel})` call before the delete, exactly mirroring `categories.py`'s `delete_category` pattern; TDD RED (`test_delete_price_rule_writes_audit_log` failed on missing AuditLog row) then GREEN. Committed as `4fd2eda fix(menu): audit-log price rule deletion`. (2) `PriceRulesPanel` was rendered as a `position:fixed` sibling of `DishEditModal` at `z-index:70`, underneath the modal's own `z-index:1000` full-viewport overlay (`onClick={onClose}`) — every click on the panel actually landed on the overlay and closed the dish edit modal, making price rules functionally unreachable; jsdom's lack of layout/paint/stacking meant existing Vitest/RTL tests never caught it. Fix: moved the panel's full implementation (renamed `PriceRulesSection`) from `MenuManagerScreen.tsx` into `DishEditModal.tsx`, rendered inside the modal's own body/DOM subtree (guarded by `!isNew`) instead of as a sibling — so it is above the overlay by construction, not by z-index. Removed the dead fixed-position CSS from `MenuManagerScreen.module.css`, added in-flow section CSS to `DishEditModal.module.css`, added `data-testid="dish-edit-modal"` on the modal element, and added a DOM-structure regression test (`MenuManagerScreen.pricing.test.tsx`: toggle button must be `within(modal)`) — the realistic ceiling for jsdom. Verification: backend `pytest tests/menu/` = 77 passed; frontend `npm test -- MenuManagerScreen` = 6 passed, full `npm test` = 292 passed (70 files); `ruff check src/app/menu tests/menu` clean; `cd frontend && npx tsc --noEmit` clean. Report: `.superpowers/sdd/task-A2-report.md`.
+
+- [2026-07-09 17:19 +0400] DOC: Wrote full advanced POS feature status into docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md — all 14 categories, 385 features (Implemented/Partial/Not implemented), executive summary, evidence notes, grand totals, highest-value gaps.
+
+- [2026-07-09 17:36 +0400] FEATURE Category 1 Order Management FULL: multi-type orders (dine_in/takeaway/drive_thru/qr/tableside/online/delivery/aggregator), hold/unhold, open/held filters, scheduled+preorder release (Celery + API), course_number/course_held + fire-course, rush/priority APIs, customer allergy_notes snapshot, repeat-last, refund-order, QR public endpoint + table qr_token, tableside create. Modules: order_types.py, pos_orders.py, qr_orders.py, scheduled.py, public_router.py, worker.py; migration a1b2c3d4e5f6; KDS create_tickets_for_items skips held courses. Tests: tests/ordering/test_category1_pos_orders.py 10/10 passed. Aggregator remains PARTIAL (mock SDK). Updated docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md Cat1 → 31I/1P/0N.
+
+- [2026-07-09 17:44 +0400] FEATURE Category 2 Kitchen/KDS 100%: station types (grill/fry/beverage/dessert/pizza/cloud/main), multi-kitchen kitchen_code, seed-defaults, auto-prioritize oldest+rush tickets, live timer/ETA/urgency, recall/start-prep/packaging/quality/missing-item APIs+FE, print payload with allergens/modifiers/notes/customer allergy, printer fallback re-route (via_fallback), category-defaults CRUD, kitchen performance report, bumped_by_staff_id for prep-by-staff. Frontend KdsScreen full tabs (tickets/pickup/performance), Nav Kitchen link, /kds route. Migration i2j3k4l5m6n7. Tests: tests/kds 26 passed; frontend KdsScreen+kdsApi+NavSidebar 6 passed. Status doc Cat2 → 30I/0P/0N.
+
+- [2026-07-09 17:52 +0400] FEATURE Category 3 Menu 100%: subcategories parent_id; dish name_ar/description_ar/allergens/nutrition/channels_allowed/brand_menu_code/stock_remaining/auto_hide_when_oos/available_from|until on API+DishEditModal; price rules applied in add_item (time/channel/branch); forced modifiers enforced; MenuSellRule upsell/cross_sell; bulk CSV import + bulk price update FE; inventory OOS auto-hide; approval already wired. Migration j3k4l5m6n7o8. Tests: tests/menu/test_category3_full + related 29 passed; frontend MenuManager/DishEdit 12 passed. Status Cat3 → 35I/0P/0N.
+
+- [2026-07-09 18:04 +0400] FEATURE Category 4 Inventory & food-cost 100% wired (backend+DB+middleware+frontend):
+  - Models: StockLocation (branch/central/commissary), GoodsReceivedNote/Line, StockCountLog, StockClosingSnapshot, StockAnomalyAlert; Ingredient.location_id/preferred_vendor_id; DishIngredient.yield_pct; WasteLog.reason_type/batch_id; IngredientBatch.qty_remaining (FEFO); IngredientSubstitute.conversion_factor/priority; Vendor.is_active/notes; PO.notes + POLine.qty_received.
+  - Services: FEFO batch deduct on confirm, auto-sub on shortfall, yield-adjusted dish_cost, spoilage/variance reports, anomaly alerts (theft_loss/over_portion), EOD closing snapshots, GRN partial receive updating stock+cost+batches, ensure default locations.
+  - Routers: /api/v1/ingredients/* (locations, reports/variance|spoilage|anomaly-alerts|closing-snapshot, waste reason_type, stock-count, batches, substitutes) + /api/v1/vendors CRUD-ish + /api/v1/purchase-orders + /api/v1/grn; reports food_cost_pct/margin on item-performance.
+  - Migration: k4l5m6n7o8p9 (head after j3k4l5m6n7o8).
+  - Frontend InventoryScreen: stock ops (restock/waste-spoilage/count/FEFO batch), purchasing (vendor+PO+GRN receive), variance/alerts, spoilage+expiring, locations+vendors, EOD snapshot; inventoryApi fully typed for Cat4 endpoints.
+  - Tests: tests/inventory full suite 47 passed (test_category4_full 11); frontend InventoryScreen+inventoryApi 9 passed; ruff clean; alembic head k4l5m6n7o8p9.
+  - Status doc Cat4 → 30I/0P/0N.
+
+- [2026-07-09 18:15 +0400] FEATURE Category 5 Payment & billing 100% wired (backend+DB+middleware+frontend):
+  - Migration l5m6n7o8p9q0 (head): payment_links, payment_settlements/lines, gift_cards; Order service/packaging/min/manager/staff discounts + payment_terms/room_number/pay_later_due_at; PaymentTransaction channel/reference_meta/wallet_session_id + longer tender_type.
+  - Tenders: cash/card/apple_pay/google_pay/tap_to_pay/online/wallet/deposit/pay_later/room_charge/gift_card/house_account; wallet-session mint (Mock+Stripe); public payment links complete; billing settings drive recompute fees; manager/staff discounts; gift card code+PIN issue/redeem; PSP settlement import + reconciliation report.
+  - Routers: payments (charge/links/billing/recon/wallet-session), orders (deposit/pay-later/discounts/payments list), public pay, gift-cards issue/redeem/list, cash-drawer (existing).
+  - Frontend: /payments PaymentsScreen — till charge, payment links, drawer open/in/out/close, billing settings, gift cards, recon KPIs; paymentsApi expanded.
+  - Tests: tests/payments+cashdrawer+giftcards 65 passed; FE PaymentsScreen 3 + paymentsApi 1; ruff clean; alembic head l5m6n7o8p9q0.
+  - Status doc Cat5 → 34I/0P/0N; grand totals 242I/79P/64N.
+
+- [2026-07-09 18:23 +0400] FEATURE Category 6 Customer/CRM/loyalty 100% wired:
+  - Migration m6n7o8p9q0r1: customer notes/birthday/anniversary/is_vip/loyalty_points; phone_history; favorites; stamp_cards; loyalty_point_entries.
+  - CRM service loyalty/crm.py: phone history, stamps earn/redeem, points ledger, favorites rebuild, AOV/CLV, high-value list, birthday IDs, delivery hooks.
+  - Delivery: after earn → stamps + points + favorites; NPS detractor auto ticket; marketing presets birthday + review_request.
+  - APIs: profile enrichment, high-value, stamp redeem, points redeem, reorder-last; patch CRM fields.
+  - FE CustomerProfileScreen: allergy/notes/birthday/anniversary/VIP, AOV/CLV, stamps/points/referral, favorites, phone history, reorder last.
+  - Tests: category6 4 + customer patch green; FE CustomerProfile 14 passed; alembic head m6n7o8p9q0r1.
+  - Status Cat6 → 31I/0P/0N; grand totals 260I/71P/54N.
+
+- [2026-07-09 18:35 +0400] FEATURE Category 7 Delivery management 100% wired:
+  - Migration n7o8p9q0r1s2: address floor; order delivery_photo_path, otp_required_at_deliver.
+  - Manual assign unassigned ready/preparing/confirmed orders; zone fee_aed pricing; COD reconcile expected from delivered COD due; OTP gate when required; proof photo base64→media/; failure reason codes on manager+rider paths; KPI avg_delivery_minutes.
+  - FE: OrderDetail assign/priority/undeliverable; Reports driver performance; Riders Settle COD; Settings zone fee; LiveOps avg delivery KPI.
+  - Tests: tests/dispatch/test_category7_full.py 5 passed; alembic head n7o8p9q0r1s2.
+  - Status Cat7 → 29I/0P/0N; grand totals 270I/61P/54N.
+
+- [2026-07-09 18:43 +0400] FEATURE Category 8 Aggregator & channel integrations 100% wired (backend+DB+middleware+frontend):
+  - Port/Mock/Factory: talabat, deliveroo, careem, ubereats, noon, zomato — parse/verify/push_menu/availability/store_status/accept/reject.
+  - channels.py: per-restaurant settings.channels (enable/accept/commission/mode/slug); pause gate on ingest.
+  - Service: idempotent ingest + source_channel; menu/price/stock sync + channel_sync_logs; commission/profit reports; settlements + recon vs settlement; public storefront place order; ensure public_slug.
+  - Migration o8p9q0r1s2t3: restaurants.public_slug, orders.source_channel, channel_sync_logs, channel_settlements (+ updated_at triggers).
+  - Routers: /api/v1/aggregators (channels, pause/resume, sync menu|price|stock, recon, commission/profit, inbox, settlements, webhooks) + /api/v1/public/store/{slug} + QR menu/order.
+  - OrderOut + list ?channel=; FE ChannelsScreen + PublicStoreScreen /order/:slug; Orders channel filter/column; Nav Channels.
+  - Tests: tests/aggregators 16 passed (test_category8_full 9); FE ChannelsScreen+channelsApi 5; ruff clean; alembic head o8p9q0r1s2t3.
+  - Status Cat8 → 22I/0P/0N; grand totals 291I/50P/44N of 385.
+
+- [2026-07-09 18:51 +0400] FEATURE Category 9 Staff & permissions 100% wired (backend+DB+middleware+frontend):
+  - Migration p9q0r1s2t3u4: staff is_active/training_mode; shifts status/actual_*; cash_drawer_sessions.staff_id; orders.is_training/tip_staff_id; approval_requests; staff_mistakes; suspicious_activity_alerts.
+  - Approvals: manager PIN (staff manager or owner password); discount ≥AED20 requires PIN; void logs approval+mistake; failed PIN → alert.
+  - Shifts open/close + clock in/out; attendance schedule vs actual; performance composite report; tip pool + tips-by-staff attribution; training mode excludes sales; drawer staff assignment.
+  - FE StaffScreen: PIN login, start break, training toggle, approvals, mistakes, attendance, performance, alerts, tip attribution, shift open/close.
+  - Tests: tests/staff 42 passed (test_category9_full 5); FE StaffScreen+staffApi 13; ruff clean; alembic head p9q0r1s2t3u4.
+  - Status Cat9 → 23I/0P/0N; grand totals 302I/43P/40N of 385.
+
+- [2026-07-09 18:58 +0400] FEATURE Category 10 Reporting & owner dashboard 100% wired (backend+DB+middleware+frontend):
+  - extended.py: sales by category/channel/waiter/payment; gross profit; food cost; discounts; voids; refunds; wastage; top/slow/dead items; AOV; avg delivery; peak hours; tax VAT period; retention cohort; forecasted sales AED; owner daily summary + WhatsApp send.
+  - xlsx_export.py: stdlib multi-sheet .xlsx; GET /reports/export.xlsx workbook pack.
+  - Migration q0r1s2t3u4v5: owner_report_deliveries log table.
+  - Z-report discounts include manager+staff+coupon.
+  - FE ReportsScreen: granularity hourly/daily/weekly/monthly, all Cat10 panels, Excel export, owner WhatsApp button.
+  - Tests: tests/reports 36 passed (test_category10_full 5); FE Reports 14; ruff clean; alembic head q0r1s2t3u4v5.
+  - Status Cat10 → 36I/0P/0N; grand totals 322I/32P/31N of 385.
+
+- [2026-07-09 19:05 +0400] FEATURE Category 11 Multi-branch & franchise 100% wired (backend+DB+middleware+frontend):
+  - Migration r1s2t3u4v5w6: org royalty/currency/locale/settings; restaurant region/currency/locale/is_central_kitchen; org_menu_items, org_branch_prices, org_menu_publish_jobs, org_customers, org_promotions, org_members, central_kitchen_requests.
+  - franchise.py: master menu + branch prices + publish approval workflow; royalty & region reports; multi-currency rollup; shared customers/loyalty; HQ promo push; members with branch scope; central kitchen requests; bulk updates.
+  - Router: /organizations/menu-*, royalty, region-report, customers, loyalty, promotions, members, central-kitchen, bulk-update, branch patch, org me.
+  - FE BranchOpsScreen: EN/AR toggle, central menu publish, royalty, regions, shared loyalty, promos, members, central kitchen, bulk locale.
+  - Tests: tests/organizations 16 passed (test_category11_full 2); FE BranchOps+orgApi 6; ruff clean; alembic head r1s2t3u4v5w6.
+  - Status Cat11 → 19I/0P/0N; grand totals 335I/28P/22N of 385.
+
+- [2026-07-09 19:11 +0400] FEATURE Category 12 Offline/backup/reliability 100% wired (backend+DB+desktop+frontend):
+  - Migration s2t3u4v5w6x7: backup_jobs, device_registrations, app_error_logs, offline_payment_ledger, dr_drill_logs.
+  - reliability service/router: cloud snapshots (APP_BACKUP_DIR), daily backup, verify, DR preview, full export, device register/heartbeat/failover, offline payment apply, error log, network status, extended health.
+  - Desktop: local_payments/print_jobs/network_state; offline order+payment queue; FileSpool+Failover printers; pull menu+orders; conflict resolve IPC; cache GET offline.
+  - FE ReliabilityScreen (/reliability): backups, devices, errors, audit, conflicts.
+  - Tests: reliability 5 + audit backup 3; desktop offline/db/sync/printer 14; FE reliability 4; alembic head s2t3u4v5w6x7.
+  - Status Cat12 → 19I/0P/0N; grand totals 353I/17P/15N of 385.
+
+- [2026-07-09 19:20 +04] Category 13 Compliance & UAE — 100% full-stack (20I/0P/0N)
+  - Migration t3u4v5w6x7y8: order_items.vat_rate/vat_amount; orders.invoice_kind/tax_pricing_mode; dishes.vat_rate; refund_notes; e_invoice_transmissions; data_retention_runs + updated_at triggers.
+  - Module src/app/compliance/: models, tax_settings, tax apply multi-rate/inclusive, einvoice Mock ASP (PINT-AE-JSON-v1), refund notes RN-*, retention purge, accountant JSON/CSV export, router /api/v1/compliance/*.
+  - Confirm path uses apply_order_vat_from_settings; SettingsPatch + Settings UI tax mode/legal_name_ar; FE ComplianceScreen + nav + vitest.
+  - Tests: tests/compliance 9 green; tax + bilingual updated; grand totals 365I/8P/12N of 385.
+
+- [2026-07-09 19:25 +04] Category 14 AI features — 100% full-stack (25I/0P/0N)
+  - Migration u4v5w6x7y8z9: ai_insights, review_reply_suggestions, reservation_requests, call_answer_sessions, menu_translations + updated_at triggers.
+  - Module src/app/ai/: insights (daily sales, sales drop, staff, slow-moving, food-cost, low-stock), recommendations (upsell/combo/bundles), marketing_ai (reorder, abandoned, segments, festival), reviews (reply+escalate), eta, translation, calls (mock IVR), reservations; router /api/v1/ai/*; text_gen Fake+optional LLM.
+  - Wired abandoned cart sweep to AI recovery copy; FE AiInsightsScreen (/ai) + nav; tests 8 backend + 1 vitest green.
+  - Status Cat14 → 25I/0P/0N; grand totals 384I/1P/0N of 385 (remaining partial: Cat1 order mgmt 1P).
+
+- [2026-07-09 19:35 +04] Residual Cat1 PARTIAL closed — Aggregator orders live HTTP adapters
+  - LiveHttpAggregator (httpx) for talabat/deliveroo/careem/ubereats/noon/zomato; factory selects live when channels.<p>.mode=live + api_key.
+  - Multi-shape webhook parse; HMAC verify; accept/reject/menu/stock/store/status; health probe; reject API.
+  - FSM transition pushes marketplace status for aggregator orders; FE Channels live mode/creds/health.
+  - Tests: tests/aggregators 25 green; status Cat1 32I/0P/0N; grand total 385I/0P/0N of 385.

@@ -4,17 +4,36 @@ import { PageHeader } from "../components/PageHeader";
 import { SectionBanner } from "../components/SectionBanner";
 import { toast } from "../components/Toaster";
 import {
+  bulkUpdateBranches,
   completeStockTransfer,
   createBranch,
+  createCentralKitchenRequest,
+  createOrgCustomer,
+  createOrgMember,
+  createOrgMenuItem,
+  createOrgPromotion,
   createStockTransfer,
+  creditOrgLoyalty,
+  decideMenuPublish,
   getBranchComparison,
   getOrgIdFromToken,
+  getOrgMe,
   getOrgToken,
   getOrganizationInventorySummary,
+  getRegionReport,
   getRollupSales,
+  getRoyaltyReport,
   listBranches,
+  listCentralKitchenRequests,
+  listOrgCustomers,
+  listOrgMembers,
+  listOrgMenuItems,
   loginOrganization,
+  patchOrgMe,
+  pushOrgPromotion,
+  requestMenuPublish,
   signupOrganization,
+  updateCentralKitchenStatus,
 } from "../lib/organizationsApi";
 import type {
   BranchComparisonOut,
@@ -66,8 +85,29 @@ export function BranchOpsScreen() {
   const [transferQty, setTransferQty] = useState("");
   const [lastTransfer, setLastTransfer] = useState<StockTransferOut | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [branchRegion, setBranchRegion] = useState("");
+  const [locale, setLocale] = useState<"en" | "ar">("en");
+  const [royaltyPct, setRoyaltyPct] = useState("0");
+  const [royalty, setRoyalty] = useState<{
+    total_royalty_aed: string;
+    total_revenue_aed: string;
+    branches: Array<{ restaurant_name: string; royalty_aed: string; revenue_aed: string }>;
+  } | null>(null);
+  const [regions, setRegions] = useState<Array<{ region: string; revenue_aed: string; branch_count: number }>>([]);
+  const [menuName, setMenuName] = useState("");
+  const [menuPrice, setMenuPrice] = useState("15.00");
+  const [menuItems, setMenuItems] = useState<Array<{ id: number; name: string; base_price_aed: string }>>([]);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoAmt, setPromoAmt] = useState("10.00");
+  const [customers, setCustomers] = useState<Array<{ phone: string; loyalty_points: number; name?: string | null }>>([]);
+  const [custPhone, setCustPhone] = useState("+9715");
+  const [members, setMembers] = useState<Array<{ name: string; role: string; email: string }>>([]);
+  const [ckRequests, setCkRequests] = useState<Array<{ id: number; status: string; from_restaurant_id: number }>>([]);
+  const [ckFrom, setCkFrom] = useState("");
+  const [ckItem, setCkItem] = useState("");
 
   const orgId = getOrgIdFromToken();
+  const t = (en: string, ar: string) => (locale === "ar" ? ar : en);
 
   async function load() {
     if (!getOrgToken()) {
@@ -79,21 +119,54 @@ export function BranchOpsScreen() {
     setLoadError(null);
     try {
       const currentOrgId = getOrgIdFromToken();
-      const [branchRows, rollupReport, inventoryReport, comparisonRows] =
-        await Promise.all([
-          listBranches(),
-          getRollupSales(targetDate),
-          getOrganizationInventorySummary(),
-          currentOrgId
-            ? getBranchComparison(currentOrgId, startDate, endDate)
-            : Promise.resolve([] as BranchComparisonOut[]),
-        ]);
+      const [
+        branchRows,
+        rollupReport,
+        inventoryReport,
+        comparisonRows,
+        me,
+        roy,
+        reg,
+        menu,
+        custs,
+        mems,
+        cks,
+      ] = await Promise.all([
+        listBranches(),
+        getRollupSales(targetDate),
+        getOrganizationInventorySummary(),
+        currentOrgId
+          ? getBranchComparison(currentOrgId, startDate, endDate)
+          : Promise.resolve([] as BranchComparisonOut[]),
+        getOrgMe().catch(() => null),
+        getRoyaltyReport(startDate, endDate).catch(() => null),
+        getRegionReport(startDate, endDate).catch(() => []),
+        listOrgMenuItems().catch(() => []),
+        listOrgCustomers().catch(() => []),
+        listOrgMembers().catch(() => []),
+        listCentralKitchenRequests().catch(() => []),
+      ]);
       setBranches(branchRows);
       setRollup(rollupReport);
       setSummary(inventoryReport);
       setComparison(comparisonRows);
       setFromBranch((prev) => prev || String(branchRows[0]?.id ?? ""));
       setToBranch((prev) => prev || String(branchRows[1]?.id ?? branchRows[0]?.id ?? ""));
+      setCkFrom((prev) => prev || String(branchRows[0]?.id ?? ""));
+      if (me) {
+        setRoyaltyPct(me.royalty_pct);
+        if (me.default_locale === "ar" || me.default_locale === "en") setLocale(me.default_locale);
+      }
+      setRoyalty(
+        roy && typeof roy === "object" && !Array.isArray(roy) && "branches" in roy
+          ? (roy as typeof royalty)
+          : null,
+      );
+      setRegions(Array.isArray(reg) ? reg : []);
+      setMenuItems(Array.isArray(menu) ? menu : []);
+      setCustomers(Array.isArray(custs) ? custs : []);
+      setMembers(Array.isArray(mems) ? mems : []);
+      setCkRequests(Array.isArray(cks) ? cks : []);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Could not load branch operations.");
     } finally {
@@ -150,11 +223,18 @@ export function BranchOpsScreen() {
     }
     setSubmitting(true);
     try {
-      const created = await createBranch({ name: branchName, lat: parsedLat, lng: parsedLng });
+      const created = await createBranch({
+        name: branchName,
+        lat: parsedLat,
+        lng: parsedLng,
+        region: branchRegion || undefined,
+        locale,
+      });
       setBranches((prev) => [...prev, created]);
       setBranchName("");
       setLat("");
       setLng("");
+      setBranchRegion("");
       toast(`Branch added: ${created.name}`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not add branch.", "error");
@@ -238,10 +318,21 @@ export function BranchOpsScreen() {
   return (
     <div className={s.screen}>
       <PageHeader
-        title="Branches"
-        subtitle="Multi-branch sales, inventory pressure, and stock transfers"
+        title={t("Branches", "الفروع")}
+        subtitle={t(
+          "Franchise HQ — menu publish, royalty, regions, shared loyalty, central kitchen",
+          "المقر — قائمة مركزية، رسوم الامتياز، المناطق، الولاء، المطبخ المركزي",
+        )}
         right={
           <div className={s.actions}>
+            <select
+              aria-label="Dashboard language"
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as "en" | "ar")}
+            >
+              <option value="en">EN</option>
+              <option value="ar">AR</option>
+            </select>
             <input
               className={s.date}
               aria-label="Rollup date"
@@ -250,7 +341,7 @@ export function BranchOpsScreen() {
               onChange={(e) => setTargetDate(e.target.value)}
             />
             <Button type="button" variant="ghost" onClick={() => void load()}>
-              Refresh
+              {t("Refresh", "تحديث")}
             </Button>
           </div>
         }
@@ -357,6 +448,10 @@ export function BranchOpsScreen() {
                 <span>Longitude</span>
                 <input aria-label="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} />
               </label>
+              <label>
+                <span>Region</span>
+                <input aria-label="Branch region" value={branchRegion} onChange={(e) => setBranchRegion(e.target.value)} placeholder="dubai" />
+              </label>
             </div>
             <Button type="button" disabled={submitting} onClick={() => void submitBranch()}>
               Add branch
@@ -409,6 +504,320 @@ export function BranchOpsScreen() {
               )}
             </div>
           </section>
+        </div>
+      </section>
+
+      <section className={s.grid}>
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <h2>{t("Central menu & publish", "القائمة المركزية")}</h2>
+            <span>HQ master items → branch menus with approval</span>
+          </div>
+          <div className={s.formGridSingle}>
+            <label>
+              <span>Dish name</span>
+              <input value={menuName} onChange={(e) => setMenuName(e.target.value)} />
+            </label>
+            <label>
+              <span>Base price AED</span>
+              <input value={menuPrice} onChange={(e) => setMenuPrice(e.target.value)} />
+            </label>
+          </div>
+          <div className={s.actions}>
+            <Button
+              type="button"
+              disabled={submitting}
+              onClick={async () => {
+                if (!menuName.trim()) return;
+                setSubmitting(true);
+                try {
+                  await createOrgMenuItem({ name: menuName, base_price_aed: menuPrice });
+                  setMenuName("");
+                  setMenuItems(await listOrgMenuItems());
+                  toast("Menu item added");
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Failed", "error");
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+            >
+              Add master item
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={async () => {
+                try {
+                  const job = await requestMenuPublish({
+                    target_restaurant_ids: branches.map((b) => b.id),
+                  });
+                  const done = await decideMenuPublish(job.id, true);
+                  toast(`Menu publish: ${done.status}`);
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Publish failed", "error");
+                }
+              }}
+            >
+              Request &amp; approve publish
+            </Button>
+          </div>
+          <ul>
+            {menuItems.map((m) => (
+              <li key={m.id}>
+                {m.name} — AED {m.base_price_aed}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <h2>{t("Franchise royalty", "رسوم الامتياز")}</h2>
+            <span>Royalty % of delivered sales by branch</span>
+          </div>
+          <div className={s.formGridSingle}>
+            <label>
+              <span>Royalty %</span>
+              <input value={royaltyPct} onChange={(e) => setRoyaltyPct(e.target.value)} />
+            </label>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={async () => {
+              try {
+                await patchOrgMe({ royalty_pct: royaltyPct, default_locale: locale });
+                setRoyalty(await getRoyaltyReport(startDate, endDate));
+                toast("Royalty settings saved");
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "Failed", "error");
+              }
+            }}
+          >
+            Save &amp; load royalty report
+          </Button>
+          {royalty && (
+            <ul>
+              <li>
+                Total royalty: {money(royalty.total_royalty_aed)} on {money(royalty.total_revenue_aed)}
+              </li>
+              {royalty.branches.map((b) => (
+                <li key={b.restaurant_name}>
+                  {b.restaurant_name}: {money(b.royalty_aed)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3 style={{ marginTop: 12 }}>{t("Regions", "المناطق")}</h3>
+          <ul>
+            {regions.map((r) => (
+              <li key={r.region}>
+                {r.region}: {r.branch_count} branches · {money(r.revenue_aed)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className={s.grid}>
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <h2>{t("Shared customers & loyalty", "العملاء والولاء")}</h2>
+            <span>Org-wide phone identity across branches</span>
+          </div>
+          <div className={s.formGridSingle}>
+            <label>
+              <span>Phone</span>
+              <input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} />
+            </label>
+          </div>
+          <div className={s.actions}>
+            <Button
+              type="button"
+              onClick={async () => {
+                try {
+                  await createOrgCustomer({ phone: custPhone, preferred_locale: locale });
+                  await creditOrgLoyalty({ phone: custPhone, points: 10, spend_aed: "25" });
+                  setCustomers(await listOrgCustomers());
+                  toast("Customer + loyalty credited");
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Failed", "error");
+                }
+              }}
+            >
+              Upsert + credit 10 pts
+            </Button>
+          </div>
+          <ul>
+            {customers.map((c) => (
+              <li key={c.phone}>
+                {c.name ?? c.phone}: {c.loyalty_points} pts
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <h2>{t("HQ promotions", "العروض")}</h2>
+            <span>Push multi-use coupons to branches</span>
+          </div>
+          <div className={s.formGridSingle}>
+            <label>
+              <span>Code</span>
+              <input value={promoCode} onChange={(e) => setPromoCode(e.target.value)} />
+            </label>
+            <label>
+              <span>Discount AED</span>
+              <input value={promoAmt} onChange={(e) => setPromoAmt(e.target.value)} />
+            </label>
+          </div>
+          <Button
+            type="button"
+            onClick={async () => {
+              if (!promoCode.trim()) return;
+              try {
+                const p = await createOrgPromotion({
+                  code: promoCode,
+                  title: promoCode,
+                  discount_aed: promoAmt,
+                  target_restaurant_ids: branches.map((b) => b.id),
+                });
+                await pushOrgPromotion(p.id);
+                toast(`Promotion ${p.code} pushed`);
+                setPromoCode("");
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "Failed", "error");
+              }
+            }}
+          >
+            Create &amp; push promo
+          </Button>
+
+          <h3 style={{ marginTop: 16 }}>{t("HQ members / roles", "الأدوار")}</h3>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={async () => {
+              if (!branches[0]) return;
+              try {
+                await createOrgMember({
+                  email: `mgr${Date.now()}@branch.local`,
+                  name: "Branch Manager",
+                  role: "branch_manager",
+                  branch_ids: [branches[0].id],
+                });
+                setMembers(await listOrgMembers());
+                toast("Member added");
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "Failed", "error");
+              }
+            }}
+          >
+            Add sample branch manager
+          </Button>
+          <ul>
+            {members.map((m) => (
+              <li key={m.email}>
+                {m.name} · {m.role} · {m.email}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className={s.grid}>
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <h2>{t("Central kitchen", "المطبخ المركزي")}</h2>
+            <span>Branch production requests</span>
+          </div>
+          <div className={s.formGridSingle}>
+            <label>
+              <span>Requesting branch</span>
+              <select
+                aria-label="Kitchen requesting branch"
+                value={ckFrom}
+                onChange={(e) => setCkFrom(e.target.value)}
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                    {b.is_central_kitchen ? " (CK)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Item</span>
+              <input value={ckItem} onChange={(e) => setCkItem(e.target.value)} placeholder="Dough 10kg" />
+            </label>
+          </div>
+          <Button
+            type="button"
+            onClick={async () => {
+              if (!ckFrom || !ckItem.trim()) return;
+              try {
+                await createCentralKitchenRequest({
+                  from_restaurant_id: Number(ckFrom),
+                  items: [{ name: ckItem, qty: 1 }],
+                });
+                setCkRequests(await listCentralKitchenRequests());
+                setCkItem("");
+                toast("Kitchen request created");
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "Failed — designate a central kitchen", "error");
+              }
+            }}
+          >
+            Submit request
+          </Button>
+          <ul>
+            {ckRequests.map((r) => (
+              <li key={r.id}>
+                #{r.id} from {r.from_restaurant_id} · {r.status}{" "}
+                {r.status === "pending" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={async () => {
+                      await updateCentralKitchenStatus(r.id, "in_production");
+                      setCkRequests(await listCentralKitchenRequests());
+                    }}
+                  >
+                    Start production
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <h2>{t("Bulk updates", "تحديث جماعي")}</h2>
+            <span>Apply locale/currency across selected locations</span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={async () => {
+              try {
+                await bulkUpdateBranches({
+                  restaurant_ids: branches.map((b) => b.id),
+                  action: "set_locale",
+                  payload: { locale },
+                });
+                await load();
+                toast(`Locale set to ${locale} on all branches`);
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "Failed", "error");
+              }
+            }}
+          >
+            Set all branches locale = {locale}
+          </Button>
         </div>
       </section>
     </div>

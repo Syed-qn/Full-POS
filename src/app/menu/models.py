@@ -27,6 +27,8 @@ class Category(Base, TimestampMixin):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     name: Mapped[str] = mapped_column(String(128))
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Subcategories: null = top-level category; set to parent Category.id for nested.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
 
 
 class Menu(Base, TimestampMixin):
@@ -61,6 +63,8 @@ class Dish(Base, TimestampMixin):
     dish_number: Mapped[int | None] = mapped_column(Integer)  # null = extraction gap, must fix before activate
     name: Mapped[str] = mapped_column(String(255))
     price_aed: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    # Optional per-dish VAT rate override (null = restaurant default, usually 5%).
+    vat_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
     category: Mapped[str | None] = mapped_column(String(128))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
     description: Mapped[str | None] = mapped_column(String(2000))
@@ -123,6 +127,24 @@ class Dish(Base, TimestampMixin):
     # ticket-creation time (see OrderItem.allergens_snapshot) so a later menu edit never
     # retroactively changes an already-placed order's ticket.
     allergens: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # Bilingual menu content (Arabic). English remains in name/description.
+    name_ar: Mapped[str | None] = mapped_column(String(255))
+    description_ar: Mapped[str | None] = mapped_column(String(2000))
+    # Nutrition facts: {"calories": 450, "protein_g": 20, "carbs_g": 40, "fat_g": 12, ...}
+    nutrition: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    # Channel visibility — empty/null list means available on ALL channels.
+    # Values: delivery | dine_in | takeaway | drive_thru | qr | tableside | online |
+    # aggregator | whatsapp
+    channels_allowed: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # Cloud-kitchen / multi-brand menu tag (e.g. "brand-a"). Null = default brand.
+    brand_menu_code: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Item countdown: remaining portions for the day/shift. Null = unlimited.
+    stock_remaining: Mapped[int | None] = mapped_column(Integer)
+    # When True and stock_remaining hits 0 (or inventory recipe is out), auto-set
+    # is_available=False.
+    auto_hide_when_oos: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     menu: Mapped["Menu"] = relationship(back_populates="dishes", lazy="raise_on_sql")
 
@@ -137,3 +159,24 @@ class MenuFile(Base, TimestampMixin):
     content_type: Mapped[str] = mapped_column(String(128))
     size_bytes: Mapped[int] = mapped_column(Integer)
     original_filename: Mapped[str | None] = mapped_column(String(512))
+
+
+class MenuSellRule(Base, TimestampMixin):
+    """Manager-configured upsell / cross-sell rule.
+
+    ``rule_kind`` is ``upsell`` (suggest after dish is in cart) or ``cross_sell``
+    (suggest complementary items). Either ``trigger_dish_id`` or ``trigger_category``
+    identifies when the rule fires; ``suggest_dish_id`` is the recommended item.
+    """
+
+    __tablename__ = "menu_sell_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    rule_kind: Mapped[str] = mapped_column(String(16))  # upsell | cross_sell
+    trigger_dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"), index=True)
+    trigger_category: Mapped[str | None] = mapped_column(String(128))
+    suggest_dish_id: Mapped[int] = mapped_column(ForeignKey("dishes.id"), index=True)
+    message: Mapped[str | None] = mapped_column(String(256))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

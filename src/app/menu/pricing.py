@@ -37,6 +37,9 @@ class DishPriceRule(Base, TimestampMixin):
     days_of_week: Mapped[list | None] = mapped_column(JSONB)  # 0=Mon ... 6=Sun; None=every day
     # "channel" rules: e.g. "delivery" | "dine_in" | "aggregator".
     channel: Mapped[str | None] = mapped_column(String(32))
+    # "branch" rules: optional restaurant_id of the branch (multi-location).
+    # Null branch_id + rule_type=branch still means "this restaurant's base override".
+    branch_id: Mapped[int | None] = mapped_column(ForeignKey("restaurants.id"), index=True)
     price_aed: Mapped[Decimal] = mapped_column(Numeric(8, 2))
 
 
@@ -51,6 +54,7 @@ async def create_price_rule(
     end_time: time | None = None,
     days_of_week: list[int] | None = None,
     channel: str | None = None,
+    branch_id: int | None = None,
 ) -> DishPriceRule:
     if rule_type not in _VALID_RULE_TYPES:
         raise ValueError(f"unknown rule_type: {rule_type}")
@@ -63,6 +67,7 @@ async def create_price_rule(
         end_time=end_time,
         days_of_week=days_of_week,
         channel=channel,
+        branch_id=branch_id,
     )
     session.add(rule)
     await session.flush()
@@ -98,7 +103,13 @@ async def delete_price_rule(
     await session.flush()
 
 
-def _rule_matches(rule: DishPriceRule, *, at: datetime, channel: str | None) -> bool:
+def _rule_matches(
+    rule: DishPriceRule,
+    *,
+    at: datetime,
+    channel: str | None,
+    branch_id: int | None = None,
+) -> bool:
     if rule.rule_type == "time":
         # Time/day-of-week rules are business-local (Asia/Dubai) — same convention as
         # conversation/hours.py and ordering/service.py. A naive `at` is assumed to
@@ -120,10 +131,11 @@ def _rule_matches(rule: DishPriceRule, *, at: datetime, channel: str | None) -> 
     if rule.rule_type == "channel":
         return channel is not None and rule.channel == channel
     if rule.rule_type == "branch":
-        # No per-branch dimension modeled yet beyond restaurant_id scoping — an active
-        # "branch" rule always matches. Kept as its own rule_type so callers can express
-        # intent today and a real branch_id filter can be added later without an API break.
-        return True
+        # Match specific branch when rule.branch_id is set; otherwise match any
+        # (restaurant-scoped override for this dish).
+        if rule.branch_id is None:
+            return True
+        return branch_id is not None and rule.branch_id == branch_id
     return False
 
 
@@ -133,15 +145,13 @@ async def resolve_dish_price(
     dish_id: int,
     at: datetime,
     channel: str | None = None,
+    branch_id: int | None = None,
 ) -> Decimal:
-    """Resolve the effective price for a dish at a given moment/channel.
+    """Resolve the effective price for a dish at a given moment/channel/branch.
 
     FIRST-MATCHING-RULE WINS: rules are evaluated in creation (id) order and the first
-    rule whose conditions match ``at``/``channel`` decides the price. This intentionally
-    does NOT implement a priority/specificity system (e.g. "branch overrides channel
-    overrides time") — a manager who needs layered overrides should create the more
-    specific rule first. Falls back to the dish's base ``price_aed`` when no rule
-    matches (or the dish has no rules at all).
+    rule whose conditions match ``at``/``channel``/``branch_id`` decides the price.
+    Falls back to the dish's base ``price_aed`` when no rule matches.
     """
     dish = await session.get(Dish, dish_id)
     if dish is None:
@@ -154,6 +164,6 @@ async def resolve_dish_price(
         )
     ).all()
     for rule in rules:
-        if _rule_matches(rule, at=at, channel=channel):
+        if _rule_matches(rule, at=at, channel=channel, branch_id=branch_id):
             return rule.price_aed
     return dish.price_aed

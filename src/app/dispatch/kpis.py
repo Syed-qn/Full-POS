@@ -17,9 +17,32 @@ async def compute_dispatch_kpis(
     restaurant_id: int,
     window_hours: int = 24,
 ) -> dict:
-    """Return batch rate, avg stops per multi-stop batch, and engine fallback %."""
+    """Return batch rate, avg stops, engine fallback %, avg delivery minutes."""
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=window_hours)
+
+    # Fleet average delivery time (always computed even with no assignments).
+    delivered = list(
+        (
+            await session.scalars(
+                select(Order).where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.status == "delivered",
+                    Order.delivered_at.is_not(None),
+                    Order.delivered_at >= since,
+                    Order.sla_confirmed_at.is_not(None),
+                )
+            )
+        ).all()
+    )
+    durations = [
+        (o.delivered_at - o.sla_confirmed_at).total_seconds() / 60.0
+        for o in delivered
+        if o.delivered_at and o.sla_confirmed_at
+    ]
+    avg_delivery_minutes = (
+        round(sum(durations) / len(durations), 2) if durations else None
+    )
 
     assignments = list(
         (
@@ -39,6 +62,8 @@ async def compute_dispatch_kpis(
             "batch_rate_pct": 0.0,
             "avg_stops": 0.0,
             "engine_fallback_pct": 0.0,
+            "avg_delivery_minutes": avg_delivery_minutes,
+            "delivered_count": len(delivered),
             "window": "today",
         }
 
@@ -57,9 +82,7 @@ async def compute_dispatch_kpis(
     multi_stop_assignments = sum(
         1 for a in assignments if batch_sizes.get(a.batch_id or -1, 1) >= 2
     )
-    batch_rate_pct = round(
-        (multi_stop_assignments / len(assignments)) * 100.0, 1
-    )
+    batch_rate_pct = round((multi_stop_assignments / len(assignments)) * 100.0, 1)
 
     multi_sizes = [s for s in batch_sizes.values() if s >= 2]
     avg_stops = round(sum(multi_sizes) / len(multi_sizes), 2) if multi_sizes else 0.0
@@ -70,13 +93,13 @@ async def compute_dispatch_kpis(
         if isinstance(a.algorithm_score, dict)
         and a.algorithm_score.get("engine_fallback") is True
     )
-    engine_fallback_pct = round(
-        (fallback_count / len(assignments)) * 100.0, 1
-    )
+    engine_fallback_pct = round((fallback_count / len(assignments)) * 100.0, 1)
 
     return {
         "batch_rate_pct": batch_rate_pct,
         "avg_stops": avg_stops,
         "engine_fallback_pct": engine_fallback_pct,
+        "avg_delivery_minutes": avg_delivery_minutes,
+        "delivered_count": len(delivered),
         "window": "today",
     }

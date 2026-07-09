@@ -29,6 +29,12 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { StaffScreen } from "./screens/StaffScreen";
 import { TicketsScreen } from "./screens/TicketsScreen";
 import { CouponsScreen } from "./screens/CouponsScreen";
+import { PaymentsScreen } from "./screens/PaymentsScreen";
+import { ChannelsScreen } from "./screens/ChannelsScreen";
+import { PublicStoreScreen } from "./screens/PublicStoreScreen";
+import { ReliabilityScreen } from "./screens/ReliabilityScreen";
+import { ComplianceScreen } from "./screens/ComplianceScreen";
+import { AiInsightsScreen } from "./screens/AiInsightsScreen";
 
 function Guarded({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
@@ -67,12 +73,14 @@ export default function App() {
       <Route path="/onboarding" element={<OnboardingRoute />} />
       <Route path="/track/:trackingToken" element={<PublicTrackingScreen />} />
       <Route path="/rider-track/:riderToken" element={<RiderTrackingScreen />} />
+      <Route path="/order/:slug" element={<PublicStoreScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
       <Route path="/customers" element={<Guarded><CustomersScreen /></Guarded>} />
       <Route path="/customers/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
       <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
+      <Route path="/kds" element={<Guarded><KdsScreen /></Guarded>} />
       <Route path="/kds/:stationId" element={<Guarded><KdsScreen /></Guarded>} />
       <Route path="/inventory" element={<Guarded><InventoryScreen /></Guarded>} />
       <Route path="/branches" element={<Guarded><BranchOpsScreen /></Guarded>} />
@@ -80,6 +88,11 @@ export default function App() {
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
       <Route path="/tickets" element={<Guarded><TicketsScreen /></Guarded>} />
       <Route path="/coupons" element={<Guarded><CouponsScreen /></Guarded>} />
+      <Route path="/payments" element={<Guarded><PaymentsScreen /></Guarded>} />
+      <Route path="/channels" element={<Guarded><ChannelsScreen /></Guarded>} />
+      <Route path="/reliability" element={<Guarded><ReliabilityScreen /></Guarded>} />
+      <Route path="/compliance" element={<Guarded><ComplianceScreen /></Guarded>} />
+      <Route path="/ai" element={<Guarded><AiInsightsScreen /></Guarded>} />
       <Route path="/staff" element={<Guarded><StaffScreen /></Guarded>} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />
       <Route path="/analytics" element={<Guarded><AnalyticsScreen /></Guarded>} />

@@ -6,9 +6,13 @@ import { StatusPill } from "../components/StatusPill";
 import { orderStatusLabel } from "../lib/orderDisplay";
 import { Spinner } from "../components/Spinner";
 import {
+  createReferralCode,
   deleteCustomerAddress,
   patchCustomerAddress,
   patchCustomerProfile,
+  redeemLoyaltyPoints,
+  redeemStampCard,
+  reorderLastOrder,
   setCustomerLoyaltyTier,
 } from "../lib/customerApi";
 import {
@@ -42,6 +46,12 @@ export function CustomerProfileScreen() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [optIn, setOptIn] = useState(false);
+  const [allergy, setAllergy] = useState("");
+  const [notes, setNotes] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [anniversary, setAnniversary] = useState("");
+  const [isVip, setIsVip] = useState(false);
+  const [crmMsg, setCrmMsg] = useState<string | null>(null);
 
   const wallet = walletData?.balance ?? null;
   const walletEntries = walletData?.entries ?? [];
@@ -80,6 +90,11 @@ export function CustomerProfileScreen() {
     setName(profile.name ?? "");
     setPhone(profile.phone);
     setOptIn(profile.marketing_opted_in);
+    setAllergy(profile.allergy_notes ?? "");
+    setNotes(profile.notes ?? "");
+    setBirthday(profile.birthday ? String(profile.birthday).slice(0, 10) : "");
+    setAnniversary(profile.anniversary ? String(profile.anniversary).slice(0, 10) : "");
+    setIsVip(Boolean(profile.is_vip));
   }, [profile]);
 
   if (loading) return <Spinner />;
@@ -88,7 +103,12 @@ export function CustomerProfileScreen() {
   const identityDirty =
     name !== (profile.name ?? "") ||
     phone !== profile.phone ||
-    optIn !== profile.marketing_opted_in;
+    optIn !== profile.marketing_opted_in ||
+    allergy !== (profile.allergy_notes ?? "") ||
+    notes !== (profile.notes ?? "") ||
+    birthday !== (profile.birthday ? String(profile.birthday).slice(0, 10) : "") ||
+    anniversary !== (profile.anniversary ? String(profile.anniversary).slice(0, 10) : "") ||
+    isVip !== Boolean(profile.is_vip);
 
   async function saveIdentity() {
     if (!profile) return;
@@ -98,8 +118,14 @@ export function CustomerProfileScreen() {
         name: name || null,
         phone: phone || null,
         marketing_opted_in: optIn,
+        allergy_notes: allergy || null,
+        notes: notes || null,
+        birthday: birthday || null,
+        anniversary: anniversary || null,
+        is_vip: isVip,
       });
       patchProfileCache({ ...profile, ...updated });
+      setCrmMsg("Profile saved.");
     } finally {
       setSaving(false);
     }
@@ -148,11 +174,52 @@ export function CustomerProfileScreen() {
                 {optIn ? "OPT-IN" : "OPT-OUT"}
               </button>
             </div>
+            <div className={s.toggleRow}>
+              <label className={s.label}>VIP</label>
+              <button
+                className={`${s.toggle} ${isVip ? s.toggleOn : s.toggleOff}`}
+                onClick={() => setIsVip(!isVip)}
+                aria-label="Toggle VIP"
+              >
+                {isVip ? "VIP" : "Standard"}
+              </button>
+            </div>
+            <label className={s.label}>Allergy notes</label>
+            <input
+              className={s.input}
+              aria-label="Allergy notes"
+              value={allergy}
+              onChange={(e) => setAllergy(e.target.value)}
+            />
+            <label className={s.label}>CRM notes</label>
+            <input
+              className={s.input}
+              aria-label="CRM notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            <label className={s.label}>Birthday</label>
+            <input
+              className={s.input}
+              type="date"
+              aria-label="Birthday"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+            />
+            <label className={s.label}>Anniversary</label>
+            <input
+              className={s.input}
+              type="date"
+              aria-label="Anniversary"
+              value={anniversary}
+              onChange={(e) => setAnniversary(e.target.value)}
+            />
             <div className={s.saveRow}>
               <Button onClick={saveIdentity} disabled={!identityDirty || saving}>
                 {saving ? "Saving…" : "Save"}
               </Button>
             </div>
+            {crmMsg && <p className={s.walletMsg}>{crmMsg}</p>}
           </section>
 
           <section className={s.card}>
@@ -160,6 +227,22 @@ export function CustomerProfileScreen() {
             <div className={s.stats}>
               <Stat label="Total Orders" value={String(profile.total_orders)} />
               <Stat label="Total Spend" value={`AED ${profile.total_spend}`} />
+              <Stat
+                label="AOV"
+                value={
+                  profile.average_order_value_aed != null
+                    ? `AED ${profile.average_order_value_aed}`
+                    : "—"
+                }
+              />
+              <Stat
+                label="CLV"
+                value={
+                  profile.customer_lifetime_value_aed != null
+                    ? `AED ${profile.customer_lifetime_value_aed}`
+                    : `AED ${profile.total_spend}`
+                }
+              />
               <Stat
                 label="First Order"
                 value={profile.first_order_at
@@ -173,6 +256,7 @@ export function CustomerProfileScreen() {
                   : "—"}
               />
               <Stat label="Usually Orders" value={profile.usual_order_time ?? "—"} />
+              <Stat label="Points" value={String(profile.loyalty_points ?? 0)} />
             </div>
           </section>
 
@@ -245,6 +329,16 @@ export function CustomerProfileScreen() {
                 }
               />
               <Stat label="Set by" value={profile.loyalty_tier_locked ? "Manager (locked)" : "Auto"} />
+              <Stat label="Points" value={String(profile.loyalty_points ?? 0)} />
+              <Stat
+                label="Stamps"
+                value={
+                  profile.stamp_card
+                    ? `${profile.stamp_card.stamps}/${profile.stamp_card.stamps_required}`
+                    : "—"
+                }
+              />
+              <Stat label="Referral" value={profile.referral_code ?? "—"} />
             </div>
             <div className={s.walletForm}>
               <select
@@ -273,8 +367,86 @@ export function CustomerProfileScreen() {
                   Unlock (auto)
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    const res = await redeemStampCard(Number(id));
+                    setCrmMsg(
+                      res.coupon_code
+                        ? `Stamp reward: coupon ${res.coupon_code}`
+                        : "Stamp reward redeemed.",
+                    );
+                    await queryClient.invalidateQueries({
+                      queryKey: ["customers", "profile", customerId],
+                    });
+                  } catch (e) {
+                    setCrmMsg(e instanceof Error ? e.message : "Redeem failed");
+                  }
+                }}
+              >
+                Redeem stamp card
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    const res = await redeemLoyaltyPoints(Number(id), 50, "manager redeem");
+                    setCrmMsg(`Points balance: ${res.loyalty_points}`);
+                    await queryClient.invalidateQueries({
+                      queryKey: ["customers", "profile", customerId],
+                    });
+                  } catch (e) {
+                    setCrmMsg(e instanceof Error ? e.message : "Points redeem failed");
+                  }
+                }}
+              >
+                Redeem 50 points
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    const res = await createReferralCode(Number(id));
+                    setCrmMsg(`Referral code: ${res.code}`);
+                    await queryClient.invalidateQueries({
+                      queryKey: ["customers", "profile", customerId],
+                    });
+                  } catch (e) {
+                    setCrmMsg(e instanceof Error ? e.message : "Referral failed");
+                  }
+                }}
+              >
+                Generate referral code
+              </Button>
             </div>
           </section>
+
+          {(profile.favorites?.length ?? 0) > 0 && (
+            <section className={s.card}>
+              <h3 className={s.cardTitle}>Favorite items</h3>
+              <ul>
+                {profile.favorites!.map((f, i) => (
+                  <li key={`${f.dish_name}-${i}`}>
+                    {f.dish_name} × {f.order_count}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {(profile.phone_history?.length ?? 0) > 0 && (
+            <section className={s.card}>
+              <h3 className={s.cardTitle}>Phone history</h3>
+              <ul>
+                {profile.phone_history!.map((p, i) => (
+                  <li key={`${p.phone}-${i}`}>
+                    {p.phone} ({p.changed_by})
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {coupons.length > 0 && (
             <section className={s.card}>
@@ -326,6 +498,23 @@ export function CustomerProfileScreen() {
 
           <section className={s.card}>
             <h3 className={s.cardTitle}>Recent Orders</h3>
+            {profile.recent_orders.length > 0 && (
+              <div className={s.saveRow}>
+                <Button
+                  onClick={async () => {
+                    try {
+                      const o = await reorderLastOrder(Number(id));
+                      setCrmMsg(`Reordered as ${o.order_number}`);
+                      navigate(`/orders`);
+                    } catch (e) {
+                      setCrmMsg(e instanceof Error ? e.message : "Reorder failed");
+                    }
+                  }}
+                >
+                  Reorder last
+                </Button>
+              </div>
+            )}
             {profile.recent_orders.length === 0 ? (
               <p className={s.empty}>No orders yet</p>
             ) : (

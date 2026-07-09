@@ -96,17 +96,35 @@ def delivery_info_text(restaurant_settings: dict | None) -> str:
     return "Delivery: " + ", ".join(parts) + f". We deliver up to {max_radius:g} km."
 
 
-def calculate_fee(distance_km: float, settings: dict | None = None) -> Decimal:
+def calculate_fee(
+    distance_km: float,
+    settings: dict | None = None,
+    *,
+    drop_lat: float | None = None,
+    drop_lon: float | None = None,
+    restaurant_settings: dict | None = None,
+) -> Decimal:
     """Return delivery fee in AED for the given distance.
 
     Args:
         distance_km: haversine distance from restaurant to delivery address.
         settings: optional dict with key ``"tiers"`` (list of {max_km, fee} dicts,
                   sorted ascending by max_km). Defaults to spec §1 tiers.
+        drop_lat/drop_lon + restaurant_settings: when provided, zone ``fee_aed``
+            overrides distance tiers if the drop-off falls in a priced zone.
 
     Raises:
         UndeliverableError: distance > max tier max_km.
     """
+    # Zone pricing (Category 7): first matching delivery_zone with fee_aed wins.
+    if drop_lat is not None and drop_lon is not None:
+        from app.geo.fees import zone_fee_aed
+
+        zones = (restaurant_settings or {}).get("delivery_zones") or []
+        zfee = zone_fee_aed(drop_lat, drop_lon, zones)
+        if zfee is not None:
+            return zfee
+
     tiers = (settings or {}).get("tiers", _DEFAULT_TIERS)
     max_radius = max(t["max_km"] for t in tiers)
 

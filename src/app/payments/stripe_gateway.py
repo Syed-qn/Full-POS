@@ -10,7 +10,11 @@ _API_BASE = "https://api.stripe.com/v1"
 # ride on top of "card" (they're wallet UIs that produce a card-network token,
 # not separate Stripe payment method types) — see Stripe's Payment Element docs.
 _TENDER_TO_STRIPE_METHOD = {
-    "card": "card", "apple_pay": "card", "google_pay": "card",
+    "card": "card",
+    "apple_pay": "card",
+    "google_pay": "card",
+    "tap_to_pay": "card",
+    "online": "card",
 }
 
 
@@ -60,3 +64,37 @@ class StripeGateway:
         if resp.status_code >= 400:
             return RefundResult(success=False, provider_refund_id="", status="failed", error=body.get("error", {}).get("message", "stripe error"))
         return RefundResult(success=True, provider_refund_id=body["id"], status="succeeded")
+
+    async def create_wallet_session(
+        self, *, amount_aed: Decimal, tender_type: str, reference: str
+    ) -> dict:
+        """Create a PaymentIntent without confirm for Apple/Google Pay client confirmation."""
+        method = _TENDER_TO_STRIPE_METHOD.get(tender_type, "card")
+        amount_fils = int((amount_aed * 100).to_integral_value())
+        try:
+            resp = await self._client.post(
+                "/payment_intents",
+                data={
+                    "amount": amount_fils,
+                    "currency": "aed",
+                    "payment_method_types[]": method,
+                    "metadata[reference]": reference,
+                    "metadata[tender]": tender_type,
+                },
+                auth=(self._secret_key, ""),
+            )
+        except httpx.HTTPError as exc:
+            return {"error": str(exc), "session_id": None}
+        body = resp.json()
+        if resp.status_code >= 400:
+            return {
+                "error": body.get("error", {}).get("message", "stripe error"),
+                "session_id": None,
+            }
+        return {
+            "session_id": body["id"],
+            "client_secret": body.get("client_secret"),
+            "tender_type": tender_type,
+            "amount_aed": str(amount_aed),
+            "reference": reference,
+        }

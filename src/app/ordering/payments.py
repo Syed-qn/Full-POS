@@ -71,9 +71,26 @@ async def recompute_order_total(session: "AsyncSession", *, order: "Order") -> D
         subtotal = Decimal(order.subtotal or _ZERO).quantize(_CENT)
 
     fee = Decimal(order.delivery_fee_aed or _ZERO)
+    # Apply restaurant billing settings (service / packaging / min-order surcharge).
+    try:
+        from app.identity.models import Restaurant
+        from app.payments.billing import apply_billing_fees
+
+        restaurant = await session.get(Restaurant, order.restaurant_id)
+        if restaurant is not None:
+            apply_billing_fees(order, restaurant)
+    except Exception:  # noqa: BLE001 — never block total recompute on billing settings
+        pass
+    # Category 5 billables — keep defaults if columns missing on partial migrations.
+    service = Decimal(getattr(order, "service_charge_aed", None) or _ZERO)
+    packaging = Decimal(getattr(order, "packaging_charge_aed", None) or _ZERO)
+    min_surcharge = Decimal(getattr(order, "min_order_surcharge_aed", None) or _ZERO)
+    manager_disc = max(Decimal(getattr(order, "manager_discount_aed", None) or _ZERO), _ZERO)
+    staff_disc = max(Decimal(getattr(order, "staff_discount_aed", None) or _ZERO), _ZERO)
     discount = max(Decimal(order.coupon_discount_aed or _ZERO), _ZERO)
-    # Coupon never pushes the total below the delivery fee (mirrors apply_at_confirm).
-    new_total = max(subtotal + fee - discount, fee).quantize(_CENT)
+    # Coupon + till discounts never push total below delivery fee floor.
+    gross = subtotal + fee + service + packaging + min_surcharge
+    new_total = max(gross - discount - manager_disc - staff_disc, fee).quantize(_CENT)
     order.total = new_total
 
     # Clamp the wallet portion down to the (possibly smaller) new total. If the current
