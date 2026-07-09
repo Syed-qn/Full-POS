@@ -1,0 +1,235 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric,
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.metric {
+  min-height: 88px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metricLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.metric strong {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cardHead h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.cardHead span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.formGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.formGrid input,
+.select,
+.input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sideStack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+
+.table th {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.badgeOk,
+.badgeWarn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badgeOk {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.badgeWarn {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listItem,
+.approval {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-surface-inset);
+}
+
+.listItem,
+.approval > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.listItem strong,
+.approval strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.listItem span,
+.approval span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.approval {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.rowActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.empty {
+  padding: 16px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .metrics,
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .formGrid {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .metrics,
+  .grid,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .approval {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rowActions {
+    justify-content: stretch;
+  }
+}

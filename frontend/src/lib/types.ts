@@ -566,3 +566,241 @@ export interface ShiftCreateIn {
   scheduled_start: string;
   scheduled_end: string;
 }
+
+// ── Wave 3 inventory and organization operations ────────────────────────────
+
+export type DecimalString = string;
+
+export interface IngredientIn {
+  name: string;
+  unit: string;
+  current_stock?: DecimalString;
+  low_stock_threshold?: DecimalString;
+  par_level?: DecimalString;
+  cost_per_unit_aed?: DecimalString;
+}
+
+export interface IngredientOut {
+  id: number;
+  name: string;
+  unit: string;
+  current_stock: DecimalString;
+  low_stock_threshold: DecimalString;
+  par_level: DecimalString;
+  cost_per_unit_aed: DecimalString;
+}
+
+export interface RestockIn {
+  quantity: DecimalString;
+}
+
+export interface WasteIn {
+  quantity: DecimalString;
+  reason?: string | null;
+}
+
+export interface StockCountIn {
+  counted_qty: DecimalString;
+}
+
+export interface StockCountOut {
+  variance: DecimalString;
+  previous_stock: DecimalString;
+  counted_stock: DecimalString;
+}
+
+export interface RecipeLinkIn {
+  dish_id: number;
+  quantity_per_dish: DecimalString;
+}
+
+export interface BatchIn {
+  qty: DecimalString;
+  expiry_date: string;
+}
+
+export interface BatchOut {
+  id: number;
+  ingredient_id: number;
+  qty: DecimalString;
+  expiry_date: string;
+  received_at: string;
+}
+
+export interface SubstituteIn {
+  substitute_ingredient_id: number;
+  notes?: string | null;
+}
+
+export interface SubstituteOut {
+  id: number;
+  ingredient_id: number;
+  substitute_ingredient_id: number;
+  notes?: string | null;
+}
+
+export interface CostIn {
+  cost_per_unit_aed: DecimalString;
+}
+
+export interface ReorderSuggestionOut {
+  ingredient_id: number;
+  ingredient_name: string;
+  current_stock: DecimalString;
+  par_level: DecimalString;
+  suggested_order_qty: DecimalString;
+}
+
+export interface StockClosingOut {
+  ingredient_id: number;
+  ingredient_name: string;
+  closing_stock: DecimalString;
+  unit: string;
+}
+
+export interface VendorIn {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
+export interface VendorOut {
+  id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
+export interface PurchaseOrderLineIn {
+  ingredient_id: number;
+  qty_ordered: DecimalString;
+  unit_cost_aed: DecimalString;
+}
+
+export interface PurchaseOrderIn {
+  vendor_id: number;
+  lines: PurchaseOrderLineIn[];
+}
+
+export interface PurchaseOrderLineOut {
+  id: number;
+  ingredient_id: number;
+  qty_ordered: DecimalString;
+  unit_cost_aed: DecimalString;
+}
+
+export interface PurchaseOrderOut {
+  id: number;
+  vendor_id: number;
+  status: string;
+  lines: PurchaseOrderLineOut[];
+}
+
+export interface VendorPriceComparisonOut {
+  vendor_id: number;
+  vendor_name: string;
+  unit_cost_aed: DecimalString;
+  purchase_order_id: number;
+  purchase_order_line_id: number;
+}
+
+export interface InventoryValuationRowOut {
+  ingredient_id: number;
+  ingredient_name: string;
+  unit: string;
+  current_stock: DecimalString;
+  cost_per_unit_aed: DecimalString;
+  value_aed: DecimalString;
+}
+
+export interface InventoryValuationOut {
+  total_value_aed: DecimalString;
+  rows: InventoryValuationRowOut[];
+}
+
+export type StockAdjustmentStatus = "pending" | "approved" | "rejected";
+
+export interface StockAdjustmentIn {
+  requested_qty: DecimalString;
+  reason?: string | null;
+  requested_by?: string;
+}
+
+export interface StockAdjustmentOut {
+  id: number;
+  ingredient_id: number;
+  requested_qty: DecimalString;
+  previous_qty_snapshot: DecimalString;
+  reason?: string | null;
+  status: StockAdjustmentStatus | string;
+  requested_by: string;
+  approved_by?: string | null;
+  decided_at?: string | null;
+}
+
+export interface LowStockAlertOut {
+  enqueued: boolean;
+  reason?: string | null;
+  outbox_id?: number | null;
+}
+
+export interface OrganizationBranchIn {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+export interface OrganizationBranchOut {
+  id: number;
+  name: string;
+}
+
+export interface OrganizationRollupBranchOut {
+  restaurant_id: number;
+  name: string;
+  gross_sales_aed: DecimalString;
+}
+
+export interface OrganizationRollupSalesOut {
+  total_gross_sales_aed: DecimalString;
+  branches: OrganizationRollupBranchOut[];
+}
+
+export interface BranchComparisonOut {
+  restaurant_id: number;
+  restaurant_name: string;
+  order_count: number;
+  revenue_aed: DecimalString;
+}
+
+export interface OrganizationInventorySummaryBranchOut {
+  restaurant_id: number;
+  restaurant_name: string;
+  low_stock_count: number;
+  inventory_value_aed: DecimalString;
+}
+
+export interface OrganizationInventorySummaryOut {
+  total_low_stock_count: number;
+  total_inventory_value_aed: DecimalString;
+  branches: OrganizationInventorySummaryBranchOut[];
+}
+
+export interface StockTransferLineIn {
+  ingredient_name: string;
+  unit: string;
+  quantity: DecimalString;
+}
+
+export interface StockTransferIn {
+  from_restaurant_id: number;
+  to_restaurant_id: number;
+  lines: StockTransferLineIn[];
+}
+
+export interface StockTransferOut {
+  id: number;
+  status: string;
+  from_restaurant_id?: number;
+  to_restaurant_id?: number;
+}

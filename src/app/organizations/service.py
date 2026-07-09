@@ -51,6 +51,36 @@ async def rollup_sales(session: AsyncSession, *, organization_id: int, target_da
     return {"total_gross_sales_aed": total, "branches": breakdown}
 
 
+async def organization_inventory_summary(
+    session: AsyncSession, *, organization_id: int,
+) -> dict:
+    from app.inventory.service import inventory_valuation, list_low_stock
+
+    branches = await list_branches(session, organization_id=organization_id)
+    branch_rows = []
+    total_value = Decimal("0.00")
+    total_low_stock_count = 0
+
+    for branch in branches:
+        valuation = await inventory_valuation(session, restaurant_id=branch.id)
+        low_stock_count = len(await list_low_stock(session, restaurant_id=branch.id))
+        branch_value = valuation["total_value_aed"]
+        total_value += branch_value
+        total_low_stock_count += low_stock_count
+        branch_rows.append({
+            "restaurant_id": branch.id,
+            "restaurant_name": branch.name,
+            "inventory_value_aed": branch_value,
+            "low_stock_count": low_stock_count,
+        })
+
+    return {
+        "total_inventory_value_aed": total_value.quantize(Decimal("0.01")),
+        "total_low_stock_count": total_low_stock_count,
+        "branches": branch_rows,
+    }
+
+
 async def branch_comparison(
     session: AsyncSession, *, org_id: int, start_date: date, end_date: date
 ) -> list[dict]:

@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { logout } from "../lib/auth";
 import { fetchConversations } from "../lib/conversationsApi";
 import { listCustomers } from "../lib/customerApi";
+import { listIngredients } from "../lib/inventoryApi";
 import { fetchOrders } from "../lib/ordersApi";
 import { fetchRiders } from "../lib/ridersApi";
 import { listTickets } from "../lib/ticketsApi";
@@ -15,6 +16,8 @@ const ITEMS: Array<{ to: string; label: string; icon: string }> = [
   { to: "/customers", label: "Customers", icon: "👥" },
   { to: "/new-order", label: "New Order", icon: "➕" },
   { to: "/menu", label: "Menu", icon: "🍽️" },
+  { to: "/inventory", label: "Inventory", icon: "📦" },
+  { to: "/branches", label: "Branches", icon: "🏢" },
   { to: "/riders", label: "Riders", icon: "🛵" },
   { to: "/staff", label: "Staff", icon: "🧑‍🍳" },
   { to: "/conversations", label: "Chats", icon: "💬" },
@@ -37,6 +40,10 @@ const PREFETCH: Record<string, { queryKey: readonly unknown[]; queryFn: () => Pr
   "/riders": {
     queryKey: ["riders", "list"],
     queryFn: fetchRiders,
+  },
+  "/inventory": {
+    queryKey: ["inventory", "ingredients"],
+    queryFn: listIngredients,
   },
   "/conversations": {
     queryKey: ["conversations", "list"],

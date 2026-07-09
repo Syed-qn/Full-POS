@@ -13,6 +13,7 @@ from app.organizations.service import (
     add_branch,
     branch_comparison,
     list_branches,
+    organization_inventory_summary,
     rollup_sales,
     signup_organization,
 )
@@ -79,6 +80,22 @@ async def get_rollup_sales(
         "total_gross_sales_aed": str(result["total_gross_sales_aed"]),
         "branches": [
             {**b, "gross_sales_aed": str(b["gross_sales_aed"])} for b in result["branches"]
+        ],
+    }
+
+
+@router.get("/inventory-summary")
+async def get_inventory_summary(
+    org: Organization = Depends(current_organization),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await organization_inventory_summary(session, organization_id=org.id)
+    return {
+        "total_inventory_value_aed": str(result["total_inventory_value_aed"]),
+        "total_low_stock_count": result["total_low_stock_count"],
+        "branches": [
+            {**row, "inventory_value_aed": str(row["inventory_value_aed"])}
+            for row in result["branches"]
         ],
     }
 

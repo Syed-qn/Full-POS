@@ -8,9 +8,11 @@ import {
   resolveOnboardingComplete,
 } from "./lib/onboardingGate";
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
+import { BranchOpsScreen } from "./screens/BranchOpsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
 import { CustomerProfileScreen } from "./screens/CustomerProfileScreen";
 import { CustomersScreen } from "./screens/CustomersScreen";
+import { InventoryScreen } from "./screens/InventoryScreen";
 import { KdsScreen } from "./screens/KdsScreen";
 import { LiveOpsScreen } from "./screens/LiveOpsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -71,6 +73,8 @@ export default function App() {
       <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
       <Route path="/kds/:stationId" element={<Guarded><KdsScreen /></Guarded>} />
+      <Route path="/inventory" element={<Guarded><InventoryScreen /></Guarded>} />
+      <Route path="/branches" element={<Guarded><BranchOpsScreen /></Guarded>} />
       <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
       <Route path="/tickets" element={<Guarded><TicketsScreen /></Guarded>} />
