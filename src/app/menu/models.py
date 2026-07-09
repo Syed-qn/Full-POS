@@ -17,6 +17,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base, TimestampMixin
 
 
+class Category(Base, TimestampMixin):
+    __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("restaurant_id", "name", name="uq_categories_restaurant_name"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
 class Menu(Base, TimestampMixin):
     __tablename__ = "menus"
     __table_args__ = (UniqueConstraint("restaurant_id", "version"),)
@@ -50,6 +62,7 @@ class Dish(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255))
     price_aed: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     category: Mapped[str | None] = mapped_column(String(128))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
     description: Mapped[str | None] = mapped_column(String(2000))
     # KDS station routing: explicit per-dish override; falls back to a
     # category-level default, then a restaurant's auto-created "Main" station.
