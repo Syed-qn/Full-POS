@@ -201,3 +201,35 @@ async def test_effective_price_endpoint_404_for_other_restaurant_dish(client, db
         headers={"Authorization": f"Bearer {other_token}"},
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_list_and_delete_price_rules_via_router(client, db_session, restaurant, seed_biryani_menu):
+    from sqlalchemy import select
+
+    from app.identity.auth import create_access_token
+    from app.menu.models import Dish
+
+    dish = (await db_session.scalars(
+        select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.name == "Chicken Biryani")
+    )).one()
+    auth_headers = {"Authorization": f"Bearer {create_access_token(restaurant_id=restaurant.id)}"}
+
+    create_resp = await client.post(
+        f"/api/v1/dishes/{dish.id}/price-rules",
+        json={"rule_type": "channel", "price_aed": "25.00", "channel": "aggregator"},
+        headers=auth_headers,
+    )
+    rule_id = create_resp.json()["id"]
+
+    list_resp = await client.get(f"/api/v1/dishes/{dish.id}/price-rules", headers=auth_headers)
+    assert list_resp.status_code == 200
+    assert [r["id"] for r in list_resp.json()] == [rule_id]
+
+    delete_resp = await client.delete(
+        f"/api/v1/dishes/{dish.id}/price-rules/{rule_id}", headers=auth_headers
+    )
+    assert delete_resp.status_code == 204
+
+    list_after = await client.get(f"/api/v1/dishes/{dish.id}/price-rules", headers=auth_headers)
+    assert list_after.json() == []

@@ -68,6 +68,26 @@ async def create_price_rule(
     return rule
 
 
+async def list_price_rules(
+    session: AsyncSession, *, restaurant_id: int, dish_id: int
+) -> list[DishPriceRule]:
+    return list((await session.scalars(
+        select(DishPriceRule)
+        .where(DishPriceRule.restaurant_id == restaurant_id, DishPriceRule.dish_id == dish_id)
+        .order_by(DishPriceRule.id)
+    )).all())
+
+
+async def delete_price_rule(
+    session: AsyncSession, *, restaurant_id: int, dish_id: int, rule_id: int
+) -> None:
+    rule = await session.get(DishPriceRule, rule_id)
+    if rule is None or rule.restaurant_id != restaurant_id or rule.dish_id != dish_id:
+        raise ValueError("price rule not found")
+    await session.delete(rule)
+    await session.flush()
+
+
 def _rule_matches(rule: DishPriceRule, *, at: datetime, channel: str | None) -> bool:
     if rule.rule_type == "time":
         # Time/day-of-week rules are business-local (Asia/Dubai) — same convention as

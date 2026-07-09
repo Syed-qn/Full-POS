@@ -1,5 +1,5 @@
 import { ApiError, apiClient } from "./apiClient";
-import type { DishOut, MenuOut, MenuWithDiffOut } from "./types";
+import type { DishOut, MenuOut, MenuWithDiffOut, PriceRuleOut } from "./types";
 
 export async function getMenu(menuId: number): Promise<MenuOut> {
   return apiClient.get<MenuOut>(`/api/v1/menus/${menuId}`);
@@ -89,4 +89,30 @@ export async function fetchActiveMenu(): Promise<MenuOut | null> {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+// ── Dish price rules (time/channel/branch overrides) ─────────────────────────
+
+export interface PriceRuleInput {
+  rule_type: string;
+  price_aed: string;
+  channel?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  days_of_week?: number[] | null;
+}
+
+export async function listPriceRules(dishId: number): Promise<PriceRuleOut[]> {
+  return apiClient.get<PriceRuleOut[]>(`/api/v1/dishes/${dishId}/price-rules`);
+}
+
+export async function createPriceRule(
+  dishId: number,
+  body: PriceRuleInput,
+): Promise<PriceRuleOut> {
+  return apiClient.post<PriceRuleOut>(`/api/v1/dishes/${dishId}/price-rules`, body);
+}
+
+export async function deletePriceRule(dishId: number, ruleId: number): Promise<void> {
+  await apiClient.delete<void>(`/api/v1/dishes/${dishId}/price-rules/${ruleId}`);
 }

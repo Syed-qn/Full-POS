@@ -88,6 +88,23 @@ export interface MenuWithDiffOut extends MenuOut {
   diff_vs_active: DiffOut | null;
 }
 
+export interface PriceRuleOut {
+  id: number;
+  dish_id: number;
+  rule_type: "time" | "channel" | "branch";
+  price_aed: string;
+  start_time: string | null;
+  end_time: string | null;
+  days_of_week: number[] | null;
+  channel: string | null;
+}
+
+export interface CategoryOut {
+  id: number;
+  name: string;
+  sort_order: number;
+}
+
 // FSM states from src/app/ordering/fsm.py
 export type OrderStatus =
   | "draft"
