@@ -10,18 +10,15 @@ import { ApiError } from "../lib/apiClient";
 import {
   activateMenu,
   createBlankMenu,
-  createPriceRule,
   deleteDish,
-  deletePriceRule,
   fetchActiveMenu,
   getMenu,
-  listPriceRules,
   setAvailability,
   setWhatsapp,
   uploadMenu,
 } from "../lib/menuApi";
 import { toast } from "../components/Toaster";
-import type { DishOut, MenuWithDiffOut, PriceRuleOut } from "../lib/types";
+import type { DishOut, MenuWithDiffOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { UnifiedMenuPanel } from "../components/UnifiedMenuPanel";
 import s from "./MenuManagerScreen.module.css";
@@ -380,137 +377,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           onClose={() => setEditing(null)}
           onSaved={onDishSaved}
         />
-      )}
-      {editing !== null && editing !== "new" && <PriceRulesPanel dish={editing} />}
-    </div>
-  );
-}
-
-/** Time/channel/branch price overrides for the currently-selected dish. Rendered
- *  alongside the edit modal (not inside it) so it works independent of the
- *  base-dish save flow — a manager can add/remove rules without touching name,
- *  price, or category. */
-function PriceRulesPanel({ dish }: { dish: DishOut }) {
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [rules, setRules] = useState<PriceRuleOut[]>([]);
-  const [ruleType, setRuleType] = useState<"time" | "channel" | "branch">("channel");
-  const [priceAed, setPriceAed] = useState("");
-  const [channel, setChannel] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    try {
-      setRules(await listPriceRules(dish.id));
-    } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "Failed to load price rules.", "error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onToggleOpen() {
-    const next = !open;
-    setOpen(next);
-    if (next) await load();
-  }
-
-  async function onDeleteRule(ruleId: number) {
-    try {
-      await deletePriceRule(dish.id, ruleId);
-      setRules((rs) => rs.filter((r) => r.id !== ruleId));
-      toast("Price rule removed.");
-    } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "Failed to delete price rule.", "error");
-    }
-  }
-
-  async function onAddRule() {
-    if (!priceAed.trim()) return;
-    setBusy(true);
-    try {
-      const created = await createPriceRule(dish.id, {
-        rule_type: ruleType,
-        price_aed: priceAed.trim(),
-        channel: ruleType === "channel" ? channel.trim() || null : null,
-      });
-      setRules((rs) => [...rs, created]);
-      setPriceAed("");
-      setChannel("");
-      toast("Price rule added.");
-    } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "Failed to add price rule.", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function describeRule(r: PriceRuleOut): string {
-    const parts: string[] = [r.rule_type];
-    if (r.channel) parts.push(r.channel);
-    if (r.start_time && r.end_time) parts.push(`${r.start_time}–${r.end_time}`);
-    parts.push(`AED ${r.price_aed}`);
-    return parts.join(" · ");
-  }
-
-  return (
-    <div className={s.priceRulesPanel}>
-      <button type="button" className={s.priceRulesToggle} onClick={onToggleOpen}>
-        Price rules
-      </button>
-      {open && (
-        <div className={s.priceRulesBody}>
-          {loading ? (
-            <span className={s.hint}>Loading price rules…</span>
-          ) : rules.length === 0 ? (
-            <p className={s.hint}>No price rules yet for this dish.</p>
-          ) : (
-            <ul className={s.priceRulesList}>
-              {rules.map((r) => (
-                <li key={r.id} className={s.priceRuleRow}>
-                  <span>{describeRule(r)}</span>
-                  <button type="button" onClick={() => onDeleteRule(r.id)}>
-                    Delete rule
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className={s.priceRuleForm}>
-            <select
-              className={s.priceRuleSelect}
-              value={ruleType}
-              onChange={(e) => setRuleType(e.target.value as "time" | "channel" | "branch")}
-              aria-label="Rule type"
-            >
-              <option value="channel">Channel</option>
-              <option value="time">Time</option>
-              <option value="branch">Branch</option>
-            </select>
-            {ruleType === "channel" && (
-              <input
-                className={s.priceRuleInput}
-                placeholder="Channel (e.g. aggregator)"
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-                aria-label="Channel"
-              />
-            )}
-            <input
-              className={s.priceRuleInput}
-              type="number"
-              step="0.01"
-              placeholder="Price AED"
-              value={priceAed}
-              onChange={(e) => setPriceAed(e.target.value)}
-              aria-label="Price AED"
-            />
-            <button type="button" onClick={onAddRule} disabled={busy || !priceAed.trim()}>
-              Add rule
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );

@@ -219,6 +219,69 @@
 .addVariant:hover {
   border-color: var(--accent-primary);
 }
+/* Price rules — in-flow section of the modal body (not a floating overlay), so it
+   can never sit behind the modal's own overlay/backdrop. */
+.priceRules {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 14px;
+}
+.priceRulesToggle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.priceRulesBody {
+  width: 100%;
+  background: var(--bg-surface-inset, var(--bg-surface));
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+.priceRulesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.priceRuleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.priceRuleForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.priceRuleSelect,
+.priceRuleInput {
+  flex: 1 1 100px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
 .footer {
   display: flex;
   align-items: center;

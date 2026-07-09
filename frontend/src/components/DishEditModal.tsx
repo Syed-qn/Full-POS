@@ -1,9 +1,17 @@
 import { useRef, useState } from "react";
 import { Button } from "./Button";
 import { toast } from "./Toaster";
-import { addDish, deleteDish, patchDish, uploadDishImage } from "../lib/menuApi";
+import {
+  addDish,
+  createPriceRule,
+  deleteDish,
+  deletePriceRule,
+  listPriceRules,
+  patchDish,
+  uploadDishImage,
+} from "../lib/menuApi";
 import { ApiError } from "../lib/apiClient";
-import type { DishOut } from "../lib/types";
+import type { DishOut, PriceRuleOut } from "../lib/types";
 import s from "./DishEditModal.module.css";
 
 const DISH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -199,7 +207,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
   return (
     <div className={s.overlay} onClick={onClose}>
-      <div className={s.modal} onClick={(e) => e.stopPropagation()}>
+      <div className={s.modal} data-testid="dish-edit-modal" onClick={(e) => e.stopPropagation()}>
         <div className={s.header}>
           <h2 className={s.title}>{isNew ? "Add dish" : `Edit — ${d?.name}`}</h2>
           <button className={s.close} onClick={onClose} aria-label="Close">×</button>
@@ -363,6 +371,8 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               {isDrink ? "+ Add size" : "+ Add serving size"}
             </button>
           </div>
+
+          {!isNew && d && <PriceRulesSection dish={d} />}
         </div>
 
         <div className={s.footer}>
@@ -387,6 +397,137 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Time/channel/branch price overrides for this dish. Rendered INSIDE the modal's
+ *  own DOM tree (as a collapsible section of the body, below the base-dish fields)
+ *  so it works independent of the base-dish save flow — a manager can add/remove
+ *  rules without touching name, price, or category — while staying above the
+ *  modal overlay by construction instead of relying on z-index stacking. */
+function PriceRulesSection({ dish }: { dish: DishOut }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [rules, setRules] = useState<PriceRuleOut[]>([]);
+  const [ruleType, setRuleType] = useState<"time" | "channel" | "branch">("channel");
+  const [priceAed, setPriceAed] = useState("");
+  const [channel, setChannel] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      setRules(await listPriceRules(dish.id));
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Failed to load price rules.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onToggleOpen() {
+    const next = !open;
+    setOpen(next);
+    if (next) await load();
+  }
+
+  async function onDeleteRule(ruleId: number) {
+    try {
+      await deletePriceRule(dish.id, ruleId);
+      setRules((rs) => rs.filter((r) => r.id !== ruleId));
+      toast("Price rule removed.");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Failed to delete price rule.", "error");
+    }
+  }
+
+  async function onAddRule() {
+    if (!priceAed.trim()) return;
+    setBusy(true);
+    try {
+      const created = await createPriceRule(dish.id, {
+        rule_type: ruleType,
+        price_aed: priceAed.trim(),
+        channel: ruleType === "channel" ? channel.trim() || null : null,
+      });
+      setRules((rs) => [...rs, created]);
+      setPriceAed("");
+      setChannel("");
+      toast("Price rule added.");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Failed to add price rule.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function describeRule(r: PriceRuleOut): string {
+    const parts: string[] = [r.rule_type];
+    if (r.channel) parts.push(r.channel);
+    if (r.start_time && r.end_time) parts.push(`${r.start_time}–${r.end_time}`);
+    parts.push(`AED ${r.price_aed}`);
+    return parts.join(" · ");
+  }
+
+  return (
+    <div className={s.priceRules}>
+      <button type="button" className={s.priceRulesToggle} onClick={onToggleOpen}>
+        Price rules
+      </button>
+      {open && (
+        <div className={s.priceRulesBody}>
+          {loading ? (
+            <span className={s.hint}>Loading price rules…</span>
+          ) : rules.length === 0 ? (
+            <p className={s.hint}>No price rules yet for this dish.</p>
+          ) : (
+            <ul className={s.priceRulesList}>
+              {rules.map((r) => (
+                <li key={r.id} className={s.priceRuleRow}>
+                  <span>{describeRule(r)}</span>
+                  <button type="button" onClick={() => onDeleteRule(r.id)}>
+                    Delete rule
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className={s.priceRuleForm}>
+            <select
+              className={s.priceRuleSelect}
+              value={ruleType}
+              onChange={(e) => setRuleType(e.target.value as "time" | "channel" | "branch")}
+              aria-label="Rule type"
+            >
+              <option value="channel">Channel</option>
+              <option value="time">Time</option>
+              <option value="branch">Branch</option>
+            </select>
+            {ruleType === "channel" && (
+              <input
+                className={s.priceRuleInput}
+                placeholder="Channel (e.g. aggregator)"
+                value={channel}
+                onChange={(e) => setChannel(e.target.value)}
+                aria-label="Channel"
+              />
+            )}
+            <input
+              className={s.priceRuleInput}
+              type="number"
+              step="0.01"
+              placeholder="Price AED"
+              value={priceAed}
+              onChange={(e) => setPriceAed(e.target.value)}
+              aria-label="Price AED"
+            />
+            <button type="button" onClick={onAddRule} disabled={busy || !priceAed.trim()}>
+              Add rule
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -41,5 +41,21 @@ describe("MenuManagerScreen price rules", () => {
     expect(await screen.findByText(/aggregator/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /delete rule/i }));
     await waitFor(() => expect(menuApi.deletePriceRule).toHaveBeenCalledWith(10, 5));
+  });
+
+  // Regression test for the "price rules panel unreachable behind the dish edit
+  // modal's overlay" bug: the panel used to render as a position:fixed SIBLING of
+  // the modal at a z-index below the modal overlay, so every click on it actually
+  // landed on the overlay and closed the modal instead. jsdom performs no
+  // layout/paint/stacking, so the only realistic assertion here is DOM structure:
+  // the "Price rules" toggle must live INSIDE the modal's own DOM subtree (so it is
+  // above the overlay by construction, not by z-index), not as a sibling of it.
+  it("renders the price rules toggle inside the dish edit modal's DOM tree", async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByText("Chai"));
+
+    const modal = await screen.findByTestId("dish-edit-modal");
+    const toggle = within(modal).getByRole("button", { name: /price rules/i });
+    expect(modal).toContainElement(toggle);
   });
 });
