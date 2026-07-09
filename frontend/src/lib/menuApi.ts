@@ -91,6 +91,17 @@ export async function fetchActiveMenu(): Promise<MenuOut | null> {
   }
 }
 
+/** Move a draft (``pending_confirmation``) menu into ``pending_approval`` so a
+ *  manager-role approver can sign off before it goes live. */
+export async function submitMenuForApproval(menuId: number): Promise<MenuOut> {
+  return apiClient.post<MenuOut>(`/api/v1/menus/${menuId}/submit-for-approval`);
+}
+
+/** Approve a ``pending_approval`` menu, activating it in the same call. */
+export async function approveMenu(menuId: number): Promise<MenuOut> {
+  return apiClient.post<MenuOut>(`/api/v1/menus/${menuId}/approve`);
+}
+
 // ── Dish price rules (time/channel/branch overrides) ─────────────────────────
 
 export interface PriceRuleInput {

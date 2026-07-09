@@ -9,12 +9,14 @@ import { SectionBanner } from "../components/SectionBanner";
 import { ApiError } from "../lib/apiClient";
 import {
   activateMenu,
+  approveMenu,
   createBlankMenu,
   deleteDish,
   fetchActiveMenu,
   getMenu,
   setAvailability,
   setWhatsapp,
+  submitMenuForApproval,
   uploadMenu,
 } from "../lib/menuApi";
 import { toast } from "../components/Toaster";
@@ -30,6 +32,8 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   // True while Claude is extracting an uploaded menu (before the review dialog opens).
   const [extracting, setExtracting] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<number | null>(initialMenuId ?? null);
+  // Drives the "Submit for Approval" / "Approve & Activate" buttons below.
+  const [menuStatus, setMenuStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<DishOut | "new" | null>(null);
   // Bumped on every dish mutation so the unified/catalog panel re-fetches and can
@@ -55,13 +59,19 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
 
   function reloadDishes() {
     if (activeMenuId !== null) {
-      getMenu(activeMenuId).then((m) => setDishes(m.dishes ?? [])).catch(() => {});
+      getMenu(activeMenuId)
+        .then((m) => {
+          setDishes(m.dishes ?? []);
+          setMenuStatus(m.status);
+        })
+        .catch(() => {});
     } else {
       fetchActiveMenu()
         .then((m) => {
           if (m) {
             setActiveMenuId(m.id);
             setDishes(m.dishes ?? []);
+            setMenuStatus(m.status);
           }
         })
         .catch(() => {});
@@ -86,7 +96,13 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     if (pending !== null) return;
     if (activeMenuId !== null) {
       // Known menu id (after an upload+activate, or passed in): load its dishes.
-      getMenu(activeMenuId).then((m) => setDishes(m.dishes ?? [])).catch(() => {}).finally(() => setLoading(false));
+      getMenu(activeMenuId)
+        .then((m) => {
+          setDishes(m.dishes ?? []);
+          setMenuStatus(m.status);
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
     } else {
       // First mount with no id: discover the restaurant's active menu so the
       // current dishes show up instead of the empty "upload your first menu"
@@ -96,6 +112,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
           if (m) {
             setActiveMenuId(m.id);
             setDishes(m.dishes ?? []);
+            setMenuStatus(m.status);
           }
         })
         .catch(() => {})
@@ -191,6 +208,39 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     }
   }
 
+  const [submittingApproval, setSubmittingApproval] = useState(false);
+  async function onSubmitForApproval() {
+    if (activeMenuId === null) return;
+    setSubmittingApproval(true);
+    try {
+      const menu = await submitMenuForApproval(activeMenuId);
+      setMenuStatus(menu.status);
+      setDishes(menu.dishes ?? []);
+      toast("Menu submitted for approval.");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Could not submit menu for approval.", "error");
+    } finally {
+      setSubmittingApproval(false);
+    }
+  }
+
+  const [approving, setApproving] = useState(false);
+  async function onApproveMenu() {
+    if (activeMenuId === null) return;
+    setApproving(true);
+    try {
+      const menu = await approveMenu(activeMenuId);
+      setMenuStatus(menu.status);
+      setDishes(menu.dishes ?? []);
+      setMenuRev((v) => v + 1);
+      toast("Menu approved and activated.");
+    } catch (err) {
+      toast(err instanceof ApiError ? err.detail : "Could not approve menu.", "error");
+    } finally {
+      setApproving(false);
+    }
+  }
+
   const hasErrors = (pending?.diff_vs_active?.conflicts.length ?? 0) > 0;
 
   // Next free dish number — assigned automatically to new dishes.
@@ -283,6 +333,16 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
               data-testid="menu-upload"
             />
             <Button variant="ghost" onClick={onAddDish}>+ Add dish</Button>
+            {menuStatus === "pending_confirmation" && (
+              <Button onClick={onSubmitForApproval} disabled={submittingApproval}>
+                {submittingApproval ? "Submitting…" : "Submit for Approval"}
+              </Button>
+            )}
+            {menuStatus === "pending_approval" && (
+              <Button onClick={onApproveMenu} disabled={approving}>
+                {approving ? "Approving…" : "Approve & Activate"}
+              </Button>
+            )}
             <Button onClick={() => fileRef.current?.click()}>
               {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
             </Button>

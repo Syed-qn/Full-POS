@@ -25,7 +25,12 @@ from app.menu.schemas import (
     WhatsappToggleIn,
     serialize_variants,
 )
-from app.menu.service import MenuIncompleteError
+from app.menu.service import (
+    MenuApprovalError,
+    MenuIncompleteError,
+    approve_menu,
+    submit_menu_for_approval,
+)
 from app.menu.unified import UnifiedMenuOut, build_unified_menu
 from app.catalog.sync_service import schedule_auto_publish, unpublish_from_meta
 from app.okf.producer import refresh_okf_for_restaurant
@@ -465,6 +470,40 @@ async def activate_menu(
         return await service.activate_menu(session, menu)
     except MenuIncompleteError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+
+
+@router.post("/menus/{menu_id}/submit-for-approval", response_model=MenuOut)
+async def submit_menu_for_approval_endpoint(
+    menu_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        menu = await submit_menu_for_approval(session, restaurant_id=restaurant.id, menu_id=menu_id)
+        await session.commit()
+        await session.refresh(menu)
+        return menu
+    except MenuApprovalError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.post("/menus/{menu_id}/approve", response_model=MenuOut)
+async def approve_menu_endpoint(
+    menu_id: int,
+    restaurant: Restaurant = Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        menu = await approve_menu(
+            session, restaurant_id=restaurant.id, menu_id=menu_id, approved_by=f"mgr:{restaurant.id}"
+        )
+        await session.commit()
+        await session.refresh(menu)
+        return menu
+    except MenuApprovalError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except MenuIncompleteError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.post("/menus/{menu_id}/reextract", response_model=MenuWithDiffOut, status_code=200)
