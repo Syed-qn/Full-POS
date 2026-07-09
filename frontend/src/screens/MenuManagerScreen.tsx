@@ -400,9 +400,9 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
       {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
-        <div className={s.empty}>
+        <div className={s.empty} role="status">
           <p>Upload your first menu (PDF, image, or text) to get started.</p>
-          <Button onClick={() => fileRef.current?.click()}>Upload menu</Button>
+          <Button size="touch" onClick={() => fileRef.current?.click()}>Upload menu</Button>
         </div>
       ) : (
         <>

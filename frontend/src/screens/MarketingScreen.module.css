@@ -47,9 +47,10 @@
   border: none;
   background: transparent;
   border-radius: 999px;
-  padding: 9px 18px;
+  min-height: 48px;
+  padding: 12px 18px;
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;

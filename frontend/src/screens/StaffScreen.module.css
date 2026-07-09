@@ -1,8 +1,86 @@
-.root { padding: 24px; }
-.card { background: var(--surface, #fff); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-.cardTitle { margin: 0 0 12px; font-size: 15px; }
-.form { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border, #eee); }
-.loading, .error, .empty { padding: 16px; }
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-title, 18px);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.form {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 140px;
+}
+
+.field input,
+.field select {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  font-size: var(--font-size-body, 16px);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+}
+
+.table tbody tr {
+  min-height: 56px;
+}
+
+.table :global(button) {
+  min-height: 48px;
+  min-width: 48px;
+  margin-right: 6px;
+}
+
+.loading,
+.error,
+.empty {
+  padding: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.error {
+  color: var(--sla-critical);
+}

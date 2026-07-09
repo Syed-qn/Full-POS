@@ -1,13 +1,17 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { CompactTable, type Column } from "../components/CompactTable";
+import { Link, useNavigate } from "react-router-dom";
+import { BottomActionBar } from "../components/BottomActionBar";
+import { Button, TouchButton } from "../components/Button";
 import { DispatchKpiPanel } from "../components/DispatchKpiPanel";
+import { EmptyState } from "../components/EmptyState";
 import { LiveOpsMap } from "../components/LiveOpsMap";
 import { SectionBanner } from "../components/SectionBanner";
 import { SLAOrderCard } from "../components/SLAOrderCard";
 import { StatusPill } from "../components/StatusPill";
+import { CountdownTimer } from "../components/CountdownTimer";
+import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { useLiveOpsOrdersQuery } from "../lib/queries/dashboard";
-import { remainingMs } from "../lib/sla";
+import { remainingMs, slaTier } from "../lib/sla";
 import type { OrderOut } from "../lib/types";
 import s from "./LiveOpsScreen.module.css";
 
@@ -15,39 +19,46 @@ const ACTIVE: OrderOut["status"][] = [
   "confirmed", "preparing", "ready", "assigned", "picked_up", "arriving",
 ];
 
-// Friendly labels for status — plain English
 const STATUS_LABEL: Record<string, string> = {
-  draft:                "Draft",
+  draft: "Draft",
   pending_confirmation: "Pending",
-  confirmed:            "New",
-  preparing:            "Cooking",
-  ready:                "Ready",
-  assigned:             "With Rider",
-  picked_up:            "On the Way",
-  arriving:             "Arriving",
-  delivered:            "Delivered",
-  cancelled:            "Cancelled",
-  on_resale:            "On Resale",
+  confirmed: "New",
+  preparing: "Cooking",
+  ready: "Ready",
+  assigned: "With Rider",
+  picked_up: "On the Way",
+  arriving: "Arriving",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  on_resale: "On Resale",
 };
 
-// Greyscale ramp (light = earlier in the flow, dark = completed) so the donut
-// stays cohesive with the white & grey theme.
-const STATUS_COLORS: Record<string, string> = {
-  draft:                "#cbd0d6",
-  pending_confirmation: "#b3b9c0",
-  confirmed:            "#9aa0a8",
-  preparing:            "#7e858e",
-  ready:                "#656c75",
-  assigned:             "#525964",
-  picked_up:            "#444b54",
-  arriving:             "#363c44",
-  delivered:            "#23272f",
-  cancelled:            "#a7adb4",
-  on_resale:            "#8b929b",
-};
+type LaneKey = "new" | "preparing" | "ready" | "out" | "late";
 
-// Loading skeleton mirroring the home layout: 4 KPI cards + a donut card and
-// the orders-feed card. Shown until the first poll resolves.
+const LANES: { key: LaneKey; title: string; hint: string }[] = [
+  { key: "new", title: "New", hint: "Just confirmed" },
+  { key: "preparing", title: "Preparing", hint: "In kitchen" },
+  { key: "ready", title: "Ready", hint: "Awaiting rider" },
+  { key: "out", title: "Out", hint: "On the road" },
+  { key: "late", title: "Late", hint: "SLA risk" },
+];
+
+function isLate(order: OrderOut): boolean {
+  return remainingMs(order.sla_started_at) <= 10 * 60_000;
+}
+
+function boardLane(order: OrderOut): LaneKey {
+  // Late is visually unavoidable — always take priority over status columns.
+  if (ACTIVE.includes(order.status) && isLate(order)) return "late";
+  if (order.status === "confirmed") return "new";
+  if (order.status === "preparing") return "preparing";
+  if (order.status === "ready") return "ready";
+  if (order.status === "assigned" || order.status === "picked_up" || order.status === "arriving") {
+    return "out";
+  }
+  return "new";
+}
+
 function LiveOpsSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading live operations">
@@ -63,48 +74,17 @@ function LiveOpsSkeleton() {
           </div>
         ))}
       </div>
-
-      <div className={s.dispatchKpiRow} style={{ marginTop: 20 }}>
-        <div className={s.skDispatchRow}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <span key={i} className={`${s.sk} ${s.skTile}`} />
-          ))}
-        </div>
-      </div>
-
-      <div className={s.card} style={{ marginTop: 20 }}>
-        <span className={`${s.sk} ${s.skCardTitle}`} />
-        <span className={`${s.sk} ${s.skMap}`} />
-      </div>
-
-      <div className={s.grid2} style={{ marginTop: 20 }}>
-        <div className={s.card}>
-          <span className={`${s.sk} ${s.skCardTitle}`} />
-          <div className={s.statusBody}>
-            <span className={`${s.sk} ${s.skDonut}`} />
-            <div className={s.legend}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className={s.legendRow}>
-                  <span className={`${s.sk} ${s.skDot}`} />
-                  <span className={`${s.sk} ${s.skLine}`} style={{ flex: 1 }} />
-                  <span className={`${s.sk} ${s.skLineSm}`} />
-                </div>
-              ))}
+      <div className={s.board} style={{ marginTop: 20 }}>
+        {LANES.map((lane) => (
+          <div key={lane.key} className={s.lane}>
+            <div className={s.laneHead}>
+              <span className={`${s.sk} ${s.skLabel}`} />
             </div>
+            {Array.from({ length: 2 }).map((_, i) => (
+              <span key={i} className={`${s.sk} ${s.skCard}`} />
+            ))}
           </div>
-        </div>
-
-        <div className={s.card}>
-          <span className={`${s.sk} ${s.skCardTitle}`} />
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className={s.skFeedRow}>
-              <span className={`${s.sk} ${s.skLineSm}`} style={{ width: 36 }} />
-              <span className={`${s.sk} ${s.skLine}`} style={{ flex: 1 }} />
-              <span className={`${s.sk} ${s.skLineSm}`} style={{ width: 54 }} />
-              <span className={`${s.sk} ${s.skPill}`} />
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -127,19 +107,49 @@ function StatCard({
   );
 }
 
+function BoardCard({ order, onOpen }: { order: OrderOut; onOpen: () => void }) {
+  const tier = slaTier(order.sla_started_at);
+  const late = isLate(order);
+  const items = order.items.map((i) => `${i.qty}× ${i.name}`).join(", ");
+  return (
+    <button
+      type="button"
+      className={`${s.orderCard} ${late ? s.orderCardLate : ""} ${s[`tier_${tier}`] ?? ""}`}
+      onClick={onOpen}
+    >
+      <div className={s.orderCardTop}>
+        <span className={s.orderId}>#{order.id}</span>
+        <StatusPill status={order.status} />
+      </div>
+      <span className={s.orderCust}>{order.customer_name}</span>
+      <span className={s.orderItems} title={items}>{items || "—"}</span>
+      <div className={s.orderCardFoot}>
+        <span className={s.orderTotal}>AED {order.total_aed}</span>
+        {late ? (
+          <span className={s.lateChip}>
+            {tier === "breach" ? "OVERDUE" : "LATE RISK"}
+          </span>
+        ) : (
+          <span className={s.timerChip}>
+            <CountdownTimer slaStartedAt={order.sla_started_at} />
+          </span>
+        )}
+      </div>
+      {order.rider_name && <span className={s.orderRider}>{order.rider_name}</span>}
+    </button>
+  );
+}
+
 export function LiveOpsScreen() {
   const { data, error, isPending } = useLiveOpsOrdersQuery();
   const loading = isPending && data == null;
   const orders = data ?? [];
   const nav = useNavigate();
-  const [filter, setFilter] = useState<OrderOut["status"] | "all">("all");
-  // Manager-dismissed urgent alerts (kept in memory only — a page refresh
-  // re-surfaces anything still breaching so nothing is silently lost).
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
   const activeOrders = orders.filter((o) => ACTIVE.includes(o.status));
   const urgent = activeOrders
-    .filter((o) => remainingMs(o.sla_started_at) <= 10 * 60_000)
+    .filter((o) => isLate(o))
     .filter((o) => !dismissed.has(o.id));
 
   const kpis = useMemo(() => {
@@ -157,64 +167,32 @@ export function LiveOpsScreen() {
     };
   }, [orders, activeOrders.length]);
 
-  // Status breakdown for the donut — only statuses that have orders.
-  const pieData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const o of orders) counts[o.status] = (counts[o.status] || 0) + 1;
-    return Object.entries(counts)
-      .map(([status, value]) => ({
-        name: STATUS_LABEL[status] ?? status,
-        value,
-        color: STATUS_COLORS[status] ?? "#9ca3af",
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [orders]);
-
-  // Conic-gradient stops for the donut ring — always a perfectly closed circle
-  // (no recharts single-segment seam), segments sized by share of total.
-  const conic = useMemo(() => {
-    const total = orders.length || 1;
-    let acc = 0;
-    const stops = pieData.map((d) => {
-      const start = (acc / total) * 360;
-      acc += d.value;
-      const end = (acc / total) * 360;
-      return `${d.color} ${start}deg ${end}deg`;
-    });
-    return `conic-gradient(${stops.join(", ")})`;
-  }, [pieData, orders.length]);
-
-  const laneIds = new Set(urgent.map((o) => o.id));
-  const feedSource = orders.filter((o) => !laneIds.has(o.id));
-  const feed = filter === "all" ? feedSource : feedSource.filter((o) => o.status === filter);
-  // Show only the 8 most recent orders in the side panel.
-  const visibleFeed = [...feed].sort((a, b) => b.id - a.id).slice(0, 8);
-
-  const orderColumns: Column<OrderOut>[] = [
-    { key: "id", header: "#", render: (o) => <span className="mono">#{o.id}</span> },
-    { key: "cust", header: "Customer", render: (o) => o.customer_name },
-    {
-      key: "items",
-      header: "Items",
-      render: (o) => {
-        const text = o.items.map((i) => `${i.qty}× ${i.name}`).join(", ");
-        // Truncate long item lists to one line; full text on hover.
-        return <span className={s.itemsCell} title={text}>{text}</span>;
-      },
-    },
-    { key: "total", header: "Total", render: (o) => <span className="mono">AED {o.total_aed}</span> },
-    { key: "status", header: "Status", render: (o) => <StatusPill status={o.status} /> },
-  ];
+  const lanes = useMemo(() => {
+    const buckets: Record<LaneKey, OrderOut[]> = {
+      new: [],
+      preparing: [],
+      ready: [],
+      out: [],
+      late: [],
+    };
+    for (const o of activeOrders) {
+      buckets[boardLane(o)].push(o);
+    }
+    for (const key of Object.keys(buckets) as LaneKey[]) {
+      buckets[key].sort((a, b) => remainingMs(a.sla_started_at) - remainingMs(b.sla_started_at));
+    }
+    return buckets;
+  }, [activeOrders]);
 
   return (
     <div className={s.screen}>
+      <OfflineLimitsBanner surface="live-ops" />
       {error != null && <SectionBanner tone="warning">Connection lost — reconnecting…</SectionBanner>}
 
-      {/* ── Command-center header ─── */}
       <header className={s.pageHeader}>
         <div>
           <h1 className={s.h1}>Live Operations</h1>
-          <p className={s.sub}>Real time order &amp; delivery command center</p>
+          <p className={s.sub}>Order board · SLA · fleet — rush-hour command center</p>
         </div>
         <div className={s.headerRight}>
           <span className={s.livePill}><span className={s.liveDot} />LIVE</span>
@@ -225,7 +203,6 @@ export function LiveOpsScreen() {
         <LiveOpsSkeleton />
       ) : (
       <>
-      {/* ── KPI cards ─── */}
       <div className={s.kpiStrip}>
         <StatCard icon="📦" label="Orders Today" value={String(kpis.total)}
           accent="var(--chart-1)" sub={`${kpis.active} active now`} />
@@ -241,12 +218,6 @@ export function LiveOpsScreen() {
         <DispatchKpiPanel />
       </div>
 
-      <div className={s.card}>
-        <div className={s.cardTitle}>Fleet Map</div>
-        <LiveOpsMap />
-      </div>
-
-      {/* ── Urgent orders (need attention) ─── */}
       {urgent.length > 0 && (
         <div className={s.urgentCard}>
           <div className={s.urgentTitle}>
@@ -268,66 +239,102 @@ export function LiveOpsScreen() {
         </div>
       )}
 
-      {/* ── Distribution + All Orders ─── */}
-      <div className={s.grid2}>
-        <div className={s.card}>
-          <div className={s.cardTitle}>Order Distribution</div>
-          {orders.length === 0 ? (
-            <div className={s.miniEmpty}>No orders to chart yet.</div>
-          ) : (
-            <div className={s.statusBody}>
-              <div className={s.donutWrap}>
-                <div className={s.donut} style={{ background: conic }} />
-                <div className={s.donutHole} />
-                <div className={s.donutCenter}>
-                  <span className={s.donutNum}>{orders.length}</span>
-                  <span className={s.donutCap}>orders</span>
-                </div>
-              </div>
-              <div className={s.legend}>
-                {pieData.map((d) => (
-                  <div key={d.name} className={s.legendRow}>
-                    <span className={s.legendDot} style={{ background: d.color }} />
-                    <span className={s.legendLabel}>{d.name}</span>
-                    <span className={s.legendPct}>{Math.round((d.value / orders.length) * 100)}%</span>
-                    <span className={s.legendCount}>{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Status board — cards by lane (no dense table) */}
+      <section className={s.boardSection} aria-label="Order status board">
+        <div className={s.boardHead}>
+          <h2 className={s.boardTitle}>Order board</h2>
+          <span className={s.boardMeta}>{activeOrders.length} active</span>
         </div>
-
-        <div className={s.card}>
-          <div className={s.feedHead}>
-            <span className={s.feedTitle}>All Orders</span>
-            <div className={s.filters}>
-              <button
-                className={`${s.filterPill} ${filter === "all" ? s.filterActive : ""}`}
-                onClick={() => setFilter("all")}
-              >All</button>
-              {ACTIVE.map((st) => (
-                <button
-                  key={st}
-                  className={`${s.filterPill} ${filter === st ? s.filterActive : ""}`}
-                  onClick={() => setFilter(st)}
-                >
-                  {STATUS_LABEL[st] ?? st}
-                </button>
-              ))}
-            </div>
-          </div>
-          <CompactTable
-            columns={orderColumns}
-            rows={visibleFeed}
-            rowKey={(o) => o.id}
-            onRowClick={(o) => nav(`/orders?id=${o.id}`)}
-            emptyText={orders.length === 0 ? "No orders yet today." : "Nothing in this category right now."}
+        {activeOrders.length === 0 ? (
+          <EmptyState
+            title="No active orders"
+            description="New confirmations appear here by status. Start a walk-in or WhatsApp order."
+            action={
+              <TouchButton type="button" onClick={() => nav("/new-order")}>
+                New Order
+              </TouchButton>
+            }
           />
-        </div>
+        ) : (
+          <div className={s.board}>
+            {LANES.map((lane) => {
+              const rows = lanes[lane.key];
+              return (
+                <div
+                  key={lane.key}
+                  className={`${s.lane} ${lane.key === "late" ? s.laneLate : ""}`}
+                >
+                  <div className={s.laneHead}>
+                    <div>
+                      <span className={s.laneTitle}>{lane.title}</span>
+                      <span className={s.laneHint}>{lane.hint}</span>
+                    </div>
+                    <span className={`${s.laneCount} ${lane.key === "late" && rows.length ? s.laneCountHot : ""}`}>
+                      {rows.length}
+                    </span>
+                  </div>
+                  <div className={s.laneBody}>
+                    {rows.length === 0 ? (
+                      <div className={s.laneEmpty}>None</div>
+                    ) : (
+                      rows.map((o) => (
+                        <BoardCard
+                          key={o.id}
+                          order={o}
+                          onOpen={() => nav(`/orders?id=${o.id}`)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className={s.card}>
+        <div className={s.cardTitle}>Fleet Map</div>
+        <LiveOpsMap />
+      </div>
+
+      {/* Compact distribution legend (not the primary board) */}
+      <div className={s.card}>
+        <div className={s.cardTitle}>Today by status</div>
+        {orders.length === 0 ? (
+          <div className={s.miniEmpty}>No orders yet today.</div>
+        ) : (
+          <div className={s.statusChips}>
+            {Object.entries(
+              orders.reduce<Record<string, number>>((acc, o) => {
+                acc[o.status] = (acc[o.status] || 0) + 1;
+                return acc;
+              }, {}),
+            )
+              .sort((a, b) => b[1] - a[1])
+              .map(([status, count]) => (
+                <span key={status} className={s.statusChip}>
+                  <StatusPill status={status as OrderOut["status"]} />
+                  <strong>{count}</strong>
+                  <span className={s.statusChipLabel}>{STATUS_LABEL[status] ?? status}</span>
+                </span>
+              ))}
+          </div>
+        )}
       </div>
       </>
       )}
+
+      <BottomActionBar>
+        <TouchButton type="button" onClick={() => nav("/new-order")}>
+          New Order
+        </TouchButton>
+        <Button type="button" variant="ghost" size="lg" onClick={() => nav("/orders")}>
+          Open Orders
+        </Button>
+        <Link className={s.barLink} to="/riders">Riders</Link>
+        <Link className={s.barLink} to="/kds">Kitchen</Link>
+      </BottomActionBar>
     </div>
   );
 }

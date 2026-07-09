@@ -2,13 +2,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: var(--topbar-height);
-  min-height: var(--topbar-height);
+  height: var(--topbar-height, 56px);
+  min-height: var(--topbar-height, 56px);
   flex-shrink: 0;
   padding: 0 16px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
-  -webkit-app-region: drag; /* Electron: drag window from top bar */
+  -webkit-app-region: drag;
+  gap: 12px;
 }
 
 .left,
@@ -21,51 +22,152 @@
 }
 
 .pageTitle {
-  font-size: 14px;
+  font-size: var(--font-size-title, 18px);
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .sep {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .store {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 240px;
+  max-width: 220px;
 }
 
 .pill {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 2px 7px;
+  padding: 4px 8px;
   border-radius: 999px;
   background: var(--accent-primary-dim);
   color: var(--accent-primary);
   border: 1px solid rgba(23, 92, 211, 0.2);
 }
 
+.offlineBadge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--sla-critical-dim);
+  color: var(--sla-critical);
+  border: 1px solid var(--sla-critical);
+}
+
+.pendingBadge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--sla-warn-dim);
+  color: var(--sla-warn);
+  border: 1px solid var(--sla-warn);
+}
+
+.staffBtn,
+.alertBtn {
+  min-height: 40px;
+  min-width: 56px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.staffBtn:hover,
+.alertBtn:hover {
+  background: var(--bg-surface-inset);
+}
+
+.staffBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.staffBtn:disabled:hover {
+  background: var(--bg-surface);
+}
+
+.trainingBadge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--sla-warn-dim);
+  color: var(--sla-warn);
+  border: 1px solid var(--sla-warn);
+}
+
+.alertWrap {
+  position: relative;
+}
+
+.alertCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--sla-critical);
+  color: var(--text-inverse);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reliabilityLink {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+}
+
+.reliabilityLink:hover {
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+}
+
 .date {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .time {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
-  min-width: 52px;
+  min-width: 56px;
   text-align: right;
 }

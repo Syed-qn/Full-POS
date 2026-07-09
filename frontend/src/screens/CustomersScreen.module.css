@@ -1,7 +1,4 @@
-/* Customers filter bar — a cleaner, two-row layout that replaces the cramped
-   single-line filter borrowed from the Orders screen. Row 1 = search + min
-   spend; row 2 = labelled segmented filters. Screen/table/pagination styles
-   still come from OrdersScreen.module.css. */
+/* Customers filter bar — phone search is the primary lookup surface. */
 
 .filterBar {
   display: flex;
@@ -14,7 +11,26 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* Row 1 — labelled Search (grows) + Min spend groups sit side by side. */
+.phoneSearchBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.phoneSearchLabel {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.phoneSearchHint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Row for secondary filters (min spend). */
 .topRow {
   display: flex;
   gap: 16px;
@@ -32,10 +48,10 @@
 }
 .searchIcon {
   position: absolute;
-  left: 14px;
+  left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 14px;
+  font-size: 18px;
   color: var(--text-muted);
   pointer-events: none;
 }
@@ -43,25 +59,57 @@
   width: 100%;
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
-  padding: 10px 14px 10px 36px;
+  border-radius: 12px;
+  padding: 10px 14px 10px 44px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-body, 16px);
+  min-height: var(--touch-min, 56px);
+}
+.phoneSearch {
+  font-size: var(--font-size-item, 18px);
+  min-height: var(--touch-primary, 64px);
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-primary) 4%, var(--bg-surface));
 }
 .search:focus,
 .minSpend:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 16%, transparent);
 }
 .minSpend {
   width: 150px;
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-body, 16px);
+  min-height: 48px;
+}
+
+.phoneCell {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rowOpen {
+  min-height: var(--touch-min, 56px);
+  min-width: 72px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rowOpen:hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim);
 }
 
 /* Row 2 — labelled segmented controls. */
@@ -92,12 +140,13 @@
   gap: 2px;
 }
 .chip {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   background: transparent;
   border: none;
-  border-radius: 7px;
-  padding: 6px 14px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-height: 44px;
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;

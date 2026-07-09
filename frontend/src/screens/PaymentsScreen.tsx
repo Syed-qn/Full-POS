@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { PageHeader } from "../components/PageHeader";
 import { SectionBanner } from "../components/SectionBanner";
 import { toast } from "../components/Toaster";
@@ -19,12 +20,14 @@ import {
   markPayLater,
   openCashDrawer,
   redeemGiftCard,
+  refundPayment,
   setBillingSettings,
   type BillingSettings,
   type CashDrawerSession,
   type GiftCardOut,
   type PaymentLinkOut,
 } from "../lib/paymentsApi";
+import { useManagerPinGate } from "../lib/requireManagerPin";
 import s from "./PaymentsScreen.module.css";
 
 const TENDERS = [
@@ -77,6 +80,9 @@ export function PaymentsScreen() {
   const [gcRedeemPin, setGcRedeemPin] = useState("");
   const [discountAmt, setDiscountAmt] = useState("5.00");
   const [discountType, setDiscountType] = useState<"manager" | "staff">("manager");
+  const [refundTxnId, setRefundTxnId] = useState("");
+  const [refundAmt, setRefundAmt] = useState("");
+  const { requestPin, pinGate, pinBusy } = useManagerPinGate();
 
   async function load() {
     setLoadError(null);
@@ -188,25 +194,95 @@ export function PaymentsScreen() {
     }
   }
 
-  async function runDiscount() {
+  function runDiscount() {
     const oid = Number(orderId);
     if (!oid) {
       toast("Order ID is required.", "error");
       return;
     }
-    setBusy(true);
-    try {
-      await applyOrderDiscount(oid, {
-        discount_type: discountType,
-        amount_aed: discountAmt,
-        reason: `${discountType} discount from payments screen`,
+    if (discountType === "manager") {
+      requestPin({
+        actionType: "discount",
+        actionLabel: "Manager discount override",
+        recordLabel: `order #${oid}`,
+        orderId: oid,
+        amountAed: discountAmt,
+        confirmTitle: "Apply manager discount?",
+        confirmMessage: `Apply AED ${discountAmt} manager discount to order #${oid}. Manager PIN required.`,
+        confirmLabel: "Continue to PIN",
+        cancelLabel: "Back",
+        execute: async ({ reason }) => {
+          setBusy(true);
+          try {
+            await applyOrderDiscount(oid, {
+              discount_type: "manager",
+              amount_aed: discountAmt,
+              reason: reason || "manager discount from payments screen",
+            });
+            toast("Manager discount applied.");
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Discount failed.", "error");
+            throw e;
+          } finally {
+            setBusy(false);
+          }
+        },
       });
-      toast(`${discountType} discount applied.`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Discount failed.", "error");
-    } finally {
-      setBusy(false);
+      return;
     }
+    void (async () => {
+      setBusy(true);
+      try {
+        await applyOrderDiscount(oid, {
+          discount_type: "staff",
+          amount_aed: discountAmt,
+          reason: "staff discount from payments screen",
+        });
+        toast("Staff discount applied.");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Discount failed.", "error");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }
+
+  function runRefund() {
+    const tid = Number(refundTxnId);
+    const oid = Number(orderId) || undefined;
+    if (!tid) {
+      toast("Transaction ID is required for refund.", "error");
+      return;
+    }
+    if (!refundAmt || Number(refundAmt) <= 0) {
+      toast("Refund amount must be greater than zero.", "error");
+      return;
+    }
+    requestPin({
+      actionType: "refund",
+      actionLabel: "Refund / partial refund",
+      recordLabel: `txn #${tid}`,
+      orderId: oid,
+      amountAed: refundAmt,
+      reasonRequired: true,
+      confirmTitle: "Refund this payment?",
+      confirmMessage: `Refund AED ${refundAmt} on transaction #${tid}. Manager PIN and reason required.`,
+      confirmLabel: "Continue to PIN",
+      cancelLabel: "Keep payment",
+      execute: async () => {
+        setBusy(true);
+        try {
+          const result = await refundPayment(tid, refundAmt);
+          toast(`Refunded AED ${result.refunded_amount_aed ?? refundAmt}.`);
+          await load();
+        } catch (e) {
+          toast(e instanceof Error ? e.message : "Refund failed.", "error");
+          throw e;
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
   }
 
   return (
@@ -220,6 +296,7 @@ export function PaymentsScreen() {
           </Button>
         }
       />
+      <OfflineLimitsBanner surface="payments" />
 
       {loadError && <SectionBanner tone="warning">{loadError}</SectionBanner>}
 
@@ -333,8 +410,36 @@ export function PaymentsScreen() {
             />
           </label>
         </div>
-        <Button type="button" disabled={busy} onClick={() => void runDiscount()}>
+        <Button type="button" disabled={busy || pinBusy} onClick={() => runDiscount()}>
           Apply discount
+        </Button>
+      </section>
+
+      <section className={s.card}>
+        <div className={s.cardHead}>
+          <h2>Refund / partial refund</h2>
+          <span>Manager PIN required. Uses payment transaction id from charge history.</span>
+        </div>
+        <div className={s.formGrid}>
+          <label>
+            <span>Transaction ID</span>
+            <input
+              aria-label="Refund transaction id"
+              value={refundTxnId}
+              onChange={(e) => setRefundTxnId(e.target.value)}
+            />
+          </label>
+          <label>
+            <span>Amount AED</span>
+            <input
+              aria-label="Refund amount"
+              value={refundAmt}
+              onChange={(e) => setRefundAmt(e.target.value)}
+            />
+          </label>
+        </div>
+        <Button type="button" variant="danger" disabled={busy || pinBusy} onClick={() => runRefund()}>
+          Refund…
         </Button>
       </section>
 
@@ -656,6 +761,8 @@ export function PaymentsScreen() {
           </div>
         </div>
       </section>
+
+      {pinGate}
     </div>
   );
 }

@@ -194,7 +194,9 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
         .split(",")
         .map((a) => a.trim())
         .filter(Boolean),
-      nutrition: calories.trim() ? { calories: Number(calories) } : {},
+      nutrition: calories.trim()
+        ? ({ calories: Number(calories) } as Record<string, number | string>)
+        : undefined,
       channels_allowed: channels
         .split(",")
         .map((c) => c.trim())

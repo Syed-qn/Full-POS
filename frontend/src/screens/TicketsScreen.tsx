@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { TicketDetailDrawer } from "../components/TicketDetailDrawer";
 import { useTicketsQuery } from "../lib/queries/dashboard";
@@ -62,7 +63,14 @@ export function TicketsScreen() {
       {isPending && <TicketsSkeleton />}
 
       {!isPending && ordered.length === 0 && (
-        <div className={s.empty}>No open complaints — you're all caught up.</div>
+        <EmptyState
+          title="No open complaints"
+          description={
+            phoneFilter
+              ? "No tickets match this phone. Clear search to see the full queue."
+              : "You're all caught up — new complaints open in a drawer for resolution."
+          }
+        />
       )}
 
       {!isPending && ordered.length > 0 && (

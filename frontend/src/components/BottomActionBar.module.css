@@ -1,0 +1,15 @@
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  min-height: var(--bottom-bar-height, 80px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-default);
+  box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.06);
+  margin: auto -16px -16px;
+}

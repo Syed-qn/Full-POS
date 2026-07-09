@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "../test/render";
 import { InventoryScreen } from "./InventoryScreen";
@@ -224,6 +224,11 @@ describe("InventoryScreen", () => {
             }, 201),
           );
         }
+        if (path.includes("/staff/approvals") && init?.method === "POST") {
+          return Promise.resolve(
+            json({ id: 1, action_type: "stock_adjustment", status: "approved" }, 201),
+          );
+        }
         return Promise.resolve(json([]));
       }),
     );
@@ -253,6 +258,16 @@ describe("InventoryScreen", () => {
     await waitFor(() => expect(screen.getByRole("cell", { name: "Mint" })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /approve adjustment 10/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
+    const pinDialog = await screen.findByRole("dialog", { name: /manager approval/i });
+    for (const d of ["1", "2", "3", "4"]) {
+      fireEvent.click(within(pinDialog).getByRole("button", { name: `Digit ${d}` }));
+    }
+    fireEvent.change(within(pinDialog).getByPlaceholderText(/why is this needed/i), {
+      target: { value: "Manager approved variance" },
+    });
+    fireEvent.click(within(pinDialog).getByRole("button", { name: /^approve$/i }));
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/ingredients/stock-adjustments/10/approve"),
@@ -276,6 +291,16 @@ describe("InventoryScreen", () => {
     fireEvent.change(screen.getByLabelText("Ops quantity"), { target: { value: "1.000" } });
     fireEvent.change(screen.getByLabelText("Waste reason type"), { target: { value: "spoilage" } });
     fireEvent.click(screen.getByRole("button", { name: /log waste\/spoilage/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
+    const wastePin = await screen.findByRole("dialog", { name: /manager approval/i });
+    for (const d of ["1", "2", "3", "4"]) {
+      fireEvent.click(within(wastePin).getByRole("button", { name: `Digit ${d}` }));
+    }
+    fireEvent.change(within(wastePin).getByPlaceholderText(/why is this needed/i), {
+      target: { value: "Spoilage write-off" },
+    });
+    fireEvent.click(within(wastePin).getByRole("button", { name: /^approve$/i }));
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/ingredients/1/waste"),

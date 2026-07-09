@@ -5,11 +5,61 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiClient";
 import { RidersScreen } from "./RidersScreen";
 import * as ridersApi from "../lib/ridersApi";
+import * as ordersApi from "../lib/ordersApi";
 
 const riders = [
-  { id: 3, name: "Ali Hassan", phone: "+9715", status: "on_delivery" },
-  { id: 4, name: "Omar Farouq", phone: "+9716", status: "off_shift" },
+  {
+    id: 3,
+    name: "Ali Hassan",
+    phone: "+9715",
+    status: "available",
+    on_duty: true,
+    delivered_24h: 2,
+    delivered_lifetime: 40,
+    last_lat: null,
+    last_lng: null,
+    last_location_at: null,
+  },
+  {
+    id: 4,
+    name: "Omar Farouq",
+    phone: "+9716",
+    status: "off_shift",
+    on_duty: false,
+    delivered_24h: 0,
+    delivered_lifetime: 12,
+    last_lat: null,
+    last_lng: null,
+    last_location_at: null,
+  },
 ];
+
+const queueOrders = [
+  {
+    id: 101,
+    order_number: "R1-0101",
+    status: "ready",
+    customer_name: "Sara",
+    customer_phone: "+97150111",
+    items: [],
+    total_aed: "45.00",
+    rider_id: null,
+    rider_name: null,
+    sla_started_at: new Date(Date.now() - 35 * 60_000).toISOString(),
+    prep_deadline: null,
+    cook_estimate_minutes: null,
+    created_at: new Date().toISOString(),
+    address: null,
+    lat: null,
+    lng: null,
+  },
+];
+
+const emptyMap = {
+  origin: { lat: 25.2, lng: 55.27, name: "HQ" },
+  batches: [],
+  sla_rings: [],
+};
 
 vi.mock("../lib/ridersApi", async (importOriginal) => {
   const actual = await importOriginal<typeof ridersApi>();
@@ -20,30 +70,99 @@ vi.mock("../lib/ridersApi", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/ordersApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof ordersApi>();
+  return {
+    ...actual,
+    assignOrder: vi.fn(),
+  };
+});
+
+vi.mock("../components/LiveOpsMap", () => ({
+  LiveOpsMap: ({ fillHeight }: { fillHeight?: boolean }) => (
+    <div data-testid="live-ops-map" data-fill={fillHeight ? "1" : "0"}>
+      map
+    </div>
+  ),
+}));
+
 describe("RidersScreen", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
-        if (url.endsWith("/api/v1/me")) {
-          return Promise.resolve(new Response(JSON.stringify({ phone: "+971500000000" }), { status: 200 }));
+        const u = String(url);
+        if (u.includes("/api/v1/me")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ phone: "+971500000000" }), { status: 200 }),
+          );
         }
+        if (u.includes("/api/v1/dispatch/live-map")) {
+          return Promise.resolve(new Response(JSON.stringify(emptyMap), { status: 200 }));
+        }
+        if (u.includes("/api/v1/orders")) {
+          return Promise.resolve(new Response(JSON.stringify(queueOrders), { status: 200 }));
+        }
+        if (u.includes("/api/v1/riders") || u.endsWith("/riders")) {
+          return Promise.resolve(new Response(JSON.stringify(riders), { status: 200 }));
+        }
+        // riders list is default from useRidersQuery
         return Promise.resolve(new Response(JSON.stringify(riders), { status: 200 }));
       }),
     );
     vi.mocked(ridersApi.deleteRider).mockReset();
     vi.mocked(ridersApi.setRiderStatus).mockReset();
+    vi.mocked(ordersApi.assignOrder).mockReset();
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders rider cards from API", async () => {
+  it("renders rider fleet and map+queue layout", async () => {
     renderWithProviders(<RidersScreen />);
-    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
-    expect(screen.getByText("Omar Farouq")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Omar Farouq").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("riders-ops-layout")).toBeInTheDocument();
+    expect(screen.getByTestId("live-ops-map")).toBeInTheDocument();
+    expect(screen.getByTestId("riders-late-risk")).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: /primary actions/i })).toBeInTheDocument();
+  });
+
+  it("shows unassigned queue with SLA risk", async () => {
+    renderWithProviders(<RidersScreen />);
+    await waitFor(() => expect(screen.getByTestId("dispatch-queue-101")).toBeInTheDocument());
+    expect(screen.getByTestId("dispatch-queue-101")).toHaveTextContent(/R1-0101|101/);
+    expect(screen.getByTestId("riders-late-risk")).toHaveTextContent(/late risk/i);
+  });
+
+  it("manual assign uses selected order and rider", async () => {
+    const user = userEvent.setup();
+    vi.mocked(ordersApi.assignOrder).mockResolvedValue({
+      ...queueOrders[0],
+      status: "assigned",
+      rider_id: 3,
+      rider_name: "Ali Hassan",
+    } as never);
+
+    renderWithProviders(<RidersScreen />);
+    await waitFor(() => expect(screen.getByTestId("dispatch-queue-101")).toBeInTheDocument());
+
+    await user.click(screen.getByTestId("dispatch-queue-101"));
+    await user.click(screen.getByTestId("fleet-rider-3"));
+    await user.click(screen.getByTestId("riders-manual-assign"));
+
+    await waitFor(() => expect(ordersApi.assignOrder).toHaveBeenCalledWith(101, 3));
   });
 
   it("shows empty state when no riders", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response("[]", { status: 200 }));
+    vi.mocked(fetch).mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes("/api/v1/orders")) {
+        return Promise.resolve(new Response("[]", { status: 200 }));
+      }
+      if (u.includes("/api/v1/me")) {
+        return Promise.resolve(new Response(JSON.stringify({ phone: null }), { status: 200 }));
+      }
+      return Promise.resolve(new Response("[]", { status: 200 }));
+    });
     renderWithProviders(<RidersScreen />);
     await waitFor(() => expect(screen.getByText(/register your first rider/i)).toBeInTheDocument());
   });
@@ -66,12 +185,14 @@ describe("RidersScreen", () => {
     vi.mocked(ridersApi.setRiderStatus).mockResolvedValue({
       ...riders[0],
       status: "deactivated",
-    });
+    } as never);
 
     renderWithProviders(<RidersScreen />);
-    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
 
-    await user.click(screen.getAllByRole("button", { name: /remove/i })[0]);
+    // Select Ali so detail RiderCard is in focus (or use any Remove on page)
+    const removeButtons = screen.getAllByRole("button", { name: /remove/i });
+    await user.click(removeButtons[0]);
     await user.click(screen.getByRole("button", { name: /remove rider/i }));
 
     expect(ridersApi.deleteRider).toHaveBeenCalledWith(3);
@@ -79,6 +200,8 @@ describe("RidersScreen", () => {
 
     await user.click(screen.getByRole("button", { name: /deactivate rider/i }));
     expect(ridersApi.setRiderStatus).toHaveBeenCalledWith(3, "deactivated");
-    await waitFor(() => expect(screen.queryByText(/payment records on file/i)).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText(/payment records on file/i)).not.toBeInTheDocument(),
+    );
   });
 });

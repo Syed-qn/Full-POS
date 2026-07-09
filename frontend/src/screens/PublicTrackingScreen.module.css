@@ -156,3 +156,115 @@
   font-size: 0.88rem;
   line-height: 1.45;
 }
+
+.statusHero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+}
+
+.statusHero strong {
+  font-size: 1.0625rem;
+  color: #0f172a;
+}
+
+.statusHero span {
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.timelineStep {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: start;
+  position: relative;
+  padding: 0 0 14px 0;
+  color: #94a3b8;
+}
+
+.timelineStep:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.timelineDone {
+  color: #0f172a;
+}
+
+.timelineDone:not(:last-child)::before {
+  background: #16a34a;
+}
+
+.timelineCurrent .timelineLabel {
+  font-weight: 700;
+}
+
+.timelineDot {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  background: #fff;
+  justify-self: center;
+}
+
+.timelineDone .timelineDot {
+  border-color: #16a34a;
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+
+.timelineLabel {
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+
+.mapPlaceholder {
+  margin: 4px 0 12px;
+  padding: 28px 16px;
+  border-radius: 16px;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.mapPlaceholder p {
+  margin: 0;
+}
+
+.helpRow {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.helpText {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.45;
+}

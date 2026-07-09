@@ -199,6 +199,8 @@ export function placePublicStoreOrder(
     customer_name?: string;
     items: Array<{ dish_id: number; qty: number }>;
     channel?: string;
+    table_id?: number;
+    notes?: string;
   },
 ) {
   return apiClient.post<{

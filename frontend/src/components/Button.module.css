@@ -1,37 +1,69 @@
 .btn {
   font-family: var(--font-sans);
-  font-size: 13px;
   font-weight: 600;
-  padding: 8px 14px;
   border-radius: var(--radius);
   border: 1px solid transparent;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   transition: background 150ms ease-out, border-color 150ms ease-out;
+  box-sizing: border-box;
 }
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.md {
+  font-size: var(--font-size-ui, 14px);
+  min-height: 40px;
+  min-width: 40px;
+  padding: 8px 14px;
+}
+
+.lg {
+  font-size: var(--font-size-body, 16px);
+  min-height: var(--touch-min, 56px);
+  min-width: var(--touch-min, 56px);
+  padding: 12px 18px;
+}
+
+.touch {
+  font-size: var(--font-size-body, 16px);
+  min-height: var(--touch-primary, 64px);
+  min-width: var(--touch-min, 56px);
+  padding: 14px 20px;
+}
+
 .primary {
   background: var(--accent-primary);
   color: var(--text-inverse);
 }
+
 .primary:hover:not(:disabled) {
   background: var(--accent-primary-hover);
 }
+
 .ghost {
   background: transparent;
   border-color: var(--border-default);
   color: var(--text-primary);
 }
+
 .ghost:hover:not(:disabled) {
   border-color: var(--border-strong);
+  background: var(--bg-surface-inset);
 }
+
 .danger {
   background: transparent;
   border-color: var(--sla-critical);
   color: var(--sla-critical);
 }
+
 .danger:hover:not(:disabled) {
   background: var(--sla-critical-dim);
 }

@@ -34,8 +34,13 @@ vi.mock("../lib/orderDetailApi", async (importOriginal) => {
   };
 });
 vi.mock("../lib/ordersApi");
+vi.mock("../lib/staffApi", () => ({
+  submitManagerPin: vi.fn().mockResolvedValue({ id: 1, action_type: "void", status: "approved" }),
+}));
 
 import * as orderDetailApi from "../lib/orderDetailApi";
+import * as ordersApi from "../lib/ordersApi";
+import * as staffApi from "../lib/staffApi";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -275,5 +280,37 @@ describe("OrderDetailDrawer", () => {
     expect(within(dispatch).getByText(/#99/)).toBeInTheDocument();
     expect(within(dispatch).getByText(/41\.2 min projected/i)).toBeInTheDocument();
     expect(within(dispatch).getByText(/Marina/)).toBeInTheDocument();
+  });
+
+  it("gates cancel order behind confirm + manager PIN", async () => {
+    const confirmed = {
+      ...mockDetail,
+      status: "confirmed",
+      delivered_at: null,
+    };
+    vi.mocked(orderDetailApi.fetchOrderDetail).mockResolvedValue(confirmed as typeof mockDetail);
+    vi.mocked(ordersApi.cancelOrder).mockResolvedValue({
+      ...mockBasicOrder,
+      status: "cancelled",
+    });
+
+    renderDrawer(1);
+    await waitFor(() => screen.getByText("Chicken Biryani"));
+    fireEvent.click(screen.getByRole("button", { name: /cancel order/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
+    expect(await screen.findByRole("dialog", { name: /manager approval/i })).toBeInTheDocument();
+    expect(screen.getByText(/cancel \/ void order/i)).toBeInTheDocument();
+    for (const d of ["1", "2", "3", "4"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Digit ${d}` }));
+    }
+    fireEvent.change(screen.getByPlaceholderText(/why is this needed/i), {
+      target: { value: "Customer cancelled" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => {
+      expect(staffApi.submitManagerPin).toHaveBeenCalled();
+      expect(ordersApi.cancelOrder).toHaveBeenCalledWith(1, "Customer cancelled");
+    });
   });
 });

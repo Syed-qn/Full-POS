@@ -23,7 +23,10 @@ describe("LiveOpsScreen", () => {
     renderWithProviders(<LiveOpsScreen />);
     await vi.advanceTimersByTimeAsync(0);
     await waitFor(() => expect(screen.getByText("Orders Today")).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText("Ali Hassan")).toBeInTheDocument());
+    // Late/urgent orders appear on both the attention strip and the Late board lane.
+    await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
+    expect(screen.getByRole("toolbar", { name: /primary actions/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /new order/i })).toBeInTheDocument();
   });
 
   it("shows urgent section for orders within 10 minutes of SLA", async () => {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChannelsScreen } from "./ChannelsScreen";
 
@@ -18,7 +18,12 @@ vi.mock("../lib/channelsApi", () => ({
   createSettlement: vi.fn(),
 }));
 
+vi.mock("../lib/staffApi", () => ({
+  submitManagerPin: vi.fn().mockResolvedValue({ id: 1, action_type: "channel_pause", status: "approved" }),
+}));
+
 import * as api from "../lib/channelsApi";
+import * as staffApi from "../lib/staffApi";
 
 const mockChannels = {
   channels: {
@@ -111,5 +116,35 @@ describe("ChannelsScreen", () => {
     expect(screen.getByText("TB-1")).toBeInTheDocument();
     expect(screen.getByText("Commission report")).toBeInTheDocument();
     expect(screen.getByText("Profitability by channel")).toBeInTheDocument();
+  });
+
+  it("gates channel pause behind confirm + manager PIN", async () => {
+    vi.mocked(api.pauseChannel).mockResolvedValue({
+      ...mockChannels,
+      channels: {
+        ...mockChannels.channels,
+        talabat: { ...mockChannels.channels.talabat, accepting: false },
+      },
+    } as never);
+
+    render(<ChannelsScreen />);
+    const card = await screen.findByTestId("channel-talabat");
+    fireEvent.click(within(card).getByRole("button", { name: /^pause$/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
+    const pinDialog = await screen.findByRole("dialog", { name: /manager approval/i });
+    expect(within(pinDialog).getByText(/pause sales channel/i)).toBeInTheDocument();
+    expect(within(pinDialog).getByText("talabat")).toBeInTheDocument();
+    for (const d of ["1", "2", "3", "4"]) {
+      fireEvent.click(within(pinDialog).getByRole("button", { name: `Digit ${d}` }));
+    }
+    fireEvent.click(within(pinDialog).getByRole("button", { name: /^approve$/i }));
+    await waitFor(() => {
+      expect(staffApi.submitManagerPin).toHaveBeenCalledWith(
+        expect.objectContaining({ action_type: "channel_pause", pin: "1234" }),
+      );
+      expect(api.pauseChannel).toHaveBeenCalledWith("talabat");
+    });
+    expect(card).toBeInTheDocument();
   });
 });

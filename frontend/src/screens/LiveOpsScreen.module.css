@@ -1,15 +1,15 @@
 .screen {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
+  padding-bottom: var(--space-2);
 }
 
-/* ── Command-center header ─── */
 .pageHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   flex-wrap: wrap;
   padding: 4px 2px 2px;
 }
@@ -20,10 +20,11 @@
   letter-spacing: -0.01em;
   color: var(--text-primary);
   line-height: 1.1;
+  margin: 0;
 }
 .sub {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   color: var(--text-muted);
 }
 .headerRight {
@@ -44,13 +45,13 @@
   border: 1px solid color-mix(in srgb, var(--sla-safe) 30%, transparent);
   border-radius: 999px;
   padding: 5px 12px 5px 10px;
+  min-height: 36px;
 }
 .liveDot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--sla-safe);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--sla-safe) 60%, transparent);
   animation: liveBlink 1.6s ease-out infinite;
 }
 @keyframes liveBlink {
@@ -58,46 +59,29 @@
   70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--sla-safe) 0%, transparent); }
   100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sla-safe) 0%, transparent); }
 }
-.clock {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.1;
-}
-.clockTime {
-  font-family: var(--font-mono);
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.clockDate {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
 
-/* ── KPI cards ─── */
 .kpiStrip {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
 }
-.dispatchKpiRow {
-  /* No extra margin — the page's 20px flex gap already spaces this row. */
+@media (max-width: 900px) {
+  .kpiStrip { grid-template-columns: repeat(2, 1fr); }
 }
+.dispatchKpiRow {}
+
 .stat {
   position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  animation: fade-up 0.3s ease both;
+  min-height: 96px;
 }
 .statTop {
   display: flex;
@@ -128,26 +112,14 @@
   color: var(--text-primary);
 }
 .statSub {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-muted);
 }
 
-/* ── Two-column grid (distribution + SLA) ─── */
-.grid2 {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 16px;
-  align-items: stretch;
-}
-@media (max-width: 900px) {
-  .grid2 { grid-template-columns: 1fr; }
-}
-
-/* ── Generic card ─── */
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
   box-shadow: var(--shadow-sm);
 }
@@ -161,168 +133,22 @@
 }
 .miniEmpty {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   padding: 28px 0;
   text-align: center;
 }
 
-/* ── Donut ─── */
-.statusBody {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  padding-top: 4px;
-}
-.donutWrap {
-  position: relative;
-  width: 168px;
-  height: 168px;
-  flex-shrink: 0;
-}
-.donut {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  /* faint full ring sits under the colored gradient via the hole punch below */
-}
-.donutHole {
-  position: absolute;
-  inset: 26px;
-  border-radius: 50%;
-  background: var(--bg-surface);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
-}
-.donutCenter {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.donutNum {
-  font-family: var(--font-mono);
-  font-size: 30px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1;
-}
-.donutCap {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-top: 3px;
-}
-.legend {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-/* Each status on its own separated line so rows don't run together. */
-.legendRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.legendRow:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-.legendRow:first-child {
-  padding-top: 0;
-}
-.legendDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.legendLabel {
-  font-size: 13px;
-  color: var(--text-primary);
-  flex: 1;
-}
-.legendPct {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  min-width: 34px;
-  text-align: right;
-}
-.legendCount {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  min-width: 18px;
-  text-align: right;
-}
-
-/* ── SLA health ─── */
-.slaBody {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.slaBar {
-  display: flex;
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--bg-surface-inset);
-}
-.slaBar > span {
-  height: 100%;
-  transition: width 0.4s ease;
-}
-.slaRows {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.slaRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.slaRow:last-child { border-bottom: none; }
-.slaSwatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.slaName {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.slaHint {
-  font-size: 11px;
-  color: var(--text-muted);
-  flex: 1;
-}
-.slaCount {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-/* ── Urgent ─── */
 .urgentCard {
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border: 2px solid var(--sla-critical);
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
   box-shadow: var(--shadow-sm);
+  background-image: linear-gradient(
+    0deg,
+    var(--sla-critical-dim),
+    var(--bg-surface) 48%
+  );
 }
 .urgentTitle {
   display: flex;
@@ -332,7 +158,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--sla-critical);
   margin-bottom: 12px;
 }
 .urgentPulse {
@@ -356,74 +182,247 @@
   gap: 8px;
 }
 
-/* ── Feed ─── */
-.feedHead {
+/* ── Status board ── */
+.boardSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.boardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.boardTitle {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.boardMeta {
+  font-size: var(--font-size-ui);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+@media (max-width: 1100px) {
+  .board {
+    grid-template-columns: repeat(5, minmax(180px, 1fr));
+  }
+}
+
+.lane {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.laneLate {
+  border-color: var(--sla-critical);
+  box-shadow: 0 0 0 1px var(--sla-critical-dim), var(--shadow-sm);
+  background: linear-gradient(180deg, var(--sla-critical-dim), var(--bg-surface) 80px);
+}
+.laneHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.laneTitle {
+  display: block;
+  font-size: var(--font-size-body);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.laneHint {
+  display: block;
+  font-size: var(--font-size-caption);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.laneCount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--font-size-item);
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: right;
+}
+.laneCountHot {
+  color: var(--sla-critical);
+}
+.laneBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  flex: 1;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.laneEmpty {
+  color: var(--text-muted);
+  font-size: var(--font-size-ui);
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.orderCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  text-align: left;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.orderCard:hover,
+.orderCard:focus-visible {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+.orderCardLate {
+  border-color: var(--sla-critical);
+  background: #fff5f5;
+  box-shadow: inset 3px 0 0 var(--sla-critical);
+}
+.tier_breach {
+  animation: latePulse 1.4s ease-in-out infinite;
+}
+@keyframes latePulse {
+  0%, 100% { background-color: #fff5f5; }
+  50% { background-color: #ffe4e4; }
+}
+.orderCardTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
   gap: 8px;
 }
-.feedTitle {
-  font-size: 11px;
+.orderId {
+  font-family: var(--font-mono);
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--font-size-ui);
+  color: var(--text-primary);
+}
+.orderCust {
+  font-size: var(--font-size-item);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+.orderItems {
+  font-size: var(--font-size-ui);
   color: var(--text-secondary);
-}
-.feedList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-/* Long item lists truncate to one line with an ellipsis (full text on hover). */
-.itemsCell {
-  display: block;
-  max-width: 220px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.filters {
+.orderCardFoot {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
 }
-.filterPill {
-  font-size: 12px;
-  background: var(--bg-surface-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  padding: 4px 12px;
+.orderTotal {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--font-size-body);
+  color: var(--text-primary);
+}
+.timerChip {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.12s;
 }
-.filterPill:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-.filterActive {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
+.lateChip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   color: #fff;
+  background: var(--sla-critical);
+  border-radius: 999px;
+  padding: 4px 8px;
 }
-.empty {
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 24px 0;
-  text-align: center;
-  line-height: 1.6;
+.orderRider {
+  font-size: var(--font-size-caption);
+  color: var(--accent-dispatch);
+  font-weight: 600;
 }
 
-/* ── Loading skeleton (mirrors the home layout) ── */
+.statusChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-inset);
+}
+.statusChip strong {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-body);
+}
+.statusChipLabel {
+  font-size: var(--font-size-ui);
+  color: var(--text-secondary);
+}
+
+.barLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-min);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--font-size-body);
+  background: transparent;
+}
+.barLink:hover {
+  background: var(--bg-surface-inset);
+}
+
+/* skeleton */
 .sk {
   display: block;
   position: relative;
   overflow: hidden;
-  /* Near-white placeholder so the skeleton reads as light on the white cards,
-     not a grey block. The shimmer sweep provides the movement. */
   background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-surface));
   border-radius: 6px;
 }
@@ -442,22 +441,4 @@
 .skLabel { width: 90px; height: 10px; }
 .skValue { width: 64px; height: 30px; margin-top: 2px; }
 .skSub { width: 80px; height: 12px; }
-.skCardTitle { width: 120px; height: 12px; margin-bottom: 16px; }
-.skDonut { width: 168px; height: 168px; border-radius: 50%; flex-shrink: 0; }
-.skDot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.skLine { height: 12px; }
-.skLineSm { width: 34px; height: 12px; }
-.skPill { width: 64px; height: 20px; border-radius: 999px; }
-.skFeedRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.skFeedRow:last-child { border-bottom: none; }
-/* Dispatch-KPI tiles + Fleet-Map placeholders — keep the skeleton the same
-   height as the loaded page so nothing jumps when data arrives. */
-.skDispatchRow { display: flex; flex-wrap: wrap; gap: 12px; }
-.skTile { flex: 1; min-width: 150px; height: 88px; border-radius: 12px; }
-.skMap { width: 100%; height: 320px; border-radius: 12px; }
+.skCard { width: 100%; height: 88px; border-radius: var(--radius); margin-bottom: 8px; }

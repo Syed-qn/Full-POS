@@ -66,6 +66,7 @@ describe("ReliabilityScreen", () => {
       expect(screen.getByText("Reliability")).toBeInTheDocument();
     });
     expect(screen.getByText("Run cloud backup")).toBeInTheDocument();
+    await screen.getByRole("tab", { name: /devices/i }).click();
     await waitFor(() => {
       expect(screen.getByText(/POS1/)).toBeInTheDocument();
     });

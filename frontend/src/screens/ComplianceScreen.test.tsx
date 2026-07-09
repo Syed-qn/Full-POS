@@ -51,8 +51,12 @@ describe("ComplianceScreen", () => {
       expect(screen.getByText("Compliance (UAE)")).toBeInTheDocument();
     });
     expect(screen.getByText("Save tax settings")).toBeInTheDocument();
-    expect(screen.getByText(/E-invoicing readiness/)).toBeInTheDocument();
     await waitFor(() => {
+      expect(screen.getByText("Yes")).toBeInTheDocument();
+    });
+    await screen.getByRole("tab", { name: /e-invoice/i }).click();
+    await waitFor(() => {
+      expect(screen.getByText(/E-invoicing readiness/)).toBeInTheDocument();
       expect(screen.getByText(/PINT-AE-JSON-v1/)).toBeInTheDocument();
     });
   });

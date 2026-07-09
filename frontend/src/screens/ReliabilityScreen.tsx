@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
@@ -10,7 +11,6 @@ import {
   getNetworkStatus,
   listAuditLog,
   listBackups,
-  listDevices,
   listErrors,
   promoteFailover,
   registerDevice,
@@ -18,7 +18,9 @@ import {
   runDailyBackup,
   verifyBackup,
 } from "../lib/reliabilityApi";
-import s from "./BranchOpsScreen.module.css";
+import s from "./ReliabilityScreen.module.css";
+
+type RelTab = "backups" | "devices" | "errors" | "conflicts";
 
 type Bridge = {
   networkStatus?: () => Promise<{ online: boolean; last_error: string | null }>;
@@ -63,6 +65,7 @@ export function ReliabilityScreen() {
   const [conflicts, setConflicts] = useState<Array<{ id: string; entity: string; path: string }>>([]);
   const [deviceName, setDeviceName] = useState("Dashboard browser");
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<RelTab>("backups");
 
   const reload = useCallback(async () => {
     try {
@@ -137,11 +140,11 @@ export function ReliabilityScreen() {
           <span>Devices offline</span>
           <strong>{network?.devices_offline ?? "—"}</strong>
         </div>
-        <div className={s.metric}>
+        <div className={`${s.metric} ${(network?.unacked_errors ?? 0) > 0 ? s.metricAlert : ""}`}>
           <span>Unacked errors</span>
           <strong>{network?.unacked_errors ?? "—"}</strong>
         </div>
-        <div className={s.metric}>
+        <div className={`${s.metric} ${desktopOnline === false ? s.metricAlert : ""}`}>
           <span>Desktop link</span>
           <strong>
             {desktopOnline === null ? "n/a" : desktopOnline ? "online" : "OFFLINE"}
@@ -149,7 +152,29 @@ export function ReliabilityScreen() {
         </div>
       </section>
 
-      <section className={s.grid}>
+      <div className={s.tabs} role="tablist" aria-label="Reliability sections">
+        {(
+          [
+            ["backups", "Backups"],
+            ["devices", "Devices"],
+            ["errors", "Errors & audit"],
+            ["conflicts", "Conflicts"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`${s.tab} ${tab === key ? s.tabActive : ""}`}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "backups" && (
         <div className={s.card}>
           <div className={s.cardHead}>
             <h2>Cloud / daily backup</h2>
@@ -195,55 +220,63 @@ export function ReliabilityScreen() {
             </Button>
           </div>
           {readiness && (
-            <p>
+            <p className={s.muted}>
               Readiness: {readiness.orders_count} orders · {readiness.dishes_count} dishes
             </p>
           )}
-          <table className={s.table}>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Kind</th>
-                <th>Status</th>
-                <th>Size</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {backups.map((b) => (
-                <tr key={b.id}>
-                  <td>#{b.id}</td>
-                  <td>{b.kind}</td>
-                  <td>{b.status}</td>
-                  <td>{b.size_bytes}</td>
-                  <td>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={async () => {
-                        const v = await verifyBackup(b.id);
-                        toast(v.ok ? "Checksum OK" : "Checksum FAIL");
-                      }}
-                    >
-                      Verify
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={async () => {
-                        const p = await restorePreview(b.id);
-                        toast(p.message);
-                      }}
-                    >
-                      DR preview
-                    </Button>
-                  </td>
+          {backups.length === 0 ? (
+            <EmptyState title="No backups yet" description="Run a cloud backup to create the first snapshot." />
+          ) : (
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Kind</th>
+                  <th>Status</th>
+                  <th>Size</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {backups.map((b) => (
+                  <tr key={b.id}>
+                    <td>#{b.id}</td>
+                    <td>{b.kind}</td>
+                    <td>{b.status}</td>
+                    <td>{b.size_bytes}</td>
+                    <td>
+                      <div className={s.rowActions}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            const v = await verifyBackup(b.id);
+                            toast(v.ok ? "Checksum OK" : "Checksum FAIL");
+                          }}
+                        >
+                          Verify
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            const p = await restorePreview(b.id);
+                            toast(p.message);
+                          }}
+                        >
+                          DR preview
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
+      )}
 
+      {tab === "devices" && (
         <div className={s.card}>
           <div className={s.cardHead}>
             <h2>Devices & failover</h2>
@@ -274,112 +307,145 @@ export function ReliabilityScreen() {
           >
             Register this browser
           </Button>
-          <ul>
+          <ul className={s.list}>
             {(network?.devices ?? []).map((d) => (
-              <li key={d.device_id}>
-                {d.name} · {d.role} · {d.status}
-                {d.is_failover_active ? " · FAILOVER" : ""}{" "}
+              <li key={d.device_id} className={s.listItem}>
+                <span>
+                  {d.name} · {d.role} · {d.status}
+                  {d.is_failover_active ? " · FAILOVER" : ""}
+                </span>
                 {d.role !== "primary" && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={async () => {
-                      await promoteFailover(d.device_id);
-                      toast("Failover promoted");
-                      await reload();
-                    }}
-                  >
-                    Promote
-                  </Button>
+                  <div className={s.listActions}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={async () => {
+                        await promoteFailover(d.device_id);
+                        toast("Failover promoted");
+                        await reload();
+                      }}
+                    >
+                      Promote
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}
-          </ul>
-        </div>
-      </section>
-
-      <section className={s.grid}>
-        <div className={s.card}>
-          <div className={s.cardHead}>
-            <h2>Error logs</h2>
-            <span>In-app viewer (Sentry optional)</span>
-          </div>
-          <ul>
-            {errors.map((e) => (
-              <li key={e.id}>
-                [{e.level}] {e.message}{" "}
-                {!e.acknowledged && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={async () => {
-                      await ackError(e.id);
-                      setErrors(await listErrors());
-                    }}
-                  >
-                    Ack
-                  </Button>
-                )}
+            {(network?.devices ?? []).length === 0 && (
+              <li>
+                <EmptyState title="No devices" description="Register this browser as a POS terminal." />
               </li>
-            ))}
-            {errors.length === 0 && <li>No errors</li>}
+            )}
           </ul>
         </div>
+      )}
 
-        <div className={s.card}>
-          <div className={s.cardHead}>
-            <h2>Admin activity (audit)</h2>
-            <span>Append-only trail explorer</span>
+      {tab === "errors" && (
+        <section className={s.grid}>
+          <div className={s.card}>
+            <div className={s.cardHead}>
+              <h2>Error logs</h2>
+              <span>In-app viewer (Sentry optional)</span>
+            </div>
+            {errors.length === 0 ? (
+              <EmptyState title="No errors" description="Unacked application errors will show here." />
+            ) : (
+              <ul className={s.list}>
+                {errors.map((e) => (
+                  <li key={e.id} className={s.listItem}>
+                    <span>
+                      [{e.level}] {e.message}
+                    </span>
+                    {!e.acknowledged && (
+                      <div className={s.listActions}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={async () => {
+                            await ackError(e.id);
+                            setErrors(await listErrors());
+                          }}
+                        >
+                          Ack
+                        </Button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <ul>
-            {audit.map((a) => (
-              <li key={a.id}>
-                {a.created_at?.slice(0, 19)} · {a.actor} · {a.entity}/{a.action}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
 
-      <section className={s.card}>
-        <div className={s.cardHead}>
-          <h2>Offline conflict resolution</h2>
-          <span>Desktop shell only — retry or discard 409 conflicts after reconnect</span>
-        </div>
-        {!posBridge()?.listConflicts && (
-          <p>Open the Electron desktop shell to manage offline queue conflicts.</p>
-        )}
-        <ul>
-          {conflicts.map((c) => (
-            <li key={c.id}>
-              {c.entity} {c.path}{" "}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={async () => {
-                  await posBridge()?.resolveConflict?.(c.id, "retry");
-                  toast("Queued for retry");
-                  setConflicts((await posBridge()?.listConflicts?.()) ?? []);
-                }}
-              >
-                Retry
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={async () => {
-                  await posBridge()?.resolveConflict?.(c.id, "discard");
-                  toast("Discarded");
-                  setConflicts((await posBridge()?.listConflicts?.()) ?? []);
-                }}
-              >
-                Discard
-              </Button>
-            </li>
-          ))}
-          {conflicts.length === 0 && <li>No conflicts</li>}
-        </ul>
-      </section>
+          <div className={s.card}>
+            <div className={s.cardHead}>
+              <h2>Admin activity (audit)</h2>
+              <span>Append-only trail explorer</span>
+            </div>
+            {audit.length === 0 ? (
+              <EmptyState title="No audit rows" description="Manager actions appear in this trail." />
+            ) : (
+              <ul className={s.list}>
+                {audit.map((a) => (
+                  <li key={a.id} className={s.listItem}>
+                    <span>
+                      {a.created_at?.slice(0, 19)} · {a.actor} · {a.entity}/{a.action}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      {tab === "conflicts" && (
+        <section className={s.card}>
+          <div className={s.cardHead}>
+            <h2>Offline conflict resolution</h2>
+            <span>Desktop shell only — retry or discard 409 conflicts after reconnect</span>
+          </div>
+          {!posBridge()?.listConflicts && (
+            <p className={s.muted}>Open the Electron desktop shell to manage offline queue conflicts.</p>
+          )}
+          {conflicts.length === 0 ? (
+            <EmptyState title="No conflicts" description="Sync conflicts after reconnect will list here." />
+          ) : (
+            <ul className={s.list}>
+              {conflicts.map((c) => (
+                <li key={c.id} className={s.listItem}>
+                  <span>
+                    {c.entity} {c.path}
+                  </span>
+                  <div className={s.listActions}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={async () => {
+                        await posBridge()?.resolveConflict?.(c.id, "retry");
+                        toast("Queued for retry");
+                        setConflicts((await posBridge()?.listConflicts?.()) ?? []);
+                      }}
+                    >
+                      Retry
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={async () => {
+                        await posBridge()?.resolveConflict?.(c.id, "discard");
+                        toast("Discarded");
+                        setConflicts((await posBridge()?.listConflicts?.()) ?? []);
+                      }}
+                    >
+                      Discard
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

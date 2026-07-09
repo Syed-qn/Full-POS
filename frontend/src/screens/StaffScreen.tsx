@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { EmptyState } from "../components/EmptyState";
+import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
@@ -401,8 +403,20 @@ export function StaffScreen() {
       </section>
 
       {!loaded && <p className={s.loading}>Loading staff…</p>}
-      {loadError && <p className={s.error} role="alert">{loadError}</p>}
-      {loaded && !loadError && staff.length === 0 && <div className={s.empty}>No staff yet.</div>}
+      {loadError && (
+        <ErrorState
+          title="Could not load staff"
+          description={loadError}
+          action={
+            <Button type="button" onClick={() => void reload()}>
+              Retry
+            </Button>
+          }
+        />
+      )}
+      {loaded && !loadError && staff.length === 0 && (
+        <EmptyState title="No staff yet" description="Add a staff member above to enable PIN login and shifts." />
+      )}
 
       {loaded && staff.length > 0 && (
         <table className={s.table}>

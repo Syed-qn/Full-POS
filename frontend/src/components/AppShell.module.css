@@ -5,6 +5,11 @@
   background: var(--bg-canvas);
 }
 
+/* Subtle training-mode chrome (paired with TopBar Training badge + banner). */
+.training {
+  box-shadow: inset 0 0 0 2px var(--sla-warn, #f79009);
+}
+
 .content {
   flex: 1;
   display: flex;
@@ -17,10 +22,11 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 14px 16px 16px;
+  padding: 16px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   background: var(--bg-canvas);
   min-height: 0;
+  font-size: var(--font-size-body, 16px);
 }

@@ -41,7 +41,7 @@ describe("CouponsScreen", () => {
       return Promise.resolve(new Response("[]", { status: 200 }));
     });
     render(<CouponsScreen />);
-    await waitFor(() => expect(screen.getByText(/create one above/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/no coupons yet/i)).toBeInTheDocument());
   });
 
   it("shows load error when list fails", async () => {

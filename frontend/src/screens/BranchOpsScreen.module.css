@@ -6,9 +6,14 @@
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.actions :global(button),
+.card :global(button) {
+  min-height: var(--touch-min, 56px);
 }
 
 .date,
@@ -17,11 +22,12 @@
 .formGridSingle input,
 .formGridSingle select,
 .inlineFields input {
-  min-height: 36px;
+  min-height: 48px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font: inherit;
+  font-size: var(--font-size-body, 16px);
   background: var(--bg-surface);
   color: var(--text-primary);
 }
@@ -143,9 +149,13 @@
 .table th,
 .table td {
   text-align: left;
-  padding: 10px 12px;
+  padding: 14px 12px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.table tbody tr {
+  height: 56px;
 }
 
 .table th {

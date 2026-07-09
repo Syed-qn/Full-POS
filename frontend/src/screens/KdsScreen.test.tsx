@@ -110,4 +110,18 @@ describe("KdsScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: /bump/i }));
     await waitFor(() => expect(screen.queryByText(/kebab/i)).not.toBeInTheDocument());
   });
+
+  it("supports expo view query stub (ready pickup emphasis)", async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/kds" element={<KdsScreen />} />
+        <Route path="/kds/:stationId" element={<KdsScreen />} />
+      </Routes>,
+      { initialEntries: ["/kds?view=expo"] },
+    );
+
+    await waitFor(() => expect(screen.getByTestId("kds-screen")).toHaveAttribute("data-view", "expo"));
+    expect(screen.getByTestId("kds-expo-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("kds-pickup")).toBeInTheDocument();
+  });
 });

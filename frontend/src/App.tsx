@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { NoAccessScreen } from "./components/NoAccessScreen";
 import { Toaster } from "./components/Toaster";
 import { isAuthenticated } from "./lib/auth";
+import { canAccess, getSessionRole } from "./lib/navAccess";
 import {
   readCachedOnboardingComplete,
   resolveOnboardingComplete,
@@ -35,6 +37,10 @@ import { PublicStoreScreen } from "./screens/PublicStoreScreen";
 import { ReliabilityScreen } from "./screens/ReliabilityScreen";
 import { ComplianceScreen } from "./screens/ComplianceScreen";
 import { AiInsightsScreen } from "./screens/AiInsightsScreen";
+import { FloorPlanScreen } from "./screens/FloorPlanScreen";
+import { OrderDetailScreen } from "./screens/OrderDetailScreen";
+import { CheckoutScreen } from "./screens/CheckoutScreen";
+import { RiderAppScreen } from "./screens/RiderAppScreen";
 
 function Guarded({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
@@ -57,6 +63,17 @@ function Guarded({ children }: { children: React.ReactNode }) {
     return <Navigate to="/onboarding" replace />;
   }
   if (onboardingOk === null) return null;
+
+  // Soft role gate: keep shell chrome; show friendly no-access (public routes are unguarded).
+  const role = getSessionRole();
+  if (!canAccess(loc.pathname, role)) {
+    return (
+      <AppShell>
+        <NoAccessScreen />
+      </AppShell>
+    );
+  }
+
   return <AppShell>{children}</AppShell>;
 }
 
@@ -75,7 +92,24 @@ export default function App() {
       <Route path="/rider-track/:riderToken" element={<RiderTrackingScreen />} />
       <Route path="/order/:slug" element={<PublicStoreScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
+      <Route path="/floor" element={<Guarded><FloorPlanScreen /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
+      <Route
+        path="/orders/:id/pay"
+        element={
+          <Guarded>
+            <CheckoutScreen />
+          </Guarded>
+        }
+      />
+      <Route
+        path="/orders/:id"
+        element={
+          <Guarded>
+            <OrderDetailScreen />
+          </Guarded>
+        }
+      />
       <Route path="/customers" element={<Guarded><CustomersScreen /></Guarded>} />
       <Route path="/customers/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
       <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
@@ -85,6 +119,7 @@ export default function App() {
       <Route path="/inventory" element={<Guarded><InventoryScreen /></Guarded>} />
       <Route path="/branches" element={<Guarded><BranchOpsScreen /></Guarded>} />
       <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
+      <Route path="/rider-app" element={<RiderAppScreen />} />
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
       <Route path="/tickets" element={<Guarded><TicketsScreen /></Guarded>} />
       <Route path="/coupons" element={<Guarded><CouponsScreen /></Guarded>} />

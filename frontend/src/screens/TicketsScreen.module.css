@@ -18,15 +18,16 @@
 
 .row {
   display: grid;
-  grid-template-columns: 56px 1fr auto auto;
+  grid-template-columns: 64px 1fr auto auto;
   align-items: center;
   gap: 12px;
   text-align: left;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--shadow-sm);
-  padding: 12px 16px;
+  padding: 14px 16px;
+  min-height: var(--touch-min, 56px);
   cursor: pointer;
   font: inherit;
   color: var(--text-primary);
@@ -107,23 +108,30 @@
 
 .search {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  align-items: stretch;
 }
 
 .search input {
   flex: 1;
   min-width: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  font-size: 14px;
+  min-height: var(--touch-min, 56px);
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  font-size: var(--font-size-body, 16px);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .search button {
-  padding: 8px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-base);
+  min-height: var(--touch-min, 56px);
+  min-width: 96px;
+  padding: 12px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-surface);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 600;
 }

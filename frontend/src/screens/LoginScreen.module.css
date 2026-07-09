@@ -3,8 +3,11 @@
   align-items: center;
   justify-content: center;
   height: 100%;
+  min-height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow: auto;
+  padding: var(--space-4);
+  box-sizing: border-box;
 }
 
 .bg {
@@ -17,14 +20,15 @@
 }
 
 .card {
-  width: 400px;
+  width: 100%;
+  max-width: 440px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 28px 28px 22px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-6) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
   position: relative;
   box-shadow: var(--shadow-md);
 }
@@ -32,18 +36,18 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 4px;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
 }
 
 .brandMark {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius);
   background: var(--accent-primary);
   color: var(--text-inverse);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   display: flex;
@@ -60,24 +64,23 @@
 }
 
 .brandText strong {
-  font-size: 16px;
+  font-size: var(--font-size-title);
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .brandText span {
-  font-size: 11px;
+  font-size: var(--font-size-ui);
   color: var(--text-secondary);
 }
 
-/* Tab switcher */
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   overflow: hidden;
-  position: relative;
+  background: var(--bg-surface-inset);
 }
 
 .tab {
@@ -87,68 +90,115 @@
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.08em;
   color: var(--text-secondary);
-  padding: 9px 0;
-  position: relative;
-  z-index: 1;
-  transition: color 0.2s;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-2);
+  transition: color 0.15s, background 0.15s;
 }
 
 .tabActive {
   color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
-.tabSlider {
-  position: absolute;
-  top: 0;
-  width: 50%;
-  height: 100%;
-  background: var(--bg-surface-inset);
-  border-radius: calc(var(--radius) - 1px);
-  transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-  pointer-events: none;
-}
-
-/* Fields */
-.fields {
+.fields,
+.pinForm {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-4);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 
 .field input {
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
-  padding: 9px 12px;
+  min-height: var(--touch-min);
+  padding: 12px 14px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   transition: border-color 0.15s;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .field input::placeholder {
-  color: var(--text-muted, var(--text-secondary));
-  opacity: 0.5;
+  color: var(--text-muted);
+  opacity: 0.7;
 }
 
 .field input:focus {
   outline: none;
   border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
 }
 
-/* Footer hint */
+.pinDisplay {
+  min-height: var(--touch-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-item-lg);
+  letter-spacing: 0.35em;
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.pinPad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.pinKey {
+  min-height: var(--touch-primary);
+  min-width: var(--touch-min);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-item);
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.pinKey:active {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+}
+
+.pinKeyMuted {
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+  background: var(--bg-surface-inset);
+}
+
 .hint {
-  font-size: 12px;
+  font-size: var(--font-size-ui);
   color: var(--text-secondary);
   text-align: center;
   margin: 0;
+  line-height: 1.5;
 }
 
 .switchLink {
@@ -156,13 +206,14 @@
   border: none;
   cursor: pointer;
   color: var(--accent-primary);
-  font-size: 12px;
+  font-size: inherit;
   font-family: inherit;
   padding: 0;
   text-decoration: underline;
   text-underline-offset: 2px;
+  min-height: auto;
 }
 
 .switchLink:hover {
-  opacity: 0.8;
+  opacity: 0.85;
 }

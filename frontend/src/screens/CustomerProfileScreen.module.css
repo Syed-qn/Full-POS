@@ -35,17 +35,30 @@
 .input {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
-  border-radius: 4px;
+  border-radius: 10px;
   color: var(--text-primary);
-  font-size: 0.85rem;
+  font-size: var(--font-size-body, 16px);
   margin-bottom: 10px;
-  padding: 6px 8px;
+  min-height: 48px;
+  padding: 10px 12px;
   width: 100%;
 }
 .input:focus { border-color: var(--accent-primary); outline: none; }
 
 .toggleRow { align-items: center; display: flex; gap: 10px; margin-bottom: 10px; }
-.toggle { border: none; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; padding: 4px 10px; }
+.toggle {
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  min-height: 44px;
+  padding: 10px 14px;
+}
+.card :global(button) {
+  min-height: 48px;
+}
 .toggleOn { background: #22c55e; color: #000; }
 .toggleOff { background: var(--bg-surface-inset); color: var(--text-secondary); }
 .saveRow { margin-top: 4px; }

@@ -1,7 +1,31 @@
-.root { padding: 24px; }
-.card { background: var(--surface, #fff); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-.cardTitle { margin: 0 0 12px; font-size: 15px; }
+.root { display: flex; flex-direction: column; gap: 16px; padding: 0; }
+.card {
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border-subtle, #eee);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+  margin-bottom: 0;
+}
+.cardTitle { margin: 0 0 12px; font-size: var(--font-size-title, 18px); font-weight: 700; }
 .table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-.table th, .table td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border, #eee); }
+.table th, .table td {
+  text-align: left;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border-subtle, #eee);
+  font-size: 14px;
+}
+.table tbody tr { height: 52px; }
 .form { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 12px; }
-.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.field input,
+.field select {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  font-size: var(--font-size-body, 16px);
+}
+.card :global(button) {
+  min-height: var(--touch-min, 56px);
+}

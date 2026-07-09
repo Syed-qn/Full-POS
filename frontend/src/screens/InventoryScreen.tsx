@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
+import { EmptyState } from "../components/EmptyState";
+import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
-import { SectionBanner } from "../components/SectionBanner";
 import { toast } from "../components/Toaster";
 import {
   approveStockAdjustment,
@@ -30,6 +31,7 @@ import {
   takeClosingSnapshot,
   wasteIngredient,
 } from "../lib/inventoryApi";
+import { useManagerPinGate } from "../lib/requireManagerPin";
 import type {
   BatchOut,
   GrnOut,
@@ -122,6 +124,7 @@ export function InventoryScreen() {
   );
   const [opsExpiry, setOpsExpiry] = useState("");
   const [opsBusy, setOpsBusy] = useState(false);
+  const { requestPin, pinGate, pinBusy } = useManagerPinGate();
 
   const [vendorName, setVendorName] = useState("");
   const [vendorPhone, setVendorPhone] = useState("");
@@ -223,19 +226,36 @@ export function InventoryScreen() {
     }
   }
 
-  async function decideAdjustment(adjustment: StockAdjustmentOut, decision: "approve" | "reject") {
-    try {
-      if (decision === "approve") {
-        await approveStockAdjustment(adjustment.id);
-      } else {
-        await rejectStockAdjustment(adjustment.id);
-      }
-      setAdjustments((prev) => prev.filter((entry) => entry.id !== adjustment.id));
-      toast(`Adjustment ${decision}d.`);
-      await load();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not update adjustment.", "error");
+  function decideAdjustment(adjustment: StockAdjustmentOut, decision: "approve" | "reject") {
+    if (decision === "reject") {
+      void (async () => {
+        try {
+          await rejectStockAdjustment(adjustment.id);
+          setAdjustments((prev) => prev.filter((entry) => entry.id !== adjustment.id));
+          toast("Adjustment rejected.");
+          await load();
+        } catch (e) {
+          toast(e instanceof Error ? e.message : "Could not update adjustment.", "error");
+        }
+      })();
+      return;
     }
+    requestPin({
+      actionType: "stock_adjustment",
+      actionLabel: "Approve stock adjustment",
+      recordLabel: `adj #${adjustment.id}`,
+      reasonRequired: true,
+      confirmTitle: "Approve stock adjustment?",
+      confirmMessage: `Approve adjustment #${adjustment.id} to qty ${adjustment.requested_qty}. Manager PIN and reason required.`,
+      confirmLabel: "Continue to PIN",
+      cancelLabel: "Back",
+      execute: async () => {
+        await approveStockAdjustment(adjustment.id);
+        setAdjustments((prev) => prev.filter((entry) => entry.id !== adjustment.id));
+        toast("Adjustment approved.");
+        await load();
+      },
+    });
   }
 
   async function sendAlert() {
@@ -250,43 +270,63 @@ export function InventoryScreen() {
     }
   }
 
-  async function runOps(
-    action: "restock" | "waste" | "count" | "batch",
-  ) {
+  function runOps(action: "restock" | "waste" | "count" | "batch") {
     if (!opsIngredientId) {
       toast("Select an ingredient first.", "error");
       return;
     }
-    const id = Number(opsIngredientId);
-    setOpsBusy(true);
-    try {
-      if (action === "restock") {
-        await restockIngredient(id, { quantity: opsQty });
-        toast("Stock restocked.");
-      } else if (action === "waste") {
-        await wasteIngredient(id, {
-          quantity: opsQty,
-          reason: opsReason || undefined,
-          reason_type: opsReasonType,
-        });
-        toast(`${opsReasonType} logged.`);
-      } else if (action === "count") {
-        const result = await recordStockCount(id, { counted_qty: opsQty });
-        toast(`Count saved. Variance ${result.variance}`);
-      } else {
-        if (!opsExpiry) {
-          toast("Expiry date required for FEFO batch.", "error");
-          return;
-        }
-        await createBatch(id, { qty: opsQty, expiry_date: opsExpiry });
-        toast("Batch received (FEFO).");
-      }
-      await load();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Stock operation failed.", "error");
-    } finally {
-      setOpsBusy(false);
+    if (action === "batch" && !opsExpiry) {
+      toast("Expiry date required for FEFO batch.", "error");
+      return;
     }
+    const id = Number(opsIngredientId);
+    const label =
+      action === "restock"
+        ? "Restock inventory"
+        : action === "waste"
+          ? "Log waste / spoilage"
+          : action === "count"
+            ? "Record stock count"
+            : "Receive FEFO batch";
+    requestPin({
+      actionType: "stock_adjustment",
+      actionLabel: label,
+      recordLabel: `ingredient #${id}`,
+      reasonRequired: true,
+      amountAed: undefined,
+      confirmTitle: `${label}?`,
+      confirmMessage: `Change stock for ingredient #${id} (qty ${opsQty}). Manager PIN and reason required.`,
+      confirmLabel: "Continue to PIN",
+      cancelLabel: "Back",
+      execute: async ({ reason }) => {
+        setOpsBusy(true);
+        try {
+          if (action === "restock") {
+            await restockIngredient(id, { quantity: opsQty });
+            toast("Stock restocked.");
+          } else if (action === "waste") {
+            await wasteIngredient(id, {
+              quantity: opsQty,
+              reason: reason || opsReason || undefined,
+              reason_type: opsReasonType,
+            });
+            toast(`${opsReasonType} logged.`);
+          } else if (action === "count") {
+            const result = await recordStockCount(id, { counted_qty: opsQty });
+            toast(`Count saved. Variance ${result.variance}`);
+          } else {
+            await createBatch(id, { qty: opsQty, expiry_date: opsExpiry });
+            toast("Batch received (FEFO).");
+          }
+          await load();
+        } catch (e) {
+          toast(e instanceof Error ? e.message : "Stock operation failed.", "error");
+          throw e;
+        } finally {
+          setOpsBusy(false);
+        }
+      },
+    });
   }
 
   async function addVendor() {
@@ -368,7 +408,39 @@ export function InventoryScreen() {
         }
       />
 
-      {loadError && <SectionBanner tone="warning">{loadError}</SectionBanner>}
+      {loadError && (
+        <ErrorState
+          title="Could not load inventory"
+          description={loadError}
+          action={
+            <Button type="button" onClick={() => void load()}>
+              Retry
+            </Button>
+          }
+        />
+      )}
+
+      {loaded && !loadError && lowStock.length > 0 && (
+        <section className={s.lowStockBanner} role="status" aria-live="polite">
+          <div className={s.lowStockCopy}>
+            <strong>
+              {lowStock.length} low-stock item{lowStock.length === 1 ? "" : "s"}
+            </strong>
+            <span>
+              {lowStock
+                .slice(0, 6)
+                .map((item) => item.name)
+                .join(" · ")}
+              {lowStock.length > 6 ? ` · +${lowStock.length - 6} more` : ""}
+            </span>
+          </div>
+          <div className={s.lowStockActions}>
+            <Button type="button" disabled={alerting} onClick={() => void sendAlert()}>
+              {alerting ? "Sending…" : "Send WhatsApp alert"}
+            </Button>
+          </div>
+        </section>
+      )}
 
       <section className={s.metrics}>
         <div className={s.metric}>
@@ -379,7 +451,7 @@ export function InventoryScreen() {
           <span className={s.metricLabel}>Ingredients</span>
           <strong>{ingredients.length}</strong>
         </div>
-        <div className={s.metric}>
+        <div className={`${s.metric} ${lowStock.length > 0 ? s.metricAlert : ""}`}>
           <span className={s.metricLabel}>Low stock</span>
           <strong>{lowStock.length}</strong>
         </div>
@@ -515,16 +587,16 @@ export function InventoryScreen() {
           </label>
         </div>
         <div className={s.actions}>
-          <Button type="button" disabled={opsBusy} onClick={() => void runOps("restock")}>
+          <Button type="button" disabled={opsBusy || pinBusy} onClick={() => runOps("restock")}>
             Restock
           </Button>
-          <Button type="button" disabled={opsBusy} onClick={() => void runOps("waste")}>
+          <Button type="button" disabled={opsBusy || pinBusy} onClick={() => runOps("waste")}>
             Log waste/spoilage
           </Button>
-          <Button type="button" disabled={opsBusy} onClick={() => void runOps("count")}>
+          <Button type="button" disabled={opsBusy || pinBusy} onClick={() => runOps("count")}>
             Record stock count
           </Button>
-          <Button type="button" disabled={opsBusy} onClick={() => void runOps("batch")}>
+          <Button type="button" disabled={opsBusy || pinBusy} onClick={() => runOps("batch")}>
             Receive FEFO batch
           </Button>
         </div>
@@ -658,7 +730,10 @@ export function InventoryScreen() {
               </thead>
               <tbody>
                 {ingredients.map((item) => (
-                  <tr key={item.id}>
+                  <tr
+                    key={item.id}
+                    className={lowStockIds.has(item.id) ? s.rowLow : undefined}
+                  >
                     <td>{item.name}</td>
                     <td>{qty(item.current_stock, item.unit)}</td>
                     <td>{qty(item.par_level, item.unit)}</td>
@@ -673,8 +748,11 @@ export function InventoryScreen() {
                 ))}
                 {loaded && ingredients.length === 0 && (
                   <tr>
-                    <td colSpan={6} className={s.empty}>
-                      No ingredients yet.
+                    <td colSpan={6}>
+                      <EmptyState
+                        title="No ingredients yet"
+                        description="Add ingredients above to track stock, cost, and reorders."
+                      />
                     </td>
                   </tr>
                 )}
@@ -844,6 +922,8 @@ export function InventoryScreen() {
           </div>
         </div>
       </section>
+
+      {pinGate}
     </div>
   );
 }

@@ -93,6 +93,15 @@ describe("PaymentsScreen", () => {
         if (path.includes("/wallet-session")) {
           return Promise.resolve(json({ session_id: "ws_1", tender_type: "tap_to_pay" }, 201));
         }
+        if (path.includes("/staff/approvals") && init?.method === "POST") {
+          return Promise.resolve(json({ id: 1, action_type: "discount", status: "approved" }, 201));
+        }
+        if (path.includes("/discounts") && init?.method === "POST") {
+          return Promise.resolve(json({ ok: true }, 201));
+        }
+        if (path.includes("/refund") && init?.method === "POST") {
+          return Promise.resolve(json({ id: 11, status: "refunded", refunded_amount_aed: "5.00" }));
+        }
         return Promise.resolve(json({}));
       }),
     );
@@ -137,6 +146,51 @@ describe("PaymentsScreen", () => {
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/gift-cards/issue"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("gates manager discount behind confirm + PIN", async () => {
+    renderWithProviders(<PaymentsScreen />);
+    await screen.findByRole("heading", { name: /Payments & billing/i });
+    fireEvent.change(screen.getByLabelText("Payment order id"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply discount/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
+    expect(await screen.findByRole("dialog", { name: /manager approval/i })).toBeInTheDocument();
+    expect(screen.getByText(/manager discount override/i)).toBeInTheDocument();
+    for (const d of ["1", "2", "3", "4"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Digit ${d}` }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining("/discounts"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("gates refund behind confirm + PIN with reason", async () => {
+    renderWithProviders(<PaymentsScreen />);
+    await screen.findByRole("heading", { name: /Payments & billing/i });
+    fireEvent.change(screen.getByLabelText("Refund transaction id"), { target: { value: "11" } });
+    fireEvent.change(screen.getByLabelText("Refund amount"), { target: { value: "5.00" } });
+    fireEvent.click(screen.getByRole("button", { name: /^refund/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
+    expect(await screen.findByRole("dialog", { name: /manager approval/i })).toBeInTheDocument();
+    for (const d of ["9", "8", "7", "6"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Digit ${d}` }));
+    }
+    fireEvent.change(screen.getByPlaceholderText(/why is this needed/i), {
+      target: { value: "Customer complaint" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.stringContaining("/refund"),
         expect.objectContaining({ method: "POST" }),
       ),
     );

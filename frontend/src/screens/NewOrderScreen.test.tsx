@@ -144,9 +144,11 @@ describe("NewOrderScreen", () => {
     const plusButtons = screen.getAllByText("+");
     fireEvent.click(plusButtons[0]); // first dish (Chicken Biryani)
 
+    // Price appears on the tile, cart line, total, and Place Order CTA.
     await waitFor(() =>
-      expect(screen.getByText(/AED 22\.00/)).toBeInTheDocument(),
+      expect(screen.getAllByText(/AED 22\.00/).length).toBeGreaterThan(0),
     );
+    expect(screen.getByText(/1× Chicken Biryani/)).toBeInTheDocument();
   });
 
   it("Place Order button disabled when no items selected", async () => {

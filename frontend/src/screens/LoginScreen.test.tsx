@@ -34,6 +34,15 @@ describe("LoginScreen — login", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sign In" }));
     await waitFor(() => expect(screen.getByText(/bad credentials/i)).toBeInTheDocument());
   });
+
+  it("exposes a large staff PIN pad mode", async () => {
+    render(<MemoryRouter><LoginScreen /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
+    expect(screen.getByLabelText(/staff id/i)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /pin pad/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Digit 5" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign in with pin/i })).toBeInTheDocument();
+  });
 });
 
 describe("LoginScreen — signup", () => {
@@ -41,8 +50,8 @@ describe("LoginScreen — signup", () => {
   afterEach(() => vi.restoreAllMocks());
 
   function clickSignUpTab() {
-    // Two "sign up" buttons exist: the tab and the hint link — pick the tab (first).
-    return userEvent.click(screen.getAllByRole("button", { name: /sign up/i })[0]);
+    // Tab labelled SIGN UP
+    return userEvent.click(screen.getByRole("tab", { name: /sign up/i }));
   }
 
   it("sign up tab shows restaurant name field", async () => {

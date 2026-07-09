@@ -11,20 +11,42 @@ import s from "./PublicTrackingScreen.module.css";
 
 type Phase = "loading" | "active" | "ended" | "notfound" | "error";
 
+/** Customer-facing milestones only — no kitchen/internal statuses. */
+const TIMELINE_STEPS = [
+  { key: "confirmed", label: "Order received", match: ["confirmed", "preparing", "ready", "assigned", "picked_up", "arriving", "delivered"] },
+  { key: "preparing", label: "Being prepared", match: ["preparing", "ready", "assigned", "picked_up", "arriving", "delivered"] },
+  { key: "on_the_way", label: "On the way", match: ["assigned", "picked_up", "arriving", "delivered"] },
+  { key: "arriving", label: "Arriving soon", match: ["arriving", "delivered"] },
+  { key: "delivered", label: "Delivered", match: ["delivered"] },
+] as const;
+
+const STATUS_COPY: Record<string, string> = {
+  confirmed: "We've got your order",
+  preparing: "The kitchen is preparing your food",
+  ready: "Your order is ready for the rider",
+  assigned: "A rider is on the way to pick up your order",
+  picked_up: "Your order is on the way",
+  arriving: "Your rider is almost there",
+  delivered: "Delivered — enjoy your meal!",
+};
+
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return "Waiting for rider location";
   return new Date(iso).toLocaleTimeString();
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  assigned: "Rider assigned",
-  picked_up: "Order picked up — on the way",
-  arriving: "Your rider is arriving",
-  delivered: "Delivered",
-};
+function customerStatusLabel(statusKey: string): string {
+  return STATUS_COPY[statusKey] ?? (statusKey ? statusKey.replace(/_/g, " ") : "Loading…");
+}
 
-// Coloured pin with an emoji glyph — gives the map a Swiggy/Zomato look
-// (restaurant, you, and a moving rider) instead of a single anonymous dot.
+/** Map only once a rider is assigned / en route (not kitchen-only phases). */
+function shouldShowMap(statusKey: string, hasLocation: boolean): boolean {
+  if (["assigned", "picked_up", "arriving"].includes(statusKey)) return true;
+  if (statusKey === "delivered" && hasLocation) return true;
+  return false;
+}
+
+// Coloured pin with an emoji glyph — gives the map a Swiggy/Zomato look.
 function pinIcon(L: typeof import("leaflet"), emoji: string, bg: string) {
   return L.divIcon({
     className: "",
@@ -40,10 +62,6 @@ function pinIcon(L: typeof import("leaflet"), emoji: string, bg: string) {
   });
 }
 
-// Live rider marker: a round green dot with the 🛵 glyph, plus a directional
-// arrow that rotates to the rider's GPS heading (0 = north, clockwise) so the
-// bike "faces" where it's travelling — like Uber/Swiggy. When heading is
-// unknown (rider stationary / no fix) the arrow is omitted.
 function riderIcon(L: typeof import("leaflet"), heading: number | null | undefined) {
   const hasHeading = typeof heading === "number" && !Number.isNaN(heading);
   const arrow = hasHeading
@@ -83,9 +101,6 @@ export function PublicTrackingScreen() {
   const routeRef = useRef<import("leaflet").Polyline | null>(null);
   const fittedRef = useRef(false);
 
-  // The app forces a 1440px desktop viewport for the manager dashboard, which
-  // makes this customer-facing page render zoomed-out on phones. Override it to
-  // the device width while this screen is mounted, then restore on leave.
   useEffect(() => {
     const meta = document.querySelector('meta[name="viewport"]');
     const prev = meta?.getAttribute("content") ?? null;
@@ -95,8 +110,6 @@ export function PublicTrackingScreen() {
     };
   }, []);
 
-  // Map a thrown error to a terminal phase (410 = ended, 404 = not found) or a
-  // transient error note. Returns true if it was a terminal state.
   function classifyError(err: unknown): boolean {
     if (err instanceof TrackingError) {
       if (err.status === 410) {
@@ -147,8 +160,6 @@ export function PublicTrackingScreen() {
         }
       } catch (err) {
         if (!alive) return;
-        // Terminal (delivered/expired/missing) → switch state and stop polling.
-        // A transient network blip during an active session keeps the map up.
         classifyError(err);
       }
     }
@@ -162,7 +173,6 @@ export function PublicTrackingScreen() {
     };
   }, [trackingToken]);
 
-  // Stop the 5s poller once the session reaches a terminal state.
   useEffect(() => {
     if ((phase === "ended" || phase === "notfound") && timerRef.current) {
       window.clearInterval(timerRef.current);
@@ -170,18 +180,20 @@ export function PublicTrackingScreen() {
     }
   }, [phase]);
 
+  const statusKey = location?.status ?? tracking?.status ?? "";
+  const showMap = shouldShowMap(statusKey, Boolean(location));
+
   useEffect(() => {
-    if (!mapRef.current || !tracking) return;
+    if (!showMap || !mapRef.current || !tracking) return;
     const restaurant = tracking.restaurant ?? null;
     const dest = tracking.destination ?? null;
     const riderPos: [number, number] | null = location
       ? [location.latitude, location.longitude]
       : null;
 
-    // Need at least one known point to render anything meaningful.
     const anchor = riderPos
-      ?? (restaurant ? [restaurant.latitude, restaurant.longitude] as [number, number] : null)
-      ?? (dest ? [dest.latitude, dest.longitude] as [number, number] : null);
+      ?? (restaurant ? ([restaurant.latitude, restaurant.longitude] as [number, number]) : null)
+      ?? (dest ? ([dest.latitude, dest.longitude] as [number, number]) : null);
     if (!anchor) return;
 
     import("leaflet").then((L) => {
@@ -196,7 +208,6 @@ export function PublicTrackingScreen() {
       }
       const map = leafletMapRef.current;
 
-      // Restaurant (from) — placed once.
       if (restaurant && !restaurantRef.current) {
         restaurantRef.current = L.marker([restaurant.latitude, restaurant.longitude], {
           icon: pinIcon(L, "🍴", "#f97316"),
@@ -204,7 +215,6 @@ export function PublicTrackingScreen() {
           .addTo(map)
           .bindPopup(restaurant.label ?? "Restaurant");
       }
-      // Destination (to) — placed once.
       if (dest && !destRef.current) {
         destRef.current = L.marker([dest.latitude, dest.longitude], {
           icon: pinIcon(L, "🏠", "#2563eb"),
@@ -212,8 +222,6 @@ export function PublicTrackingScreen() {
           .addTo(map)
           .bindPopup(dest.label ?? "Delivery address");
       }
-      // Rider (moving) — created on first GPS fix, then repositioned + re-faced
-      // to the latest heading on every update.
       if (riderPos) {
         const heading = location?.heading ?? null;
         if (!riderRef.current) {
@@ -226,10 +234,6 @@ export function PublicTrackingScreen() {
         }
       }
 
-      // The delivery route is restaurant (kitchen) → customer address — a single
-      // fixed corridor. The rider is a live marker that moves ALONG it; we do NOT
-      // bend the line to the rider's current ping (that made it look like
-      // "restaurant → rider"). Drawn only when we have both endpoints.
       if (restaurant && dest) {
         const line: [number, number][] = [
           [restaurant.latitude, restaurant.longitude],
@@ -248,8 +252,6 @@ export function PublicTrackingScreen() {
         }
       }
 
-      // Fit all known points into view once, so the customer sees the whole
-      // journey (like Swiggy). Subsequent rider moves just slide the marker.
       if (!fittedRef.current) {
         const pts: [number, number][] = [];
         if (restaurant) pts.push([restaurant.latitude, restaurant.longitude]);
@@ -263,7 +265,7 @@ export function PublicTrackingScreen() {
         }
       }
     });
-  }, [tracking, location]);
+  }, [tracking, location, showMap]);
 
   useEffect(() => {
     const onResize = () => leafletMapRef.current?.invalidateSize();
@@ -277,11 +279,6 @@ export function PublicTrackingScreen() {
     };
   }, []);
 
-  const statusKey = location?.status ?? tracking?.status ?? "";
-  const statusText = STATUS_LABEL[statusKey] ?? statusKey ?? "loading";
-
-  // Terminal states get a clean, friendly card instead of a raw error + an empty
-  // map. "ended" covers delivered / stopped / expired (all 410 from the API).
   if (phase === "ended" || phase === "notfound") {
     const ended = phase === "ended";
     return (
@@ -304,53 +301,110 @@ export function PublicTrackingScreen() {
     );
   }
 
+  const statusText = customerStatusLabel(statusKey);
+  const etaHint =
+    statusKey === "arriving"
+      ? "Usually a few minutes"
+      : statusKey === "picked_up" || statusKey === "assigned"
+        ? "Typically within 40 minutes of ordering"
+        : statusKey === "preparing" || statusKey === "ready" || statusKey === "confirmed"
+          ? "We'll show the map once your rider is on the way"
+          : null;
+
   return (
     <main className={s.page}>
       <section className={s.card}>
-        <h1 className={s.title}>Live order tracking</h1>
+        <h1 className={s.title}>Track your order</h1>
         <p className={s.meta}>
-          Order {tracking?.orderNumber ?? "—"} · {statusText}
+          Order {tracking?.orderNumber ?? "—"}
         </p>
+
+        <div className={s.statusHero} data-testid="status-hero">
+          <strong>{statusText}</strong>
+          {etaHint ? <span>{etaHint}</span> : null}
+        </div>
+
+        <ol className={s.timeline} data-testid="status-timeline" aria-label="Order progress">
+          {TIMELINE_STEPS.map((step) => {
+            const done = step.match.includes(statusKey as never);
+            const current =
+              done &&
+              !(
+                TIMELINE_STEPS.findIndex((t) => t.key === step.key) <
+                  TIMELINE_STEPS.length - 1 &&
+                TIMELINE_STEPS[TIMELINE_STEPS.findIndex((t) => t.key === step.key) + 1]?.match.includes(
+                  statusKey as never,
+                )
+              );
+            return (
+              <li
+                key={step.key}
+                className={`${s.timelineStep} ${done ? s.timelineDone : ""} ${current ? s.timelineCurrent : ""}`}
+              >
+                <span className={s.timelineDot} aria-hidden />
+                <span className={s.timelineLabel}>{step.label}</span>
+              </li>
+            );
+          })}
+        </ol>
+
         {phase === "error" && error ? <div className={s.error}>{error}</div> : null}
-        <div ref={mapRef} className={s.map} />
-        <div className={s.legend}>
-          <span className={s.legendItem}>
-            <span className={s.dotFrom} /> {tracking?.restaurant?.label ?? "Restaurant"}
-          </span>
-          <span className={s.legendItem}>
-            <span className={s.dotRider} /> Rider
-          </span>
-          {/* Only show the delivery-address marker in the legend when we actually
-              have a pin for it — otherwise it promised a blue dot that never
-              appears on the map (confusing). */}
-          {tracking?.destination ? (
-            <span className={s.legendItem}>
-              <span className={s.dotTo} /> {tracking.destination.label ?? "Delivery address"}
-            </span>
-          ) : null}
-        </div>
-        {tracking && !tracking.destination ? (
-          <p className={s.note}>
-            📍 Exact delivery pin not shared for this order — the map shows the
-            restaurant and your rider only.
-          </p>
-        ) : null}
-        <div className={s.infoRow}>
-          <span>Last updated</span>
-          <strong>{formatTime(location?.updatedAt ?? tracking?.lastUpdatedAt)}</strong>
-        </div>
-        {location ? (
-          <a
-            className={s.link}
-            href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open rider location in Maps
-          </a>
+
+        {showMap ? (
+          <>
+            <div ref={mapRef} className={s.map} data-testid="tracking-map" />
+            <div className={s.legend}>
+              <span className={s.legendItem}>
+                <span className={s.dotFrom} /> {tracking?.restaurant?.label ?? "Restaurant"}
+              </span>
+              <span className={s.legendItem}>
+                <span className={s.dotRider} /> Rider
+              </span>
+              {tracking?.destination ? (
+                <span className={s.legendItem}>
+                  <span className={s.dotTo} /> {tracking.destination.label ?? "Your address"}
+                </span>
+              ) : null}
+            </div>
+            {tracking && !tracking.destination ? (
+              <p className={s.note}>
+                Exact delivery pin is not shared for this order — the map shows the restaurant and
+                your rider only.
+              </p>
+            ) : null}
+            <div className={s.infoRow}>
+              <span>Last updated</span>
+              <strong>{formatTime(location?.updatedAt ?? tracking?.lastUpdatedAt)}</strong>
+            </div>
+            {location ? (
+              <a
+                className={s.link}
+                href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open rider location in Maps
+              </a>
+            ) : (
+              <p className={s.waiting}>The rider hasn&apos;t shared a live GPS position yet.</p>
+            )}
+          </>
         ) : (
-          <p className={s.waiting}>The rider hasn’t shared a live GPS position yet.</p>
+          <div className={s.mapPlaceholder} data-testid="map-placeholder">
+            <p>
+              Live map appears when your rider is on the way.
+              {statusKey === "preparing" || statusKey === "ready" || statusKey === "confirmed"
+                ? " Your food is being prepared — hang tight."
+                : ""}
+            </p>
+          </div>
         )}
+
+        <div className={s.helpRow}>
+          <p className={s.helpText}>
+            Need help? Reply on WhatsApp or contact the restaurant from your order chat.
+          </p>
+        </div>
       </section>
     </main>
   );

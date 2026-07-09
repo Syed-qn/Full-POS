@@ -1,0 +1,18 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: min(420px, 70vh);
+  padding: var(--space-6, 24px);
+}
+
+.linkReset {
+  text-decoration: none;
+  color: inherit;
+}
+
+.linkReset:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius, 8px);
+}

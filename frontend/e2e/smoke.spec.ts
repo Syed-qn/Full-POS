@@ -49,12 +49,23 @@ test("login → live ops renders KPI strip and feed", async ({ page }) => {
     }),
   );
 
-  await page.goto("/login");
-  await page.getByLabel("Phone").fill("+97150000000");
+  // Redesign login: email (not phone). domcontentloaded avoids hanging on heavy asset load.
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await expect(page.getByLabel("Email")).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel("Email").fill("e2e@example.com");
   await page.getByLabel("Password").fill("password1");
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
 
   await expect(page).toHaveURL("/");
+  // Live Ops KPI + fixture feed (redesign: board lanes still show customer names)
   await expect(page.getByText("Orders Today")).toBeVisible();
-  await expect(page.getByText("Ali Hassan")).toBeVisible();
+  // Redesign: late orders appear on both the urgent strip and the Late board lane.
+  await expect(page.getByText("Ali Hassan").first()).toBeVisible();
+
+  // Redesign chrome: Daily nav group includes Floor Plan; TopBar has Alerts
+  await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Floor Plan" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Live Ops" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Alert center/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live Ops" })).toBeVisible();
 });

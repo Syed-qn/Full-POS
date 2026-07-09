@@ -72,3 +72,37 @@
   margin-top: 16px;
   color: #64748b;
 }
+
+/* Phone-first: full-bleed card like other public surfaces */
+@media (max-width: 640px) {
+  .page {
+    padding: 0;
+    place-items: stretch;
+    background: #fff;
+  }
+  .card {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+  .actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding-top: 16px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #fff;
+  }
+  .primary,
+  .secondary {
+    flex: 1;
+    min-height: 56px;
+    font-weight: 700;
+  }
+}

@@ -6,9 +6,20 @@
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.actions :global(button),
+.card :global(button) {
+  min-height: var(--touch-min, 56px);
+}
+
+.card input,
+.card select {
+  min-height: 48px;
+  font-size: var(--font-size-body, 16px);
 }
 
 .metrics {
@@ -26,7 +37,7 @@
 }
 
 .metric {
-  min-height: 88px;
+  min-height: 100px;
   padding: 16px;
   display: flex;
   flex-direction: column;

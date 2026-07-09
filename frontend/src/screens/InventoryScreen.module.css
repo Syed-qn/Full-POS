@@ -6,9 +6,55 @@
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.lowStockBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid color-mix(in srgb, var(--sla-warn) 45%, var(--border-default));
+  background: color-mix(in srgb, var(--sla-warn) 12%, var(--bg-surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.lowStockCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.lowStockCopy strong {
+  font-size: var(--font-size-item, 18px);
+  color: var(--text-primary);
+}
+
+.lowStockCopy span {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.lowStockActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metricAlert {
+  border-color: color-mix(in srgb, var(--sla-warn) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-warn) 10%, var(--bg-surface));
+}
+
+.rowLow td {
+  background: color-mix(in srgb, var(--sla-warn) 8%, transparent);
 }
 
 .metrics {
@@ -87,11 +133,12 @@
 .select,
 .input {
   width: 100%;
-  min-height: 36px;
+  min-height: 48px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font: inherit;
+  font-size: var(--font-size-body, 16px);
   background: var(--bg-surface);
   color: var(--text-primary);
 }
@@ -122,9 +169,14 @@
 .table th,
 .table td {
   text-align: left;
-  padding: 10px 12px;
+  padding: 14px 12px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 13px;
+  font-size: 14px;
+  min-height: 56px;
+}
+
+.table tbody tr {
+  height: 56px;
 }
 
 .table th {
@@ -195,9 +247,16 @@
 
 .rowActions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.rowActions :global(button) {
+  min-height: var(--touch-min, 56px);
+  min-width: var(--touch-min, 56px);
+  padding: 12px 16px;
+  font-size: 15px;
 }
 
 .empty {

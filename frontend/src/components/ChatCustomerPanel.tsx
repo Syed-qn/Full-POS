@@ -13,11 +13,14 @@ import s from "./ChatCustomerPanel.module.css";
  */
 export function ChatCustomerPanel({
   conversationId,
+  /** Always expanded for right-pane context (WhatsApp inbox 3-pane). */
+  alwaysOpen = false,
 }: {
   conversationId: number;
+  alwaysOpen?: boolean;
 }) {
   const [ctx, setCtx] = useState<ChatCustomerContext | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(alwaysOpen);
   const [couponAmt, setCouponAmt] = useState("");
   const [walletAmt, setWalletAmt] = useState("");
   const [walletReason, setWalletReason] = useState("");
@@ -32,15 +35,23 @@ export function ChatCustomerPanel({
   useEffect(() => {
     setCtx(null);
     setMsg(null);
+    if (alwaysOpen) setOpen(true);
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]);
+  }, [conversationId, alwaysOpen]);
 
-  if (!ctx) return null;
+  if (!ctx) {
+    return alwaysOpen ? (
+      <div className={s.note} aria-busy="true">
+        Loading customer context…
+      </div>
+    ) : null;
+  }
   if (ctx.customer_id === null) {
     return <div className={s.note}>No customer record yet for {ctx.phone}.</div>;
   }
   const cid = ctx.customer_id;
+  const bodyOpen = alwaysOpen || open;
 
   async function issueCoupon() {
     setBusy(true);
@@ -77,16 +88,24 @@ export function ChatCustomerPanel({
   }
 
   return (
-    <div className={s.panel}>
-      <button type="button" className={s.header} onClick={() => setOpen((o) => !o)}>
+    <div className={`${s.panel} ${alwaysOpen ? s.panelSidebar : ""}`} data-testid="chat-customer-panel">
+      <button
+        type="button"
+        className={s.header}
+        onClick={() => {
+          if (!alwaysOpen) setOpen((o) => !o);
+        }}
+        aria-expanded={bodyOpen}
+      >
         <span>
           {ctx.name ?? ctx.phone} · Wallet AED {ctx.wallet_balance_aed}
           {ctx.wallet_status === "frozen" ? " (frozen)" : ""}
         </span>
-        <span>{open ? "▲" : "▼ actions"}</span>
+        {!alwaysOpen && <span>{open ? "▲" : "▼ actions"}</span>}
+        {alwaysOpen && <span>Context</span>}
       </button>
 
-      {open && (
+      {bodyOpen && (
         <div className={s.body}>
           <div className={s.section}>
             <span className={s.label}>Recent orders</span>

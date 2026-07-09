@@ -1,0 +1,156 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tab {
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabActive {
+  background: var(--accent-ai-dim, rgba(105, 65, 198, 0.1));
+  border-color: var(--accent-ai, #6941c6);
+  color: var(--accent-ai, #6941c6);
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-title, 18px);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.row2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+  flex: 1 1 180px;
+}
+
+.rowName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.rowHint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.input {
+  min-height: 48px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--font-size-body, 16px);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.insightGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.insightCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-ai) 6%, var(--bg-surface));
+  min-height: 160px;
+}
+
+.insightKind {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-ai, #6941c6);
+}
+
+.insightTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.insightSummary {
+  margin: 0;
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.cardActions :global(button) {
+  min-height: 48px;
+}
+
+.genActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.genActions :global(button) {
+  min-height: var(--touch-min, 56px);
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   bumpItem,
   fetchKitchenPerformance,
@@ -20,13 +20,8 @@ import {
   type KitchenPerformance,
   type ReadyPickupOrder,
 } from "../lib/kdsApi";
+import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import s from "./KdsScreen.module.css";
-
-const URGENCY_COLOR: Record<string, string> = {
-  ok: "#22c55e",
-  warning: "#f59e0b",
-  late: "#ef4444",
-};
 
 type Tab = "tickets" | "pickup" | "performance";
 
@@ -35,10 +30,19 @@ function modifierLabel(m: { name?: string } | string): string {
   return m.name ?? JSON.stringify(m);
 }
 
+function urgencyCardClass(urgency: string): string {
+  if (urgency === "late") return s.cardUrgencyLate;
+  if (urgency === "warning") return s.cardUrgencyWarning;
+  return s.cardUrgencyOk;
+}
+
 export function KdsScreen() {
   const { stationId: stationIdParam } = useParams<{ stationId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const stationId = stationIdParam ? Number(stationIdParam) : null;
+  /** Expo / ready-pickup surface stub (full expo UX lands Phase 2). */
+  const isExpoView = searchParams.get("view") === "expo";
 
   const [stations, setStations] = useState<KdsStation[]>([]);
   const [items, setItems] = useState<KdsTicketItem[]>([]);
@@ -47,10 +51,14 @@ export function KdsScreen() {
   const [printers, setPrinters] = useState<
     Array<{ station_id: number; healthy: boolean }>
   >([]);
-  const [tab, setTab] = useState<Tab>("tickets");
+  const [tab, setTab] = useState<Tab>(isExpoView ? "pickup" : "tickets");
   const [includeReady, setIncludeReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    if (isExpoView) setTab("pickup");
+  }, [isExpoView]);
 
   useEffect(() => {
     const tick = setInterval(() => forceTick((n) => n + 1), 1000);
@@ -64,13 +72,13 @@ export function KdsScreen() {
         rows = await seedDefaultStations("main");
       }
       setStations(rows);
-      if (!stationId && rows[0]) {
+      if (!stationId && rows[0] && !isExpoView) {
         navigate(`/kds/${rows[0].id}`, { replace: true });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load stations");
     }
-  }, [navigate, stationId]);
+  }, [navigate, stationId, isExpoView]);
 
   const reloadTickets = useCallback(async () => {
     if (!stationId) return;
@@ -120,7 +128,11 @@ export function KdsScreen() {
   }, [tab, reloadTickets]);
 
   useEffect(() => {
-    if (tab === "pickup") reloadPickup();
+    if (tab === "pickup") {
+      reloadPickup();
+      const interval = setInterval(reloadPickup, 5000);
+      return () => clearInterval(interval);
+    }
     if (tab === "performance") {
       reloadPerf();
       reloadPrinters();
@@ -131,6 +143,8 @@ export function KdsScreen() {
     () => stations.find((st) => st.id === stationId) ?? null,
     [stations, stationId],
   );
+
+  const unhealthyPrinters = printers.filter((p) => !p.healthy).length;
 
   async function handleBump(id: number) {
     await bumpItem(id);
@@ -168,60 +182,89 @@ export function KdsScreen() {
     await missingItemConfirm(id, "missing/short on ticket");
     setItems((prev) =>
       prev.map((i) =>
-        i.id === id ? { ...i, missing_item_confirmed: true, missing_item_note: "missing/short on ticket" } : i,
+        i.id === id
+          ? { ...i, missing_item_confirmed: true, missing_item_note: "missing/short on ticket" }
+          : i,
       ),
     );
   }
 
   return (
-    <div className={s.root} data-testid="kds-screen">
+    <div
+      className={`${s.root} ${isExpoView ? s.rootExpo : ""}`}
+      data-testid="kds-screen"
+      data-view={isExpoView ? "expo" : "station"}
+    >
+      <OfflineLimitsBanner surface="kds" />
       <div className={s.header}>
         <h1 className={s.title}>
-          Kitchen Display
-          {currentStation ? ` — ${currentStation.name}` : ""}
+          {isExpoView ? "Expo / Ready Pickup" : "Kitchen Display"}
+          {!isExpoView && currentStation ? ` — ${currentStation.name}` : ""}
           {currentStation?.station_type ? (
-            <span className={s.badge + " " + s.badgeInfo} style={{ marginLeft: 8 }}>
-              {currentStation.station_type}
-            </span>
+            <span className={`${s.badge} ${s.badgeInfo}`}>{currentStation.station_type}</span>
           ) : null}
           {currentStation?.kitchen_code ? (
-            <span className={s.badge + " " + s.badgeOk} style={{ marginLeft: 4 }}>
-              kitchen:{currentStation.kitchen_code}
+            <span className={`${s.badge} ${s.badgeOk}`}>kitchen:{currentStation.kitchen_code}</span>
+          ) : null}
+          {printers.length > 0 ? (
+            <span
+              className={`${s.badge} ${unhealthyPrinters > 0 ? "" : s.badgeOk}`}
+              data-testid="kds-printer-status"
+            >
+              {unhealthyPrinters > 0
+                ? `Printers: ${unhealthyPrinters} down`
+                : "Printers OK"}
             </span>
           ) : null}
         </h1>
         <div className={s.controls}>
-          <select
-            className={s.select}
-            aria-label="Station"
-            value={stationId ?? ""}
-            onChange={(e) => navigate(`/kds/${e.target.value}`)}
+          {!isExpoView && (
+            <>
+              <select
+                className={s.select}
+                aria-label="Station"
+                value={stationId ?? ""}
+                onChange={(e) => navigate(`/kds/${e.target.value}`)}
+              >
+                {stations.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name} ({st.station_type}) [{st.kitchen_code}]
+                  </option>
+                ))}
+              </select>
+              <label className={s.includeReady}>
+                <input
+                  type="checkbox"
+                  checked={includeReady}
+                  onChange={(e) => setIncludeReady(e.target.checked)}
+                />{" "}
+                Show ready
+              </label>
+            </>
+          )}
+          <button
+            type="button"
+            className={s.btn}
+            onClick={() => seedDefaultStations().then(loadStations)}
           >
-            {stations.map((st) => (
-              <option key={st.id} value={st.id}>
-                {st.name} ({st.station_type}) [{st.kitchen_code}]
-              </option>
-            ))}
-          </select>
-          <label style={{ fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={includeReady}
-              onChange={(e) => setIncludeReady(e.target.checked)}
-            />{" "}
-            Show ready
-          </label>
-          <button type="button" className={s.btn} onClick={() => seedDefaultStations().then(loadStations)}>
             Seed stations
           </button>
         </div>
       </div>
 
-      <div className={s.tabs}>
+      {isExpoView && (
+        <div className={s.expoBanner} data-testid="kds-expo-banner" role="status">
+          Expo / ready pickup — packaging checklist and reopen actions on each ticket.
+        </div>
+      )}
+
+      <div className={s.tabs} role="tablist">
         {(["tickets", "pickup", "performance"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
+            role="tab"
+            aria-selected={tab === t}
             className={`${s.tab} ${tab === t ? s.tabActive : ""}`}
             onClick={() => setTab(t)}
           >
@@ -230,7 +273,11 @@ export function KdsScreen() {
         ))}
       </div>
 
-      {error ? <div role="alert">{error}</div> : null}
+      {error ? (
+        <div className={s.alert} role="alert">
+          {error}
+        </div>
+      ) : null}
 
       {tab === "tickets" && (
         <div className={s.grid} data-testid="kds-ticket-grid">
@@ -250,16 +297,17 @@ export function KdsScreen() {
                 ticketUrgency(item.kitchen_received_at || item.created_at);
               const mods = item.selected_modifiers ?? [];
               const allergens = item.allergens ?? [];
+              const hasAllergy =
+                allergens.length > 0 || Boolean(item.customer_allergy_notes);
               return (
                 <div
                   key={item.id}
-                  className={s.card}
+                  className={`${s.card} ${urgencyCardClass(urgency)}`}
                   data-urgency={urgency}
                   data-testid={`kds-ticket-${item.id}`}
-                  style={{ borderLeftColor: URGENCY_COLOR[urgency] }}
                 >
                   <div className={s.meta}>
-                    <span>
+                    <span className={s.orderRef}>
                       #{item.order_number ?? item.order_id}
                       {item.order_priority && item.order_priority !== "normal" ? (
                         <span className={s.badge} style={{ marginLeft: 6 }}>
@@ -274,7 +322,11 @@ export function KdsScreen() {
                     </span>
                     <span
                       className={`${s.timer} ${
-                        urgency === "late" ? s.timerLate : urgency === "warning" ? s.timerWarn : ""
+                        urgency === "late"
+                          ? s.timerLate
+                          : urgency === "warning"
+                            ? s.timerWarn
+                            : ""
                       }`}
                       data-testid="kds-timer"
                     >
@@ -283,7 +335,11 @@ export function KdsScreen() {
                   </div>
 
                   {(item.is_delayed || urgency !== "ok") && (
-                    <div className={s.badge + " " + (urgency === "late" ? "" : s.badgeWarn)}>
+                    <div
+                      className={`${s.urgencyBanner} ${
+                        urgency === "late" ? s.urgencyBannerLate : s.urgencyBannerWarn
+                      }`}
+                    >
                       {urgency === "late" ? "DELAYED — late ticket" : "Aging ticket"}
                     </div>
                   )}
@@ -294,23 +350,27 @@ export function KdsScreen() {
                   </div>
 
                   {mods.length > 0 && (
-                    <div data-testid="kds-modifiers">
+                    <div className={s.modifiers} data-testid="kds-modifiers">
                       Modifiers: {mods.map(modifierLabel).join(", ")}
                     </div>
                   )}
-                  {item.notes && <div>Note: {item.notes}</div>}
-                  {allergens.length > 0 && (
-                    <div data-testid="kds-allergens">
-                      <span className={s.badge}>ALLERGENS: {allergens.join(", ")}</span>
+                  {item.notes && <div className={s.notes}>Note: {item.notes}</div>}
+
+                  {hasAllergy && (
+                    <div className={s.allergenBlock}>
+                      {allergens.length > 0 && (
+                        <div className={s.allergenBanner} data-testid="kds-allergens">
+                          ⚠ ALLERGENS: {allergens.join(", ").toUpperCase()}
+                        </div>
+                      )}
+                      {item.customer_allergy_notes && (
+                        <div className={s.customerAllergy}>
+                          CUSTOMER ALLERGY: {item.customer_allergy_notes}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {item.customer_allergy_notes && (
-                    <div>
-                      <span className={s.badge}>
-                        CUSTOMER ALLERGY: {item.customer_allergy_notes}
-                      </span>
-                    </div>
-                  )}
+
                   {item.estimated_ready_at && (
                     <div className={s.meta} data-testid="kds-eta">
                       ETA ready: {new Date(item.estimated_ready_at).toLocaleTimeString()}
@@ -328,7 +388,7 @@ export function KdsScreen() {
                     {item.kitchen_status === "received" && (
                       <button
                         type="button"
-                        className={s.btn}
+                        className={`${s.btn} ${s.btnStart}`}
                         onClick={() => handleStartPrep(item.id)}
                       >
                         Start prep
@@ -386,12 +446,19 @@ export function KdsScreen() {
 
       {tab === "pickup" && (
         <div className={s.section} data-testid="kds-pickup">
-          <div className={s.sectionTitle}>Ready for pickup</div>
+          <div className={s.sectionTitle}>
+            Ready for pickup
+            {isExpoView ? ` · ${pickup.length} ready` : ""}
+          </div>
           {pickup.length === 0 ? (
             <div className={s.empty}>No orders ready for pickup</div>
           ) : (
             pickup.map((o) => (
-              <div key={o.order_id} className={s.pickupCard}>
+              <div
+                key={o.order_id}
+                className={s.pickupCard}
+                data-testid={`expo-ticket-${o.order_id}`}
+              >
                 <strong>#{o.order_number}</strong>
                 <ul>
                   {o.items.map((i) => (
@@ -399,9 +466,52 @@ export function KdsScreen() {
                       {i.qty}x {i.dish_name}
                       {i.packaging_checked ? " · pack✓" : ""}
                       {i.quality_checked ? " · qc✓" : ""}
+                      {i.missing_item_confirmed ? " · missing noted" : ""}
                     </li>
                   ))}
                 </ul>
+                {isExpoView && (
+                  <div className={s.actions} style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className={`${s.btn} ${s.btnPrimary}`}
+                      onClick={async () => {
+                        for (const i of o.items) {
+                          if (!i.packaging_checked) await packagingCheck(i.id);
+                        }
+                        await reloadPickup();
+                      }}
+                    >
+                      Packaging checklist
+                    </button>
+                    <button
+                      type="button"
+                      className={s.btn}
+                      onClick={async () => {
+                        for (const i of o.items) {
+                          if (!i.missing_item_confirmed) {
+                            await missingItemConfirm(i.id, "expo check");
+                          }
+                        }
+                        await reloadPickup();
+                      }}
+                    >
+                      Confirm missing
+                    </button>
+                    <button
+                      type="button"
+                      className={`${s.btn} ${s.btnGhost}`}
+                      onClick={async () => {
+                        for (const i of o.items) {
+                          await recallItem(i.id);
+                        }
+                        await reloadPickup();
+                      }}
+                    >
+                      Reopen ticket
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}

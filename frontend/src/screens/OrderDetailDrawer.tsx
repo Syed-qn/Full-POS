@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
 import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
-import { ConfirmDialog } from "../components/ConfirmDialog";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { DispatchExplainSection } from "../components/DispatchExplainSection";
 import { PrepCountdown } from "../components/PrepCountdown";
@@ -27,6 +26,7 @@ import {
   reassignOrder,
   setOrderPriority,
 } from "../lib/ordersApi";
+import { useManagerPinGate } from "../lib/requireManagerPin";
 import { fetchRiders } from "../lib/ridersApi";
 import type {
   AddressDetailOut,
@@ -84,11 +84,11 @@ export function OrderDetailDrawer({
   const { data: queryDetail, isPending, isError } = useOrderDetailQuery(orderId, tab);
   const [advancing, setAdvancing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [riders, setRiders] = useState<RiderOut[]>([]);
   const [reassignTo, setReassignTo] = useState<number | "">("");
   const [reassigning, setReassigning] = useState(false);
+  const { requestPin, pinGate, pinBusy } = useManagerPinGate();
 
   useEffect(() => {
     if (orderId === null) {
@@ -132,8 +132,10 @@ export function OrderDetailDrawer({
     setActionError(null);
     try {
       const updated = await assignOrder(basicOrder.id, Number(reassignTo));
-      onOrderUpdated?.(updated);
+      setBasicOrder(updated);
+      await refreshDetail(basicOrder.id);
       setReassignTo("");
+      fetchRiders().then(setRiders).catch(() => {});
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Failed to assign");
     } finally {
@@ -170,20 +172,40 @@ export function OrderDetailDrawer({
     }
   }
 
-  async function cancelOrderAction() {
-    if (!basicOrder) return;
-    setCancelling(true);
+  function requestCancelOrder() {
+    if (!basicOrder || !detail) return;
     setActionError(null);
-    try {
-      const updated = await cancelOrder(basicOrder.id);
-      setBasicOrder(updated);
-      await refreshDetail(basicOrder.id);
-      setConfirmCancel(false);
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to cancel order");
-    } finally {
-      setCancelling(false);
-    }
+    const statusMsg =
+      detail.status === "preparing"
+        ? "It's already being cooked. Cancelling stops the order — the food won't be resold. This cannot be undone."
+        : ["ready", "assigned", "picked_up", "arriving"].includes(detail.status)
+          ? "The order is already in progress. Cancelling will notify the customer and free the rider. This cannot be undone."
+          : "This cannot be undone.";
+    requestPin({
+      actionType: "void",
+      actionLabel: "Cancel / void order",
+      recordLabel: basicOrder.order_number || String(basicOrder.id),
+      reasonRequired: true,
+      orderId: basicOrder.id,
+      amountAed: basicOrder.total_aed,
+      confirmTitle: "Cancel this order?",
+      confirmMessage: `${statusMsg} Manager PIN required.`,
+      confirmLabel: "Continue to PIN",
+      cancelLabel: "Keep order",
+      execute: async ({ reason }) => {
+        setCancelling(true);
+        try {
+          const updated = await cancelOrder(basicOrder.id, reason || "void");
+          setBasicOrder(updated);
+          await refreshDetail(basicOrder.id);
+        } catch (e) {
+          setActionError(e instanceof Error ? e.message : "Failed to cancel order");
+          throw e;
+        } finally {
+          setCancelling(false);
+        }
+      },
+    });
   }
 
   function onCustomerSaved(updated: CustomerDetailOut) {
@@ -265,8 +287,8 @@ export function OrderDetailDrawer({
               {CANCELLABLE.has(detail.status) && (
                 <Button
                   variant="danger"
-                  onClick={() => { setActionError(null); setConfirmCancel(true); }}
-                  disabled={advancing || cancelling}
+                  onClick={requestCancelOrder}
+                  disabled={advancing || cancelling || pinBusy}
                 >
                   {cancelling ? "Cancelling…" : "Cancel Order"}
                 </Button>
@@ -311,7 +333,8 @@ export function OrderDetailDrawer({
                     if (!basicOrder) return;
                     try {
                       const updated = await setOrderPriority(basicOrder.id, "priority");
-                      onOrderUpdated?.(updated);
+                      setBasicOrder(updated);
+                      await refreshDetail(basicOrder.id);
                     } catch (e) {
                       setActionError(e instanceof Error ? e.message : "Priority failed");
                     }
@@ -356,7 +379,8 @@ export function OrderDetailDrawer({
                   if (!basicOrder) return;
                   try {
                     const updated = await setOrderPriority(basicOrder.id, "priority");
-                    onOrderUpdated?.(updated);
+                    setBasicOrder(updated);
+                    await refreshDetail(basicOrder.id);
                   } catch (e) {
                     setActionError(e instanceof Error ? e.message : "Priority failed");
                   }
@@ -396,7 +420,8 @@ export function OrderDetailDrawer({
                       basicOrder.id,
                       sel?.value || "customer_unreachable",
                     );
-                    onOrderUpdated?.(updated);
+                    setBasicOrder(updated);
+                    await refreshDetail(basicOrder.id);
                   } catch (e) {
                     setActionError(e instanceof Error ? e.message : "Fail failed");
                   }
@@ -435,24 +460,7 @@ export function OrderDetailDrawer({
           </div>
         </div>
       )}
-      {confirmCancel && (
-        <ConfirmDialog
-          title="Cancel this order?"
-          message={
-            detail?.status === "preparing"
-              ? "It's already being cooked. Cancelling stops the order — the food won't be resold. This cannot be undone."
-              : ["ready", "assigned", "picked_up", "arriving"].includes(detail?.status ?? "")
-                ? "The order is already in progress. Cancelling will notify the customer and free the rider. This cannot be undone."
-                : "This cannot be undone."
-          }
-          confirmLabel="Cancel order"
-          cancelLabel="Keep order"
-          danger
-          busy={cancelling}
-          onConfirm={cancelOrderAction}
-          onCancel={() => setConfirmCancel(false)}
-        />
-      )}
+      {pinGate}
     </SideDrawer>
   );
 }

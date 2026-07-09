@@ -22,6 +22,7 @@ import {
   type InboxOrder,
   type ProfitRow,
 } from "../lib/channelsApi";
+import { useManagerPinGate } from "../lib/requireManagerPin";
 
 const AGGREGATOR_KEYS = new Set([
   "talabat",
@@ -48,6 +49,7 @@ export function ChannelsScreen() {
   const [data, setData] = useState<ChannelsOut | null>(null);
   const [inbox, setInbox] = useState<InboxOrder[]>([]);
   const [commission, setCommission] = useState<CommissionRow[]>([]);
+  const { requestPin, pinGate, pinBusy } = useManagerPinGate();
   const [profit, setProfit] = useState<ProfitRow[]>([]);
   const [recon, setRecon] = useState<
     Record<string, { order_count: number; revenue_aed: string; commission_aed: string; net_aed: string }>
@@ -97,17 +99,29 @@ export function ChannelsScreen() {
   const enabledCount = channelEntries.filter(([, c]) => c.enabled).length;
   const inboxOpen = inbox.filter((o) => !["delivered", "cancelled"].includes(o.status)).length;
 
-  async function onPause(key: string) {
-    setBusy(true);
-    try {
-      const next = await pauseChannel(key);
-      setData(next);
-      toast(`${key} paused`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Pause failed", "error");
-    } finally {
-      setBusy(false);
-    }
+  function onPause(key: string) {
+    requestPin({
+      actionType: "channel_pause",
+      actionLabel: "Pause sales channel",
+      recordLabel: key,
+      confirmTitle: `Pause ${key}?`,
+      confirmMessage: `Pause accepting orders on ${key}. Manager PIN required.`,
+      confirmLabel: "Continue to PIN",
+      cancelLabel: "Keep accepting",
+      execute: async () => {
+        setBusy(true);
+        try {
+          const next = await pauseChannel(key);
+          setData(next);
+          toast(`${key} paused`);
+        } catch (e) {
+          toast(e instanceof Error ? e.message : "Pause failed", "error");
+          throw e;
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
   }
 
   async function onResume(key: string) {
@@ -345,7 +359,7 @@ export function ChannelsScreen() {
                   {cfg.enabled ? "Disable" : "Enable"}
                 </Button>
                 {cfg.accepting ? (
-                  <Button disabled={busy || !cfg.enabled} onClick={() => void onPause(key)}>
+                  <Button disabled={busy || pinBusy || !cfg.enabled} onClick={() => onPause(key)}>
                     Pause
                   </Button>
                 ) : (
@@ -625,6 +639,8 @@ export function ChannelsScreen() {
           </Button>
         </div>
       </section>
+
+      {pinGate}
     </div>
   );
 }

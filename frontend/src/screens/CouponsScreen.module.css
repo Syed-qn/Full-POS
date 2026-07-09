@@ -37,10 +37,11 @@
 
 .field input,
 .field select {
-  padding: 8px;
+  min-height: 48px;
+  padding: 10px 12px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--font-size-body, 16px);
   color: var(--text-default);
   background: var(--bg-base);
 }
@@ -81,8 +82,23 @@
 .table th,
 .table td {
   text-align: left;
-  padding: 10px 14px;
+  padding: 14px;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.table tbody tr {
+  height: 56px;
+}
+
+.rowActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.rowActions :global(button) {
+  min-height: var(--touch-min, 56px);
+  min-width: 72px;
 }
 
 .table th {
@@ -129,23 +145,27 @@
 
 .search {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .search input {
   flex: 1;
   min-width: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  font-size: 14px;
+  min-height: var(--touch-min, 56px);
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  font-size: var(--font-size-body, 16px);
 }
 
 .search button {
-  padding: 8px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-base);
+  min-height: var(--touch-min, 56px);
+  min-width: 96px;
+  padding: 12px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-surface);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 600;
 }

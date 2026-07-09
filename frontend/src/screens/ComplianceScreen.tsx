@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
@@ -15,7 +16,9 @@ import {
   transmitEInvoice,
   type TaxSettings,
 } from "../lib/complianceApi";
-import s from "./BranchOpsScreen.module.css";
+import s from "./ComplianceScreen.module.css";
+
+type ComplianceTab = "tax" | "einvoice" | "refunds" | "retention" | "export";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -64,6 +67,7 @@ export function ComplianceScreen() {
   const [buyerTrn, setBuyerTrn] = useState("");
   const [exportStart, setExportStart] = useState(monthStartISO());
   const [exportEnd, setExportEnd] = useState(todayISO());
+  const [tab, setTab] = useState<ComplianceTab>("tax");
 
   const reload = useCallback(async () => {
     try {
@@ -212,6 +216,49 @@ export function ComplianceScreen() {
         subtitle="VAT invoices · TRN · e-invoicing ASP · refund notes · retention · accountant export"
       />
 
+      <div className={s.healthGrid}>
+        <div className={`${s.healthCard} ${readiness?.ready ? s.healthOk : s.healthWarn}`}>
+          <span>E-invoice ready</span>
+          <strong>{readiness ? (readiness.ready ? "Yes" : "No") : "—"}</strong>
+        </div>
+        <div className={s.healthCard}>
+          <span>E-invoicing</span>
+          <strong>{eInv ? "On" : "Off"}</strong>
+        </div>
+        <div className={s.healthCard}>
+          <span>Refund notes</span>
+          <strong>{refunds.length}</strong>
+        </div>
+        <div className={s.healthCard}>
+          <span>Retention runs</span>
+          <strong>{runs.length}</strong>
+        </div>
+      </div>
+
+      <div className={s.tabs} role="tablist" aria-label="Compliance sections">
+        {(
+          [
+            ["tax", "Tax profile"],
+            ["einvoice", "E-invoice"],
+            ["refunds", "Refund notes"],
+            ["retention", "Retention"],
+            ["export", "Accountant export"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`${s.tab} ${tab === key ? s.tabActive : ""}`}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "tax" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Tax settings · branch TRN</h3>
         <div className={s.row2}>
@@ -264,11 +311,15 @@ export function ComplianceScreen() {
             {tax.simplified_invoice_threshold_aed} · ASP {tax.asp_provider}
           </p>
         )}
-        <Button onClick={() => void saveTax()} disabled={busy}>
-          Save tax settings
-        </Button>
+        <div className={s.stickySave}>
+          <Button onClick={() => void saveTax()} disabled={busy}>
+            Save tax settings
+          </Button>
+        </div>
       </section>
+      )}
 
+      {tab === "einvoice" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>E-invoicing readiness (PINT-AE / ASP)</h3>
         {readiness ? (
@@ -283,7 +334,7 @@ export function ComplianceScreen() {
             <li className={s.rowHint}>{readiness.notes}</li>
           </ul>
         ) : (
-          <p>Loading…</p>
+          <p className={s.rowHint}>Loading…</p>
         )}
         <div className={s.row2}>
           <label className={s.col}>
@@ -295,10 +346,12 @@ export function ComplianceScreen() {
             <input className={s.input} value={buyerTrn} onChange={(e) => setBuyerTrn(e.target.value)} />
           </label>
         </div>
-        <Button onClick={() => void onTransmit()} disabled={busy}>
-          Transmit via Mock ASP
-        </Button>
-        {txns.length > 0 && (
+        <div className={s.actions}>
+          <Button onClick={() => void onTransmit()} disabled={busy}>
+            Transmit via Mock ASP
+          </Button>
+        </div>
+        {txns.length > 0 ? (
           <ul className={s.list}>
             {txns.slice(0, 10).map((t) => (
               <li key={t.id}>
@@ -307,9 +360,13 @@ export function ComplianceScreen() {
               </li>
             ))}
           </ul>
+        ) : (
+          <EmptyState title="No transmissions yet" description="Transmit an order to see ASP status." />
         )}
       </section>
+      )}
 
+      {tab === "refunds" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Refund notes (RN-…)</h3>
         <div className={s.row2}>
@@ -326,10 +383,12 @@ export function ComplianceScreen() {
             <input className={s.input} value={rnReason} onChange={(e) => setRnReason(e.target.value)} />
           </label>
         </div>
-        <Button onClick={() => void onRefundNote()} disabled={busy}>
-          Issue refund note
-        </Button>
-        {refunds.length > 0 && (
+        <div className={s.actions}>
+          <Button onClick={() => void onRefundNote()} disabled={busy}>
+            Issue refund note
+          </Button>
+        </div>
+        {refunds.length > 0 ? (
           <ul className={s.list}>
             {refunds.map((n) => (
               <li key={n.id}>
@@ -337,16 +396,20 @@ export function ComplianceScreen() {
               </li>
             ))}
           </ul>
+        ) : (
+          <EmptyState title="No refund notes" description="Issued credit notes appear here." />
         )}
       </section>
+      )}
 
+      {tab === "retention" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Data retention</h3>
         <p className={s.rowHint}>
           Purges operational noise older than retention days. Fiscal confirmed orders are counted, not
           deleted.
         </p>
-        <div className={s.row2}>
+        <div className={s.actions}>
           <Button onClick={() => void onRetention(true)} disabled={busy}>
             Dry-run purge
           </Button>
@@ -354,7 +417,7 @@ export function ComplianceScreen() {
             Run purge
           </Button>
         </div>
-        {runs.length > 0 && (
+        {runs.length > 0 ? (
           <ul className={s.list}>
             {runs.slice(0, 5).map((r) => (
               <li key={r.id}>
@@ -362,9 +425,13 @@ export function ComplianceScreen() {
               </li>
             ))}
           </ul>
+        ) : (
+          <EmptyState title="No retention runs" description="Dry-run first to preview purge counts." />
         )}
       </section>
+      )}
 
+      {tab === "export" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Accountant export</h3>
         <div className={s.row2}>
@@ -387,7 +454,7 @@ export function ComplianceScreen() {
             />
           </label>
         </div>
-        <div className={s.row2}>
+        <div className={s.actions}>
           <Button onClick={() => void onExport("json")} disabled={busy}>
             Export JSON
           </Button>
@@ -397,6 +464,7 @@ export function ComplianceScreen() {
         </div>
         {exportSummary && <p className={s.rowHint}>{exportSummary}</p>}
       </section>
+      )}
     </div>
   );
 }

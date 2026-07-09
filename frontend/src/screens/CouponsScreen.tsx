@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { EmptyState } from "../components/EmptyState";
+import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import { createCoupon, listCoupons, pauseCoupon } from "../lib/couponsApi";
@@ -175,14 +177,27 @@ export function CouponsScreen() {
       </section>
 
       {!loaded && <p className={s.loading}>Loading coupons…</p>}
-      {loadError && <p className={s.error} role="alert">{loadError}</p>}
+      {loadError && (
+        <ErrorState
+          title="Could not load coupons"
+          description={loadError}
+          action={
+            <Button type="button" onClick={() => void reload()}>
+              Retry
+            </Button>
+          }
+        />
+      )}
 
       {loaded && !loadError && coupons.length === 0 && (
-        <div className={s.empty}>
-          {phone.trim()
-            ? "No coupons found for that phone."
-            : "No coupons yet — create one above."}
-        </div>
+        <EmptyState
+          title={phone.trim() ? "No coupons for that phone" : "No coupons yet"}
+          description={
+            phone.trim()
+              ? "Try another customer phone or clear the search."
+              : "Create a coupon above. Prefer pause over delete for active promos."
+          }
+        />
       )}
 
       {loaded && coupons.length > 0 && (
@@ -195,7 +210,7 @@ export function CouponsScreen() {
               <th>Min order</th>
               <th>Limits</th>
               <th>Status</th>
-              <th />
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -214,9 +229,11 @@ export function CouponsScreen() {
                 </td>
                 <td>
                   {c.status === "active" && (
-                    <Button type="button" variant="ghost" onClick={() => void onPause(c.code)}>
-                      Pause
-                    </Button>
+                    <div className={s.rowActions}>
+                      <Button type="button" variant="ghost" onClick={() => void onPause(c.code)}>
+                        Pause
+                      </Button>
+                    </div>
                   )}
                 </td>
               </tr>

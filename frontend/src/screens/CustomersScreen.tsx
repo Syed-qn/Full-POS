@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CompactTable, type Column } from "../components/CompactTable";
+import { EmptyState } from "../components/EmptyState";
+import { ErrorState } from "../components/ErrorState";
+import { PageHeader } from "../components/PageHeader";
 import { QueryRefreshNote } from "../components/QueryRefreshNote";
 import { perfMark, perfNow } from "../lib/perf";
 import { useCustomersQuery } from "../lib/queries/dashboard";
 import type { CustomerDetailOut } from "../lib/types";
-import { PageHeader } from "../components/PageHeader";
 import s from "./OrdersScreen.module.css";
 import f from "./CustomersScreen.module.css";
 
@@ -79,29 +81,54 @@ export function CustomersScreen() {
 
   const columns: Column<CustomerDetailOut>[] = [
     { key: "name", header: "Name", render: (c) => c.name ?? "—" },
-    { key: "phone", header: "Phone", render: (c) => c.phone },
+    {
+      key: "phone",
+      header: "Phone",
+      render: (c) => <span className={f.phoneCell}>{c.phone}</span>,
+    },
     { key: "orders", header: "Orders", render: (c) => String(c.total_orders) },
     { key: "spend", header: "Spend", render: (c) => `AED ${c.total_spend}` },
     { key: "opt", header: "Marketing", render: (c) => c.marketing_opted_in ? "Opted In" : "Opted Out" },
+    {
+      key: "open",
+      header: "",
+      render: (c) => (
+        <button
+          type="button"
+          className={f.rowOpen}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/customers/${c.id}`);
+          }}
+        >
+          Open
+        </button>
+      ),
+    },
   ];
 
   return (
     <div className={s.screen}>
-      <PageHeader title="Customers" subtitle="Your customer directory" />
+      <PageHeader title="Customers" subtitle="Find guests by phone, spend, or marketing status" />
       <div className={f.filterBar}>
-        <div className={f.topRow}>
-          <div className={`${f.filterGroup} ${f.grow}`}>
-            <span className={f.filterLabel}>Search</span>
-            <div className={f.searchWrap}>
-              <span className={f.searchIcon} aria-hidden="true">🔍</span>
-              <input
-                className={f.search}
-                placeholder="Search name or phone"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+        <div className={f.phoneSearchBlock}>
+          <span className={f.phoneSearchLabel}>Phone search</span>
+          <div className={f.searchWrap}>
+            <span className={f.searchIcon} aria-hidden="true">📞</span>
+            <input
+              className={`${f.search} ${f.phoneSearch}`}
+              type="search"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="Search by phone number or name"
+              aria-label="Search customers by phone or name"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+          <span className={f.phoneSearchHint}>Primary lookup for returning guests at the counter</span>
+        </div>
+        <div className={f.topRow}>
           <div className={f.filterGroup}>
             <span className={f.filterLabel}>Min spend (AED)</span>
             <input
@@ -159,14 +186,30 @@ export function CustomersScreen() {
             <QueryRefreshNote show={isError && customers.length > 0} />
           </span>
         </div>
-        <CompactTable<CustomerDetailOut>
-          columns={columns}
-          rows={filtered}
-          rowKey={(c) => c.id}
-          onRowClick={(c) => navigate(`/customers/${c.id}`)}
-          emptyText="No customers found"
-          loading={loading}
-        />
+        {isError && customers.length === 0 && !loading ? (
+          <ErrorState
+            title="Could not load customers"
+            description="Check your connection and try again."
+          />
+        ) : !loading && filtered.length === 0 ? (
+          <EmptyState
+            title="No customers found"
+            description={
+              debouncedSearch
+                ? "Try another phone number or clear filters."
+                : "Customers appear here after their first order."
+            }
+          />
+        ) : (
+          <CompactTable<CustomerDetailOut>
+            columns={columns}
+            rows={filtered}
+            rowKey={(c) => c.id}
+            onRowClick={(c) => navigate(`/customers/${c.id}`)}
+            emptyText="No customers found"
+            loading={loading}
+          />
+        )}
       </div>
       {showPagination && (
         <div className={s.pagination}>

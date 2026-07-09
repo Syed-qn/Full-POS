@@ -1,0 +1,209 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 8px 0;
+  background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.tab {
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabActive {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric,
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-sm);
+}
+
+.metric {
+  min-height: 100px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metric span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.metric strong {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.metricAlert {
+  border-color: color-mix(in srgb, var(--sla-critical) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-critical) 8%, var(--bg-surface));
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cardHead h2 {
+  margin: 0;
+  font-size: var(--font-size-title, 18px);
+  color: var(--text-primary);
+}
+
+.cardHead span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.formGridSingle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.formGridSingle label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.formGridSingle input {
+  min-height: 48px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--font-size-body, 16px);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+}
+
+.table tbody tr {
+  height: 56px;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rowActions :global(button),
+.actions :global(button),
+.listActions :global(button) {
+  min-height: var(--touch-min, 56px);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface-inset);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+@media (max-width: 1100px) {
+  .metrics,
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .metrics,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

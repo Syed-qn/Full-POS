@@ -21,9 +21,20 @@
   gap: 4px;
 }
 .cardTitle {
-  font-size: 16px;
+  font-size: var(--font-size-title, 18px);
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.card :global(button),
+.screen :global(button) {
+  min-height: 48px;
+}
+
+.card input,
+.card select {
+  min-height: 48px;
+  font-size: var(--font-size-body, 16px);
 }
 .cardSub {
   font-size: 13px;

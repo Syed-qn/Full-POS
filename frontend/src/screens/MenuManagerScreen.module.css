@@ -75,8 +75,16 @@
 .pushRight {
   margin-left: auto;
 }
+/* Touch-safe filter controls */
+.filterBar :global(button),
+.bar :global(button) {
+  min-height: 48px;
+}
+
 .search {
   width: 100%;
+  min-height: 48px;
+  font-size: var(--font-size-body, 16px);
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);

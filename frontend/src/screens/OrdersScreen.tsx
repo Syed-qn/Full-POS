@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { CompactTable, type Column } from "../components/CompactTable";
 import { QueryRefreshNote } from "../components/QueryRefreshNote";
 import { StatusPill, STATUS_LABELS } from "../components/StatusPill";
 import { PrepCountdown } from "../components/PrepCountdown";
+import { EmptyState } from "../components/EmptyState";
+import { Button } from "../components/Button";
 import { orderStatusLabel } from "../lib/orderDisplay";
 import { perfMark, perfNow } from "../lib/perf";
 import { useOrdersQuery } from "../lib/queries/dashboard";
 import type { OrderOut, OrderStatus } from "../lib/types";
 import { OrderDetailDrawer } from "./OrderDetailDrawer";
 import { PageHeader } from "../components/PageHeader";
+import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import s from "./OrdersScreen.module.css";
 
 const PAGE_SIZE = 20;
 
-// Local YYYY-MM-DD (matches what <input type="date"> emits, so day-level
-// comparisons are plain string compares in the restaurant's own timezone).
 function toYMD(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -22,7 +22,6 @@ function toYMD(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// Status options in FSM order (src/app/ordering/fsm.py), for the status filter.
 const STATUS_OPTIONS: OrderStatus[] = [
   "draft", "pending_confirmation", "confirmed", "preparing", "ready", "assigned",
   "picked_up", "arriving", "delivered", "cancelled", "undeliverable",
@@ -40,7 +39,6 @@ const PRESETS: { key: Exclude<PresetKey, "custom">; label: string }[] = [
   { key: "month", label: "This month" },
 ];
 
-// Resolve a preset to [from, to] day bounds (inclusive). "" means unbounded.
 function presetRange(key: Exclude<PresetKey, "custom">, now: Date): [string, string] {
   const today = toYMD(now);
   switch (key) {
@@ -53,7 +51,7 @@ function presetRange(key: Exclude<PresetKey, "custom">, now: Date): [string, str
     }
     case "7d": {
       const f = new Date(now);
-      f.setDate(now.getDate() - 6); // inclusive of today = 7 calendar days
+      f.setDate(now.getDate() - 6);
       return [toYMD(f), today];
     }
     case "30d": {
@@ -69,11 +67,106 @@ function presetRange(key: Exclude<PresetKey, "custom">, now: Date): [string, str
   }
 }
 
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function OrderCard({
+  order,
+  onOpen,
+}: {
+  order: OrderOut;
+  onOpen: () => void;
+}) {
+  const items = order.items.map((i) => `${i.qty}× ${i.name}`);
+  const itemsLabel =
+    items.length <= 1 ? items[0] ?? "—" : `${items[0]} +${items.length - 1} more`;
+  const channel = order.source_channel || order.aggregator_source || order.order_type || "—";
+  const batched = !!(order.batch_size && order.batch_size > 1);
+
+  return (
+    <button
+      type="button"
+      className={`${s.orderCard} ${batched ? s.orderCardBatch : ""}`}
+      onClick={onOpen}
+    >
+      <div className={s.cardTop}>
+        <span className={s.cardId} title={order.order_number}>
+          #{order.id}
+        </span>
+        <StatusPill
+          status={order.status}
+          label={orderStatusLabel(order.status, {
+            resaleOfOrderId: order.resale_of_order_id,
+            orderNumber: order.order_number,
+          })}
+        />
+      </div>
+      <div className={s.cardName}>{order.customer_name}</div>
+      <div className={s.cardPhone}>{order.customer_phone || "—"}</div>
+      <div className={s.cardItems} title={items.join(", ")}>
+        {itemsLabel}
+      </div>
+      <div className={s.cardMeta}>
+        <span className={s.cardChannel}>{channel}</span>
+        <span className={s.cardTime}>{formatTime(order.created_at)}</span>
+        <span className={s.cardTotal}>AED {order.total_aed}</span>
+      </div>
+      <div className={s.cardFoot}>
+        <span className={s.cardRider}>
+          {order.rider_name ?? "No rider"}
+          {batched ? (
+            <span
+              className={s.batchTag}
+              title={`Batched on one rider trip. Prepare these together to protect the shared 40-min SLA: ${(order.batch_order_numbers ?? []).join(", ")}`}
+            >
+              🔗 {order.batch_size} together
+            </span>
+          ) : order.batch_preview ? (
+            <span
+              className={s.batchPreviewTag}
+              title={`Will likely batch together (group ${order.batch_preview}) — nearby drop-offs. Prepare them together so they ride out on one trip.`}
+            >
+              Batch {order.batch_preview}
+            </span>
+          ) : null}
+        </span>
+        <span className={s.cardKitchen}>
+          {order.status === "preparing" ? (
+            <PrepCountdown prepDeadline={order.prep_deadline} label="Plate" compact />
+          ) : order.status === "confirmed" ? (
+            <PrepCountdown
+              prepDeadline={
+                order.prep_deadline && order.cook_estimate_minutes != null
+                  ? new Date(
+                      Date.parse(order.prep_deadline) - order.cook_estimate_minutes * 60_000,
+                    ).toISOString()
+                  : order.prep_deadline
+              }
+              label="Start"
+              compact
+            />
+          ) : (
+            <span className={s.mono}>—</span>
+          )}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 export function OrdersScreen() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
-  // "all" | "single" | a batch label ("A", "B", …) present in the current orders.
   const [batchFilter, setBatchFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -129,14 +222,11 @@ export function OrdersScreen() {
     setPreset("custom");
   }
 
-  // Open the native date picker on a click anywhere in the field (not just the
-  // tiny calendar glyph). showPicker() is a no-op/throws on older browsers, so
-  // guard it — they keep the default click-the-icon behaviour.
   function openPicker(e: MouseEvent<HTMLInputElement>) {
     try {
       e.currentTarget.showPicker?.();
     } catch {
-      /* not supported / blocked — fall back to native behaviour */
+      /* not supported */
     }
   }
 
@@ -150,7 +240,6 @@ export function OrdersScreen() {
     return base;
   }, [orders, batchFilter]);
 
-  // Distinct forecast batch labels present, so the dropdown only offers real groups.
   const batchLabels = useMemo(
     () =>
       Array.from(
@@ -166,100 +255,10 @@ export function OrdersScreen() {
   const hasNextPage = orders.length === PAGE_SIZE;
   const pageRows = filtered;
 
-  const columns: Column<OrderOut>[] = [
-    {
-      key: "id",
-      header: "#",
-      render: (o) => (
-        <span className={s.mono} title={o.order_number}>
-          #{o.id}
-        </span>
-      ),
-    },
-    { key: "cust", header: "Customer", render: (o) => o.customer_name },
-    {
-      key: "items",
-      header: "Items",
-      render: (o) => {
-        const lines = o.items.map((i) => `${i.qty}× ${i.name}`);
-        const full = lines.join(", ");
-        // Keep the row compact: first dish + "+N more", full list on hover.
-        const label = lines.length <= 1 ? full : `${lines[0]} +${lines.length - 1} more`;
-        return <span title={full}>{label}</span>;
-      },
-    },
-    { key: "total", header: "Total", render: (o) => <span className={s.mono}>AED {o.total_aed}</span> },
-    {
-      key: "channel",
-      header: "Channel",
-      render: (o) => (
-        <span className={s.mono} title={o.aggregator_order_ref ?? undefined}>
-          {o.source_channel || o.aggregator_source || o.order_type || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "rider",
-      header: "Rider",
-      render: (o) => (
-        <span className={s.riderCell}>
-          {o.rider_name ?? "—"}
-          {o.batch_size && o.batch_size > 1 ? (
-            <span
-              className={s.batchTag}
-              title={`Batched on one rider trip. Prepare these together to protect the shared 40-min SLA: ${(o.batch_order_numbers ?? []).join(", ")}`}
-            >
-              🔗 {o.batch_size} together
-            </span>
-          ) : o.batch_preview ? (
-            <span
-              className={s.batchPreviewTag}
-              title={`Will likely batch together (group ${o.batch_preview}) — nearby drop-offs. Prepare them together so they ride out on one trip.`}
-            >
-              Batch {o.batch_preview}
-            </span>
-          ) : null}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (o) => (
-        <StatusPill
-          status={o.status}
-          label={orderStatusLabel(o.status, {
-            resaleOfOrderId: o.resale_of_order_id,
-            orderNumber: o.order_number,
-          })}
-        />
-      ),
-    },
-    {
-      key: "kitchen",
-      header: "Kitchen",
-      render: (o) => {
-        if (o.status === "preparing") {
-          return <PrepCountdown prepDeadline={o.prep_deadline} label="Plate" compact />;
-        }
-        if (o.status === "confirmed") {
-          // Not started yet → show "start cooking by" = plate-by − cook estimate.
-          const startBy =
-            o.prep_deadline && o.cook_estimate_minutes != null
-              ? new Date(
-                  Date.parse(o.prep_deadline) - o.cook_estimate_minutes * 60_000
-                ).toISOString()
-              : o.prep_deadline;
-          return <PrepCountdown prepDeadline={startBy} label="Start" compact />;
-        }
-        return <span className={s.mono}>—</span>;
-      },
-    },
-  ];
-
   return (
     <div className={s.screen}>
-      <PageHeader title="Orders" subtitle="All delivery orders, live and past" />
+      <PageHeader title="Orders" subtitle="Card board · search by phone or order # · open for detail" />
+      <OfflineLimitsBanner surface="orders" />
       <div className={s.filterBar}>
         <div className={s.topRow}>
           <div className={`${s.filterGroup} ${s.grow}`}>
@@ -271,6 +270,7 @@ export function OrdersScreen() {
                 placeholder="Search #ID, name or phone"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search orders"
               />
             </div>
           </div>
@@ -384,9 +384,10 @@ export function OrdersScreen() {
           </div>
         </div>
       </div>
-      <div className={s.tableCard}>
+
+      <div className={s.listCard}>
         <div className={s.tableHead}>
-          <span className={s.tableTitle}>Order list</span>
+          <span className={s.tableTitle}>Orders</span>
           <span className={s.tableCount}>
             {filtered.length} {filtered.length === 1 ? "order" : "orders"}
             {isFetching && !loading ? " · refreshing…" : ""}
@@ -394,16 +395,27 @@ export function OrdersScreen() {
             <QueryRefreshNote show={isError && orders.length > 0} />
           </span>
         </div>
-        <CompactTable<OrderOut>
-          columns={columns}
-          rows={pageRows}
-          rowKey={(o) => o.id}
-          onRowClick={(o) => setOpenId(o.id)}
-          emptyText="No orders match these filters"
-          loading={loading}
-          rowClassName={(o) => (o.batch_size && o.batch_size > 1 ? s.batchRow : undefined)}
-        />
+
+        {loading ? (
+          <div className={s.cardGrid} aria-busy="true" aria-label="Loading rows">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={s.skCard} />
+            ))}
+          </div>
+        ) : pageRows.length === 0 ? (
+          <EmptyState
+            title="No orders match these filters"
+            description="Try another date, status, channel, or clear search."
+          />
+        ) : (
+          <div className={s.cardGrid}>
+            {pageRows.map((o) => (
+              <OrderCard key={o.id} order={o} onOpen={() => setOpenId(o.id)} />
+            ))}
+          </div>
+        )}
       </div>
+
       {(page > 1 || hasNextPage) && (
         <div className={s.pagination}>
           <span className={s.pageInfo}>
@@ -411,13 +423,25 @@ export function OrdersScreen() {
             {hasNextPage ? "" : " (last)"}
           </span>
           <div className={s.pageBtns}>
-            <button className={s.pageBtn} disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              disabled={page <= 1}
+              onClick={() => setPage(page - 1)}
+            >
               ‹ Prev
-            </button>
+            </Button>
             <span className={s.pageNum}>Page {page}</span>
-            <button className={s.pageBtn} disabled={!hasNextPage} onClick={() => setPage(page + 1)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              disabled={!hasNextPage}
+              onClick={() => setPage(page + 1)}
+            >
               Next ›
-            </button>
+            </Button>
           </div>
         </div>
       )}

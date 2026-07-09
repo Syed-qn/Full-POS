@@ -22,8 +22,8 @@ body {
   background: var(--bg-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: var(--font-size-body, 16px);
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none; /* POS: avoid accidental selection; inputs re-enable */
@@ -58,7 +58,7 @@ a {
   text-decoration: none;
 }
 
-/* Dense desktop forms */
+/* Touch-friendly forms (min 44px; primary controls use --touch-min) */
 input,
 select,
 textarea {
@@ -66,7 +66,9 @@ textarea {
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
-  padding: 6px 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+  font-size: var(--font-size-body, 16px);
   outline: none;
 }
 
@@ -74,7 +76,38 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px var(--accent-primary-dim);
+  box-shadow: var(--focus-ring);
+}
+
+/* Keyboard focus only — strong 3px ring for WCAG 2.4.7 Focus Visible */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring-strong);
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="link"]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring-strong);
+}
+
+/* Inputs keep border + ring (outline can clip in dense forms) */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring-strong);
 }
 
 .mono {
@@ -135,6 +168,9 @@ body.is-desktop {
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }

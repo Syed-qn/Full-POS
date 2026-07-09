@@ -6,6 +6,11 @@ import { apiClient } from "../lib/apiClient";
 import type { DishOut, MenuOut, RestaurantOut } from "../lib/types";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
+import { BottomActionBar } from "../components/BottomActionBar";
+import { Button, TouchButton } from "../components/Button";
+import { MoneySummary } from "../components/MoneySummary";
+import { EmptyState } from "../components/EmptyState";
+import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import s from "./NewOrderScreen.module.css";
 
 type FeeOption = string;
@@ -20,7 +25,6 @@ interface FeeChoice {
   label: string;
 }
 
-// Turn the restaurant's saved fee tiers into labelled delivery-fee choices.
 function buildFeeOptions(tiers: FeeTier[]): FeeChoice[] {
   const sorted = [...tiers].sort((a, b) => Number(a.max_km) - Number(b.max_km));
   return sorted.map((t, i) => {
@@ -48,14 +52,12 @@ export function NewOrderScreen() {
 
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string | "all">("all");
 
   const [aptRoom, setAptRoom] = useState("");
   const [building, setBuilding] = useState("");
   const [receiverName, setReceiverName] = useState("");
   const [addressNotes, setAddressNotes] = useState("");
-  // Exact delivery pin from the map picker (search/drag). Null until set; when
-  // set it's sent as the order's drop-off so the rider gets a Navigate link and
-  // the customer sees a live ETA. If left unset the backend geocodes Building.
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
 
   const [feeOptions, setFeeOptions] = useState<FeeChoice[]>([]);
@@ -69,9 +71,6 @@ export function NewOrderScreen() {
     fetchActiveMenu().then((m) => setMenu(m));
   }, []);
 
-  // Load delivery-fee tiers from settings so the choices match what the
-  // manager configured on the Settings → Fees tab. Nothing is hardcoded:
-  // until this resolves we show a loading state, never placeholder fees.
   useEffect(() => {
     apiClient
       .get<RestaurantOut>("/api/v1/me")
@@ -79,8 +78,6 @@ export function NewOrderScreen() {
         const tiers = (r.settings as Record<string, unknown>)?.delivery_fee_tiers;
         if (Array.isArray(tiers) && tiers.length > 0) {
           const opts = buildFeeOptions(tiers as FeeTier[]);
-          // Always offer a free-delivery choice (comps / promos) even when no
-          // tier is free, and select it by default.
           const withFree = opts.some((o) => o.value === "0.00")
             ? opts
             : [{ value: "0.00", label: "Free delivery" }, ...opts];
@@ -125,26 +122,35 @@ export function NewOrderScreen() {
     });
   }
 
+  function clearCart() {
+    setQuantities({});
+  }
+
   const dishes: DishOut[] = useMemo(() => {
     if (!menu || menu === "loading") return [];
     return menu.dishes.filter((d) => d.is_available);
   }, [menu]);
 
+  const categories = useMemo(() => {
+    const cats = new Set(dishes.map((d) => d.category ?? "Other"));
+    return Array.from(cats).sort();
+  }, [dishes]);
+
   const filteredDishes = useMemo(() => {
     const q = search.toLowerCase();
-    return q
-      ? dishes.filter(
-          (d) =>
-            d.name.toLowerCase().includes(q) ||
-            String(d.dish_number).includes(q),
-        )
-      : dishes;
-  }, [dishes, search]);
-
-  const categories = useMemo(() => {
-    const cats = new Set(filteredDishes.map((d) => d.category ?? "Other"));
-    return Array.from(cats).sort();
-  }, [filteredDishes]);
+    let list = dishes;
+    if (activeCategory !== "all") {
+      list = list.filter((d) => (d.category ?? "Other") === activeCategory);
+    }
+    if (q) {
+      list = list.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) ||
+          String(d.dish_number).includes(q),
+      );
+    }
+    return list;
+  }, [dishes, search, activeCategory]);
 
   const selectedItems = useMemo(
     () =>
@@ -171,10 +177,6 @@ export function NewOrderScreen() {
     building.trim() &&
     receiverName.trim() &&
     fee !== "" &&
-    // A delivery pin is REQUIRED: without coordinates the dispatch engine can't
-    // place the order on the map, so it never batches/assigns to a rider (a typed
-    // building name often fails to geocode). Same location signal a WhatsApp order
-    // gets from the customer's shared GPS pin.
     pin !== null &&
     !submitting;
 
@@ -223,12 +225,13 @@ export function NewOrderScreen() {
 
   return (
     <div className={s.screen}>
-      <PageHeader title="New Order" subtitle="Place a manual order on behalf of a customer" />
+      <PageHeader title="New Order" subtitle="Delivery POS · large items · cart always visible" />
+      <OfflineLimitsBanner surface="new-order" />
 
-      {error && <div className={s.errorBanner}>{error}</div>}
+      {error && <div className={s.errorBanner} role="alert">{error}</div>}
 
-      <div className={s.grid}>
-        {/* LEFT COLUMN */}
+      <div className={s.posLayout}>
+        {/* LEFT — customer + address */}
         <div className={s.leftCol}>
           <div className={s.section}>
             <div className={s.sectionTitle}>Customer</div>
@@ -350,137 +353,176 @@ export function NewOrderScreen() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className={s.section}>
-          <div className={s.sectionTitle}>Items</div>
-
+        {/* CENTER — large item grid */}
+        <div className={`${s.section} ${s.itemsPane}`}>
+          <div className={s.sectionTitle}>Menu</div>
           <input
             className={s.searchInput}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search dishes…"
+            placeholder="Search dishes or number…"
+            aria-label="Search dishes"
           />
-
-          <div className={s.itemList}>
-          {categories.map((cat) => (
-            <div key={cat}>
-              <div className={s.categoryLabel}>{cat}</div>
-              {filteredDishes
-                .filter((d) => (d.category ?? "Other") === cat)
-                .map((dish) => {
-                  const qty = quantities[dish.id] ?? 0;
-                  return (
-                    <div
-                      key={dish.id}
-                      className={`${s.dishRow} ${qty > 0 ? s.dishRowActive : ""}`}
-                    >
-                      <span>
-                        <span
-                          className={`${s.dishName} ${qty > 0 ? s.dishNameActive : ""}`}
-                        >
-                          {dish.name}
-                        </span>
-                        <span className={s.dishPrice}>
-                          · AED {dish.price_aed}
-                        </span>
-                      </span>
-                      <div className={s.qtyControls}>
-                        <button
-                          type="button"
-                          className={s.qtyBtn}
-                          onClick={() => setQty(dish.id, -1)}
-                          disabled={qty === 0}
-                        >
-                          −
-                        </button>
-                        <span
-                          className={`${s.qtyValue} ${qty > 0 ? s.qtyValueActive : ""}`}
-                        >
-                          {qty}
-                        </span>
-                        <button
-                          type="button"
-                          className={`${s.qtyBtn} ${qty > 0 ? s.qtyBtnActive : ""}`}
-                          onClick={() => setQty(dish.id, 1)}
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          ))}
+          <div className={s.catRail} role="tablist" aria-label="Categories">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeCategory === "all"}
+              className={`${s.catChip} ${activeCategory === "all" ? s.catChipActive : ""}`}
+              onClick={() => setActiveCategory("all")}
+            >
+              All
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === cat}
+                className={`${s.catChip} ${activeCategory === cat ? s.catChipActive : ""}`}
+                onClick={() => setActiveCategory(cat)}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
 
-          {selectedItems.length === 0 && (
+          {filteredDishes.length === 0 ? (
+            <EmptyState title="No dishes match" description="Try another search or category." />
+          ) : (
+            <div className={s.itemGrid}>
+              {filteredDishes.map((dish) => {
+                const qty = quantities[dish.id] ?? 0;
+                return (
+                  <div
+                    key={dish.id}
+                    className={`${s.itemTile} ${qty > 0 ? s.itemTileActive : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className={s.itemMain}
+                      onClick={() => setQty(dish.id, 1)}
+                      aria-label={`Add ${dish.name}`}
+                    >
+                      <span className={s.itemNum}>#{dish.dish_number}</span>
+                      <span className={s.itemName}>{dish.name}</span>
+                      <span className={s.itemPrice}>AED {dish.price_aed}</span>
+                    </button>
+                    <div className={s.qtyControls}>
+                      <button
+                        type="button"
+                        className={s.qtyBtn}
+                        onClick={() => setQty(dish.id, -1)}
+                        disabled={qty === 0}
+                        aria-label={`Decrease ${dish.name}`}
+                      >
+                        −
+                      </button>
+                      <span
+                        className={`${s.qtyValue} ${qty > 0 ? s.qtyValueActive : ""}`}
+                        aria-label={`${dish.name} quantity`}
+                      >
+                        {qty}
+                      </span>
+                      <button
+                        type="button"
+                        className={`${s.qtyBtn} ${qty > 0 ? s.qtyBtnActive : ""}`}
+                        onClick={() => setQty(dish.id, 1)}
+                        aria-label={`Increase ${dish.name}`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT — cart always visible */}
+        <aside className={`${s.section} ${s.cartPane}`} aria-label="Cart">
+          <div className={s.sectionTitle}>Cart</div>
+          {selectedItems.length === 0 ? (
             <p className={s.emptyHint}>Add at least 1 item to continue.</p>
+          ) : (
+            <div className={s.cartLines}>
+              {selectedItems.map(({ dish, qty }) => (
+                <div key={dish.id} className={s.cartLine}>
+                  <div className={s.cartLineMain}>
+                    <span className={s.cartLineName}>
+                      {qty}× {dish.name}
+                    </span>
+                    <span className={s.cartLineAmt}>
+                      AED {(parseFloat(dish.price_aed ?? "0") * qty).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className={s.qtyControls}>
+                    <button
+                      type="button"
+                      className={s.qtyBtn}
+                      onClick={() => setQty(dish.id, -1)}
+                      aria-label={`Remove one ${dish.name}`}
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      className={`${s.qtyBtn} ${s.qtyBtnActive}`}
+                      onClick={() => setQty(dish.id, 1)}
+                      aria-label={`Add one ${dish.name}`}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           <div className={s.summary}>
-            <div className={s.summaryTitle}>Order Summary</div>
-            {selectedItems.map(({ dish, qty }) => (
-              <div key={dish.id} className={s.summaryLine}>
-                <span>
-                  {qty}× {dish.name}
-                </span>
-                <span>
-                  AED {(parseFloat(dish.price_aed ?? "0") * qty).toFixed(2)}
-                </span>
-              </div>
-            ))}
-            <hr className={s.summaryDivider} />
             <div className={s.summaryLine}>
               <span>Subtotal</span>
               <span>AED {subtotal.toFixed(2)}</span>
             </div>
             <div className={s.summaryLine}>
               <span>Delivery</span>
-              <span>{fee === "0.00" ? "Free" : `AED ${fee}`}</span>
+              <span>{fee === "0.00" || fee === "" ? "Free" : `AED ${fee}`}</span>
             </div>
-            <hr className={s.summaryDivider} />
-            <div className={s.summaryTotal}>
-              <span>TOTAL</span>
-              <span className={s.summaryTotalAmount}>
-                AED {total.toFixed(2)}
-              </span>
-            </div>
+            <MoneySummary label="TOTAL" amount={total.toFixed(2)} />
           </div>
-        </div>
+        </aside>
       </div>
 
-      <div className={s.bottomBar}>
+      <BottomActionBar>
         <span className={s.waHint}>
           {phone.trim()
             ? `📱 WhatsApp confirmation will be sent to ${phone.trim()}`
             : "📱 Enter phone to receive WhatsApp confirmation"}
         </span>
-        <div className={s.actions}>
-          <button
-            className={s.cancelBtn}
-            type="button"
-            onClick={() => navigate("/orders")}
-          >
-            Cancel
-          </button>
-          <button
-            className={s.placeBtn}
-            type="button"
-            disabled={!canSubmit}
-            onClick={onSubmit}
-          >
-            {submitting
-              ? "Placing…"
-              : `Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
-          </button>
-        </div>
-      </div>
+        <div className={s.footerSpacer} />
+        <Button
+          type="button"
+          variant="ghost"
+          size="lg"
+          onClick={clearCart}
+          disabled={selectedItems.length === 0}
+        >
+          Clear
+        </Button>
+        <Button type="button" variant="ghost" size="lg" onClick={() => navigate("/orders")}>
+          Cancel
+        </Button>
+        <TouchButton type="button" disabled={!canSubmit} onClick={onSubmit}>
+          {submitting
+            ? "Placing…"
+            : `Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
+        </TouchButton>
+      </BottomActionBar>
     </div>
   );
 }
 
-// A skeleton placeholder that mirrors the real New Order layout (two columns,
-// same cards/sections) so the page keeps its shape while the menu loads.
 function SkField({ labelWidth }: { labelWidth?: number }) {
   return (
     <div className={s.field}>
@@ -494,68 +536,26 @@ function NewOrderSkeleton() {
   return (
     <div className={s.screen} aria-busy="true" aria-label="Loading new order form">
       <PageHeader title="New Order" subtitle="Place a manual order on behalf of a customer" />
-
-      <div className={s.grid}>
-        {/* LEFT COLUMN */}
+      <div className={s.posLayout}>
         <div className={s.leftCol}>
           <div className={s.section}>
             <span className={`${s.sk} ${s.skTitle}`} />
-            <div className={s.field}>
-              <span className={`${s.sk} ${s.skLabel}`} />
-              <div className={s.inputRow}>
-                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
-                <span className={`${s.sk} ${s.skBtn}`} />
-              </div>
-            </div>
-            <SkField />
-          </div>
-
-          <div className={s.section}>
-            <span className={`${s.sk} ${s.skTitle}`} />
             <SkField />
             <SkField />
-            <SkField labelWidth={96} />
-            <SkField labelWidth={88} />
-            <div className={s.field}>
-              <span className={`${s.sk} ${s.skLabel}`} />
-              <div className={s.feeRow}>
-                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
-                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
-                <span className={`${s.sk} ${s.skInput}`} style={{ flex: 1 }} />
-              </div>
-            </div>
           </div>
         </div>
-
-        {/* RIGHT COLUMN */}
         <div className={s.section}>
           <span className={`${s.sk} ${s.skTitle}`} />
           <span className={`${s.sk} ${s.skInput}`} />
-          <div className={s.itemList}>
+          <div className={s.itemGrid}>
             {Array.from({ length: 6 }).map((_, i) => (
               <span key={i} className={`${s.sk} ${s.skDish}`} />
             ))}
           </div>
-          <div className={s.summary}>
-            <span className={`${s.sk} ${s.skBar}`} style={{ width: 110, marginBottom: 12 }} />
-            <div className={s.summaryLine}>
-              <span className={`${s.sk} ${s.skLine}`} style={{ width: "40%" }} />
-              <span className={`${s.sk} ${s.skLine}`} style={{ width: "20%" }} />
-            </div>
-            <hr className={s.summaryDivider} />
-            <div className={s.summaryLine}>
-              <span className={`${s.sk} ${s.skLine}`} style={{ width: "30%" }} />
-              <span className={`${s.sk} ${s.skLine}`} style={{ width: "18%" }} />
-            </div>
-          </div>
         </div>
-      </div>
-
-      <div className={s.bottomBar}>
-        <span className={`${s.sk} ${s.skBar}`} style={{ width: 240 }} />
-        <div className={s.actions}>
-          <span className={`${s.sk} ${s.skBtn}`} />
-          <span className={`${s.sk} ${s.skBtn}`} style={{ width: 130 }} />
+        <div className={s.section}>
+          <span className={`${s.sk} ${s.skTitle}`} />
+          <span className={`${s.sk} ${s.skBar}`} style={{ width: "80%" }} />
         </div>
       </div>
     </div>

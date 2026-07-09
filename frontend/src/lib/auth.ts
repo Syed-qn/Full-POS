@@ -1,4 +1,5 @@
 import { apiClient } from "./apiClient";
+import { clearStaffSession } from "./navAccess";
 import { clearCachedOnboardingComplete } from "./onboardingGate";
 import type { TokenOut } from "./types";
 
@@ -22,6 +23,7 @@ export function setToken(token: string): void {
 export function logout(): void {
   localStorage.removeItem(TOKEN_KEY);
   clearCachedOnboardingComplete();
+  clearStaffSession();
   desktopBridge()?.setAuthToken(null);
 }
 

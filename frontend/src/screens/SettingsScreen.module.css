@@ -37,11 +37,12 @@
   align-items: center;
   gap: 11px;
   width: 100%;
+  min-height: var(--touch-min, 56px);
   text-align: left;
   background: none;
   border: 1px solid transparent;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
   color: var(--text-secondary);
   transition: background 0.12s, border-color 0.12s, color 0.12s;
@@ -333,11 +334,12 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
-  padding: 9px 12px;
+  padding: 12px 14px;
   color: var(--text-primary);
   width: 100%;
   max-width: 320px;
-  font-size: 13px;
+  min-height: 48px;
+  font-size: var(--font-size-body, 16px);
   box-sizing: border-box;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
@@ -379,6 +381,28 @@
   justify-content: flex-end;
   gap: 10px;
   padding-top: 18px;
+}
+
+/* Sticky primary save bar for long settings forms */
+.stickySave {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  margin: 20px -24px -24px;
+  padding: 14px 24px;
+  min-height: var(--bottom-bar-height, 80px);
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border-default);
+  box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.06);
+}
+
+.stickySave :global(button) {
+  min-height: var(--touch-primary, 64px);
+  min-width: 120px;
+  padding: 14px 22px;
+  font-size: var(--font-size-body, 16px);
 }
 
 /* ---- Fee tier table ---- */

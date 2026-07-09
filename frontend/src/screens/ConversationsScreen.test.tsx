@@ -60,4 +60,15 @@ describe("ConversationsScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: /switch to human reply/i }));
     await waitFor(() => expect(screen.getByText(/you are controlling this conversation/i)).toBeInTheDocument());
   });
+
+  it("uses a 3-pane layout with AI state and customer context", async () => {
+    renderWithProviders(<ConversationsScreen />);
+    await waitFor(() => expect(screen.getByTestId("conversations-screen")).toBeInTheDocument());
+    expect(screen.getByLabelText(/customer context/i)).toBeInTheDocument();
+    await waitFor(() => screen.getByText("+971501234567"));
+    await userEvent.click(screen.getByText("+971501234567"));
+    expect(screen.getByTestId("conversation-ai-state")).toHaveTextContent(/ai handling/i);
+    expect(screen.getByRole("button", { name: /ai handling/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /needs staff/i })).toBeInTheDocument();
+  });
 });

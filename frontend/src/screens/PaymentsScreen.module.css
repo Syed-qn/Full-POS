@@ -195,9 +195,32 @@
 
 .rowActions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.rowActions :global(button),
+.actions :global(button) {
+  min-height: var(--touch-min, 56px);
+  min-width: 72px;
+}
+
+.table tbody tr {
+  height: 56px;
+}
+
+.table td,
+.table th {
+  padding: 14px 12px;
+  font-size: 14px;
+}
+
+.formGrid input,
+.formGrid select,
+.input {
+  min-height: 48px;
+  font-size: var(--font-size-body, 16px);
 }
 
 .empty {

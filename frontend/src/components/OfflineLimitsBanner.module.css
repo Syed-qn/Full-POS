@@ -1,0 +1,105 @@
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius, 8px);
+  background: var(--sla-warn-dim);
+  border: 1px solid var(--sla-warn);
+  color: var(--text-primary);
+  font-size: var(--font-size-ui, 14px);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--sla-critical-dim);
+  color: var(--sla-critical);
+  border: 1px solid var(--sla-critical);
+}
+
+.title {
+  font-weight: 600;
+  font-size: var(--font-size-body, 16px);
+  color: var(--text-primary);
+}
+
+.pending {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+}
+
+@media (max-width: 640px) {
+  .cols {
+    grid-template-columns: 1fr;
+  }
+
+  .pending {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.colLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sla-safe);
+  margin-bottom: 4px;
+}
+
+.colLabelBlocked {
+  color: var(--sla-critical);
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.15em;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.list li + li {
+  margin-top: 2px;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.link:hover {
+  color: var(--accent-primary-hover);
+}
