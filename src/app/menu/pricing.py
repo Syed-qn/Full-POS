@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.audit.service import record_audit
 from app.db import Base, TimestampMixin
 from app.menu.models import Dish
 
@@ -84,6 +85,15 @@ async def delete_price_rule(
     rule = await session.get(DishPriceRule, rule_id)
     if rule is None or rule.restaurant_id != restaurant_id or rule.dish_id != dish_id:
         raise ValueError("price rule not found")
+    before = {
+        "rule_type": rule.rule_type,
+        "price_aed": str(rule.price_aed),
+        "channel": rule.channel,
+    }
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant_id, entity="price_rule",
+        entity_id=str(rule.id), action="deleted", before=before, after=None,
+    )
     await session.delete(rule)
     await session.flush()
 

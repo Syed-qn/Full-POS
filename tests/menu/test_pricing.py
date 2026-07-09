@@ -3,7 +3,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.menu.pricing import create_price_rule, resolve_dish_price
+from app.audit.models import AuditLog
+from app.menu.pricing import create_price_rule, delete_price_rule, resolve_dish_price
 
 
 @pytest.mark.anyio
@@ -201,6 +202,35 @@ async def test_effective_price_endpoint_404_for_other_restaurant_dish(client, db
         headers={"Authorization": f"Bearer {other_token}"},
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_delete_price_rule_writes_audit_log(db_session, restaurant, seed_biryani_menu):
+    from sqlalchemy import select
+
+    from app.menu.models import Dish
+
+    dish = (await db_session.scalars(
+        select(Dish).where(Dish.restaurant_id == restaurant.id, Dish.name == "Chicken Biryani")
+    )).one()
+
+    rule = await create_price_rule(
+        db_session, restaurant_id=restaurant.id, dish_id=dish.id, rule_type="channel",
+        price_aed=Decimal("25.00"), channel="aggregator",
+    )
+    await db_session.commit()
+
+    await delete_price_rule(db_session, restaurant_id=restaurant.id, dish_id=dish.id, rule_id=rule.id)
+    await db_session.commit()
+
+    audit = await db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.entity == "price_rule",
+            AuditLog.entity_id == str(rule.id),
+        )
+    )
+    assert audit is not None
+    assert audit.action == "deleted"
 
 
 @pytest.mark.anyio
