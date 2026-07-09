@@ -804,3 +804,52 @@ export interface StockTransferOut {
   from_restaurant_id?: number;
   to_restaurant_id?: number;
 }
+
+export interface SalesRollupRow {
+  bucket: string;
+  revenue_aed: string;
+  order_count: number;
+}
+
+export interface ItemPerformanceRow {
+  dish_name: string;
+  order_count: number;
+  revenue_aed: string;
+  food_cost_aed: string;
+  margin_aed: string;
+  margin_pct: number;
+}
+
+export interface DrawerSessionSummary {
+  opening_float_aed: string;
+  closing_count_aed: string | null;
+  variance_aed: string | null;
+  [key: string]: unknown;
+}
+
+export interface ZReport {
+  gross_sales_aed: string;
+  total_discounts_aed: string;
+  cod_collected_aed: string;
+  drawer_sessions: DrawerSessionSummary[];
+  [key: string]: unknown;
+}
+
+export interface RetentionReport {
+  repeat_rate_pct: number;
+  new_customers: number;
+  returning_customers: number;
+  [key: string]: unknown;
+}
+
+export interface LaborHoursRow {
+  staff_id: number;
+  name: string;
+  hours: number;
+}
+
+export interface PrepTimeRow {
+  key: string;
+  avg_prep_minutes: number;
+  ticket_count: number;
+}
