@@ -96,6 +96,7 @@ export default function App() {
       <Route path="/staff" element={<Guarded><StaffScreen /></Guarded>} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />
       <Route path="/analytics" element={<Guarded><AnalyticsScreen /></Guarded>} />
+      <Route path="/predictions" element={<Guarded><AnalyticsScreen /></Guarded>} />
       <Route path="/reports" element={<Guarded><ReportsScreen /></Guarded>} />
       <Route path="/settings" element={<Guarded><SettingsScreen /></Guarded>} />
       <Route path="*" element={<Navigate to="/" replace />} />

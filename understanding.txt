@@ -2385,3 +2385,13 @@
   - Multi-shape webhook parse; HMAC verify; accept/reject/menu/stock/store/status; health probe; reject API.
   - FSM transition pushes marketplace status for aggregator orders; FE Channels live mode/creds/health.
   - Tests: tests/aggregators 25 green; status Cat1 32I/0P/0N; grand total 385I/0P/0N of 385.
+
+- [2026-07-09 19:40 +04] Frontend repair: light professional POS shell (no dark UI)
+  - Desktop-native: HashRouter for Electron file://, denser nav groups, status bar (local/online/pending), TopBar page titles, Full POS branding, Electron window 1440x900 + arm64/x64 .exe.
+  - Light theme tokens (#eef0f3 canvas, white surfaces, blue accent). Login: Full POS · AI · data science.
+  - Product framing: traditional POS + AI + data science layers; cloud console OR local .exe/.dmg terminal.
+
+- [2026-07-09 19:50 +04] docs/FULL_PRODUCT_FEATURE_CATALOG.md — complete user-facing feature inventory
+  - Actors, every manager screen, desktop offline, WhatsApp customer, rider app, KDS, integrations, business rules
+  - Full advanced POS matrix (Cats 1–14) listed as interactive capabilities
+  - Source: ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS + live screens/routers

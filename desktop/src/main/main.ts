@@ -22,14 +22,26 @@ import {
 
 export function createMainWindow(loadUrl: string): BrowserWindow {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1440,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 700,
+    title: "Full POS",
+    backgroundColor: "#eef0f3",
+    autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
+  win.once("ready-to-show", () => {
+    win.show();
+    win.focus();
+  });
+  win.setMenuBarVisibility(false);
   win.loadURL(loadUrl);
   return win;
 }

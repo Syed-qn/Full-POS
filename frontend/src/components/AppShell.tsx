@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DesktopStatusBar } from "./DesktopStatusBar";
 import { NavSidebar } from "./NavSidebar";
 import { SectionBanner } from "./SectionBanner";
 import { SyncConflictBanner } from "./SyncConflictBanner";
@@ -23,11 +24,12 @@ export function AppShell({
           <SyncConflictBanner />
           {connectionDown && (
             <SectionBanner tone="warning">
-              Live updates paused — reconnecting.
+              Live updates paused — reconnecting. Local queue still works offline.
             </SectionBanner>
           )}
           {children}
         </main>
+        <DesktopStatusBar />
       </div>
     </div>
   );

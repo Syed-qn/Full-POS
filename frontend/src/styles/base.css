@@ -10,6 +10,12 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden; /* desktop window — no document rubber-band */
+}
+
+html {
+  /* Local app, not a public website */
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -17,8 +23,21 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none; /* POS: avoid accidental selection; inputs re-enable */
+  cursor: default;
+  overscroll-behavior: none;
+}
+
+/* Editable surfaces keep text selection */
+input,
+textarea,
+[contenteditable="true"],
+.selectable {
+  user-select: text;
+  cursor: text;
 }
 
 button,
@@ -30,9 +49,32 @@ select {
   color: inherit;
 }
 
+button {
+  cursor: pointer;
+}
+
 a {
   color: var(--accent-primary);
   text-decoration: none;
+}
+
+/* Dense desktop forms */
+input,
+select,
+textarea {
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-dim);
 }
 
 .mono {
@@ -48,36 +90,33 @@ a {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-canvas);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-default);
-  border-radius: 6px;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* When running inside Electron, mark body for chrome-specific CSS */
+body.is-desktop {
+  /* Windows title bar drag regions handled on .titlebar */
 }
 
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
   }
 }
 

@@ -21,7 +21,7 @@ describe("NavSidebar logout", () => {
       </QueryClientProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /logout/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
 
     expect(localStorage.getItem("ops_token")).toBeNull();
     expect(screen.getByText("LOGIN PAGE")).toBeInTheDocument();

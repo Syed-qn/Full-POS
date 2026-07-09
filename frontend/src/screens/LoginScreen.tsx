@@ -47,7 +47,11 @@ export function LoginScreen() {
       <div className={s.bg} />
       <form className={s.card} onSubmit={submit} noValidate>
         <div className={s.brand}>
-          <span className={s.brandIcon}>▸</span> OPS TERMINAL
+          <span className={s.brandMark}>POS</span>
+          <div className={s.brandText}>
+            <strong>Full POS</strong>
+            <span>Advanced POS · AI · Data science</span>
+          </div>
         </div>
 
         <div className={s.tabs}>

@@ -5,17 +5,17 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(resolve(__dirname, "tokens.css"), "utf8");
 
 describe("design tokens", () => {
-  // Values track the active white & grey theme (see tokens.css).
+  // Light professional POS terminal (no dark UI).
   it.each([
-    ["--bg-canvas", "#f4f5f6"],
+    ["--bg-canvas", "#eef0f3"],
     ["--bg-surface", "#ffffff"],
-    ["--sla-safe", "#2e9e5b"],
-    ["--sla-warn", "#d98a1f"],
-    ["--sla-critical", "#dc3b3b"],
-    ["--sla-breach", "#b91c1c"],
-    ["--accent-primary", "#33363b"],
-    ["--status-delivered", "#2e9e5b"],
-    ["--text-primary", "#1c1e21"],
+    ["--sla-safe", "#12b76a"],
+    ["--sla-warn", "#f79009"],
+    ["--sla-critical", "#f04438"],
+    ["--sla-breach", "#d92d20"],
+    ["--accent-primary", "#175cd3"],
+    ["--status-delivered", "#12b76a"],
+    ["--text-primary", "#101828"],
   ])("defines %s = %s", (name, value) => {
     const re = new RegExp(`${name}:\\s*${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
     expect(css).toMatch(re);

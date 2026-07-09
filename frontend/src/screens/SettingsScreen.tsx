@@ -315,7 +315,7 @@ export function SettingsScreen() {
       setName(r.name);
       setLat(String(r.lat));
       setLng(String(r.lng));
-      const sset = r.settings as Record<string, unknown>;
+      const sset = (r.settings ?? {}) as Record<string, unknown>;
       if (typeof sset.trn === "string") setTrn(sset.trn);
       if (sset.tax_pricing_mode === "inclusive" || sset.tax_pricing_mode === "exclusive") {
         setTaxPricingMode(sset.tax_pricing_mode);

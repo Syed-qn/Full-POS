@@ -1,83 +1,81 @@
 :root {
-  /* ─── Backgrounds (clean white & grey) ─── */
-  --bg-canvas: #f4f5f6;
+  /* ─── Light professional POS terminal (not dark SaaS, not browser chrome) ─── */
+  --bg-canvas: #eef0f3;
   --bg-surface: #ffffff;
   --bg-surface-raised: #ffffff;
-  --bg-surface-inset: #f1f2f4;
-  --bg-overlay: rgba(15, 18, 22, 0.42);
+  --bg-surface-inset: #f4f5f7;
+  --bg-overlay: rgba(15, 18, 22, 0.4);
 
-  /* ─── Borders ─── */
-  --border-subtle: #eceef0;
-  --border-default: #dcdfe3;
-  --border-strong: #bcc1c8;
+  --border-subtle: #e4e7ec;
+  --border-default: #d0d5dd;
+  --border-strong: #98a2b3;
 
-  /* ─── Text ─── */
-  --text-primary: #1c1e21;
-  --text-secondary: #5a6068;
-  --text-muted: #969ba3;
+  --text-primary: #101828;
+  --text-secondary: #475467;
+  --text-muted: #98a2b3;
   --text-inverse: #ffffff;
 
-  /* ─── SLA Semantics (kept colourful — urgency must stay scannable) ─── */
-  --sla-safe: #2e9e5b;
-  --sla-safe-dim: rgba(46, 158, 91, 0.10);
-  --sla-warn: #d98a1f;
-  --sla-warn-dim: rgba(217, 138, 31, 0.10);
-  --sla-critical: #dc3b3b;
-  --sla-critical-dim: rgba(220, 59, 59, 0.10);
-  --sla-breach: #b91c1c;
+  /* ─── SLA Semantics (colour retained for ops glance) ─── */
+  --sla-safe: #12b76a;
+  --sla-safe-dim: rgba(18, 183, 106, 0.1);
+  --sla-warn: #f79009;
+  --sla-warn-dim: rgba(247, 144, 9, 0.1);
+  --sla-critical: #f04438;
+  --sla-critical-dim: rgba(240, 68, 56, 0.1);
+  --sla-breach: #d92d20;
 
-  /* ─── Operational accent: neutral charcoal (monochrome theme) ─── */
-  --accent-primary: #33363b;
-  --accent-primary-hover: #1f2125;
-  --accent-primary-dim: rgba(51, 54, 59, 0.07);
-  --accent-dispatch: #6b7280;
-  --accent-rider: #6b7280;
-  --accent-revenue: #4b5563;
-  --accent-ai: #6b7280;
-  --accent-ai-dim: rgba(107, 114, 128, 0.12);
+  /* ─── Operational accent — solid POS blue ─── */
+  --accent-primary: #175cd3;
+  --accent-primary-hover: #1849a9;
+  --accent-primary-dim: rgba(23, 92, 211, 0.08);
+  --accent-dispatch: #026aa2;
+  --accent-rider: #027a48;
+  --accent-revenue: #b54708;
+  --accent-ai: #6941c6;
+  --accent-ai-dim: rgba(105, 65, 198, 0.1);
 
-  /* ─── Chart colours (greyscale ramp, on-theme) ─── */
-  --chart-1: #4b5563;
-  --chart-2: #6b7280;
-  --chart-3: #9aa0a8;
-  --chart-4: #374151;
-  --chart-5: #c2c6cc;
-  --chart-6: #828a96;
+  --chart-1: #175cd3;
+  --chart-2: #12b76a;
+  --chart-3: #f79009;
+  --chart-4: #6941c6;
+  --chart-5: #f04438;
+  --chart-6: #026aa2;
 
-  /* ─── Status Pills (semantic for ops clarity) ─── */
-  --status-pending: #6b7280;
-  --status-confirmed: #3b6fb0;
-  --status-preparing: #d98a1f;
-  --status-ready: #7c6fb0;
-  --status-assigned: #3b8ca8;
-  --status-pickedup: #7c6fb0;
-  --status-delivered: #2e9e5b;
-  --status-cancelled: #dc3b3b;
-  --status-resale: #d98a1f;
+  --status-pending: #667085;
+  --status-confirmed: #175cd3;
+  --status-preparing: #f79009;
+  --status-ready: #6941c6;
+  --status-assigned: #026aa2;
+  --status-pickedup: #7a5af8;
+  --status-delivered: #12b76a;
+  --status-cancelled: #f04438;
+  --status-resale: #f79009;
 
-  /* ─── Map ─── */
-  --map-bg: #e9ebee;
-  --map-road: #d3d7dc;
-  --map-water: #c7d8e6;
-  --map-rider-active: #33363b;
-  --map-rider-stale: #aab0b8;
-  --map-order-pin: #d98a1f;
-  --map-batch-hull: rgba(107, 114, 128, 0.12);
-  --map-batch-stroke: #6b7280;
+  --map-bg: #f2f4f7;
+  --map-road: #d0d5dd;
+  --map-water: #d1e9ff;
+  --map-rider-active: #12b76a;
+  --map-rider-stale: #98a2b3;
+  --map-order-pin: #f79009;
+  --map-batch-hull: rgba(23, 92, 211, 0.1);
+  --map-batch-stroke: #175cd3;
 
-  /* ─── Type ─── */
-  --font-mono: "DM Mono", ui-monospace, monospace;
-  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-sans: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;
 
-  /* ─── Spacing (4px base) ─── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --radius: 8px;
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.18);
+  --radius: 6px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12);
+
+  --titlebar-height: 36px;
+  --topbar-height: 44px;
+  --statusbar-height: 26px;
+  --nav-width: 200px;
 }

@@ -7,6 +7,12 @@ vi.mock("electron", () => {
     loadURL(url: string) {
       this.loadedUrl = url;
     }
+    once(_ev: string, cb: () => void) {
+      cb();
+    }
+    show() {}
+    focus() {}
+    setMenuBarVisibility(_v: boolean) {}
   }
   return { BrowserWindow: FakeBrowserWindow };
 });
