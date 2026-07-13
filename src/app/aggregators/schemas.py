@@ -10,17 +10,31 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChannelConfigOut(BaseModel):
+    """Tenant channel config returned to the manager dashboard.
+
+    Secrets are **never** echoed — only ``*_set`` flags. Each restaurant stores
+    its own credentials in ``restaurant.settings.channels`` (multi-tenant SaaS).
+    """
+
     enabled: bool = False
     accepting: bool = True
     commission_pct: float = 0.0
     mode: str = "mock"  # mock | live
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None  # always null on read
     api_key_set: bool = False
+    api_secret_set: bool = False
+    access_token_set: bool = False
     store_id: Optional[str] = None
     base_url: Optional[str] = None
     webhook_secret_set: bool = False
+    # Tenant-scoped webhook the restaurant pastes into the partner portal.
+    webhook_url: Optional[str] = None
+    # Alternate: partner X-API-Key path (same host, requires restaurant API key).
+    partner_webhook_url: Optional[str] = None
     order_url: Optional[str] = None
     slug: Optional[str] = None
+    # Short operator hint for which credential fields this marketplace expects.
+    credential_hint: Optional[str] = None
 
 
 class ChannelsOut(BaseModel):
@@ -28,6 +42,10 @@ class ChannelsOut(BaseModel):
     providers: list[str]
     public_slug: Optional[str] = None
     order_links: dict[str, str] = Field(default_factory=dict)
+    # Multi-tenant note for dashboard.
+    tenant_scope: str = (
+        "Credentials are stored per restaurant only and never shared across tenants."
+    )
 
 
 class ChannelPatchIn(BaseModel):
@@ -38,6 +56,7 @@ class ChannelPatchIn(BaseModel):
     api_key: Optional[str] = None
     api_secret: Optional[str] = None
     webhook_secret: Optional[str] = None
+    access_token: Optional[str] = None  # e.g. Keeta merchant token
     store_id: Optional[str] = None
     base_url: Optional[str] = None
     order_url: Optional[str] = None

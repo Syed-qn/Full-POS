@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { fetchActiveMenu } from "../lib/menuApi";
 import { createManualOrder, lookupCustomer } from "../lib/manualOrderApi";
 import { apiClient } from "../lib/apiClient";
-import type { DishOut, MenuOut, RestaurantOut } from "../lib/types";
+import { fetchOrders } from "../lib/ordersApi";
+import type { DishOut, MenuOut, OrderStatus, RestaurantOut } from "../lib/types";
+import { isCashierRole, isWaiterRole } from "../lib/navAccess";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
 import { BottomActionBar } from "../components/BottomActionBar";
@@ -12,6 +14,18 @@ import { MoneySummary } from "../components/MoneySummary";
 import { EmptyState } from "../components/EmptyState";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import s from "./NewOrderScreen.module.css";
+
+/** Active tickets a cashier may still collect payment for (not terminal). */
+const OPEN_BILL_STATUSES = new Set<OrderStatus>([
+  "draft",
+  "pending_confirmation",
+  "confirmed",
+  "preparing",
+  "ready",
+  "assigned",
+  "picked_up",
+  "arriving",
+]);
 
 type FeeOption = string;
 
@@ -41,6 +55,8 @@ function buildFeeOptions(tiers: FeeTier[]): FeeChoice[] {
 
 export function NewOrderScreen() {
   const navigate = useNavigate();
+  const waiterMode = isWaiterRole();
+  const cashierMode = isCashierRole();
 
   const [menu, setMenu] = useState<MenuOut | null | "loading">("loading");
 
@@ -51,6 +67,9 @@ export function NewOrderScreen() {
   >("idle");
 
   const [quantities, setQuantities] = useState<Record<number, number>>({});
+  /** Per-dish kitchen / customer line notes (API ManualOrderItemIn.notes). */
+  const [itemNotes, setItemNotes] = useState<Record<number, string>>({});
+  const [kitchenNotes, setKitchenNotes] = useState("");
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | "all">("all");
 
@@ -66,10 +85,28 @@ export function NewOrderScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openBillsCount, setOpenBillsCount] = useState<number | null>(null);
 
   useEffect(() => {
     fetchActiveMenu().then((m) => setMenu(m));
   }, []);
+
+  useEffect(() => {
+    if (!cashierMode) return;
+    let cancelled = false;
+    fetchOrders({ limit: 50, previewBatch: false })
+      .then((rows) => {
+        if (cancelled) return;
+        const n = rows.filter((o) => OPEN_BILL_STATUSES.has(o.status)).length;
+        setOpenBillsCount(n);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenBillsCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cashierMode]);
 
   useEffect(() => {
     apiClient
@@ -116,14 +153,35 @@ export function NewOrderScreen() {
       if (next <= 0) {
         const copy = { ...prev };
         delete copy[dishId];
+        setItemNotes((notes) => {
+          if (!(dishId in notes)) return notes;
+          const n = { ...notes };
+          delete n[dishId];
+          return n;
+        });
         return copy;
       }
       return { ...prev, [dishId]: next };
     });
   }
 
+  function setItemNote(dishId: number, value: string) {
+    setItemNotes((prev) => {
+      const trimmed = value.slice(0, 200);
+      if (!trimmed) {
+        if (!(dishId in prev)) return prev;
+        const next = { ...prev };
+        delete next[dishId];
+        return next;
+      }
+      return { ...prev, [dishId]: trimmed };
+    });
+  }
+
   function clearCart() {
     setQuantities({});
+    setItemNotes({});
+    setKitchenNotes("");
   }
 
   const dishes: DishOut[] = useMemo(() => {
@@ -185,14 +243,24 @@ export function NewOrderScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      await createManualOrder({
+      const order = await createManualOrder({
         customer_phone: phone.trim(),
         customer_name: name.trim() || null,
-        items: selectedItems.map(({ dish, qty }) => ({
-          dish_id: dish.id,
-          qty,
-          notes: null,
-        })),
+        items: selectedItems.map(({ dish, qty }) => {
+          const lineNote = (itemNotes[dish.id] ?? "").trim();
+          // Attach order-level kitchen notes to the first line so KDS sees them
+          // until a dedicated order.kitchen_notes field exists on this endpoint.
+          const kitchen = kitchenNotes.trim();
+          const isFirst = selectedItems[0]?.dish.id === dish.id;
+          const combined = [lineNote, isFirst && kitchen ? `Kitchen: ${kitchen}` : ""]
+            .filter(Boolean)
+            .join(" · ");
+          return {
+            dish_id: dish.id,
+            qty,
+            notes: combined || null,
+          };
+        }),
         address: {
           apt_room: aptRoom.trim(),
           building: building.trim(),
@@ -203,7 +271,14 @@ export function NewOrderScreen() {
         },
         delivery_fee_aed: fee,
       });
-      navigate("/orders");
+      // Cashier: go straight to bill/pay. Waiter/others: open order list.
+      if (cashierMode && order?.id) {
+        navigate(`/orders/${order.id}/pay`);
+      } else if (waiterMode && order?.id) {
+        navigate(`/orders/${order.id}`);
+      } else {
+        navigate("/orders");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to place order.");
       setSubmitting(false);
@@ -215,7 +290,16 @@ export function NewOrderScreen() {
   if (!menu) {
     return (
       <div className={s.screen}>
-        <PageHeader title="New Order" subtitle="Place a manual order on behalf of a customer" />
+        <PageHeader
+          title={waiterMode ? "Table order" : cashierMode ? "Cashier terminal" : "New Order"}
+          subtitle={
+            waiterMode
+              ? "Quantity, instructions, modifiers — send to kitchen (payment at cashier)"
+              : cashierMode
+                ? "Terminal · place order then take payment"
+                : "Place a manual order on behalf of a customer"
+          }
+        />
         <div className={s.noMenuBanner}>
           No active menu found. Activate a menu before placing manual orders.
         </div>
@@ -225,8 +309,61 @@ export function NewOrderScreen() {
 
   return (
     <div className={s.screen}>
-      <PageHeader title="New Order" subtitle="Delivery POS · large items · cart always visible" />
+      <PageHeader
+        title={waiterMode ? "Table order" : cashierMode ? "Cashier terminal" : "New Order"}
+        subtitle={
+          waiterMode
+            ? "Quantity, instructions, modifiers — send to kitchen (payment at cashier)"
+            : cashierMode
+              ? "Terminal · all order types · pay after place"
+              : "Delivery POS · large items · cart always visible"
+        }
+      />
       <OfflineLimitsBanner surface="new-order" />
+
+      {cashierMode && (
+        <div className={s.cashierStrip} data-testid="cashier-strip" role="navigation" aria-label="Cashier shortcuts">
+          <span className={s.cashierStripLabel}>Cashier</span>
+          <button
+            type="button"
+            className={s.cashierChip}
+            data-testid="cashier-open-bills"
+            onClick={() => navigate("/orders")}
+            title="Active orders that may still need payment"
+          >
+            Open bills
+            {openBillsCount != null && (
+              <span className={s.cashierChipBadge} data-testid="cashier-open-bills-count">
+                {openBillsCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            className={s.cashierChip}
+            data-testid="cashier-drawer"
+            onClick={() => navigate("/payments")}
+          >
+            Drawer / payments
+          </button>
+          <button
+            type="button"
+            className={s.cashierChip}
+            data-testid="cashier-customers"
+            onClick={() => navigate("/customers")}
+          >
+            Customers
+          </button>
+          <button
+            type="button"
+            className={s.cashierChip}
+            data-testid="cashier-floor"
+            onClick={() => navigate("/floor")}
+          >
+            Floor
+          </button>
+        </div>
+      )}
 
       {error && <div className={s.errorBanner} role="alert">{error}</div>}
 
@@ -475,9 +612,37 @@ export function NewOrderScreen() {
                       +
                     </button>
                   </div>
+                  <label className={s.itemNoteField}>
+                    <span className={s.itemNoteLabel}>Instructions</span>
+                    <input
+                      className={s.itemNoteInput}
+                      type="text"
+                      value={itemNotes[dish.id] ?? ""}
+                      onChange={(e) => setItemNote(dish.id, e.target.value)}
+                      placeholder="No onion, extra sauce…"
+                      maxLength={200}
+                      aria-label={`Instructions for ${dish.name}`}
+                      data-testid={`item-note-${dish.id}`}
+                    />
+                  </label>
                 </div>
               ))}
             </div>
+          )}
+
+          {selectedItems.length > 0 && (
+            <label className={s.kitchenNoteField} data-testid="kitchen-notes-field">
+              <span className={s.itemNoteLabel}>Kitchen notes (whole order)</span>
+              <textarea
+                className={s.kitchenNoteInput}
+                value={kitchenNotes}
+                onChange={(e) => setKitchenNotes(e.target.value.slice(0, 300))}
+                placeholder="Rush, allergy strip, course timing…"
+                rows={2}
+                maxLength={300}
+                aria-label="Kitchen notes for entire order"
+              />
+            </label>
           )}
 
           <div className={s.summary}>
@@ -496,9 +661,13 @@ export function NewOrderScreen() {
 
       <BottomActionBar>
         <span className={s.waHint}>
-          {phone.trim()
-            ? `📱 WhatsApp confirmation will be sent to ${phone.trim()}`
-            : "📱 Enter phone to receive WhatsApp confirmation"}
+          {waiterMode
+            ? "Floor: set qty & notes per item, then send to kitchen"
+            : cashierMode
+              ? "Cashier: place order → bill opens for payment"
+              : phone.trim()
+                ? `📱 WhatsApp confirmation will be sent to ${phone.trim()}`
+                : "📱 Enter phone to receive WhatsApp confirmation"}
         </span>
         <div className={s.footerSpacer} />
         <Button
@@ -513,10 +682,23 @@ export function NewOrderScreen() {
         <Button type="button" variant="ghost" size="lg" onClick={() => navigate("/orders")}>
           Cancel
         </Button>
-        <TouchButton type="button" disabled={!canSubmit} onClick={onSubmit}>
+        <TouchButton
+          type="button"
+          disabled={!canSubmit}
+          onClick={onSubmit}
+          data-testid="new-order-primary-cta"
+        >
           {submitting
-            ? "Placing…"
-            : `Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
+            ? waiterMode
+              ? "Sending…"
+              : cashierMode
+                ? "Placing…"
+                : "Placing…"
+            : waiterMode
+              ? `Send to kitchen${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+              : cashierMode
+                ? `Place & Pay${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+                : `Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
         </TouchButton>
       </BottomActionBar>
     </div>
@@ -526,7 +708,10 @@ export function NewOrderScreen() {
 function SkField({ labelWidth }: { labelWidth?: number }) {
   return (
     <div className={s.field}>
-      <span className={`${s.sk} ${s.skLabel}`} style={labelWidth ? { width: labelWidth } : undefined} />
+      <span
+        className={`${s.sk} ${s.skLabel}`}
+        style={labelWidth ? { width: labelWidth } : undefined}
+      />
       <span className={`${s.sk} ${s.skInput}`} />
     </div>
   );

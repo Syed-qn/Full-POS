@@ -1,13 +1,14 @@
 # Full POS — Complete Feature Catalog
 
 **Product:** Full POS (Catalystiq) — multi-tenant restaurant POS + WhatsApp delivery + AI + data science  
-**Document date:** 2026-07-09  
+**Document date:** 2026-07-13  
 **Purpose:** Single inventory of **everything** a user can open, use, edit, or operate — across desktop app (Windows/macOS), cloud manager console, WhatsApp, rider app, kitchen KDS, public pages, and integrations.  
 **How to read:**  
 - **Sections A–H** = interactive product surfaces (screens, buttons, roles, channels).  
-- **Section I** = full named feature matrix from the advanced POS audit (order types through AI).  
+- **Section I** = full named feature matrix from the advanced POS audit (order types through AI + UI shell).  
 - **Evidence / implementation notes:** `docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md`  
-**Scope note:** Every matrix feature is implemented as a working product path in this repository (API + UI and/or channel). Live marketplace partners use mock adapters by default and live HTTP when credentials/`mode=live` are set.
+**Scope note:** Catalog features (1–14) are implemented as working product paths (API + UI and/or channel). Marketplace: **Talabat**, **Deliveroo**, and **Keeta** use **brand-specific real adapters** when `mode=live` + credentials; Careem/Noon/Uber/Zomato use generic live HTTP or mock. Default without credentials is **mock**.  
+**UI redesign (2026-07-09/10):** Touch-first shell (Phases 0–5) — Floor Plan, Order Detail page, Checkout, Expo KDS, Rider web app, manager PIN gates, offline banners, role-filtered nav. Plan: `docs/superpowers/plans/2026-07-09-pos-frontend-uiux-redesign-phases.md`.
 
 ### Contents
 - [A. Who can do what](#a-who-can-do-what-actors)
@@ -18,7 +19,7 @@
 - [F. Kitchen KDS](#f-kitchen-staff-on-kds--interactive-capabilities)
 - [G. Partner / marketplace](#g-partner--marketplace-integrations-operator--system)
 - [H. Enforced business rules](#h-business-rules-the-product-always-enforces)
-- [I. Complete feature matrix](#i-complete-feature-matrix-385-product-features)
+- [I. Complete feature matrix](#i-complete-feature-matrix-product-features)
 - [J. Counts](#j-counts)
 - [K. Related docs](#k-related-docs)
 
@@ -29,92 +30,95 @@
 
 | Actor | Surfaces | What they do |
 |-------|----------|--------------|
-| **Restaurant manager / owner** | Full POS desktop app (Windows `.exe` x64/arm64, Mac DMG) **or** cloud manager console | Run the restaurant: orders, kitchen, menu, inventory, payments, staff, marketing, AI, compliance, reports, multi-branch HQ |
-| **Floor / counter staff** | Full POS + PIN staff login | Take POS orders, take payments, clock in/out, open drawer (role-gated) |
-| **Kitchen staff** | Kitchen Display (`/kds`) | Bump/start/recall tickets, packaging/quality/missing checks, station boards |
+| **Restaurant manager / owner** | Full POS desktop (Windows `.exe` x64/arm64, Mac `.app`/`.dmg`) **or** cloud console; email login | Full nav: ops, menu, inventory, payments, staff, marketing, AI, compliance, reports, multi-branch HQ |
+| **Cashier** | Full POS + staff **PIN** (`role=cashier`) | Floor, Orders, New Order, Checkout/Payments, Customers — no Menu/Settings/Marketing |
+| **Floor / waiter / counter staff** | Full POS + PIN (`role=staff` or `cashier`) | Floor Plan tables, New Order, Orders/modify, payments (role-gated) |
+| **Kitchen staff** | KDS (`/kds`, Expo view); PIN `role=kitchen` | Bump/start/recall, packaging/QC/missing, station boards — no New Order/admin |
 | **Customer (WhatsApp)** | WhatsApp Business chat | Order, modify, track, pay COD, redeem wallet/coupons, complain, STOP marketing, voice notes |
-| **Customer (web/QR/kiosk)** | Public store `/order/:slug`, QR table order, tracking `/track/:token` | Browse menu, place order, track delivery |
-| **Rider (employee)** | Rider mobile app + optional WhatsApp | Receive assignments, GPS, pickup/deliver, COD, proof photo, OTP |
+| **Customer (web/QR/kiosk)** | Public store `/order/:slug` (+ `?table=`), tracking `/track/:token` | Browse menu, place order, locked table QR, track delivery |
+| **Rider (employee)** | Native rider app + **web** `/rider-app` + optional WhatsApp | Pair device, duty, GPS, pickup/deliver, COD, proof, OTP, fail reasons |
 | **Franchise / org HQ** | Branches screen (org APIs) | Multi-branch menu publish, stock transfer, royalty, shared loyalty, promotions |
 | **POS partner (e.g. Cratis)** | Partner REST + webhooks | Push kitchen status, sync menu, chat takeover, order events |
-| **Marketplace (Talabat, etc.)** | Aggregator webhooks + live HTTP | Inbound orders, menu/stock/price sync, accept/reject, status push |
+| **Marketplace (Talabat, Deliveroo, Keeta, …)** | Aggregator webhooks + brand adapters | Inbound orders, accept/reject, status push, menu/stock sync where configured |
+
+**Nav soft-gates:** `frontend/src/lib/navAccess.ts` — owner/manager (or missing role) see everything; restricted roles hide admin modules. Shared screens, not separate apps per job.
 
 ---
 
 ## B. Full POS manager app — every screen you can open
 
-Navigation is grouped. Each row is something a signed-in manager can open and use.
+Navigation (UI/UX redesign): **Daily** → **Manage** → **More**. Collapsible sidebar 88/240 px. Touch targets ≥56 px; primary actions ≥64 px.
 
-### Floor
+### Daily (ops first)
 | Screen | Route | User can |
 |--------|-------|----------|
-| Live Ops | `/` | Watch live orders, SLA lanes, dispatch KPIs, live map, batch previews, urgency colors |
-| Orders | `/orders` | List/filter/search orders by status/channel, open detail, channel badges |
-| New Order | `/new-order` | Create manual/POS orders (phone, items, type, table, notes) |
-| Kitchen (KDS) | `/kds`, `/kds/:stationId` | Station boards, bump/start/recall, checks, performance, ready-for-pickup |
+| Live Ops | `/` | Rush board (New/Preparing/Ready/Out/**Late**), SLA lanes, map, rider strip, bottom quick actions (New Order, Orders, Riders, KDS) |
+| Floor Plan | `/floor` | Zone tabs, touch table map, status colors, table drawer, New Table Order / Transfer / Merge / Split (confirm) |
+| Orders | `/orders` | Card-first list, filters/search by status/channel/phone, preview drawer |
+| Order Detail | `/orders/:id` | Full order page: items, SLA, timeline, kitchen/rider/payment; Pay, rush, void (**manager PIN**), print |
+| New Order | `/new-order` | 3-pane POS: order type rail, category grid, cart always visible, bottom Clear/Place |
+| Checkout | `/orders/:id/pay` | Tender grid (cash/card/wallet/link/…), keypad, tips, split, MoneySummary; discount/refund **PIN** |
+| Kitchen (KDS) | `/kds`, `/kds/:stationId` | Large tickets, 64px bump/start, allergens, urgency colors, stations |
+| Expo / Ready pickup | `/kds?view=expo` | Ready tickets, packaging checklist, missing confirm, handoff actions |
+| Payments (back office) | `/payments` | Tenders, refunds (**PIN**), links, gift cards, drawer, recon, billing |
+| Riders (dispatch) | `/riders` | Unassigned SLA queue · live map · fleet; Manual Assign, Settle COD, add rider |
+| Chats | `/conversations` | 3-pane: list · transcript · customer context; AI takeover, quick replies |
 
-### Catalog & stock
+### Manage
 | Screen | Route | User can |
 |--------|-------|----------|
-| Menu | `/menu` | Upload/extract menu, edit dishes, variants, modifiers, combos, pricing rules, import CSV, bulk price, approve menu, images, allergens, AR names, seasonal windows |
-| Inventory | `/inventory` | Ingredients, low stock, PO/GRN, waste, variance, locations, vendors, EOD snapshot, substitutions, batches/expiry |
-| Branches | `/branches` | Org HQ: branches, rollups, central menu, publish approval, stock transfer, royalty, promotions, multi-currency, members |
+| Menu | `/menu` | Categories, dishes, variants, modifiers, combos, pricing rules, CSV import, bulk price, approve, images, allergens, AR, seasonal |
+| Inventory | `/inventory` | Stock, low-stock banner, PO/GRN, waste, variance, vendors; stock adjust **PIN** |
+| Customers | `/customers` | Phone-first search, segments, preview drawer |
+| Customer profile | `/customers/:id` | Notes/allergies/VIP, favorites, points, stamps, wallet, reorder last, referral |
+| Staff | `/staff` | PIN, roles, shifts, clock/break, attendance, tips, mistakes, training mode, approvals |
+| Marketing | `/marketing` | Templates, campaigns, segments, automations, broadcast, schedule, today’s special |
+| Reports | `/reports` | Owner reports, date range, Excel export, WhatsApp daily report |
+| AI Insights | `/ai` | Insight cards + actions: sales/staff/stock, segments, festival, review reply, translate, calls, reservations |
+| Branches | `/branches` | Org HQ: rollups, menu publish, stock transfer, royalty, promotions |
+| Channels | `/channels` | Enable/pause (**PIN** on pause), live keys, sync, commission/profit, settlements; **Talabat / Deliveroo / Keeta / Careem / Noon / Uber / Zomato** + website/QR/kiosk links |
+| Reliability | `/reliability` | Backups, devices, errors, audit, conflicts, network; desktop offline queue |
+| Settings | `/settings` | Profile, tax/TRN, batching, zones/fees, hours, Meta WhatsApp, loyalty/resale, cart recovery; sticky save |
 
-### Delivery
+### More (manager secondary)
 | Screen | Route | User can |
 |--------|-------|----------|
-| Riders | `/riders` | Add riders, status, map, settle COD |
-| Chats | `/conversations` | Read WhatsApp threads, media/voice, takeover, reset, customer context panel |
-| Channels | `/channels` | Enable/pause channels, live API keys, sync menu/price/stock, commission/profit, inbox, settlements, public slug & social order links |
-
-### People
-| Screen | Route | User can |
-|--------|-------|----------|
-| Customers | `/customers` | Search list, open profiles |
-| Customer profile | `/customers/:id` | Edit notes/allergies/VIP/birthday, favorites, points, stamps, wallet, refunds, reorder last, referral |
-| Staff | `/staff` | PIN login, roles, shifts, clock/break, attendance, tips, sales, mistakes, training mode, approvals |
-| Complaints | `/tickets` | Open tickets, evidence, resolve with wallet/replacement/no-action |
-
-### Money
-| Screen | Route | User can |
-|--------|-------|----------|
-| Payments | `/payments` | Charge tenders, refunds, credit notes, payment links, gift cards, drawer open/close, cash in/out, recon import, billing settings |
-| Coupons | `/coupons` | Create/issue/pause multi-use coupons |
-| Compliance | `/compliance` | TRN/tax mode, simplified vs full invoice, refund notes, e-invoice transmit, retention, accountant export |
-| Reports | `/reports` | All owner reports, date range, Excel export, owner WhatsApp daily report |
-
-### AI & data
-| Screen | Route | User can |
-|--------|-------|----------|
-| AI Insights | `/ai` | Generate sales/staff/stock insights, segments, festival campaigns, review replies, reservations, mock call IVR, translate menu |
-| Analytics | `/analytics` | Forecast horizons, campaign summary, dispatch KPIs, order delivery KPIs |
-| Forecast (alias) | `/predictions` | Same analytics/forecast surface |
-| Marketing | `/marketing` | Templates, campaigns, segments, automations, images, broadcast, schedule, today’s special |
-
-### System
-| Screen | Route | User can |
-|--------|-------|----------|
-| Reliability | `/reliability` | Backups, devices/failover, errors, audit log, offline conflicts, network status, export pack |
-| Settings | `/settings` | Restaurant name/location/TRN/tax mode, batching, dispatch knobs, delivery zones/fees, open hours, Meta WhatsApp connect/disconnect, loyalty/resale, cart recovery |
+| Complaints | `/tickets` | Tickets, evidence, resolve wallet/replacement |
+| Coupons | `/coupons` | Create/issue/pause coupons, margin warnings |
+| Compliance | `/compliance` | TRN/tax, invoices, refund notes, e-invoice, retention, accountant export |
+| Analytics | `/analytics` | Forecasts, dispatch/delivery KPIs |
+| Forecast | `/predictions` | Alias of analytics/forecast |
 
 ### Auth / setup (no main nav)
 | Screen | Route | User can |
 |--------|-------|----------|
-| Login / Signup | `/login` | Sign in or create restaurant account |
-| Onboarding | `/onboarding` | Connect WhatsApp (Meta), pin location, complete setup |
+| Login / Signup | `/login` | Email login **or** staff PIN pad; device name; offline PIN messaging |
+| Onboarding | `/onboarding` | Wizard: WhatsApp, location, blockers; sticky Back/Continue |
 
 ### Public (no login)
 | Screen | Route | User can |
 |--------|-------|----------|
-| Public storefront | `/order/:slug` | Browse menu, cart, place order (website/mobile/kiosk channel) |
-| Customer tracking | `/track/:trackingToken` | Live order status / map |
+| Public storefront | `/order/:slug` | Mobile menu, sticky cart, place order |
+| QR table ordering | `/order/:slug?table=` | Table **locked** banner; dine-in QR channel + `table_id` |
+| Customer tracking | `/track/:trackingToken` | Status timeline + simple ETA; map only when rider en route |
 | Rider share track | `/rider-track/:riderToken` | Customer views rider location |
+| Rider web app | `/rider-app` | Pair code, duty, COD, sticky pickup → deliver / fail |
+
+### Shell chrome (every authenticated screen)
+| Capability | User can |
+|------------|----------|
+| Top bar | Page title, restaurant name, **Offline** badge, pending sync chip, **Alerts**, Staff entry, clock, Reliability link |
+| Alert center | Late/low-stock/sync-style alerts panel |
+| Offline limits banner | Core screens show what still works offline vs blocked |
+| Manager PIN modal | Void, refund, manager discount, stock adjust, channel pause |
+| Training mode chrome | Badge + shell warning when staff session is training |
+| No-access screen | Friendly block if role cannot open route |
 
 ---
 
 ## C. Desktop app extras (local software)
 
-When running as **Full POS** Electron (`.exe` / `.dmg`), the user also gets:
+When running as **Full POS** Electron (`.exe` / `.dmg` / `.app`), the user also gets:
 
 | Capability | Interaction |
 |------------|-------------|
@@ -127,7 +131,9 @@ When running as **Full POS** Electron (`.exe` / `.dmg`), the user also gets:
 | Conflict resolve | Retry or discard conflicting ops in Reliability |
 | Auth token in main process | Secure handoff for offline API proxy |
 | Auto-update channel | Polls `POS_UPDATE_URL` when configured |
-| Window chrome | Native window title **Full POS**, no browser URL bar |
+| Window chrome | Native window **Full POS**, 1440×900 default, light POS theme, no browser URL bar |
+| Mac arm64 / x64 packages | `desktop/dist_installer/FullPOS-0.1.0-arm64.dmg` (+ x64); API base baked at FE build (`VITE_API_BASE`) |
+| `posBridge` | Network status, pending ops, conflict resolve, offline print from UI |
 
 ---
 
@@ -156,46 +162,59 @@ When running as **Full POS** Electron (`.exe` / `.dmg`), the user also gets:
 
 ## E. Rider app — interactive capabilities
 
+Surfaces: **native** `rider-app/` (Expo) and **web** `/rider-app` (`RiderAppScreen`).
+
 | User action | What happens |
 |-------------|--------------|
-| Login with rider credentials | Rider session |
-| View assigned tasks | Queue of pickups/deliveries |
-| Navigate with map | Live map panel |
-| Advance status | Picked up → arriving → delivered |
+| Pair with WhatsApp / device code | Stores rider device token (web) |
+| Login with rider credentials | Rider session (native) |
+| Go on/off duty | Duty toggle; dispatch sees availability |
+| View assigned tasks | Queue of pickups/deliveries + COD strip |
+| Navigate with map | Live map / open maps |
+| Advance status (one primary sticky action) | Picked up → arriving → delivered |
 | Share live GPS | Location pings for tracking links & dispatch |
-| Collect COD | Cash collection path |
-| Delivery proof photo | Upload / attach proof |
+| Collect COD | Cash due visible before deliver |
+| Delivery proof photo | Upload / attach proof (native path) |
 | OTP confirm (if required) | Customer code at door |
-| Mark undeliverable | Failure reason codes |
+| Mark undeliverable | Failure reason **required** |
 | Push notifications | Task alerts (when FCM configured) |
 
 ---
 
 ## F. Kitchen staff on KDS — interactive capabilities
 
+Touch-first redesign: large ticket cards, allergen banners, ≥64 px Start/Bump.
+
 | User action | What happens |
 |-------------|--------------|
 | Switch station | Grill/fry/beverage/dessert/pizza/cloud boards |
-| See urgency colors / timers | Age, delayed, rush |
-| Start prep | Ticket → preparing |
+| See urgency colors / timers | Age, delayed, rush (safe/warn/late) |
+| Start prep | Ticket → preparing (large control) |
 | Bump ready | Ticket → ready / bumped |
 | Recall | Undo bump |
 | Packaging / quality / missing | Checklist stamps |
-| View ready for pickup | Expo-style ready list |
+| Expo view (`?view=expo`) | Ready-only board, packaging, handoff to rider/customer |
 | Performance tab | Prep times by item/staff |
-| Printer jobs | Desktop poller prints KOTs |
+| Printer jobs | Desktop poller prints KOTs; fallback station |
 
 ---
 
 ## G. Partner / marketplace integrations (operator + system)
 
-| Integration | Operator can |
-|-------------|----------------|
-| Meta WhatsApp | Connect/disconnect WABA, fix re-subscribe, catalog sync/push |
-| Cratis / partner POS | API keys, menu/order sync, kitchen status webhooks |
-| Talabat / Deliveroo / Careem / Uber / Noon / Zomato | Enable channel, live API key, health check, pause, sync, recon settlements |
-| Stripe / card gateways | Store credentials (Payments), payment links |
-| Cloud backups | Manual/daily backup, verify, restore preview |
+| Integration | Operator can | Adapter mode |
+|-------------|----------------|--------------|
+| Meta WhatsApp | Connect/disconnect WABA, re-subscribe, catalog sync/push | Cloud API / mock |
+| Cratis / partner POS | API keys, menu/order sync, kitchen status webhooks | Partner REST |
+| **Talabat** | Enable, `mode=live`, middleware username/password, vendor remote id, health, pause (**PIN**), sync, recon | **Real** `TalabatAdapter` (Delivery Hero POS Middleware — accept/reject/prep-complete) · [docs](https://integration.talabat.com/en/documentation/) |
+| **Deliveroo** | Live API key/token, site id, webhook HMAC, pause, accept/reject | **Real** `DeliverooAdapter` (PATCH order status) · [docs](https://api-docs.deliveroo.com/docs/order-integration) |
+| **Keeta** | Live appId/appSecret/accessToken, shopId, signed Open API | **Real** `KeetaAdapter` (confirm/cancel/prepare) · [docs](https://api-docs.mykeeta.com/apis/standard/docs/intro) |
+| Careem / Uber Eats / Noon / Zomato | Enable, live key, health, pause, sync | **Generic** `LiveHttpAggregator` or **mock** until brand OpenAPI mapped |
+| Website / QR / kiosk / Instagram / GBP | Public slug, order links, pause accepting | Public storefront APIs |
+| Stripe / card gateways | Store credentials (Payments), payment links | Gateway ports |
+| Cloud backups | Manual/daily backup, verify, restore preview | Reliability module |
+
+**Inbound path:** marketplace webhook → parse (provider-native shapes) → internal order FSM → KDS/dispatch.  
+**Outbound path:** accept/reject/status from POS → brand adapter when live.
 
 ---
 
@@ -479,32 +498,33 @@ Source tables: `docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md` (2026-07-09)
 | 28 | Average delivery time |
 | 29 | Cancelled delivery reasons |
 
-### Category 8 — Aggregator and channel integrations (22 features)
+### Category 8 — Aggregator and channel integrations (24 features)
 
 | # | Feature (user-facing capability) |
 |--:|----------------------------------|
-| 1 | Talabat integration |
-| 2 | Deliveroo integration |
+| 1 | Talabat integration (real DH middleware adapter when live) |
+| 2 | Deliveroo integration (real Order API adapter when live) |
 | 3 | Noon Food integration |
 | 4 | Careem integration |
 | 5 | Uber Eats integration |
 | 6 | Zomato integration |
-| 7 | Website ordering |
-| 8 | Mobile app ordering |
-| 9 | WhatsApp ordering |
-| 10 | Instagram order link |
-| 11 | Google Business Profile order link |
-| 12 | QR table ordering |
-| 13 | Self-order kiosk |
-| 14 | Call center order entry |
-| 15 | Centralized order inbox |
-| 16 | Menu sync across platforms |
-| 17 | Price sync across platforms |
-| 18 | Stock sync across platforms |
-| 19 | Pause orders per channel |
-| 20 | Channel-wise commission report |
-| 21 | Channel-wise profitability report |
-| 22 | Aggregator reconciliation |
+| 7 | **Keeta integration** (real Open API adapter + signed confirm/cancel/prepare when live) |
+| 8 | Website ordering |
+| 9 | Mobile app ordering |
+| 10 | WhatsApp ordering |
+| 11 | Instagram order link |
+| 12 | Google Business Profile order link |
+| 13 | QR table ordering (locked table query UX) |
+| 15 | Self-order kiosk |
+| 16 | Call center order entry |
+| 17 | Centralized order inbox |
+| 18 | Menu sync across platforms |
+| 19 | Price sync across platforms |
+| 20 | Stock sync across platforms |
+| 21 | Pause orders per channel (manager PIN on pause) |
+| 22 | Channel-wise commission report |
+| 23 | Channel-wise profitability report |
+| 24 | Aggregator reconciliation |
 
 ### Category 9 — Staff and permissions (22 features)
 
@@ -675,6 +695,45 @@ Source tables: `docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md` (2026-07-09)
 | 24 | AI reservation handling |
 | 25 | AI demand forecasting |
 
+### Category 15 — Frontend UI shell & ops surfaces (32 features)
+
+Touch-first POS shell from UI/UX redesign (not a replacement for cats 1–14 — documents delivery of those capabilities in the manager/desktop UX).
+
+| # | Feature (user-facing capability) |
+|--:|----------------------------------|
+| 1 | Touch design tokens (56/64 targets, 16–28 type scale) |
+| 2 | AppShell top status bar (offline, alerts, clock) |
+| 3 | Collapsible sidebar 88/240 + Daily/Manage/More nav |
+| 4 | Alert center |
+| 5 | TouchButton / primary action sizes |
+| 6 | Bottom sticky action bar |
+| 7 | Manager PIN modal + danger-action matrix |
+| 8 | Money summary (large totals) |
+| 9 | Empty / error states |
+| 10 | Login email + staff PIN pad |
+| 11 | Onboarding wizard shell |
+| 12 | Live Ops rush card board |
+| 13 | Floor Plan / table map |
+| 14 | Orders list card-first |
+| 15 | Order Detail full page |
+| 16 | New Order POS 3-pane |
+| 17 | Checkout / Payment tender UI |
+| 18 | Kitchen KDS touch redesign |
+| 19 | Expo / ready pickup view |
+| 20 | Rider Dispatch map + queue |
+| 21 | WhatsApp inbox 3-pane |
+| 22 | Public storefront mobile |
+| 23 | QR table lock UX |
+| 24 | Customer tracking page |
+| 25 | Rider mobile **web** app |
+| 26 | Manager screens touch polish |
+| 27 | Role / license nav soft-gates |
+| 28 | Offline limits banners on core screens |
+| 29 | Accessibility baseline |
+| 30 | Rush-hour load fixtures (100 orders / 20 riders / …) |
+| 31 | Mac desktop package with redesign UI |
+| 32 | (Partial residuals: in-shell staff switch, branch selector, settings PIN, list virtualization) |
+
 ---
 
 ## J. Counts
@@ -688,17 +747,28 @@ Source tables: `docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md` (2026-07-09)
 | Cat 5. Payment and billing | 34 |
 | Cat 6. Customer, CRM, and loyalty | 31 |
 | Cat 7. Delivery management | 29 |
-| Cat 8. Aggregator and channel integrations | 22 |
+| Cat 8. Aggregator and channel integrations | **24** (incl. Keeta + renumbered channels) |
 | Cat 9. Staff and permissions | 22 |
 | Cat 10. Reporting and owner dashboard | 34 |
 | Cat 11. Multi-branch and franchise | 19 |
 | Cat 12. Offline, backup, and reliability | 19 |
 | Cat 13. Compliance and UAE-specific | 20 |
 | Cat 14. AI features | 25 |
-| **Named matrix features (this catalog)** | **381** |
-| **Status doc rollup claim** | **385** |
+| Cat 15. Frontend UI shell & ops surfaces | **32** |
+| **Named matrix features (cats 1–14 rows in this file)** | **~383** |
+| **Status doc catalog claim (1–14)** | **385** |
+| **Status doc + UI shell (1–15)** | **417** (413 implemented / 4 partial) |
 
-The few-count difference is rollup arithmetic in the status header vs unique table rows (two names appear in two categories: Credit note, Average delivery time). Treat **this catalog + status tables** as the product inventory for user-facing capabilities.
+Small differences between tables are rollup arithmetic / dual-listed names (e.g. Credit note). Treat **this catalog + status doc** as the product inventory.
+
+**Marketplace adapter summary (2026-07-13):**
+
+| Brand | Product path | Live adapter |
+|-------|--------------|--------------|
+| Talabat | Channels + webhooks + accept/reject | **Real** Delivery Hero middleware |
+| Deliveroo | Channels + Order Events + PATCH status | **Real** Deliveroo Order API |
+| Keeta | Channels + event 1001 webhooks + confirm | **Real** Keeta Open API (signed) |
+| Careem / Noon / Uber / Zomato | Channels + mock or generic live | Generic / mock until brand docs mapped |
 
 ---
 
@@ -706,10 +776,15 @@ The few-count difference is rollup arithmetic in the status header vs unique tab
 
 | Doc | Contents |
 |-----|----------|
-| `docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md` | Audit evidence per feature |
+| `docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md` | Audit evidence per feature (incl. Cat 15 UI shell + real adapters) |
+| `docs/ROLE_SCREEN_FEATURE_PLACEMENT.md` | **Waiter / Cashier / Kitchen / Owner** — which features go on which screens |
+| `docs/superpowers/plans/2026-07-13-role-based-screens-implementation.md` | **Phased build plan** R0–R6 for role-based screens |
+| `docs/superpowers/plans/2026-07-09-pos-frontend-uiux-redesign-phases.md` | UI/UX redesign phase plan (36 screens) |
+| `docs/superpowers/plans/2026-07-09-phase-0-uiux-foundation.md` | Phase 0 foundation plan |
 | `docs/PLATFORM_FEATURES_REFERENCE.md` | Engineering-oriented platform reference |
 | `docs/API_REFERENCE.md` | HTTP API detail |
 | `docs/architecture.md` | System diagram |
 | `docs/superpowers/specs/2026-06-06-whatsapp-restaurant-platform-design.md` | Business rules SSOT |
+| `src/app/aggregators/providers/` | Talabat / Deliveroo / Keeta / Uber Eats + Careem·Noon middleware adapters |
 
 *End of catalog.*

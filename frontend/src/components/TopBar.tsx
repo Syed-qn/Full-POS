@@ -5,6 +5,7 @@ import { isDesktopShell } from "../lib/desktopEnv";
 import { getSessionRole, getStaffSession, isTrainingMode } from "../lib/navAccess";
 import type { RestaurantOut } from "../lib/types";
 import { AlertCenter, type AlertItem } from "./AlertCenter";
+import { StaffSwitchModal } from "./StaffSwitchModal";
 import s from "./TopBar.module.css";
 
 const TITLES: Record<string, string> = {
@@ -59,6 +60,7 @@ export function TopBar({
   const [name, setName] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [staffSwitchOpen, setStaffSwitchOpen] = useState(false);
   const desktop = isDesktopShell();
   const alertCount = alerts.filter((a) => a.level !== "info").length;
   const role = getSessionRole();
@@ -125,12 +127,14 @@ export function TopBar({
         <button
           type="button"
           className={s.staffBtn}
-          disabled
-          title="Staff PIN switch not available in this phase — sign out and use Login → Staff PIN"
-          aria-label="Switch staff with PIN (not available yet)"
+          onClick={() => setStaffSwitchOpen(true)}
+          title="Switch staff with PIN — lands on that role’s home"
+          aria-label="Switch staff with PIN"
+          data-testid="topbar-staff-switch"
         >
           Staff
         </button>
+        <StaffSwitchModal open={staffSwitchOpen} onClose={() => setStaffSwitchOpen(false)} />
         <div className={s.alertWrap}>
           <button
             type="button"

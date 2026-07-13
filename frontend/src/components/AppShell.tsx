@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { isTrainingMode } from "../lib/navAccess";
+import { getRoleChrome, getSessionRole, isTrainingMode } from "../lib/navAccess";
 import { useOfflineStatus } from "../lib/useOfflineStatus";
 import { DesktopStatusBar } from "./DesktopStatusBar";
 import { NavSidebar } from "./NavSidebar";
@@ -24,13 +24,16 @@ export function AppShell({
   const status = useOfflineStatus();
   const offline = connectionDown ?? status.offline;
   const training = isTrainingMode();
+  const role = getSessionRole();
+  const chrome = getRoleChrome(role);
 
   return (
     <div
-      className={`${s.shell} ${training ? s.training : ""}`}
+      className={`${s.shell} ${training ? s.training : ""} ${!chrome.showSidebar ? s.noSidebar : ""}`}
       data-training={training ? "true" : "false"}
+      data-role-mode={chrome.mode}
     >
-      <NavSidebar unread={unread} />
+      {chrome.showSidebar && <NavSidebar unread={unread} />}
       <div className={s.content}>
         <TopBar offline={offline} pendingCount={status.pendingCount} alerts={alerts} />
         <main className={s.main}>

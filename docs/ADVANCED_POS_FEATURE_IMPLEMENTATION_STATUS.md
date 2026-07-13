@@ -1,8 +1,16 @@
 # Advanced Restaurant POS — Feature Implementation Status
 
-**Date:** 2026-07-09  
-**Method:** 14 parallel read-only explore agents (one per category) audited live code under `src/app/`, `frontend/`, `desktop/`, `rider-app/`, and `tests/`.  
-**Product context:** WhatsApp-delivery-first multi-tenant restaurant platform with traditional POS modules layered on.
+**Date:** 2026-07-10  
+**Method:**  
+1. Original audit (2026-07-09): 14 parallel read-only explore agents (one per category) under `src/app/`, `frontend/`, `desktop/`, `rider-app/`, `tests/`.  
+2. **UI/UX redesign + FE hardening (2026-07-09 → 2026-07-10):** multi-agent shell-first redesign (Phases 0–5) from `POS_Frontend_UI_UX_Spec_for_Coding_Agent` — touch design system, 36-surface IA, core/manager/public screens, PIN matrix, offline banners, RBAC nav, a11y, rush fixtures, Mac desktop rebuild.  
+
+**Product context:** WhatsApp-delivery-first multi-tenant restaurant platform with traditional POS modules layered on; **touch-first Full POS** manager/desktop shell (Electron `.app` / `.dmg`).
+
+**Plan / UI contract:**  
+- `docs/superpowers/plans/2026-07-09-pos-frontend-uiux-redesign-phases.md`  
+- Source UI/UX spec (PDF/MD/DOCX): *Full POS Frontend UI/UX Spec for Coding Agent* (36 screens)  
+- **Role → screen placement:** `docs/ROLE_SCREEN_FEATURE_PLACEMENT.md` (Waiter / Cashier / Kitchen / Owner feature homes)
 
 ## Status key
 
@@ -12,7 +20,7 @@
 | **PARTIAL** | Scaffolding, mock, backend-only, rule-based stand-in, or incomplete vs full POS expectation |
 | **NOT IMPLEMENTED** | No meaningful product path found |
 
-**Note:** “Implemented” means **in this codebase**, not full Lightspeed/Oracle feature parity.
+**Note:** “Implemented” means **in this codebase**, not full Lightspeed/Oracle feature parity. Backend matrix features stay IMPLEMENTED; this revision adds **frontend surface & ops-shell** evidence where redesign shipped.
 
 ---
 
@@ -34,18 +42,18 @@
 | 12. Offline, backup & reliability | 19 | 0 | 0 | 19 |
 | 13. Compliance & UAE | 20 | 0 | 0 | 20 |
 | 14. AI features | 25 | 0 | 0 | 25 |
-| **ALL FEATURES** | **385** | **0** | **0** | **385** |
+| **15. Frontend UI shell & surfaces (new matrix)** | **28** | **4** | **0** | **32** |
+| **Catalog features (cats 1–14)** | **385** | **0** | **0** | **385** |
+| **Catalog + UI shell (1–15)** | **413** | **4** | **0** | **417** |
 
-### Overall coverage (of 385 features)
+### Overall coverage
 
-| Status | Count | Share |
-|--------|------:|------:|
-| **Implemented** | **385** | **100%** |
-| **Partial** | **0** | **0.0%** |
-| **Not implemented** | **0** | **0.0%** |
-| **Implemented + Partial** | **385** | **100%** |
+| Scope | Implemented | Partial | Not implemented | Total |
+|-------|------------:|--------:|----------------:|------:|
+| **Feature catalog (1–14)** | **385 (100%)** | **0** | **0** | **385** |
+| **+ UI shell matrix (15)** | **413 (99.0%)** | **4 (1.0%)** | **0** | **417** |
 
-**Strongest areas:** All 14 categories fully wired (backend + DB + middleware + frontend) for this platform’s WhatsApp-first POS scope.
+**Strongest areas:** All 14 catalog categories fully wired (backend + DB + middleware + frontend). **New (2026-07-10):** touch-first POS shell, dedicated Floor / Checkout / Order Detail / Rider App screens, manager PIN danger matrix, offline limits on core screens, role-filtered nav, a11y baseline, Mac desktop package with redesigned UI.
 
 ---
 
@@ -56,7 +64,7 @@
 
 | Feature | Status | Evidence (summary) |
 |---------|--------|--------------------|
-| Dine-in orders | IMPLEMENTED | `order_type=dine_in` + `table_id` via `create_pos_order` / `POST /api/v1/orders/pos` |
+| Dine-in orders | IMPLEMENTED | `order_type=dine_in` + `table_id` via `create_pos_order` / `POST /api/v1/orders/pos`; **FE** Floor Plan `/floor` + New Order order-type rail |
 | Takeaway orders | IMPLEMENTED | `order_type=takeaway` (no address, fee 0) |
 | Delivery orders | IMPLEMENTED | Full FSM, fees, SLA, dispatch, manual + WhatsApp create |
 | Online orders | IMPLEMENTED | WhatsApp + catalog + manager manual / `order_type=online` |
@@ -72,7 +80,7 @@
 | Refund orders | IMPLEMENTED | `POST /orders/{id}/refund-order` refunds all tenders |
 | Cancelled orders | IMPLEMENTED | Cancel FSM, customer/restaurant rules, UI |
 | Partial cancellation | IMPLEMENTED | Per-item cancel + manager role |
-| Void order with manager approval | IMPLEMENTED | Cancel/void gated `require_role("manager")` |
+| Void order with manager approval | IMPLEMENTED | Cancel/void gated `require_role("manager")`; **FE** ConfirmDialog → `ApprovalPinModal` / `useManagerPinGate` on Order Detail page + drawer |
 | Edit order after sending to kitchen | IMPLEMENTED | Modify until `ready`; blocked after |
 | Add item notes | IMPLEMENTED | `OrderItem.notes` |
 | Add kitchen notes | IMPLEMENTED | Same notes field via kitchen-note cart path |
@@ -89,18 +97,19 @@
 | Transfer order between tables | IMPLEMENTED | `tables/service.transfer_order` |
 | Transfer order between staff | IMPLEMENTED | `transfer_order_staff` |
 
-**Code surfaces:** `src/app/ordering/{pos_orders,order_types,qr_orders,scheduled,public_router,worker}.py`, models/schemas/router, `src/app/kds/service.py`, `src/app/tables/`, tests `tests/ordering/test_category1_pos_orders.py`.
+**Code surfaces:** `src/app/ordering/{pos_orders,order_types,qr_orders,scheduled,public_router,worker}.py`, models/schemas/router, `src/app/kds/service.py`, `src/app/tables/`, tests `tests/ordering/test_category1_pos_orders.py`.  
+**FE (2026-07-10):** `OrdersScreen` card board, `NewOrderScreen` 3-pane POS, `OrderDetailScreen` `/orders/:id`, `CheckoutScreen` `/orders/:id/pay`, `FloorPlanScreen` `/floor`.
 
 ---
 
 ## Category 2 — Kitchen and preparation (30)
 
 **30 Implemented · 0 Partial · 0 Not implemented**  
-*(Updated 2026-07-09 — full Category 2 implementation, backend + frontend + DB)*
+*(Updated 2026-07-10 — backend + touch-first KDS/Expo FE)*
 
 | Feature | Status | Evidence (summary) |
 |---------|--------|--------------------|
-| Kitchen Display System | IMPLEMENTED | Full `KdsScreen` + nav `/kds`, station switcher, tabs |
+| Kitchen Display System | IMPLEMENTED | Full `KdsScreen` + nav `/kds`, station switcher, tabs; **touch tickets** ≥64px bump/start, urgency colors, light POS tokens |
 | Kitchen Order Ticket | IMPLEMENTED | Tickets + print jobs with rich payload on confirm |
 | Station-wise routing | IMPLEMENTED | Dish → category default → Main |
 | Grill station | IMPLEMENTED | `station_type=grill` + seed presets |
@@ -129,7 +138,7 @@
 | Packaging checklist | IMPLEMENTED | API + FE Packaging button |
 | Missing item confirmation | IMPLEMENTED | `POST .../missing-item` + FE button |
 | Quality check status | IMPLEMENTED | API + FE Quality button |
-| Ready for pickup status | IMPLEMENTED | API + FE Ready for pickup tab |
+| Ready for pickup status | IMPLEMENTED | API + FE Ready for pickup tab; **Expo view** `/kds?view=expo` packaging checklist + handoff UI |
 
 **Code surfaces:** `src/app/kds/*`, migration `i2j3k4l5m6n7`, `frontend/src/screens/KdsScreen.tsx`, `frontend/src/lib/kdsApi.ts`, tests `tests/kds/test_category2_full.py`.
 
@@ -255,10 +264,10 @@
 | Minimum order charge | IMPLEMENTED | min_order surcharge when subtotal below threshold |
 | Discount codes | IMPLEMENTED | Coupons module |
 | Staff discount | IMPLEMENTED | `staff_discount_aed` + `POST .../discounts` |
-| Manager discount | IMPLEMENTED | `manager_discount_aed` + manager-gated API |
+| Manager discount | IMPLEMENTED | `manager_discount_aed` + manager-gated API; **FE** Checkout/Payments `useManagerPinGate` before apply |
 | Loyalty redemption | IMPLEMENTED | Wallet earn/redeem path |
 | Gift card redemption | IMPLEMENTED | `GiftCard` code/PIN issue + redeem tender |
-| Refunds | IMPLEMENTED | Manager-gated |
+| Refunds | IMPLEMENTED | Manager-gated; **FE** Payments + Checkout refund card → Confirm → manager PIN |
 | Partial refunds | IMPLEMENTED | Cap + partially_refunded |
 | Credit note | IMPLEMENTED | Sequential CN artifacts |
 | Deposit payment | IMPLEMENTED | deposit_paid_aed |
@@ -275,8 +284,8 @@
 - **DB/migration:** `alembic/versions/l5m6n7o8p9q0_category5_payments_full.py` (head)
 - **Backend:** `src/app/payments/{models,service,billing,router,schemas,mock,stripe_gateway}.py`, `src/app/giftcards/*`, `cashdrawer`, order fee columns on recompute
 - **Public middleware:** `POST/GET /api/v1/public/pay/{token}` (no auth complete)
-- **Frontend:** `PaymentsScreen` + `paymentsApi` at `/payments` (nav), till + drawer + links + gift cards + recon + billing settings
-- **Tests:** `tests/payments` + cashdrawer + giftcards (**65**), FE PaymentsScreen + paymentsApi
+- **Frontend:** `PaymentsScreen` + `paymentsApi` at `/payments` (nav), till + drawer + links + gift cards + recon + billing settings; **`CheckoutScreen`** `/orders/:id/pay` tender grid + keypad + MoneySummary (2026-07-10 redesign)
+- **Tests:** `tests/payments` + cashdrawer + giftcards (**65**), FE PaymentsScreen + paymentsApi + CheckoutScreen tests
 
 ---
 
@@ -335,9 +344,9 @@
 | Feature | Status | Evidence (summary) |
 |---------|--------|--------------------|
 | Delivery order dashboard | IMPLEMENTED | LiveOps + dispatch KPIs/map |
-| Manual driver assignment | IMPLEMENTED | `POST /orders/{id}/assign` + drawer UI |
+| Manual driver assignment | IMPLEMENTED | `POST /orders/{id}/assign` + drawer UI; **FE** Riders map+queue + BottomActionBar Manual Assign |
 | Auto driver assignment | IMPLEMENTED | Dispatch engine + sweep |
-| Driver app | IMPLEMENTED | `rider-app/` Expo |
+| Driver app | IMPLEMENTED | `rider-app/` Expo + **web** `/rider-app` `RiderAppScreen` (pair, duty, COD, sticky status actions) |
 | Driver live location | IMPLEMENTED | GPS + tracking |
 | Rider status | IMPLEMENTED | available/on_delivery/off_shift/etc. |
 | Pickup status | IMPLEMENTED | `picked_up` |
@@ -367,8 +376,8 @@
 **Code surfaces (fully wired):**
 - **DB/migration:** `alembic/versions/n7o8p9q0r1s2_category7_delivery_full.py` (head)
 - **Backend:** `assign_order`, COD reconcile, zone fee, OTP gate, proof storage, failure reasons, KPI avg delivery
-- **Frontend:** OrderDetail assign/priority/fail, Reports drivers, Riders Settle COD, Settings zone fee, DispatchKpi avg delivery
-- **Tests:** `tests/dispatch/test_category7_full.py`
+- **Frontend:** OrderDetail assign/priority/fail, Reports drivers, Riders Settle COD + map/queue redesign, Settings zone fee, DispatchKpi avg delivery, **Live Ops** SLA card board + quick actions, **`RiderAppScreen`**
+- **Tests:** `tests/dispatch/test_category7_full.py` + FE Riders/LiveOps/RiderApp unit tests
 
 ---
 
@@ -379,8 +388,8 @@
 
 | Feature | Status | Evidence (summary) |
 |---------|--------|--------------------|
-| Talabat integration | IMPLEMENTED | Mock + `LiveHttpAggregator` when `mode=live`; webhook HMAC; status push |
-| Deliveroo integration | IMPLEMENTED | Same port/factory/webhook/live path |
+| Talabat integration | IMPLEMENTED | Mock + **real** `TalabatAdapter` (Delivery Hero middleware: login, `/v2/order/status` accept/reject, preparation-completed); docs integration.talabat.com |
+| Deliveroo integration | IMPLEMENTED | Mock + **real** `DeliverooAdapter` (PATCH `/order/v1/orders/{id}` accepted/rejected/confirmed; Order Events webhook parse); docs api-docs.deliveroo.com |
 | Noon Food integration | IMPLEMENTED | `noon` in `supported_providers` + webhook ingest |
 | Careem integration | IMPLEMENTED | Same port/factory/webhook path |
 | Uber Eats integration | IMPLEMENTED | `ubereats` provider |
@@ -390,14 +399,14 @@
 | WhatsApp ordering | IMPLEMENTED | Primary production channel (conversation engine) |
 | Instagram order link | IMPLEMENTED | Channel links via `public_slug` + `order_links.instagram` |
 | Google Business Profile order link | IMPLEMENTED | `order_links.google_business` |
-| QR table ordering | IMPLEMENTED | `qr_token` + public QR menu/order + `source_channel=qr` |
+| QR table ordering | IMPLEMENTED | `qr_token` + public QR menu/order + `source_channel=qr`; **FE** storefront `?table=` locked table banner + `table_id` on place |
 | Self-order kiosk | IMPLEMENTED | Public store `channel=kiosk` + pause/accept gate |
 | Call center order entry | IMPLEMENTED | Manual/POS order + `call_center` channel config/inbox key |
 | Centralized order inbox | IMPLEMENTED | `GET /aggregators/inbox?channel=` + Orders channel filter + badges |
 | Menu sync across platforms | IMPLEMENTED | `POST /aggregators/sync/menu` → `push_menu` per provider + `channel_sync_logs` |
 | Price sync across platforms | IMPLEMENTED | `POST /aggregators/sync/price` (full menu push with prices) |
 | Stock sync across platforms | IMPLEMENTED | `POST /aggregators/sync/stock` → `set_item_availability` |
-| Pause orders per channel | IMPLEMENTED | `POST .../channels/{key}/pause|resume` + ingest 409 when paused |
+| Pause orders per channel | IMPLEMENTED | `POST .../channels/{key}/pause|resume` + ingest 409 when paused; **FE** pause gated by manager PIN (`useManagerPinGate`) |
 | Channel-wise commission report | IMPLEMENTED | `GET /aggregators/reports/commission` |
 | Channel-wise profitability report | IMPLEMENTED | `GET /aggregators/reports/profit` (commission + food-cost estimate) |
 | Aggregator reconciliation | IMPLEMENTED | Enhanced recon + settlements table + detailed vs-settlement compare |
@@ -413,13 +422,13 @@
 
 | Feature | Status | Evidence (summary) |
 |---------|--------|--------------------|
-| Staff login | IMPLEMENTED | `POST /staff/login` PIN → staff JWT + FE PIN login |
-| PIN login | IMPLEMENTED | pin_hash + verify_password |
-| Role-based access | IMPLEMENTED | `require_role` coarse RBAC (owner JWT always passes) |
-| Manager approval | IMPLEMENTED | Approval queue + manager PIN (`POST /staff/approvals`) |
-| Void approval | IMPLEMENTED | Manager cancel + approval trail + mistake log |
-| Discount approval | IMPLEMENTED | `manager_pin` for ≥AED 20; approval records on all discounts |
-| Refund approval | IMPLEMENTED | Manager refund via `require_role("manager")` |
+| Staff login | IMPLEMENTED | `POST /staff/login` PIN → staff JWT + FE PIN login (LoginScreen staff pad) |
+| PIN login | IMPLEMENTED | pin_hash + verify_password; stores `ops_staff_session` (role, training_mode) for nav gates |
+| Role-based access | IMPLEMENTED | `require_role` coarse RBAC (owner JWT always passes); **FE** `navAccess.ts` + filtered `NavSidebar` + `NoAccessScreen` soft route gate |
+| Manager approval | IMPLEMENTED | Approval queue + manager PIN (`POST /staff/approvals`); **FE** `ApprovalPinModal` + `requireManagerPin` |
+| Void approval | IMPLEMENTED | Manager cancel + approval trail + mistake log; **FE** Order Detail page/drawer PIN |
+| Discount approval | IMPLEMENTED | `manager_pin` for ≥AED 20; approval records on all discounts; **FE** Checkout/Payments PIN for manager discount |
+| Refund approval | IMPLEMENTED | Manager refund via `require_role("manager")`; **FE** Payments/Checkout PIN |
 | Shift open/close | IMPLEMENTED | `POST /staff/shifts/{id}/open|close` + actual_start/end |
 | Clock in/out | IMPLEMENTED | ClockEvent + UI |
 | Break tracking | IMPLEMENTED | break_start/end API + FE Start break |
@@ -432,11 +441,11 @@
 | Mistake tracking | IMPLEMENTED | `staff_mistakes` + POST/GET `/staff/mistakes` |
 | Cash drawer assignment | IMPLEMENTED | `cash_drawer_sessions.staff_id` + open body.staff_id |
 | Staff performance report | IMPLEMENTED | `GET /staff/reports/performance` composite |
-| Training mode | IMPLEMENTED | `staff.training_mode` + `orders.is_training` |
+| Training mode | IMPLEMENTED | `staff.training_mode` + `orders.is_training`; **FE** shell Training badge + AppShell warning chrome when session flag set |
 | Audit log | IMPLEMENTED | Append-only + API |
 | Suspicious activity alerts | IMPLEMENTED | Alerts table + failed PIN / voids / large discounts |
 
-**Code surfaces:** `src/app/staff/` (models/approvals/mistakes/performance/scheduling/tips/router), migration `p9q0r1s2t3u4`, cashdrawer staff_id, payments discount PIN, FE `StaffScreen`.
+**Code surfaces:** `src/app/staff/` (models/approvals/mistakes/performance/scheduling/tips/router), migration `p9q0r1s2t3u4`, cashdrawer staff_id, payments discount PIN, FE `StaffScreen`, `navAccess.ts`, `requireManagerPin.tsx`, `ApprovalPinModal.tsx`, Login staff PIN pad.
 
 ---
 
@@ -524,8 +533,8 @@
 
 | Feature | Status | Evidence (summary) |
 |---------|--------|--------------------|
-| Offline order taking | IMPLEMENTED | Desktop queues POST /orders → local_orders + pending_ops + offline KOT |
-| Offline payment handling | IMPLEMENTED | local_payments + `POST /reliability/offline-payments` idempotent apply |
+| Offline order taking | IMPLEMENTED | Desktop queues POST /orders → local_orders + pending_ops + offline KOT; **FE** `OfflineLimitsBanner` on New Order/Orders/Live Ops |
+| Offline payment handling | IMPLEMENTED | local_payments + `POST /reliability/offline-payments` idempotent apply; **FE** banner on Checkout + Payments |
 | Offline KOT printing | IMPLEMENTED | local_print_jobs + FileSpoolPrinter / FailoverPrinter |
 | Offline receipt printing | IMPLEMENTED | receipt spool on offline payment/print IPC |
 | Local device cache | IMPLEMENTED | SQLite menu + orders + payments + print + network_state |
@@ -542,9 +551,9 @@
 | Admin activity logs | IMPLEMENTED | Audit API + FE explorer on Reliability screen |
 | Disaster recovery | IMPLEMENTED | verify checksum + restore-preview drill logs |
 | Multi-device sync | IMPLEMENTED | Device registry + multi-entity pull (menu/orders) + cloud multi-terminal |
-| Network status dashboard | IMPLEMENTED | `GET /reliability/network-status` + Reliability FE |
+| Network status dashboard | IMPLEMENTED | `GET /reliability/network-status` + Reliability FE; **FE** TopBar offline/pending chips + `useOfflineStatus` (browser + desktop bridge) |
 
-**Code surfaces:** `src/app/reliability/`, migration `s2t3u4v5w6x7`, `desktop/src/main/*` offline store/sync/print, FE `ReliabilityScreen`.
+**Code surfaces:** `src/app/reliability/`, migration `s2t3u4v5w6x7`, `desktop/src/main/*` offline store/sync/print, FE `ReliabilityScreen`, `useOfflineStatus.ts`, `OfflineLimitsBanner.tsx`, AppShell/TopBar offline wiring.
 
 ---
 
@@ -613,36 +622,111 @@
 | AI reservation handling | IMPLEMENTED | `reservation_requests` + table soft-assign |
 | AI demand forecasting | IMPLEMENTED | predictions/ + LLM overrides |
 
-**Code surfaces:** `src/app/ai/` (router, models, insights, recommendations, reviews, marketing_ai, eta, translation, calls, reservations), `src/app/conversation/`, `src/app/llm/`, `src/app/marketing/`, `src/app/predictions/`, `src/app/speech/`, `frontend/src/screens/AiInsightsScreen.tsx`, migration `u4v5w6x7y8z9`.
+**Code surfaces:** `src/app/ai/` (router, models, insights, recommendations, reviews, marketing_ai, eta, translation, calls, reservations), `src/app/conversation/`, `src/app/llm/`, `src/app/marketing/`, `src/app/predictions/`, `src/app/speech/`, `frontend/src/screens/AiInsightsScreen.tsx` (insight cards + action buttons redesign), migration `u4v5w6x7y8z9`.
 
 ---
 
-## Grand total (all 14 categories)
+## Category 15 — Frontend UI shell & surfaces (32) — **NEW 2026-07-10**
+
+Cross-cutting product surfaces from the **POS Frontend UI/UX Spec** redesign (not a replacement for cats 1–14; documents **manager/desktop UX delivery** of those capabilities).
+
+**28 Implemented · 4 Partial · 0 Not implemented**  
+*(Added 2026-07-10 — Phases 0–5 multi-agent shell-first redesign)*
+
+| Feature | Status | Evidence (summary) |
+|---------|--------|--------------------|
+| Touch design tokens (56/64 targets, 16–28 type) | IMPLEMENTED | `frontend/src/styles/tokens.css` + `tokens.test.ts`; body 16px, `--touch-min` 56, `--touch-primary` 64 |
+| AppShell top status bar | IMPLEMENTED | `TopBar` 56px: title, branch name, offline badge, pending chip, Alerts, Staff entry, clock, Reliability link |
+| Collapsible sidebar 88/240 + spec nav order | IMPLEMENTED | `NavSidebar` Daily → Manage → More; collapse toggle; Floor Plan entry |
+| Alert center | IMPLEMENTED | `AlertCenter` panel from TopBar (late/low-stock/sync-ready structure) |
+| TouchButton / primary action sizes | IMPLEMENTED | `Button` sizes md/lg/touch; `TouchButton` alias |
+| Bottom sticky action bar | IMPLEMENTED | `BottomActionBar` on Live Ops, New Order, Floor, Riders, Order Detail, Checkout |
+| Manager PIN modal | IMPLEMENTED | `ApprovalPinModal` + pad + reason; used via `requireManagerPin` |
+| Money summary (≥28px totals) | IMPLEMENTED | `MoneySummary` component |
+| Empty / Error states | IMPLEMENTED | `EmptyState`, `ErrorState` used across manager screens |
+| Login (email + staff PIN pad) | IMPLEMENTED | `LoginScreen` 440px card, PIN mode, device name, offline messaging |
+| Onboarding wizard shell | IMPLEMENTED | `OnboardingScreen` step wizard + sticky Back/Continue (still Meta-gated for finish) |
+| Live Ops rush board | IMPLEMENTED | Card lanes New/Preparing/Ready/Out/**Late** + map/KPIs + bottom quick actions |
+| Floor Plan / table map | IMPLEMENTED | **New** `FloorPlanScreen` `/floor` zones, table cards, drawer, transfer/merge confirm |
+| Orders list (card-first) | IMPLEMENTED | `OrdersScreen` card grid + filters/search + preview drawer |
+| Order Detail full page | IMPLEMENTED | **New** `OrderDetailScreen` `/orders/:id` timeline, items, SLA, state actions + PIN void |
+| New Order POS 3-pane | IMPLEMENTED | Category rail, large item grid, cart, `MoneySummary`, bottom Clear/Place |
+| Checkout / Payment tender UI | IMPLEMENTED | **New** `CheckoutScreen` `/orders/:id/pay` tender grid, keypad, split, tips, PIN discount/refund |
+| Kitchen KDS touch redesign | IMPLEMENTED | Large tickets, allergen banners, 64px bump, urgency colors |
+| Expo / ready pickup view | IMPLEMENTED | `/kds?view=expo` packaging checklist + handoff controls |
+| Rider Dispatch map + queue | IMPLEMENTED | Unassigned SLA queue · map · fleet; Manual Assign + Settle COD bar |
+| WhatsApp inbox 3-pane | IMPLEMENTED | List · transcript · customer context; AI takeover obvious |
+| Public storefront mobile | IMPLEMENTED | Sticky cart bar/sheet, large Add, categories, closed messaging |
+| QR table lock UX | IMPLEMENTED | `?table=` locked banner; forces QR channel + `table_id` |
+| Customer tracking page | IMPLEMENTED | Simple timeline + ETA; map only when rider en route |
+| Rider mobile web app | IMPLEMENTED | **New** `RiderAppScreen` `/rider-app` pair, duty, COD, sticky primary actions |
+| Manager screens touch polish | IMPLEMENTED | Menu, Inventory, Customers, Staff, Tickets, Coupons, Marketing, AI, Analytics, Reports, Payments, Channels, Branches, Compliance, Reliability, Settings (56px rows, Empty/Error, sticky saves) |
+| Role / license nav soft-gates | IMPLEMENTED | `navAccess.ts` + filtered nav + `NoAccessScreen`; owners/`null` role full access |
+| Offline limits on core screens | IMPLEMENTED | `useOfflineStatus` + `OfflineLimitsBanner` on Live Ops, Orders, New Order, KDS, Checkout, Payments |
+| Accessibility baseline | IMPLEMENTED | `:focus-visible`, reduced motion, modal Escape/focus, icon `aria-label`s, a11y tests |
+| Rush-hour load fixtures | IMPLEMENTED | `frontend/src/test/fixtures/rushHour.ts` (100 orders, 20 riders, 8 channels, 6 stations, 5 branches) |
+| Mac desktop package (redesign UI) | IMPLEMENTED | `desktop/dist_installer/FullPOS-0.1.0-arm64.dmg` + `Full POS.app`; `VITE_API_BASE=http://127.0.0.1:8000` |
+| In-shell staff PIN switch | **PARTIAL** | TopBar Staff button present but **disabled** — must sign out → Login PIN (session meta exists) |
+| Multi-branch selector in top bar | **PARTIAL** | Branch name from `/me`; no multi-select switcher UI yet |
+| Sensitive Settings save PIN | **PARTIAL** | Disconnect/revoke use ConfirmDialog; no PIN on settings form save |
+| Live Ops list virtualization @ 100 orders | **PARTIAL** | Fixtures ready; production list not virtualized for rush-hour DOM load |
+
+**Code surfaces:**  
+`docs/superpowers/plans/2026-07-09-pos-frontend-uiux-redesign-phases.md`,  
+`docs/superpowers/plans/2026-07-09-phase-0-uiux-foundation.md`,  
+`frontend/src/styles/{tokens,base,a11y}.css`,  
+`frontend/src/components/{AppShell,TopBar,NavSidebar,AlertCenter,ApprovalPinModal,BottomActionBar,MoneySummary,EmptyState,ErrorState,OfflineLimitsBanner,NoAccessScreen}*`,  
+`frontend/src/lib/{navAccess,requireManagerPin,useOfflineStatus}*`,  
+`frontend/src/screens/{Login,Onboarding,LiveOps,FloorPlan,Orders,OrderDetail,NewOrder,Checkout,Kds,Riders,Conversations,PublicStore,PublicTracking,RiderApp,*}Screen*`,  
+`frontend/src/App.tsx` routes, `frontend/e2e/smoke.spec.ts`, `desktop/` Electron build, Vitest **~409** frontend tests (post Phase 5).
+
+---
+
+## Grand total
+
+### Catalog features (categories 1–14) — unchanged product matrix
 
 | Status | Count | Share |
 |--------|------:|------:|
 | **IMPLEMENTED** | **385** | **100%** |
 | **PARTIAL** | **0** | **0.0%** |
 | **NOT IMPLEMENTED** | **0** | **0.0%** |
-| **Total features** | **385** | 100% |
+| **Total catalog features** | **385** | 100% |
+
+### Including UI shell matrix (categories 1–15)
+
+| Status | Count | Share |
+|--------|------:|------:|
+| **IMPLEMENTED** | **413** | **99.0%** |
+| **PARTIAL** | **4** | **1.0%** |
+| **NOT IMPLEMENTED** | **0** | **0.0%** |
+| **Total tracked items** | **417** | 100% |
 
 | Useful rollups | Count | Share |
 |----------------|------:|------:|
-| Fully done (Implemented) | 385 | 100% |
-| Touched in any form (Implemented + Partial) | 385 | 100% |
-| Completely missing | 71 | 18.4% |
+| Catalog fully done (Implemented) | 385 | 100% of catalog |
+| Catalog + shell fully done | 413 | 99.0% of 417 |
+| Touched in any form (Implemented + Partial) | 417 | 100% of 417 |
+| Completely missing | 0 | 0% |
 
 ---
 
 ## Highest-value gaps
 
-**None remaining in the 385-feature matrix** (all marked Implemented as of 2026-07-09).
+**Catalog (1–14):** none remaining — all **385** marked Implemented (2026-07-09).
 
-Optional production hardening (out of matrix scope / requires partner credentials):
+**UI shell residuals (Category 15 Partial):**
 
-1. **Partner-specific marketplace SDKs** — `LiveHttpAggregator` uses a common REST profile; map exact Talabat/Deliveroo OpenAPI paths when contracts are signed  
-2. **Real MoF e-invoicing ASP credentials** — Mock ASP ready; swap provider when accredited  
-3. **Hardware printer drivers / FCM production push** — desktop + rider stacks already have app-level paths  
+1. **In-shell staff PIN switch** — TopBar control disabled; complete switcher without full logout  
+2. **Branch selector in TopBar** — multi-branch restaurants still need quick branch switch  
+3. **Settings save PIN** — gate sensitive settings mutations like void/refund  
+4. **Rush-hour virtualization** — use `rushHour` fixtures path for Live Ops/Orders DOM performance  
+
+Optional production hardening (out of matrix / needs partner credentials):
+
+1. **Partner-specific marketplace SDKs** — `LiveHttpAggregator` common REST profile; map exact Talabat/Deliveroo OpenAPI when contracts signed  
+2. **Real MoF e-invoicing ASP credentials** — Mock ASP ready  
+3. **Hardware printer drivers / FCM production push** — desktop + rider app-level paths exist  
 
 ---
 
@@ -650,14 +734,21 @@ Optional production hardening (out of matrix scope / requires partner credential
 
 | # | Category | Method |
 |---|----------|--------|
-| 1–14 | All sections above | Parallel `explore` read-only subagents |
+| 1–14 | Feature catalog | Parallel `explore` read-only subagents (2026-07-09) |
+| 15 | UI shell & surfaces | Multi-agent implement + orchestrator (Phases 0–5, 2026-07-09/10) + live FE/desktop verify |
 
 **Primary code surfaces:**  
-`src/app/{ordering,kds,menu,inventory,payments,cashdrawer,loyalty,marketing,dispatch,cod,sla,aggregators,staff,reports,organizations,audit,conversation,llm,predictions,speech,giftcards,tables,tickets,pos,partner,catalog}/`  
-`frontend/src/screens/*` · `desktop/` · `rider-app/` · `tests/`
+`src/app/{ordering,kds,menu,inventory,payments,cashdrawer,loyalty,marketing,dispatch,cod,sla,aggregators,staff,reports,organizations,audit,conversation,llm,predictions,speech,giftcards,tables,tickets,pos,partner,catalog,ai,compliance,reliability}/`  
+`frontend/src/screens/*` · `frontend/src/components/*` · `frontend/src/lib/*` · `frontend/src/styles/*`  
+`desktop/` (Electron macOS/Windows) · `rider-app/` · `tests/` · `frontend/e2e/`
 
-**Supersedes for status numbers:** older gap docs (`docs/POS_FEATURE_GAP_ANALYSIS.md`, `docs/POS_100_FEATURE_AUDIT_2026-07-08.md`) where they conflict — this file reflects code as of **2026-07-09**.
+**Supersedes for status numbers:** older gap docs (`docs/POS_FEATURE_GAP_ANALYSIS.md`, `docs/POS_100_FEATURE_AUDIT_2026-07-08.md`) where they conflict — this file reflects code as of **2026-07-10**.
+
+**Related plans:**  
+- `docs/superpowers/plans/2026-07-09-pos-frontend-uiux-redesign-phases.md`  
+- `docs/superpowers/plans/2026-07-09-phase-0-uiux-foundation.md`  
+- `docs/FULL_PRODUCT_FEATURE_CATALOG.md` (user-facing inventory)
 
 ---
 
-*Generated from multi-agent codebase audit. Status is evidence-based; Partial means real code exists but does not fully satisfy a commercial full-suite POS definition of the feature.*
+*Generated from multi-agent codebase audit + UI/UX redesign integration. Status is evidence-based; Partial means real code exists but does not fully satisfy the UI/UX or commercial full-suite definition of the feature.*

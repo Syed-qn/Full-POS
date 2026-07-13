@@ -4,7 +4,11 @@ import { Button, TouchButton } from "../components/Button";
 import { SectionBanner } from "../components/SectionBanner";
 import { ApiError } from "../lib/apiClient";
 import { login, setToken, signup } from "../lib/auth";
-import { clearStaffSession, setStaffSession } from "../lib/navAccess";
+import {
+  clearStaffSession,
+  getRoleHomePath,
+  setStaffSession,
+} from "../lib/navAccess";
 import { staffLogin } from "../lib/staffApi";
 import s from "./LoginScreen.module.css";
 
@@ -113,7 +117,7 @@ export function LoginScreen() {
         name: res.name,
         staff_id: res.staff_id,
       });
-      nav("/", { replace: true });
+      nav(getRoleHomePath(res.role), { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Invalid staff ID or PIN");
       setPin("");

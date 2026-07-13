@@ -25,13 +25,15 @@ from app.aggregators.port import (
 _logger = logging.getLogger(__name__)
 
 # Default partner API bases — override with channels.<provider>.base_url.
+# Generic fallback bases (brand-specific adapters override these).
 _DEFAULT_BASE: dict[str, str] = {
-    "talabat": "https://api.partners.talabat.com/v1",
-    "deliveroo": "https://api.developers.deliveroo.com/v1",
+    "talabat": "https://integration-middleware.stg.restaurant-partners.com",
+    "deliveroo": "https://api.developers.deliveroo.com",
     "careem": "https://partners.careem.com/v1",
     "ubereats": "https://api.uber.com/v1/eats",
     "noon": "https://api.noon.partners/v1",
     "zomato": "https://api.zomato.com/partner/v1",
+    "keeta": "https://open.mykeeta.com",
 }
 
 

@@ -10,6 +10,11 @@
   box-shadow: inset 0 0 0 2px var(--sla-warn, #f79009);
 }
 
+/* Kitchen fullscreen: no left nav. */
+.noSidebar {
+  /* content takes full width */
+}
+
 .content {
   flex: 1;
   display: flex;

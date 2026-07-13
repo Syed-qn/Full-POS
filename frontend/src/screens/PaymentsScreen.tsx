@@ -4,6 +4,7 @@ import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { PageHeader } from "../components/PageHeader";
 import { SectionBanner } from "../components/SectionBanner";
 import { toast } from "../components/Toaster";
+import { isCashierRole } from "../lib/navAccess";
 import {
   addCashDrawerEvent,
   applyOrderDiscount,
@@ -43,6 +44,7 @@ const TENDERS = [
 ] as const;
 
 export function PaymentsScreen() {
+  const cashierMode = isCashierRole();
   const [billing, setBilling] = useState<BillingSettings | null>(null);
   const [drawer, setDrawer] = useState<CashDrawerSession | null>(null);
   const [links, setLinks] = useState<PaymentLinkOut[]>([]);
@@ -288,8 +290,12 @@ export function PaymentsScreen() {
   return (
     <div className={s.screen}>
       <PageHeader
-        title="Payments & billing"
-        subtitle="Till charge, wallet pays, payment links, cash drawer, gift cards, recon"
+        title={cashierMode ? "Cashier drawer & payments" : "Payments & billing"}
+        subtitle={
+          cashierMode
+            ? "Till, cash drawer, links — manager PIN on refunds/discounts"
+            : "Till charge, wallet pays, payment links, cash drawer, gift cards, recon"
+        }
         right={
           <Button type="button" variant="ghost" onClick={() => void load()}>
             Refresh
@@ -299,6 +305,18 @@ export function PaymentsScreen() {
       <OfflineLimitsBanner surface="payments" />
 
       {loadError && <SectionBanner tone="warning">{loadError}</SectionBanner>}
+
+      {cashierMode && (
+        <div data-testid="cashier-drawer-banner">
+          <SectionBanner tone="info">
+            Cash drawer:{" "}
+            {drawer
+              ? `${drawer.status} · session #${drawer.id}`
+              : "closed — open float below before cash sales"}
+            . EOD / recon escalate to owner when needed.
+          </SectionBanner>
+        </div>
+      )}
 
       <section className={s.metrics}>
         <div className={s.metric}>
@@ -313,7 +331,7 @@ export function PaymentsScreen() {
           <span className={s.metricLabel}>Min order AED</span>
           <strong>{billing?.min_order_aed ?? "—"}</strong>
         </div>
-        <div className={s.metric}>
+        <div className={s.metric} data-testid="payments-drawer-status">
           <span className={s.metricLabel}>Drawer</span>
           <strong>{drawer ? drawer.status : "closed"}</strong>
         </div>

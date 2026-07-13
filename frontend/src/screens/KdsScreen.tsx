@@ -244,6 +244,21 @@ export function KdsScreen() {
           )}
           <button
             type="button"
+            className={`${s.btn} ${isExpoView ? s.btnActive : ""}`}
+            data-testid="kds-expo-toggle"
+            onClick={() => {
+              if (isExpoView) {
+                const first = stations[0];
+                navigate(first ? `/kds/${first.id}` : "/kds");
+              } else {
+                navigate("/kds?view=expo");
+              }
+            }}
+          >
+            {isExpoView ? "← Stations" : "Expo / Ready"}
+          </button>
+          <button
+            type="button"
             className={s.btn}
             onClick={() => seedDefaultStations().then(loadStations)}
           >
@@ -254,7 +269,7 @@ export function KdsScreen() {
 
       {isExpoView && (
         <div className={s.expoBanner} data-testid="kds-expo-banner" role="status">
-          Expo / ready pickup — packaging checklist and reopen actions on each ticket.
+          Expo / ready for delivery & pickup — packaging, missing items, then handoff.
         </div>
       )}
 
@@ -266,9 +281,18 @@ export function KdsScreen() {
             role="tab"
             aria-selected={tab === t}
             className={`${s.tab} ${tab === t ? s.tabActive : ""}`}
-            onClick={() => setTab(t)}
+            onClick={() => {
+              setTab(t);
+              if (t === "pickup" && !isExpoView) {
+                navigate("/kds?view=expo");
+              }
+            }}
           >
-            {t === "tickets" ? "Tickets" : t === "pickup" ? "Ready for pickup" : "Performance"}
+            {t === "tickets"
+              ? "Tickets"
+              : t === "pickup"
+                ? "Ready for delivery"
+                : "Performance"}
           </button>
         ))}
       </div>

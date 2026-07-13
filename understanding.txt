@@ -511,3 +511,53 @@
   - Integration: no conflict markers; no import fixes required; did not undo feature work.
   - Verification: vitest **409 passed / 95 files**; `npm run lint` (`tsc --noEmit`) **clean**. No commit.
   - Progress: docs/superpowers/plans/2026-07-09-pos-frontend-uiux-redesign-phases.md §13 Phase 5 → Integrated (multi-agent) with residual gaps (see gap list).
+
+- [2026-07-09 23:57 +04] Mac desktop rebuild for testing: frontend build:electron + electron-builder --mac (arm64 + x64). Artifacts: desktop/dist_installer/FullPOS-0.1.0-arm64.dmg, FullPOS-0.1.0-x64.dmg, Full POS.app under mac-arm64/. Unsigned (no Developer ID).
+
+- [2026-07-10 00:05 +04] Fixed local DB/API for Mac testing: started Colima + docker compose (Postgres :5433, Redis :6380); fixed asyncpg multi-statement trigger migrations (cat 8–14); alembic upgraded to u4v5w6x7y8z9 head; uvicorn :8000; seeded owner@fullpos.local / Owner123!
+
+- [2026-07-10 13:20 +04] Updated docs/ADVANCED_POS_FEATURE_IMPLEMENTATION_STATUS.md: date 2026-07-10; FE evidence on cats 1–2,5,7–9,12,14; NEW Category 15 Frontend UI shell (28I/4P/0N of 32); catalog 385 still 100%; total tracked 417 (413I/4P); fixed contradictory “missing 71” rollup; Mac desktop + redesign plan refs.
+
+- [2026-07-13 13:53 +04] Real marketplace adapters (order accept path): Talabat Delivery Hero middleware (login + /v2/order/status + preparation-completed), Deliveroo Order API (PATCH /order/v1/orders/{id} accepted|rejected), Keeta Open API (signed /api/open/order/confirm|cancel|prepare) + keeta channel key. Factory prefers brand adapters; careem/noon/ubereats/zomato stay generic LiveHttp. Tests: 35 aggregators green. Docs: integration.talabat.com, api-docs.deliveroo.com, api-docs.mykeeta.com. Still need partner credentials + UAT for production go-live.
+
+- [2026-07-13 13:57 +04] Updated docs/FULL_PRODUCT_FEATURE_CATALOG.md: date 2026-07-13; roles (cashier/kitchen/staff); Daily/Manage/More screens (Floor, Checkout, Order Detail, Expo, Rider web); real Talabat/Deliveroo/Keeta adapters; Cat 8 + Keeta; Cat 15 UI shell (32); counts + related plans.
+
+- [2026-07-13 16:24 +04] Created docs/ROLE_SCREEN_FEATURE_PLACEMENT.md — maps ~412 status-doc features (cats 1–15) to Waiter/Cashier/Kitchen/Owner screens with P/S/S-PIN/H access; role homes (/floor, /new-order, /kds, /); must-haves (qty, notes, bill, ready); gaps vs navAccess; build phases R1–R5. Linked from catalog + status docs.
+
+- [2026-07-13 18:07 +04] Implementation plan for role-based screens: docs/superpowers/plans/2026-07-13-role-based-screens-implementation.md (phases R0 foundations → R1 gates/landings → R2 waiter → R3 cashier → R4 kitchen → R5 owner → R6 hardening; file map, tests, risks, DoD). Linked from ROLE_SCREEN_FEATURE_PLACEMENT + FULL_PRODUCT_FEATURE_CATALOG.
+
+- [2026-07-13 18:10 +04] Role screens R0–R2 start: navAccess +waiter, getRoleHomePath/getRoleChrome/isWaiterRole; ROUTE_ROLE_MAP waiter; Login PIN → role home; AppShell hide sidebar for kitchen; NewOrder waiter “Send to kitchen”; OrderDetail hide Pay/void for waiter. Tests: navAccess 22 + NewOrder/OrderDetail/AppShell green.
+
+- [2026-07-13 18:51 +04] Role-based screens R0–R6 complete (frontend role modes)
+  - R0–R1: navAccess waiter/cashier/kitchen landings, getRoleChrome, ROUTE_ROLE_MAP; Login PIN → role home
+  - R2 Waiter: NewOrder “Send to kitchen”; OrderDetail Bill at cashier / no Pay/void; Floor → new-order?table=
+  - R3 Cashier: Cashier terminal strip (Open bills / Drawer / Customers / Floor); Place & Pay → /orders/:id/pay
+  - R4 Kitchen: AppShell no sidebar; KDS Expo toggle + “Ready for delivery” tab + expo banner
+  - R5 Owner: Live Ops bar New Order/Orders/Floor/Riders/Kitchen/Expo/Reports; Manage group label Admin for owner
+  - R6: StaffSwitchModal (TopBar Staff PIN switch); vitest role modes; e2e/role-smoke.spec.ts (4 role paths)
+  - Placement §6 gaps closed; plan progress R0–R6 Done; tsc clean; role-related vitest green
+  - Residual: live unpaid count API filter; deeper modifiers UX; marketplace partner UAT; optional full FE suite run before ship
+
+- [2026-07-13 18:56 +04] Role residual polish after R0–R6
+  - Cashier open-bills badge: fetches recent orders, counts non-terminal statuses on NewOrder strip
+  - Item instructions per cart line + whole-order kitchen notes (sent on ManualOrderItemIn.notes)
+  - PaymentsScreen cashier mode title + drawer banner; skipAuthRedirect already on staff login
+  - Plan task checkboxes marked complete; placement residual partial
+  - Full FE vitest **426 passed / 97 files**; tsc clean
+
+- [2026-07-13 19:08 +04] Marketplace adapters: Uber Eats + Careem/Noon middleware
+  - NEW providers/ubereats.py: OAuth client_credentials, accept_pos_order / deny_pos_order, X-Uber-Signature, menu/store status, parse orders.notification + cart
+  - NEW providers/middleware.py: MiddlewareChannelAdapter for careem + noon (Deliverect-style channelOrderId/items/plu, status callbacks) — no public native Careem/Noon API
+  - factory/build_provider_adapter registers ubereats, careem, noon; zomato remains LiveHttp
+  - tests/aggregators/test_real_adapters.py: 18 passed (was 10); AGGREGATOR_API_REFERENCE status table updated
+  - Still need partner credentials + certified UAT for production marketplace go-live
+
+- [2026-07-13 20:40 +04] Multi-tenant marketplace credentials (SaaS per-restaurant)
+  - Architecture: each restaurant stores partner keys in restaurant.settings.channels; factory always uses restaurant_settings
+  - BUGFIX: adapter cache now fingerprinted by tenant secrets (no cross-tenant LiveHttp/Talabat instance leak)
+  - MockAggregator verifies webhook_secret when set (wrong secret → 401)
+  - Empty secret patches do not wipe existing keys
+  - API ChannelConfigOut: api_secret_set, access_token_set, webhook_url (public slug), partner_webhook_url, credential_hint, tenant_scope
+  - Public webhook: POST /api/v1/public/store/{slug}/aggregators/{provider}/webhook (tenant by slug + HMAC)
+  - Channels UI: tenant banner, full key/secret/webhook/access_token/store/base fields, copy webhook URL
+  - tests: test_tenant_credentials.py + ChannelsScreen multi-tenant banner; aggregators suite green

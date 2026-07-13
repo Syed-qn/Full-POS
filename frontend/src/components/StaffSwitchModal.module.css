@@ -1,0 +1,110 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.modal {
+  width: min(400px, 100%);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-lg);
+  padding: 20px;
+  border: 1px solid var(--border-default);
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.hint {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.field input {
+  font-weight: 400;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.pinDisplay {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  background: var(--bg-surface-inset);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  margin: 12px 0;
+  color: var(--text-primary);
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.padKey {
+  min-height: var(--touch-primary, 64px);
+  font-size: 22px;
+  font-weight: 700;
+  font-family: inherit;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.padKey:hover:not(:disabled) {
+  background: var(--bg-surface-inset);
+}
+
+.padKey:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--sla-critical);
+  font-size: 14px;
+  margin: 12px 0 0;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+.actions > * {
+  flex: 1;
+}

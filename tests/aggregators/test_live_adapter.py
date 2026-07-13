@@ -65,11 +65,14 @@ def test_factory_selects_mock_by_default():
 
 
 def test_factory_selects_live_when_credentials():
+    from app.aggregators.providers.talabat import TalabatAdapter
+
     settings = {
         "channels": {
             "talabat": {
                 "mode": "live",
                 "api_key": "live-key-123",
+                "api_secret": "secret",
                 "store_id": "store-1",
                 "base_url": "https://example.test/v1",
             }
@@ -77,12 +80,14 @@ def test_factory_selects_live_when_credentials():
     }
     assert is_live_mode(settings, "talabat") is True
     port = get_aggregator_port("talabat", restaurant_settings=settings)
-    assert isinstance(port, LiveHttpAggregator)
+    # Brand-specific real adapter (Delivery Hero middleware), not generic LiveHttp
+    assert isinstance(port, TalabatAdapter)
     assert port.base_url == "https://example.test/v1"
 
 
 @pytest.mark.anyio
 async def test_live_http_calls_via_mock_transport():
+    """Generic LiveHttpAggregator still used for non-brand providers (e.g. careem)."""
     calls: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -174,6 +179,7 @@ async def test_ingest_with_live_port_mocked(client, auth_headers, db_session):
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
+        from app.aggregators.providers.talabat import TalabatAdapter
         from app.aggregators.service import ingest_inbound_order
 
         gw = get_aggregator_port(
@@ -181,7 +187,7 @@ async def test_ingest_with_live_port_mocked(client, auth_headers, db_session):
             restaurant_settings=restaurant.settings,
             client=http_client,
         )
-        assert isinstance(gw, LiveHttpAggregator)
+        assert isinstance(gw, (LiveHttpAggregator, TalabatAdapter))
         order = await ingest_inbound_order(
             db_session,
             restaurant_id=restaurant.id,
@@ -199,9 +205,10 @@ async def test_ingest_with_live_port_mocked(client, auth_headers, db_session):
         assert order.aggregator_source == "talabat"
         assert order.aggregator_order_ref == "LIVE-INGEST-1"
         assert order.order_type == "aggregator"
-        # accept_order was called on live adapter
+        # accept_order was called on live adapter (brand path or generic)
         assert any(
-            c.get("url", "").endswith("/orders/LIVE-INGEST-1/accept")
+            "/order/status" in c.get("url", "")
+            or c.get("url", "").endswith("/orders/LIVE-INGEST-1/accept")
             for c in gw.last_calls
         )
 
@@ -295,3 +302,7 @@ async def test_channel_config_live_fields_and_health_ui_path(
     assert talabat["store_id"] == "S1"
     assert talabat["base_url"] == "https://example.partners/v1"
     assert talabat["webhook_secret_set"] is True
+    assert "tenant_scope" in patch.json()
+    assert talabat.get("credential_hint")
+    assert talabat.get("partner_webhook_url")
+    assert "/api/v1/aggregators/talabat/webhook" in (talabat.get("partner_webhook_url") or "")

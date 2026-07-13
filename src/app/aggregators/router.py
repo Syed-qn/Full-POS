@@ -8,7 +8,12 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.aggregators.channels import get_channels_config
+from app.aggregators.channels import (
+    AGGREGATOR_CHANNELS,
+    CREDENTIAL_HINTS,
+    get_channels_config,
+    tenant_webhook_urls,
+)
 from app.aggregators.factory import get_aggregator_port, supported_providers
 from app.aggregators.schemas import (
     ChannelConfigOut,
@@ -50,9 +55,16 @@ def _money_str(v: Decimal | float | int | str) -> str:
 
 
 def _channels_response(restaurant: Restaurant, *, base_url: str = "") -> ChannelsOut:
+    """Serialize tenant channel config — secrets masked; webhook URLs included."""
     raw = get_channels_config(restaurant.settings)
-    channels = {
-        k: ChannelConfigOut(
+    slug = restaurant.public_slug
+    channels: dict[str, ChannelConfigOut] = {}
+    for k, v in raw.items():
+        pub_wh, partner_wh = tenant_webhook_urls(
+            base_url=base_url, public_slug=slug, provider=k
+        )
+        is_agg = k in AGGREGATOR_CHANNELS
+        channels[k] = ChannelConfigOut(
             enabled=bool(v.get("enabled")),
             accepting=bool(v.get("accepting", True)),
             commission_pct=float(v.get("commission_pct") or 0),
@@ -60,14 +72,17 @@ def _channels_response(restaurant: Restaurant, *, base_url: str = "") -> Channel
             # Never echo raw secrets; only presence flags for the dashboard.
             api_key=None,
             api_key_set=bool(v.get("api_key")),
+            api_secret_set=bool(v.get("api_secret")),
+            access_token_set=bool(v.get("access_token")),
             store_id=v.get("store_id"),
             base_url=v.get("base_url"),
-            webhook_secret_set=bool(v.get("webhook_secret") or v.get("api_secret")),
+            webhook_secret_set=bool(v.get("webhook_secret")),
+            webhook_url=pub_wh if is_agg else None,
+            partner_webhook_url=partner_wh if is_agg else None,
             order_url=v.get("order_url"),
             slug=v.get("slug"),
+            credential_hint=CREDENTIAL_HINTS.get(k) if is_agg else None,
         )
-        for k, v in raw.items()
-    }
     return ChannelsOut(
         channels=channels,
         providers=supported_providers(),

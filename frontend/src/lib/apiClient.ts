@@ -16,11 +16,17 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export type RequestOptions = {
+  /** When true, 401 does not clear token / redirect (staff PIN switch, login). */
+  skipAuthRedirect?: boolean;
+};
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
   isForm = false,
+  options?: RequestOptions,
 ): Promise<T> {
   const bridge = (globalThis as typeof globalThis & {
     window?: { posBridge?: { request: (m: string, p: string, b: unknown) => Promise<{ status: number; body: unknown }> } };
@@ -62,7 +68,7 @@ async function request<T>(
     } catch {
       /* non-JSON error body */
     }
-    if (resp.status === 401) {
+    if (resp.status === 401 && !options?.skipAuthRedirect) {
       // Session expired/invalid → drop the stored token and bounce to login.
       // Cleared directly (not via auth.logout) to avoid a circular import; guard
       // against a redirect loop when the failing request is the login page itself.
@@ -78,11 +84,15 @@ async function request<T>(
 }
 
 export const apiClient = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-  put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  get: <T>(path: string, options?: RequestOptions) => request<T>("GET", path, undefined, false, options),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>("POST", path, body, false, options),
+  patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>("PATCH", path, body, false, options),
+  put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    request<T>("PUT", path, body, false, options),
+  delete: <T>(path: string, options?: RequestOptions) =>
+    request<T>("DELETE", path, undefined, false, options),
   postForm: <T>(path: string, form: FormData) => request<T>("POST", path, form, true),
   TOKEN_KEY,
 };

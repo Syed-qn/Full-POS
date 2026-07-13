@@ -1,5 +1,6 @@
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStaffSession, setStaffSession } from "../lib/navAccess";
 import { renderWithProviders } from "../test/render";
 import { AppShell } from "./AppShell";
 
@@ -10,6 +11,8 @@ afterEach(() => {
     configurable: true,
     value: true,
   });
+  clearStaffSession();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -59,5 +62,25 @@ describe("AppShell offline wiring", () => {
     });
     renderShell(false);
     expect(screen.queryByText("Offline")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell role chrome", () => {
+  it("hides sidebar for kitchen role", () => {
+    setStaffSession({ role: "kitchen", name: "Cook" });
+    renderShell();
+    const shell = document.querySelector("[data-role-mode]");
+    expect(shell).toHaveAttribute("data-role-mode", "kitchen");
+    expect(screen.queryByRole("navigation", { name: "Main" })).not.toBeInTheDocument();
+  });
+
+  it("shows sidebar for cashier role", () => {
+    setStaffSession({ role: "cashier", name: "Cash" });
+    renderShell();
+    expect(document.querySelector("[data-role-mode]")).toHaveAttribute(
+      "data-role-mode",
+      "cashier",
+    );
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
   });
 });

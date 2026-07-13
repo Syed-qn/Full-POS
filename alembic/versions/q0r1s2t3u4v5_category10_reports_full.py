@@ -46,6 +46,10 @@ def upgrade() -> None:
     op.execute(
         """
         DROP TRIGGER IF EXISTS trg_owner_report_deliveries_updated_at ON owner_report_deliveries;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_owner_report_deliveries_updated_at
         BEFORE UPDATE ON owner_report_deliveries
         FOR EACH ROW EXECUTE FUNCTION set_updated_at();

@@ -119,8 +119,38 @@ No public developer documentation found. `food-partners.noon.com` / `restaurant.
 
 ---
 
+## Implementation status (code)
+
+| Provider | Adapter | Path | Notes |
+|----------|---------|------|-------|
+| **Talabat** | `providers/talabat.py` | DH Integration Middleware | Login + `/v2/order/status` |
+| **Deliveroo** | `providers/deliveroo.py` | Order API PATCH | Public docs |
+| **Keeta** | `providers/keeta.py` | Open API + sig | Public docs |
+| **Uber Eats** | `providers/ubereats.py` | accept/deny_pos_order + OAuth | Public docs; partner approval for prod |
+| **Careem** | `providers/middleware.py` | Middleware POS connector | **No native public API** — Deliverect/Foodics-style |
+| **Noon Food** | `providers/middleware.py` | Middleware POS connector | Same as Careem |
+| **Zomato** | generic `LiveHttpAggregator` | — | Not brand-mapped yet |
+
+Factory: `get_aggregator_port` → `build_provider_adapter` when `channels.<provider>.mode=live` + `api_key`.
+
 ## Recommendation for WS-AGGR implementation
 
-1. **Build Uber Eats and Deliveroo first** — only two with enough public schema detail for a direct adapter (`src/app/aggregators/uber_eats.py`, `deliveroo.py` behind the existing `factory.py` port pattern). Deliveroo needs a **UAE-specific 7-minute accept SLA**, distinct from the platform's existing 40-min delivery SLA — do not conflate the two clocks.
-2. **Talabat**: start partner onboarding (PGP key / credential request) in parallel — build the adapter skeleton now using the inferred payload shape, but gate it behind a feature flag until real partner docs/sandbox access confirm exact field names.
-3. **Careem + Noon Food**: reconsider "real adapter per vendor" — realistic path is one middleware integration (Deliverect, which is confirmed to bridge all 5 vendors including Talabat/Deliveroo/Uber Eats too) rather than hand-building 2 more native adapters against undocumented APIs. This is a scoping question worth raising before WS-AGGR starts: build 5 native adapters, or build 3 native (Uber Eats/Deliveroo/Talabat) + 1 Deliverect-mediated adapter covering Careem+Noon (and optionally replacing the other 3 too, trading control for a single well-documented integration surface).
+1. ~~**Build Uber Eats and Deliveroo first**~~ **Done in code** (plus Talabat/Keeta). Deliveroo still needs a **UAE-specific 7-minute accept SLA** timer at ops layer — do not conflate with the 40-min delivery SLA.
+2. **Talabat / Uber / Deliveroo / Keeta**: partner credentials + sandbox UAT still required for production go-live.
+3. **Careem + Noon Food**: **middleware adapter shipped** (`MiddlewareChannelAdapter`) — point `base_url` at Deliverect/Foodics (or other certified POS channel), not a fictional native Careem host. Native Careem/Noon OpenAPI remains unavailable publicly.
+
+
+## Multi-tenant SaaS credentials
+
+Each restaurant integrates **with their own** partner credentials:
+
+1. Manager opens **Channels** (JWT for that restaurant only).
+2. Sets mode **Live**, pastes API key / secret / store ID / webhook secret for Talabat, Deliveroo, Uber Eats, Keeta, Careem/Noon middleware, etc.
+3. Secrets are stored in ``restaurant.settings.channels.<provider>`` — never echoed back (``*_set`` flags only).
+4. Partner webhook URL (tenant-scoped):
+   ``POST /api/v1/public/store/{public_slug}/aggregators/{provider}/webhook``
+   verified with that restaurant’s webhook secret.
+5. Alternate: ``POST /api/v1/aggregators/{provider}/webhook`` + restaurant ``X-API-Key``.
+
+Platform-level env keys are **not** used for marketplace order accept — adapters always read the tenant channel blob via ``get_aggregator_port(..., restaurant_settings=restaurant.settings)``.
+

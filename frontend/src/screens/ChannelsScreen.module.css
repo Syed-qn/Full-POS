@@ -4,6 +4,63 @@
   gap: 20px;
 }
 
+.tenantBanner {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(23, 92, 211, 0.25);
+  background: var(--accent-primary-dim, #e8f0fe);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.integrationPanel {
+  display: flex;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border-default);
+  background: var(--bg-surface-inset, #f8f9fb);
+}
+
+.integrationTitle {
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.webhookBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+
+.webhookLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.webhookUrl {
+  font-size: 12px;
+  word-break: break-all;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+}
+
 .actions {
   display: flex;
   gap: 10px;

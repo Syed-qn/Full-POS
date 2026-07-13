@@ -188,6 +188,10 @@ def upgrade() -> None:
     op.execute(
         """
         DROP TRIGGER IF EXISTS trg_approval_requests_updated_at ON approval_requests;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_approval_requests_updated_at
         BEFORE UPDATE ON approval_requests
         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -196,6 +200,10 @@ def upgrade() -> None:
     op.execute(
         """
         DROP TRIGGER IF EXISTS trg_staff_mistakes_updated_at ON staff_mistakes;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_staff_mistakes_updated_at
         BEFORE UPDATE ON staff_mistakes
         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -204,6 +212,10 @@ def upgrade() -> None:
     op.execute(
         """
         DROP TRIGGER IF EXISTS trg_suspicious_activity_alerts_updated_at ON suspicious_activity_alerts;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_suspicious_activity_alerts_updated_at
         BEFORE UPDATE ON suspicious_activity_alerts
         FOR EACH ROW EXECUTE FUNCTION set_updated_at();

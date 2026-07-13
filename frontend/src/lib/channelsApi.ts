@@ -7,9 +7,16 @@ export interface ChannelConfig {
   mode: string; // mock | live
   api_key?: string | null;
   api_key_set?: boolean;
+  api_secret_set?: boolean;
+  access_token_set?: boolean;
   store_id?: string | null;
   base_url?: string | null;
   webhook_secret_set?: boolean;
+  /** Tenant public webhook: /api/v1/public/store/{slug}/aggregators/{provider}/webhook */
+  webhook_url?: string | null;
+  /** Partner path requiring restaurant X-API-Key */
+  partner_webhook_url?: string | null;
+  credential_hint?: string | null;
   order_url?: string | null;
   slug?: string | null;
 }
@@ -19,6 +26,8 @@ export interface ChannelsOut {
   providers: string[];
   public_slug?: string | null;
   order_links: Record<string, string>;
+  /** Multi-tenant isolation note from API */
+  tenant_scope?: string;
 }
 
 export interface SyncResult {
@@ -81,6 +90,7 @@ export function updateChannels(
       api_key?: string | null;
       api_secret?: string | null;
       webhook_secret?: string | null;
+      access_token?: string | null;
     }
   >,
 ) {

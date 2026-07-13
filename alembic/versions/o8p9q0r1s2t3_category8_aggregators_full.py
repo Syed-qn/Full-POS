@@ -77,6 +77,10 @@ def upgrade() -> None:
     op.execute(
         """
         DROP TRIGGER IF EXISTS trg_channel_sync_logs_updated_at ON channel_sync_logs;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_channel_sync_logs_updated_at
         BEFORE UPDATE ON channel_sync_logs
         FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -140,6 +144,10 @@ def upgrade() -> None:
     op.execute(
         """
         DROP TRIGGER IF EXISTS trg_channel_settlements_updated_at ON channel_settlements;
+        """
+    )
+    op.execute(
+        """
         CREATE TRIGGER trg_channel_settlements_updated_at
         BEFORE UPDATE ON channel_settlements
         FOR EACH ROW EXECUTE FUNCTION set_updated_at();

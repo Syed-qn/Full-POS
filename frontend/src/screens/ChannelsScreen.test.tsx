@@ -16,6 +16,7 @@ vi.mock("../lib/channelsApi", () => ({
   syncPrice: vi.fn(),
   syncStock: vi.fn(),
   createSettlement: vi.fn(),
+  providerLiveHealth: vi.fn(),
 }));
 
 vi.mock("../lib/staffApi", () => ({
@@ -32,6 +33,13 @@ const mockChannels = {
       accepting: true,
       commission_pct: 25,
       mode: "mock",
+      api_key_set: false,
+      api_secret_set: false,
+      webhook_secret_set: false,
+      credential_hint: "DH username → API key, password → API secret",
+      webhook_url:
+        "http://localhost/api/v1/public/store/demo-cafe/aggregators/talabat/webhook",
+      partner_webhook_url: "http://localhost/api/v1/aggregators/talabat/webhook",
     },
     website: {
       enabled: true,
@@ -40,8 +48,9 @@ const mockChannels = {
       mode: "mock",
     },
   },
-  providers: ["talabat", "deliveroo", "careem", "ubereats", "noon", "zomato"],
+  providers: ["talabat", "deliveroo", "careem", "ubereats", "noon", "zomato", "keeta"],
   public_slug: "demo-cafe",
+  tenant_scope: "Credentials are stored per restaurant only and never shared across tenants.",
   order_links: {
     website: "http://localhost/order/demo-cafe",
     mobile_app: "http://localhost/order/demo-cafe?channel=mobile_app",
@@ -116,6 +125,18 @@ describe("ChannelsScreen", () => {
     expect(screen.getByText("TB-1")).toBeInTheDocument();
     expect(screen.getByText("Commission report")).toBeInTheDocument();
     expect(screen.getByText("Profitability by channel")).toBeInTheDocument();
+  });
+
+  it("shows multi-tenant credential banner and tenant webhook URL", async () => {
+    render(<ChannelsScreen />);
+    expect(await screen.findByTestId("tenant-credentials-banner")).toHaveTextContent(
+      /per restaurant only/i,
+    );
+    expect(await screen.findByTestId("integration-talabat")).toBeInTheDocument();
+    expect(screen.getByTestId("credential-hint-talabat")).toHaveTextContent(/DH username/i);
+    expect(screen.getByTestId("webhook-url-talabat")).toHaveTextContent(
+      /public\/store\/demo-cafe\/aggregators\/talabat\/webhook/,
+    );
   });
 
   it("gates channel pause behind confirm + manager PIN", async () => {

@@ -31,6 +31,7 @@ const AGGREGATOR_KEYS = new Set([
   "ubereats",
   "noon",
   "zomato",
+  "keeta",
 ]);
 import s from "./ChannelsScreen.module.css";
 
@@ -177,7 +178,14 @@ export function ChannelsScreen() {
 
   async function onSaveLiveCreds(
     key: string,
-    fields: { api_key?: string; store_id?: string; base_url?: string },
+    fields: {
+      api_key?: string;
+      api_secret?: string;
+      webhook_secret?: string;
+      access_token?: string;
+      store_id?: string;
+      base_url?: string;
+    },
   ) {
     setBusy(true);
     try {
@@ -188,12 +196,19 @@ export function ChannelsScreen() {
         },
       });
       setData(next);
-      toast(`${key} live credentials saved`);
+      toast(`${key}: your restaurant credentials saved (tenant-only)`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Save failed", "error");
     } finally {
       setBusy(false);
     }
+  }
+
+  function copyText(label: string, value: string) {
+    void navigator.clipboard?.writeText(value).then(
+      () => toast(`${label} copied`),
+      () => toast("Copy failed", "error"),
+    );
   }
 
   async function onHealth(key: string) {
@@ -265,10 +280,24 @@ export function ChannelsScreen() {
     <div className={s.screen}>
       <PageHeader
         title="Channels & Aggregators"
-        subtitle="Marketplace integrations, public storefront, pause/sync, commission & recon"
+        subtitle="Connect each marketplace with this restaurant’s own credentials (multi-tenant SaaS)"
       />
 
       {error && <p className={s.error}>{error}</p>}
+
+      <div className={s.tenantBanner} data-testid="tenant-credentials-banner" role="note">
+        <strong>Your restaurant only.</strong>{" "}
+        {data?.tenant_scope ??
+          "API keys, secrets, and store IDs are saved on this tenant and never shared with other restaurants."}{" "}
+        Switch mode to <em>Live</em>, paste partner credentials, copy the webhook URL into the partner portal, then
+        Test connectivity.
+        {!data?.public_slug && (
+          <>
+            {" "}
+            Set a <strong>public slug</strong> below so partners get a stable webhook URL.
+          </>
+        )}
+      </div>
 
       <div className={s.metrics}>
         <div className={s.metric}>
@@ -391,7 +420,17 @@ export function ChannelsScreen() {
                 </span>
               </div>
               {AGGREGATOR_KEYS.has(key) && (
-                <div className={s.row} style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                <div
+                  className={s.integrationPanel}
+                  data-testid={`integration-${key}`}
+                  style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}
+                >
+                  <div className={s.integrationTitle}>Connect {key} (this restaurant)</div>
+                  {cfg.credential_hint && (
+                    <p className={s.hint} data-testid={`credential-hint-${key}`}>
+                      {cfg.credential_hint}
+                    </p>
+                  )}
                   <label>
                     Adapter mode
                     <select
@@ -400,27 +439,87 @@ export function ChannelsScreen() {
                         void onModeChange(key, e.target.value as "mock" | "live")
                       }
                       disabled={busy}
+                      aria-label={`${key} adapter mode`}
                     >
                       <option value="mock">Mock (dev/test)</option>
-                      <option value="live">Live HTTP (partner API)</option>
+                      <option value="live">Live — use my partner credentials</option>
                     </select>
                   </label>
                   <label>
-                    API key (write-only)
+                    API key / Client ID / Username (write-only)
                     <input
                       type="password"
-                      placeholder={cfg.api_key_set ? "•••• set" : "partner api key"}
+                      autoComplete="off"
+                      placeholder={cfg.api_key_set ? "•••• saved for this restaurant" : "paste partner key"}
                       onBlur={(e) => {
                         const v = e.target.value.trim();
-                        if (v) void onSaveLiveCreds(key, { api_key: v });
+                        if (v) {
+                          void onSaveLiveCreds(key, { api_key: v });
+                          e.target.value = "";
+                        }
                       }}
                     />
                   </label>
                   <label>
-                    Store ID
+                    API secret / Password / Client secret (write-only)
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={
+                        cfg.api_secret_set ? "•••• secret saved" : "paste partner secret"
+                      }
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v) {
+                          void onSaveLiveCreds(key, { api_secret: v });
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Webhook secret / HMAC key (write-only)
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={
+                        cfg.webhook_secret_set
+                          ? "•••• webhook secret saved"
+                          : "optional partner webhook secret"
+                      }
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v) {
+                          void onSaveLiveCreds(key, { webhook_secret: v });
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+                  </label>
+                  {(key === "keeta" || key === "ubereats") && (
+                    <label>
+                      Access token (write-only{key === "keeta" ? " — Keeta merchant token" : ""})
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        placeholder={
+                          cfg.access_token_set ? "•••• token saved" : "optional pre-issued bearer"
+                        }
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v) {
+                            void onSaveLiveCreds(key, { access_token: v });
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                  <label>
+                    Store / Site / Vendor ID
                     <input
                       defaultValue={cfg.store_id ?? ""}
-                      placeholder="partner store id"
+                      placeholder="partner store id for this restaurant"
                       onBlur={(e) => {
                         const v = e.target.value.trim();
                         if (v && v !== (cfg.store_id ?? "")) {
@@ -430,10 +529,14 @@ export function ChannelsScreen() {
                     />
                   </label>
                   <label>
-                    Base URL (optional override)
+                    Partner / middleware Base URL (optional)
                     <input
                       defaultValue={cfg.base_url ?? ""}
-                      placeholder="https://api.partners…"
+                      placeholder={
+                        key === "careem" || key === "noon"
+                          ? "https://your-middleware-host/…"
+                          : "https://api.partners… (override)"
+                      }
                       onBlur={(e) => {
                         const v = e.target.value.trim();
                         if (v && v !== (cfg.base_url ?? "")) {
@@ -442,9 +545,37 @@ export function ChannelsScreen() {
                       }}
                     />
                   </label>
-                  <Button disabled={busy} onClick={() => void onHealth(key)}>
-                    Test connectivity
-                  </Button>
+                  {cfg.webhook_url && (
+                    <div className={s.webhookBox} data-testid={`webhook-url-${key}`}>
+                      <span className={s.webhookLabel}>Tenant webhook URL (paste in partner portal)</span>
+                      <code className={s.webhookUrl}>{cfg.webhook_url}</code>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => copyText("Webhook URL", cfg.webhook_url!)}
+                      >
+                        Copy webhook
+                      </Button>
+                    </div>
+                  )}
+                  {cfg.partner_webhook_url && (
+                    <p className={s.hint}>
+                      Alt (X-API-Key): <code>{cfg.partner_webhook_url}</code>
+                    </p>
+                  )}
+                  <div className={s.row}>
+                    <span className={s.badge}>
+                      {cfg.mode}
+                      {cfg.api_key_set ? " · key✓" : ""}
+                      {cfg.api_secret_set ? " · secret✓" : ""}
+                      {cfg.webhook_secret_set ? " · wh✓" : ""}
+                      {cfg.access_token_set ? " · token✓" : ""}
+                    </span>
+                    <Button disabled={busy} onClick={() => void onHealth(key)}>
+                      Test connectivity
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

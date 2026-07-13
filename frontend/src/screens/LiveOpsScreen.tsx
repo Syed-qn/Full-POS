@@ -332,8 +332,21 @@ export function LiveOpsScreen() {
         <Button type="button" variant="ghost" size="lg" onClick={() => nav("/orders")}>
           Open Orders
         </Button>
-        <Link className={s.barLink} to="/riders">Riders</Link>
-        <Link className={s.barLink} to="/kds">Kitchen</Link>
+        <Button type="button" variant="ghost" size="lg" onClick={() => nav("/floor")}>
+          Floor
+        </Button>
+        <Link className={s.barLink} to="/riders">
+          Riders
+        </Link>
+        <Link className={s.barLink} to="/kds">
+          Kitchen
+        </Link>
+        <Link className={s.barLink} to="/kds?view=expo">
+          Expo
+        </Link>
+        <Link className={s.barLink} to="/reports">
+          Reports
+        </Link>
       </BottomActionBar>
     </div>
   );

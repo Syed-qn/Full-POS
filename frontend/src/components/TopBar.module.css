@@ -105,15 +105,6 @@
   background: var(--bg-surface-inset);
 }
 
-.staffBtn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.staffBtn:disabled:hover {
-  background: var(--bg-surface);
-}
-
 .trainingBadge {
   font-size: 11px;
   font-weight: 700;

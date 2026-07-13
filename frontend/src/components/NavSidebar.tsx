@@ -34,6 +34,7 @@ const GROUPS: NavGroup[] = [
   },
   {
     id: "manage",
+    /** Owner/manager admin surface (R5). Label stays Manage for floor roles that see partial list. */
     label: "Manage",
     items: [
       { to: "/menu", label: "Menu", icon: "◇" },
@@ -106,9 +107,15 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const role = useMemo(() => getSessionRole(), [location.pathname]);
   const visibleGroups = useMemo(
     () =>
-      GROUPS.map((g) => ({ ...g, items: filterNavItems(g.items, role) })).filter(
-        (g) => g.items.length > 0,
-      ),
+      GROUPS.map((g) => {
+        const items = filterNavItems(g.items, role);
+        // R5: owner/manager see Manage as "Admin" for clarity.
+        const label =
+          g.id === "manage" && (role == null || role === "owner" || role === "manager")
+            ? "Admin"
+            : g.label;
+        return { ...g, label, items };
+      }).filter((g) => g.items.length > 0),
     [role],
   );
   const activeGroup = groupContaining(location.pathname);

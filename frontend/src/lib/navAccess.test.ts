@@ -3,8 +3,13 @@ import {
   canAccess,
   clearStaffSession,
   filterNavItems,
+  getRoleChrome,
+  getRoleHomePath,
   getSessionRole,
+  isCashierRole,
+  isKitchenRole,
   isTrainingMode,
+  isWaiterRole,
   matchRouteKey,
   normalizeRole,
   ROUTE_ROLE_MAP,
@@ -26,10 +31,12 @@ function fakeJwt(payload: Record<string, unknown>): string {
 }
 
 describe("normalizeRole", () => {
-  it("accepts known roles case-insensitively", () => {
+  it("accepts known roles including waiter", () => {
     expect(normalizeRole("Manager")).toBe("manager");
     expect(normalizeRole("KITCHEN")).toBe("kitchen");
     expect(normalizeRole("cashier")).toBe("cashier");
+    expect(normalizeRole("waiter")).toBe("waiter");
+    expect(normalizeRole("WAITER")).toBe("waiter");
   });
 
   it("returns null for empty or unknown (full access)", () => {
@@ -37,6 +44,51 @@ describe("normalizeRole", () => {
     expect(normalizeRole(undefined)).toBeNull();
     expect(normalizeRole("")).toBeNull();
     expect(normalizeRole("franchise_admin")).toBeNull();
+  });
+});
+
+describe("getRoleHomePath", () => {
+  it("maps roles to home screens", () => {
+    expect(getRoleHomePath(null)).toBe("/");
+    expect(getRoleHomePath("owner")).toBe("/");
+    expect(getRoleHomePath("manager")).toBe("/");
+    expect(getRoleHomePath("waiter")).toBe("/floor");
+    expect(getRoleHomePath("staff")).toBe("/floor");
+    expect(getRoleHomePath("cashier")).toBe("/new-order");
+    expect(getRoleHomePath("kitchen")).toBe("/kds");
+    expect(getRoleHomePath("rider")).toBe("/riders");
+  });
+});
+
+describe("getRoleChrome", () => {
+  it("hides sidebar for kitchen", () => {
+    expect(getRoleChrome("kitchen").showSidebar).toBe(false);
+    expect(getRoleChrome("kitchen").mode).toBe("kitchen");
+    expect(getRoleChrome("waiter").showSidebar).toBe(true);
+    expect(getRoleChrome(null).showSidebar).toBe(true);
+  });
+});
+
+describe("role helpers", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+  afterEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("isWaiterRole for waiter and staff", () => {
+    setStaffSession({ role: "waiter" });
+    expect(isWaiterRole()).toBe(true);
+    setStaffSession({ role: "staff" });
+    expect(isWaiterRole()).toBe(true);
+    setStaffSession({ role: "cashier" });
+    expect(isWaiterRole()).toBe(false);
+    expect(isCashierRole()).toBe(true);
+    setStaffSession({ role: "kitchen" });
+    expect(isKitchenRole()).toBe(true);
   });
 });
 
@@ -104,26 +156,39 @@ describe("canAccess — role matrix", () => {
       denied: ["/menu", "/kds", "/staff", "/settings", "/marketing", "/riders"],
     },
     {
+      role: "waiter",
+      allowed: ["/", "/floor", "/orders", "/orders/9", "/new-order"],
+      denied: [
+        "/menu",
+        "/payments",
+        "/orders/1/pay",
+        "/kds",
+        "/staff",
+        "/settings",
+        "/marketing",
+        "/inventory",
+        "/reports",
+        "/channels",
+      ],
+    },
+    {
       role: "rider",
       allowed: ["/", "/orders", "/riders"],
       denied: ["/menu", "/new-order", "/kds", "/payments", "/settings", "/staff", "/floor"],
     },
     {
       role: "staff",
-      allowed: [
-        "/",
-        "/floor",
-        "/orders",
-        "/new-order",
-        "/kds",
+      allowed: ["/", "/floor", "/orders", "/new-order", "/kds", "/riders", "/conversations", "/customers", "/tickets"],
+      denied: [
+        "/menu",
+        "/inventory",
+        "/staff",
+        "/settings",
+        "/marketing",
+        "/reports",
+        "/compliance",
         "/payments",
-        "/riders",
-        "/conversations",
-        "/customers",
-        "/tickets",
-        "/reliability",
       ],
-      denied: ["/menu", "/inventory", "/staff", "/settings", "/marketing", "/reports", "/compliance"],
     },
   ];
 
@@ -141,15 +206,21 @@ describe("filterNavItems", () => {
     { to: "/menu", label: "Menu" },
     { to: "/kds", label: "Kitchen" },
     { to: "/settings", label: "Settings" },
+    { to: "/floor", label: "Floor" },
   ];
 
   it("returns all items when role is null", () => {
-    expect(filterNavItems(items, null)).toHaveLength(4);
+    expect(filterNavItems(items, null)).toHaveLength(5);
   });
 
   it("filters for kitchen", () => {
     const out = filterNavItems(items, "kitchen");
     expect(out.map((i) => i.to)).toEqual(["/", "/kds"]);
+  });
+
+  it("filters for waiter", () => {
+    const out = filterNavItems(items, "waiter");
+    expect(out.map((i) => i.to)).toEqual(["/", "/floor"]);
   });
 });
 

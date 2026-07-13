@@ -1,4 +1,10 @@
-"""Per-restaurant channel configuration (pause, commission, public links)."""
+"""Per-restaurant channel configuration (pause, commission, public links).
+
+Multi-tenant SaaS: every restaurant owns ``settings.channels.<provider>`` with
+**their** partner credentials (api_key, api_secret, webhook_secret, store_id…).
+Factory ``get_aggregator_port(..., restaurant_settings=)`` always reads that
+tenant blob — never a global platform key.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +20,7 @@ CHANNEL_KEYS = (
     "ubereats",
     "noon",
     "zomato",
+    "keeta",
     "website",
     "mobile_app",
     "instagram",
@@ -25,8 +32,19 @@ CHANNEL_KEYS = (
 
 # Aggregator subset that use AggregatorPort.
 AGGREGATOR_CHANNELS = frozenset(
-    {"talabat", "deliveroo", "careem", "ubereats", "noon", "zomato"}
+    {"talabat", "deliveroo", "careem", "ubereats", "noon", "zomato", "keeta"}
 )
+
+# Operator-facing credential field guidance (dashboard).
+CREDENTIAL_HINTS: dict[str, str] = {
+    "talabat": "DH username → API key, password → API secret, vendor id → Store ID",
+    "deliveroo": "API key + API secret/token (Bearer), site_id → Store ID",
+    "ubereats": "OAuth client_id → API key, client_secret → API secret, store UUID → Store ID",
+    "keeta": "appId → API key, appSecret → API secret, accessToken → Access token, shopId → Store ID",
+    "careem": "Middleware API key/secret + Store/channel-link ID; Base URL = middleware host",
+    "noon": "Middleware API key/secret + Store/channel-link ID; Base URL = middleware host",
+    "zomato": "Partner API key/secret + outlet Store ID (generic live HTTP until brand mapper)",
+}
 
 _DEFAULT_CHANNEL = {
     "enabled": False,
@@ -36,6 +54,7 @@ _DEFAULT_CHANNEL = {
     "api_key": None,
     "api_secret": None,
     "webhook_secret": None,
+    "access_token": None,
     "store_id": None,
     "base_url": None,
     "order_url": None,
@@ -50,6 +69,7 @@ _DEFAULTS: dict[str, dict] = {
     "ubereats": {**_DEFAULT_CHANNEL, "commission_pct": 30.0},
     "noon": {**_DEFAULT_CHANNEL, "commission_pct": 25.0},
     "zomato": {**_DEFAULT_CHANNEL, "commission_pct": 20.0},
+    "keeta": {**_DEFAULT_CHANNEL, "commission_pct": 25.0},
     "website": {**_DEFAULT_CHANNEL, "enabled": True, "accepting": True},
     "mobile_app": {**_DEFAULT_CHANNEL, "enabled": True, "accepting": True},
     "instagram": {**_DEFAULT_CHANNEL, "enabled": True},
@@ -71,8 +91,16 @@ def get_channels_config(restaurant_settings: dict | None) -> dict[str, dict]:
     return out
 
 
+# Credential keys that may be written once and must not be wiped by empty strings.
+_SECRET_KEYS = frozenset({"api_key", "api_secret", "webhook_secret", "access_token"})
+
+
 def set_channels_config(restaurant, updates: dict[str, Any]) -> dict[str, dict]:
-    """Merge channel updates into restaurant.settings['channels']."""
+    """Merge channel updates into restaurant.settings['channels'].
+
+    Empty-string secrets are ignored (keep previous) so the dashboard can
+    patch non-secret fields without re-sending passwords.
+    """
     settings = dict(restaurant.settings) if isinstance(restaurant.settings, dict) else {}
     channels = dict(settings.get("channels") or {})
     for key, patch in updates.items():
@@ -81,11 +109,30 @@ def set_channels_config(restaurant, updates: dict[str, Any]) -> dict[str, dict]:
         if not isinstance(patch, dict):
             continue
         current = dict(channels.get(key) or copy.deepcopy(_DEFAULTS[key]))
-        current.update(patch)
+        cleaned = dict(patch)
+        for sk in _SECRET_KEYS:
+            if sk in cleaned and (cleaned[sk] is None or str(cleaned[sk]).strip() == ""):
+                cleaned.pop(sk)
+        current.update(cleaned)
         channels[key] = current
     settings["channels"] = channels
     restaurant.settings = settings
     return get_channels_config(settings)
+
+
+def tenant_webhook_urls(
+    *,
+    base_url: str,
+    public_slug: str | None,
+    provider: str,
+) -> tuple[str | None, str]:
+    """Return (public slug webhook, partner API-key webhook) for one provider."""
+    base = (base_url or "").rstrip("/")
+    partner = f"{base}/api/v1/aggregators/{provider}/webhook"
+    public = None
+    if public_slug:
+        public = f"{base}/api/v1/public/store/{public_slug}/aggregators/{provider}/webhook"
+    return public, partner
 
 
 def channel_is_accepting(restaurant_settings: dict | None, channel: str) -> bool:

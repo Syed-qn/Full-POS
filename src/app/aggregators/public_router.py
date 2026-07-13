@@ -1,14 +1,22 @@
-"""Unauthenticated public storefront + QR menu endpoints (Category 8)."""
+"""Unauthenticated public storefront + QR menu + tenant marketplace webhooks.
+
+Marketplace webhooks are multi-tenant: ``/store/{slug}/aggregators/{provider}/webhook``
+resolves the restaurant by public slug, then verifies the webhook using **that**
+restaurant's ``settings.channels.<provider>`` secrets (HMAC / shared secret).
+"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.aggregators.channels import AGGREGATOR_CHANNELS
+from app.aggregators.factory import get_aggregator_port
 from app.aggregators.schemas import PublicMenuItemOut, PublicStoreOrderIn
 from app.aggregators.service import (
     ChannelPausedError,
     get_restaurant_by_slug,
+    ingest_inbound_order,
     place_public_channel_order,
     public_menu_for_restaurant,
 )
@@ -162,4 +170,81 @@ async def public_qr_order_v2(
         "source_channel": order.source_channel,
         "table_id": order.table_id,
         "total_aed": str(order.total),
+    }
+
+
+@router.post(
+    "/store/{slug}/aggregators/{provider}/webhook",
+    status_code=201,
+    tags=["public-store", "aggregators"],
+)
+async def public_tenant_aggregator_webhook(
+    slug: str,
+    provider: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Inbound marketplace order for **one restaurant** (multi-tenant).
+
+    Tenant resolution: public store ``slug`` → restaurant.
+    Auth: that restaurant's ``channels.<provider>`` webhook_secret / HMAC
+    (via adapter ``verify_webhook``). No JWT; partners paste this URL once.
+    """
+    key = (provider or "").strip().lower()
+    if key not in AGGREGATOR_CHANNELS:
+        raise HTTPException(status_code=400, detail=f"unsupported provider: {provider}")
+
+    restaurant = await get_restaurant_by_slug(session, slug=slug)
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="store not found")
+
+    try:
+        gateway = get_aggregator_port(key, restaurant_settings=restaurant.settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    raw = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    if not gateway.verify_webhook(headers, raw):
+        raise HTTPException(status_code=401, detail="invalid webhook signature")
+
+    try:
+        import json as _json
+
+        payload = _json.loads(raw.decode("utf-8") or "{}")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a JSON object")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"invalid JSON body: {exc}") from exc
+
+    try:
+        order = await ingest_inbound_order(
+            session,
+            restaurant_id=restaurant.id,
+            provider=key,
+            payload=payload,
+            gateway=gateway,
+            restaurant=restaurant,
+        )
+    except ChannelPausedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422, detail=f"malformed {key} payload: {exc}"
+        ) from exc
+
+    await session.commit()
+    mode = (
+        ((restaurant.settings or {}).get("channels") or {})
+        .get(key, {})
+        .get("mode")
+        or "mock"
+    )
+    return {
+        "order_id": order.id,
+        "order_number": order.order_number,
+        "source_channel": order.source_channel,
+        "aggregator_source": order.aggregator_source,
+        "restaurant_slug": restaurant.public_slug,
+        "adapter_mode": "live" if mode == "live" else "mock",
     }

@@ -1,5 +1,5 @@
 /**
- * Role / license navigation gates (Phase 5C).
+ * Role / license navigation gates + role landings (R0–R1).
  *
  * Backend model:
  * - Restaurant owner login → JWT aud="manager", no `role` claim → full access.
@@ -7,12 +7,15 @@
  *
  * Default / backward compatible: unknown or missing role → show all routes
  * (never lock out owners/managers who lack a role claim).
+ *
+ * Placement SSOT: docs/ROLE_SCREEN_FEATURE_PLACEMENT.md
  */
 
 export type StaffRole =
   | "owner"
   | "manager"
   | "staff"
+  | "waiter"
   | "kitchen"
   | "cashier"
   | "rider";
@@ -21,6 +24,7 @@ export const KNOWN_ROLES: readonly StaffRole[] = [
   "owner",
   "manager",
   "staff",
+  "waiter",
   "kitchen",
   "cashier",
   "rider",
@@ -36,6 +40,13 @@ export type StaffSessionMeta = {
   training_mode?: boolean;
   name?: string;
   staff_id?: number;
+};
+
+export type RoleChrome = {
+  /** Hide left nav (kitchen fullscreen). */
+  showSidebar: boolean;
+  /** Role mode string for data attributes / CSS. */
+  mode: "owner" | "waiter" | "cashier" | "kitchen" | "staff" | "rider" | "full";
 };
 
 export function setStaffSession(meta: StaffSessionMeta | null): void {
@@ -127,16 +138,79 @@ export function isTrainingMode(): boolean {
 }
 
 /**
+ * Post-login home path for a role.
+ * null / owner / manager → Live Ops.
+ */
+export function getRoleHomePath(role: StaffRole | string | null | undefined): string {
+  const r =
+    role == null || role === ""
+      ? null
+      : typeof role === "string"
+        ? normalizeRole(role)
+        : role;
+  if (r == null) return "/";
+  switch (r) {
+    case "waiter":
+    case "staff":
+      return "/floor";
+    case "cashier":
+      return "/new-order";
+    case "kitchen":
+      return "/kds";
+    case "rider":
+      return "/riders";
+    case "owner":
+    case "manager":
+    default:
+      return "/";
+  }
+}
+
+/** Shell chrome flags per role. */
+export function getRoleChrome(role: StaffRole | string | null | undefined): RoleChrome {
+  const r =
+    role == null || role === ""
+      ? null
+      : typeof role === "string"
+        ? normalizeRole(role)
+        : role;
+  if (r === "kitchen") return { showSidebar: false, mode: "kitchen" };
+  if (r === "waiter") return { showSidebar: true, mode: "waiter" };
+  if (r === "cashier") return { showSidebar: true, mode: "cashier" };
+  if (r === "staff") return { showSidebar: true, mode: "staff" };
+  if (r === "rider") return { showSidebar: true, mode: "rider" };
+  return { showSidebar: true, mode: r === "owner" || r === "manager" ? "owner" : "full" };
+}
+
+/** True when role should not see payment / tender UI (waiter floor staff). */
+export function isWaiterRole(role?: StaffRole | string | null): boolean {
+  const r = role === undefined ? getSessionRole() : typeof role === "string" ? normalizeRole(role) : role;
+  return r === "waiter" || r === "staff";
+}
+
+/** True when role is kitchen cook board. */
+export function isKitchenRole(role?: StaffRole | string | null): boolean {
+  const r = role === undefined ? getSessionRole() : typeof role === "string" ? normalizeRole(role) : role;
+  return r === "kitchen";
+}
+
+/** True when role is cashier money terminal. */
+export function isCashierRole(role?: StaffRole | string | null): boolean {
+  const r = role === undefined ? getSessionRole() : typeof role === "string" ? normalizeRole(role) : role;
+  return r === "cashier";
+}
+
+/**
  * Route → roles allowed (owner/manager always pass via canAccess).
  * Paths are prefixes; longest match wins. Nested routes inherit.
  */
 export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
-  "/": ["owner", "manager", "staff", "kitchen", "cashier", "rider"],
-  "/floor": ["owner", "manager", "staff", "cashier"],
-  "/orders": ["owner", "manager", "staff", "kitchen", "cashier", "rider"],
-  "/new-order": ["owner", "manager", "staff", "cashier"],
+  "/": ["owner", "manager", "staff", "waiter", "kitchen", "cashier", "rider"],
+  "/floor": ["owner", "manager", "staff", "waiter", "cashier"],
+  "/orders": ["owner", "manager", "staff", "waiter", "kitchen", "cashier", "rider"],
+  "/new-order": ["owner", "manager", "staff", "waiter", "cashier"],
   "/kds": ["owner", "manager", "staff", "kitchen"],
-  "/payments": ["owner", "manager", "staff", "cashier"],
+  "/payments": ["owner", "manager", "cashier"],
   "/riders": ["owner", "manager", "staff", "rider"],
   "/conversations": ["owner", "manager", "staff"],
   "/menu": ["owner", "manager"],
@@ -148,7 +222,7 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/ai": ["owner", "manager"],
   "/branches": ["owner", "manager"],
   "/channels": ["owner", "manager"],
-  "/reliability": ["owner", "manager", "staff"],
+  "/reliability": ["owner", "manager"],
   "/settings": ["owner", "manager"],
   "/tickets": ["owner", "manager", "staff"],
   "/coupons": ["owner", "manager"],

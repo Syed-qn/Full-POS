@@ -19,6 +19,7 @@ import {
 } from "../lib/orderDetailApi";
 import { cancelOrder, setOrderPriority } from "../lib/ordersApi";
 import { listOrderPayments } from "../lib/paymentsApi";
+import { isWaiterRole } from "../lib/navAccess";
 import { submitManagerPin } from "../lib/staffApi";
 import type { OrderDetailOut, OrderOut, TimelineEventOut } from "../lib/types";
 import s from "./OrderDetailScreen.module.css";
@@ -88,6 +89,7 @@ export function OrderDetailScreen() {
   const { id: idParam } = useParams<{ id: string }>();
   const orderId = Number(idParam);
   const navigate = useNavigate();
+  const waiterMode = isWaiterRole();
 
   const [detail, setDetail] = useState<OrderDetailOut | null>(null);
   const [basic, setBasic] = useState<OrderOut | null>(null);
@@ -391,15 +393,22 @@ export function OrderDetailScreen() {
       </div>
 
       <BottomActionBar>
-        {KITCHEN_ADVANCEABLE.has(detail.status) && (
+        {KITCHEN_ADVANCEABLE.has(detail.status) && !waiterMode && (
           <TouchButton type="button" onClick={() => void advanceStatus()} disabled={advancing}>
             {advancing ? "Saving…" : ADVANCE_LABEL[detail.status] || "Advance"}
           </TouchButton>
         )}
-        {PAYABLE.has(detail.status) && (
+        {PAYABLE.has(detail.status) && !waiterMode && (
           <Link to={`/orders/${detail.id}/pay`}>
-            <TouchButton type="button">Pay</TouchButton>
+            <TouchButton type="button" data-testid="order-detail-pay">
+              Pay
+            </TouchButton>
           </Link>
+        )}
+        {waiterMode && PAYABLE.has(detail.status) && (
+          <Button type="button" variant="ghost" size="lg" disabled title="Payment is handled at cashier">
+            Bill at cashier
+          </Button>
         )}
         <Button
           type="button"
@@ -407,7 +416,7 @@ export function OrderDetailScreen() {
           size="lg"
           onClick={() => navigate(`/new-order?reorder=${detail.id}`)}
         >
-          Edit / re-order
+          {waiterMode ? "Edit items / qty / notes" : "Edit / re-order"}
         </Button>
         <Button type="button" variant="ghost" size="lg" onClick={() => void markPriority()}>
           Rush / Priority
@@ -432,29 +441,38 @@ export function OrderDetailScreen() {
           </Button>
           {showMore && (
             <div className={s.morePanel} role="menu">
-              <button
-                type="button"
-                className={`${s.moreBtn} ${s.moreDanger}`}
-                role="menuitem"
-                disabled={!CANCELLABLE.has(detail.status)}
-                onClick={() => {
-                  setShowMore(false);
-                  setConfirmCancel(true);
-                }}
-              >
-                Void order…
-              </button>
-              <button
-                type="button"
-                className={s.moreBtn}
-                role="menuitem"
-                onClick={() => {
-                  setShowMore(false);
-                  navigate(`/orders`);
-                }}
-              >
-                Assign rider (list)
-              </button>
+              {!waiterMode && (
+                <button
+                  type="button"
+                  className={`${s.moreBtn} ${s.moreDanger}`}
+                  role="menuitem"
+                  disabled={!CANCELLABLE.has(detail.status)}
+                  onClick={() => {
+                    setShowMore(false);
+                    setConfirmCancel(true);
+                  }}
+                >
+                  Void order…
+                </button>
+              )}
+              {waiterMode && (
+                <button type="button" className={s.moreBtn} role="menuitem" disabled>
+                  Void — ask manager (PIN)
+                </button>
+              )}
+              {!waiterMode && (
+                <button
+                  type="button"
+                  className={s.moreBtn}
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMore(false);
+                    navigate(`/orders`);
+                  }}
+                >
+                  Assign rider (list)
+                </button>
+              )}
             </div>
           )}
         </div>

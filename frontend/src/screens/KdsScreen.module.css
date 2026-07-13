@@ -326,6 +326,12 @@
   border-color: var(--border-strong);
 }
 
+.btnActive {
+  background: var(--accent-primary-dim);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 .btnPrimary {
   background: var(--sla-safe);
   border-color: var(--sla-safe);

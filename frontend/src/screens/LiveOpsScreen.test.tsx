@@ -37,4 +37,14 @@ describe("LiveOpsScreen", () => {
       expect(screen.getByText(/needs attention now/i)).toBeInTheDocument()
     );
   });
+
+  it("owner bottom bar includes Floor, Expo, Reports, Kitchen", async () => {
+    renderWithProviders(<LiveOpsScreen />);
+    await vi.advanceTimersByTimeAsync(0);
+    await waitFor(() => expect(screen.getByText("Orders Today")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /^floor$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^expo$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^reports$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^kitchen$/i })).toBeInTheDocument();
+  });
 });

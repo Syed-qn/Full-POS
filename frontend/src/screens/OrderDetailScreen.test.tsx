@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearStaffSession, setStaffSession } from "../lib/navAccess";
 import { renderWithProviders } from "../test/render";
 import { OrderDetailScreen } from "./OrderDetailScreen";
 import type { OrderDetailOut } from "../lib/types";
@@ -73,6 +74,8 @@ function renderScreen() {
 
 describe("OrderDetailScreen", () => {
   beforeEach(() => {
+    clearStaffSession();
+    localStorage.clear();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
@@ -94,7 +97,10 @@ describe("OrderDetailScreen", () => {
       }),
     );
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    clearStaffSession();
+    vi.restoreAllMocks();
+  });
 
   it("renders order detail smoke with header, items, timeline", async () => {
     renderScreen();
@@ -116,5 +122,21 @@ describe("OrderDetailScreen", () => {
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /continue to pin/i }));
     expect(await screen.findByRole("dialog", { name: /manager approval/i })).toBeInTheDocument();
+  });
+
+  it("waiter mode hides Pay and shows Bill at cashier", async () => {
+    setStaffSession({ role: "waiter", name: "W1" });
+    renderScreen();
+    await screen.findByText("R1-0042");
+    expect(screen.queryByTestId("order-detail-pay")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /bill at cashier/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /mark as ready/i })).not.toBeInTheDocument();
+  });
+
+  it("cashier mode keeps primary Pay CTA", async () => {
+    setStaffSession({ role: "cashier", name: "C1" });
+    renderScreen();
+    await screen.findByText("R1-0042");
+    expect(screen.getByTestId("order-detail-pay")).toBeInTheDocument();
   });
 });

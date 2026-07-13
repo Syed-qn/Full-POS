@@ -36,6 +36,8 @@ describe("NavSidebar logout", () => {
     expect(screen.getByRole("link", { name: /live ops/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /floor plan/i })).toHaveAttribute("href", "/floor");
     expect(screen.getByRole("link", { name: /new order/i })).toBeInTheDocument();
+    // Owner/manager (null role) see Manage as Admin
+    expect(screen.getByRole("button", { name: /admin/i })).toBeInTheDocument();
   });
 
   it("collapses navigation width and keeps accessible names on icon-only links", () => {

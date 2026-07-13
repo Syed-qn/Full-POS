@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearStaffSession, setStaffSession } from "../lib/navAccess";
 import { NewOrderScreen } from "./NewOrderScreen";
 
 // Stub the leaflet map picker (heavy in jsdom) with a button that sets a pin, so
@@ -66,12 +67,70 @@ function json(data: unknown, status = 200) {
 
 // URL-aware fetch mock so call ORDER never matters (the screen fires both the
 // active-menu and /me fetches on mount). Tests override individual routes.
-function mockFetch(overrides: Partial<Record<"menu" | "me" | "lookup" | "manual", () => Response>> = {}) {
+function mockFetch(
+  overrides: Partial<
+    Record<"menu" | "me" | "lookup" | "manual" | "orders", () => Response>
+  > = {},
+) {
   const routes = {
     menu: () => json(mockMenu),
     me: () => json(mockSettings),
     lookup: () => json({ detail: "not found" }, 404),
     manual: () => json({ id: 99, status: "confirmed", order_number: "R1-0001" }),
+    orders: () =>
+      json([
+        {
+          id: 1,
+          status: "confirmed",
+          customer_name: "A",
+          customer_phone: "+1",
+          items: [],
+          total_aed: "10",
+          rider_id: null,
+          rider_name: null,
+          sla_started_at: null,
+          prep_deadline: null,
+          cook_estimate_minutes: null,
+          created_at: "2026-07-13T10:00:00Z",
+          address: null,
+          lat: null,
+          lng: null,
+        },
+        {
+          id: 2,
+          status: "delivered",
+          customer_name: "B",
+          customer_phone: "+2",
+          items: [],
+          total_aed: "20",
+          rider_id: null,
+          rider_name: null,
+          sla_started_at: null,
+          prep_deadline: null,
+          cook_estimate_minutes: null,
+          created_at: "2026-07-13T10:00:00Z",
+          address: null,
+          lat: null,
+          lng: null,
+        },
+        {
+          id: 3,
+          status: "preparing",
+          customer_name: "C",
+          customer_phone: "+3",
+          items: [],
+          total_aed: "15",
+          rider_id: null,
+          rider_name: null,
+          sla_started_at: null,
+          prep_deadline: null,
+          cook_estimate_minutes: null,
+          created_at: "2026-07-13T10:00:00Z",
+          address: null,
+          lat: null,
+          lng: null,
+        },
+      ]),
     ...overrides,
   };
   vi.stubGlobal(
@@ -82,6 +141,9 @@ function mockFetch(overrides: Partial<Record<"menu" | "me" | "lookup" | "manual"
       if (u.includes("/api/v1/me")) return Promise.resolve(routes.me());
       if (u.includes("/customer-lookup")) return Promise.resolve(routes.lookup());
       if (u.includes("/orders/manual")) return Promise.resolve(routes.manual());
+      if (u.includes("/api/v1/orders") && !u.includes("/manual")) {
+        return Promise.resolve(routes.orders());
+      }
       return Promise.resolve(json(mockMenu));
     }),
   );
@@ -97,9 +159,14 @@ function renderScreen() {
 
 describe("NewOrderScreen", () => {
   beforeEach(() => {
+    clearStaffSession();
+    localStorage.clear();
     mockFetch();
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    clearStaffSession();
+    vi.restoreAllMocks();
+  });
 
   it("renders all main sections", async () => {
     renderScreen();
@@ -256,5 +323,54 @@ describe("NewOrderScreen", () => {
       );
       expect(postCall).toBeDefined();
     });
+  });
+});
+
+describe("NewOrderScreen role modes", () => {
+  beforeEach(() => {
+    clearStaffSession();
+    localStorage.clear();
+    mockFetch();
+  });
+  afterEach(() => {
+    clearStaffSession();
+    vi.restoreAllMocks();
+  });
+
+  it("waiter mode shows Send to kitchen, not Place Order", async () => {
+    setStaffSession({ role: "waiter", name: "W1" });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: /table order/i })).toBeInTheDocument();
+    expect(screen.getByTestId("new-order-primary-cta")).toHaveTextContent(/send to kitchen/i);
+    expect(screen.queryByTestId("cashier-strip")).not.toBeInTheDocument();
+  });
+
+  it("cashier mode shows Place & Pay and cashier strip", async () => {
+    setStaffSession({ role: "cashier", name: "C1" });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: /cashier terminal/i })).toBeInTheDocument();
+    expect(screen.getByTestId("cashier-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("new-order-primary-cta")).toHaveTextContent(/place & pay/i);
+    expect(screen.getByTestId("cashier-open-bills")).toBeInTheDocument();
+    expect(screen.getByTestId("cashier-drawer")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("cashier-open-bills-count")).toHaveTextContent("2"),
+    );
+  });
+
+  it("cart line accepts item instructions and kitchen notes", async () => {
+    renderScreen();
+    await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
+    fireEvent.click(screen.getAllByText("+")[0]);
+    const note = await screen.findByTestId("item-note-10");
+    fireEvent.change(note, { target: { value: "extra raita" } });
+    expect(note).toHaveValue("extra raita");
+    expect(screen.getByTestId("kitchen-notes-field")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/kitchen notes for entire order/i), {
+      target: { value: "rush table 4" },
+    });
+    expect(screen.getByLabelText(/kitchen notes for entire order/i)).toHaveValue("rush table 4");
   });
 });

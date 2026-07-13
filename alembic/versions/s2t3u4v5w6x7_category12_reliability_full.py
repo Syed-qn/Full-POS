@@ -93,8 +93,10 @@ def upgrade() -> None:
         "dr_drill_logs",
     ):
         op.execute(
+            f"DROP TRIGGER IF EXISTS trg_{table}_updated_at ON {table};"
+        )
+        op.execute(
             f"""
-            DROP TRIGGER IF EXISTS trg_{table}_updated_at ON {table};
             CREATE TRIGGER trg_{table}_updated_at
             BEFORE UPDATE ON {table}
             FOR EACH ROW EXECUTE FUNCTION set_updated_at();

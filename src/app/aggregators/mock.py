@@ -1,3 +1,7 @@
+import hashlib
+import hmac
+from typing import Any
+
 from app.aggregators.live import parse_marketplace_payload
 from app.aggregators.port import (
     MenuPushItem,
@@ -10,10 +14,13 @@ class MockAggregator:
     """Simulates marketplace webhooks + sync ops for every supported provider.
 
     Accepts unified + provider-native payload shapes (same parser as live).
+    When the restaurant set a webhook_secret / api_secret, mock still enforces it
+    (multi-tenant: partners cannot hit another restaurant without the secret).
     """
 
-    def __init__(self, provider: str) -> None:
+    def __init__(self, provider: str, config: dict[str, Any] | None = None) -> None:
         self._provider = provider
+        self._cfg = dict(config or {})
         self.last_menu_push: list[MenuPushItem] = []
         self.last_store_status: bool | None = None
         self.availability_updates: list[tuple[str, bool]] = []
@@ -23,11 +30,36 @@ class MockAggregator:
         return parse_marketplace_payload(self._provider, payload)
 
     def verify_webhook(self, headers: dict, body: bytes) -> bool:
-        # Optional shared secret: X-Aggregator-Secret must match if set on payload path.
-        secret = headers.get("x-aggregator-secret") or headers.get("X-Aggregator-Secret")
-        if secret is None:
+        secret = (
+            self._cfg.get("webhook_secret")
+            or self._cfg.get("api_secret")
+            or self._cfg.get("api_key")
+        )
+        if not secret:
+            # Dev mock with no tenant secret configured — open (local tests).
             return True
-        return bool(secret)
+        hdr_secret = (
+            headers.get("x-aggregator-secret")
+            or headers.get("X-Aggregator-Secret")
+            or headers.get("x-webhook-secret")
+            or headers.get("X-Webhook-Secret")
+        )
+        if hdr_secret is not None:
+            return hmac.compare_digest(str(hdr_secret), str(secret))
+        sig = (
+            headers.get("x-signature")
+            or headers.get("X-Signature")
+            or headers.get("x-hub-signature-256")
+        )
+        if not sig:
+            return False
+        sig = str(sig)
+        if sig.startswith("sha256="):
+            sig = sig[7:]
+        digest = hmac.new(
+            str(secret).encode("utf-8"), body or b"", hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(digest, sig)
 
     async def push_menu(self, items: list[MenuPushItem]) -> SyncResult:
         self.last_menu_push = list(items)

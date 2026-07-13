@@ -158,8 +158,10 @@ def upgrade() -> None:
     )
     for table in ("refund_notes", "e_invoice_transmissions", "data_retention_runs"):
         op.execute(
+            f"DROP TRIGGER IF EXISTS trg_{table}_updated_at ON {table};"
+        )
+        op.execute(
             f"""
-            DROP TRIGGER IF EXISTS trg_{table}_updated_at ON {table};
             CREATE TRIGGER trg_{table}_updated_at
             BEFORE UPDATE ON {table}
             FOR EACH ROW EXECUTE FUNCTION set_updated_at();

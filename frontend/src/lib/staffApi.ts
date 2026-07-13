@@ -17,6 +17,7 @@ export async function createStaff(body: StaffCreateIn): Promise<StaffMember> {
 }
 
 export async function staffLogin(staffId: number, pin: string) {
+  // Wrong PIN must not clear the current shell session (staff switch / login pad).
   return apiClient.post<{
     access_token: string;
     token_type: string;
@@ -24,7 +25,7 @@ export async function staffLogin(staffId: number, pin: string) {
     staff_id: number;
     name: string;
     training_mode: boolean;
-  }>("/api/v1/staff/login", { staff_id: staffId, pin });
+  }>("/api/v1/staff/login", { staff_id: staffId, pin }, { skipAuthRedirect: true });
 }
 
 export async function clockStaff(
