@@ -19,11 +19,15 @@ const DEVICE_KEY = "pos_device_name";
 export function LoginScreen() {
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
-  // Dev-only convenience prefill — production builds stay empty.
-  const [email, setEmail] = useState(import.meta.env.DEV ? "owner@biryani.ae" : "");
-  const [password, setPassword] = useState(import.meta.env.DEV ? "password123" : "");
-  const [staffId, setStaffId] = useState("");
-  const [pin, setPin] = useState("");
+  // Demo convenience prefill (all builds) — a real account so Sign In works
+  // out of the box. Created via /auth/signup; change or clear before real use.
+  const [email, setEmail] = useState("manager@fullpos.ae");
+  const [password, setPassword] = useState("FullPOS@2026");
+  // Demo convenience prefill for the Staff PIN pad (staff id 1 = Demo Manager,
+  // PIN 1234). Staff PIN login routes by role and skips the manager onboarding
+  // gate; clear these before real use.
+  const [staffId, setStaffId] = useState("1");
+  const [pin, setPin] = useState("1234");
   const [deviceName, setDeviceName] = useState(
     () => localStorage.getItem(DEVICE_KEY) ?? "",
   );
@@ -36,7 +40,9 @@ export function LoginScreen() {
   function switchMode(m: Mode) {
     setMode(m);
     setError(null);
-    setPin("");
+    // Demo convenience: seed the demo PIN when entering the PIN pad so Staff PIN
+    // sign-in works out of the box (staff id 1 = Demo Manager). Clear otherwise.
+    setPin(m === "pin" ? "1234" : "");
   }
 
   function onDeviceNameChange(value: string) {
