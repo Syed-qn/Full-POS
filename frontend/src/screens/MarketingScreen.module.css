@@ -560,7 +560,7 @@
   gap: 12px;
 }
 .previewModal .modalHead .cardTitle {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: 13px;
   word-break: break-all;
 }

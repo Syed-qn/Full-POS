@@ -61,7 +61,10 @@
   --map-batch-stroke: #175cd3;
 
   --font-mono: "DM Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
-  --font-sans: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;
+  --font-sans: "Inter", system-ui, "Segoe UI", -apple-system, sans-serif;
+  /* Display face for page/section titles — modern sans, replaces the old mono
+     headings that read as a code terminal. */
+  --font-display: "Inter", system-ui, "Segoe UI", -apple-system, sans-serif;
 
   /* Touch-first type scale (UI/UX spec) */
   --font-size-body: 16px;
@@ -81,12 +84,17 @@
   --space-7: 32px;
   --space-8: 40px;
 
-  --radius: 8px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
-  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12);
+  --radius: 10px;
+  --radius-sm: 7px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  /* Softer, layered elevation — modern depth instead of flat single-shadow */
+  --shadow-xs: 0 1px 1px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 2px 4px rgba(16, 24, 40, 0.04), 0 8px 20px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 4px 8px rgba(16, 24, 40, 0.05), 0 16px 40px rgba(16, 24, 40, 0.14);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 1px rgba(16, 24, 40, 0.03);
+  --shadow-card-hover: 0 4px 12px rgba(16, 24, 40, 0.1), 0 2px 4px rgba(16, 24, 40, 0.05);
 
   /* Touch targets */
   --touch-min: 56px;
