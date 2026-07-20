@@ -150,9 +150,9 @@ export function getRoleHomePath(role: StaffRole | string | null | undefined): st
         : role;
   if (r == null) return "/";
   switch (r) {
-    case "waiter":
     case "staff":
       return "/floor";
+    case "waiter":
     case "cashier":
       return "/new-order";
     case "kitchen":

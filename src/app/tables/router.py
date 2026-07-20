@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.staff.deps import current_restaurant_any
 from app.tables.models import DiningTable
 from app.tables.schemas import StatusIn, TableIn, TableOut, TablePositionIn, TransferIn
 from app.tables.service import (
@@ -33,7 +34,7 @@ async def create_table(
 
 @router.get("", response_model=list[TableOut])
 async def list_tables(
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ):
     rows = await session.scalars(

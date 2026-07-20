@@ -553,3 +553,270 @@
 .kitchenNoteField {
   margin-top: 10px;
 }
+
+/* ── Classic terminal chrome ─────────────────────────────────────── */
+.terminal {
+  max-width: 1600px;
+}
+
+/* Order-type tabs */
+.typeTabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.typeTab {
+  min-height: 52px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+.typeTab:hover {
+  border-color: var(--border-strong);
+}
+
+.typeTabActive {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Home Delivery keeps the highlight color from the reference terminal. */
+.typeTabActive.type_delivery {
+  background: #eab308;
+  border-color: #eab308;
+  color: #1a1a1a;
+}
+.typeTabActive.type_online {
+  background: #d61f69;
+  border-color: #d61f69;
+}
+
+/* Token bar */
+.tokenBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #2aa6c9, #1f8fb0);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.tokenBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tokenLabel {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tokenValue {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #ffe08a;
+}
+
+.tokenNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tokenArrow {
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tokenArrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.tokenArrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tokenOpen {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: none;
+  background: #fff;
+  color: #1f8fb0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tokenType {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: var(--font-size-body);
+}
+
+.tokenDate {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-ui);
+  opacity: 0.9;
+}
+
+.itemTileFocused {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.cartLineFocused {
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+/* Numeric keypad */
+.keypad {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-inset);
+}
+
+.keypadDisplay {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.keypadGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.key {
+  min-height: 48px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.key:hover {
+  border-color: var(--accent-primary);
+}
+
+.keyAccent {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.keyCode {
+  min-height: 44px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.keyCode:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+/* Terminal action row */
+.posActions {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .posActions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.posBtn {
+  min-height: 60px;
+  border-radius: var(--radius-lg);
+  border: none;
+  color: #fff;
+  font-size: var(--font-size-body);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.posBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.posCash {
+  background: #16a34a;
+}
+.posCard {
+  background: #2563eb;
+}
+.posKot {
+  background: #f59e0b;
+  color: #1a1a1a;
+}
+
+.posBtnGhost {
+  min-height: 60px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-ui);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.posBtnGhost:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}

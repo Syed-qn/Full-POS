@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant
+from app.staff.deps import require_role
 from app.tickets import service as ticket_service
 from app.tickets.schemas import TicketOut, TicketResolveIn
 from app.tickets.service import TicketError
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 async def list_tickets(
     status: str | None = Query(default=None),
     phone: str | None = Query(default=None),
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "staff")),
     session: AsyncSession = Depends(get_session),
 ) -> list[TicketOut]:
     rows = await ticket_service.list_tickets(
@@ -40,7 +40,7 @@ async def list_tickets(
 @router.get("/{ticket_id}", response_model=TicketOut)
 async def get_ticket(
     ticket_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "staff")),
     session: AsyncSession = Depends(get_session),
 ) -> TicketOut:
     try:
@@ -56,7 +56,7 @@ async def get_ticket(
 async def resolve_ticket(
     ticket_id: int,
     body: TicketResolveIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "staff")),
     session: AsyncSession = Depends(get_session),
 ) -> TicketOut:
     actor = f"mgr:{restaurant.id}"

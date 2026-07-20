@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchActiveMenu } from "../lib/menuApi";
-import { createManualOrder, lookupCustomer } from "../lib/manualOrderApi";
+import {
+  createManualOrder,
+  createPosOrder,
+  lookupCustomer,
+} from "../lib/manualOrderApi";
 import { apiClient } from "../lib/apiClient";
 import { fetchOrders } from "../lib/ordersApi";
-import type { DishOut, MenuOut, OrderStatus, RestaurantOut } from "../lib/types";
+import type {
+  DishOut,
+  MenuOut,
+  OrderOut,
+  OrderStatus,
+  RestaurantOut,
+} from "../lib/types";
 import { isCashierRole, isWaiterRole } from "../lib/navAccess";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
@@ -26,6 +36,19 @@ const OPEN_BILL_STATUSES = new Set<OrderStatus>([
   "picked_up",
   "arriving",
 ]);
+
+/** Fulfillment tabs — mirror the classic terminal. `delivery` is the default so
+ *  the delivery address block renders on first paint (keeps existing flow/tests). */
+const ORDER_TYPE_TABS = [
+  { key: "dine_in", label: "Dining" },
+  { key: "takeaway", label: "Take Away" },
+  { key: "delivery", label: "Home Delivery" },
+  { key: "online", label: "Online" },
+] as const;
+type OrderTypeKey = (typeof ORDER_TYPE_TABS)[number]["key"];
+
+/** Order types that require a delivery address + fee + map pin. */
+const ADDRESS_REQUIRED: ReadonlySet<OrderTypeKey> = new Set(["delivery", "online"]);
 
 type FeeOption = string;
 
@@ -53,6 +76,15 @@ function buildFeeOptions(tiers: FeeTier[]): FeeChoice[] {
   });
 }
 
+function today(): string {
+  // Locale date without pulling in a lib; matches the terminal's date chip.
+  return new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function NewOrderScreen() {
   const navigate = useNavigate();
   const waiterMode = isWaiterRole();
@@ -60,8 +92,12 @@ export function NewOrderScreen() {
 
   const [menu, setMenu] = useState<MenuOut | null | "loading">("loading");
 
+  const [orderType, setOrderType] = useState<OrderTypeKey>("delivery");
+  const needsAddress = ADDRESS_REQUIRED.has(orderType);
+
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  const [tableNo, setTableNo] = useState("");
   const [lookupStatus, setLookupStatus] = useState<
     "idle" | "found" | "new" | "error"
   >("idle");
@@ -87,18 +123,26 @@ export function NewOrderScreen() {
   const [error, setError] = useState<string | null>(null);
   const [openBillsCount, setOpenBillsCount] = useState<number | null>(null);
 
+  // Token bar / open-ticket navigation.
+  const [openOrders, setOpenOrders] = useState<OrderOut[]>([]);
+  const [browseIdx, setBrowseIdx] = useState<number | null>(null);
+
+  // Numeric keypad state (touchscreen qty / dish-code entry).
+  const [keypad, setKeypad] = useState("");
+  const [focusedDishId, setFocusedDishId] = useState<number | null>(null);
+
   useEffect(() => {
     fetchActiveMenu().then((m) => setMenu(m));
   }, []);
 
   useEffect(() => {
-    if (!cashierMode) return;
     let cancelled = false;
     fetchOrders({ limit: 50, previewBatch: false })
       .then((rows) => {
         if (cancelled) return;
-        const n = rows.filter((o) => OPEN_BILL_STATUSES.has(o.status)).length;
-        setOpenBillsCount(n);
+        const open = rows.filter((o) => OPEN_BILL_STATUSES.has(o.status));
+        setOpenOrders(open);
+        setOpenBillsCount(open.length);
       })
       .catch(() => {
         if (!cancelled) setOpenBillsCount(null);
@@ -106,7 +150,7 @@ export function NewOrderScreen() {
     return () => {
       cancelled = true;
     };
-  }, [cashierMode]);
+  }, []);
 
   useEffect(() => {
     apiClient
@@ -161,7 +205,19 @@ export function NewOrderScreen() {
         });
         return copy;
       }
+      setFocusedDishId(dishId);
       return { ...prev, [dishId]: next };
+    });
+  }
+
+  function setQtyAbsolute(dishId: number, value: number) {
+    setQuantities((prev) => {
+      if (value <= 0) {
+        const copy = { ...prev };
+        delete copy[dishId];
+        return copy;
+      }
+      return { ...prev, [dishId]: Math.min(value, 99) };
     });
   }
 
@@ -182,6 +238,8 @@ export function NewOrderScreen() {
     setQuantities({});
     setItemNotes({});
     setKitchenNotes("");
+    setFocusedDishId(null);
+    setKeypad("");
   }
 
   const dishes: DishOut[] = useMemo(() => {
@@ -226,55 +284,111 @@ export function NewOrderScreen() {
     (acc, { dish, qty }) => acc + parseFloat(dish.price_aed ?? "0") * qty,
     0,
   );
-  const total = subtotal + (parseFloat(fee) || 0);
+  const deliveryFee = needsAddress ? parseFloat(fee) || 0 : 0;
+  const total = subtotal + deliveryFee;
+
+  // ── Keypad handlers ──────────────────────────────────────────────
+  function pressKey(d: string) {
+    setKeypad((k) => (k + d).replace(/^0+(?=\d)/, "").slice(0, 3));
+  }
+  function clearKey() {
+    setKeypad("");
+  }
+  function applyQty() {
+    const val = parseInt(keypad, 10);
+    const target = focusedDishId ?? selectedItems[selectedItems.length - 1]?.dish.id;
+    if (!Number.isFinite(val) || target == null) return;
+    setQtyAbsolute(target, val);
+    setKeypad("");
+  }
+  function applyCode() {
+    const num = parseInt(keypad, 10);
+    if (!Number.isFinite(num)) return;
+    const dish = dishes.find((x) => x.dish_number === num);
+    if (dish) {
+      setQty(dish.id, 1);
+      setActiveCategory("all");
+    }
+    setKeypad("");
+  }
+
+  // ── Token / open-ticket navigation ───────────────────────────────
+  const browsing = browseIdx != null ? openOrders[browseIdx] : null;
+  const tokenNumber = browsing?.order_number ?? String(openOrders.length + 1);
+  function stepToken(dir: -1 | 1) {
+    if (openOrders.length === 0) return;
+    setBrowseIdx((i) => {
+      if (i == null) return dir === -1 ? openOrders.length - 1 : 0;
+      const next = i + dir;
+      if (next < 0 || next >= openOrders.length) return null; // back to NEW ticket
+      return next;
+    });
+  }
 
   const canSubmit =
     phone.trim().length >= 7 &&
     selectedItems.length > 0 &&
-    aptRoom.trim() &&
-    building.trim() &&
-    receiverName.trim() &&
-    fee !== "" &&
-    pin !== null &&
+    (!needsAddress ||
+      (aptRoom.trim() !== "" &&
+        building.trim() !== "" &&
+        receiverName.trim() !== "" &&
+        fee !== "" &&
+        pin !== null)) &&
     !submitting;
 
-  async function onSubmit() {
+  function buildItems() {
+    return selectedItems.map(({ dish, qty }) => {
+      const lineNote = (itemNotes[dish.id] ?? "").trim();
+      const kitchen = kitchenNotes.trim();
+      const isFirst = selectedItems[0]?.dish.id === dish.id;
+      const combined = [lineNote, isFirst && kitchen ? `Kitchen: ${kitchen}` : ""]
+        .filter(Boolean)
+        .join(" · ");
+      return { dish_id: dish.id, qty, notes: combined || null };
+    });
+  }
+
+  async function onSubmit(goPay = cashierMode) {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      const order = await createManualOrder({
-        customer_phone: phone.trim(),
-        customer_name: name.trim() || null,
-        items: selectedItems.map(({ dish, qty }) => {
-          const lineNote = (itemNotes[dish.id] ?? "").trim();
-          // Attach order-level kitchen notes to the first line so KDS sees them
-          // until a dedicated order.kitchen_notes field exists on this endpoint.
-          const kitchen = kitchenNotes.trim();
-          const isFirst = selectedItems[0]?.dish.id === dish.id;
-          const combined = [lineNote, isFirst && kitchen ? `Kitchen: ${kitchen}` : ""]
-            .filter(Boolean)
-            .join(" · ");
-          return {
-            dish_id: dish.id,
-            qty,
-            notes: combined || null,
-          };
-        }),
-        address: {
-          apt_room: aptRoom.trim(),
-          building: building.trim(),
-          receiver_name: receiverName.trim(),
-          notes: addressNotes.trim() || null,
-          latitude: pin?.lat ?? null,
-          longitude: pin?.lng ?? null,
-        },
-        delivery_fee_aed: fee,
-      });
-      // Cashier: go straight to bill/pay. Waiter/others: open order list.
-      if (cashierMode && order?.id) {
+      let order: OrderOut;
+      if (needsAddress) {
+        order = await createManualOrder({
+          customer_phone: phone.trim(),
+          customer_name: name.trim() || null,
+          items: buildItems(),
+          address: {
+            apt_room: aptRoom.trim(),
+            building: building.trim(),
+            receiver_name: receiverName.trim(),
+            notes: addressNotes.trim() || null,
+            latitude: pin?.lat ?? null,
+            longitude: pin?.lng ?? null,
+          },
+          delivery_fee_aed: fee,
+          order_type: orderType,
+        });
+      } else {
+        order = await createPosOrder({
+          order_type: orderType,
+          customer_phone: phone.trim(),
+          customer_name: name.trim() || null,
+          items: buildItems(),
+          table_id:
+            orderType === "dine_in" && tableNo.trim()
+              ? Number(tableNo.trim()) || null
+              : null,
+          address: null,
+          delivery_fee_aed: "0.00",
+        });
+      }
+      if (cashierMode && goPay && order?.id) {
         navigate(`/orders/${order.id}/pay`);
       } else if (waiterMode && order?.id) {
+        navigate(`/orders/${order.id}`);
+      } else if (order?.id) {
         navigate(`/orders/${order.id}`);
       } else {
         navigate("/orders");
@@ -307,8 +421,11 @@ export function NewOrderScreen() {
     );
   }
 
+  const activeTabLabel =
+    ORDER_TYPE_TABS.find((t) => t.key === orderType)?.label ?? "";
+
   return (
-    <div className={s.screen}>
+    <div className={`${s.screen} ${s.terminal}`}>
       <PageHeader
         title={waiterMode ? "Table order" : cashierMode ? "Cashier terminal" : "New Order"}
         subtitle={
@@ -320,6 +437,66 @@ export function NewOrderScreen() {
         }
       />
       <OfflineLimitsBanner surface="new-order" />
+
+      {/* Order-type tabs — classic terminal top rail */}
+      <div className={s.typeTabs} role="tablist" aria-label="Order type">
+        {ORDER_TYPE_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={orderType === t.key}
+            className={`${s.typeTab} ${orderType === t.key ? s.typeTabActive : ""} ${
+              s[`type_${t.key}`] ?? ""
+            }`}
+            onClick={() => setOrderType(t.key)}
+            data-testid={`order-type-${t.key}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Token bar + open-ticket navigation */}
+      <div className={s.tokenBar} data-testid="token-bar">
+        <div className={s.tokenBlock}>
+          <span className={s.tokenLabel}>Token</span>
+          <span className={s.tokenValue} data-testid="token-value">
+            {browsing ? tokenNumber : `${tokenNumber} · NEW`}
+          </span>
+        </div>
+        <div className={s.tokenNav}>
+          <button
+            type="button"
+            className={s.tokenArrow}
+            onClick={() => stepToken(-1)}
+            disabled={openOrders.length === 0}
+            aria-label="Previous ticket"
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            className={s.tokenArrow}
+            onClick={() => stepToken(1)}
+            disabled={openOrders.length === 0}
+            aria-label="Next ticket"
+          >
+            ▶
+          </button>
+          {browsing && (
+            <button
+              type="button"
+              className={s.tokenOpen}
+              onClick={() => navigate(`/orders/${browsing.id}`)}
+            >
+              Open ticket
+            </button>
+          )}
+        </div>
+        <span className={s.tokenType}>{activeTabLabel}</span>
+        <span className={s.tokenDate}>{today()}</span>
+      </div>
 
       {cashierMode && (
         <div className={s.cashierStrip} data-testid="cashier-strip" role="navigation" aria-label="Cashier shortcuts">
@@ -368,7 +545,7 @@ export function NewOrderScreen() {
       {error && <div className={s.errorBanner} role="alert">{error}</div>}
 
       <div className={s.posLayout}>
-        {/* LEFT — customer + address */}
+        {/* LEFT — customer + address / table */}
         <div className={s.leftCol}>
           <div className={s.section}>
             <div className={s.sectionTitle}>Customer</div>
@@ -407,87 +584,112 @@ export function NewOrderScreen() {
                 placeholder="Customer name"
               />
             </div>
+
+            {orderType === "dine_in" && (
+              <div className={s.field}>
+                <label className={s.label}>Table (optional)</label>
+                <input
+                  className={s.input}
+                  value={tableNo}
+                  onChange={(e) => setTableNo(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="Table number"
+                  inputMode="numeric"
+                  data-testid="table-number"
+                />
+              </div>
+            )}
           </div>
 
-          <div className={s.section}>
-            <div className={s.sectionTitle}>Delivery Address</div>
+          {needsAddress ? (
+            <div className={s.section}>
+              <div className={s.sectionTitle}>Delivery Address</div>
 
-            <div className={s.field}>
-              <label className={s.label}>Apt / Room *</label>
-              <input
-                className={s.input}
-                value={aptRoom}
-                onChange={(e) => setAptRoom(e.target.value)}
-                placeholder="Apt 404"
-              />
-            </div>
+              <div className={s.field}>
+                <label className={s.label}>Apt / Room *</label>
+                <input
+                  className={s.input}
+                  value={aptRoom}
+                  onChange={(e) => setAptRoom(e.target.value)}
+                  placeholder="Apt 404"
+                />
+              </div>
 
-            <div className={s.field}>
-              <label className={s.label}>Building *</label>
-              <input
-                className={s.input}
-                value={building}
-                onChange={(e) => setBuilding(e.target.value)}
-                placeholder="Marina Tower"
-              />
-              <span className={s.fieldHint}>Shown to the rider as the address label.</span>
-            </div>
+              <div className={s.field}>
+                <label className={s.label}>Building *</label>
+                <input
+                  className={s.input}
+                  value={building}
+                  onChange={(e) => setBuilding(e.target.value)}
+                  placeholder="Marina Tower"
+                />
+                <span className={s.fieldHint}>Shown to the rider as the address label.</span>
+              </div>
 
-            <div className={s.field}>
-              <label className={s.label}>Delivery location {pin ? "✓" : "*"}</label>
-              <span className={s.fieldHint}>
-                Search an address or drop the pin so the rider navigates to the exact spot.
-                {!pin && " Required — without a pin the order can't be assigned to a rider."}
-              </span>
-              <LocationPicker
-                lat={pin?.lat ?? NaN}
-                lng={pin?.lng ?? NaN}
-                onChange={(lat, lng) => setPin({ lat, lng })}
-              />
-            </div>
+              <div className={s.field}>
+                <label className={s.label}>Delivery location {pin ? "✓" : "*"}</label>
+                <span className={s.fieldHint}>
+                  Search an address or drop the pin so the rider navigates to the exact spot.
+                  {!pin && " Required — without a pin the order can't be assigned to a rider."}
+                </span>
+                <LocationPicker
+                  lat={pin?.lat ?? NaN}
+                  lng={pin?.lng ?? NaN}
+                  onChange={(lat, lng) => setPin({ lat, lng })}
+                />
+              </div>
 
-            <div className={s.field}>
-              <label className={s.label}>Receiver Name *</label>
-              <input
-                className={s.input}
-                value={receiverName}
-                onChange={(e) => setReceiverName(e.target.value)}
-                placeholder="Who receives the order"
-              />
-            </div>
+              <div className={s.field}>
+                <label className={s.label}>Receiver Name *</label>
+                <input
+                  className={s.input}
+                  value={receiverName}
+                  onChange={(e) => setReceiverName(e.target.value)}
+                  placeholder="Who receives the order"
+                />
+              </div>
 
-            <div className={s.field}>
-              <label className={s.label}>Notes (optional)</label>
-              <input
-                className={s.input}
-                value={addressNotes}
-                onChange={(e) => setAddressNotes(e.target.value)}
-                placeholder="Gate code, floor, landmarks…"
-              />
-            </div>
+              <div className={s.field}>
+                <label className={s.label}>Notes (optional)</label>
+                <input
+                  className={s.input}
+                  value={addressNotes}
+                  onChange={(e) => setAddressNotes(e.target.value)}
+                  placeholder="Gate code, floor, landmarks…"
+                />
+              </div>
 
-            <div className={s.field}>
-              <label className={s.label}>Delivery Fee</label>
-              <div className={s.feeRow}>
-                {feesLoading ? (
-                  <span className={s.feeHint}>Loading delivery fees…</span>
-                ) : feeOptions.length === 0 ? (
-                  <span className={s.feeHint}>No delivery fees set — configure them in Settings → Fees.</span>
-                ) : (
-                  feeOptions.map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`${s.feeBtn} ${fee === value ? s.feeBtnActive : ""}`}
-                      onClick={() => setFee(value)}
-                    >
-                      {label}
-                    </button>
-                  ))
-                )}
+              <div className={s.field}>
+                <label className={s.label}>Delivery Fee</label>
+                <div className={s.feeRow}>
+                  {feesLoading ? (
+                    <span className={s.feeHint}>Loading delivery fees…</span>
+                  ) : feeOptions.length === 0 ? (
+                    <span className={s.feeHint}>No delivery fees set — configure them in Settings → Fees.</span>
+                  ) : (
+                    feeOptions.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`${s.feeBtn} ${fee === value ? s.feeBtnActive : ""}`}
+                        onClick={() => setFee(value)}
+                      >
+                        {label}
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className={s.section}>
+              <div className={s.sectionTitle}>
+                {orderType === "dine_in" ? "Dine-in" : "Take away"}
+              </div>
+              <p className={s.emptyHint}>
+                No delivery address needed for {activeTabLabel.toLowerCase()} — pick items and take payment.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* CENTER — large item grid */}
@@ -533,7 +735,9 @@ export function NewOrderScreen() {
                 return (
                   <div
                     key={dish.id}
-                    className={`${s.itemTile} ${qty > 0 ? s.itemTileActive : ""}`}
+                    className={`${s.itemTile} ${qty > 0 ? s.itemTileActive : ""} ${
+                      focusedDishId === dish.id ? s.itemTileFocused : ""
+                    }`}
                   >
                     <button
                       type="button"
@@ -577,7 +781,7 @@ export function NewOrderScreen() {
           )}
         </div>
 
-        {/* RIGHT — cart always visible */}
+        {/* RIGHT — cart + keypad */}
         <aside className={`${s.section} ${s.cartPane}`} aria-label="Cart">
           <div className={s.sectionTitle}>Cart</div>
           {selectedItems.length === 0 ? (
@@ -585,7 +789,11 @@ export function NewOrderScreen() {
           ) : (
             <div className={s.cartLines}>
               {selectedItems.map(({ dish, qty }) => (
-                <div key={dish.id} className={s.cartLine}>
+                <div
+                  key={dish.id}
+                  className={`${s.cartLine} ${focusedDishId === dish.id ? s.cartLineFocused : ""}`}
+                  onClick={() => setFocusedDishId(dish.id)}
+                >
                   <div className={s.cartLineMain}>
                     <span className={s.cartLineName}>
                       {qty}× {dish.name}
@@ -645,18 +853,117 @@ export function NewOrderScreen() {
             </label>
           )}
 
+          {/* Numeric keypad — qty / dish-code entry */}
+          <div className={s.keypad} data-testid="keypad">
+            <div className={s.keypadDisplay} aria-label="Keypad entry">
+              {keypad || "0"}
+            </div>
+            <div className={s.keypadGrid}>
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={s.key}
+                  onClick={() => pressKey(d)}
+                >
+                  {d}
+                </button>
+              ))}
+              <button type="button" className={s.key} onClick={clearKey} aria-label="Clear keypad">
+                C
+              </button>
+              <button type="button" className={s.key} onClick={() => pressKey("0")}>
+                0
+              </button>
+              <button
+                type="button"
+                className={`${s.key} ${s.keyAccent}`}
+                onClick={applyQty}
+                title="Set quantity of the focused cart line"
+              >
+                Qty
+              </button>
+            </div>
+            <button
+              type="button"
+              className={s.keyCode}
+              onClick={applyCode}
+              title="Add item by its dish number"
+            >
+              Add by code #{keypad || "…"}
+            </button>
+          </div>
+
           <div className={s.summary}>
             <div className={s.summaryLine}>
               <span>Subtotal</span>
               <span>AED {subtotal.toFixed(2)}</span>
             </div>
-            <div className={s.summaryLine}>
-              <span>Delivery</span>
-              <span>{fee === "0.00" || fee === "" ? "Free" : `AED ${fee}`}</span>
-            </div>
+            {needsAddress && (
+              <div className={s.summaryLine}>
+                <span>Delivery</span>
+                <span>{fee === "0.00" || fee === "" ? "Free" : `AED ${fee}`}</span>
+              </div>
+            )}
             <MoneySummary label="TOTAL" amount={total.toFixed(2)} />
           </div>
         </aside>
+      </div>
+
+      {/* Classic terminal action row: Cash / Card / KOT / Print / Open Cash / Pending */}
+      <div className={s.posActions} role="toolbar" aria-label="Terminal actions">
+        <button
+          type="button"
+          className={`${s.posBtn} ${s.posCash}`}
+          onClick={() => onSubmit(true)}
+          disabled={!canSubmit}
+          data-testid="pos-cash"
+        >
+          💵 Cash
+        </button>
+        <button
+          type="button"
+          className={`${s.posBtn} ${s.posCard}`}
+          onClick={() => onSubmit(true)}
+          disabled={!canSubmit}
+          data-testid="pos-card"
+        >
+          💳 Card
+        </button>
+        <button
+          type="button"
+          className={`${s.posBtn} ${s.posKot}`}
+          onClick={() => onSubmit(false)}
+          disabled={!canSubmit}
+          data-testid="pos-kot"
+          title="Send to kitchen without taking payment"
+        >
+          🍳 KOT
+        </button>
+        <button
+          type="button"
+          className={s.posBtnGhost}
+          onClick={() => (browsing ? navigate(`/orders/${browsing.id}`) : window.print())}
+          data-testid="pos-print"
+        >
+          🖨 Print Bill
+        </button>
+        <button
+          type="button"
+          className={s.posBtnGhost}
+          onClick={() => navigate("/payments")}
+          data-testid="pos-open-cash"
+        >
+          💰 Open Cash
+        </button>
+        <button
+          type="button"
+          className={s.posBtnGhost}
+          onClick={() => navigate("/orders")}
+          data-testid="pos-pending"
+        >
+          📋 Pending {openBillsCount != null ? `(${openBillsCount})` : ""}
+        </button>
       </div>
 
       <BottomActionBar>
@@ -685,7 +992,7 @@ export function NewOrderScreen() {
         <TouchButton
           type="button"
           disabled={!canSubmit}
-          onClick={onSubmit}
+          onClick={() => onSubmit()}
           data-testid="new-order-primary-cta"
         >
           {submitting

@@ -35,6 +35,19 @@ export interface ManualOrderIn {
   items: ManualOrderItemIn[];
   address: ManualOrderAddressIn;
   delivery_fee_aed: string;
+  /** Fulfillment type — defaults to "delivery" server-side. */
+  order_type?: string;
+}
+
+/** Unified POS create — used for order types that don't require a delivery address. */
+export interface PosOrderIn {
+  order_type: string;
+  customer_phone: string;
+  customer_name: string | null;
+  items: ManualOrderItemIn[];
+  table_id?: number | null;
+  address?: ManualOrderAddressIn | null;
+  delivery_fee_aed?: string;
 }
 
 export async function lookupCustomer(
@@ -52,4 +65,9 @@ export async function lookupCustomer(
 
 export async function createManualOrder(body: ManualOrderIn): Promise<OrderOut> {
   return apiClient.post<OrderOut>("/api/v1/orders/manual", body);
+}
+
+/** Unified POS create (dine-in / takeaway / drive-thru). Address optional. */
+export async function createPosOrder(body: PosOrderIn): Promise<OrderOut> {
+  return apiClient.post<OrderOut>("/api/v1/orders/pos", body);
 }
