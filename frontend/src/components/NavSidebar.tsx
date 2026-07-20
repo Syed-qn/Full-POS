@@ -103,8 +103,11 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { data: openTickets = 0 } = useOpenTicketsCountQuery();
   const role = useMemo(() => getSessionRole(), [location.pathname]);
+  // Only fetch the open-tickets badge for roles that can open /tickets — otherwise
+  // the manager-only endpoint 401s and the global auth interceptor logs the
+  // (valid) staff session straight back out to /login.
+  const { data: openTickets = 0 } = useOpenTicketsCountQuery(canAccess("/tickets", role));
   const visibleGroups = useMemo(
     () =>
       GROUPS.map((g) => {

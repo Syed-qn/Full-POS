@@ -1,0 +1,52 @@
+# Plan.txt — Roles & Access (Full POS)
+# Saved: 2026-07-20
+
+## ACTIVE ROLES (4 for now)
+Manager, Cashier, Waiter, Kitchen.
+(owner = restaurant email account. rider + staff roles exist in code but are UNUSED — no accounts.)
+
+## DEMO STAFF ACCOUNTS  (Staff PIN login — all PIN 1234)
+Restaurant #4 "Full POS Demo".
+  ID 1  Manager   PIN 1234   -> lands on Live Ops (/)          -> sees everything
+  ID 2  Cashier   PIN 1234   -> lands on POS terminal (/new-order) -> POS, Orders, Customers, Payments, Floor
+  ID 3  Waiter    PIN 1234   -> lands on POS terminal (/new-order) -> Floor, Orders, POS, Customers
+  ID 4  Kitchen   PIN 1234   -> lands on Kitchen display (/kds)    -> Kitchen board, Orders
+
+## ROLE -> LANDING PAGE  (frontend/src/lib/navAccess.ts : getRoleHomePath)
+  owner / manager -> /            (Live Ops)
+  cashier         -> /new-order   (POS terminal)
+  waiter          -> /new-order   (POS terminal)   [changed from /floor]
+  kitchen         -> /kds
+  rider           -> /riders      (unused)
+  staff           -> /floor       (unused)
+
+## ROLE -> ALLOWED SCREENS  (navAccess.ts : ROUTE_ROLE_MAP; owner/manager = full)
+  /new-order   : owner, manager, staff, waiter, cashier
+  /orders      : all roles
+  /floor       : owner, manager, staff, waiter, cashier
+  /customers   : owner, manager, staff, cashier
+  /payments    : owner, manager, cashier
+  /kds         : owner, manager, staff, kitchen
+  /tickets     : owner, manager, staff
+  /riders      : owner, manager, staff, rider
+  /menu, /inventory, /marketing, /reports, /settings, /staff, /ai ... : owner, manager only
+
+## BACKEND AUTH (how role gating works)
+- Owner/manager login  -> JWT aud=manager (no role claim) -> full access.
+- Staff PIN login      -> JWT aud=staff, role claim = staff_members.role.
+- current_restaurant (owner-only): valid staff token lacking manager access -> 403 (NOT 401),
+  so a valid staff session is never logged out on a manager-only route.
+- current_restaurant_any (owner OR any staff): used for shell/POS reads
+  (/me, /menus/active, /orders list, /ordering/customers, /tables).
+- require_role(...): order-taking = manager/cashier/waiter; tickets = manager/staff;
+  KDS = manager/kitchen/staff.
+
+## TO RE-CREATE DEMO DATA (local dev, docker postgres :5433)
+- Menu (36 dishes / 12 categories): scripts/seed_demo_menu.py 4   [NOTE: script was deleted; recreate if needed]
+- Staff (waiter+kitchen):            scripts/seed_demo_staff.py 4  [NOTE: script was deleted; recreate if needed]
+- DB URL for local run:
+  APP_DATABASE_URL=postgresql+asyncpg://app:app@localhost:5433/restaurant
+
+## NEXT / DECISIONS
+- Add rider role later only if own-fleet delivery is used.
+- Keep src/app/pos/cratis.py (core POS adapter — do not delete).

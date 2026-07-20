@@ -52,7 +52,7 @@ describe("getRoleHomePath", () => {
     expect(getRoleHomePath(null)).toBe("/");
     expect(getRoleHomePath("owner")).toBe("/");
     expect(getRoleHomePath("manager")).toBe("/");
-    expect(getRoleHomePath("waiter")).toBe("/floor");
+    expect(getRoleHomePath("waiter")).toBe("/new-order");
     expect(getRoleHomePath("staff")).toBe("/floor");
     expect(getRoleHomePath("cashier")).toBe("/new-order");
     expect(getRoleHomePath("kitchen")).toBe("/kds");

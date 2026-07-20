@@ -160,14 +160,19 @@ export function useCustomerCouponsQuery(phone: string | null | undefined) {
   });
 }
 
-export function useOpenTicketsCountQuery() {
+export function useOpenTicketsCountQuery(enabled = true) {
   return useQuery({
     queryKey: ["tickets", "open-count"],
     queryFn: async () => {
       const rows = await listTickets("open");
       return rows.length;
     },
+    // Tickets is manager/staff-only; roles without access (cashier, waiter,
+    // kitchen, rider) must NOT fire this — a 401 here would trip the global
+    // auth interceptor and bounce a valid staff session back to /login.
+    enabled,
     staleTime: 30_000,
     refetchInterval: pollWhenVisible(30_000),
+    retry: false,
   });
 }

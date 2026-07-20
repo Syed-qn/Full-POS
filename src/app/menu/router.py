@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.staff.deps import current_restaurant_any
 from app.identity.models import Restaurant
 from app.llm.factory import get_menu_extractor
 from app.llm.port import MenuExtractor, UploadedFile
@@ -195,10 +196,13 @@ async def list_dishes(
 
 @router.get("/menus/active", response_model=MenuOut)
 async def get_active_menu(
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ):
-    """Return the currently active menu with all dishes for this restaurant."""
+    """Return the currently active menu with all dishes for this restaurant.
+
+    Read-only — any authenticated actor (owner or staff PIN) may load it, so the
+    POS terminal works for cashier/waiter/kitchen sessions."""
     menu = await session.scalar(
         select(Menu).where(
             Menu.restaurant_id == restaurant.id,

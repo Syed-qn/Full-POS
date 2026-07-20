@@ -12,6 +12,7 @@ from app.identity.auth import (
     verify_password,
 )
 from app.identity.deps import current_restaurant
+from app.staff.deps import current_restaurant_any
 from app.identity.models import Restaurant
 from app.identity.schemas import (
     LoginIn,
@@ -88,7 +89,9 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/me", response_model=RestaurantOut)
-async def me(restaurant: Restaurant = Depends(current_restaurant)):
+async def me(restaurant: Restaurant = Depends(current_restaurant_any)):
+    # Read-only shell context — any authenticated actor of the tenant (owner or
+    # staff PIN) may load it, so staff sessions don't 401-bounce out of the app.
     return restaurant
 
 

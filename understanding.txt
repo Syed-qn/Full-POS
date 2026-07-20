@@ -565,3 +565,50 @@
   - Public webhook: POST /api/v1/public/store/{slug}/aggregators/{provider}/webhook (tenant by slug + HMAC)
   - Channels UI: tenant banner, full key/secret/webhook/access_token/store/base fields, copy webhook URL
   - tests: test_tenant_credentials.py + ChannelsScreen multi-tenant banner; aggregators suite green
+
+## 2026-07-20 21:00 — Classic HANASIS-style POS terminal on NewOrderScreen (post-login landing)
+  - NewOrderScreen restyled into a classic terminal: order-type tabs, token bar, numeric keypad, Cash/Card/KOT action row
+  - Order-type tabs (Dining=dine_in / Take Away=takeaway / Home Delivery=delivery [default] / Online=online); delivery+online require address+fee+pin, dine_in/takeaway do not (dine_in shows optional Table field)
+  - Submit routing: address-required types → POST /api/v1/orders/manual (existing, adds order_type); dine_in/takeaway → POST /api/v1/orders/pos (createPosOrder, address null)
+  - Token bar shows next-ticket number + ◀▶ to browse open tickets (fetched via fetchOrders, open statuses) + "Open ticket" nav
+  - Numeric keypad: digits, C, Qty (set focused cart-line qty), "Add by code #" (add dish by dish_number). No discount sent to backend (no field) — kept honest
+  - Cash/Card → onSubmit(goPay=true) (cashier → /pay); KOT → onSubmit(goPay=false); Print/Open Cash/Pending navigate. Legacy BottomActionBar primary CTA (new-order-primary-cta) preserved for tests
+  - navAccess.getRoleHomePath: waiter now lands on /new-order (was /floor); cashier already did. navAccess.test.ts updated
+  - manualOrderApi: added order_type to ManualOrderIn + new PosOrderIn/createPosOrder
+  - All test markers preserved (placeholders, cashier-strip, item-note, kitchen-notes, CTA text). tsc clean; NewOrderScreen (12) + navAccess (22) = 34 tests green
+
+## 2026-07-20 22:30 — Fix: staff PIN login bounced back to /login (401 → global logout)
+  - Root cause: staff-audience JWT (aud=staff) 401'd on GET /api/v1/me, and TopBar (in AppShell) calls /me on EVERY guarded screen; apiClient interceptor treats any 401 as session-expired → clears token + window.location.assign('/login'). POS reads (/menus/active, /orders) were also owner-only → same bounce for cashier/waiter on /new-order.
+  - Fix (backend): added current_restaurant_any dep in src/app/staff/deps.py — accepts owner (aud=manager) OR any staff PIN token (aud=staff, resolves tenant via staff.restaurant_id). Read-only shell/POS context.
+  - Wired current_restaurant_any onto: GET /api/v1/me (identity/router.py), GET /api/v1/menus/active (menu/router.py), GET /api/v1/orders list (ordering/router.py)
+  - Order-taking endpoints now require_role("manager","cashier","waiter") instead of owner-only current_restaurant: /manual/customer-lookup, POST /manual, POST /pos
+  - Verified live: staff id1/pin1234 (role=manager) → /me 200, /orders 200 (were 401). /menus/active 404 only because local DB has no active menu (data, not auth) — POS shows "No active menu" banner, no bounce.
+  - Import-checked (no circular import: identity/menu/ordering routers import staff.deps; staff.deps imports only identity.auth/models + staff.models).
+  - Local run note: .env APP_DATABASE_URL points to a remote Render DB (dpg-... host, unresolvable locally + malformed double scheme). Run backend with APP_DATABASE_URL=postgresql+asyncpg://app:app@localhost:5433/restaurant against docker postgres. Uvicorn --reload can leave an inherited-socket zombie holding :8000 on Windows; started without --reload.
+
+## 2026-07-20 22:50 — Fix: cashier (non-manager staff) login bounced to /login via NavSidebar tickets badge
+  - Root cause (found in backend request log): after staff login, NavSidebar's useOpenTicketsCountQuery fired GET /api/v1/tickets?status=open for EVERY role. Tickets was owner-only (current_restaurant) → 401 for cashier staff token → apiClient global interceptor cleared token + redirected to /login. (staff id2 = Demo Cashier.)
+  - Fix 1 (frontend): useOpenTicketsCountQuery(enabled) now gated — NavSidebar passes canAccess("/tickets", role); cashier/waiter/kitchen/rider no longer fire it. Added retry:false. (lib/queries/dashboard.ts, components/NavSidebar.tsx)
+  - Fix 2 (backend): tickets list/detail/resolve endpoints now require_role("manager","staff") (was owner-only current_restaurant) — so the 'staff' role the UI permits actually works, and cashier gets 403 (not 401 → no logout). (src/app/tickets/router.py)
+  - Verified live cashier flow: /me 200, /orders 200, /menus/active 404 (no menu seeded), /tickets 403 (no bounce). NavSidebar tests (4) green; frontend tsc + backend import clean.
+  - NOTE: demo staff roles — id1 Demo Manager (role=manager, full access by design), id2 Demo Cashier (role=cashier, PIN 1234, restricted nav → lands on POS /new-order).
+
+## 2026-07-20 23:10 — Fix: clicking any sidebar item logged cashier out (whole class of 401→logout)
+  - Root cause: many tenant-scoped endpoints still guard with owner-only current_restaurant, which raised 401 "invalid token" for a VALID staff PIN token. apiClient interceptor treats any 401 as session-expiry → clears token + redirects /login. So every cashier-allowed screen (Customers, Floor, Payments...) bounced.
+  - PRIMARY fix (src/app/identity/deps.py): current_restaurant now returns 403 (not 401) when the bearer is a VALID staff token lacking manager access; only a genuinely invalid/expired token yields 401. 403 is not in the frontend interceptor → no logout. Universal safety net for the whole class.
+  - Opened high-value cashier reads to any authenticated actor (current_restaurant_any): GET /api/v1/ordering/customers (list + /{id} detail), GET /api/v1/tables. Writes/loyalty/mutations stay owner-only.
+  - Verified live cashier (id2/pin1234): /me 200, /orders 200, /ordering/customers 200, /tables 200, /menus/active 404 (no menu seeded), /tickets 403, /payments/credentials 403 — NO 401 anywhere → no bounce.
+  - Security note: current_restaurant still authorizes (staff without manager access → 403). Endpoints on bare current_restaurant remain manager-only; per-role opening done deliberately per endpoint. Consider auditing remaining current_restaurant endpoints vs ROUTE_ROLE_MAP for staff-allowed screens (payments drawer for cashier still 403 on credentials/billing — those are manager config, acceptable).
+
+## 2026-07-20 23:30 — Seeded active demo menu so POS terminal populates (was showing "No active menu")
+  - Reason user saw empty terminal (not the HANASIS-style grid): local DB had NO active menu for the staff's restaurant → NewOrderScreen renders "No active menu" banner and skips the terminal chrome.
+  - scripts/seed_demo_menu.py: creates an ACTIVE Menu + 36 Dishes across 12 categories (Popcorn incl. Chicken Dynamite Popcorn Medium 12.00 / Large 17.00, Burgers, Club/Wrap Sandwich, Juices, Shakes, Desserts, Salad, Paratha, Soft Drinks, Tea & Coffee, Combos). Archives any prior active menu, versions +1. Import app.kds.models to resolve dishes.station_id FK. Takes optional restaurant_id argv (default first restaurant).
+  - IMPORTANT: staff id1/id2 belong to restaurant #4 "Full POS Demo" (NOT #1). Seed with: python scripts/seed_demo_menu.py 4
+  - Verified via cashier token: GET /menus/active → status=active, 36 dishes. Terminal now shows tabs + categories + items + keypad + Cash/Card.
+
+## 2026-07-20 23:55 — Active roles narrowed to 4 (Manager, Cashier, Waiter, Kitchen); demo accounts + KDS access
+  - Per user: only Manager, Cashier, Waiter, Kitchen for now. (owner still = the restaurant email account; rider/staff roles remain defined in code but unused — no accounts.)
+  - scripts/seed_demo_staff.py: idempotently creates Demo Waiter (waiter) + Demo Kitchen (kitchen) for restaurant #4, PIN 1234. Manager(id1)/Cashier(id2) already existed. Roster now id1 manager, id2 cashier, id3 waiter, id4 kitchen — all PIN 1234.
+  - KDS was owner-only (current_restaurant) → kitchen role got 403 (no bounce but board wouldn't load). Opened all 18 KDS endpoints to require_role("manager","kitchen","staff") in src/app/kds/router.py so the kitchen role's screen works.
+  - Verified live: manager /me200 /kds200; cashier /me200 /kds403; waiter /me200 /kds403; kitchen /me200 /kds200. No 401 anywhere → correct per-role access, no logout bounce.
+  - Login map (Staff PIN): id1=Manager, id2=Cashier, id3=Waiter, id4=Kitchen (all PIN 1234). Waiter/Cashier land on POS /new-order, Kitchen lands on /kds, Manager on Live Ops.

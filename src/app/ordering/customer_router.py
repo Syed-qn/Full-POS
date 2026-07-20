@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.staff.deps import current_restaurant_any
 from app.identity.models import Restaurant
 from app.marketing.models import OptOut
 from app.marketing.optout import is_opted_out
@@ -32,7 +33,7 @@ async def list_customers(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> CustomerListOut:
     stmt = select(Customer).where(Customer.restaurant_id == restaurant.id)
@@ -141,7 +142,7 @@ async def list_high_value_customers(
 @router.get("/{customer_id}", response_model=CustomerProfileOut)
 async def get_customer_profile(
     customer_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> CustomerProfileOut:
     customer = await session.scalar(

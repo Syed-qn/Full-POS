@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant, Rider
-from app.staff.deps import require_role
+from app.staff.deps import current_restaurant_any, require_role
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import (
     AddressOut,
@@ -263,7 +263,7 @@ async def _enrich(
 @router.get("/manual/customer-lookup", response_model=CustomerLookupOut)
 async def customer_lookup(
     phone: str,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
     session: AsyncSession = Depends(get_session),
 ) -> CustomerLookupOut:
     customer = await session.scalar(
@@ -289,7 +289,7 @@ async def customer_lookup(
 @router.post("/manual", response_model=OrderOut)
 async def create_manual_order_endpoint(
     body: ManualOrderIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     # Prefer unified POS create when order_type is non-delivery or table-bound;
@@ -352,7 +352,7 @@ async def create_manual_order_endpoint(
 @router.post("/pos", response_model=OrderOut)
 async def create_pos_order_endpoint(
     body: PosOrderIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     """Unified create for dine-in / takeaway / drive-thru / delivery / online / tableside."""
@@ -1068,7 +1068,7 @@ async def list_orders(
     held_only: bool = Query(default=False),
     order_type: str | None = Query(default=None),
     channel: str | None = Query(default=None, description="source_channel / aggregator filter"),
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
     orders = await list_orders_for_tenant(
