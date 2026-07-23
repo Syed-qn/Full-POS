@@ -24,20 +24,28 @@ import s from "./NavSidebar.module.css";
 type NavItem = { to: string; label: string; icon: string };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
-/** Spec main navigation order: daily first, manager/admin below. */
+/** Spec main navigation order: daily ops first, then the WhatsApp channel,
+ *  then the manager/admin surface, then the long tail. */
 const GROUPS: NavGroup[] = [
   {
     id: "daily",
     label: "Daily",
     items: [
       { to: "/", label: "Live Ops", icon: "⌂" },
+      { to: "/floor", label: "Floor Plan", icon: "▦" },
       { to: "/new-order", label: "New Order", icon: "+" },
       { to: "/orders", label: "Orders", icon: "☰" },
-      { to: "/floor", label: "Floor Plan", icon: "▦" },
       { to: "/kds", label: "Kitchen", icon: "▣" },
       { to: "/payments", label: "Payments", icon: "¤" },
-      { to: "/riders", label: "Riders", icon: "›" },
+    ],
+  },
+  {
+    id: "whatsapp",
+    /** The WhatsApp channel: live customer/driver chats and outbound promotion. */
+    label: "WhatsApp",
+    items: [
       { to: "/conversations", label: "Chats", icon: "◎" },
+      { to: "/marketing", label: "Promotion", icon: "✦" },
     ],
   },
   {
@@ -45,11 +53,11 @@ const GROUPS: NavGroup[] = [
     /** Owner/manager admin surface (R5). Label stays Manage for floor roles that see partial list. */
     label: "Manage",
     items: [
+      { to: "/customers", label: "Customers", icon: "○" },
+      { to: "/riders", label: "Riders", icon: "›" },
       { to: "/menu", label: "Menu", icon: "◇" },
       { to: "/inventory", label: "Inventory", icon: "▦" },
-      { to: "/customers", label: "Customers", icon: "○" },
       { to: "/staff", label: "Staff", icon: "◎" },
-      { to: "/marketing", label: "Marketing", icon: "✦" },
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },
       { to: "/branches", label: "Branches", icon: "▣" },
@@ -122,6 +130,11 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
   );
   const restaurantName = useRestaurantName();
   const [collapsed, setCollapsed] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  function toggleGroup(id: string) {
+    setCollapsedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
   const theme = useAppTheme();
   const nextTheme = nextAppTheme();
 
@@ -171,14 +184,24 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
 
       <div className={s.scroll}>
         {visibleGroups.map((group) => {
+          const groupOpen = !collapsedGroups[group.id];
           return (
             <div key={group.id} className={s.group}>
               {!collapsed && (
-                <div className={s.groupHead}>
+                <button
+                  type="button"
+                  className={s.groupHead}
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={groupOpen}
+                  aria-controls={`nav-group-${group.id}`}
+                >
                   <span>{group.label}</span>
-                </div>
+                  <span className={s.chev} aria-hidden="true">
+                    {groupOpen ? "▾" : "▸"}
+                  </span>
+                </button>
               )}
-              {(
+              {(collapsed || groupOpen) && (
                 <div className={s.groupBody} id={`nav-group-${group.id}`} role="group" aria-label={group.label}>
                   {group.items.map((it) => {
                     // Collapsed = icon-only; title + aria-label keep an accessible name.
