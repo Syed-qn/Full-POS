@@ -100,6 +100,17 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
         {showTakeaway && (
           <button
             type="button"
+            className={`${s.tab} ${active === "delivery" ? s.tabActive : ""}`}
+            aria-current={active === "delivery" ? "page" : undefined}
+            data-testid="cashier-delivery-tab"
+            onClick={() => navigate("/cashier/delivery")}
+          >
+            Home Delivery
+          </button>
+        )}
+        {showTakeaway && (
+          <button
+            type="button"
             className={`${s.tab} ${active === "whatsapp" ? s.tabActive : ""}`}
             aria-current={active === "whatsapp" ? "page" : undefined}
             data-testid="cashier-whatsapp-tab"

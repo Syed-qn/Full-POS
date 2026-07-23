@@ -56,9 +56,9 @@ function bucketOf(status: string): Bucket | null {
 }
 
 function hhmm(iso?: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "n/a";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "n/a";
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
@@ -303,15 +303,15 @@ export function CashierWhatsappScreen() {
                     {kotBusy ? "Sending…" : "🧾 KOT · Send to Kitchen"}
                   </button>
                 ) : selected.status === "preparing" ? (
-                  <span className={s.act} aria-disabled data-testid="whatsapp-state">
-                    👨‍🍳 In the kitchen — waiting for Ready
+                  <span className={s.actState} role="status" data-testid="whatsapp-state">
+                    👨‍🍳 In the kitchen, waiting for Ready
                   </span>
                 ) : selected.status === "ready" ? (
-                  <span className={s.act} aria-disabled data-testid="whatsapp-state">
-                    ✅ Ready — dispatching to a rider
+                  <span className={s.actState} role="status" data-testid="whatsapp-state">
+                    ✅ Ready, dispatching to a rider
                   </span>
                 ) : (
-                  <span className={s.act} aria-disabled data-testid="whatsapp-state">
+                  <span className={s.actState} role="status" data-testid="whatsapp-state">
                     {selBucket ? BUCKET_LABEL[selBucket] : String(selected.status).toUpperCase()}
                   </span>
                 )}

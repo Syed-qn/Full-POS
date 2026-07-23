@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
@@ -23,6 +24,7 @@ export function CouponsScreen() {
   const [totalLimit, setTotalLimit] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
 
   async function reload(phoneFilter?: string) {
     setLoadError(null);
@@ -73,6 +75,7 @@ export function CouponsScreen() {
         return [created, ...without];
       });
       toast(`Coupon created: ${created.code}`);
+      setFormOpen(false);
       await reload();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not create coupon.";
@@ -103,80 +106,63 @@ export function CouponsScreen() {
     <div className={s.root}>
       <PageHeader title="Coupons" subtitle="Create and manage discount coupons" />
 
-      <form
-        className={s.search}
-        onSubmit={(e) => {
-          e.preventDefault();
-          setLoaded(false);
-          void reload(phone);
-        }}
-      >
-        <input
-          type="search"
-          placeholder="Search coupons by customer phone"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          aria-label="search coupons by phone"
-        />
-        <button type="submit">Search</button>
-      </form>
-
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>New coupon</h3>
-        <div className={s.form}>
-          <label className={s.field}>
-            <span>Type</span>
-            <select value={discountType} onChange={(e) => setDiscountType(e.target.value as CouponDiscountType)}>
-              <option value="fixed">Fixed (AED)</option>
-              <option value="percent">Percent (%)</option>
-            </select>
-          </label>
-          <label className={s.field}>
-            <span>{discountType === "percent" ? "Percent" : "Amount (AED)"}</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              aria-label={discountType === "percent" ? "Percent" : "Amount (AED)"}
-            />
-          </label>
-          <label className={s.field}>
-            <span>Kind</span>
-            <select value={kind} onChange={(e) => setKind(e.target.value as CouponKind)}>
-              <option value="multi_use">Multi-use</option>
-              <option value="single_use">Single-use</option>
-            </select>
-          </label>
-          <label className={s.field}>
-            <span>Min order (AED)</span>
-            <input type="number" min="0" step="0.01" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
-          </label>
-          {discountType === "percent" && (
-            <label className={s.field}>
-              <span>Max discount (AED)</span>
-              <input type="number" min="0" step="0.01" value={maxDiscount} onChange={(e) => setMaxDiscount(e.target.value)} />
-            </label>
-          )}
-          <label className={s.field}>
-            <span>Per-customer limit</span>
-            <input type="number" min="1" value={perCustomer} onChange={(e) => setPerCustomer(e.target.value)} />
-          </label>
-          <label className={s.field}>
-            <span>Total limit</span>
-            <input type="number" min="1" value={totalLimit} onChange={(e) => setTotalLimit(e.target.value)} />
-          </label>
-        </div>
-        <Button type="button" disabled={submitting || !valueOk} onClick={() => void submit()}>
-          {submitting ? "Creating…" : "Create coupon"}
+      <div className={s.toolbar}>
+        <form
+          className={s.search}
+          onSubmit={(e) => {
+            e.preventDefault();
+            setLoaded(false);
+            void reload(phone);
+          }}
+        >
+          {/* No button — Enter submits, and clearing the box re-runs the full
+              list so the search feels automatic. */}
+          <input
+            type="search"
+            placeholder="Search by customer phone"
+            value={phone}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPhone(v);
+              if (v.trim() === "") {
+                setLoaded(false);
+                void reload("");
+              }
+            }}
+            aria-label="search coupons by phone"
+          />
+        </form>
+        <Button type="button" onClick={() => setFormOpen(true)}>
+          + Add coupon
         </Button>
-        {!valueOk && value !== "" && (
-          <p className={s.hint}>Discount must be greater than zero.</p>
-        )}
-      </section>
+      </div>
 
-      {!loaded && <p className={s.loading}>Loading coupons…</p>}
+      {!loaded && (
+        <table className={s.table} aria-hidden="true">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Discount</th>
+              <th>Kind</th>
+              <th>Min order</th>
+              <th>Limits</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <tr key={i}>
+                {Array.from({ length: 7 }).map((__, j) => (
+                  <td key={j}>
+                    <span className={s.sk} style={{ width: `${[70, 55, 60, 50, 65, 58, 44][j]}%` }} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {loadError && (
         <ErrorState
           title="Could not load coupons"
@@ -195,7 +181,7 @@ export function CouponsScreen() {
           description={
             phone.trim()
               ? "Try another customer phone or clear the search."
-              : "Create a coupon above. Prefer pause over delete for active promos."
+              : "Use Add coupon to create one. Prefer pause over delete for active promos."
           }
         />
       )}
@@ -241,6 +227,95 @@ export function CouponsScreen() {
           </tbody>
         </table>
       )}
+
+      {formOpen &&
+        createPortal(
+          <div
+            className={s.overlay}
+            role="presentation"
+            onClick={() => !submitting && setFormOpen(false)}
+          >
+            <div
+              className={s.modal}
+              role="dialog"
+              aria-modal="true"
+              aria-label="New coupon"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={s.modalHead}>
+                <h3 className={s.cardTitle}>New coupon</h3>
+                <button
+                  type="button"
+                  className={s.close}
+                  onClick={() => setFormOpen(false)}
+                  disabled={submitting}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div className={s.modalBody}>
+                <div className={s.form}>
+                  <label className={s.field}>
+                    <span>Type</span>
+                    <select value={discountType} onChange={(e) => setDiscountType(e.target.value as CouponDiscountType)}>
+                      <option value="fixed">Fixed (AED)</option>
+                      <option value="percent">Percent (%)</option>
+                    </select>
+                  </label>
+                  <label className={s.field}>
+                    <span>{discountType === "percent" ? "Percent" : "Amount (AED)"}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      aria-label={discountType === "percent" ? "Percent" : "Amount (AED)"}
+                    />
+                  </label>
+                  <label className={s.field}>
+                    <span>Kind</span>
+                    <select value={kind} onChange={(e) => setKind(e.target.value as CouponKind)}>
+                      <option value="multi_use">Multi-use</option>
+                      <option value="single_use">Single-use</option>
+                    </select>
+                  </label>
+                  <label className={s.field}>
+                    <span>Min order (AED)</span>
+                    <input type="number" min="0" step="0.01" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
+                  </label>
+                  {discountType === "percent" && (
+                    <label className={s.field}>
+                      <span>Max discount (AED)</span>
+                      <input type="number" min="0" step="0.01" value={maxDiscount} onChange={(e) => setMaxDiscount(e.target.value)} />
+                    </label>
+                  )}
+                  <label className={s.field}>
+                    <span>Per-customer limit</span>
+                    <input type="number" min="1" value={perCustomer} onChange={(e) => setPerCustomer(e.target.value)} />
+                  </label>
+                  <label className={s.field}>
+                    <span>Total limit</span>
+                    <input type="number" min="1" value={totalLimit} onChange={(e) => setTotalLimit(e.target.value)} />
+                  </label>
+                </div>
+                {!valueOk && value !== "" && (
+                  <p className={s.hint}>Discount must be greater than zero.</p>
+                )}
+              </div>
+              <div className={s.modalFoot}>
+                <Button type="button" variant="ghost" onClick={() => setFormOpen(false)} disabled={submitting}>
+                  Cancel
+                </Button>
+                <Button type="button" disabled={submitting || !valueOk} onClick={() => void submit()}>
+                  {submitting ? "Creating…" : "Create coupon"}
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

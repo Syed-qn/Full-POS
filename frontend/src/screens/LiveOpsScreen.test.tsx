@@ -25,8 +25,7 @@ describe("LiveOpsScreen", () => {
     await waitFor(() => expect(screen.getByText("Orders Today")).toBeInTheDocument());
     // Orders land on the board table.
     await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
-    // The WhatsApp channel tile + board tab are present alongside Dine In / Take Away.
-    expect(screen.getByTestId("kpi-whatsapp")).toBeInTheDocument();
+    // The WhatsApp board tab is present alongside Dine In / Take Away.
     expect(screen.getByTestId("board-tab-whatsapp")).toBeInTheDocument();
   });
 

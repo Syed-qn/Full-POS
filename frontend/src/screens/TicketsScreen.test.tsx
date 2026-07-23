@@ -73,8 +73,8 @@ describe("TicketsScreen phone search", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<TicketsScreen />);
     await waitFor(() => screen.getByLabelText(/search complaints by phone/i));
+    // Typing filters automatically — no Search button to click.
     fireEvent.change(screen.getByLabelText(/search complaints by phone/i), { target: { value: "777001" } });
-    fireEvent.click(screen.getByRole("button", { name: /^search$/i }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("phone=777001"))).toBe(true),
     );

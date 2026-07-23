@@ -55,7 +55,7 @@ export function TicketDetailDrawer({
       <div className={s.section}>
         <div className={s.summary}>
           <Field label="Customer" value={`#${ticket.customer_id}`} />
-          <Field label="Order" value={ticket.order_id ? `#${ticket.order_id}` : "—"} />
+          <Field label="Order" value={ticket.order_id ? `#${ticket.order_id}` : "none"} />
           {ticket.category && <Field label="Category" value={ticket.category} />}
           <Field label="Status" value={ticket.status.replace("_", " ")} />
           {wallet && (
@@ -119,7 +119,7 @@ export function TicketDetailDrawer({
             />
             {!noteOk && (
               <p className={s.hint}>
-                Required — type a resolution note before any action below.
+                Required. Type a resolution note before any action below.
               </p>
             )}
           </div>
@@ -156,7 +156,7 @@ export function TicketDetailDrawer({
           <div className={s.action}>
             <span className={s.hint}>
               {ticket.order_id
-                ? "Creates a free replacement of the original order — sent to the kitchen, assigned a rider, and trackable like any order."
+                ? "Creates a free replacement of the original order, sent to the kitchen, assigned a rider, and trackable like any order."
                 : "This complaint isn't linked to an order, so a replacement can't be auto-created. Issue a refund or place a manual order instead."}
             </span>
             <Button

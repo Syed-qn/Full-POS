@@ -132,8 +132,8 @@ function BoardRow({ order, onOpen }: { order: OrderOut; onOpen: () => void }) {
       }}
     >
       <td className={s.cRef}>#{order.id}</td>
-      <td className={s.cCust}>{order.customer_name || "Walk-in"}</td>
-      <td className={s.cItems} title={items}>{items || "—"}</td>
+      <td className={s.cCust}>{order.customer_name || "Walk in"}</td>
+      <td className={s.cItems} title={items}>{items || "None"}</td>
       <td className={s.cStatus}>
         {/* Same wording as the Orders board: a dine-in / take-away tab has no
             delivery leg, so it reads Open · Paid · Cancelled, not "Confirmed". */}
@@ -225,12 +225,12 @@ export function LiveOpsScreen() {
   return (
     <div className={s.screen}>
       <OfflineLimitsBanner surface="live-ops" />
-      {error != null && <SectionBanner tone="warning">Connection lost — reconnecting…</SectionBanner>}
+      {error != null && <SectionBanner tone="warning">Connection lost, reconnecting…</SectionBanner>}
 
       <header className={s.pageHeader}>
         <div>
           <h1 className={s.h1}>Live Operations</h1>
-          <p className={s.sub}>Order board — rush-hour command center</p>
+          <p className={s.sub}>Order board · rush hour command center</p>
         </div>
         <div className={s.headerRight}>
           <span className={s.livePill}><span className={s.liveDot} />LIVE</span>
@@ -246,27 +246,10 @@ export function LiveOpsScreen() {
           accent="var(--chart-1)" sub={`${kpis.active} active now`} />
         <StatCard icon="⚡" label="Active Now" value={String(kpis.active)}
           accent="var(--sla-warn)" sub={urgent.length > 0 ? `${urgent.length} urgent` : "all on track"} />
-        <StatCard icon="✅" label="Delivered" value={String(kpis.delivered)}
+        <StatCard icon="✅" label="Completed" value={String(kpis.delivered)}
           accent="var(--sla-safe)" sub={`${kpis.completion}% completion`} />
         <StatCard icon="💰" label="Money Collected" value={kpis.revenue}
           accent="var(--accent-revenue)" sub="collected today" />
-        {/* Channel tiles double as board filters — click one to narrow the
-            table below, click it again to go back to All. */}
-        <StatCard icon="🍽️" label="Dine In" value={String(laneCounts.dine)}
-          accent="var(--amber, var(--sla-warn))" sub="active dine-in"
-          testId="kpi-dine"
-          active={boardTab === "dine"}
-          onClick={() => setBoardTab(boardTab === "dine" ? "all" : "dine")} />
-        <StatCard icon="🥡" label="Take Away" value={String(laneCounts.takeaway)}
-          accent="var(--sla-safe)" sub="active take away"
-          testId="kpi-takeaway"
-          active={boardTab === "takeaway"}
-          onClick={() => setBoardTab(boardTab === "takeaway" ? "all" : "takeaway")} />
-        <StatCard icon="💬" label="WhatsApp" value={String(laneCounts.whatsapp)}
-          accent="var(--accent-primary)" sub="active delivery"
-          testId="kpi-whatsapp"
-          active={boardTab === "whatsapp"}
-          onClick={() => setBoardTab(boardTab === "whatsapp" ? "all" : "whatsapp")} />
       </div>
 
       {/* SLA "Needs Attention Now" list hidden for now. The board's Late tab
@@ -340,7 +323,7 @@ export function LiveOpsScreen() {
                 className={s.moreLink}
                 onClick={() => nav("/orders")}
               >
-                {hiddenCount} more — open Orders
+                {hiddenCount} more · open Orders
               </button>
             )}
           </div>

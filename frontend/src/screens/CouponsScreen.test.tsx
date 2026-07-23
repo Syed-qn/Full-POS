@@ -60,6 +60,7 @@ describe("CouponsScreen", () => {
       return Promise.resolve(new Response("[]", { status: 200 }));
     });
     render(<CouponsScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: /add coupon/i }));
     const createBtn = await screen.findByRole("button", { name: /create coupon/i });
     expect(createBtn).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/amount \(aed\)/i), { target: { value: "10" } });
@@ -68,6 +69,7 @@ describe("CouponsScreen", () => {
 
   it("posts a new coupon on create", async () => {
     render(<CouponsScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: /add coupon/i }));
     fireEvent.change(await screen.findByLabelText(/amount \(aed\)/i), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: /create coupon/i }));
     await waitFor(() => {

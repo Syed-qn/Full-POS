@@ -50,14 +50,18 @@ export function TicketsScreen() {
           setPhoneFilter(phoneInput.trim());
         }}
       >
+        {/* No button — typing filters automatically (Enter still works). */}
         <input
           type="search"
           placeholder="Search by phone number"
           value={phoneInput}
-          onChange={(e) => setPhoneInput(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setPhoneInput(v);
+            setPhoneFilter(v.trim());
+          }}
           aria-label="search complaints by phone"
         />
-        <button type="submit">Search</button>
       </form>
 
       {isPending && <TicketsSkeleton />}
@@ -68,7 +72,7 @@ export function TicketsScreen() {
           description={
             phoneFilter
               ? "No tickets match this phone. Clear search to see the full queue."
-              : "You're all caught up — new complaints open in a drawer for resolution."
+              : "You're all caught up. New complaints open in a drawer for resolution."
           }
         />
       )}
@@ -87,7 +91,7 @@ export function TicketsScreen() {
               <span className={s.meta}>
                 {t.customer_name ?? t.customer_phone ?? "customer"}
                 {t.customer_phone ? ` · ${t.customer_phone}` : ""}
-                {" · "}order {t.order_id ? `#${t.order_id}` : "—"}
+                {" · "}order {t.order_id ? `#${t.order_id}` : "none"}
               </span>
               <span className={`${s.status} ${s[t.status]}`}>{t.status.replace("_", " ")}</span>
             </button>

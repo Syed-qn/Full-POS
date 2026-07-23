@@ -6,9 +6,11 @@ import { apiClient } from "../lib/apiClient";
 import {
   addOrderItems,
   confirmOrder,
+  createManualOrder,
   createPosOrder,
   fetchNextToken,
   fireCourse,
+  lookupCustomer,
   setOrderCovers,
   setTableStatus,
 } from "../lib/manualOrderApi";
@@ -18,7 +20,8 @@ import { getStaffSession, isCashierRole } from "../lib/navAccess";
 import { usePosTheme } from "../lib/posTheme";
 import { fetchOrderDetail } from "../lib/orderDetailApi";
 import { getClockStatus, listStaff } from "../lib/staffApi";
-import type { StaffMember } from "../lib/types";
+import { LocationPicker } from "../components/LocationPicker";
+import type { RestaurantOut, StaffMember } from "../lib/types";
 import s from "./WaiterOrderScreen.module.css";
 
 /** VAT is 5% inclusive (AED / UAE) per the platform spec — not the rate on any
@@ -61,6 +64,31 @@ const SECTION_BY_TYPE: Record<OrderTypeKey, WaiterSection> = {
 
 function money(n: number): string {
   return n.toFixed(2);
+}
+
+/** Delivery fee tier from restaurant settings (distance → fee). */
+interface FeeTier {
+  max_km: number;
+  fee_aed: number | string;
+}
+interface FeeChoice {
+  value: string;
+  label: string;
+}
+
+/** Build the picker options from the configured tiers (≤3 km free, etc.). */
+function buildFeeOptions(tiers: FeeTier[]): FeeChoice[] {
+  const sorted = [...tiers].sort((a, b) => Number(a.max_km) - Number(b.max_km));
+  return sorted.map((t, i) => {
+    const km = Number(t.max_km);
+    const fee = Number(t.fee_aed);
+    const lower = i === 0 ? 0 : Number(sorted[i - 1].max_km);
+    const range = i === 0 ? `≤${km} km` : `${lower}–${km} km`;
+    return {
+      value: fee.toFixed(2),
+      label: fee === 0 ? `Free (${range})` : `AED ${fee} (${range})`,
+    };
+  });
 }
 
 /**
@@ -138,6 +166,19 @@ export function WaiterOrderScreen() {
   const [heldIds, setHeldIds] = useState<Set<number>>(new Set());
   const [transferOpen, setTransferOpen] = useState(false);
   const [codOpen, setCodOpen] = useState(false);
+
+  // ── Home Delivery: customer + address capture (delivery order_type only) ──
+  const [deliveryOpen, setDeliveryOpen] = useState(false);
+  const [custPhone, setCustPhone] = useState("");
+  const [custName, setCustName] = useState("");
+  const [aptRoom, setAptRoom] = useState("");
+  const [building, setBuilding] = useState("");
+  const [receiverName, setReceiverName] = useState("");
+  const [addressNotes, setAddressNotes] = useState("");
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [feeOptions, setFeeOptions] = useState<FeeChoice[]>([]);
+  const [fee, setFee] = useState<string>("");
+  const [lookupState, setLookupState] = useState<"idle" | "found" | "new" | "error">("idle");
   /**
    * Dish ids the guest wants PARCELLED even though they are dining in — same
    * tab, same bill, but the kitchen boxes them (order_items.is_takeaway).
@@ -204,6 +245,54 @@ export function WaiterOrderScreen() {
       setCovers(selectedTable.guests);
     }
   }, [selectedTable?.guests]);
+
+  // Delivery fee tiers from restaurant settings — only needed for the delivery
+  // capture. Always keep a "Free delivery" option so a near order can be zeroed.
+  useEffect(() => {
+    if (orderType !== "delivery") return;
+    apiClient
+      .get<RestaurantOut>("/api/v1/me")
+      .then((r) => {
+        const tiers = (r.settings as Record<string, unknown>)?.delivery_fee_tiers;
+        if (Array.isArray(tiers) && tiers.length > 0) {
+          const opts = buildFeeOptions(tiers as FeeTier[]);
+          const withFree = opts.some((o) => o.value === "0.00")
+            ? opts
+            : [{ value: "0.00", label: "Free delivery" }, ...opts];
+          setFeeOptions(withFree);
+          setFee((f) => f || withFree[0].value);
+        } else {
+          setFeeOptions([{ value: "0.00", label: "Free delivery" }]);
+          setFee((f) => f || "0.00");
+        }
+      })
+      .catch(() => {
+        setFeeOptions([{ value: "0.00", label: "Free delivery" }]);
+        setFee((f) => f || "0.00");
+      });
+  }, [orderType]);
+
+  /** Phone → prefill name + last address (same lookup as the manager screen). */
+  async function onLookupCustomer() {
+    if (custPhone.trim().length < 7) return;
+    try {
+      const result = await lookupCustomer(custPhone.trim());
+      if (result) {
+        setLookupState("found");
+        if (result.name) setCustName(result.name);
+        if (result.last_address) {
+          setAptRoom(result.last_address.apt_room);
+          setBuilding(result.last_address.building);
+          setReceiverName(result.last_address.receiver_name);
+          setAddressNotes(result.last_address.notes ?? "");
+        }
+      } else {
+        setLookupState("new");
+      }
+    } catch {
+      setLookupState("error");
+    }
+  }
 
   // Show what is already on the tab when adding another round.
   useEffect(() => {
@@ -280,6 +369,20 @@ export function WaiterOrderScreen() {
   const netValue = roundTotal + tabTotal;
   const vat = netValue - netValue / (1 + VAT_RATE);
   const subTotal = netValue - vat;
+
+  const isDelivery = orderType === "delivery";
+  /** Delivery fee applies on delivery only; the food total already includes VAT. */
+  const feeNum = isDelivery ? Number(fee || 0) || 0 : 0;
+  const grandTotal = netValue + feeNum;
+  /** All the fields a rider needs before a home delivery can leave. */
+  const deliverySaved =
+    !isDelivery ||
+    (custPhone.trim().length >= 7 &&
+      aptRoom.trim() !== "" &&
+      building.trim() !== "" &&
+      receiverName.trim() !== "" &&
+      fee !== "" &&
+      pin !== null);
 
   // ── cart ops ────────────────────────────────────────────────────────────
   const setDishQty = useCallback((dishId: number, n: number) => {
@@ -398,6 +501,14 @@ export function WaiterOrderScreen() {
       toast("Pick a table on the floor first.", "error");
       return;
     }
+    // A NEW home delivery cannot leave without a name, phone and address — the
+    // rider has nowhere to go. Appending to an existing delivery order (Add
+    // Item) is exempt: the address was captured when it was first created.
+    if (isDelivery && !openTabOrderId && !deliverySaved) {
+      toast("Add the delivery name, phone and address first.", "error");
+      setDeliveryOpen(true);
+      return;
+    }
     setSubmitting(true);
     try {
       const items = lines.map((l) => ({
@@ -416,6 +527,30 @@ export function WaiterOrderScreen() {
       } else if (orderId) {
         const updated = await addOrderItems(orderId, items);
         orderNumber = updated?.order_number ?? "";
+      } else if (isDelivery) {
+        // Home delivery goes through the manual-order endpoint, which persists
+        // the real customer + address + fee the rider needs (not the walk-in
+        // placeholder the POS create uses for dine-in / takeaway).
+        const created = await createManualOrder({
+          customer_phone: custPhone.trim(),
+          customer_name: custName.trim() || null,
+          items,
+          address: {
+            apt_room: aptRoom.trim(),
+            building: building.trim(),
+            receiver_name: receiverName.trim(),
+            notes: addressNotes.trim() || null,
+            latitude: pin?.lat ?? null,
+            longitude: pin?.lng ?? null,
+          },
+          delivery_fee_aed: fee || "0.00",
+          order_type: "delivery",
+        });
+        orderId = created?.id ?? null;
+        orderNumber = created?.order_number ?? "";
+        // Keep the till pointed at what we just opened so the next round appends
+        // and the payment buttons have something to charge.
+        if (orderId) setTakeawayOrderId(orderId);
       } else {
         const created = await createPosOrder({
           order_type: orderType,
@@ -603,11 +738,155 @@ export function WaiterOrderScreen() {
     );
   }
 
-  const sendLabel = openTabOrderId
-    ? `KOT · Add to ${selectedTable?.label ?? "tab"} & send`
-    : "KOT · Send";
   // Off-shift waiters are hidden — a waiter must be clocked in to take a table.
   const waiterOptions = staffList.filter((m) => m.role === "waiter" && onShiftIds.has(m.id));
+
+  // The action row lives at the bottom of the right (dish) column across every
+  // mode, so the left ticket column always runs full height beside it.
+  const actionBar = (
+    <div className={`${s.actionBar} ${s.actionBarInline}`}>
+      {/* KOT is first = the outer edge of this left-aligned row, the fastest
+          target for the one button pressed on every order. */}
+      <button
+        type="button"
+        className={`${s.act} ${s.actKot}`}
+        disabled={submitting || (lines.length === 0 && !tabUnfired)}
+        onClick={() => void saveRound(true)}
+        data-testid="waiter-kot"
+        title={
+          lines.length === 0 && tabUnfired
+            ? "Fire the saved (not yet sent) items to the kitchen"
+            : "Save and fire the ticket to the kitchen / bar stations"
+        }
+      >
+        🖨 {submitting ? "Sending…" : "Kot"}
+      </button>
+      {/* New Bill only makes sense on a fresh table — on an open tab (old
+          table) you're adding to the existing bill, not starting one.
+          Take Away always keeps it: once an order is settled, "New Bill" is
+          the only way to start the next customer at this till. */}
+      {(!openTabOrderId || orderType !== "dine_in") && (
+        <button type="button" className={s.act} onClick={startNewBill}>
+          New Bill
+        </button>
+      )}
+      {/* Waiter keeps Print Bill here; the cashier gets it in the right-side
+          payment cluster instead. */}
+      {!isCashier && (
+        <button
+          type="button"
+          className={s.act}
+          disabled={!openTabOrderId}
+          onClick={printBill}
+          title={openTabOrderId ? "Print the running bill for this table" : "No open tab yet"}
+        >
+          🧾 Print Bill
+        </button>
+      )}
+      {/* Parcel only matters on a dine-in bill; a Take Away order is all boxed. */}
+      {orderType === "dine_in" && (
+        <button
+          type="button"
+          className={`${s.act} ${parcelCount > 0 ? s.actParcelOn : ""}`}
+          disabled={focusedId == null}
+          onClick={() => focusedId != null && toggleParcel(focusedId)}
+          data-testid="waiter-parcel"
+          title={
+            focusedId == null
+              ? "Select a line to parcel it"
+              : "Box this line — stays on the same bill, kitchen packs it"
+          }
+        >
+          📦 {focusedId != null && parcelIds.has(focusedId) ? "Eat in" : "Parcel"}
+        </button>
+      )}
+      <button type="button" className={s.act} disabled title="Rush flag coming soon">
+        Rush
+      </button>
+      {/* Request Bill is a waiter action only — the cashier tenders directly
+          via the green "Payment Now" button on the right. */}
+      {!isCashier && (
+        <button
+          type="button"
+          className={s.act}
+          disabled={submitting || !openTabOrderId || !selectedTable}
+          onClick={() => void requestBill()}
+          data-testid="waiter-request-bill"
+          title={
+            openTabOrderId
+              ? "Guest asked for the bill — flag the table for the cashier"
+              : "No open tab on this table"
+          }
+        >
+          🧾 Request Bill
+        </button>
+      )}
+      {/* Transfer moves a tab between tables — dine-in only. */}
+      {orderType === "dine_in" && (
+        <button
+          type="button"
+          className={s.act}
+          disabled={submitting || !openTabOrderId || transferTargets.length === 0}
+          onClick={() => setTransferOpen(true)}
+          data-testid="waiter-transfer"
+          title={
+            !openTabOrderId
+              ? "No open tab on this table to move"
+              : transferTargets.length === 0
+                ? "No free table to move to"
+                : "Move this tab to another table"
+          }
+        >
+          ⇄ Transfer
+        </button>
+      )}
+      {/* Deletion happens via the per-line 🗑 in the cart, so no bar Delete. */}
+      <button type="button" className={`${s.act} ${s.actVoid}`} disabled title="Void needs a manager PIN">
+        ⚠ Void
+      </button>
+
+      <span className={s.spacer} />
+
+      {/* Payment is a cashier-only cluster; waiters send to the kitchen and the
+          cashier tenders, so they get no payment control here. */}
+      {isCashier && (
+        <span className={s.payCluster}>
+          <button
+            type="button"
+            className={s.act}
+            disabled={!openTabOrderId}
+            onClick={printBill}
+            title={openTabOrderId ? "Print the running bill" : "No open tab yet"}
+            data-testid="cashier-print-bill"
+          >
+            🧾 Print Bill
+          </button>
+          <button
+            type="button"
+            className={s.act}
+            disabled={submitting || !openTabOrderId}
+            onClick={() => goPay("card")}
+            title="Card, wallet, online & other payment modes"
+            data-testid="cashier-other-pay"
+          >
+            💳 Other Pay
+          </button>
+          {/* Last = backed against the screen edge, the fastest target for
+              the tender used on most orders. Same order as the Take Away list. */}
+          <button
+            type="button"
+            className={`${s.act} ${s.payBtn}`}
+            disabled={submitting || !openTabOrderId}
+            onClick={() => setCodOpen(true)}
+            title="Collect cash at the counter now"
+            data-testid="cashier-cod"
+          >
+            💵 Cash
+          </button>
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div className={s.root} data-theme={theme} data-testid="waiter-order-screen">
@@ -627,7 +906,11 @@ export function WaiterOrderScreen() {
           <button
             type="button"
             className={s.backBtn}
-            onClick={() => navigate("/cashier/takeaway?from=till")}
+            onClick={() =>
+              navigate(
+                `/cashier/${orderType === "delivery" ? "delivery" : "takeaway"}?from=till`,
+              )
+            }
             data-testid="takeaway-back-list"
           >
             ‹ Orders
@@ -640,6 +923,35 @@ export function WaiterOrderScreen() {
             {nextToken ?? "—"}
           </strong>
         </span>
+
+        {/* Home Delivery: the customer + address control sits right after the
+            token. Empty = a call to capture it; filled = a compact chip. */}
+        {isDelivery &&
+          (deliverySaved ? (
+            <button
+              type="button"
+              className={s.delChip}
+              onClick={() => setDeliveryOpen(true)}
+              data-testid="delivery-summary"
+              title="Edit delivery details"
+            >
+              <span aria-hidden>🛵</span>
+              <strong>{custName.trim() || receiverName.trim() || "Customer"}</strong>
+              <span className={s.delChipMeta}>
+                {[custPhone.trim(), building.trim()].filter(Boolean).join(" · ")}
+              </span>
+              <span className={s.delChipEdit}>Edit</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={s.delChipAdd}
+              onClick={() => setDeliveryOpen(true)}
+              data-testid="delivery-add-details"
+            >
+              ＋ Add delivery details
+            </button>
+          ))}
 
         {orderType === "dine_in" && <span className={s.tableTag}>{tableLabel}</span>}
 
@@ -896,9 +1208,15 @@ export function WaiterOrderScreen() {
               <span>VAT ({VAT_RATE * 100}% incl.)</span>
               <span>{money(vat)}</span>
             </div>
+            {isDelivery && (
+              <div className={s.totRow}>
+                <span>Delivery fee</span>
+                <span data-testid="waiter-delivery-fee">{money(feeNum)}</span>
+              </div>
+            )}
             <div className={`${s.totRow} ${s.totNet}`}>
               <span>{tabTotal > 0 ? "Table total" : "Net Value"}</span>
-              <span data-testid="waiter-net">{money(netValue)}</span>
+              <span data-testid="waiter-net">{money(isDelivery ? grandTotal : netValue)}</span>
             </div>
           </div>
 
@@ -1070,170 +1388,10 @@ export function WaiterOrderScreen() {
               </div>
             )}
           </div>
+          {/* Action row under the dish list so the left ticket column runs full
+              height — same layout for dine-in, take away and delivery. */}
+          {actionBar}
         </section>
-      </div>
-
-      {/* ── bottom action bar ────────────────────────────────────────── */}
-      <div className={s.actionBar}>
-        {/* KOT is first = the outer edge of this left-aligned row, the fastest
-            target for the one button pressed on every order. */}
-        <button
-          type="button"
-          className={`${s.act} ${s.actKot}`}
-          disabled={submitting || (lines.length === 0 && !tabUnfired)}
-          onClick={() => void saveRound(true)}
-          data-testid="waiter-kot"
-          title={
-            lines.length === 0 && tabUnfired
-              ? "Fire the saved (not yet sent) items to the kitchen"
-              : "Save and fire the ticket to the kitchen / bar stations"
-          }
-        >
-          🖨{" "}
-          {submitting
-            ? "Sending…"
-            : lines.length === 0 && tabUnfired
-              ? "KOT · Send saved"
-              : sendLabel}
-        </button>
-        {/* New Bill only makes sense on a fresh table — on an open tab (old
-            table) you're adding to the existing bill, not starting one.
-            Take Away always keeps it: once an order is settled, "New Bill" is
-            the only way to start the next customer at this till. */}
-        {(!openTabOrderId || orderType !== "dine_in") && (
-          <button type="button" className={s.act} onClick={startNewBill}>
-            New Bill
-          </button>
-        )}
-        {/* Waiter keeps Print Bill here; the cashier gets it in the right-side
-            payment cluster instead. */}
-        {!isCashier && (
-          <button
-            type="button"
-            className={s.act}
-            disabled={!openTabOrderId}
-            onClick={printBill}
-            title={openTabOrderId ? "Print the running bill for this table" : "No open tab yet"}
-          >
-            🧾 Print Bill
-          </button>
-        )}
-        {/* Parcel only matters on a dine-in bill; a Take Away order is all boxed. */}
-        {orderType === "dine_in" && (
-          <button
-            type="button"
-            className={`${s.act} ${parcelCount > 0 ? s.actParcelOn : ""}`}
-            disabled={focusedId == null}
-            onClick={() => focusedId != null && toggleParcel(focusedId)}
-            data-testid="waiter-parcel"
-            title={
-              focusedId == null
-                ? "Select a line to parcel it"
-                : "Box this line — stays on the same bill, kitchen packs it"
-            }
-          >
-            📦 {focusedId != null && parcelIds.has(focusedId) ? "Eat in" : "Parcel"}
-          </button>
-        )}
-        <button type="button" className={s.act} disabled title="Rush flag coming soon">
-          RUSH
-        </button>
-        {/* Request Bill is a waiter action only — the cashier tenders directly
-            via the green "Payment Now" button on the right. */}
-        {!isCashier && (
-          <button
-            type="button"
-            className={s.act}
-            disabled={submitting || !openTabOrderId || !selectedTable}
-            onClick={() => void requestBill()}
-            data-testid="waiter-request-bill"
-            title={
-              openTabOrderId
-                ? "Guest asked for the bill — flag the table for the cashier"
-                : "No open tab on this table"
-            }
-          >
-            🧾 Request Bill
-          </button>
-        )}
-        {/* Transfer moves a tab between tables — dine-in only. */}
-        {orderType === "dine_in" && (
-          <button
-            type="button"
-            className={s.act}
-            disabled={submitting || !openTabOrderId || transferTargets.length === 0}
-            onClick={() => setTransferOpen(true)}
-            data-testid="waiter-transfer"
-            title={
-              !openTabOrderId
-                ? "No open tab on this table to move"
-                : transferTargets.length === 0
-                  ? "No free table to move to"
-                  : "Move this tab to another table"
-            }
-          >
-            ⇄ TRANSFER
-          </button>
-        )}
-        {/* Per-line 🗑 in the cart already deletes; the bar Delete is dine-in only. */}
-        {orderType === "dine_in" && (
-          <button
-            type="button"
-            className={s.act}
-            disabled={focusedId == null}
-            onClick={() => {
-              if (focusedId != null) setDishQty(focusedId, 0);
-              setFocusedId(null);
-            }}
-          >
-            ✕ Delete
-          </button>
-        )}
-        <button type="button" className={`${s.act} ${s.actVoid}`} disabled title="Void needs a manager PIN">
-          ⚠ Void
-        </button>
-
-        <span className={s.spacer} />
-
-        {isCashier ? (
-          <span className={s.payCluster}>
-            <button
-              type="button"
-              className={s.act}
-              disabled={!openTabOrderId}
-              onClick={printBill}
-              title={openTabOrderId ? "Print the running bill" : "No open tab yet"}
-              data-testid="cashier-print-bill"
-            >
-              🧾 Print Bill
-            </button>
-            <button
-              type="button"
-              className={s.act}
-              disabled={submitting || !openTabOrderId}
-              onClick={() => goPay("card")}
-              title="Card, wallet, online & other payment modes"
-              data-testid="cashier-other-pay"
-            >
-              💳 Other Pay
-            </button>
-            {/* Last = backed against the screen edge, the fastest target for
-                the tender used on most orders. Same order as the Take Away list. */}
-            <button
-              type="button"
-              className={`${s.act} ${s.payBtn}`}
-              disabled={submitting || !openTabOrderId}
-              onClick={() => setCodOpen(true)}
-              title="Collect cash at the counter now"
-              data-testid="cashier-cod"
-            >
-              💵 Cash
-            </button>
-          </span>
-        ) : (
-          /* Waiters never tender: the cashier takes payment. */
-          <span className={s.payNote}>Payment at cashier</span>
-        )}
       </div>
 
       {codOpen && (
@@ -1287,6 +1445,136 @@ export function WaiterOrderScreen() {
                 data-testid="cod-collect"
               >
                 {submitting ? "Collecting…" : `✔ Collect AED ${tabTotal.toFixed(2)} (Cash)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deliveryOpen && (
+        <div
+          className={s.modalBack}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delivery details"
+          onClick={() => setDeliveryOpen(false)}
+        >
+          <div
+            className={`${s.modal} ${s.delModal}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={s.modalHead}>🛵 Delivery details</div>
+
+            <div className={s.delBody}>
+              <div className={s.delFields}>
+                <label className={s.delField}>
+                  <span>Phone</span>
+                  <input
+                    type="tel"
+                    value={custPhone}
+                    onChange={(e) => {
+                      setCustPhone(e.target.value);
+                      setLookupState("idle");
+                    }}
+                    onBlur={() => void onLookupCustomer()}
+                    placeholder="05x xxx xxxx"
+                    data-testid="delivery-phone"
+                  />
+                  {lookupState === "found" && (
+                    <em className={s.delHint}>Returning customer — details filled in.</em>
+                  )}
+                  {lookupState === "new" && (
+                    <em className={s.delHint}>New customer.</em>
+                  )}
+                </label>
+                <label className={s.delField}>
+                  <span>Customer name</span>
+                  <input
+                    type="text"
+                    value={custName}
+                    onChange={(e) => setCustName(e.target.value)}
+                    placeholder="Name"
+                  />
+                </label>
+                <div className={s.delTwoUp}>
+                  <label className={s.delField}>
+                    <span>Apt / Room</span>
+                    <input
+                      type="text"
+                      value={aptRoom}
+                      onChange={(e) => setAptRoom(e.target.value)}
+                      placeholder="Apt 12"
+                    />
+                  </label>
+                  <label className={s.delField}>
+                    <span>Building</span>
+                    <input
+                      type="text"
+                      value={building}
+                      onChange={(e) => setBuilding(e.target.value)}
+                      placeholder="Marina Tower"
+                    />
+                  </label>
+                </div>
+                <label className={s.delField}>
+                  <span>Receiver name</span>
+                  <input
+                    type="text"
+                    value={receiverName}
+                    onChange={(e) => setReceiverName(e.target.value)}
+                    placeholder="Who receives the order"
+                  />
+                </label>
+                <label className={s.delField}>
+                  <span>Notes (optional)</span>
+                  <input
+                    type="text"
+                    value={addressNotes}
+                    onChange={(e) => setAddressNotes(e.target.value)}
+                    placeholder="Landmark, gate code…"
+                  />
+                </label>
+                <label className={s.delField}>
+                  <span>Delivery fee</span>
+                  <select value={fee} onChange={(e) => setFee(e.target.value)} data-testid="delivery-fee-select">
+                    {feeOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className={s.delMap}>
+                <span className={s.delMapLabel}>
+                  Pin the exact drop-off {pin ? "" : "— required"}
+                </span>
+                <LocationPicker
+                  lat={pin?.lat ?? 0}
+                  lng={pin?.lng ?? 0}
+                  onChange={(lat, lng) => setPin({ lat, lng })}
+                  className={s.delPicker}
+                />
+              </div>
+            </div>
+
+            <div className={s.codActions}>
+              <button
+                type="button"
+                className={s.codCancel}
+                onClick={() => setDeliveryOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={s.codCollect}
+                disabled={!deliverySaved}
+                onClick={() => setDeliveryOpen(false)}
+                data-testid="delivery-save"
+              >
+                Save details
               </button>
             </div>
           </div>

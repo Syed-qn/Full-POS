@@ -399,6 +399,23 @@
 .act:hover:not(:disabled) { filter: brightness(1.08); }
 .act:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* A read-only progress state (kitchen / dispatching), NOT a button. Reads as a
+   status chip — muted fill, no border chrome, default cursor — so the cashier
+   doesn't try to click a dead control. */
+.actState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--ink-2, var(--ink));
+  font-size: 15px;
+  font-weight: 700;
+  cursor: default;
+}
+
 /* Colour marks THE action, not an action: COD is the one that takes money and
    closes the order, so it is the only filled button in the row. */
 .actPay {

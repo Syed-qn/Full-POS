@@ -196,7 +196,7 @@
   grid-template-columns: 26px 46px 1fr 58px 96px 70px 44px;
   align-items: center;
   gap: 4px;
-  padding: 7px 10px;
+  padding: 4px 10px;
   text-align: left;
 }
 
@@ -345,7 +345,12 @@
 .cAmt { font-weight: 700; }
 
 .cartEmpty {
-  margin: 40px 0;
+  /* Center the prompt in the empty cart area, not pinned to the top. */
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
   text-align: center;
   color: var(--ink-dim);
   font-size: 13px;
@@ -716,6 +721,11 @@
   background: var(--panel);
   border-top: 1px solid var(--line);
 }
+/* Home Delivery: the bar sits at the bottom of the dish column (not full
+   width), so the left ticket column runs the full height beside it. */
+.actionBarInline {
+  margin-top: auto;
+}
 
 .act {
   min-height: 38px;
@@ -934,3 +944,111 @@
   border-color: #0e9d5a;
   color: #04160d;
 }
+
+/* ── Home Delivery: ticket-bar customer chip + address capture ─────────── */
+/* Empty-state button — a call to capture, styled to stand out in the bar. */
+.delChipAdd {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px dashed var(--amber);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.delChipAdd:hover { background: color-mix(in srgb, var(--amber) 20%, transparent); }
+
+/* Filled chip — 🛵 name · phone · building, with an Edit affordance. */
+.delChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  max-width: 420px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+.delChip:hover { border-color: var(--amber); }
+.delChip strong { font-weight: 800; white-space: nowrap; }
+.delChipMeta {
+  color: var(--ink-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.delChipEdit {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-dim);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Dialog: fields on the left, map on the right; stacks on a narrow screen. */
+.delModal { width: min(880px, 94vw); }
+.delBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 16px;
+  margin-bottom: 14px;
+}
+@media (max-width: 720px) {
+  .delBody { grid-template-columns: 1fr; }
+}
+.delFields { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.delTwoUp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* min-width:0 lets a grid/flex item shrink below the input's intrinsic width,
+   so the Building field can't overflow its column. */
+.delField { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.delField > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.delField input,
+.delField select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 15px;
+}
+.delField input:focus,
+.delField select:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+.delField select option { background: var(--panel-2); color: var(--ink); }
+.delHint { font-size: 12px; color: var(--green); font-style: normal; }
+
+.delMap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.delMapLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+/* Let the picker fill the dialog column instead of its own max-width card. */
+.delPicker { max-width: none; width: 100%; }

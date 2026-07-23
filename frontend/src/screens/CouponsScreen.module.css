@@ -62,6 +62,28 @@
   margin: 0;
 }
 
+/* Row skeleton: shimmer bars in the coupons table shape while the first
+   list load is in flight. */
+.sk {
+  display: inline-block;
+  height: 12px;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: couponsSkShimmer 1.4s infinite;
+}
+@keyframes couponsSkShimmer {
+  100% { transform: translateX(100%); }
+}
+
 .hint {
   color: var(--text-muted);
   font-size: 12px;
@@ -143,9 +165,19 @@
   margin: 0;
 }
 
+/* Toolbar: a compact search box on the left, the Add-coupon opener on the right. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .search {
   display: flex;
-  gap: 10px;
+  flex: 1 1 260px;
+  max-width: 360px;
 }
 
 .search input {
@@ -158,14 +190,62 @@
   font-size: var(--font-size-body, 16px);
 }
 
-.search button {
-  min-height: var(--touch-min, 56px);
-  min-width: 96px;
-  padding: 12px 18px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
+/* ---- New-coupon dialog ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 25, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+.modal {
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+}
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.modalHead .cardTitle { margin: 0; }
+.close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 15px;
-  font-weight: 600;
+  padding: 0 4px;
+}
+.close:hover { color: var(--text-primary); }
+.close:disabled { opacity: 0.5; cursor: default; }
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+.modalBody .form {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.modalFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-subtle);
 }

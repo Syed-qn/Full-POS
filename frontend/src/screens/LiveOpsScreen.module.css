@@ -62,15 +62,15 @@
 
 .kpiStrip {
   display: grid;
-  /* Six tiles: 3 × 2 keeps every card the same width. At 4 columns the two
-     channel tiles would orphan onto a half-empty second row. */
-  grid-template-columns: repeat(3, 1fr);
+  /* Four primary metrics across one row; the channel breakdown lives in its own
+     merged card below, so nothing orphans. */
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
 }
-@media (max-width: 1200px) {
+@media (max-width: 1100px) {
   .kpiStrip { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 640px) {
+@media (max-width: 560px) {
   .kpiStrip { grid-template-columns: 1fr; }
 }
 .dispatchKpiRow {}
@@ -306,28 +306,22 @@
 
 .row {
   cursor: pointer;
-  border-bottom: 1px solid var(--border-subtle);
 }
-.row:last-child { border-bottom: none; }
-.row:hover { background: var(--bg-surface-inset); }
 .row td {
   padding: 14px 16px;
   height: 52px;
   vertical-align: middle;
   color: var(--text-primary);
 }
-
-/* Late: a left stripe only. A tinted row fill + coloured border + stripe was
-   three signals for one fact, and a hardcoded pink broke on dark surfaces. */
-.rowLate td:first-child { box-shadow: inset 3px 0 0 var(--sla-critical); }
-.tier_breach td:first-child { animation: latePulse 1.6s ease-in-out infinite; }
-@keyframes latePulse {
-  0%, 100% { box-shadow: inset 3px 0 0 var(--sla-critical); }
-  50% { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--sla-critical) 40%, transparent); }
+/* Zebra rows + accent hover — matches the Waiter roster table exactly, so both
+   boards read as the same component. Shading lives on the td (not the tr) so it
+   layers correctly with the SLA stripe on the first cell. */
+.row:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-surface-inset) 55%, var(--bg-surface));
 }
-@media (prefers-reduced-motion: reduce) {
-  .tier_breach td:first-child { animation: none; }
-}
+.row:hover td { background: var(--accent-primary-dim); }
+/* Lateness is already carried by the SLA column's OVERDUE chip, so the row
+   itself needs no coloured side stripe — it just added visual noise. */
 
 .cRef {
   font-family: var(--font-mono);

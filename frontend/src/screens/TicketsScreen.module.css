@@ -108,8 +108,9 @@
 
 .search {
   display: flex;
-  gap: 10px;
-  align-items: stretch;
+  width: 360px;
+  max-width: 100%;
+  align-self: flex-start;
 }
 
 .search input {
@@ -122,16 +123,4 @@
   font-size: var(--font-size-body, 16px);
   background: var(--bg-surface);
   color: var(--text-primary);
-}
-
-.search button {
-  min-height: var(--touch-min, 56px);
-  min-width: 96px;
-  padding: 12px 18px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--bg-surface);
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 600;
 }
