@@ -193,7 +193,7 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
         aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
         aria-expanded={!collapsed}
       >
-        {collapsed ? "»" : "«"}
+        {collapsed ? "›" : "‹"}
       </button>
 
       <div className={s.scroll}>
