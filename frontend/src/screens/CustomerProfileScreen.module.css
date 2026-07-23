@@ -199,20 +199,25 @@
   border: 1px solid var(--border-subtle);
 }
 
+/* 2×2 grid: Amount + Reason on top, Add credit + Deduct below. A single flex
+   row squeezed the inputs to slivers inside the narrow profile card. */
 .walletForm {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  align-items: center;
   margin-top: 10px;
 }
 
 .walletForm input {
-  flex: 1;
   min-width: 0;
   padding: 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-size: 14px;
+}
+
+.walletForm button {
+  width: 100%;
 }
 
 .walletMsg {
