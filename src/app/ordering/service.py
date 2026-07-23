@@ -1910,6 +1910,33 @@ async def advance_kitchen_status(
     # confirm) and warn the kitchen if it just got tighter.
     if next_status == OrderStatus.PREPARING:
         await _refresh_prep_deadline(session, order)
+
+        # KOT = put the order on the kitchen board. Delivery/WhatsApp orders are
+        # gated by the cashier (confirmed -> KOT -> preparing), so their lines are
+        # not fired at confirm the way a dine-in tab is. Create the tickets now for
+        # any line that has not been routed yet (station_id_snapshot IS NULL). This
+        # is idempotent: a dine-in order already ticketed at confirm has snapshots,
+        # so its fireable set is empty and nothing double-fires. Held courses wait.
+        untucketed = (
+            await session.scalars(
+                select(OrderItem).where(
+                    OrderItem.order_id == order.id,
+                    OrderItem.cancelled.is_(False),
+                    OrderItem.station_id_snapshot.is_(None),
+                )
+            )
+        ).all()
+        fireable = [i for i in untucketed if not getattr(i, "course_held", False)]
+        if fireable:
+            from app.kds.service import create_tickets_for_items
+
+            await create_tickets_for_items(
+                session,
+                restaurant_id=order.restaurant_id,
+                order=order,
+                items=fireable,
+            )
+
         from app.dispatch.rider_flow import _notify_customer_status
 
         await _notify_customer_status(
