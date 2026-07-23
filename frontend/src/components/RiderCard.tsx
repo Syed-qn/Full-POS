@@ -79,22 +79,26 @@ export function RiderCard({
   const paired = rider.app_paired ?? true;
 
   // The ACTUAL dispatch outcome, combining BOTH switches so the manager doesn't have
-  // to decode two badges. A rider receives new orders ONLY if the manager has them
-  // Available AND the rider is On duty in the app.
+  // to decode two badges. A rider receives new orders ONLY if they have paired the
+  // app AND the manager has them Available AND they are On duty in the app. An
+  // unpaired rider is never dispatched (no app to receive the run / share GPS), so
+  // the banner must NOT claim "Receiving orders" just because status is available.
   const dispatch: { label: string; tone: "go" | "busy" | "stop" } = deactivated
     ? { label: "Not receiving · Deactivated", tone: "stop" }
-    : onDelivery
-      ? { label: "On a delivery", tone: "busy" }
-      : rider.status === "available" && !offDuty
-        ? { label: "Receiving orders", tone: "go" }
-        : {
-            label:
-              "Not receiving · " +
-              [offShift ? "off shift" : null, offDuty ? "off duty" : null]
-                .filter(Boolean)
-                .join(" & ") || "Not receiving",
-            tone: "stop",
-          };
+    : !paired
+      ? { label: "Not receiving · not paired", tone: "stop" }
+      : onDelivery
+        ? { label: "On a delivery", tone: "busy" }
+        : rider.status === "available" && !offDuty
+          ? { label: "Receiving orders", tone: "go" }
+          : {
+              label:
+                "Not receiving · " +
+                [offShift ? "off shift" : null, offDuty ? "off duty" : null]
+                  .filter(Boolean)
+                  .join(" & ") || "Not receiving",
+              tone: "stop",
+            };
 
   // Loose `!= null` so a backend that hasn't shipped these fields yet (value is
   // `undefined`, not `null`) reads as "no location" instead of rendering NaN.
