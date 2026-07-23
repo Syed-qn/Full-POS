@@ -20,7 +20,8 @@ import {
   type CredentialsStatus,
 } from "../lib/paymentsApi";
 import { PageHeader } from "../components/PageHeader";
-import { LocationPicker, reverseGeocode } from "../components/LocationPicker";
+import { reverseGeocode } from "../components/LocationPicker";
+import { LocationPickerModal } from "../components/LocationPickerModal";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import s from "./SettingsScreen.module.css";
 
@@ -225,6 +226,7 @@ export function SettingsScreen() {
   const [taxPricingMode, setTaxPricingMode] = useState<"exclusive" | "inclusive">("exclusive");
   const [legalNameAr, setLegalNameAr] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
+  const [savingLoc, setSavingLoc] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
   // WhatsApp connect / disconnect — both happen HERE. Connect opens Meta's own
   // Embedded Signup dialog in place (same popup the onboarding wizard uses);
@@ -413,6 +415,27 @@ export function SettingsScreen() {
       flash();
     } catch {
       flash("Failed to save.");
+    }
+  }
+
+  // Persist just the map pin from the "Set on map" dialog, independently of the
+  // rest of the General form, then close the dialog.
+  async function saveLocation(la: number, ln: number) {
+    setSavingLoc(true);
+    try {
+      const updated = await apiClient.patch<RestaurantOut>("/api/v1/me", {
+        name: name.trim(),
+        lat: la,
+        lng: ln,
+      });
+      setLat(String(updated.lat));
+      setLng(String(updated.lng));
+      setMapOpen(false);
+      flash();
+    } catch {
+      flash("Failed to save the location.");
+    } finally {
+      setSavingLoc(false);
     }
   }
 
@@ -715,10 +738,9 @@ export function SettingsScreen() {
               <button
                 type="button"
                 className={s.locToggle}
-                aria-expanded={mapOpen}
-                onClick={() => setMapOpen((o) => !o)}
+                onClick={() => setMapOpen(true)}
               >
-                {mapOpen ? "Close map" : "Set on map"}
+                {lat.trim() && lng.trim() ? "Change on map" : "Set on map"}
               </button>
             </div>
             <div className={s.locCurrent}>
@@ -732,14 +754,16 @@ export function SettingsScreen() {
                 <span className={s.rowHint}>No location set yet. Open the map to set it.</span>
               )}
             </div>
-            {mapOpen && (
-              <LocationPicker
-                lat={Number(lat)}
-                lng={Number(lng)}
-                onChange={(la, ln) => { setLat(String(la)); setLng(String(ln)); }}
-              />
-            )}
           </div>
+          {mapOpen && (
+            <LocationPickerModal
+              lat={lat.trim() ? Number(lat) : 0}
+              lng={lng.trim() ? Number(lng) : 0}
+              saving={savingLoc}
+              onSave={saveLocation}
+              onClose={() => setMapOpen(false)}
+            />
+          )}
           <div className={`${s.actions} ${s.stickySave}`}>
             <Button onClick={saveGeneral}>Save</Button>
           </div>
