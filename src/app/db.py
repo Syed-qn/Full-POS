@@ -1,7 +1,10 @@
 # src/app/db.py
+import os
+import sys
 from collections.abc import AsyncIterator
 from datetime import datetime
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import (
@@ -26,6 +29,35 @@ class TimestampMixin:
     )
 
 
+def _announce_db_target(url: str) -> None:
+    """One line on stderr naming WHERE we are about to connect and WHY.
+
+    Deploys fail with a bare "Connect call failed 127.0.0.1:5433" when the
+    platform's database variable never reaches the container — the settings
+    default then points at a localhost dev database that does not exist in the
+    image. The traceback cannot distinguish "variable missing" from "variable
+    wrong", which turns every failed deploy into guesswork. Credentials are
+    never printed: host, port and database name only.
+    """
+    try:
+        p = urlparse(url)
+        source = (
+            "APP_DATABASE_URL"
+            if os.getenv("APP_DATABASE_URL")
+            else "DATABASE_URL"
+            if os.getenv("DATABASE_URL")
+            else "BUILT-IN DEFAULT (no database env var set!)"
+        )
+        print(
+            f"[db] connecting to host={p.hostname} port={p.port} "
+            f"db={(p.path or '/').lstrip('/')} driver={p.scheme} source={source}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception:  # noqa: BLE001 — diagnostics must never break startup
+        pass
+
+
 @lru_cache
 def get_engine():
     # NullPool: open a fresh asyncpg connection per checkout and close it on release.
@@ -37,7 +69,9 @@ def get_engine():
     # request (e.g. login). NullPool sidesteps all of that: every checkout is a new
     # connection in the CURRENT loop, never stale, never cross-loop. Slightly more
     # connect overhead, negligible at this app's scale and far safer.
-    return create_async_engine(get_settings().database_url, poolclass=NullPool)
+    url = get_settings().database_url
+    _announce_db_target(url)
+    return create_async_engine(url, poolclass=NullPool)
 
 
 @lru_cache
