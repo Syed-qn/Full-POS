@@ -56,7 +56,7 @@
       "expo-notifications"
     ],
     "extra": {
-      "apiBase": "https://restaurant-whatsapp-service.onrender.com",
+      "apiBase": "https://full-pos-production.up.railway.app",
       "eas": {
         "projectId": "72a399a4-84d6-46f5-a97f-fbc35ddfd30d"
       }

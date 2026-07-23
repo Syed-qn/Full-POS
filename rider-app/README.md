@@ -26,7 +26,13 @@ as before, now driven by the app.
 1. Install tooling: `npm i -g eas-cli` and create a free [Expo account](https://expo.dev).
 2. In `rider-app/`: `npm install`, then `npx expo install` (aligns native dep versions).
 3. Edit `app.json` → `expo.extra.apiBase` to your backend URL
-   (default `https://restaurant-whatsapp-service.onrender.com`).
+   (default `https://full-pos-production.up.railway.app`).
+
+   `apiBase` is **baked into the APK at build time**. It must point at the same
+   backend as the manager dashboard, because a pairing code only exists in that
+   backend's database — pointing the app elsewhere makes every code come back
+   "invalid or expired pairing code" even though the code is perfectly valid.
+   Changing it requires a rebuild; there is no runtime override.
 4. `eas login`, then `eas init` (fills `expo.extra.eas.projectId`).
 
 ## In-app map (not WhatsApp redirect)
