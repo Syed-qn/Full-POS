@@ -768,22 +768,23 @@ export function SettingsScreen() {
             className={s.rowStacked}
             style={{ marginTop: 24, borderTop: "1px solid var(--border, #334155)", paddingTop: 18 }}
           >
-            <div className={s.rowLabel}>
-              <span className={s.rowName}>
-                WhatsApp connection
-                {metaCfg && (
-                  <span className={s.rowBadge} data-connected={metaCfg.connected ? "yes" : "no"}>
-                    {metaCfg.connected ? "Connected" : "Not connected"}
-                  </span>
-                )}
-              </span>
-              <span className={s.rowHint}>
-                {metaCfg?.connected
-                  ? "Disconnect this restaurant's WhatsApp (Meta) account. Your menu, orders and settings are kept — but the bot stops replying until you reconnect."
-                  : "Link your Meta / WhatsApp Business account. The Facebook dialog opens right here — pick your number and we set the rest up."}
-              </span>
-            </div>
-            <div className={s.actions}>
+            {/* Label and the connect/disconnect button share one row. */}
+            <div className={s.locHead}>
+              <div className={s.rowLabel}>
+                <span className={s.rowName}>
+                  WhatsApp connection
+                  {metaCfg && (
+                    <span className={s.rowBadge} data-connected={metaCfg.connected ? "yes" : "no"}>
+                      {metaCfg.connected ? "Connected" : "Not connected"}
+                    </span>
+                  )}
+                </span>
+                <span className={s.rowHint}>
+                  {metaCfg?.connected
+                    ? "Disconnect this restaurant's WhatsApp (Meta) account. Your menu, orders and settings are kept — but the bot stops replying until you reconnect."
+                    : "Link your Meta / WhatsApp Business account. The Facebook dialog opens right here — pick your number and we set the rest up."}
+                </span>
+              </div>
               {metaCfg?.connected ? (
                 <Button variant="ghost" onClick={() => setShowDisconnect(true)}>
                   Disconnect WhatsApp
