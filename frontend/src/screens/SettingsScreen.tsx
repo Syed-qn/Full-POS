@@ -825,11 +825,10 @@ export function SettingsScreen() {
               </div>
             )}
           </div>
-          {/* Save is the last thing in the tab and sits inline at the very bottom
-              (not sticky) so it no longer floats over the WhatsApp connection
-              block just above it. It saves the profile/tax/location fields;
-              WhatsApp connect/disconnect above act on their own. */}
-          <div className={s.actions}>
+          {/* Sticky Save like every other tab. It's the last element (the
+              WhatsApp connection block sits above it in the DOM), so the sticky
+              bar never floats over that block — it just parks at the bottom. */}
+          <div className={`${s.actions} ${s.stickySave}`}>
             <Button onClick={saveGeneral}>Save</Button>
           </div>
         </div>
