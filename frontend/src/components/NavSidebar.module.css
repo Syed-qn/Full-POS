@@ -185,6 +185,34 @@
   justify-content: center;
 }
 
+/* Not-yet-shipped screens: shown but inert, with a "Soon" pill. */
+.itemDisabled {
+  cursor: default;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.itemDisabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.soon {
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .logout {
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);

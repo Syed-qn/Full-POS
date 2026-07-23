@@ -35,7 +35,9 @@ describe("NavSidebar logout", () => {
     renderNav("/");
     expect(screen.getByRole("link", { name: /live ops/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /floor plan/i })).toHaveAttribute("href", "/floor");
-    expect(screen.getByRole("link", { name: /new order/i })).toBeInTheDocument();
+    // New Order isn't shipped yet: shown as an inert "coming soon" row, not a link.
+    expect(screen.queryByRole("link", { name: /new order/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/new order, coming soon/i)).toBeInTheDocument();
     // Owner/manager (null role) see Manage as Admin
     expect(screen.getByRole("button", { name: /admin/i })).toBeInTheDocument();
   });

@@ -24,6 +24,19 @@ import s from "./NavSidebar.module.css";
 type NavItem = { to: string; label: string; icon: string };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
+/** Routes that are live today. Everything else in the nav renders inert with a
+ *  "Soon" pill until it ships. */
+const LIVE_ROUTES = new Set<string>([
+  "/", // Live Ops
+  "/floor", // Floor Plan
+  "/orders", // Orders
+  "/kds", // Kitchen
+  "/conversations", // Chats
+  "/marketing", // Promotion
+  "/riders", // Riders
+  "/menu", // Menu
+]);
+
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
  *  then the manager/admin surface, then the long tail. */
 const GROUPS: NavGroup[] = [
@@ -204,6 +217,29 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
               {(collapsed || groupOpen) && (
                 <div className={s.groupBody} id={`nav-group-${group.id}`} role="group" aria-label={group.label}>
                   {group.items.map((it) => {
+                    // Not-yet-shipped screens render as an inert row with a "Soon"
+                    // pill instead of a navigable link.
+                    if (!LIVE_ROUTES.has(it.to)) {
+                      return (
+                        <span
+                          key={it.to}
+                          className={`${s.item} ${s.itemDisabled}`}
+                          title={`${it.label} — coming soon`}
+                          aria-label={`${it.label}, coming soon`}
+                          aria-disabled="true"
+                        >
+                          <span className={s.icon} aria-hidden="true">
+                            {it.icon}
+                          </span>
+                          {!collapsed && <span className={s.label}>{it.label}</span>}
+                          {!collapsed && (
+                            <span className={s.soon} aria-hidden="true">
+                              Soon
+                            </span>
+                          )}
+                        </span>
+                      );
+                    }
                     // Collapsed = icon-only; title + aria-label keep an accessible name.
                     const a11yName =
                       it.to === "/conversations" && unread > 0
