@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, TouchButton } from "../components/Button";
+import { Button } from "../components/Button";
 import { ConversationRow } from "../components/ConversationRow";
 import { MessageBubble } from "../components/MessageBubble";
 import { SectionBanner } from "../components/SectionBanner";
@@ -297,9 +297,9 @@ export function ConversationsScreen() {
                     }
                   }}
                 />
-                <TouchButton onClick={send} disabled={!canCompose || !draft.trim()}>
+                <Button size="md" onClick={send} disabled={!canCompose || !draft.trim()}>
                   Send
-                </TouchButton>
+                </Button>
               </div>
             </>
           )}
