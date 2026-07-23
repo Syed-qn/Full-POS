@@ -36,6 +36,7 @@ const LIVE_ROUTES = new Set<string>([
   "/riders", // Riders
   "/menu", // Menu
   "/customers", // Customers
+  "/settings", // Settings
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,

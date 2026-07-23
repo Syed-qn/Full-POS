@@ -17,18 +17,19 @@ const ACTIVE: OrderOut["status"][] = [
 ];
 
 /** Toggle above the table. "All" first — it is the default view, not a state. */
-type BoardTab = "all" | "dine" | "takeaway";
+type BoardTab = "all" | "dine" | "takeaway" | "whatsapp";
 
 const BOARD_TABS: { key: BoardTab; title: string }[] = [
   { key: "all", title: "All" },
   { key: "dine", title: "Dine In" },
   { key: "takeaway", title: "Take Away" },
+  { key: "whatsapp", title: "WhatsApp" },
 ];
 
 /**
  * Channel grouping, matching the KDS card badges so the two boards can never
- * disagree about what counts as dine-in. Delivery/online is not in this build,
- * so those order types fall outside both tabs and show only under "All".
+ * disagree about what counts as dine-in. Delivery/online orders are the
+ * WhatsApp channel (same mapping the KDS badge and Orders filter use).
  */
 function channelOf(order: OrderOut): BoardTab | null {
   switch (order.order_type) {
@@ -39,6 +40,9 @@ function channelOf(order: OrderOut): BoardTab | null {
     case "takeaway":
     case "drive_thru":
       return "takeaway";
+    case "delivery":
+    case "online":
+      return "whatsapp";
     default:
       return null;
   }
@@ -194,6 +198,7 @@ export function LiveOpsScreen() {
       all: activeOrders.length,
       dine: 0,
       takeaway: 0,
+      whatsapp: 0,
     };
     for (const o of activeOrders) {
       const ch = channelOf(o);
@@ -257,6 +262,11 @@ export function LiveOpsScreen() {
           testId="kpi-takeaway"
           active={boardTab === "takeaway"}
           onClick={() => setBoardTab(boardTab === "takeaway" ? "all" : "takeaway")} />
+        <StatCard icon="💬" label="WhatsApp" value={String(laneCounts.whatsapp)}
+          accent="var(--accent-primary)" sub="active delivery"
+          testId="kpi-whatsapp"
+          active={boardTab === "whatsapp"}
+          onClick={() => setBoardTab(boardTab === "whatsapp" ? "all" : "whatsapp")} />
       </div>
 
       {/* SLA "Needs Attention Now" list hidden for now. The board's Late tab

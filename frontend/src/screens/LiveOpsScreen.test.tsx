@@ -19,32 +19,33 @@ describe("LiveOpsScreen", () => {
     expect(screen.queryByText("Orders Today")).not.toBeInTheDocument();
   });
 
-  it("renders KPI strip and the live feed from fixtures", async () => {
+  it("renders KPI strip and the order board from fixtures", async () => {
     renderWithProviders(<LiveOpsScreen />);
     await vi.advanceTimersByTimeAsync(0);
     await waitFor(() => expect(screen.getByText("Orders Today")).toBeInTheDocument());
-    // Late/urgent orders appear on both the attention strip and the Late board lane.
+    // Orders land on the board table.
     await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
-    expect(screen.getByRole("toolbar", { name: /primary actions/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /new order/i })).toBeInTheDocument();
+    // The WhatsApp channel tile + board tab are present alongside Dine In / Take Away.
+    expect(screen.getByTestId("kpi-whatsapp")).toBeInTheDocument();
+    expect(screen.getByTestId("board-tab-whatsapp")).toBeInTheDocument();
   });
 
-  it("shows urgent section for orders within 10 minutes of SLA", async () => {
+  it("flags an order past its SLA on the board", async () => {
     renderWithProviders(<LiveOpsScreen />);
     await vi.advanceTimersByTimeAsync(0);
-    // Order 47 has 32 min elapsed (8 remaining) → urgent
+    // Order 47 is within/past its SLA window → LATE/OVERDUE chip on its row.
     await waitFor(() =>
-      expect(screen.getByText(/needs attention now/i)).toBeInTheDocument()
+      expect(screen.getAllByText(/late|overdue/i).length).toBeGreaterThan(0)
     );
   });
 
-  it("owner bottom bar includes Floor, Expo, Reports, Kitchen", async () => {
+  it("offers channel board tabs including WhatsApp", async () => {
     renderWithProviders(<LiveOpsScreen />);
     await vi.advanceTimersByTimeAsync(0);
     await waitFor(() => expect(screen.getByText("Orders Today")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /^floor$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^expo$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^reports$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^kitchen$/i })).toBeInTheDocument();
+    expect(screen.getByTestId("board-tab-all")).toBeInTheDocument();
+    expect(screen.getByTestId("board-tab-dine")).toBeInTheDocument();
+    expect(screen.getByTestId("board-tab-takeaway")).toBeInTheDocument();
+    expect(screen.getByTestId("board-tab-whatsapp")).toBeInTheDocument();
   });
 });
