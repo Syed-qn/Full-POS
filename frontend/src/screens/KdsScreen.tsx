@@ -81,8 +81,11 @@ function orderTypeBadge(orderType: string | null | undefined): string | null {
       return "TK";
     case "delivery":
     case "online":
+      // A customer delivery order is a WhatsApp order (order_types.py: "WhatsApp
+      // defaults use delivery") — same label the cashier queue uses.
+      return "WhatsApp";
     case "aggregator":
-      return "DL";
+      return "AGG";
     default:
       return orderType.replace(/_/g, " ").toUpperCase();
   }
