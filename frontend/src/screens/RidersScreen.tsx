@@ -396,14 +396,10 @@ export function RidersScreen() {
         >
           {assignBusy ? "Assigning…" : "Manual Assign"}
         </TouchButton>
-        <Button
-          variant="ghost"
-          size="touch"
-          disabled={!selectedRider || settleBusy === selectedRider?.id}
-          onClick={() => selectedRider && onSettleCod(selectedRider.id)}
-        >
-          {selectedRider && settleBusy === selectedRider.id ? "Settling…" : "Settle COD"}
-        </Button>
+        {/* Settle COD lives on the rider CARD, not here: the bar copy needed a
+            rider selected first, so it sat greyed out next to an identical
+            always-live button and left "which one do I press?" unanswered. The
+            card version also makes the rider it applies to unmistakable. */}
         <Button variant="ghost" size="touch" onClick={() => setShowAdd(true)}>
           + Add Rider
         </Button>
