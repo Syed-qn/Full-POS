@@ -207,8 +207,10 @@ export function CustomerProfileScreen() {
               <button
                 className={`${s.toggle} ${optIn ? s.toggleOn : s.toggleOff}`}
                 onClick={() => setOptIn(!optIn)}
+                aria-pressed={optIn}
+                title="Tap to change marketing opt-in"
               >
-                {optIn ? "OPT-IN" : "OPT-OUT"}
+                {optIn ? "Opted in" : "Opted out"}
               </button>
             </div>
             <div className={s.toggleRow}>
