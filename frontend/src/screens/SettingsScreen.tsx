@@ -825,10 +825,8 @@ export function SettingsScreen() {
               </div>
             )}
           </div>
-          {/* Sticky Save like every other tab. It's the last element (the
-              WhatsApp connection block sits above it in the DOM), so the sticky
-              bar never floats over that block — it just parks at the bottom. */}
-          <div className={`${s.actions} ${s.stickySave}`}>
+          {/* Plain inline Save at the very bottom (not sticky). */}
+          <div className={s.actions}>
             <Button onClick={saveGeneral}>Save</Button>
           </div>
         </div>
@@ -888,7 +886,7 @@ export function SettingsScreen() {
             </button>
           </div>
           </div>
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveFees}>Save Fee Tiers</Button>
           </div>
         </div>
@@ -953,7 +951,7 @@ export function SettingsScreen() {
               </button>
             </>
           )}
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveHours}>Save Hours</Button>
           </div>
         </div>
@@ -999,7 +997,7 @@ export function SettingsScreen() {
               </span>
             </label>
           </div>
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveBatching}>Save</Button>
           </div>
         </div>
@@ -1078,7 +1076,7 @@ export function SettingsScreen() {
               <span className={s.rowHint}>Don't offer food cancelled longer ago than this.</span>
             </label>
           </div>
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveResale}>Save</Button>
           </div>
         </div>
@@ -1202,7 +1200,7 @@ export function SettingsScreen() {
             </label>
           </div>
 
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveLoyalty}>Save</Button>
           </div>
         </div>
@@ -1251,7 +1249,7 @@ export function SettingsScreen() {
               </span>
             </label>
           </div>
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveCart}>Save</Button>
           </div>
         </div>
@@ -1455,7 +1453,7 @@ export function SettingsScreen() {
               <span className={s.rowHint}>Nudge the kitchen to rush a cooking order within this distance of a run going out.</span>
             </label>
           </div>
-          <div className={`${s.actions} ${s.stickySave}`}>
+          <div className={s.actions}>
             <Button onClick={saveDispatch}>Save</Button>
           </div>
         </div>
