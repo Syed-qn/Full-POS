@@ -13,17 +13,6 @@ import f from "./CustomersScreen.module.css";
 
 const PAGE_SIZE = 20;
 
-/** Avatar initials: first two letters of name, else last 2 phone digits. */
-function initials(name?: string | null, phone?: string): string {
-  const n = (name ?? "").trim();
-  if (n) {
-    const parts = n.split(/\s+/);
-    return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
-  }
-  const digits = (phone ?? "").replace(/\D/g, "");
-  return digits.slice(-2) || "•";
-}
-
 type Marketing = "all" | "in" | "out";
 type Activity = "all" | "has" | "repeat" | "none";
 
@@ -94,17 +83,12 @@ export function CustomersScreen() {
     {
       key: "name",
       header: "Customer",
-      render: (c) => (
-        <div className={f.nameCell}>
-          <span className={f.avatar} aria-hidden="true">
-            {initials(c.name, c.phone)}
-          </span>
-          <div className={f.nameStack}>
-            <span className={f.custName}>{c.name?.trim() || "Guest"}</span>
-            <span className={f.phoneCell}>{c.phone}</span>
-          </div>
-        </div>
-      ),
+      render: (c) => <span className={f.custName}>{c.name?.trim() || "Guest"}</span>,
+    },
+    {
+      key: "phone",
+      header: "Phone",
+      render: (c) => <span className={f.phoneCell}>{c.phone}</span>,
     },
     {
       key: "orders",
