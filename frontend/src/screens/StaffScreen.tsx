@@ -7,6 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 import { SideDrawer } from "../components/SideDrawer";
 import { toast } from "../components/Toaster";
 import {
+  clockStaff,
   createStaff,
   getClockStatus,
   getHours,
@@ -14,6 +15,7 @@ import {
   getTipsByStaff,
   listMistakes,
   listStaff,
+  setTrainingMode,
 } from "../lib/staffApi";
 import type { StaffCreateIn, StaffMember } from "../lib/types";
 import s from "./StaffScreen.module.css";
@@ -35,6 +37,7 @@ export function StaffScreen() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<StaffMember | null>(null);
+  const [clockStatuses, setClockStatuses] = useState<Record<number, "clocked_out" | "clocked_in" | "on_break">>({});
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
@@ -50,10 +53,31 @@ export function StaffScreen() {
   // This screen is waiter-only, but the API returns every role — keep just waiters.
   const waiters = staff.filter((m) => m.role === NEW_STAFF_ROLE);
 
+  async function loadClockStatuses(members: StaffMember[]) {
+    const results = await Promise.all(
+      members.map(async (m) => {
+        try {
+          const { status } = await getClockStatus(m.id);
+          const norm = status === "clocked_in" || status === "on_break" ? status : "clocked_out";
+          return [m.id, norm] as const;
+        } catch {
+          return [m.id, "clocked_out"] as const;
+        }
+      }),
+    );
+    setClockStatuses((prev) => {
+      const next = { ...prev };
+      for (const [id, status] of results) next[id] = status;
+      return next;
+    });
+  }
+
   async function reload() {
     setLoadError(null);
     try {
-      setStaff(await listStaff());
+      const rows = await listStaff();
+      setStaff(rows);
+      void loadClockStatuses(rows.filter((m) => m.role === NEW_STAFF_ROLE));
     } catch (e) {
       setStaff([]);
       setLoadError(e instanceof Error ? e.message : "Could not load waiters.");
@@ -62,10 +86,32 @@ export function StaffScreen() {
     }
   }
 
+  async function toggleShift(m: StaffMember) {
+    const status = clockStatuses[m.id] ?? "clocked_out";
+    const on = status === "clocked_in" || status === "on_break";
+    try {
+      await clockStaff(m.id, on ? "clock_out" : "clock_in");
+      setClockStatuses((prev) => ({ ...prev, [m.id]: on ? "clocked_out" : "clocked_in" }));
+      toast(`${m.name} clocked ${on ? "out" : "in"}.`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not update shift.", "error");
+    }
+  }
+
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
+
+  async function toggleTraining(m: StaffMember) {
+    try {
+      const next = await setTrainingMode(m.id, !m.training_mode);
+      setStaff((prev) => prev.map((x) => (x.id === m.id ? next : x)));
+      toast(`${m.name} training mode ${next.training_mode ? "on" : "off"}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not update training mode.", "error");
+    }
+  }
 
   async function submit() {
     if (!name.trim() || !pin.trim()) {
@@ -123,6 +169,10 @@ export function StaffScreen() {
                 <tr>
                   <th>Name</th>
                   <th>Phone</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Shift</th>
+                  <th>Training</th>
                   <th className={s.actionsCol}>View</th>
                 </tr>
               </thead>
@@ -131,6 +181,46 @@ export function StaffScreen() {
                   <tr key={m.id}>
                     <td className={s.nameCell}>{m.name}</td>
                     <td className={s.mono}>{m.phone ?? "—"}</td>
+                    <td>
+                      <span className={s.rolePill}>{m.role}</span>
+                    </td>
+                    <td>
+                      <span
+                        className={`${s.statusPill} ${m.is_active === false ? s.statusOff : s.statusOn}`}
+                      >
+                        {m.is_active === false ? "Inactive" : "Active"}
+                      </span>
+                    </td>
+                    <td>
+                      {(() => {
+                        const onShift =
+                          clockStatuses[m.id] === "clocked_in" || clockStatuses[m.id] === "on_break";
+                        return (
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={onShift}
+                            aria-label={`Shift for ${m.name}`}
+                            className={`${s.switch} ${onShift ? s.switchOn : ""}`}
+                            onClick={() => void toggleShift(m)}
+                          >
+                            <span className={s.switchKnob} />
+                          </button>
+                        );
+                      })()}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!m.training_mode}
+                        aria-label={`Training mode for ${m.name}`}
+                        className={`${s.switch} ${m.training_mode ? s.switchOn : ""}`}
+                        onClick={() => void toggleTraining(m)}
+                      >
+                        <span className={s.switchKnob} />
+                      </button>
+                    </td>
                     <td className={s.actionsCol}>
                       <button
                         type="button"
