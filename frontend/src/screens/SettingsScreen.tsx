@@ -646,6 +646,7 @@ export function SettingsScreen() {
           <>
           {tab === "general" && (
         <div className={s.section}>
+          {/* Row 1 — identity: name, Arabic legal name, WhatsApp number. */}
           <div className={`${s.row2} ${s.fieldGrid}`}>
             <label className={s.col}>
               <span className={s.rowName}>Restaurant Name</span>
@@ -657,6 +658,30 @@ export function SettingsScreen() {
                 className={s.input}
               />
             </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Legal name (Arabic)</span>
+              <input
+                type="text"
+                value={legalNameAr}
+                onChange={(e) => setLegalNameAr(e.target.value)}
+                className={s.input}
+                dir="rtl"
+              />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Phone (WABA number)</span>
+              <input
+                type="text"
+                value={me?.phone ?? ""}
+                disabled
+                className={s.input}
+                aria-label="Phone (WABA number)"
+              />
+              <span className={s.rowHint}>🔒 WhatsApp Business number, locked.</span>
+            </label>
+          </div>
+          {/* Row 2 — tax: registration number + pricing mode. */}
+          <div className={`${s.row2} ${s.fieldGrid}`}>
             <label className={s.col}>
               <span className={s.rowName}>TRN (Tax Registration Number)</span>
               <input
@@ -679,27 +704,6 @@ export function SettingsScreen() {
                 <option value="exclusive">Exclusive (VAT added on top)</option>
                 <option value="inclusive">Inclusive (VAT extracted from prices)</option>
               </select>
-            </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Legal name (Arabic)</span>
-              <input
-                type="text"
-                value={legalNameAr}
-                onChange={(e) => setLegalNameAr(e.target.value)}
-                className={s.input}
-                dir="rtl"
-              />
-            </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Phone (WABA number)</span>
-              <input
-                type="text"
-                value={me?.phone ?? ""}
-                disabled
-                className={s.input}
-                aria-label="Phone (WABA number)"
-              />
-              <span className={s.rowHint}>🔒 WhatsApp Business number, locked.</span>
             </label>
           </div>
           <div className={s.rowStacked}>
