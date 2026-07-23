@@ -62,9 +62,12 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 16%, transparent);
 }
 
-/* Roster table sits inside a card; scroll horizontally on narrow viewports. */
+/* Roster table: rounded outer frame + zebra rows so it reads as a real table
+   even with only a couple of columns. Scrolls horizontally on narrow screens. */
 .tableWrap {
-  overflow-x: auto;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
 }
 .table {
   width: 100%;
@@ -73,32 +76,93 @@
 
 .table th {
   text-align: left;
-  padding: 8px 12px;
+  padding: 12px 16px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
+  background: var(--bg-surface-inset);
   border-bottom: 1px solid var(--border-default);
   white-space: nowrap;
 }
 .table td {
   text-align: left;
-  padding: 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 14px;
+  padding: 14px 16px;
+  height: 52px;
+  font-size: 15px;
   color: var(--text-primary);
 }
-.table tbody tr:last-child td {
-  border-bottom: none;
+/* Zebra: alternate rows shaded so the eye can track across columns. */
+.table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-surface-inset) 55%, var(--bg-surface));
 }
 .table tbody tr:hover td {
-  background: var(--bg-surface-inset);
+  background: var(--accent-primary-dim);
 }
 
 .nameCell { font-weight: 600; }
 .mono { font-family: var(--font-mono); color: var(--text-secondary); }
 .actionsCol { text-align: right; width: 1%; white-space: nowrap; }
+
+/* Row "view" control: icon-only, no outer ring. */
+.viewBtn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.viewBtn:hover { color: var(--accent-primary); }
+
+/* ---- Waiter detail drawer ---- */
+.detail { display: flex; flex-direction: column; gap: 22px; }
+.detailBlock { display: flex; flex-direction: column; gap: 10px; }
+.detailHead {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+.detailList { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.detailRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.detailRow dt {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.detailRow dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+.detailEmpty { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+.mistakeList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mistakeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+}
+.cap { text-transform: capitalize; }
 .rowActions {
   display: flex;
   gap: 8px;
