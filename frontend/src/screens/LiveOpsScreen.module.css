@@ -275,8 +275,8 @@
 }
 
 .tableWrap {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
   background: var(--bg-surface);
   /* Wide content scrolls inside its own box — the page must never scroll
      sideways because one order has a long item list. */
@@ -286,19 +286,19 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--font-size-ui);
+  font-size: 15px;
 }
 
 .table th {
   position: sticky;
   top: 0;
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 16px;
   background: var(--bg-surface-inset);
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: var(--font-size-caption);
+  border-bottom: 1px solid var(--border-default);
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-muted);
   white-space: nowrap;
@@ -311,7 +311,8 @@
 .row:last-child { border-bottom: none; }
 .row:hover { background: var(--bg-surface-inset); }
 .row td {
-  padding: 10px 12px;
+  padding: 14px 16px;
+  height: 52px;
   vertical-align: middle;
   color: var(--text-primary);
 }
