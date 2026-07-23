@@ -124,7 +124,7 @@ describe("matchRouteKey", () => {
     expect(matchRouteKey("/")).toBe("/");
     expect(matchRouteKey("/orders/12")).toBe("/orders");
     expect(matchRouteKey("/orders/12/pay")).toBe("/payments");
-    expect(matchRouteKey("/customers/3")).toBe("/customers");
+    expect(matchRouteKey("/customer-management/3")).toBe("/customer-management");
     expect(matchRouteKey("/kds/grill")).toBe("/kds");
     expect(matchRouteKey("/menu")).toBe("/menu");
   });
@@ -178,7 +178,7 @@ describe("canAccess — role matrix", () => {
         "/payments",
         "/floor",
         "/marketing",
-        "/customers",
+        "/customer-management",
       ],
     },
     {
@@ -202,13 +202,13 @@ describe("canAccess — role matrix", () => {
         "/orders",
         "/orders/40",
         "/new-order",
-        "/customers",
+        "/customer-management",
         "/menu",
         "/kds",
         "/waiter-management",
         "/settings",
         "/marketing",
-        "/riders",
+        "/rider-management",
         "/waiter",
       ],
     },

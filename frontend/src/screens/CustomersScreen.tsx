@@ -120,7 +120,7 @@ export function CustomersScreen() {
           title="View customer"
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/customers/${c.id}`);
+            navigate(`/customer-management/${c.id}`);
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -234,7 +234,7 @@ export function CustomersScreen() {
             columns={columns}
             rows={filtered}
             rowKey={(c) => c.id}
-            onRowClick={(c) => navigate(`/customers/${c.id}`)}
+            onRowClick={(c) => navigate(`/customer-management/${c.id}`)}
             emptyText="No customers found"
             loading={loading}
           />

@@ -241,11 +241,11 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/new-order": ["owner", "manager"],
   "/kds": ["owner", "manager", "kitchen"],
   "/payments": ["owner", "manager", "cashier"],
-  "/riders": ["owner", "manager"],
+  "/rider-management": ["owner", "manager"],
   "/conversations": ["owner", "manager"],
   "/menu": ["owner", "manager"],
   "/inventory": ["owner", "manager"],
-  "/customers": ["owner", "manager"],
+  "/customer-management": ["owner", "manager"],
   "/waiter-management": ["owner", "manager"],
   "/marketing": ["owner", "manager"],
   "/reports": ["owner", "manager"],
@@ -269,7 +269,7 @@ export function matchRouteKey(pathname: string): string {
   // Explicit nested mappings
   if (/^\/orders\/[^/]+\/pay\/?$/.test(path)) return "/payments";
   if (/^\/orders(\/|$)/.test(path)) return "/orders";
-  if (/^\/customers(\/|$)/.test(path)) return "/customers";
+  if (/^\/customer-management(\/|$)/.test(path)) return "/customer-management";
   if (/^\/kds(\/|$)/.test(path)) return "/kds";
 
   const keys = Object.keys(ROUTE_ROLE_MAP)

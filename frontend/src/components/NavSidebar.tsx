@@ -33,9 +33,9 @@ const LIVE_ROUTES = new Set<string>([
   "/kds", // Kitchen
   "/conversations", // Chats
   "/marketing", // Promotion
-  "/riders", // Riders
+  "/rider-management", // Rider Management
   "/menu", // Menu
-  "/customers", // Customers
+  "/customer-management", // Customer Management
   "/settings", // Settings
   "/waiter-management", // Waiter Management
 ]);
@@ -52,16 +52,19 @@ const GROUPS: NavGroup[] = [
       { to: "/new-order", label: "New Order", icon: "+" },
       { to: "/orders", label: "Orders", icon: "☰" },
       { to: "/kds", label: "Kitchen", icon: "▣" },
-      { to: "/payments", label: "Payments", icon: "¤" },
+      { to: "/menu", label: "Menu", icon: "◇" },
     ],
   },
   {
     id: "whatsapp",
-    /** The WhatsApp channel: live customer/driver chats and outbound promotion. */
+    /** The WhatsApp channel: chats, promotion, and the customer-facing
+     *  complaint + coupon flows that run over WhatsApp. */
     label: "WhatsApp",
     items: [
       { to: "/conversations", label: "Chats", icon: "◎" },
       { to: "/marketing", label: "Promotion", icon: "✦" },
+      { to: "/tickets", label: "Complaints", icon: "!" },
+      { to: "/coupons", label: "Coupons", icon: "%" },
     ],
   },
   {
@@ -69,8 +72,8 @@ const GROUPS: NavGroup[] = [
     /** People the restaurant manages: customers, delivery riders, floor waiters. */
     label: "User Management",
     items: [
-      { to: "/customers", label: "Customer Management", icon: "○" },
-      { to: "/riders", label: "Rider Management", icon: "›" },
+      { to: "/customer-management", label: "Customer Management", icon: "○" },
+      { to: "/rider-management", label: "Rider Management", icon: "›" },
       { to: "/waiter-management", label: "Waiter Management", icon: "◎" },
     ],
   },
@@ -79,7 +82,6 @@ const GROUPS: NavGroup[] = [
     /** Owner/manager admin surface (R5). Label stays Manage for floor roles that see partial list. */
     label: "Manage",
     items: [
-      { to: "/menu", label: "Menu", icon: "◇" },
       { to: "/inventory", label: "Inventory", icon: "▦" },
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },
@@ -93,8 +95,7 @@ const GROUPS: NavGroup[] = [
     id: "more",
     label: "More",
     items: [
-      { to: "/tickets", label: "Complaints", icon: "!" },
-      { to: "/coupons", label: "Coupons", icon: "%" },
+      { to: "/payments", label: "Payments", icon: "¤" },
       { to: "/compliance", label: "Compliance", icon: "§" },
       { to: "/analytics", label: "Analytics", icon: "▴" },
       { to: "/predictions", label: "Forecast", icon: "◈" },
@@ -107,11 +108,11 @@ const PREFETCH: Record<string, { queryKey: readonly unknown[]; queryFn: () => Pr
     queryKey: ["orders", "list", { previewBatch: true, page: 1, limit: 20 }],
     queryFn: () => fetchOrders({ limit: 20, offset: 0 }),
   },
-  "/customers": {
+  "/customer-management": {
     queryKey: ["customers", "list", 1, ""],
     queryFn: () => listCustomers({ limit: 20, offset: 0 }),
   },
-  "/riders": {
+  "/rider-management": {
     queryKey: ["riders", "list"],
     queryFn: fetchRiders,
   },

@@ -100,7 +100,7 @@ describe("App routing", () => {
     const fetchSpy = vi.mocked(globalThis.fetch);
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/customers"]}>
+        <MemoryRouter initialEntries={["/customer-management"]}>
           <App />
         </MemoryRouter>
       </QueryClientProvider>,

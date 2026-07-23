@@ -246,6 +246,27 @@
   color: var(--text-secondary);
 }
 
+/* Loading shimmer bar for the roster skeleton. */
+.sk {
+  display: inline-block;
+  height: 14px;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset);
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: staffSkShimmer 1.4s infinite;
+}
+@keyframes staffSkShimmer {
+  100% { transform: translateX(100%); }
+}
+
 .error {
   color: var(--sla-critical);
 }

@@ -1143,7 +1143,7 @@ export function NewOrderScreen() {
           >
             🔒 Sign-Out
           </button>
-          <button type="button" className={s.tStatusItem} onClick={() => navigate("/customers")}>
+          <button type="button" className={s.tStatusItem} onClick={() => navigate("/customer-management")}>
             Customers
           </button>
           <button type="button" className={s.tStatusItem} onClick={() => navigate("/orders")}>
@@ -1269,7 +1269,7 @@ export function NewOrderScreen() {
             type="button"
             className={s.cashierChip}
             data-testid="cashier-customers"
-            onClick={() => navigate("/customers")}
+            onClick={() => navigate("/customer-management")}
           >
             Customers
           </button>

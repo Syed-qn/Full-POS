@@ -146,7 +146,34 @@ export function StaffScreen() {
       <section className={s.card}>
         <h3 className={s.cardTitle}>Waiters{loaded && waiters.length > 0 ? ` (${waiters.length})` : ""}</h3>
 
-        {!loaded && <p className={s.loading}>Loading waiters…</p>}
+        {!loaded && (
+          <div className={s.tableWrap} aria-busy="true" aria-label="Loading waiters">
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Shift</th>
+                  <th>Training</th>
+                  <th className={s.actionsCol}>View</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    {[38, 30, 26, 30, 22, 22, 18].map((w, c) => (
+                      <td key={c} className={c === 6 ? s.actionsCol : undefined}>
+                        <span className={s.sk} style={{ width: `${w}%` }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         {loadError && (
           <ErrorState
             title="Could not load waiters"

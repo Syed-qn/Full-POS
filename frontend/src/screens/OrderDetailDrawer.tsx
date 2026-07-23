@@ -1145,7 +1145,7 @@ function CustomerTab({
         />
       </div>
 
-      <Link to={`/customers/${customer.id}`} className={s.openProfile}>
+      <Link to={`/customer-management/${customer.id}`} className={s.openProfile}>
         Open Full Profile →
       </Link>
 

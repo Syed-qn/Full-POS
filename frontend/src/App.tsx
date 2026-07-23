@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { NoAccessScreen } from "./components/NoAccessScreen";
 import { Toaster } from "./components/Toaster";
@@ -65,6 +65,12 @@ function FloorRoute() {
 /** Waiters and cashiers get the dark order terminal; everyone else keeps the POS screen. */
 function NewOrderRoute() {
   return isWaiterRole() || isCashierRole() ? <WaiterOrderScreen /> : <NewOrderScreen />;
+}
+
+/** Redirect an old /customers/:id profile link to the renamed path, keeping the id. */
+function RedirectCustomerProfile() {
+  const { id } = useParams();
+  return <Navigate to={`/customer-management/${id ?? ""}`} replace />;
 }
 
 function Guarded({ children }: { children: React.ReactNode }) {
@@ -152,15 +158,19 @@ export default function App() {
           </Guarded>
         }
       />
-      <Route path="/customers" element={<Guarded><CustomersScreen /></Guarded>} />
-      <Route path="/customers/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
+      <Route path="/customer-management" element={<Guarded><CustomersScreen /></Guarded>} />
+      <Route path="/customer-management/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
+      {/* Old /customers paths kept as redirects for existing links/bookmarks. */}
+      <Route path="/customers" element={<Navigate to="/customer-management" replace />} />
+      <Route path="/customers/:id" element={<RedirectCustomerProfile />} />
       <Route path="/new-order" element={<Guarded><NewOrderRoute /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
       <Route path="/kds" element={<Guarded><KdsScreen /></Guarded>} />
       <Route path="/kds/:stationId" element={<Guarded><KdsScreen /></Guarded>} />
       <Route path="/inventory" element={<Guarded><InventoryScreen /></Guarded>} />
       <Route path="/branches" element={<Guarded><BranchOpsScreen /></Guarded>} />
-      <Route path="/riders" element={<Guarded><RidersScreen /></Guarded>} />
+      <Route path="/rider-management" element={<Guarded><RidersScreen /></Guarded>} />
+      <Route path="/riders" element={<Navigate to="/rider-management" replace />} />
       <Route path="/rider-app" element={<RiderAppScreen />} />
       <Route path="/conversations" element={<Guarded><ConversationsScreen /></Guarded>} />
       <Route path="/tickets" element={<Guarded><TicketsScreen /></Guarded>} />
