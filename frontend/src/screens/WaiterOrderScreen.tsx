@@ -12,24 +12,22 @@ import {
   setOrderCovers,
   setTableStatus,
 } from "../lib/manualOrderApi";
-import { fetchActiveMenu } from "../lib/menuApi";
+import { useLiveMenu } from "../lib/useLiveMenu";
 import { chargePayment } from "../lib/paymentsApi";
 import { getStaffSession, isCashierRole } from "../lib/navAccess";
 import { usePosTheme } from "../lib/posTheme";
 import { fetchOrderDetail } from "../lib/orderDetailApi";
 import { listStaff } from "../lib/staffApi";
-import type { DishOut, StaffMember } from "../lib/types";
+import type { StaffMember } from "../lib/types";
 import s from "./WaiterOrderScreen.module.css";
 
 /** VAT is 5% inclusive (AED / UAE) per the platform spec — not the rate on any
  *  reference screenshot. Displayed back out of the inclusive total. */
 const VAT_RATE = 0.05;
 
-/** Module-level menu cache. The floor and order terminal are separate routes,
- *  so the menu would refetch (and flash "Loading menu…") on every table tap.
- *  Caching the last available dishes lets repeat taps paint instantly while a
- *  fresh copy revalidates in the background. Lives for the tab's lifetime. */
-let menuCache: DishOut[] | null = null;
+/* The menu now comes from useLiveMenu, which keeps the module-level cache (so a
+   table tap paints instantly) AND polls, so a dish marked unavailable in the
+   manager disappears from this terminal without anyone reloading the page. */
 
 /** Category tile colours, cycled in menu order so the pad stays colourful. */
 const CAT_COLORS = [
@@ -98,10 +96,9 @@ export function WaiterOrderScreen() {
     ? typeParam
     : "dine_in";
 
-  // Seed from cache so a repeat table tap paints dishes immediately (no flash).
-  const [dishes, setDishes] = useState<DishOut[]>(() => menuCache ?? []);
-  const [menuLoading, setMenuLoading] = useState(menuCache === null);
-  const [menuError, setMenuError] = useState<string | null>(null);
+  // Cached for an instant repaint on a repeat table tap, and polled so an
+  // availability change in the manager reaches this terminal on its own.
+  const { dishes, loading: menuLoading, error: menuError } = useLiveMenu({ cache: true });
   const [tables, setTables] = useState<ApiTable[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [waiterId, setWaiterId] = useState<number | "">(staff?.staff_id ?? "");
@@ -171,28 +168,6 @@ export function WaiterOrderScreen() {
     (tabStatus === "draft" || tabStatus === "pending_confirmation");
 
   // ── data ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    fetchActiveMenu()
-      .then((m) => {
-        const avail = (m?.dishes ?? []).filter((d) => d.is_available);
-        menuCache = avail; // warm the cache for the next table tap
-        if (!cancelled) setDishes(avail);
-      })
-      .catch((e) => {
-        // Keep showing the cached menu on a refresh failure rather than blanking.
-        if (!cancelled && menuCache === null) {
-          setMenuError(e instanceof Error ? e.message : "Menu unavailable");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setMenuLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   useEffect(() => {
     apiClient
       .get<ApiTable[]>("/api/v1/tables")

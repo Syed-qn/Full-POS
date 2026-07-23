@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { logout } from "../lib/auth";
 import { fetchOrderDetail } from "../lib/orderDetailApi";
-import { fetchActiveMenu } from "../lib/menuApi";
+import { useLiveMenu } from "../lib/useLiveMenu";
 import {
   addOrderItems,
   createManualOrder,
@@ -14,7 +14,6 @@ import { apiClient } from "../lib/apiClient";
 import { fetchOrders } from "../lib/ordersApi";
 import type {
   DishOut,
-  MenuOut,
   OrderOut,
   OrderStatus,
   RestaurantOut,
@@ -105,7 +104,16 @@ export function NewOrderScreen() {
   const waiterMode = isWaiterRole();
   const cashierMode = isCashierRole();
 
-  const [menu, setMenu] = useState<MenuOut | null | "loading">("loading");
+  // Polled, so a dish the manager marks unavailable leaves this pad on its own.
+  const liveMenu = useLiveMenu();
+  // "loading" until the first fetch settles; null ONLY when the restaurant has
+  // no active menu (404) — an active menu with everything 86'd is not the same
+  // thing and must not show "activate a menu".
+  const menu: "loading" | null | { dishes: DishOut[] } = liveMenu.loading
+    ? "loading"
+    : liveMenu.exists === false || liveMenu.exists === null
+      ? null
+      : { dishes: liveMenu.dishes };
 
   // Counter roles start on Dining (the first tab); the delivery-origin default
   // only makes sense for the manager delivery flow.
@@ -170,9 +178,6 @@ export function NewOrderScreen() {
   // Which cart lines have their per-item note field expanded (opened via ✎).
   const [openNotes, setOpenNotes] = useState<Record<number, boolean>>({});
 
-  useEffect(() => {
-    fetchActiveMenu().then((m) => setMenu(m));
-  }, []);
 
   // Arriving from the Floor Plan ("New table order") → preselect dine-in + table.
   useEffect(() => {
@@ -339,10 +344,8 @@ export function NewOrderScreen() {
     };
   }, [tabOrderId]);
 
-  const dishes: DishOut[] = useMemo(() => {
-    if (!menu || menu === "loading") return [];
-    return menu.dishes.filter((d) => d.is_available);
-  }, [menu]);
+  // useLiveMenu already filters to available dishes.
+  const dishes: DishOut[] = liveMenu.dishes;
 
   const categories = useMemo(() => {
     const cats = new Set(dishes.map((d) => d.category ?? "Other"));
