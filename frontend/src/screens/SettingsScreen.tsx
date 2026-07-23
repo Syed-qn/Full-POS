@@ -764,10 +764,7 @@ export function SettingsScreen() {
               onClose={() => setMapOpen(false)}
             />
           )}
-          <div
-            className={s.rowStacked}
-            style={{ marginTop: 24, borderTop: "1px solid var(--border, #334155)", paddingTop: 18 }}
-          >
+          <div className={s.rowStacked}>
             {/* Label and the connect/disconnect button share one row. */}
             <div className={s.locHead}>
               <div className={s.rowLabel}>
