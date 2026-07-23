@@ -42,6 +42,7 @@ export function LocationPickerModal({
 
         <div className={s.body}>
           <LocationPicker
+            className={s.picker}
             lat={draftLat}
             lng={draftLng}
             onChange={(la, ln) => {

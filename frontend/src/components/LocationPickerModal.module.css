@@ -54,6 +54,20 @@
   overflow-y: auto;
   min-height: 0;
 }
+
+/* Let the picker fill the dialog: the shared card is capped at 460px and carries
+   its own border/shadow, which read as a nested box inside the modal. */
+.picker {
+  max-width: none;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* A dialog has room for a bigger map than the inline card's 260px. */
+.picker :global(.leaflet-container) {
+  height: 340px;
+}
 .footer {
   display: flex;
   align-items: center;

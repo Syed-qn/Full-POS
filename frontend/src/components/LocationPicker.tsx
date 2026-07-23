@@ -6,6 +6,8 @@ interface Props {
   lng: number;
   /** Fired with rounded coords whenever the pin moves (search, drag, click, geolocate). */
   onChange: (lat: number, lng: number) => void;
+  /** Extra class on the card root (e.g. to drop the max-width inside a dialog). */
+  className?: string;
 }
 
 interface Place {
@@ -45,7 +47,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
   return d.display_name ?? null;
 }
 
-export function LocationPicker({ lat, lng, onChange }: Props) {
+export function LocationPicker({ lat, lng, onChange, className = "" }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<import("leaflet").Map | null>(null);
   const markerRef = useRef<import("leaflet").Marker | null>(null);
@@ -196,7 +198,7 @@ export function LocationPicker({ lat, lng, onChange }: Props) {
   }
 
   return (
-    <div className={s.card}>
+    <div className={`${s.card} ${className}`.trim()}>
       <div className={s.searchWrap}>
         <span className={s.searchIcon} aria-hidden>🔍</span>
         <input
