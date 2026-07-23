@@ -408,6 +408,14 @@ def enrich_ticket(
         "is_takeaway": bool(getattr(item, "is_takeaway", False)),
         "customer_allergy_notes": getattr(order, "customer_allergy_notes", None) if order else None,
         "estimated_ready_at": eta,
+        # The 40-min customer SLA clock start (= sla_confirmed_at, same mapping the
+        # order API uses), so the board can show the SAME countdown the manager
+        # dashboard shows (down from 40:00, then LATE).
+        "sla_started_at": (
+            order.sla_confirmed_at.isoformat()
+            if order is not None and getattr(order, "sla_confirmed_at", None)
+            else None
+        ),
         "age_seconds": int(age_seconds),
         "age_minutes": round(age_minutes, 1),
         "urgency": urgency,

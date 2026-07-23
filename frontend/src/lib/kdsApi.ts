@@ -23,6 +23,8 @@ export interface KdsTicketItem {
   course_held?: boolean;
   customer_allergy_notes?: string | null;
   estimated_ready_at?: string | null;
+  /** Start of the 40-min customer SLA (= order.sla_confirmed_at); drives the board countdown. */
+  sla_started_at?: string | null;
   age_seconds?: number;
   age_minutes?: number;
   urgency?: TicketUrgency;

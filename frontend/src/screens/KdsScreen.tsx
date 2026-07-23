@@ -7,7 +7,6 @@ import {
   fetchReadyForPickup,
   fetchStationTickets,
   fetchStations,
-  formatElapsed,
   missingItemConfirm,
   packagingCheck,
   recallItem,
@@ -19,6 +18,7 @@ import {
   type ReadyPickupOrder,
   type TicketUrgency,
 } from "../lib/kdsApi";
+import { formatCountdown, SLA_WINDOW_MS } from "../lib/sla";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { useRestaurantName } from "../lib/brand";
 import { logout } from "../lib/auth";
@@ -49,6 +49,8 @@ interface TicketCard {
   priority: string | null;
   urgency: TicketUrgency;
   ageSeconds: number;
+  /** Start of the 40-min SLA; the board counts down from it, then shows LATE. */
+  slaStartedAt: string | null;
   estimatedReadyAt: string | null;
   /** Bill already paid while the food is still on the pass. */
   settled: boolean;
@@ -122,6 +124,7 @@ export function groupTicketsByOrder(items: KdsTicketItem[]): TicketCard[] {
         priority: item.order_priority ?? null,
         urgency,
         ageSeconds: age,
+        slaStartedAt: item.sla_started_at ?? null,
         estimatedReadyAt: item.estimated_ready_at ?? null,
         customerAllergyNotes: item.customer_allergy_notes ?? null,
         allReady: item.kitchen_status === "ready",
@@ -135,6 +138,9 @@ export function groupTicketsByOrder(items: KdsTicketItem[]): TicketCard[] {
       existing.urgency = urgency;
     }
     if (age > existing.ageSeconds) existing.ageSeconds = age;
+    if (!existing.slaStartedAt && item.sla_started_at) {
+      existing.slaStartedAt = item.sla_started_at;
+    }
     if (!existing.estimatedReadyAt && item.estimated_ready_at) {
       existing.estimatedReadyAt = item.estimated_ready_at;
     }
@@ -336,6 +342,22 @@ export function KdsScreen() {
   function liveAge(baseSeconds: number): number {
     const drift = Math.floor((Date.now() - fetchedAtRef.current) / 1000);
     return Math.max(0, baseSeconds + Math.max(0, drift));
+  }
+
+  /**
+   * Board timer, matching the manager dashboard: count DOWN from the 40-min SLA,
+   * then show "LATE" instead of a climbing number. Uses sla_started_at when the
+   * order carries one (the 40-min customer clock); otherwise it falls back to the
+   * ticket's own age so an on-premise line still shows time-left / LATE.
+   */
+  function slaTimer(card: TicketCard): { text: string; late: boolean } {
+    const elapsedMs = card.slaStartedAt
+      ? Date.now() - Date.parse(card.slaStartedAt)
+      : liveAge(card.ageSeconds) * 1000;
+    const remaining = SLA_WINDOW_MS - elapsedMs;
+    return remaining <= 0
+      ? { text: "LATE", late: true }
+      : { text: formatCountdown(remaining), late: false };
   }
 
   /** Marks every not-yet-ready, not-held line of an order ready. */
@@ -606,12 +628,20 @@ export function KdsScreen() {
                         </span>
                       ) : null}
                     </div>
-                    <span
-                      className={`${s.timer} ${s[`timer_${card.urgency}`]}`}
-                      data-testid="kds-timer"
-                    >
-                      {formatElapsed(liveAge(card.ageSeconds))}
-                    </span>
+                    {(() => {
+                      const t = slaTimer(card);
+                      // A breached SLA is always the red "late" style, even if the
+                      // per-item urgency hasn't ticked over yet.
+                      const tone = t.late ? "late" : card.urgency;
+                      return (
+                        <span
+                          className={`${s.timer} ${s[`timer_${tone}`]}`}
+                          data-testid="kds-timer"
+                        >
+                          {t.text}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {card.customerAllergyNotes ? (
