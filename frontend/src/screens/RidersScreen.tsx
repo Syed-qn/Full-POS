@@ -248,6 +248,10 @@ export function RidersScreen() {
 }
 
 function RidersSkeleton() {
+  // Mirror the real content: the stats row, then a card grid whose placeholders
+  // match a RiderCard (avatar + name/phone, dispatch banner, location line, two
+  // delivery stats, a row of action buttons). The old skeleton drew the removed
+  // 3-pane ops block, so the page visibly reshaped when riders loaded in.
   return (
     <>
       <div className={s.stats} aria-busy="true" aria-label="Loading riders">
@@ -255,16 +259,49 @@ function RidersSkeleton() {
           <span key={i} className={`${s.sk} ${s.skStat}`} style={{ width: w }} />
         ))}
       </div>
-      <div className={s.ops}>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className={s.pane}>
-            <div className={s.skCard}>
-              <span className={`${s.sk} ${s.skLineLg}`} style={{ width: "55%" }} />
-              <span className={`${s.sk} ${s.skLine}`} style={{ width: "40%" }} />
-              <span className={`${s.sk} ${s.skLine}`} style={{ width: "70%" }} />
+      <div className={s.detail}>
+        <div
+          className={s.grid}
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))" }}
+        >
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={s.skCard}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+                <span className={s.sk} style={{ width: 44, height: 44, borderRadius: "50%" }} />
+                <div style={{ flex: 1 }}>
+                  <span
+                    className={`${s.sk} ${s.skLineLg}`}
+                    style={{ width: "50%", marginBottom: 8 }}
+                  />
+                  <span className={`${s.sk} ${s.skLine}`} style={{ width: "35%" }} />
+                </div>
+              </div>
+              <span
+                className={`${s.sk} ${s.skLine}`}
+                style={{ height: 34, width: "100%", marginBottom: 12 }}
+              />
+              <span
+                className={`${s.sk} ${s.skLine}`}
+                style={{ width: "60%", marginBottom: 12 }}
+              />
+              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+                <span className={`${s.sk} ${s.skLine}`} style={{ height: 40, flex: 1 }} />
+                <span className={`${s.sk} ${s.skLine}`} style={{ height: 40, flex: 1 }} />
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {Array.from({ length: 4 }).map((_, j) => (
+                  <span key={j} className={`${s.sk} ${s.skLine}`} style={{ height: 36 }} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </>
   );
