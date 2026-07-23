@@ -227,8 +227,10 @@
   background: var(--bg-surface-inset);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
-  min-height: var(--touch-primary);
-  padding: 12px 16px;
+  /* Was the 64px touch height, which (with align-items: stretch) forced the Send
+     button to 64px too. A 44px composer keeps input + button aligned and compact. */
+  min-height: 44px;
+  padding: 10px 16px;
   color: var(--text-primary);
   font-size: var(--font-size-body);
   font-family: var(--font-sans);
