@@ -73,7 +73,7 @@ const GROUPS: NavGroup[] = [
       { to: "/riders", label: "Riders", icon: "›" },
       { to: "/menu", label: "Menu", icon: "◇" },
       { to: "/inventory", label: "Inventory", icon: "▦" },
-      { to: "/staff", label: "Staff", icon: "◎" },
+      { to: "/staff", label: "Waiter Management", icon: "◎" },
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },
       { to: "/branches", label: "Branches", icon: "▣" },

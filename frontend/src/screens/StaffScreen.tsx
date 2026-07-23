@@ -149,7 +149,7 @@ export function StaffScreen() {
 
   return (
     <div className={s.root}>
-      <PageHeader title="Staff" subtitle="Add waiters, PIN login and time clock" />
+      <PageHeader title="Waiter Management" subtitle="Add waiters, PIN login and time clock" />
 
       <section className={s.card}>
         <h3 className={s.cardTitle}>New waiter</h3>
