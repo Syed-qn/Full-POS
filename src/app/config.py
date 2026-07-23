@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,8 +9,18 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="APP_", extra="ignore")
 
     env: str = "dev"
-    database_url: str = "postgresql+asyncpg://app:app@localhost:5433/restaurant"
-    redis_url: str = "redis://localhost:6380/0"
+    # Managed platforms (Railway, Render, Heroku, Fly) inject DATABASE_URL and
+    # REDIS_URL under those exact names — their reference pickers won't emit an
+    # APP_ prefix. Accept both, APP_-prefixed first so an explicit override still
+    # wins over whatever the platform injected.
+    database_url: str = Field(
+        default="postgresql+asyncpg://app:app@localhost:5433/restaurant",
+        validation_alias=AliasChoices("APP_DATABASE_URL", "DATABASE_URL"),
+    )
+    redis_url: str = Field(
+        default="redis://localhost:6380/0",
+        validation_alias=AliasChoices("APP_REDIS_URL", "REDIS_URL"),
+    )
     jwt_secret: SecretStr = SecretStr("dev-secret-change-me-0123456789abcdef")
     jwt_ttl_minutes: int = 60
     jwt_issuer: str = "restaurant-platform"
