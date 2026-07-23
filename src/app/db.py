@@ -41,13 +41,23 @@ def _announce_db_target(url: str) -> None:
     """
     try:
         p = urlparse(url)
-        source = (
-            "APP_DATABASE_URL"
-            if os.getenv("APP_DATABASE_URL")
-            else "DATABASE_URL"
-            if os.getenv("DATABASE_URL")
-            else "BUILT-IN DEFAULT (no database env var set!)"
-        )
+        # pydantic-settings loads .env into the SETTINGS object, not into the
+        # process environment, so os.getenv misses a var that lives only in the
+        # .env file and used to mislabel a real DB URL as "BUILT-IN DEFAULT (no
+        # database env var set!)" — a false alarm. Compare the RESOLVED url to
+        # the field default first; only if it matches is nothing configured.
+        from app.config import Settings
+
+        is_default = url == Settings.model_fields["database_url"].default
+        if is_default:
+            source = "BUILT-IN DEFAULT (no database env var set!)"
+        elif os.getenv("APP_DATABASE_URL"):
+            source = "APP_DATABASE_URL (env)"
+        elif os.getenv("DATABASE_URL"):
+            source = "DATABASE_URL (env)"
+        else:
+            # Not the default and not in the environment → it came from the .env file.
+            source = "APP_DATABASE_URL/DATABASE_URL (.env file)"
         print(
             f"[db] connecting to host={p.hostname} port={p.port} "
             f"db={(p.path or '/').lstrip('/')} driver={p.scheme} source={source}",

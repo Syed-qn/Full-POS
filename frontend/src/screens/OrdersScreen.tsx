@@ -95,11 +95,13 @@ function OrderCard({
     String(order.order_type ?? ""),
   );
   // Clean, human order-type label instead of the raw "dine_in" channel string.
+  // A "delivery" order is a customer WhatsApp order (order_types.py: "WhatsApp
+  // defaults use delivery"), so the pill reads WhatsApp to match the Type filter.
   const TYPE_LABELS: Record<string, string> = {
     dine_in: "Dine-in",
     takeaway: "Take away",
     drive_thru: "Drive-thru",
-    delivery: "Delivery",
+    delivery: "WhatsApp",
     online: "Online",
   };
   const typeLabel =
@@ -195,6 +197,11 @@ const TYPE_FILTERS = [
   { key: "all", label: "All", types: undefined },
   { key: "dine", label: "Dine In", types: "dine_in,tableside,qr" },
   { key: "takeaway", label: "Take Away", types: "takeaway,drive_thru" },
+  // A customer WhatsApp order is a delivery order — order_types.py: "WhatsApp
+  // defaults use delivery". `online` is the same self-service channel on the web.
+  // Aggregator orders (Talabat etc.) are order_type "aggregator", so they stay
+  // out of this tab on purpose.
+  { key: "whatsapp", label: "WhatsApp", types: "delivery,online" },
 ] as const;
 type TypeFilterKey = (typeof TYPE_FILTERS)[number]["key"];
 

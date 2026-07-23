@@ -47,3 +47,5 @@ releases/
 
 .worktrees/
 .env.bak
+.env.bak*
+.env.*.bak
