@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
@@ -16,10 +17,18 @@ export function StaffScreen() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  function openAdd() {
+    setName("");
+    setPhone("");
+    setPin("");
+    setShowAdd(true);
+  }
 
   // This screen is waiter-only, but the API returns every role — keep just waiters.
   const waiters = staff.filter((m) => m.role === NEW_STAFF_ROLE);
@@ -54,6 +63,7 @@ export function StaffScreen() {
       setPhone("");
       setPin("");
       setStaff((prev) => [created, ...prev]);
+      setShowAdd(false);
       toast(`Waiter added: ${created.name}`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not add waiter.", "error");
@@ -64,28 +74,11 @@ export function StaffScreen() {
 
   return (
     <div className={s.root}>
-      <PageHeader title="Waiter Management" subtitle="Add waiters and see your team" />
-
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>New waiter</h3>
-        <div className={s.form}>
-          <label className={s.field}>
-            <span>Name</span>
-            <input aria-label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          </label>
-          <label className={s.field}>
-            <span>Phone</span>
-            <input aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </label>
-          <label className={s.field}>
-            <span>PIN</span>
-            <input aria-label="New staff PIN" type="password" value={pin} onChange={(e) => setPin(e.target.value)} />
-          </label>
-        </div>
-        <Button type="button" disabled={submitting} onClick={() => void submit()}>
-          {submitting ? "Adding…" : "Add waiter"}
-        </Button>
-      </section>
+      <PageHeader
+        title="Waiter Management"
+        subtitle="Add waiters and see your team"
+        right={<Button type="button" size="md" onClick={openAdd}>+ Add waiter</Button>}
+      />
 
       <section className={s.card}>
         <h3 className={s.cardTitle}>Waiters{loaded && waiters.length > 0 ? ` (${waiters.length})` : ""}</h3>
@@ -127,6 +120,62 @@ export function StaffScreen() {
           </div>
         )}
       </section>
+
+      {showAdd &&
+        createPortal(
+          <div className={s.overlay} onClick={submitting ? undefined : () => setShowAdd(false)}>
+            <div className={s.modal} onClick={(e) => e.stopPropagation()}>
+              <div className={s.modalHead}>
+                <h3 className={s.cardTitle}>New waiter</h3>
+                <button
+                  type="button"
+                  className={s.close}
+                  aria-label="Close"
+                  disabled={submitting}
+                  onClick={() => setShowAdd(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <div className={s.modalBody}>
+                <label className={s.field}>
+                  <span>Name</span>
+                  <input
+                    aria-label="Name"
+                    autoFocus
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </label>
+                <label className={s.field}>
+                  <span>Phone</span>
+                  <input aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                </label>
+                <label className={s.field}>
+                  <span>PIN</span>
+                  <input
+                    aria-label="New staff PIN"
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void submit();
+                    }}
+                  />
+                </label>
+              </div>
+              <div className={s.modalFoot}>
+                <Button type="button" variant="ghost" disabled={submitting} onClick={() => setShowAdd(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" disabled={submitting} onClick={() => void submit()}>
+                  {submitting ? "Adding…" : "Add waiter"}
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

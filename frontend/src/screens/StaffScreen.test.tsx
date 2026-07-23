@@ -30,12 +30,14 @@ describe("StaffScreen", () => {
     await waitFor(() => expect(screen.getByRole("cell", { name: "Ahmed" })).toBeInTheDocument());
   });
 
-  it("creates a waiter", async () => {
+  it("creates a waiter from the dialog", async () => {
     render(<StaffScreen />);
     await waitFor(() => expect(screen.getByRole("cell", { name: "Ahmed" })).toBeInTheDocument());
+    // Open the add-waiter dialog first.
+    fireEvent.click(screen.getByRole("button", { name: /\+ add waiter/i }));
     fireEvent.change(screen.getByLabelText(/^Name$/i), { target: { value: "Bilal" } });
     fireEvent.change(screen.getByLabelText(/new staff pin/i), { target: { value: "4321" } });
-    fireEvent.click(screen.getByRole("button", { name: /add waiter/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add waiter$/i }));
     await waitFor(() => expect(screen.getByRole("cell", { name: "Bilal" })).toBeInTheDocument());
   });
 });
