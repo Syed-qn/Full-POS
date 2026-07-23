@@ -111,7 +111,7 @@ export function CustomersScreen() {
     },
     {
       key: "open",
-      header: "",
+      header: "View",
       render: (c) => (
         <button
           type="button"
