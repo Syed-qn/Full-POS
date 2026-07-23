@@ -170,23 +170,21 @@
   border: 1px solid var(--border-subtle);
 }
 
+/* Icon-only: no outer ring/box, just the eye glyph. */
 .rowOpen {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition: color 0.12s;
 }
 .rowOpen:hover {
   color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  background: var(--accent-primary-dim);
 }
 
 /* Row 2 — min spend + labelled segmented controls, aligned on one row. */
