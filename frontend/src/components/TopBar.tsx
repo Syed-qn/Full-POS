@@ -1,4 +1,11 @@
 import { useEffect, useState } from "react";
+import {
+  APP_THEME_ICON,
+  APP_THEME_LABEL,
+  cycleAppTheme,
+  nextAppTheme,
+  useAppTheme,
+} from "../lib/appTheme";
 import { isDesktopShell } from "../lib/desktopEnv";
 import { isTrainingMode } from "../lib/navAccess";
 import { AlertCenter, type AlertItem } from "./AlertCenter";
@@ -16,6 +23,8 @@ export function TopBar({
 }) {
   const [now, setNow] = useState(() => new Date());
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const theme = useAppTheme();
+  const nextTheme = nextAppTheme();
   const desktop = isDesktopShell();
   const alertCount = alerts.filter((a) => a.level !== "info").length;
   const training = isTrainingMode();
@@ -63,6 +72,18 @@ export function TopBar({
         )}
       </div>
       <div className={s.right}>
+        <button
+          type="button"
+          className={s.alertBtn}
+          onClick={cycleAppTheme}
+          title={`Theme: ${APP_THEME_LABEL[theme]} — switch to ${APP_THEME_LABEL[nextTheme]}`}
+          aria-label={`Theme ${APP_THEME_LABEL[theme]}, switch to ${APP_THEME_LABEL[nextTheme]}`}
+          data-testid="dashboard-theme"
+        >
+          <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>
+            {APP_THEME_ICON[theme]}
+          </span>
+        </button>
         <div className={s.alertWrap}>
           <button
             type="button"

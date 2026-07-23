@@ -1,13 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import {
-  APP_THEME_ICON,
-  APP_THEME_LABEL,
-  cycleAppTheme,
-  nextAppTheme,
-  useAppTheme,
-} from "../lib/appTheme";
 import { logout } from "../lib/auth";
 import { useRestaurantName } from "../lib/brand";
 import { appProductName, isDesktopShell } from "../lib/desktopEnv";
@@ -88,7 +81,6 @@ const GROUPS: NavGroup[] = [
       { to: "/branches", label: "Branches", icon: "▣" },
       { to: "/channels", label: "Channels", icon: "⇄" },
       { to: "/reliability", label: "Reliability", icon: "⟳" },
-      { to: "/settings", label: "Settings", icon: "⚙" },
     ],
   },
   {
@@ -159,8 +151,6 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
   function toggleGroup(id: string) {
     setCollapsedGroups((prev) => ({ ...prev, [id]: !prev[id] }));
   }
-  const theme = useAppTheme();
-  const nextTheme = nextAppTheme();
 
   const desktop = useMemo(() => isDesktopShell(), []);
 
@@ -207,21 +197,6 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
       </button>
 
       <div className={s.scroll}>
-        {/* Theme lives at the top of the main nav now (was pinned above Sign out). */}
-        <button
-          type="button"
-          className={s.item}
-          onClick={cycleAppTheme}
-          title={`Theme: ${APP_THEME_LABEL[theme]} — switch to ${APP_THEME_LABEL[nextTheme]}`}
-          aria-label={`Theme ${APP_THEME_LABEL[theme]}, switch to ${APP_THEME_LABEL[nextTheme]}`}
-          data-testid="dashboard-theme"
-        >
-          <span className={s.icon} aria-hidden="true">
-            {APP_THEME_ICON[theme]}
-          </span>
-          {!collapsed && <span className={s.label}>{APP_THEME_LABEL[theme]}</span>}
-        </button>
-
         {visibleGroups.map((group) => {
           const groupOpen = !collapsedGroups[group.id];
           return (
@@ -306,6 +281,22 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
           );
         })}
       </div>
+
+      {/* Settings + Sign out are pinned to the bottom, below the nav list. */}
+      {canAccess("/settings", role) && (
+        <NavLink
+          to="/settings"
+          title="Settings"
+          aria-label="Settings"
+          className={({ isActive }) => `${s.item} ${s.footItem} ${isActive ? s.active : ""}`}
+          onMouseEnter={() => prefetchRoute("/settings")}
+        >
+          <span className={s.icon} aria-hidden="true">
+            ⚙
+          </span>
+          {!collapsed && <span className={s.label}>Settings</span>}
+        </NavLink>
+      )}
 
       <button
         type="button"
