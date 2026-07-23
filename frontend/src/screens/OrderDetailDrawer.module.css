@@ -47,13 +47,25 @@
 
 .actionBar { margin-bottom: 12px; padding: 0 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+/* This is a compact admin row, not the POS touch surface, so the buttons drop
+   from the 56px touch default to the same 36px box as the assign-rider select —
+   the whole strip reads as one row of equal-height controls. */
+.actionBar :global(button) {
+  height: 36px;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 14px;
+  font-size: 0.85rem;
+}
+
 .reassignSelect {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 0.85rem;
-  padding: 7px 10px;
+  height: 36px;
+  padding: 0 10px;
 }
 .reassignSelect:focus { border-color: var(--accent-primary); outline: none; }
 
