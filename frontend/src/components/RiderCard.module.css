@@ -136,6 +136,15 @@
   border-color: color-mix(in srgb, var(--sla-warn, #d97706) 45%, transparent);
   background: color-mix(in srgb, var(--sla-warn, #d97706) 10%, transparent);
 }
+/* Locked until the app is paired: duty belongs to the rider's own in-app switch,
+   so this reads as unavailable rather than merely "off". */
+.dutyToggleLocked {
+  color: var(--text-muted);
+  border-color: var(--border-default);
+  background: var(--bg-surface-inset);
+  cursor: not-allowed;
+}
+
 .dutyTrack {
   width: 26px;
   height: 16px;
@@ -284,15 +293,20 @@
   background: var(--border-subtle);
   margin: 0 12px;
 }
+/* An even grid, not a wrapping row. The buttons carry different-length labels
+   ("Deactivate" vs "Send app link"), so a flex row gave every one a different
+   width and left ragged gaps; Remove was additionally pushed right by
+   margin-left:auto and ended up stranded alone on its own line. Equal columns
+   make the block read as one set of controls at any card width. */
 .actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
 }
 .actions :global(button) {
   white-space: nowrap;
-}
-.removeBtn {
-  margin-left: auto;
+  width: 100%;
+  padding-left: 10px;
+  padding-right: 10px;
 }

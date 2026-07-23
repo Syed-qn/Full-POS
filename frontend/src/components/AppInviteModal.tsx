@@ -66,7 +66,7 @@ export function AppInviteModal({ rider, restaurantPhone, onClose }: Props) {
               </div>
             </li>
             <li style={{ marginTop: 8 }}>
-              Once they’ve sent it, confirm below — we’ll text them the pairing
+              Once they’ve sent it, confirm below and we’ll text them the pairing
               code and app download link.
             </li>
           </ol>

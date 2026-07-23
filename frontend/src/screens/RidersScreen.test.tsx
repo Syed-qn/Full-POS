@@ -116,40 +116,27 @@ describe("RidersScreen", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders rider fleet and map+queue layout", async () => {
+  it("renders every rider as a card", async () => {
     renderWithProviders(<RidersScreen />);
     await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
     expect(screen.getAllByText("Omar Farouq").length).toBeGreaterThan(0);
-    expect(screen.getByTestId("riders-ops-layout")).toBeInTheDocument();
-    expect(screen.getByTestId("live-ops-map")).toBeInTheDocument();
-    expect(screen.getByTestId("riders-late-risk")).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: /primary actions/i })).toBeInTheDocument();
+    expect(screen.getByTestId("riders-stats")).toBeInTheDocument();
   });
 
-  it("shows unassigned queue with SLA risk", async () => {
+  // The unassigned queue, dispatch map, fleet selector, late-risk pill and the
+  // bottom action bar were removed from this screen on purpose. Manual rider
+  // assignment now lives ONLY in the order detail drawer, so nothing here may
+  // call assignOrder.
+  it("no longer renders the dispatch ops block or its bottom bar", async () => {
     renderWithProviders(<RidersScreen />);
-    await waitFor(() => expect(screen.getByTestId("dispatch-queue-101")).toBeInTheDocument());
-    expect(screen.getByTestId("dispatch-queue-101")).toHaveTextContent(/R1-0101|101/);
-    expect(screen.getByTestId("riders-late-risk")).toHaveTextContent(/late risk/i);
-  });
-
-  it("manual assign uses selected order and rider", async () => {
-    const user = userEvent.setup();
-    vi.mocked(ordersApi.assignOrder).mockResolvedValue({
-      ...queueOrders[0],
-      status: "assigned",
-      rider_id: 3,
-      rider_name: "Ali Hassan",
-    } as never);
-
-    renderWithProviders(<RidersScreen />);
-    await waitFor(() => expect(screen.getByTestId("dispatch-queue-101")).toBeInTheDocument());
-
-    await user.click(screen.getByTestId("dispatch-queue-101"));
-    await user.click(screen.getByTestId("fleet-rider-3"));
-    await user.click(screen.getByTestId("riders-manual-assign"));
-
-    await waitFor(() => expect(ordersApi.assignOrder).toHaveBeenCalledWith(101, 3));
+    await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
+    expect(screen.queryByTestId("riders-ops-layout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("live-ops-map")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("dispatch-queue-101")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("riders-late-risk")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("riders-manual-assign")).not.toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: /primary actions/i })).not.toBeInTheDocument();
+    expect(ordersApi.assignOrder).not.toHaveBeenCalled();
   });
 
   it("shows empty state when no riders", async () => {

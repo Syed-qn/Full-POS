@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "./Button";
+import { PairingCodeModal } from "./PairingCodeModal";
 import { RiderMapModal } from "./RiderMapModal";
 import type { RiderOut, RiderStatus } from "../lib/types";
 import s from "./RiderCard.module.css";
@@ -64,11 +65,18 @@ export function RiderCard({
   const deactivated = rider.status === "deactivated";
   const color = STATUS_COLOR[rider.status];
   const [showMap, setShowMap] = useState(false);
+  const [showCode, setShowCode] = useState(false);
 
   // Rider's in-app On/Off duty switch (independent of the manager's shift status).
   // `on_duty` may be undefined on an older backend — treat that as on duty.
   const offDuty = rider.on_duty === false;
   const onDelivery = rider.status === "on_delivery";
+  // Duty is the rider's OWN in-app switch, so it cannot mean anything until the
+  // app is paired (app_paired = the rider redeemed a code and holds a device
+  // token). Until then the toggle is locked and reads "Not paired". Older
+  // backends omit the field entirely — `!== false` keeps those cards usable
+  // rather than locking every rider on a version mismatch.
+  const paired = rider.app_paired ?? true;
 
   // The ACTUAL dispatch outcome, combining BOTH switches so the manager doesn't have
   // to decode two badges. A rider receives new orders ONLY if the manager has them
@@ -124,15 +132,25 @@ export function RiderCard({
           {!deactivated && (
             <button
               type="button"
-              className={`${s.dutyToggle} ${offDuty ? s.dutyToggleOff : s.dutyToggleOn}`}
+              className={`${s.dutyToggle} ${
+                !paired ? s.dutyToggleLocked : offDuty ? s.dutyToggleOff : s.dutyToggleOn
+              }`}
               onClick={() => onDutyChange?.(rider.id, offDuty)}
-              disabled={!onDutyChange}
-              title="On / Off duty — the same switch the rider has in their app. Off = no new orders."
+              disabled={!onDutyChange || !paired}
+              title={
+                paired
+                  ? "On / Off duty. The same switch the rider has in their app. Off means no new orders."
+                  : "Locked until the rider pairs the app. Duty is their own in-app switch, so it cannot be set for them."
+              }
             >
-              <span className={`${s.dutyTrack} ${offDuty ? s.dutyTrackOff : s.dutyTrackOn}`}>
+              <span
+                className={`${s.dutyTrack} ${
+                  !paired ? s.dutyTrackOff : offDuty ? s.dutyTrackOff : s.dutyTrackOn
+                }`}
+              >
                 <span className={s.dutyKnob} />
               </span>
-              {offDuty ? "Off duty" : "On duty"}
+              {!paired ? "Not paired" : offDuty ? "Off duty" : "On duty"}
             </button>
           )}
         </div>
@@ -187,6 +205,9 @@ export function RiderCard({
         </div>
       </div>
 
+      {/* Even columns rather than a wrapping flex row: the old layout pushed
+          Remove to the right with margin-left:auto, so it fell onto a line of
+          its own and floated away from the buttons it belongs with. */}
       <div className={s.actions}>
         {deactivated ? (
           <Button variant="ghost" onClick={() => onStatusChange(rider.id, "available")}>
@@ -204,6 +225,9 @@ export function RiderCard({
                 Send app link
               </Button>
             )}
+            <Button variant="ghost" onClick={() => setShowCode(true)}>
+              Show code
+            </Button>
             {onSettleCod && (
               <Button
                 variant="ghost"
@@ -215,12 +239,13 @@ export function RiderCard({
             )}
           </>
         )}
-        <Button variant="danger" onClick={() => onDelete(rider.id)} className={s.removeBtn}>
+        <Button variant="danger" onClick={() => onDelete(rider.id)}>
           Remove
         </Button>
       </div>
 
       {showMap && <RiderMapModal rider={rider} onClose={() => setShowMap(false)} />}
+      {showCode && <PairingCodeModal rider={rider} onClose={() => setShowCode(false)} />}
     </div>
   );
 }

@@ -1,0 +1,121 @@
+/* Same shell as the other dialogs (DishEditModal), with a code display built for
+   reading aloud across a counter. All tokens, so it follows the dashboard theme. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.close:hover {
+  color: var(--text-primary);
+}
+
+.body {
+  padding: 20px;
+}
+
+/* Big, monospaced, generously tracked — this gets read out loud or typed by
+   someone holding a phone, so legibility beats compactness. */
+.code {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-align: center;
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 18px 12px;
+  /* The alphabet already excludes 0/O/1/I, so no ambiguity to design around. */
+}
+
+.codeExpired {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  border-color: color-mix(in srgb, var(--sla-critical) 45%, var(--border-default));
+}
+
+.expiry {
+  margin-top: 10px;
+  text-align: center;
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  color: var(--sla-safe);
+}
+
+.expiryDead {
+  margin-top: 10px;
+  text-align: center;
+  font-size: var(--font-size-ui);
+  font-weight: 700;
+  color: var(--sla-critical);
+}
+
+.steps {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-ui);
+  line-height: 1.6;
+}
+
+.error {
+  margin: 0;
+  background: var(--sla-critical-dim);
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 45%, transparent);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--sla-critical);
+  font-size: var(--font-size-ui);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-subtle);
+}

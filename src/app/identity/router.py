@@ -35,6 +35,7 @@ from app.identity.service import (
     DuplicatePhoneError,
     RiderHasHistoryError,
 )
+from app.audit.service import record_audit
 from app.ratelimit.deps import rate_limit_auth
 
 # Every manager-surface route here takes require_role("manager") rather than the
@@ -476,6 +477,49 @@ async def invite_rider_to_app(
     await session.commit()
     await deliver_pending(session, restaurant.id)
     return {"success": True, "code": code, "expires_in_minutes": _PAIRING_TTL_MINUTES}
+
+
+@router.post("/riders/{rider_id}/pairing-code")
+async def issue_rider_pairing_code(
+    rider_id: int,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Mint a fresh pairing code and RETURN it, without sending anything.
+
+    Separate from /app-invite on purpose. That one texts the rider over WhatsApp,
+    which Meta only permits inside the 24h service window — so it fails exactly
+    when a new rider has never messaged the restaurant. This endpoint just issues
+    the code so the manager can read it out or show the rider the screen. Same
+    code, same 60-minute expiry, same redemption path; calling it again replaces
+    the previous code (one live code per rider).
+    """
+    from app.dispatch.rider_app import _PAIRING_TTL_MINUTES, create_pairing_code
+    from app.identity.models import Rider
+
+    rider = await session.scalar(
+        select(Rider).where(Rider.id == rider_id, Rider.restaurant_id == restaurant.id)
+    )
+    if rider is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "rider not found")
+    code = await create_pairing_code(session, rider=rider)
+    expires_at = rider.pairing_code_expires_at
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant.id,
+        entity="rider",
+        entity_id=str(rider.id),
+        action="pairing_code_issued",
+        # The code itself is a credential — never write it to the audit log.
+        after={"expires_at": expires_at.isoformat() if expires_at else None},
+    )
+    await session.commit()
+    return {
+        "code": code,
+        "expires_in_minutes": _PAIRING_TTL_MINUTES,
+        "expires_at": expires_at,
+    }
 
 
 @router.delete("/riders/{rider_id}", status_code=204)

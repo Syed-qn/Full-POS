@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fetchRiderLocation } from "../lib/ridersApi";
 import type { RiderLocationOut, RiderOut } from "../lib/types";
 import s from "./RiderMapModal.module.css";
@@ -91,7 +92,10 @@ export function RiderMapModal({
 
   const stale = loc !== null && Date.now() - new Date(loc.ts).getTime() > STALE_MS;
 
-  return (
+  // Portal for the same reason as PairingCodeModal: the rider card transforms on
+  // hover, and a transformed ancestor becomes the containing block for a
+  // position:fixed overlay — which would size this dialog to the card.
+  return createPortal(
     <div className={s.overlay} onClick={onClose}>
       <div className={s.modal} onClick={(e) => e.stopPropagation()}>
         <div className={s.header}>
@@ -129,10 +133,11 @@ export function RiderMapModal({
             {!loaded
               ? "Loading…"
               : "No location yet. The rider shares live location after tapping " +
-                "“Picked up” — it'll appear here once they do."}
+                "“Picked up”. It'll appear here once they do."}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

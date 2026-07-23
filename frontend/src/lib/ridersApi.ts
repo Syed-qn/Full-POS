@@ -47,6 +47,19 @@ export async function inviteRiderToApp(id: number): Promise<AppInviteOut> {
   return apiClient.post<AppInviteOut>(`/api/v1/riders/${id}/app-invite`, {});
 }
 
+export interface PairingCodeOut {
+  code: string;
+  expires_in_minutes: number;
+  expires_at: string | null;
+}
+
+/** Mint a pairing code and show it on screen — nothing is sent to the rider.
+ *  Use when WhatsApp can't reach them yet (Meta's 24h window) or the manager
+ *  would rather just read the code out. Each call replaces the previous code. */
+export async function issueRiderPairingCode(id: number): Promise<PairingCodeOut> {
+  return apiClient.post<PairingCodeOut>(`/api/v1/riders/${id}/pairing-code`, {});
+}
+
 /** The configured rider-app APK download link (null if not set up yet). */
 export async function fetchRiderAppInfo(): Promise<{ apkUrl: string | null }> {
   return apiClient.get<{ apkUrl: string | null }>("/api/v1/rider-app/info");

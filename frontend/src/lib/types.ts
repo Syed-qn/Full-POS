@@ -23,6 +23,10 @@ export interface RiderOut {
   /** Rider's own On duty / Off duty switch (native app). False = off duty: no new
    * assignments (keeps any active run). Defaults true on older backends. */
   on_duty?: boolean;
+  /** True once the rider has redeemed a pairing code and the tracking app holds
+   *  a device token. Duty is the rider's IN-APP switch, so the dashboard toggle
+   *  stays locked until this is true. Absent on older backends. */
+  app_paired?: boolean;
   /** Deliveries completed in the current 08:00→08:00 shift window. */
   delivered_24h: number;
   /** Deliveries completed all-time. */

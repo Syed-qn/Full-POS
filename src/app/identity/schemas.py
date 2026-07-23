@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 def _normalize_email(v: str) -> str:
@@ -145,6 +145,20 @@ class RiderOut(BaseModel):
     last_lat: float | None = None
     last_lng: float | None = None
     last_location_at: datetime | None = None
+    # Has this rider redeemed a pairing code, i.e. is the tracking app actually
+    # installed and signed in? device_token is written only by redeem_pairing_code,
+    # so its presence IS the paired state. Read via alias off the ORM attribute so
+    # every response carries it (list, create, patch) without each call site
+    # remembering to compute it. The token itself is never serialised.
+    app_paired: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("app_paired", "device_token"),
+    )
+
+    @field_validator("app_paired", mode="before")
+    @classmethod
+    def _token_to_bool(cls, v: object) -> bool:
+        return bool(v)
 
 
 class RiderLocationOut(BaseModel):

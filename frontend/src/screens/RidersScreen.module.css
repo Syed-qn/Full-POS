@@ -291,6 +291,20 @@
   text-align: center;
 }
 
+/* Inline replacement for the removed page-wide bottom bar: shown only while an
+   order is selected, so it reads as a step in the assign flow rather than a
+   permanent strip of mostly-disabled buttons. */
+.assignStrip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: var(--accent-primary-dim);
+}
+
 .barHint {
   font-size: var(--font-size-ui);
   color: var(--text-secondary);
