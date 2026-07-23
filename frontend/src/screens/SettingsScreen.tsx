@@ -41,7 +41,7 @@ const DEFAULT_RESALE: ResaleConfig = {
   max_age_minutes: 30,
 };
 
-const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string }[] = [
+const TABS: { key: Tab; label: string; icon: string; desc: string; title: string; blurb: string; soon?: boolean }[] = [
   { key: "general", label: "General", icon: "🏪", desc: "Profile & location",
     title: "General", blurb: "Your restaurant's name and pickup location." },
   { key: "fees", label: "Delivery Fees", icon: "🛵", desc: "Distance pricing",
@@ -61,7 +61,7 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
   // "API Keys" (integrations) tab removed from the settings surface. The
   // ApiKeysSection + partner-key flow stay wired below but are no longer
   // reachable from the tab list.
-  { key: "payments", label: "Payments", icon: "💳", desc: "Card processor",
+  { key: "payments", label: "Payments", icon: "💳", desc: "Card processor", soon: true,
     title: "Payment Processing", blurb: "Connect your own Stripe account to accept card payments. Without one, card charges run in test/mock mode." },
 ];
 
@@ -644,15 +644,18 @@ export function SettingsScreen() {
           {TABS.map((t) => (
             <button
               key={t.key}
-              className={`${s.navItem} ${tab === t.key ? s.navActive : ""}`}
-              onClick={() => setTab(t.key)}
+              className={`${s.navItem} ${tab === t.key ? s.navActive : ""} ${t.soon ? s.navSoon : ""}`}
+              onClick={() => t.soon || setTab(t.key)}
               aria-current={tab === t.key}
+              aria-disabled={t.soon || undefined}
+              disabled={t.soon}
             >
               <span className={s.navIcon} aria-hidden>{t.icon}</span>
               <span className={s.navText}>
                 <span className={s.navLabel}>{t.label}</span>
                 <span className={s.navDesc}>{t.desc}</span>
               </span>
+              {t.soon && <span className={s.navSoonPill}>Soon</span>}
             </button>
           ))}
         </nav>

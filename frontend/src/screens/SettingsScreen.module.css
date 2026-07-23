@@ -67,6 +67,28 @@
 .navActive .navIcon {
   background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
 }
+/* Not-yet-shipped tab: dimmed, inert, with a "Soon" pill. */
+.navSoon {
+  opacity: 0.55;
+  cursor: default;
+}
+.navSoon:hover { background: transparent; color: inherit; }
+.navSoonPill {
+  margin-left: auto;
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+}
 .navText { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .navLabel { font-size: 13px; font-weight: 600; line-height: 1.2; }
 .navDesc { font-size: 11px; color: var(--text-muted); line-height: 1.2; }
