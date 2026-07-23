@@ -189,10 +189,11 @@
   background: var(--accent-primary-dim);
 }
 
-/* Row 2 — labelled segmented controls. */
+/* Row 2 — min spend + labelled segmented controls, aligned on one row. */
 .groups {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
   gap: 20px;
 }
 .filterGroup {

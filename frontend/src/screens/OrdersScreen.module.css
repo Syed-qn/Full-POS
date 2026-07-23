@@ -199,6 +199,16 @@
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
+/* Bordered container around a list table (Customers, etc.). Was referenced but
+   never defined, so the table rendered with no outline/background at all. */
+.tableCard {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
 .tableHead {
   display: flex;
   align-items: baseline;

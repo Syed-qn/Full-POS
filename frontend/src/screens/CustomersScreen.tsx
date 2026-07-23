@@ -175,7 +175,7 @@ export function CustomersScreen() {
           </div>
           <span className={f.phoneSearchHint}>Primary lookup for returning guests at the counter</span>
         </div>
-        <div className={f.topRow}>
+        <div className={f.groups}>
           <div className={f.filterGroup}>
             <span className={f.filterLabel}>Min spend (AED)</span>
             <input
@@ -189,8 +189,6 @@ export function CustomersScreen() {
               onChange={(e) => setMinSpend(e.target.value)}
             />
           </div>
-        </div>
-        <div className={f.groups}>
           <div className={f.filterGroup}>
             <span className={f.filterLabel}>Marketing</span>
             <div className={f.segment} role="group" aria-label="Marketing filter">
