@@ -764,10 +764,6 @@ export function SettingsScreen() {
               onClose={() => setMapOpen(false)}
             />
           )}
-          <div className={`${s.actions} ${s.stickySave}`}>
-            <Button onClick={saveGeneral}>Save</Button>
-          </div>
-
           <div
             className={s.rowStacked}
             style={{ marginTop: 24, borderTop: "1px solid var(--border, #334155)", paddingTop: 18 }}
@@ -830,6 +826,13 @@ export function SettingsScreen() {
                 </div>
               </div>
             )}
+          </div>
+          {/* Save is the last thing in the tab and sits inline at the very bottom
+              (not sticky) so it no longer floats over the WhatsApp connection
+              block just above it. It saves the profile/tax/location fields;
+              WhatsApp connect/disconnect above act on their own. */}
+          <div className={s.actions}>
+            <Button onClick={saveGeneral}>Save</Button>
           </div>
         </div>
       )}
