@@ -6,11 +6,14 @@ when unset or ``rate_limit_enabled`` is False, the deps are no-ops so unit tests
 that don't exercise rate limiting stay green.
 """
 import json
+import logging
 
 from fastapi import HTTPException, Request
 
 from app.config import get_settings
 from app.ratelimit.bucket import TokenBucketLimiter
+
+_logger = logging.getLogger(__name__)
 
 _UNIT_SECONDS = {"second": 1, "minute": 60, "hour": 3600}
 _limiter: TokenBucketLimiter | None = None
@@ -37,7 +40,15 @@ async def _enforce(key: str, spec: str) -> None:
     if not settings.rate_limit_enabled or _limiter is None:
         return
     cap, refill = _parse(spec)
-    ok, retry = await _limiter.allow(key, capacity=cap, refill_per_sec=refill)
+    try:
+        ok, retry = await _limiter.allow(key, capacity=cap, refill_per_sec=refill)
+    except Exception:  # noqa: BLE001 — see below
+        # FAIL OPEN. The limiter is a guard rail, not a gate: if Redis is
+        # unreachable/misconfigured, throttling stops working but LOGIN MUST NOT.
+        # Raising here 500s every auth request and locks the whole restaurant out
+        # of the POS over a cache outage. Logged loudly so it is not silent.
+        _logger.exception("rate limiter unavailable — allowing %s", key)
+        return
     if not ok:
         raise HTTPException(
             429, "rate limit exceeded", headers={"Retry-After": str(retry)}
