@@ -207,6 +207,21 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
       </button>
 
       <div className={s.scroll}>
+        {/* Theme lives at the top of the main nav now (was pinned above Sign out). */}
+        <button
+          type="button"
+          className={s.item}
+          onClick={cycleAppTheme}
+          title={`Theme: ${APP_THEME_LABEL[theme]} — switch to ${APP_THEME_LABEL[nextTheme]}`}
+          aria-label={`Theme ${APP_THEME_LABEL[theme]}, switch to ${APP_THEME_LABEL[nextTheme]}`}
+          data-testid="dashboard-theme"
+        >
+          <span className={s.icon} aria-hidden="true">
+            {APP_THEME_ICON[theme]}
+          </span>
+          {!collapsed && <span className={s.label}>{APP_THEME_LABEL[theme]}</span>}
+        </button>
+
         {visibleGroups.map((group) => {
           const groupOpen = !collapsedGroups[group.id];
           return (
@@ -291,22 +306,6 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
           );
         })}
       </div>
-
-      {/* Theme sits with Sign out: both are "this device / this person"
-          settings rather than places to go, so they live below the nav list. */}
-      <button
-        type="button"
-        className={s.item}
-        onClick={cycleAppTheme}
-        title={`Theme: ${APP_THEME_LABEL[theme]} — switch to ${APP_THEME_LABEL[nextTheme]}`}
-        aria-label={`Theme ${APP_THEME_LABEL[theme]}, switch to ${APP_THEME_LABEL[nextTheme]}`}
-        data-testid="dashboard-theme"
-      >
-        <span className={s.icon} aria-hidden="true">
-          {APP_THEME_ICON[theme]}
-        </span>
-        {!collapsed && <span className={s.label}>{APP_THEME_LABEL[theme]}</span>}
-      </button>
 
       <button
         type="button"
