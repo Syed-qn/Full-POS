@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -230,6 +230,26 @@ class Settings(BaseSettings):
 
     # Observability
     sentry_dsn: str = ""
+
+    @field_validator("database_url")
+    @classmethod
+    def _force_async_driver(cls, v: str) -> str:
+        """Coerce a platform-issued URL onto the asyncpg driver.
+
+        Railway, Render, Heroku and Fly all hand out ``postgres://`` or
+        ``postgresql://``. SQLAlchemy maps those to psycopg2, which this
+        async-only app does not install — the container then dies at boot with
+        ``ModuleNotFoundError: No module named 'psycopg2'`` before a single
+        request is served. Rewriting the scheme here means a copy-pasted
+        DATABASE_URL just works.
+        """
+        for prefix in ("postgresql+asyncpg://", "postgres+asyncpg://"):
+            if v.startswith(prefix):
+                return v
+        for prefix in ("postgresql://", "postgres://"):
+            if v.startswith(prefix):
+                return "postgresql+asyncpg://" + v[len(prefix) :]
+        return v
 
 
 @lru_cache
