@@ -24,6 +24,13 @@ import type {
 } from "../lib/types";
 import s from "./CustomerProfileScreen.module.css";
 
+/** Trim the minute-level precision off the "usual order time" so it fits one
+ *  line, e.g. "Evenings (~6:09 PM)" → "Evenings (~6 PM)". */
+function shortOrderTime(value?: string | null): string {
+  if (!value) return "—";
+  return value.replace(/(~?\d{1,2}):\d{2}(\s*[AP]M)/i, "$1$2");
+}
+
 /** Avatar initials: first two letters of name, else last 2 phone digits. */
 function profileInitials(name?: string | null, phone?: string): string {
   const n = (name ?? "").trim();
@@ -316,7 +323,7 @@ export function CustomerProfileScreen() {
                   ? new Date(profile.last_order_at).toLocaleDateString()
                   : "—"}
               />
-              <Stat label="Usually Orders" value={profile.usual_order_time ?? "—"} />
+              <Stat label="Usually Orders" value={shortOrderTime(profile.usual_order_time)} />
               <Stat label="Points" value={String(profile.loyalty_points ?? 0)} />
             </div>
           </section>
@@ -646,9 +653,12 @@ function AddressCard({
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  // A zero / empty stat is real but not interesting — mute it so the numbers
+  // that matter stand out.
+  const isZero = value === "—" || value === "0" || /^AED\s*0(\.0+)?$/.test(value);
   return (
     <div className={s.stat}>
-      <span className={s.statValue}>{value}</span>
+      <span className={`${s.statValue} ${isZero ? s.statZero : ""}`}>{value}</span>
       <span className={s.statLabel}>{label}</span>
     </div>
   );

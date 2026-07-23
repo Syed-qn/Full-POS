@@ -174,10 +174,24 @@
 
 .saveRow { margin-top: 8px; }
 
-.stats { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
-.stat { text-align: center; }
-.statValue { color: var(--text-primary); display: block; font-size: 1.1rem; font-weight: 700; }
-.statLabel { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; }
+.stats { display: grid; gap: 14px 12px; grid-template-columns: 1fr 1fr; }
+.stat { text-align: center; min-width: 0; }
+.statValue {
+  color: var(--text-primary);
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+/* Zero / empty stats: present but de-emphasised. */
+.statZero { color: var(--text-muted); font-weight: 600; }
+.statLabel {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
 
 .addressCard {
   border: 1px solid var(--border-default);
