@@ -124,21 +124,21 @@
 }
 
 .active {
-  color: #166534;
-  background: #dcfce7;
-  border-color: #bbf7d0;
+  color: var(--sla-safe);
+  background: var(--sla-safe-dim);
+  border-color: color-mix(in srgb, var(--sla-safe) 40%, transparent);
 }
 
 .paused,
 .exhausted,
 .expired {
-  color: #991b1b;
-  background: #fee2e2;
-  border-color: #fecaca;
+  color: var(--sla-critical);
+  background: var(--sla-critical-dim);
+  border-color: color-mix(in srgb, var(--sla-critical) 40%, transparent);
 }
 
 .error {
-  color: #b91c1c;
+  color: var(--sla-critical);
   font-size: 13px;
   margin: 0;
 }

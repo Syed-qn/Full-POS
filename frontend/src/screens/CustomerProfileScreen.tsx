@@ -6,14 +6,9 @@ import { StatusPill } from "../components/StatusPill";
 import { orderStatusLabel } from "../lib/orderDisplay";
 import { Spinner } from "../components/Spinner";
 import {
-  createReferralCode,
   deleteCustomerAddress,
   patchCustomerAddress,
   patchCustomerProfile,
-  redeemLoyaltyPoints,
-  redeemStampCard,
-  reorderLastOrder,
-  setCustomerLoyaltyTier,
 } from "../lib/customerApi";
 import {
   useCustomerCouponsQuery,
@@ -27,6 +22,17 @@ import type {
   CustomerProfileOut,
 } from "../lib/types";
 import s from "./CustomerProfileScreen.module.css";
+
+/** Avatar initials: first two letters of name, else last 2 phone digits. */
+function profileInitials(name?: string | null, phone?: string): string {
+  const n = (name ?? "").trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+  }
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits.slice(-2) || "•";
+}
 
 export function CustomerProfileScreen() {
   const { id } = useParams<{ id: string }>();
@@ -150,11 +156,42 @@ export function CustomerProfileScreen() {
     });
   }
 
+  const displayName = profile.name?.trim() || "Guest";
+
   return (
     <div className={s.screen}>
-      <div className={s.header}>
-        <button className={s.back} onClick={() => navigate(-1)}>← Back</button>
-        <h2 className={s.title}>{profile.name ?? profile.phone}</h2>
+      <button className={s.back} onClick={() => navigate(-1)}>← Back to customers</button>
+      <div className={s.hero}>
+        <span className={s.heroAvatar} aria-hidden="true">{profileInitials(profile.name, profile.phone)}</span>
+        <div className={s.heroMain}>
+          <div className={s.heroTop}>
+            <h2 className={s.heroName}>{displayName}</h2>
+            {profile.is_vip && <span className={`${s.heroBadge} ${s.badgeVip}`}>★ VIP</span>}
+            <span className={`${s.heroBadge} ${profile.marketing_opted_in ? s.badgeIn : s.badgeOut}`}>
+              {profile.marketing_opted_in ? "Marketing on" : "Marketing off"}
+            </span>
+            {profile.loyalty_tier && (
+              <span className={`${s.heroBadge} ${s.badgeTier}`}>
+                {{ gold: "🥇", silver: "🥈", bronze: "🥉" }[profile.loyalty_tier] ?? ""} {profile.loyalty_tier}
+              </span>
+            )}
+          </div>
+          <span className={s.heroPhone}>{profile.phone}</span>
+        </div>
+        <div className={s.heroStats}>
+          <div className={s.heroStat}>
+            <span className={s.heroStatValue}>{profile.total_orders}</span>
+            <span className={s.heroStatLabel}>Orders</span>
+          </div>
+          <div className={s.heroStat}>
+            <span className={s.heroStatValue}>AED {profile.total_spend}</span>
+            <span className={s.heroStatLabel}>Spend</span>
+          </div>
+          <div className={s.heroStat}>
+            <span className={s.heroStatValue}>{profile.loyalty_points ?? 0}</span>
+            <span className={s.heroStatLabel}>Points</span>
+          </div>
+        </div>
       </div>
 
       <div className={s.grid}>
@@ -317,131 +354,15 @@ export function CustomerProfileScreen() {
             </section>
           )}
 
-          <section className={s.card}>
-            <h3 className={s.cardTitle}>Loyalty</h3>
-            <div className={s.stats}>
-              <Stat
-                label="Tier"
-                value={
-                  profile.loyalty_tier
-                    ? `${{ gold: "🥇", silver: "🥈", bronze: "🥉" }[profile.loyalty_tier] ?? ""} ${profile.loyalty_tier}`
-                    : "—"
-                }
-              />
-              <Stat label="Set by" value={profile.loyalty_tier_locked ? "Manager (locked)" : "Auto"} />
-              <Stat label="Points" value={String(profile.loyalty_points ?? 0)} />
-              <Stat
-                label="Stamps"
-                value={
-                  profile.stamp_card
-                    ? `${profile.stamp_card.stamps}/${profile.stamp_card.stamps_required}`
-                    : "—"
-                }
-              />
-              <Stat label="Referral" value={profile.referral_code ?? "—"} />
-            </div>
-            <div className={s.walletForm}>
-              <select
-                aria-label="set loyalty tier"
-                value={profile.loyalty_tier ?? ""}
-                onChange={async (e) => {
-                  const v = e.target.value;
-                  const tier = (v === "" ? null : v) as "gold" | "silver" | "bronze" | null;
-                  const updated = await setCustomerLoyaltyTier(Number(id), { tier });
-                  patchProfileCache(updated);
-                }}
-              >
-                <option value="">None</option>
-                <option value="bronze">🥉 Bronze</option>
-                <option value="silver">🥈 Silver</option>
-                <option value="gold">🥇 Gold</option>
-              </select>
-              {profile.loyalty_tier_locked && (
-                <Button
-                  variant="ghost"
-                  onClick={async () => {
-                    const updated = await setCustomerLoyaltyTier(Number(id), { unlock: true });
-                    patchProfileCache(updated);
-                  }}
-                >
-                  Unlock (auto)
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    const res = await redeemStampCard(Number(id));
-                    setCrmMsg(
-                      res.coupon_code
-                        ? `Stamp reward: coupon ${res.coupon_code}`
-                        : "Stamp reward redeemed.",
-                    );
-                    await queryClient.invalidateQueries({
-                      queryKey: ["customers", "profile", customerId],
-                    });
-                  } catch (e) {
-                    setCrmMsg(e instanceof Error ? e.message : "Redeem failed");
-                  }
-                }}
-              >
-                Redeem stamp card
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    const res = await redeemLoyaltyPoints(Number(id), 50, "manager redeem");
-                    setCrmMsg(`Points balance: ${res.loyalty_points}`);
-                    await queryClient.invalidateQueries({
-                      queryKey: ["customers", "profile", customerId],
-                    });
-                  } catch (e) {
-                    setCrmMsg(e instanceof Error ? e.message : "Points redeem failed");
-                  }
-                }}
-              >
-                Redeem 50 points
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    const res = await createReferralCode(Number(id));
-                    setCrmMsg(`Referral code: ${res.code}`);
-                    await queryClient.invalidateQueries({
-                      queryKey: ["customers", "profile", customerId],
-                    });
-                  } catch (e) {
-                    setCrmMsg(e instanceof Error ? e.message : "Referral failed");
-                  }
-                }}
-              >
-                Generate referral code
-              </Button>
-            </div>
-          </section>
-
           {(profile.favorites?.length ?? 0) > 0 && (
             <section className={s.card}>
               <h3 className={s.cardTitle}>Favorite items</h3>
-              <ul>
+              <ul className={s.favList}>
                 {profile.favorites!.map((f, i) => (
-                  <li key={`${f.dish_name}-${i}`}>
-                    {f.dish_name} × {f.order_count}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {(profile.phone_history?.length ?? 0) > 0 && (
-            <section className={s.card}>
-              <h3 className={s.cardTitle}>Phone history</h3>
-              <ul>
-                {profile.phone_history!.map((p, i) => (
-                  <li key={`${p.phone}-${i}`}>
-                    {p.phone} ({p.changed_by})
+                  <li key={`${f.dish_name}-${i}`} className={s.favRow}>
+                    <span className={s.favRank} aria-hidden="true">{i + 1}</span>
+                    <span className={s.favName}>{f.dish_name}</span>
+                    <span className={s.favCount}>×{f.order_count}</span>
                   </li>
                 ))}
               </ul>
@@ -498,23 +419,6 @@ export function CustomerProfileScreen() {
 
           <section className={s.card}>
             <h3 className={s.cardTitle}>Recent Orders</h3>
-            {profile.recent_orders.length > 0 && (
-              <div className={s.saveRow}>
-                <Button
-                  onClick={async () => {
-                    try {
-                      const o = await reorderLastOrder(Number(id));
-                      setCrmMsg(`Reordered as ${o.order_number}`);
-                      navigate(`/orders`);
-                    } catch (e) {
-                      setCrmMsg(e instanceof Error ? e.message : "Reorder failed");
-                    }
-                  }}
-                >
-                  Reorder last
-                </Button>
-              </div>
-            )}
             {profile.recent_orders.length === 0 ? (
               <p className={s.empty}>No orders yet</p>
             ) : (
@@ -534,9 +438,11 @@ export function CustomerProfileScreen() {
                       <td>
                         <StatusPill
                           status={o.status}
+                          orderType={o.order_type}
                           label={orderStatusLabel(o.status, {
                             resaleOfOrderId: o.resale_of_order_id,
                             orderNumber: o.order_number,
+                            orderType: o.order_type,
                           })}
                         />
                       </td>

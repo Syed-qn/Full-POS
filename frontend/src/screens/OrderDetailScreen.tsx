@@ -147,6 +147,15 @@ export function OrderDetailScreen() {
     );
   }, [basic]);
 
+  // On-premise (dine-in / takeaway / drive-thru) orders have NO rider, NO
+  // delivery address, and the cashier doesn't drive the kitchen FSM — so we hide
+  // all of that and show table + add-items + bill/pay instead.
+  const isOnPremise = useMemo(() => {
+    const t = String(basic?.order_type ?? "");
+    return t === "dine_in" || t === "takeaway" || t === "drive_thru";
+  }, [basic]);
+  const isDineIn = String(basic?.order_type ?? "") === "dine_in";
+
   async function advanceStatus() {
     if (!basic) return;
     setAdvancing(true);
@@ -266,7 +275,7 @@ export function OrderDetailScreen() {
       <div className={s.header}>
         <h2 className={s.orderTitle}>{detail.order_number || `#${detail.id}`}</h2>
         <div className={s.metaChips}>
-          <StatusPill status={detail.status} />
+          <StatusPill status={detail.status} orderType={basic.order_type} />
           <span className={s.chip}>{channel}</span>
           {ACTIVE_SLA.has(detail.status) && (
             <CountdownTimer slaStartedAt={basic.sla_started_at} />
@@ -285,7 +294,9 @@ export function OrderDetailScreen() {
 
       <div className={s.layout}>
         <section className={s.card} aria-label="Customer and delivery">
-          <h3 className={s.cardTitle}>Customer / delivery</h3>
+          <h3 className={s.cardTitle}>
+            {isOnPremise ? "Customer / table" : "Customer / delivery"}
+          </h3>
           {detail.customer.allergy_notes && (
             <div className={s.allergy} data-testid="allergy-warning">
               Allergy: {detail.customer.allergy_notes}
@@ -301,22 +312,33 @@ export function OrderDetailScreen() {
               <a href={`tel:${detail.customer.phone}`}>{detail.customer.phone}</a>
             </span>
           </div>
-          <div className={s.field}>
-            <span className={s.fieldLabel}>Address</span>
-            <span className={s.fieldValue}>{addr || "—"}</span>
-          </div>
+          {isDineIn ? (
+            <div className={s.field}>
+              <span className={s.fieldLabel}>Table</span>
+              <span className={s.fieldValue}>
+                {basic.table_id ? `Table #${basic.table_id}` : "—"}
+              </span>
+            </div>
+          ) : (
+            <div className={s.field}>
+              <span className={s.fieldLabel}>Address</span>
+              <span className={s.fieldValue}>{addr || "—"}</span>
+            </div>
+          )}
           <div className={s.field}>
             <span className={s.fieldLabel}>Notes</span>
             <span className={s.fieldValue}>{detail.customer.notes || "—"}</span>
           </div>
-          <div className={s.field}>
-            <span className={s.fieldLabel}>Rider</span>
-            <span className={s.fieldValue}>
-              {detail.rider
-                ? `${detail.rider.name} · ${detail.rider.phone}`
-                : "Unassigned"}
-            </span>
-          </div>
+          {!isOnPremise && (
+            <div className={s.field}>
+              <span className={s.fieldLabel}>Rider</span>
+              <span className={s.fieldValue}>
+                {detail.rider
+                  ? `${detail.rider.name} · ${detail.rider.phone}`
+                  : "Unassigned"}
+              </span>
+            </div>
+          )}
         </section>
 
         <section className={s.card} aria-label="Order items">
@@ -339,10 +361,12 @@ export function OrderDetailScreen() {
               <span>Subtotal</span>
               <span>AED {detail.subtotal}</span>
             </div>
-            <div className={s.totalRow}>
-              <span>Delivery</span>
-              <span>AED {detail.delivery_fee_aed}</span>
-            </div>
+            {!isOnPremise && (
+              <div className={s.totalRow}>
+                <span>Delivery</span>
+                <span>AED {detail.delivery_fee_aed}</span>
+              </div>
+            )}
             <div className={s.totalGrand}>
               <span>Total</span>
               <span>AED {detail.total}</span>
@@ -373,18 +397,20 @@ export function OrderDetailScreen() {
             <p className={s.emptyMuted}>No timeline events yet.</p>
           )}
           <h3 className={s.cardTitle} style={{ marginTop: 20 }}>
-            Kitchen / rider
+            {isOnPremise ? "Order status" : "Kitchen / rider"}
           </h3>
           <div className={s.field}>
             <span className={s.fieldLabel}>Status</span>
             <span className={s.fieldValue}>{detail.status}</span>
           </div>
-          <div className={s.field}>
-            <span className={s.fieldLabel}>Prep deadline</span>
-            <span className={s.fieldValue}>
-              {detail.prep_deadline ? formatTs(detail.prep_deadline) : "—"}
-            </span>
-          </div>
+          {!isOnPremise && (
+            <div className={s.field}>
+              <span className={s.fieldLabel}>Prep deadline</span>
+              <span className={s.fieldValue}>
+                {detail.prep_deadline ? formatTs(detail.prep_deadline) : "—"}
+              </span>
+            </div>
+          )}
           <div className={s.field}>
             <span className={s.fieldLabel}>Priority</span>
             <span className={s.fieldValue}>{basic.priority || "normal"}</span>
@@ -393,7 +419,20 @@ export function OrderDetailScreen() {
       </div>
 
       <BottomActionBar>
-        {KITCHEN_ADVANCEABLE.has(detail.status) && !waiterMode && (
+        {/* Dine-in: add another round to this tab (table stays reserved). */}
+        {isDineIn && CANCELLABLE.has(detail.status) && (
+          <TouchButton
+            type="button"
+            data-testid="order-detail-add-items"
+            onClick={() =>
+              navigate(basic.table_id ? `/new-order?table=${basic.table_id}` : "/new-order")
+            }
+          >
+            + Add items
+          </TouchButton>
+        )}
+        {/* Kitchen advance is delivery/kitchen-driven — hidden for on-premise. */}
+        {KITCHEN_ADVANCEABLE.has(detail.status) && !waiterMode && !isOnPremise && (
           <TouchButton type="button" onClick={() => void advanceStatus()} disabled={advancing}>
             {advancing ? "Saving…" : ADVANCE_LABEL[detail.status] || "Advance"}
           </TouchButton>
@@ -401,7 +440,7 @@ export function OrderDetailScreen() {
         {PAYABLE.has(detail.status) && !waiterMode && (
           <Link to={`/orders/${detail.id}/pay`}>
             <TouchButton type="button" data-testid="order-detail-pay">
-              Pay
+              {isOnPremise ? "Bill & Pay" : "Pay"}
             </TouchButton>
           </Link>
         )}
@@ -418,9 +457,11 @@ export function OrderDetailScreen() {
         >
           {waiterMode ? "Edit items / qty / notes" : "Edit / re-order"}
         </Button>
-        <Button type="button" variant="ghost" size="lg" onClick={() => void markPriority()}>
-          Rush / Priority
-        </Button>
+        {!isOnPremise && (
+          <Button type="button" variant="ghost" size="lg" onClick={() => void markPriority()}>
+            Rush / Priority
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -460,7 +501,7 @@ export function OrderDetailScreen() {
                   Void — ask manager (PIN)
                 </button>
               )}
-              {!waiterMode && (
+              {!waiterMode && !isOnPremise && (
                 <button
                   type="button"
                   className={s.moreBtn}

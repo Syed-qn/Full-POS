@@ -4,6 +4,7 @@ from datetime import date, datetime, time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit.context import get_actor_staff_id
 from app.audit.models import AuditLog
 
 
@@ -17,10 +18,18 @@ async def record_audit(
     restaurant_id: int | None = None,
     before: dict | None = None,
     after: dict | None = None,
+    actor_staff_id: int | None = None,
 ) -> AuditLog:
-    """Add an audit row to the caller's transaction. The caller MUST commit (or flush) — record_audit never commits."""
+    """Add an audit row to the caller's transaction. The caller MUST commit (or flush) — record_audit never commits.
+
+    ``actor_staff_id`` defaults to whoever's staff token made this request (see
+    app.audit.context) so callers do not have to thread it through.
+    """
+    if actor_staff_id is None:
+        actor_staff_id = get_actor_staff_id()
     row = AuditLog(
         actor=actor,
+        actor_staff_id=actor_staff_id,
         restaurant_id=restaurant_id,
         entity=entity,
         entity_id=entity_id,

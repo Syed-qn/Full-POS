@@ -1,16 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { toast } from "./Toaster";
 import {
-  connectMetaEmbedded,
   fetchMetaConfig,
-  fetchMetaEmbedConfig,
   saveMetaConfig,
   type MetaConfig,
-  type MetaEmbedConfig,
 } from "../lib/onboardingApi";
-import { loadFacebookSdk } from "../lib/facebookSdk";
-import { getOnboardPartner } from "../lib/partner";
+import { useMetaEmbeddedSignup } from "../lib/useMetaEmbeddedSignup";
 
 /**
  * Onboarding: connect this restaurant's own WhatsApp / Meta account.
@@ -27,20 +23,30 @@ export function MetaConnectPanel(
   { onSaved, hideBadge = false }: { onSaved?: () => void; hideBadge?: boolean } = {},
 ) {
   const [cfg, setCfg] = useState<MetaConfig | null>(null);
-  const [embed, setEmbed] = useState<MetaEmbedConfig | null>(null);
   const [phone, setPhone] = useState("");
   const [waba, setWaba] = useState("");
   const [token, setToken] = useState("");
   const [catalog, setCatalog] = useState("");
   const [pin, setPin] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
   const [useManual, setUseManual] = useState(false);
-  // POS API key auto-minted on connect — shown ONCE for the manager to hand to the POS.
-  // While it's set we hold navigation so it can't be missed.
-  const [posKey, setPosKey] = useState<string | null>(null);
-  // Embedded Signup posts the business's phone_number_id + waba_id via window
-  // messages during the popup; we stash the latest here to pair with the code.
-  const sessionInfo = useRef<{ phone_number_id?: string; waba_id?: string }>({});
+
+  // The popup itself lives in the shared hook so Settings can launch the very
+  // same dialog without routing through this wizard step.
+  const {
+    embed,
+    busy: connecting,
+    connect: connectWithFacebook,
+    apiKey: posKey,
+    clearApiKey,
+  } = useMetaEmbeddedSignup((c) => {
+    setCfg(c);
+    setPhone(c.wa_phone_number_id);
+    setWaba(c.wa_business_account_id);
+    // Hold on the one-time POS key screen if there is one; otherwise move on.
+    if (!c.api_key && c.connected) onSaved?.();
+  });
+  const busy = connecting || manualBusy;
 
   useEffect(() => {
     fetchMetaConfig()
@@ -51,108 +57,10 @@ export function MetaConnectPanel(
         setCatalog(c.catalog_id);
       })
       .catch(() => {});
-    fetchMetaEmbedConfig()
-      .then(setEmbed)
-      .catch(() => setEmbed({ enabled: false, app_id: "", config_id: "", graph_version: "v21.0" }));
   }, []);
-
-  // Capture the Embedded Signup session info (phone number id + WABA) as it streams.
-  useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      let host = "";
-      try {
-        host = new URL(event.origin).hostname;
-      } catch {
-        return; // opaque/empty origin — not from the FB popup
-      }
-      if (!/(^|\.)facebook\.com$/.test(host)) return;
-      try {
-        const data = JSON.parse(event.data);
-        if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
-        if (data.event === "FINISH" && data.data) {
-          sessionInfo.current = {
-            phone_number_id: data.data.phone_number_id,
-            waba_id: data.data.waba_id,
-          };
-        }
-      } catch {
-        /* non-JSON postMessage — ignore */
-      }
-    }
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
-
-  // Runs after the FB popup returns — pairs the OAuth code with the WABA/number
-  // captured from the session-info messages, then exchanges + stores server-side.
-  async function finishConnect(code: string) {
-    const info = sessionInfo.current;
-    if (!info.phone_number_id || !info.waba_id) {
-      toast("Connection incomplete. Please try again.");
-      setBusy(false);
-      return;
-    }
-    try {
-      // Partner attribution: the POS embeds the onboarding link with ?partner=<slug>,
-      // captured at app start so it survives the signup journey. Absent = standalone.
-      const partner = getOnboardPartner();
-      const c = await connectMetaEmbedded({
-        code,
-        phone_number_id: info.phone_number_id,
-        waba_id: info.waba_id,
-        partner: partner || undefined,
-      });
-      setCfg(c);
-      setPhone(c.wa_phone_number_id);
-      setWaba(c.wa_business_account_id);
-      toast("WhatsApp connected ✓");
-      if (c.api_key) {
-        // Hold here so the one-time POS key is copied before we move on (finally
-        // clears busy). The manager clicks Continue to proceed.
-        setPosKey(c.api_key);
-        return;
-      }
-      if (c.connected) onSaved?.();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Couldn't finish connecting");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function connectWithFacebook() {
-    if (!embed?.enabled) return;
-    setBusy(true);
-    try {
-      const FB = await loadFacebookSdk(embed.app_id, embed.graph_version);
-      sessionInfo.current = {};
-      // FB.login rejects an async callback ("Expression is of type asyncfunction,
-      // not function") — keep this a plain function and kick off async work inside.
-      FB.login(
-        (resp) => {
-          const code = resp?.authResponse?.code;
-          if (!code) {
-            toast("Connection cancelled. Please try again.");
-            setBusy(false);
-            return;
-          }
-          void finishConnect(code);
-        },
-        {
-          config_id: embed.config_id,
-          response_type: "code",
-          override_default_response_type: true,
-          extras: { setup: {}, sessionInfoVersion: "3" },
-        },
-      );
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Couldn't open the Facebook popup");
-      setBusy(false);
-    }
-  }
 
   async function saveManual() {
-    setBusy(true);
+    setManualBusy(true);
     try {
       const patch: Record<string, string> = {
         wa_phone_number_id: phone.trim(),
@@ -169,7 +77,7 @@ export function MetaConnectPanel(
     } catch (e) {
       toast(e instanceof Error ? e.message : "Couldn't save");
     } finally {
-      setBusy(false);
+      setManualBusy(false);
     }
   }
 
@@ -243,7 +151,7 @@ export function MetaConnectPanel(
         </div>
         <Button
           onClick={() => {
-            setPosKey(null);
+            clearApiKey();
             onSaved?.();
           }}
         >

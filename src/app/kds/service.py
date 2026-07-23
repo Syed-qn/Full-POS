@@ -25,6 +25,11 @@ from app.ordering.models import Order, OrderItem
 WARNING_AFTER_MINUTES = 8
 LATE_AFTER_MINUTES = 15
 
+# Orders that must never appear on a live kitchen board. `cancelled` covers a
+# void; `on_resale` is a cancelled-after-cooking order being re-sold, whose food
+# already exists and must not be cooked again.
+DEAD_ORDER_STATUSES = ("cancelled", "on_resale")
+
 
 async def get_or_create_main_station(
     session: AsyncSession, *, restaurant_id: int, kitchen_code: str = "main"
@@ -323,6 +328,7 @@ async def list_ready_for_pickup(
                 Order.restaurant_id == restaurant_id,
                 OrderItem.kitchen_status == "ready",
                 OrderItem.cancelled.is_(False),
+                Order.status.notin_(DEAD_ORDER_STATUSES),
             )
             .order_by(OrderItem.order_id, OrderItem.id)
         )
@@ -346,8 +352,16 @@ def enrich_ticket(
     order: Order | None,
     *,
     now: datetime | None = None,
+    table_labels: dict[int, str] | None = None,
+    dish_categories: dict[int, str] | None = None,
 ) -> dict[str, Any]:
-    """Build a KDS ticket dict with timer, ETA, allergens, modifiers, urgency."""
+    """Build a KDS ticket dict with timer, ETA, allergens, modifiers, urgency.
+
+    ``table_labels`` maps table_id -> label so a dine-in ticket can show WHERE
+    it came from (the kitchen plates by table, not by order number). Callers
+    batch-load it to avoid a per-ticket query; when omitted the ticket simply
+    carries table_id with a null label rather than inventing one.
+    """
     now = now or datetime.now(timezone.utc)
     created = item.kitchen_received_at or item.created_at
     if created is not None and created.tzinfo is None:
@@ -373,6 +387,8 @@ def enrich_ticket(
         "order_number": order.order_number if order else None,
         "order_priority": getattr(order, "priority", None) if order else None,
         "order_type": getattr(order, "order_type", None) if order else None,
+        # Paid and closed, yet still on the pass — the guest is already waiting.
+        "order_settled": bool(order is not None and order.status == "delivered"),
         "dish_name": item.dish_name,
         "variant_name": item.variant_name,
         "qty": item.qty,
@@ -388,6 +404,8 @@ def enrich_ticket(
         "missing_item_note": getattr(item, "missing_item_note", None),
         "course_number": getattr(item, "course_number", 1) or 1,
         "course_held": bool(getattr(item, "course_held", False)),
+        # Parcel line on a dine-in bill — the kitchen must BOX this one.
+        "is_takeaway": bool(getattr(item, "is_takeaway", False)),
         "customer_allergy_notes": getattr(order, "customer_allergy_notes", None) if order else None,
         "estimated_ready_at": eta,
         "age_seconds": int(age_seconds),
@@ -396,6 +414,17 @@ def enrich_ticket(
         "is_delayed": urgency in ("warning", "late"),
         "station_id": item.station_id_snapshot,
         "kitchen_code": getattr(item, "kitchen_code_snapshot", None),
+        # The dish's real menu category ("Popcorn", "Paratha Spot"). Stations are
+        # generic presets and may not describe this kitchen, so the board shows
+        # the category the restaurant actually defined.
+        "category": (dish_categories or {}).get(item.dish_id),
+        # Source of the ticket: which table the waiter sent it from.
+        "table_id": getattr(order, "table_id", None) if order else None,
+        "table_label": (
+            (table_labels or {}).get(order.table_id)
+            if order is not None and order.table_id is not None
+            else None
+        ),
     }
 
 
@@ -420,6 +449,9 @@ async def list_station_tickets(
                 OrderItem.kitchen_status.in_(statuses),
                 OrderItem.cancelled.is_(False),
                 Order.held_at.is_(None),
+                # A cancelled/voided order must leave the pass immediately —
+                # otherwise the kitchen keeps cooking food nobody will pay for.
+                Order.status.notin_(DEAD_ORDER_STATUSES),
             )
             .order_by(
                 # Auto-prioritize old orders: oldest kitchen_received_at first.
@@ -435,8 +467,37 @@ async def list_station_tickets(
             await session.scalars(select(Order).where(Order.id.in_(order_ids)))
         ).all():
             orders[o.id] = o
+    # Batch-load table labels once so dine-in tickets can show their table.
+    table_labels: dict[int, str] = {}
+    table_ids = {o.table_id for o in orders.values() if o.table_id is not None}
+    if table_ids:
+        from app.tables.models import DiningTable
+
+        for t in (
+            await session.scalars(
+                select(DiningTable).where(DiningTable.id.in_(table_ids))
+            )
+        ).all():
+            table_labels[t.id] = t.label
+
+    # Batch-load real menu categories for the board chips.
+    dish_categories: dict[int, str] = {}
+    dish_ids = {i.dish_id for i in rows if i.dish_id is not None}
+    if dish_ids:
+        for d in (await session.scalars(select(Dish).where(Dish.id.in_(dish_ids)))).all():
+            if d.category:
+                dish_categories[d.id] = d.category
+
     # Priority orders float above normal when equally old-ish: stable secondary sort
-    enriched = [enrich_ticket(i, orders.get(i.order_id)) for i in rows]
+    enriched = [
+        enrich_ticket(
+            i,
+            orders.get(i.order_id),
+            table_labels=table_labels,
+            dish_categories=dish_categories,
+        )
+        for i in rows
+    ]
     enriched.sort(
         key=lambda t: (
             0 if (t.get("order_priority") or "normal") in ("rush", "priority") else 1,

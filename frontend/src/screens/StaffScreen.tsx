@@ -27,6 +27,7 @@ import {
   staffLogin,
   submitManagerPin,
 } from "../lib/staffApi";
+import { ASSIGNABLE_ROLES, type StaffRole } from "../lib/navAccess";
 import type { Shift, ShiftCreateIn, StaffCreateIn, StaffMember } from "../lib/types";
 import s from "./StaffScreen.module.css";
 
@@ -44,7 +45,7 @@ export function StaffScreen() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
-  const [role, setRole] = useState("staff");
+  const [role, setRole] = useState<StaffRole>("waiter");
   const [submitting, setSubmitting] = useState(false);
 
   const [loginStaffId, setLoginStaffId] = useState("");
@@ -370,9 +371,18 @@ export function StaffScreen() {
           </label>
           <label className={s.field}>
             <span>Role</span>
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="staff">Staff</option>
-              <option value="manager">Manager</option>
+            {/* Driven by ASSIGNABLE_ROLES so this list cannot drift from the
+                roles the API actually accepts. "owner" is excluded: that is the
+                restaurant account, not a person you add. */}
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as StaffRole)}
+            >
+              {ASSIGNABLE_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </option>
+              ))}
             </select>
           </label>
         </div>

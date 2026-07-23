@@ -12,9 +12,11 @@ from app.identity.models import Restaurant, Rider
 from app.staff.deps import current_restaurant_any, require_role
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import (
+    AddOrderItemsIn,
     AddressOut,
     CancelOrderIn,
     CancelOrderItemIn,
+    CoversIn,
     CustomerLookupOut,
     DeliveryFailedIn,
     DeliveryPhotoIn,
@@ -41,6 +43,7 @@ from app.ordering.detail_schemas import (
 from app.ordering.fsm import IllegalTransitionError
 from app.loyalty.schemas import NpsResponseIn, NpsResponseOut
 from app.ordering.service import (
+    acknowledge_sla_breach,
     advance_kitchen_status,
     cancel_order,
     cancel_order_item,
@@ -205,7 +208,9 @@ async def _enrich_orders_bulk(
             OrderOut(
                 id=order.id,
                 order_number=order.order_number,
+                daily_token=getattr(order, "daily_token", None),
                 resale_of_order_id=order.resale_of_order_id,
+                cancellation_reason=getattr(order, "cancellation_reason", None),
                 status=str(order.status),
                 customer_name=customer_name,
                 customer_phone=customer_phone,
@@ -247,6 +252,12 @@ async def _enrich_orders_bulk(
                     getattr(order, "source_channel", None)
                     or getattr(order, "aggregator_source", None)
                 ),
+                sla_acked_at=(
+                    order.sla_acked_at.isoformat()
+                    if getattr(order, "sla_acked_at", None)
+                    else None
+                ),
+                sla_acked_by_staff_id=getattr(order, "sla_acked_by_staff_id", None),
             )
         )
     return out
@@ -284,6 +295,22 @@ async def customer_lookup(
             notes=last_addr.additional_details,
         )
     return CustomerLookupOut(name=customer.name, last_address=address_out)
+
+
+@router.get("/next-token")
+async def next_token_endpoint(
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    """Preview the next daily queue token for this restaurant (today, Asia/Dubai).
+
+    Read-only forecast for the New Order screen — the real token is assigned
+    atomically when the order is actually created, so this may skip a number if
+    another till places an order first (same as any deli-ticket counter).
+    """
+    from app.ordering.service import allocate_daily_token
+
+    return {"next_token": await allocate_daily_token(session, restaurant.id)}
 
 
 @router.post("/manual", response_model=OrderOut)
@@ -368,6 +395,7 @@ async def create_pos_order_endpoint(
             customer_name=body.customer_name,
             items=[i.model_dump() for i in body.items],
             table_id=body.table_id,
+            covers=body.covers,
             staff_id=body.staff_id,
             apt_room=addr.apt_room if addr else None,
             building=addr.building if addr else None,
@@ -384,6 +412,195 @@ async def create_pos_order_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/items", response_model=OrderOut)
+async def add_items_to_order_endpoint(
+    order_id: int,
+    body: AddOrderItemsIn,
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Append lines to an open order — the dine-in "another round" flow.
+
+    Spec: order modification is allowed only before the kitchen marks it ready.
+    Adds each dish via service.add_item (recomputes subtotal/total), audits, and
+    returns the enriched order so the terminal can refresh the running bill.
+    """
+    from app.menu.models import Dish
+    from app.ordering.service import add_item
+
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Modification window: only before the food is ready / out for delivery.
+    ADDABLE_STATUSES = {"draft", "pending_confirmation", "confirmed", "preparing"}
+    if str(order.status) not in ADDABLE_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot add items to an order in status {order.status!r}.",
+        )
+
+    added: list = []
+    for line in body.items:
+        dish = await session.get(Dish, line.dish_id)
+        if dish is None or dish.restaurant_id != restaurant.id:
+            raise HTTPException(
+                status_code=422, detail=f"Dish {line.dish_id} not found for this restaurant."
+            )
+        try:
+            item = await add_item(
+                session,
+                order=order,
+                dish=dish,
+                qty=line.qty,
+                notes=line.notes,
+                course_number=line.course_number,
+                course_held=line.course_held,
+                is_takeaway=line.is_takeaway,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        added.append(item)
+
+    # Cut kitchen tickets for the new lines.
+    #
+    # add_item() only writes the bill line — station routing, kitchen_status and
+    # the print job are stamped by create_tickets_for_items(), which previously
+    # ran ONLY on confirm and on fire-course. That meant a second round added to
+    # an already-confirmed tab was billed but never appeared on any station
+    # board. Only fire for orders the kitchen already owns: a draft still gets
+    # its tickets when it is confirmed, and held lines wait for fire-course.
+    if str(order.status) not in ("draft", "pending_confirmation"):
+        from app.kds.service import create_tickets_for_items
+
+        fireable = [
+            i
+            for i in added
+            if not getattr(i, "course_held", False) and not getattr(i, "cancelled", False)
+        ]
+        if fireable:
+            await create_tickets_for_items(
+                session,
+                restaurant_id=restaurant.id,
+                order=order,
+                items=fireable,
+            )
+
+    from app.audit.service import record_audit
+
+    await record_audit(
+        session,
+        actor="cashier",
+        restaurant_id=restaurant.id,
+        entity="order",
+        entity_id=str(order.id),
+        action="order_items_added",
+        before=None,
+        after={"added": [{"dish_id": i.dish_id, "qty": i.qty} for i in body.items]},
+    )
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/{order_id}/confirm", response_model=OrderOut)
+async def confirm_order_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Fire a parked (draft) order to the kitchen — the waiter's KOT button.
+
+    Waiters build a round with "Save to Table" (POS create with
+    auto_confirm=false), which leaves the order DRAFT so the kitchen cannot see
+    it yet. This confirms it: starts the SLA, cuts station tickets, deducts
+    inventory — everything finalize_confirmation does on an auto-confirmed POS
+    sale. Already-confirmed orders are a no-op so a double tap is harmless.
+    """
+    from app.ordering.service import finalize_confirmation
+    from app.tables.models import DiningTable
+
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    CONFIRMABLE = {"draft", "pending_confirmation"}
+    if str(order.status) not in CONFIRMABLE:
+        # Idempotent: the ticket is already with the kitchen (or beyond).
+        return await _enrich(session, order)
+
+    if not order.items:
+        raise HTTPException(status_code=422, detail="Cannot send an empty order.")
+
+    await finalize_confirmation(session, order=order, actor="waiter")
+
+    # A parked dine-in table sits at "seated"; firing it makes it "ordered".
+    if order.table_id is not None:
+        table = await session.get(DiningTable, order.table_id)
+        if table is not None and table.status in ("available", "seated"):
+            table.status = "ordered"
+
+    from app.audit.service import record_audit
+
+    await record_audit(
+        session,
+        actor="waiter",
+        restaurant_id=restaurant.id,
+        entity="order",
+        entity_id=str(order.id),
+        action="order_fired_to_kitchen",
+        before=None,
+        after={"status": str(order.status)},
+    )
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.patch("/{order_id}/covers", response_model=OrderOut)
+async def set_order_covers_endpoint(
+    order_id: int,
+    body: CoversIn,
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Update the dine-in party size on an open tab.
+
+    Covers are captured when the table is opened, but parties grow and shrink.
+    Nothing could change them afterwards, so the number went stale and the floor
+    plan's cover count with it.
+    """
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if str(order.status) in ("delivered", "cancelled"):
+        raise HTTPException(
+            status_code=409, detail="Cannot change covers on a closed order."
+        )
+
+    before = getattr(order, "covers", None)
+    order.covers = body.covers
+
+    from app.audit.service import record_audit
+
+    await record_audit(
+        session,
+        actor="waiter",
+        restaurant_id=restaurant.id,
+        entity="order",
+        entity_id=str(order.id),
+        action="covers_changed",
+        before={"covers": before},
+        after={"covers": body.covers},
+    )
     await session.commit()
     return await _enrich(session, order)
 
@@ -513,7 +730,8 @@ async def rush_order_endpoint(
 async def fire_course_endpoint(
     order_id: int,
     body: FireCourseIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    # Floor staff release held courses — it is the other half of holding a line.
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     from app.ordering.pos_orders import fire_course
@@ -562,7 +780,7 @@ async def refund_order_endpoint(
 @router.post("/merge", response_model=OrderOut)
 async def merge_orders_endpoint(
     body: MergeOrdersIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     """Merge all items from ``secondary_order_id`` onto ``primary_order_id`` and
@@ -582,6 +800,29 @@ async def merge_orders_endpoint(
     await session.commit()
     await session.refresh(order)
     return await _enrich(session, order)
+
+
+@router.post("/{order_id}/unmerge", response_model=OrderOut)
+async def unmerge_last_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Undo the most recent table merge into this order — the last-merged table's
+    bill pops back onto its own table. 409 if there's nothing to un-merge."""
+    from app.ordering.service import unmerge_last_merge
+
+    try:
+        revived = await unmerge_last_merge(
+            session, restaurant_id=restaurant.id, primary_order_id=order_id
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if msg == "Order not found" else 409
+        raise HTTPException(status_code=code, detail=msg)
+    await session.commit()
+    await session.refresh(revived)
+    return await _enrich(session, revived)
 
 
 @router.post("/{order_id}/advance", response_model=OrderOut)
@@ -628,6 +869,37 @@ async def duplicate_order_endpoint(
         "status": new_order.status,
         "total_aed": str(new_order.total),
     }
+
+
+@router.post("/{order_id}/sla-ack", response_model=OrderOut)
+async def acknowledge_sla_endpoint(
+    order_id: int,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+) -> OrderOut:
+    """Acknowledge a late order's SLA alert so it leaves the Live Ops queue.
+
+    Manager-gated on purpose: silencing a breach alert is an accountability
+    action, so it is recorded in the audit trail with who did it. It does NOT
+    change the order's status or stop the SLA clock — the order is still late.
+    Idempotent; re-acknowledging keeps the first acknowledgement.
+    """
+    try:
+        await acknowledge_sla_breach(
+            session,
+            restaurant_id=restaurant.id,
+            order_id=order_id,
+            actor="manager",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    await session.commit()
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return (await _enrich_orders_bulk(session, [order]))[0]
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
@@ -1001,7 +1273,7 @@ async def delete_order_endpoint(
 async def get_order_detail_endpoint(
     order_id: int,
     include: str | None = Query(default="overview"),
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> OrderDetailOut:
     try:
@@ -1021,7 +1293,7 @@ async def get_tax_invoice(
     document_type: str | None = None,
     buyer_trn: str | None = None,
     buyer_name: str | None = None,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ):
     from app.ordering.tax import build_tax_invoice
@@ -1042,7 +1314,7 @@ async def get_tax_invoice(
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order(
     order_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     order = await get_order_for_tenant(

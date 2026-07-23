@@ -102,7 +102,7 @@
 
   /* Shell layout */
   --titlebar-height: 36px;
-  --topbar-height: 56px;
+  --topbar-height: 68px;
   --statusbar-height: 28px;
   --nav-width: 240px;
   --nav-width-collapsed: 88px;
@@ -112,4 +112,156 @@
 
   --focus-ring: 0 0 0 3px var(--accent-primary-dim);
   --focus-ring-strong: 0 0 0 3px rgba(23, 92, 211, 0.35);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DASHBOARD THEMES
+
+   Only the SURFACE layer flips: backgrounds, borders, text, elevation. The
+   operational palette (SLA, status, chart, map) keeps its meaning in every
+   theme — a breach must read red on a dark board exactly as it does on white,
+   so those hues are re-tuned for contrast rather than replaced.
+
+   Applied by lib/appTheme.ts as data-theme on <html>, which is why these are
+   :root rules and reach every screen and portal without a wrapper.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+:root[data-theme="dark"] {
+  --bg-canvas: #131416;
+  --bg-surface: #1c1e21;
+  --bg-surface-raised: #24272b;
+  --bg-surface-inset: #17191c;
+  --bg-overlay: rgba(0, 0, 0, 0.62);
+
+  --border-subtle: #2b2f34;
+  --border-default: #3a3f45;
+  --border-strong: #576069;
+
+  --text-primary: #e8eaed;
+  --text-secondary: #a9b1ba;
+  --text-muted: #79828c;
+  --text-inverse: #101828;
+
+  /* Brightened so they hold contrast against a dark surface. */
+  --sla-safe: #32d583;
+  --sla-safe-dim: rgba(50, 213, 131, 0.16);
+  --sla-warn: #fdb022;
+  --sla-warn-dim: rgba(253, 176, 34, 0.16);
+  --sla-critical: #ff6b60;
+  --sla-critical-dim: rgba(255, 107, 96, 0.18);
+  --sla-breach: #f97066;
+
+  --accent-primary: #4a8dff;
+  --accent-primary-hover: #6ba3ff;
+  --accent-primary-dim: rgba(74, 141, 255, 0.16);
+  --accent-dispatch: #38bdf8;
+  --accent-rider: #34d399;
+  --accent-revenue: #fdb022;
+  --accent-ai: #a78bfa;
+  --accent-ai-dim: rgba(167, 139, 250, 0.18);
+
+  --chart-1: #4a8dff;
+  --chart-2: #32d583;
+  --chart-3: #fdb022;
+  --chart-4: #a78bfa;
+  --chart-5: #ff6b60;
+  --chart-6: #38bdf8;
+
+  --status-pending: #98a2b3;
+  --status-confirmed: #4a8dff;
+  --status-preparing: #fdb022;
+  --status-ready: #a78bfa;
+  --status-assigned: #38bdf8;
+  --status-pickedup: #b39cff;
+  --status-delivered: #32d583;
+  --status-cancelled: #ff6b60;
+  --status-resale: #fdb022;
+
+  --map-bg: #1c1e21;
+  --map-road: #3a3f45;
+  --map-water: #16324a;
+  --map-batch-hull: rgba(74, 141, 255, 0.16);
+  --map-batch-stroke: #4a8dff;
+
+  /* Shadows do not read on dark; depth comes from the raised surface instead. */
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, 0.5);
+
+  --focus-ring: 0 0 0 3px rgba(74, 141, 255, 0.28);
+  --focus-ring-strong: 0 0 0 3px rgba(74, 141, 255, 0.5);
+
+  color-scheme: dark;
+}
+
+:root[data-theme="blue"] {
+  --bg-canvas: #0a1729;
+  --bg-surface: #11243f;
+  --bg-surface-raised: #16304f;
+  --bg-surface-inset: #0d1d34;
+  --bg-overlay: rgba(3, 10, 20, 0.66);
+
+  --border-subtle: #1d3a63;
+  --border-default: #2a4a7a;
+  --border-strong: #3f6499;
+
+  --text-primary: #eaf1ff;
+  --text-secondary: #a8bde0;
+  --text-muted: #7089b0;
+  --text-inverse: #0a1729;
+
+  --sla-safe: #2fd48f;
+  --sla-safe-dim: rgba(47, 212, 143, 0.16);
+  --sla-warn: #ffb020;
+  --sla-warn-dim: rgba(255, 176, 32, 0.16);
+  --sla-critical: #ff7a70;
+  --sla-critical-dim: rgba(255, 122, 112, 0.18);
+  --sla-breach: #ff5f52;
+
+  --accent-primary: #4d9bff;
+  --accent-primary-hover: #74b2ff;
+  --accent-primary-dim: rgba(77, 155, 255, 0.18);
+  --accent-dispatch: #48c6ef;
+  --accent-rider: #2fd48f;
+  --accent-revenue: #ffb020;
+  --accent-ai: #b39cff;
+  --accent-ai-dim: rgba(179, 156, 255, 0.18);
+
+  --chart-1: #4d9bff;
+  --chart-2: #2fd48f;
+  --chart-3: #ffb020;
+  --chart-4: #b39cff;
+  --chart-5: #ff7a70;
+  --chart-6: #48c6ef;
+
+  --status-pending: #7089b0;
+  --status-confirmed: #4d9bff;
+  --status-preparing: #ffb020;
+  --status-ready: #b39cff;
+  --status-assigned: #48c6ef;
+  --status-pickedup: #c0aaff;
+  --status-delivered: #2fd48f;
+  --status-cancelled: #ff7a70;
+  --status-resale: #ffb020;
+
+  --map-bg: #11243f;
+  --map-road: #2a4a7a;
+  --map-water: #123456;
+  --map-batch-hull: rgba(77, 155, 255, 0.18);
+  --map-batch-stroke: #4d9bff;
+
+  --shadow-xs: 0 1px 1px rgba(2, 8, 18, 0.45);
+  --shadow-sm: 0 1px 2px rgba(2, 8, 18, 0.5);
+  --shadow-md: 0 4px 12px rgba(2, 8, 18, 0.55);
+  --shadow-lg: 0 12px 32px rgba(2, 8, 18, 0.6);
+  --shadow-card: 0 1px 2px rgba(2, 8, 18, 0.45);
+  --shadow-card-hover: 0 6px 18px rgba(2, 8, 18, 0.55);
+
+  --focus-ring: 0 0 0 3px rgba(77, 155, 255, 0.3);
+  --focus-ring-strong: 0 0 0 3px rgba(77, 155, 255, 0.52);
+
+  color-scheme: dark;
 }

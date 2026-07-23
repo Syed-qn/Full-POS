@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { Button } from "./Button";
 import s from "./ConfirmDialog.module.css";
 
@@ -7,6 +8,8 @@ interface Props {
   title: string;
   /** Body text explaining what is about to happen. */
   message: string;
+  /** Optional custom content (e.g. a picker) rendered between message and buttons. */
+  children?: ReactNode;
   /** Label for the confirming action button (default "Confirm"). */
   confirmLabel?: string;
   /** Label for the dismissing button (default "Cancel"). */
@@ -26,6 +29,7 @@ interface Props {
 export function ConfirmDialog({
   title,
   message,
+  children,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   danger = false,
@@ -57,6 +61,7 @@ export function ConfirmDialog({
       >
         <h2 className={s.title}>{title}</h2>
         <p className={s.message}>{message}</p>
+        {children}
         <div className={s.footer}>
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
             {cancelLabel}

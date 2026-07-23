@@ -1,0 +1,170 @@
+/* Dark header shared by the waiter floor + order screens. Palette is hardcoded
+   on purpose: these surfaces are a dark POS skin, not the light app theme. */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  height: 52px;
+  flex: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* base.css paints a blue box-shadow focus ring; the dark skin drops it. */
+.topBar :focus,
+.topBar :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 18px;
+  border-right: 1px solid var(--line);
+  height: 100%;
+}
+
+/* Blue "POS" tile, identical to the manager sidebar's logoMark. The accent
+   token is deliberately NOT themed: the mark is the product identity and must
+   look the same on the dark, light and blue boards. */
+.brandMark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--accent-primary, #175cd3);
+  color: var(--text-inverse, #ffffff);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.brandName {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Signed-in role, same sub-line treatment as the sidebar. */
+.brandRole {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 100%;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: none;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 3px solid transparent;
+}
+
+.tab:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tabActive,
+.tabActive:hover {
+  color: var(--amber);
+  border-bottom-color: var(--amber);
+  background: rgba(247, 144, 9, 0.07);
+}
+
+.topRight {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+
+.themeBtn {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.themeBtn:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.online {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--green);
+}
+
+.clock {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.avatar:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}

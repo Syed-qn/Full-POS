@@ -14,8 +14,6 @@ import s from "./LoginScreen.module.css";
 
 type Mode = "login" | "signup" | "pin";
 
-const DEVICE_KEY = "pos_device_name";
-
 export function LoginScreen() {
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
@@ -28,9 +26,6 @@ export function LoginScreen() {
   // gate; clear these before real use.
   const [staffId, setStaffId] = useState("1");
   const [pin, setPin] = useState("1234");
-  const [deviceName, setDeviceName] = useState(
-    () => localStorage.getItem(DEVICE_KEY) ?? "",
-  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
@@ -43,12 +38,6 @@ export function LoginScreen() {
     // Demo convenience: seed the demo PIN when entering the PIN pad so Staff PIN
     // sign-in works out of the box (staff id 1 = Demo Manager). Clear otherwise.
     setPin(m === "pin" ? "1234" : "");
-  }
-
-  function onDeviceNameChange(value: string) {
-    setDeviceName(value);
-    if (value.trim()) localStorage.setItem(DEVICE_KEY, value.trim());
-    else localStorage.removeItem(DEVICE_KEY);
   }
 
   function pinPress(key: string) {
@@ -144,17 +133,6 @@ export function LoginScreen() {
           </div>
         </div>
 
-        <label className={s.field}>
-          <span className={s.label}>This device</span>
-          <input
-            aria-label="Device name"
-            value={deviceName}
-            onChange={(e) => onDeviceNameChange(e.target.value)}
-            placeholder="e.g. Counter 1 · iPad"
-            autoComplete="off"
-          />
-        </label>
-
         <div className={s.tabs} role="tablist" aria-label="Sign-in method">
           <button
             type="button"
@@ -173,15 +151,6 @@ export function LoginScreen() {
             onClick={() => switchMode("pin")}
           >
             STAFF PIN
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "signup"}
-            className={`${s.tab} ${mode === "signup" ? s.tabActive : ""}`}
-            onClick={() => switchMode("signup")}
-          >
-            SIGN UP
           </button>
         </div>
 
@@ -291,26 +260,10 @@ export function LoginScreen() {
             </Button>
 
             <p className={s.hint}>
-              {mode === "login" ? (
-                <>
-                  Staff terminal?{" "}
-                  <button type="button" className={s.switchLink} onClick={() => switchMode("pin")}>
-                    Use PIN pad
-                  </button>
-                  {" · "}
-                  No account?{" "}
-                  <button type="button" className={s.switchLink} onClick={() => switchMode("signup")}>
-                    Sign up
-                  </button>
-                </>
-              ) : (
-                <>
-                  Already registered?{" "}
-                  <button type="button" className={s.switchLink} onClick={() => switchMode("login")}>
-                    Sign in
-                  </button>
-                </>
-              )}
+              Staff terminal?{" "}
+              <button type="button" className={s.switchLink} onClick={() => switchMode("pin")}>
+                Use PIN pad
+              </button>
             </p>
           </form>
         )}

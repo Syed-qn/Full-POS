@@ -11,8 +11,7 @@ from app.identity.auth import (
     hash_password,
     verify_password,
 )
-from app.identity.deps import current_restaurant
-from app.staff.deps import current_restaurant_any
+from app.staff.deps import current_restaurant_any, require_role
 from app.identity.models import Restaurant
 from app.identity.schemas import (
     LoginIn,
@@ -38,6 +37,12 @@ from app.identity.service import (
 )
 from app.ratelimit.deps import rate_limit_auth
 
+# Every manager-surface route here takes require_role("manager") rather than the
+# owner-only identity.deps.current_restaurant. current_restaurant accepts ONLY an
+# aud=manager (owner login) token, so a manager signed in with a staff PIN got
+# 403 "manager access required" on riders, onboarding, the Meta/WhatsApp
+# connection and the whole Settings save. require_role still passes the owner
+# token unchanged; a staff token must carry role=manager.
 router = APIRouter(prefix="/api/v1", tags=["identity"])
 
 _logger = logging.getLogger(__name__)
@@ -97,7 +102,7 @@ async def me(restaurant: Restaurant = Depends(current_restaurant_any)):
 
 @router.get("/onboarding/status", response_model=OnboardingStatusOut)
 async def onboarding_status(
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     return await service.get_onboarding_status(session, restaurant=restaurant)
@@ -105,7 +110,7 @@ async def onboarding_status(
 
 @router.post("/onboarding/complete", response_model=RestaurantOut)
 async def onboarding_complete(
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -152,7 +157,7 @@ def _meta_config_out(restaurant: Restaurant) -> MetaConfigOut:
 
 
 @router.get("/onboarding/meta-config", response_model=MetaConfigOut)
-async def get_meta_config(restaurant: Restaurant = Depends(current_restaurant)):
+async def get_meta_config(restaurant: Restaurant = Depends(require_role("manager"))):
     """Read this restaurant's Meta/WhatsApp connection (token never returned)."""
     return _meta_config_out(restaurant)
 
@@ -160,7 +165,7 @@ async def get_meta_config(restaurant: Restaurant = Depends(current_restaurant)):
 @router.patch("/onboarding/meta-config", response_model=MetaConfigOut)
 async def patch_meta_config(
     body: MetaConfigIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     """Onboarding page saves the Meta connection for this restaurant."""
@@ -199,7 +204,7 @@ async def patch_meta_config(
 
 @router.post("/onboarding/meta-disconnect", response_model=MetaConfigOut)
 async def meta_disconnect(
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     """Disconnect this restaurant's WhatsApp (Meta) account: clears its stored
@@ -221,7 +226,7 @@ async def meta_disconnect(
 
 @router.post("/onboarding/meta-resubscribe", response_model=MetaConfigOut)
 async def meta_resubscribe(
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
 ):
     """Re-subscribe our app to this restaurant's WABA (fix inbound without ES popup).
 
@@ -248,7 +253,7 @@ async def meta_resubscribe(
 
 
 @router.get("/onboarding/meta-embed-config", response_model=MetaEmbedConfigOut)
-async def get_meta_embed_config(_: Restaurant = Depends(current_restaurant)):
+async def get_meta_embed_config(_: Restaurant = Depends(require_role("manager"))):
     """Config the frontend needs to launch the Embedded Signup ("Connect with
     Facebook") popup. `enabled` is False when the tech-provider app isn't set up —
     the UI then falls back to the manual paste form. No secrets returned."""
@@ -266,7 +271,7 @@ async def get_meta_embed_config(_: Restaurant = Depends(current_restaurant)):
 @router.post("/onboarding/meta-connect", response_model=MetaConfigOut)
 async def meta_connect(
     body: MetaConnectIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     """Embedded Signup popup result → exchange the code for this restaurant's own
@@ -305,7 +310,7 @@ async def meta_connect(
 async def geo_health(
     lat: float | None = None,
     lng: float | None = None,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
 ):
     """Diagnose delivery-distance accuracy in the live environment.
 
@@ -346,7 +351,7 @@ async def geo_health(
 @router.patch("/me", response_model=RestaurantOut)
 async def patch_me(
     body: ProfilePatch,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     return await service.update_profile(
@@ -357,7 +362,7 @@ async def patch_me(
 @router.post("/riders", response_model=RiderOut, status_code=201)
 async def create_rider(
     body: RiderIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -387,7 +392,7 @@ async def create_rider(
 
 @router.get("/riders", response_model=list[RiderOut])
 async def list_riders(
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     return await service.list_riders(session, restaurant.id)
@@ -396,7 +401,7 @@ async def list_riders(
 @router.get("/riders/{rider_id}/location", response_model=RiderLocationOut | None)
 async def rider_location(
     rider_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     """Latest location ping for the live-tracking map. 200 with the pin, 200 with
@@ -414,7 +419,7 @@ async def rider_location(
 async def patch_rider(
     rider_id: int,
     body: RiderPatch,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     # Profile edit (name/phone) takes precedence; otherwise it's a status change.
@@ -453,7 +458,7 @@ async def patch_rider(
 @router.post("/riders/{rider_id}/app-invite")
 async def invite_rider_to_app(
     rider_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     """Generate a one-time pairing code for the rider and send it (with the APK
@@ -476,7 +481,7 @@ async def invite_rider_to_app(
 @router.delete("/riders/{rider_id}", status_code=204)
 async def delete_rider(
     rider_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -492,7 +497,7 @@ async def delete_rider(
 @router.patch("/settings", response_model=RestaurantOut)
 async def patch_settings(
     body: SettingsPatch,
-    restaurant: Restaurant = Depends(current_restaurant),
+    restaurant: Restaurant = Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     changes = body.model_dump(exclude_unset=True, exclude_none=True)

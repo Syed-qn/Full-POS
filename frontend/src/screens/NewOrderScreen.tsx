@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { logout } from "../lib/auth";
+import { fetchOrderDetail } from "../lib/orderDetailApi";
 import { fetchActiveMenu } from "../lib/menuApi";
 import {
+  addOrderItems,
   createManualOrder,
   createPosOrder,
+  fetchNextToken,
   lookupCustomer,
 } from "../lib/manualOrderApi";
 import { apiClient } from "../lib/apiClient";
@@ -39,6 +43,16 @@ const OPEN_BILL_STATUSES = new Set<OrderStatus>([
 
 /** Fulfillment tabs — mirror the classic terminal. `delivery` is the default so
  *  the delivery address block renders on first paint (keeps existing flow/tests). */
+/** "seated for" label from an ISO start time — 00:30h / 01:03h like the floor plan. */
+function seatedFor(iso?: string | null): string | null {
+  if (!iso) return null;
+  const mins = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60_000));
+  if (Number.isNaN(mins)) return null;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}h`;
+}
+
 const ORDER_TYPE_TABS = [
   { key: "dine_in", label: "Dining" },
   { key: "takeaway", label: "Take Away" },
@@ -87,17 +101,33 @@ function today(): string {
 
 export function NewOrderScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const waiterMode = isWaiterRole();
   const cashierMode = isCashierRole();
 
   const [menu, setMenu] = useState<MenuOut | null | "loading">("loading");
 
-  const [orderType, setOrderType] = useState<OrderTypeKey>("delivery");
+  // Counter roles start on Dining (the first tab); the delivery-origin default
+  // only makes sense for the manager delivery flow.
+  const [orderType, setOrderType] = useState<OrderTypeKey>(() =>
+    cashierMode || waiterMode ? "dine_in" : "delivery",
+  );
   const needsAddress = ADDRESS_REQUIRED.has(orderType);
 
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [tableNo, setTableNo] = useState("");
+  const [tables, setTables] = useState<
+    {
+      id: number;
+      label: string;
+      status: string;
+      seats: number;
+      order_id?: number | null;
+      order_total_aed?: string | null;
+      seated_since?: string | null;
+    }[]
+  >([]);
   const [lookupStatus, setLookupStatus] = useState<
     "idle" | "found" | "new" | "error"
   >("idle");
@@ -126,13 +156,49 @@ export function NewOrderScreen() {
   // Token bar / open-ticket navigation.
   const [openOrders, setOpenOrders] = useState<OrderOut[]>([]);
   const [browseIdx, setBrowseIdx] = useState<number | null>(null);
+  // Predicted next daily queue token for a fresh ticket (real one is assigned on save).
+  const [nextToken, setNextToken] = useState<number | null>(null);
+  // Terminal numeric keypad entry buffer (dish code / quantity multiplier).
+  const [keyBuf, setKeyBuf] = useState("");
+  // Items already on the open tab when adding another round to a dine-in table.
+  const [tabItems, setTabItems] = useState<
+    { dish_name: string; qty: number; line_total: string }[]
+  >([]);
 
-  // Numeric keypad state (touchscreen qty / dish-code entry).
-  const [keypad, setKeypad] = useState("");
+  // Highlights the last-touched cart line (kept for the tile/cart focus styling).
   const [focusedDishId, setFocusedDishId] = useState<number | null>(null);
+  // Which cart lines have their per-item note field expanded (opened via ✎).
+  const [openNotes, setOpenNotes] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     fetchActiveMenu().then((m) => setMenu(m));
+  }, []);
+
+  // Arriving from the Floor Plan ("New table order") → preselect dine-in + table.
+  useEffect(() => {
+    const table = searchParams.get("table");
+    if (table) {
+      setOrderType("dine_in");
+      setTableNo(table);
+    }
+  }, [searchParams]);
+
+  // Real tables for the dine-in picker (label + seats + live status).
+  useEffect(() => {
+    apiClient
+      .get<
+        {
+          id: number;
+          label: string;
+          status: string;
+          seats: number;
+          order_id?: number | null;
+          order_total_aed?: string | null;
+          seated_since?: string | null;
+        }[]
+      >("/api/v1/tables")
+      .then((rows) => setTables(Array.isArray(rows) ? rows : []))
+      .catch(() => setTables([]));
   }, []);
 
   useEffect(() => {
@@ -146,6 +212,13 @@ export function NewOrderScreen() {
       })
       .catch(() => {
         if (!cancelled) setOpenBillsCount(null);
+      });
+    fetchNextToken()
+      .then((t) => {
+        if (!cancelled) setNextToken(t);
+      })
+      .catch(() => {
+        if (!cancelled) setNextToken(null);
       });
     return () => {
       cancelled = true;
@@ -210,17 +283,6 @@ export function NewOrderScreen() {
     });
   }
 
-  function setQtyAbsolute(dishId: number, value: number) {
-    setQuantities((prev) => {
-      if (value <= 0) {
-        const copy = { ...prev };
-        delete copy[dishId];
-        return copy;
-      }
-      return { ...prev, [dishId]: Math.min(value, 99) };
-    });
-  }
-
   function setItemNote(dishId: number, value: string) {
     setItemNotes((prev) => {
       const trimmed = value.slice(0, 200);
@@ -239,8 +301,43 @@ export function NewOrderScreen() {
     setItemNotes({});
     setKitchenNotes("");
     setFocusedDishId(null);
-    setKeypad("");
   }
+
+  const selectedTable = useMemo(
+    () => tables.find((t) => String(t.id) === tableNo) ?? null,
+    [tables, tableNo],
+  );
+
+  const dineInMode = orderType === "dine_in";
+  // On-premise (dine-in / takeaway) share the clean single action bar with an
+  // immediate "Pay now"; delivery/online are COD-on-arrival, so they get a
+  // place-only bar. No mode shows the old stacked terminal toolbar.
+  const isOnPremiseType = orderType === "dine_in" || orderType === "takeaway";
+  // Dine-in "another round": picking an occupied table appends to its open tab
+  // instead of starting a new order.
+  const addingToTab =
+    orderType === "dine_in" && !!selectedTable?.order_id;
+
+  // When adding a round to an occupied table, load what's already on its tab so
+  // the cashier sees the running order (the cart below holds only NEW items).
+  const tabOrderId = addingToTab ? selectedTable?.order_id ?? null : null;
+  useEffect(() => {
+    if (tabOrderId == null) {
+      setTabItems([]);
+      return;
+    }
+    let cancelled = false;
+    fetchOrderDetail(tabOrderId, { include: "overview" })
+      .then((d) => {
+        if (!cancelled) setTabItems(Array.isArray(d.items) ? d.items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setTabItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tabOrderId]);
 
   const dishes: DishOut[] = useMemo(() => {
     if (!menu || menu === "loading") return [];
@@ -287,34 +384,12 @@ export function NewOrderScreen() {
   const deliveryFee = needsAddress ? parseFloat(fee) || 0 : 0;
   const total = subtotal + deliveryFee;
 
-  // ── Keypad handlers ──────────────────────────────────────────────
-  function pressKey(d: string) {
-    setKeypad((k) => (k + d).replace(/^0+(?=\d)/, "").slice(0, 3));
-  }
-  function clearKey() {
-    setKeypad("");
-  }
-  function applyQty() {
-    const val = parseInt(keypad, 10);
-    const target = focusedDishId ?? selectedItems[selectedItems.length - 1]?.dish.id;
-    if (!Number.isFinite(val) || target == null) return;
-    setQtyAbsolute(target, val);
-    setKeypad("");
-  }
-  function applyCode() {
-    const num = parseInt(keypad, 10);
-    if (!Number.isFinite(num)) return;
-    const dish = dishes.find((x) => x.dish_number === num);
-    if (dish) {
-      setQty(dish.id, 1);
-      setActiveCategory("all");
-    }
-    setKeypad("");
-  }
 
   // ── Token / open-ticket navigation ───────────────────────────────
   const browsing = browseIdx != null ? openOrders[browseIdx] : null;
-  const tokenNumber = browsing?.order_number ?? String(openOrders.length + 1);
+  // Only an existing ticket has a real number. A NEW ticket has none yet —
+  // the backend assigns the order number on save — so never fabricate one.
+  const tokenNumber = browsing?.order_number ?? null;
   function stepToken(dir: -1 | 1) {
     if (openOrders.length === 0) return;
     setBrowseIdx((i) => {
@@ -325,16 +400,68 @@ export function NewOrderScreen() {
     });
   }
 
+  // ── Terminal keypad ──────────────────────────────────────────────
+  function pressKey(k: string) {
+    setKeyBuf((b) => {
+      if (k === "⌫") return b.slice(0, -1);
+      if (k === ".") return b.includes(".") ? b : b === "" ? "0." : b + ".";
+      return (b + k).replace(/^0+(?=\d)/, "").slice(0, 6);
+    });
+  }
+  /** Add a dish, honouring a pending keypad quantity ("5" then tap = +5). */
+  function addDishQty(dishId: number) {
+    const n = parseInt(keyBuf, 10);
+    setQty(dishId, Number.isFinite(n) && n > 0 ? n : 1);
+    setKeyBuf("");
+  }
+  /** "Code" key: add the dish whose number matches the buffer. */
+  function applyCode() {
+    const num = parseInt(keyBuf, 10);
+    if (Number.isFinite(num)) {
+      const dish = dishes.find((d) => d.dish_number === num);
+      if (dish) {
+        setActiveCategory("all");
+        addDishQty(dish.id);
+        return;
+      }
+    }
+    setKeyBuf("");
+  }
+  /** "Token" key: jump to the open ticket with that daily token. */
+  function applyToken() {
+    const num = parseInt(keyBuf, 10);
+    if (Number.isFinite(num)) {
+      const idx = openOrders.findIndex((o) => o.daily_token === num);
+      if (idx >= 0) setBrowseIdx(idx);
+    }
+    setKeyBuf("");
+  }
+  /** ▲ / ▼ move the highlighted cart line's selection. */
+  function moveSelection(dir: -1 | 1) {
+    const idx = selectedItems.findIndex((it) => it.dish.id === focusedDishId);
+    if (idx < 0) return;
+    const next = idx + dir;
+    if (next < 0 || next >= selectedItems.length) return;
+    setFocusedDishId(selectedItems[next].dish.id);
+  }
+
+  const phoneOk = phone.trim().length >= 7;
   const canSubmit =
-    phone.trim().length >= 7 &&
     selectedItems.length > 0 &&
-    (!needsAddress ||
-      (aptRoom.trim() !== "" &&
+    !submitting &&
+    (needsAddress
+      ? // Delivery / Online: phone + full address + fee + map pin required.
+        phoneOk &&
+        aptRoom.trim() !== "" &&
         building.trim() !== "" &&
         receiverName.trim() !== "" &&
         fee !== "" &&
-        pin !== null)) &&
-    !submitting;
+        pin !== null
+      : orderType === "dine_in"
+        ? // Dine-in: a table is required; phone is optional (walk-in).
+          tableNo !== ""
+        : // Takeaway: just items; phone optional (walk-in).
+          true);
 
   function buildItems() {
     return selectedItems.map(({ dish, qty }) => {
@@ -354,6 +481,16 @@ export function NewOrderScreen() {
     setError(null);
     try {
       let order: OrderOut;
+      // Occupied dine-in table → append this round to the existing tab.
+      if (addingToTab && selectedTable?.order_id) {
+        order = await addOrderItems(selectedTable.order_id, buildItems());
+        if (goPay && order?.id) {
+          navigate(`/orders/${order.id}/pay`);
+        } else {
+          navigate(`/orders/${order.id}`);
+        }
+        return;
+      }
       if (needsAddress) {
         order = await createManualOrder({
           customer_phone: phone.trim(),
@@ -373,13 +510,16 @@ export function NewOrderScreen() {
       } else {
         order = await createPosOrder({
           order_type: orderType,
-          customer_phone: phone.trim(),
-          customer_name: name.trim() || null,
+          // Walk-in dine-in/takeaway may have no phone — send a generic walk-in
+          // number so the till can still ring the sale.
+          customer_phone: phone.trim() || "0000000000",
+          customer_name: name.trim() || (phone.trim() ? null : "Walk-in"),
           items: buildItems(),
           table_id:
             orderType === "dine_in" && tableNo.trim()
               ? Number(tableNo.trim()) || null
               : null,
+          covers: null,
           address: null,
           delivery_fee_aed: "0.00",
         });
@@ -424,19 +564,614 @@ export function NewOrderScreen() {
   const activeTabLabel =
     ORDER_TYPE_TABS.find((t) => t.key === orderType)?.label ?? "";
 
+  // ── Cashier full-screen terminal (HANASIS-style single screen) ──────────
+  if (cashierMode) {
+    const vat = total - total / 1.05;
+    return (
+      <div className={s.term} data-testid="cashier-terminal">
+        {/* ============ HEADER — order-type switcher across the top ============ */}
+        <header className={s.tHeader} data-testid="terminal-header">
+          <div className={s.tTabs} role="tablist" aria-label="Order type">
+            {ORDER_TYPE_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={orderType === t.key}
+                className={`${s.tTab} ${orderType === t.key ? s.tTabActive : ""}`}
+                onClick={() => setOrderType(t.key)}
+                data-testid={`order-type-${t.key}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {selectedTable && (
+            <span className={s.tHeaderTable}>🍽️ {selectedTable.label}</span>
+          )}
+        </header>
+
+        {/* ============ LEFT PANEL ============ */}
+        <div className={s.termLeft}>
+          {/* Dine-in: pick the table on the floor plan first; dishes go on the right. */}
+          {dineInMode && !selectedTable && (
+            <div className={s.tFloor} data-testid="terminal-floor-plan">
+              <div className={s.tFloorHdr}>Select a table</div>
+              {tables.length === 0 ? (
+                <p className={s.tFloorEmpty}>
+                  No tables set up yet — add tables in Floor Plan first.
+                </p>
+              ) : (
+                <div className={s.tFloorGrid}>
+                  {tables.map((t) => {
+                    const busyTable = !!t.order_id;
+                    const seatCount = Math.min(t.seats ?? 4, 10);
+                    const topSeats = Math.ceil(seatCount / 2);
+                    const bottomSeats = seatCount - topSeats;
+                    const sinceLabel = seatedFor(t.seated_since);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`${s.tTable} ${busyTable ? s.tTableBusy : s.tTableFree}`}
+                        onClick={() => setTableNo(String(t.id))}
+                        data-testid={`terminal-table-${t.id}`}
+                        aria-label={`Table ${t.label}${busyTable ? " — open tab" : " — free"}`}
+                      >
+                        <span className={s.tSeatRow}>
+                          {Array.from({ length: topSeats }).map((_, i) => (
+                            <span key={i} className={s.tSeat} />
+                          ))}
+                        </span>
+                        <span className={s.tSeatMid}>
+                          <span className={s.tSeatSide} />
+                          <span className={s.tTableTop}>
+                            <span className={s.tTableLabel}>{t.label}</span>
+                            {busyTable && (
+                              <>
+                                <span className={s.tTablePill}>
+                                  💰 {t.order_total_aed ?? "0.00"}
+                                </span>
+                                {sinceLabel && (
+                                  <span className={s.tTablePill}>⏱ {sinceLabel}</span>
+                                )}
+                              </>
+                            )}
+                          </span>
+                          <span className={s.tSeatSide} />
+                        </span>
+                        <span className={s.tSeatRow}>
+                          {Array.from({ length: bottomSeats }).map((_, i) => (
+                            <span key={i} className={s.tSeat} />
+                          ))}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {dineInMode && selectedTable && (
+            <div className={s.tTableChip} data-testid="terminal-table-chip">
+              <span>
+                🍽️ Table <strong>{selectedTable.label}</strong>
+                {selectedTable.order_id ? " · adding to open tab" : ""}
+              </span>
+              <button
+                type="button"
+                className={s.tChangeTable}
+                onClick={() => setTableNo("")}
+              >
+                Change table
+              </button>
+            </div>
+          )}
+
+          {/* token + bill number + ticket nav */}
+          <div className={s.tTokenRow}>
+            <span className={s.tTokenLabel}>TOKEN</span>
+            <span className={s.tTokenNum} data-testid="token-value">
+              {browsing ? browsing.daily_token ?? "—" : nextToken ?? "—"}
+            </span>
+            <button
+              type="button"
+              className={s.tArrowBtn}
+              onClick={() => stepToken(-1)}
+              disabled={openOrders.length === 0}
+              aria-label="Previous ticket"
+            >
+              ◀
+            </button>
+            <span className={s.tBill}>{browsing?.order_number ?? "NEW"}</span>
+            <button
+              type="button"
+              className={s.tArrowBtn}
+              onClick={() => stepToken(1)}
+              disabled={openOrders.length === 0}
+              aria-label="Next ticket"
+            >
+              ▶
+            </button>
+          </div>
+
+          {/* assign delivery (delivery/online only) + customers count */}
+          <div className={s.tAssignRow}>
+            {needsAddress ? (
+              <button type="button" className={s.tAssignLink} disabled title="Coming soon">
+                Assign Delivery
+              </button>
+            ) : (
+              <span />
+            )}
+            <span className={s.tCustomers}>
+              Customers: <strong>{selectedItems.length > 0 ? 1 : 0}</strong>
+            </span>
+          </div>
+          {/* staffing: waiter for dine-in, driver for delivery/online, nothing for takeaway */}
+          {dineInMode && (
+            <button
+              type="button"
+              className={`${s.tSelectBtn} ${s.tSelectFull}`}
+              disabled
+              title="Coming soon"
+            >
+              (Select Waiter)
+            </button>
+          )}
+          {needsAddress && (
+            <button
+              type="button"
+              className={`${s.tSelectBtn} ${s.tSelectFull}`}
+              disabled
+              title="Coming soon"
+            >
+              (Select Driver)
+            </button>
+          )}
+
+          {/* customer block — address/flat only for delivery/online */}
+          <div className={s.tCustomer}>
+            <div className={s.tRow2}>
+              <input
+                className={s.tInput}
+                placeholder="Customer Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                aria-label="Customer name"
+              />
+              <input
+                className={s.tInput}
+                placeholder={needsAddress ? "Tel *" : "Tel (optional)"}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                aria-label="Phone"
+              />
+            </div>
+            {needsAddress && (
+              <div className={s.tRow2}>
+                <input
+                  className={s.tInput}
+                  placeholder="Address"
+                  value={building}
+                  onChange={(e) => setBuilding(e.target.value)}
+                  aria-label="Address"
+                />
+                <input
+                  className={s.tInput}
+                  placeholder="Flat / Room No"
+                  value={aptRoom}
+                  onChange={(e) => setAptRoom(e.target.value)}
+                  aria-label="Flat or room number"
+                />
+              </div>
+            )}
+            <input
+              className={s.tInput}
+              placeholder="🔍 Search items or #number"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search items"
+            />
+          </div>
+
+          {/* Existing tab (when adding a round to an occupied table) */}
+          {addingToTab && (
+            <div className={s.tTabBanner} data-testid="terminal-open-tab">
+              <div className={s.tTabHead}>
+                🧾 {selectedTable?.label ?? "Table"} · open tab #{selectedTable?.order_id}
+                {selectedTable?.order_total_aed ? ` · AED ${selectedTable.order_total_aed}` : ""}
+              </div>
+              {tabItems.length > 0 ? (
+                <ul className={s.tTabItems}>
+                  {tabItems.map((it, i) => (
+                    <li key={i}>
+                      <span>
+                        {it.qty}× {it.dish_name}
+                      </span>
+                      <span className={s.tTabAmt}>AED {it.line_total}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className={s.tTabHint}>Loading current items…</div>
+              )}
+              <div className={s.tTabHint}>New items you add below are appended to this tab.</div>
+            </div>
+          )}
+
+          {/* cart grid */}
+          <div className={s.tCartWrap}>
+            <table className={s.cartTable}>
+              <thead>
+                <tr>
+                  <th className={s.thRowNo} aria-label="Row" />
+                  <th className={s.thCode}>Code</th>
+                  <th className={s.thName}>Particulars</th>
+                  <th className={s.thNum}>Price</th>
+                  <th className={s.thQty}>Qty</th>
+                  <th className={s.thNum}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className={s.tEmptyRow}>
+                      No items yet — tap a dish on the right.
+                    </td>
+                  </tr>
+                ) : (
+                  selectedItems.map(({ dish, qty }, i) => {
+                    const price = parseFloat(dish.price_aed ?? "0");
+                    return (
+                      <tr
+                        key={dish.id}
+                        className={`${s.cartTr} ${focusedDishId === dish.id ? s.cartTrActive : ""}`}
+                        onClick={() => setFocusedDishId(dish.id)}
+                      >
+                        <td className={s.tdRowNo}>{i + 1}</td>
+                        <td className={s.tdCode}>#{dish.dish_number}</td>
+                        <td className={s.tdName}>{dish.name}</td>
+                        <td className={s.tdNum}>{price.toFixed(2)}</td>
+                        <td className={s.tdQty}>
+                          <div className={s.qtyMini}>
+                            <button
+                              type="button"
+                              className={s.qtyMiniBtn}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setQty(dish.id, -1);
+                              }}
+                              aria-label={`Remove one ${dish.name}`}
+                            >
+                              −
+                            </button>
+                            <span className={s.qtyMiniNum}>{qty}</span>
+                            <button
+                              type="button"
+                              className={`${s.qtyMiniBtn} ${s.qtyMiniBtnActive}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setQty(dish.id, 1);
+                              }}
+                              aria-label={`Add one ${dish.name}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
+                        <td className={`${s.tdNum} ${s.tdAmt}`}>{(price * qty).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* totals */}
+          <div className={s.tTotals}>
+            <div className={s.tTotRow}>
+              <span>Total</span>
+              <span>AED {subtotal.toFixed(2)}</span>
+            </div>
+            <div className={s.tTotRow}>
+              <span>VAT (5% incl.)</span>
+              <span>AED {vat.toFixed(2)}</span>
+            </div>
+            <div className={s.tTotRow}>
+              <span>Round Off</span>
+              <span>AED 0.00</span>
+            </div>
+            <div className={`${s.tTotRow} ${s.tTotNet}`}>
+              <span>Net Value</span>
+              <span>AED {total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* item action row */}
+          <div className={s.tActionRow}>
+            <button type="button" className={s.tActBtn} disabled title="Coming soon">
+              Change Rate
+            </button>
+            <button
+              type="button"
+              className={s.tActBtn}
+              onClick={() =>
+                focusedDishId && setQty(focusedDishId, -(quantities[focusedDishId] ?? 0))
+              }
+              disabled={focusedDishId == null}
+            >
+              Cancel Item
+            </button>
+            <button
+              type="button"
+              className={s.tActBtn}
+              onClick={() =>
+                focusedDishId && setOpenNotes((p) => ({ ...p, [focusedDishId]: true }))
+              }
+              disabled={focusedDishId == null}
+            >
+              Note
+            </button>
+            <button
+              type="button"
+              className={`${s.tActBtn} ${s.tMinus}`}
+              onClick={() => focusedDishId && setQty(focusedDishId, -1)}
+              disabled={focusedDishId == null}
+              aria-label="Decrease selected"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className={`${s.tActBtn} ${s.tPlus}`}
+              onClick={() => focusedDishId && setQty(focusedDishId, 1)}
+              disabled={focusedDishId == null}
+              aria-label="Increase selected"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className={`${s.tActBtn} ${s.tMove}`}
+              onClick={() => moveSelection(-1)}
+              disabled={focusedDishId == null}
+              title="Move selection up"
+              aria-label="Move selection up"
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className={`${s.tActBtn} ${s.tMove}`}
+              onClick={() => moveSelection(1)}
+              disabled={focusedDishId == null}
+              title="Move selection down"
+              aria-label="Move selection down"
+            >
+              ▼
+            </button>
+          </div>
+
+          {/* button grid */}
+          <div className={s.tBtnGrid}>
+            <button type="button" className={s.tBtn} onClick={clearCart}>
+              New Bill
+            </button>
+            <button
+              type="button"
+              className={s.tBtn}
+              onClick={() =>
+                focusedDishId && setQty(focusedDishId, -(quantities[focusedDishId] ?? 0))
+              }
+            >
+              Delete
+            </button>
+            <button type="button" className={s.tBtn} onClick={() => window.print()}>
+              Print Bill
+            </button>
+            <button type="button" className={s.tBtn} onClick={() => navigate("/orders")}>
+              Pending{openBillsCount != null ? ` (${openBillsCount})` : ""}
+            </button>
+            <button
+              type="button"
+              className={s.tBtn}
+              onClick={() => onSubmit(false)}
+              disabled={!canSubmit}
+              data-testid="terminal-kot"
+            >
+              KOT
+            </button>
+            <button type="button" className={s.tBtn} onClick={() => navigate("/payments")}>
+              Open Cash
+            </button>
+            <button
+              type="button"
+              className={`${s.tBtn} ${s.tBtnCash}`}
+              onClick={() => onSubmit(true)}
+              disabled={!canSubmit}
+              data-testid="terminal-cash"
+            >
+              CASH
+            </button>
+            <button
+              type="button"
+              className={`${s.tBtn} ${s.tBtnCard}`}
+              onClick={() => onSubmit(true)}
+              disabled={!canSubmit}
+              data-testid="terminal-card"
+            >
+              CARD
+            </button>
+            <button type="button" className={s.tBtn} onClick={() => navigate("/floor")}>
+              Table Orders
+            </button>
+            <button type="button" className={s.tBtn} onClick={() => navigate("/payments")}>
+              More Payments
+            </button>
+          </div>
+        </div>
+
+        {/* ============ RIGHT PANEL ============ */}
+        <div className={s.termRight}>
+          <div className={s.tCatHdr}>
+            <span>Select Category</span>
+            <input
+              type="search"
+              className={s.tSearch}
+              placeholder="🔍 Search dish or number…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search dishes"
+              data-testid="terminal-dish-search"
+            />
+            <span className={s.tDate}>{today()}</span>
+          </div>
+          <div className={s.tRightBody}>
+            {/* Category tile grid (scrollable column) — like the reference. */}
+            <div className={s.tCatGrid} role="tablist" aria-label="Categories">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === "all"}
+                className={`${s.tCat} ${activeCategory === "all" ? s.tCatActive : ""}`}
+                onClick={() => setActiveCategory("all")}
+              >
+                ALL
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeCategory === cat}
+                  className={`${s.tCat} ${activeCategory === cat ? s.tCatActive : ""}`}
+                  onClick={() => setActiveCategory(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <div className={s.tItemsCol}>
+              <div className={s.tItems}>
+                {filteredDishes.map((dish) => {
+                  const qty = quantities[dish.id] ?? 0;
+                  return (
+                    <button
+                      key={dish.id}
+                      type="button"
+                      className={`${s.tItemTile} ${qty > 0 ? s.tItemTileActive : ""}`}
+                      onClick={() => addDishQty(dish.id)}
+                      aria-label={`Add ${dish.name}`}
+                    >
+                      <span className={s.tItemTop}>
+                        <span className={s.tItemNum}>#{dish.dish_number}</span>
+                        <span className={s.tItemPrice}>{dish.price_aed}</span>
+                      </span>
+                      <span className={s.tItemName}>{dish.name}</span>
+                      {qty > 0 && <span className={s.tItemQtyBadge}>{qty}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Numeric keypad + side keys */}
+              <div className={s.tKeypadWrap} aria-label="Numeric keypad">
+                <div className={s.tKeypadMain}>
+                  <div className={s.tKeyDisplay} data-testid="keypad-buffer">
+                    {keyBuf || "0"}
+                  </div>
+                  <div className={s.tKeypad}>
+                    {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "⌫"].map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        className={s.tKey}
+                        onClick={() => pressKey(k)}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className={s.tKeypadSide}>
+                  <button
+                    type="button"
+                    className={s.tKeySide}
+                    onClick={applyCode}
+                    title="Add the dish with this code"
+                  >
+                    Code
+                  </button>
+                  <button type="button" className={s.tKeySide} disabled title="Coming soon">
+                    Rate
+                  </button>
+                  <button
+                    type="button"
+                    className={s.tKeySide}
+                    onClick={applyToken}
+                    title="Jump to this token's open ticket"
+                  >
+                    Token
+                  </button>
+                  <button type="button" className={s.tKeySide} disabled title="Coming soon">
+                    Disc
+                  </button>
+                  <button type="button" className={s.tKeySide} disabled title="Coming soon">
+                    Disc%
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ============ BOTTOM STATUS / NAV BAR ============ */}
+        <div className={s.tStatusBar}>
+          <button
+            type="button"
+            className={s.tStatusItem}
+            data-testid="cashier-signout"
+            onClick={() => {
+              logout();
+              navigate("/login", { replace: true });
+            }}
+          >
+            🔒 Sign-Out
+          </button>
+          <button type="button" className={s.tStatusItem} onClick={() => navigate("/customers")}>
+            Customers
+          </button>
+          <button type="button" className={s.tStatusItem} onClick={() => navigate("/orders")}>
+            Orders
+          </button>
+          <button type="button" className={s.tStatusItem} onClick={() => navigate("/floor")}>
+            Floor
+          </button>
+          <button type="button" className={s.tStatusItem} onClick={() => navigate("/payments")}>
+            Payments
+          </button>
+          <span className={s.tStatusSpacer} />
+          <span className={s.tStatusClock}>{today()}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`${s.screen} ${s.terminal}`}>
-      <PageHeader
-        title={waiterMode ? "Table order" : cashierMode ? "Cashier terminal" : "New Order"}
-        subtitle={
-          waiterMode
-            ? "Quantity, instructions, modifiers — send to kitchen (payment at cashier)"
-            : cashierMode
-              ? "Terminal · all order types · pay after place"
+    <div className={`${s.screen} ${s.terminal} ${cashierMode ? s.screenCashier : ""}`}>
+      {!cashierMode && (
+        <PageHeader
+          title={waiterMode ? "Table order" : "New Order"}
+          subtitle={
+            waiterMode
+              ? "Quantity, instructions, modifiers — send to kitchen (payment at cashier)"
               : "Delivery POS · large items · cart always visible"
-        }
-      />
-      <OfflineLimitsBanner surface="new-order" />
+          }
+        />
+      )}
+      {!cashierMode && <OfflineLimitsBanner surface="new-order" />}
 
       {/* Order-type tabs — classic terminal top rail */}
       <div className={s.typeTabs} role="tablist" aria-label="Order type">
@@ -462,7 +1197,11 @@ export function NewOrderScreen() {
         <div className={s.tokenBlock}>
           <span className={s.tokenLabel}>Token</span>
           <span className={s.tokenValue} data-testid="token-value">
-            {browsing ? tokenNumber : `${tokenNumber} · NEW`}
+            {browsing
+              ? browsing.daily_token ?? tokenNumber
+              : nextToken != null
+                ? `${nextToken} · NEW`
+                : "NEW"}
           </span>
         </div>
         <div className={s.tokenNav}>
@@ -539,19 +1278,32 @@ export function NewOrderScreen() {
           >
             Floor
           </button>
+          <button
+            type="button"
+            className={`${s.cashierChip} ${s.cashierSignOut}`}
+            data-testid="cashier-signout"
+            onClick={() => {
+              logout();
+              navigate("/login", { replace: true });
+            }}
+          >
+            Sign out
+          </button>
         </div>
       )}
 
       {error && <div className={s.errorBanner} role="alert">{error}</div>}
 
-      <div className={s.posLayout}>
+      <div className={`${s.posLayout} ${cashierMode ? s.posLayoutCashier : ""}`}>
         {/* LEFT — customer + address / table */}
         <div className={s.leftCol}>
           <div className={s.section}>
             <div className={s.sectionTitle}>Customer</div>
 
             <div className={s.field}>
-              <label className={s.label}>Phone *</label>
+              <label className={s.label}>
+                Phone {needsAddress ? "*" : "(optional)"}
+              </label>
               <div className={s.inputRow}>
                 <input
                   className={s.input}
@@ -587,15 +1339,44 @@ export function NewOrderScreen() {
 
             {orderType === "dine_in" && (
               <div className={s.field}>
-                <label className={s.label}>Table (optional)</label>
-                <input
+                <label className={s.label}>Table *</label>
+                <select
                   className={s.input}
                   value={tableNo}
-                  onChange={(e) => setTableNo(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="Table number"
-                  inputMode="numeric"
-                  data-testid="table-number"
-                />
+                  onChange={(e) => setTableNo(e.target.value)}
+                  data-testid="table-select"
+                  aria-label="Select table"
+                >
+                  <option value="">Select table…</option>
+                  {tables.map((t) => (
+                    <option key={t.id} value={String(t.id)}>
+                      {t.label} · {t.seats} seats
+                      {t.status !== "available" ? ` · ${t.status}` : " · free"}
+                    </option>
+                  ))}
+                </select>
+                {tables.length === 0 && (
+                  <span className={s.fieldHint}>
+                    No tables set up yet — add tables in Floor Plan first.
+                  </span>
+                )}
+                {selectedTable?.order_id ? (
+                  <div className={s.occupiedBanner} data-testid="table-occupied">
+                    🧾 {selectedTable.label} has an open tab · bill #
+                    {selectedTable.order_id}
+                    {selectedTable.order_total_aed
+                      ? ` (AED ${selectedTable.order_total_aed})`
+                      : ""}
+                    . New items will be <strong>added to this tab</strong>.{" "}
+                    <button
+                      type="button"
+                      className={s.linkBtn}
+                      onClick={() => navigate(`/orders/${selectedTable.order_id}`)}
+                    >
+                      View bill
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -680,16 +1461,7 @@ export function NewOrderScreen() {
                 </div>
               </div>
             </div>
-          ) : (
-            <div className={s.section}>
-              <div className={s.sectionTitle}>
-                {orderType === "dine_in" ? "Dine-in" : "Take away"}
-              </div>
-              <p className={s.emptyHint}>
-                No delivery address needed for {activeTabLabel.toLowerCase()} — pick items and take payment.
-              </p>
-            </div>
-          )}
+          ) : null}
         </div>
 
         {/* CENTER — large item grid */}
@@ -787,54 +1559,87 @@ export function NewOrderScreen() {
           {selectedItems.length === 0 ? (
             <p className={s.emptyHint}>Add at least 1 item to continue.</p>
           ) : (
-            <div className={s.cartLines}>
-              {selectedItems.map(({ dish, qty }) => (
-                <div
-                  key={dish.id}
-                  className={`${s.cartLine} ${focusedDishId === dish.id ? s.cartLineFocused : ""}`}
-                  onClick={() => setFocusedDishId(dish.id)}
-                >
-                  <div className={s.cartLineMain}>
-                    <span className={s.cartLineName}>
-                      {qty}× {dish.name}
-                    </span>
-                    <span className={s.cartLineAmt}>
-                      AED {(parseFloat(dish.price_aed ?? "0") * qty).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className={s.qtyControls}>
-                    <button
-                      type="button"
-                      className={s.qtyBtn}
-                      onClick={() => setQty(dish.id, -1)}
-                      aria-label={`Remove one ${dish.name}`}
-                    >
-                      −
-                    </button>
-                    <button
-                      type="button"
-                      className={`${s.qtyBtn} ${s.qtyBtnActive}`}
-                      onClick={() => setQty(dish.id, 1)}
-                      aria-label={`Add one ${dish.name}`}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <label className={s.itemNoteField}>
-                    <span className={s.itemNoteLabel}>Instructions</span>
-                    <input
-                      className={s.itemNoteInput}
-                      type="text"
-                      value={itemNotes[dish.id] ?? ""}
-                      onChange={(e) => setItemNote(dish.id, e.target.value)}
-                      placeholder="No onion, extra sauce…"
-                      maxLength={200}
-                      aria-label={`Instructions for ${dish.name}`}
-                      data-testid={`item-note-${dish.id}`}
-                    />
-                  </label>
-                </div>
-              ))}
+            <div className={s.cartTableWrap}>
+              <table className={s.cartTable}>
+                <thead>
+                  <tr>
+                    <th className={s.thCode}>Code</th>
+                    <th className={s.thName}>Particulars</th>
+                    <th className={s.thNum}>Price</th>
+                    <th className={s.thQty}>Qty</th>
+                    <th className={s.thNum}>Amount</th>
+                    <th className={s.thNote} aria-label="Note" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedItems.map(({ dish, qty }) => {
+                    const noteOpen = !!openNotes[dish.id] || !!itemNotes[dish.id];
+                    const price = parseFloat(dish.price_aed ?? "0");
+                    return (
+                      <Fragment key={dish.id}>
+                        <tr className={s.cartTr}>
+                          <td className={s.tdCode}>#{dish.dish_number}</td>
+                          <td className={s.tdName}>{dish.name}</td>
+                          <td className={s.tdNum}>{price.toFixed(2)}</td>
+                          <td className={s.tdQty}>
+                            <div className={s.qtyMini}>
+                              <button
+                                type="button"
+                                className={s.qtyMiniBtn}
+                                onClick={() => setQty(dish.id, -1)}
+                                aria-label={`Remove one ${dish.name}`}
+                              >
+                                −
+                              </button>
+                              <span className={s.qtyMiniNum} aria-label={`${dish.name} quantity`}>
+                                {qty}
+                              </span>
+                              <button
+                                type="button"
+                                className={`${s.qtyMiniBtn} ${s.qtyMiniBtnActive}`}
+                                onClick={() => setQty(dish.id, 1)}
+                                aria-label={`Add one ${dish.name}`}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </td>
+                          <td className={`${s.tdNum} ${s.tdAmt}`}>{(price * qty).toFixed(2)}</td>
+                          <td className={s.tdNoteCell}>
+                            <button
+                              type="button"
+                              className={`${s.noteToggle} ${noteOpen ? s.noteToggleOn : ""}`}
+                              onClick={() =>
+                                setOpenNotes((prev) => ({ ...prev, [dish.id]: !noteOpen }))
+                              }
+                              aria-label={`Note for ${dish.name}`}
+                              title="Add a note"
+                            >
+                              ✎
+                            </button>
+                          </td>
+                        </tr>
+                        {noteOpen && (
+                          <tr className={s.cartNoteTr}>
+                            <td colSpan={6}>
+                              <input
+                                className={s.itemNoteInput}
+                                type="text"
+                                value={itemNotes[dish.id] ?? ""}
+                                onChange={(e) => setItemNote(dish.id, e.target.value)}
+                                placeholder={`Note for ${dish.name} — no onion, extra sauce…`}
+                                maxLength={200}
+                                aria-label={`Instructions for ${dish.name}`}
+                                data-testid={`item-note-${dish.id}`}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -853,47 +1658,6 @@ export function NewOrderScreen() {
             </label>
           )}
 
-          {/* Numeric keypad — qty / dish-code entry */}
-          <div className={s.keypad} data-testid="keypad">
-            <div className={s.keypadDisplay} aria-label="Keypad entry">
-              {keypad || "0"}
-            </div>
-            <div className={s.keypadGrid}>
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  className={s.key}
-                  onClick={() => pressKey(d)}
-                >
-                  {d}
-                </button>
-              ))}
-              <button type="button" className={s.key} onClick={clearKey} aria-label="Clear keypad">
-                C
-              </button>
-              <button type="button" className={s.key} onClick={() => pressKey("0")}>
-                0
-              </button>
-              <button
-                type="button"
-                className={`${s.key} ${s.keyAccent}`}
-                onClick={applyQty}
-                title="Set quantity of the focused cart line"
-              >
-                Qty
-              </button>
-            </div>
-            <button
-              type="button"
-              className={s.keyCode}
-              onClick={applyCode}
-              title="Add item by its dish number"
-            >
-              Add by code #{keypad || "…"}
-            </button>
-          </div>
-
           <div className={s.summary}>
             <div className={s.summaryLine}>
               <span>Subtotal</span>
@@ -905,108 +1669,71 @@ export function NewOrderScreen() {
                 <span>{fee === "0.00" || fee === "" ? "Free" : `AED ${fee}`}</span>
               </div>
             )}
+            {/* UAE prices are VAT-inclusive → show the 5% portion for the bill,
+                does not change what's charged. */}
+            <div className={s.summaryLine}>
+              <span>VAT (5% incl.)</span>
+              <span>AED {(total - total / 1.05).toFixed(2)}</span>
+            </div>
             <MoneySummary label="TOTAL" amount={total.toFixed(2)} />
           </div>
         </aside>
       </div>
 
-      {/* Classic terminal action row: Cash / Card / KOT / Print / Open Cash / Pending */}
-      <div className={s.posActions} role="toolbar" aria-label="Terminal actions">
-        <button
-          type="button"
-          className={`${s.posBtn} ${s.posCash}`}
-          onClick={() => onSubmit(true)}
-          disabled={!canSubmit}
-          data-testid="pos-cash"
-        >
-          💵 Cash
-        </button>
-        <button
-          type="button"
-          className={`${s.posBtn} ${s.posCard}`}
-          onClick={() => onSubmit(true)}
-          disabled={!canSubmit}
-          data-testid="pos-card"
-        >
-          💳 Card
-        </button>
-        <button
-          type="button"
-          className={`${s.posBtn} ${s.posKot}`}
-          onClick={() => onSubmit(false)}
-          disabled={!canSubmit}
-          data-testid="pos-kot"
-          title="Send to kitchen without taking payment"
-        >
-          🍳 KOT
-        </button>
-        <button
-          type="button"
-          className={s.posBtnGhost}
-          onClick={() => (browsing ? navigate(`/orders/${browsing.id}`) : window.print())}
-          data-testid="pos-print"
-        >
-          🖨 Print Bill
-        </button>
-        <button
-          type="button"
-          className={s.posBtnGhost}
-          onClick={() => navigate("/payments")}
-          data-testid="pos-open-cash"
-        >
-          💰 Open Cash
-        </button>
-        <button
-          type="button"
-          className={s.posBtnGhost}
-          onClick={() => navigate("/orders")}
-          data-testid="pos-pending"
-        >
-          📋 Pending {openBillsCount != null ? `(${openBillsCount})` : ""}
-        </button>
-      </div>
-
+      {/* ONE clean action bar for every order type — same layout as dine-in
+          (no stacked terminal toolbar). On-premise gets an immediate "Pay now";
+          delivery/online is COD-on-arrival so it's place-only. */}
       <BottomActionBar>
-        <span className={s.waHint}>
-          {waiterMode
-            ? "Floor: set qty & notes per item, then send to kitchen"
-            : cashierMode
-              ? "Cashier: place order → bill opens for payment"
-              : phone.trim()
-                ? `📱 WhatsApp confirmation will be sent to ${phone.trim()}`
-                : "📱 Enter phone to receive WhatsApp confirmation"}
-        </span>
-        <div className={s.footerSpacer} />
-        <Button
-          type="button"
-          variant="ghost"
-          size="lg"
-          onClick={clearCart}
-          disabled={selectedItems.length === 0}
-        >
-          Clear
-        </Button>
-        <Button type="button" variant="ghost" size="lg" onClick={() => navigate("/orders")}>
-          Cancel
-        </Button>
-        <TouchButton
-          type="button"
-          disabled={!canSubmit}
-          onClick={() => onSubmit()}
-          data-testid="new-order-primary-cta"
-        >
-          {submitting
-            ? waiterMode
-              ? "Sending…"
-              : cashierMode
-                ? "Placing…"
-                : "Placing…"
-            : waiterMode
-              ? `Send to kitchen${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
-              : cashierMode
-                ? `Place & Pay${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
-                : `Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
-        </TouchButton>
+        <div className={s.dineInActions}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="lg"
+            onClick={clearCart}
+            disabled={selectedItems.length === 0}
+          >
+            Clear
+          </Button>
+          <Button type="button" variant="ghost" size="lg" onClick={() => navigate("/orders")}>
+            Cancel
+          </Button>
+          {isOnPremiseType && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="lg"
+              disabled={!canSubmit}
+              onClick={() => onSubmit(true)}
+              data-testid="pos-pay-now"
+            >
+              💳 Pay now
+            </Button>
+          )}
+          <TouchButton
+            type="button"
+            disabled={!canSubmit}
+            onClick={() => onSubmit(isOnPremiseType ? false : undefined)}
+            data-testid="new-order-primary-cta"
+          >
+            {submitting
+              ? addingToTab
+                ? "Adding…"
+                : waiterMode
+                  ? "Sending…"
+                  : "Placing…"
+              : addingToTab
+                ? `➕ Add to tab${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+                : dineInMode
+                  ? `🍽 Save to Table${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+                  : isOnPremiseType
+                    ? `🧾 Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+                    : waiterMode
+                      ? `Send to kitchen${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+                      : cashierMode
+                        ? `Place & Pay${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`
+                        : `📱 Place Order${total > 0 ? ` — AED ${total.toFixed(2)}` : ""}`}
+          </TouchButton>
+        </div>
       </BottomActionBar>
     </div>
   );

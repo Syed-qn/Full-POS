@@ -2,10 +2,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: var(--topbar-height, 56px);
-  min-height: var(--topbar-height, 56px);
+  height: var(--topbar-height, 68px);
+  min-height: var(--topbar-height, 68px);
   flex-shrink: 0;
-  padding: 0 16px;
+  padding: 0 20px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   -webkit-app-region: drag;
@@ -84,20 +84,22 @@
 
 .staffBtn,
 .alertBtn {
-  min-height: 40px;
-  min-width: 56px;
-  padding: 0 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
+  position: relative;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
   color: var(--text-primary);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  transition: background 0.12s;
+}
+.alertBtn:hover {
+  background: var(--bg-surface-inset);
 }
 
 .staffBtn:hover,
@@ -122,17 +124,22 @@
 }
 
 .alertCount {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
   background: var(--sla-critical);
   color: var(--text-inverse);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 2px solid var(--bg-surface);
+  box-sizing: content-box;
 }
 
 .reliabilityLink {

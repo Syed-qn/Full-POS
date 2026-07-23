@@ -52,11 +52,12 @@ describe("getRoleHomePath", () => {
     expect(getRoleHomePath(null)).toBe("/");
     expect(getRoleHomePath("owner")).toBe("/");
     expect(getRoleHomePath("manager")).toBe("/");
-    expect(getRoleHomePath("waiter")).toBe("/new-order");
-    expect(getRoleHomePath("staff")).toBe("/floor");
-    expect(getRoleHomePath("cashier")).toBe("/new-order");
+    expect(getRoleHomePath("waiter")).toBe("/waiter/floor");
+    expect(getRoleHomePath("cashier")).toBe("/cashier/floor");
     expect(getRoleHomePath("kitchen")).toBe("/kds");
-    expect(getRoleHomePath("rider")).toBe("/riders");
+    // staff/rider were removed — an unknown role falls back to Live Ops.
+    expect(getRoleHomePath("staff")).toBe("/");
+    expect(getRoleHomePath("rider")).toBe("/");
   });
 });
 
@@ -64,8 +65,33 @@ describe("getRoleChrome", () => {
   it("hides sidebar for kitchen", () => {
     expect(getRoleChrome("kitchen").showSidebar).toBe(false);
     expect(getRoleChrome("kitchen").mode).toBe("kitchen");
-    expect(getRoleChrome("waiter").showSidebar).toBe(true);
     expect(getRoleChrome(null).showSidebar).toBe(true);
+  });
+
+  it("gives waiter a chrome-free full-bleed floor display", () => {
+    const w = getRoleChrome("waiter");
+    expect(w.showSidebar).toBe(false);
+    expect(w.showTopBar).toBe(false);
+    expect(w.mode).toBe("waiter");
+  });
+
+  it("gives cashier a chrome-free full-screen terminal", () => {
+    const c = getRoleChrome("cashier");
+    expect(c.showSidebar).toBe(false);
+    expect(c.showTopBar).toBe(false);
+    expect(c.mode).toBe("cashier");
+  });
+
+  it("gives kitchen a chrome-free full-bleed board", () => {
+    const k = getRoleChrome("kitchen");
+    expect(k.showSidebar).toBe(false);
+    expect(k.showTopBar).toBe(false);
+    expect(k.mode).toBe("kitchen");
+  });
+
+  it("keeps the top bar for desk roles", () => {
+    expect(getRoleChrome(null).showTopBar).toBe(true);
+    expect(getRoleChrome("manager").showTopBar).toBe(true);
   });
 });
 
@@ -79,11 +105,12 @@ describe("role helpers", () => {
     sessionStorage.clear();
   });
 
-  it("isWaiterRole for waiter and staff", () => {
+  it("isWaiterRole for waiter only", () => {
     setStaffSession({ role: "waiter" });
     expect(isWaiterRole()).toBe(true);
+    // "staff" is no longer a role; it must not read as a waiter.
     setStaffSession({ role: "staff" });
-    expect(isWaiterRole()).toBe(true);
+    expect(isWaiterRole()).toBe(false);
     setStaffSession({ role: "cashier" });
     expect(isWaiterRole()).toBe(false);
     expect(isCashierRole()).toBe(true);
@@ -137,9 +164,13 @@ describe("canAccess — role matrix", () => {
     denied: string[];
   }> = [
     {
+      // Kitchen's ONLY surface is the KDS board (/kds + /kds/<station>).
       role: "kitchen",
-      allowed: ["/", "/orders", "/orders/9", "/kds", "/kds/1"],
+      allowed: ["/kds", "/kds/1"],
       denied: [
+        "/",
+        "/orders",
+        "/orders/9",
         "/menu",
         "/settings",
         "/staff",
@@ -151,14 +182,54 @@ describe("canAccess — role matrix", () => {
       ],
     },
     {
+      // Cashier's ONLY surfaces: /cashier/floor, /cashier/new-order, and the
+      // checkout (/orders/:id/pay → "/payments"). Everything else denied.
       role: "cashier",
-      allowed: ["/", "/floor", "/orders", "/new-order", "/payments", "/orders/1/pay", "/customers"],
-      denied: ["/menu", "/kds", "/staff", "/settings", "/marketing", "/riders"],
+      allowed: [
+        "/cashier",
+        "/cashier/floor",
+        "/cashier/new-order",
+        // Query string (table/label) must not affect access — stripped before matching.
+        "/cashier/new-order?table=3&label=T03",
+        "/payments",
+        "/orders/1/pay",
+        "/orders/40/pay",
+        "/orders/40/pay?table=3&label=T03",
+      ],
+      denied: [
+        "/",
+        "/floor",
+        "/orders",
+        "/orders/40",
+        "/new-order",
+        "/customers",
+        "/menu",
+        "/kds",
+        "/staff",
+        "/settings",
+        "/marketing",
+        "/riders",
+        "/waiter",
+      ],
     },
     {
+      // Waiters are locked to their own /waiter namespace — nothing else.
       role: "waiter",
-      allowed: ["/", "/floor", "/orders", "/orders/9", "/new-order"],
+      allowed: [
+        "/waiter",
+        "/waiter/floor",
+        "/waiter/new-order",
+        // Any table/label query is stripped before matching → all tables allowed.
+        "/waiter/new-order?table=3&label=T03",
+        "/waiter/new-order?table=99&label=T99",
+      ],
       denied: [
+        "/",
+        "/floor",
+        "/orders",
+        "/orders/9",
+        "/new-order",
+        "/cashier",
         "/menu",
         "/payments",
         "/orders/1/pay",
@@ -169,25 +240,6 @@ describe("canAccess — role matrix", () => {
         "/inventory",
         "/reports",
         "/channels",
-      ],
-    },
-    {
-      role: "rider",
-      allowed: ["/", "/orders", "/riders"],
-      denied: ["/menu", "/new-order", "/kds", "/payments", "/settings", "/staff", "/floor"],
-    },
-    {
-      role: "staff",
-      allowed: ["/", "/floor", "/orders", "/new-order", "/kds", "/riders", "/conversations", "/customers", "/tickets"],
-      denied: [
-        "/menu",
-        "/inventory",
-        "/staff",
-        "/settings",
-        "/marketing",
-        "/reports",
-        "/compliance",
-        "/payments",
       ],
     },
   ];
@@ -213,14 +265,14 @@ describe("filterNavItems", () => {
     expect(filterNavItems(items, null)).toHaveLength(5);
   });
 
-  it("filters for kitchen", () => {
+  it("filters for kitchen — KDS only", () => {
     const out = filterNavItems(items, "kitchen");
-    expect(out.map((i) => i.to)).toEqual(["/", "/kds"]);
+    expect(out.map((i) => i.to)).toEqual(["/kds"]);
   });
 
-  it("filters for waiter", () => {
+  it("filters for waiter — locked out of shared nav (waiter uses /waiter/* only)", () => {
     const out = filterNavItems(items, "waiter");
-    expect(out.map((i) => i.to)).toEqual(["/", "/floor"]);
+    expect(out.map((i) => i.to)).toEqual([]);
   });
 });
 

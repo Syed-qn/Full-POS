@@ -138,11 +138,21 @@ export interface OrderItemOut {
   name: string;
   qty: number;
   price_aed: string;
+  /** Serving size, when the dish has variants. */
+  variant_name?: string | null;
+  /** Special request shown to the kitchen (e.g. "no onion"). */
+  notes?: string | null;
+  /** Parcelled line on an otherwise dine-in bill (kitchen boxes it). */
+  is_takeaway?: boolean;
+  /** Held back from the kitchen until the course is fired. */
+  course_held?: boolean;
 }
 
 export interface OrderOut {
   id: number;
   order_number?: string;
+  /** Human-facing daily queue token (e.g. 626); null for legacy rows. */
+  daily_token?: number | null;
   status: OrderStatus;
   customer_name: string;
   customer_phone: string;
@@ -152,6 +162,13 @@ export interface OrderOut {
   rider_name: string | null;
   /** ISO 8601 — when the 40-min SLA clock started (order confirmed). */
   sla_started_at: string | null;
+  /**
+   * ISO 8601 — a manager acknowledged this order's SLA breach, so it leaves the
+   * Live Ops alert queue. Server-side, so it holds across refreshes and devices.
+   * The order is still late; this only silences the alert.
+   */
+  sla_acked_at?: string | null;
+  sla_acked_by_staff_id?: number | null;
   /** ISO 8601 — distance-driven kitchen "plate by" deadline (null if no drop-off pin). */
   prep_deadline: string | null;
   /** Estimated cook minutes; "start by" = prep_deadline − this. */
@@ -169,8 +186,11 @@ export interface OrderOut {
    *  orders that will batch together by proximity. Null when it would ride alone. */
   batch_preview?: string | null;
   resale_of_order_id?: number | null;
+  /** Why cancelled — "Merged into order …" marks a merge, not a real cancellation. */
+  cancellation_reason?: string | null;
   /** Category 1+8 POS / channel fields */
   order_type?: string | null;
+  table_id?: number | null;
   priority?: string | null;
   source_channel?: string | null;
   aggregator_source?: string | null;
@@ -244,8 +264,11 @@ export interface RiderDetailOut {
 
 export interface TimelineEventOut {
   ts: string;
-  action: string;
+  /** The role that acted. */
   actor: string;
+  action: string;
+  /** The person, when a staff session performed it (null for owner/system). */
+  actor_name?: string | null;
   after: Record<string, unknown> | null;
 }
 
@@ -369,10 +392,26 @@ export interface LiveOpsMapOut {
   sla_rings: SlaRingOut[];
 }
 
+/** One tender against a bill — a split bill produces several. */
+export interface PaymentDetailOut {
+  id: number;
+  tender_type: string;
+  amount_aed: string;
+  tip_aed: string;
+  status: string;
+  channel: string;
+  provider: string;
+  refunded_amount_aed: string;
+  reference_meta?: string | null;
+  created_at: string;
+}
+
 export interface OrderDetailOut {
   id: number;
   order_number: string;
+  daily_token?: number | null;
   status: OrderStatus;
+  order_type?: string | null;
   items: OrderItemDetailOut[];
   address: AddressDetailOut | null;
   customer: CustomerDetailOut;
@@ -386,6 +425,21 @@ export interface OrderDetailOut {
   sla_started_at: string | null;
   prep_deadline: string | null;
   cook_estimate_minutes: number | null;
+  /** A→Z service record: who took it, kitchen timings, how it was settled. */
+  table_label?: string | null;
+  covers?: number | null;
+  staff_name?: string | null;
+  /** First item shown to the kitchen — the KOT moment. */
+  kitchen_sent_at?: string | null;
+  /** Last item bumped, only once nothing is still on the pass. */
+  kitchen_ready_at?: string | null;
+  /** Who bumped the last item — the cook who called the order away. */
+  kitchen_ready_by?: string | null;
+  kitchen_pending_items?: number;
+  payments?: PaymentDetailOut[];
+  paid_total_aed?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
   timeline: TimelineEventOut[];
   chat: ChatMessageOut[];
   route: GpsPingOut[];
@@ -422,6 +476,7 @@ export interface OrderSummaryOut {
   total: string;
   created_at: string;
   resale_of_order_id?: number | null;
+  order_type?: string | null;
 }
 
 export interface FavoriteOut {

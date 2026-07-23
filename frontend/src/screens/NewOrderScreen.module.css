@@ -2,14 +2,64 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 1400px;
+  /* POS terminal: use the full available width so the sticky action bar and the
+     menu grid span edge-to-edge (no dead right-side gap on wide screens). */
+  width: 100%;
+  max-width: none;
 }
 
 .posLayout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(280px, 1fr) minmax(260px, 300px);
+  /* Cart column is wider so the Code·Particulars·Price·Qty·Amount grid reads
+     like a real terminal receipt instead of crushing the item name. */
+  grid-template-columns: minmax(240px, 300px) minmax(260px, 1fr) minmax(360px, 440px);
   gap: var(--space-4);
   align-items: start;
+}
+
+/* ── Cashier full-screen terminal ─────────────────────────────────────
+   Chrome-free single screen: customer + cart on the LEFT, categories +
+   items on the RIGHT, everything fitting one viewport (panes scroll
+   internally, the page itself never scrolls). */
+.screenCashier {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  gap: 8px;
+}
+.posLayoutCashier {
+  grid-template-columns: minmax(360px, 440px) 1fr;
+  grid-template-areas:
+    "form menu"
+    "cart menu";
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.posLayoutCashier > .leftCol {
+  grid-area: form;
+  min-height: 0;
+}
+.posLayoutCashier > .itemsPane {
+  grid-area: menu;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+.posLayoutCashier > .cartPane {
+  grid-area: cart;
+  position: static;
+  top: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* Tighter section padding so the whole terminal fits one screen. */
+.posLayoutCashier .section {
+  padding: 12px;
+  gap: 10px;
 }
 
 @media (max-width: 1100px) {
@@ -344,7 +394,7 @@
 .cartLines {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   flex: 1;
   overflow-y: auto;
 }
@@ -353,29 +403,133 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px;
+  padding: 6px 8px;
   border-radius: var(--radius);
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cartLine:last-child {
+  border-bottom-color: transparent;
+}
+
+/* Terminal receipt grid: Code · Particulars · Price · Qty · Amount · ✎ */
+.cartTableWrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
   border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.cartTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-ui);
+}
+.cartTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--bg-surface-inset);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left;
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
 }
+.thNum { text-align: right; }
+.thQty { text-align: center; width: 96px; }
+.thCode { width: 52px; }
+.thNote { width: 34px; }
 
-.cartLineMain {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+.cartTr td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
 }
-
-.cartLineName {
-  font-size: var(--font-size-body);
+.tdCode {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.tdName {
   font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+.tdNum {
+  text-align: right;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.tdAmt {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.tdQty { text-align: center; }
+.tdNoteCell { text-align: center; }
+
+.cartNoteTr td {
+  padding: 0 8px 8px;
+}
+
+/* Compact qty stepper inside a table cell. */
+.qtyMini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.qtyMiniBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.qtyMiniBtn:hover { border-color: var(--accent-primary); }
+.qtyMiniBtnActive {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+  font-weight: 700;
+}
+.qtyMiniNum {
+  min-width: 20px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
   color: var(--text-primary);
 }
 
-.cartLineAmt {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-ui);
-  color: var(--text-secondary);
-  white-space: nowrap;
+.noteToggle {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.noteToggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.noteToggleOn {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim, var(--bg-surface-inset));
 }
 
 .summary {
@@ -554,9 +708,34 @@
   margin-top: 10px;
 }
 
+.occupiedBanner {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: #fff4e5;
+  border: 1px solid #f0b866;
+  color: #8a5a00;
+  font-size: var(--font-size-ui);
+  line-height: 1.5;
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-primary);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ── Classic terminal chrome ─────────────────────────────────────── */
 .terminal {
-  max-width: 1600px;
+  /* Full-width POS terminal — no cap, so the sticky action bar and menu grid
+     reach the right edge (removes the dead right-side gap on wide screens). */
+  max-width: none;
+  width: 100%;
 }
 
 /* Order-type tabs */
@@ -804,6 +983,29 @@
   background: #f59e0b;
   color: #1a1a1a;
 }
+/* Dine-in primary: big green "Save to Table" spanning most of the row. */
+.posSave {
+  background: #16a34a;
+  grid-column: span 3;
+  font-size: var(--font-size-item, 18px);
+}
+@media (max-width: 900px) {
+  .posSave {
+    grid-column: span 3;
+  }
+}
+
+/* Dine-in action group: fills the bar with equal-width buttons. */
+.dineInActions {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+.dineInActions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
 
 .posBtnGhost {
   min-height: 60px;
@@ -820,3 +1022,530 @@
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   CASHIER TERMINAL (HANASIS-style single screen)
+   ══════════════════════════════════════════════════════════════════════ */
+.term {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(440px, 42%) 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head head"
+    "left right"
+    "status status";
+  gap: 8px;
+  background: var(--bg-canvas);
+}
+.termLeft {
+  grid-area: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  /* Scroll internally so the bottom buttons (Cash/Card) are always reachable
+     even when the whole stack is taller than the panel. */
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px;
+}
+.termRight {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+/* Full-width terminal header: order type is switched here, not inside the cart pane. */
+.tHeader {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+.tHeaderTable {
+  margin-left: auto;
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tTabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tTabs .tTab { flex: 1 1 0; min-width: 120px; }
+
+/* Dine-in table picker (floor plan) inside the terminal's left pane. */
+.tFloor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tFloorHdr {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tFloorEmpty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.tFloorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 14px 10px;
+}
+
+/* Table graphic: rounded surface with chair bars around it (reference layout).
+   Free tables are soft grey; tables with an open tab fill solid blue. */
+.tTable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: 12px;
+  --tbl: #e4e7ec;
+  --tbl-ink: #667085;
+}
+.tTable:hover { background: color-mix(in srgb, var(--accent-primary) 6%, transparent); }
+.tTable:focus-visible { outline: none; box-shadow: var(--focus-ring-strong); }
+
+.tTableFree { --tbl: #e4e7ec; --tbl-ink: #667085; }
+.tTableBusy { --tbl: #2e90fa; --tbl-ink: #ffffff; }
+
+.tSeatRow { display: flex; gap: 5px; height: 7px; }
+.tSeat {
+  width: 20px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--tbl);
+}
+.tSeatMid { display: flex; align-items: center; gap: 5px; }
+.tSeatSide {
+  width: 7px;
+  height: 34px;
+  border-radius: 4px;
+  background: var(--tbl);
+}
+.tTableTop {
+  min-width: 88px;
+  min-height: 60px;
+  border-radius: 10px;
+  background: var(--tbl);
+  color: var(--tbl-ink);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 8px;
+}
+.tTableLabel {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--tbl-ink);
+}
+.tTablePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tbl-ink);
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 5px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.tTableChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--accent-primary-dim);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.tTableChip > span { flex: 1; }
+.tChangeTable {
+  flex: none;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.tChangeTable:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+/* Dish search in the right pane header. */
+.tSearch {
+  flex: 1;
+  min-width: 140px;
+  max-width: 320px;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 13px;
+}
+.tSearch:focus { outline: none; border-color: var(--accent-primary); }
+.tTab {
+  min-height: 46px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.tTab:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.tTabActive, .tTabActive:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.tTokenRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-primary) 7%, var(--bg-surface));
+  border: 1px solid var(--border-subtle);
+}
+.tTokenLabel { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; color: var(--text-muted); }
+.tTokenNum {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--sla-critical, #d92d20);
+  margin-right: auto;
+}
+.tArrowBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.tArrowBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tBill { font-family: var(--font-mono); font-weight: 700; color: var(--accent-primary); }
+
+.tCustomer { display: flex; flex-direction: column; gap: 6px; }
+.tRow2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tInput {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.tInput:focus { outline: none; border-color: var(--accent-primary); }
+
+.tCartWrap {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 42vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+/* Existing open-tab summary shown when adding a round to a dine-in table. */
+.tTabBanner {
+  border: 1px solid color-mix(in srgb, #f79009 40%, var(--border-subtle));
+  background: color-mix(in srgb, #f79009 7%, var(--bg-surface));
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tTabHead { font-weight: 700; font-size: 13px; color: var(--text-primary); }
+.tTabItems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tTabItems li { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); }
+.tTabAmt { font-family: var(--font-mono); }
+.tTabHint { font-size: 11px; color: var(--text-muted); }
+.cartTrActive td { background: color-mix(in srgb, var(--accent-primary) 9%, transparent); }
+.tEmptyRow { padding: 24px 8px; text-align: center; color: var(--text-muted); font-style: italic; }
+
+.tTotals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-surface-inset);
+}
+.tTotRow { display: flex; justify-content: space-between; font-size: 14px; color: var(--text-secondary); }
+.tTotRow span:last-child { font-family: var(--font-mono); }
+.tTotNet {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.tActionRow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.tMove { font-size: 14px; color: #b42318; }
+
+/* assign delivery + customers + select waiter/driver */
+.tAssignRow { display: flex; align-items: center; justify-content: space-between; }
+.tAssignLink {
+  border: none;
+  background: transparent;
+  color: var(--accent-primary);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.tAssignLink:disabled { opacity: 0.6; cursor: default; }
+.tCustomers { font-size: 13px; color: var(--text-secondary); }
+.tCustomers strong { color: var(--text-primary); }
+.tSelectBtn {
+  min-height: 38px;
+  border-radius: 8px;
+  border: 1px dashed var(--border-default);
+  background: var(--bg-surface-inset);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tSelectBtn:disabled { opacity: 0.7; cursor: default; }
+.tSelectFull { width: 100%; }
+
+/* cart row numbers */
+.thRowNo { width: 26px; text-align: center; }
+.tdRowNo {
+  width: 26px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-surface-inset);
+}
+
+/* keypad side keys */
+/* Keypad anchored to the bottom-right of the right column, like the reference. */
+.tKeypadWrap {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  display: grid;
+  grid-template-columns: 138px auto;
+  gap: 4px;
+}
+.tKeypadSide { display: grid; grid-template-rows: repeat(5, 1fr); gap: 4px; }
+.tKeySide {
+  min-width: 62px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--accent-primary-dim, var(--bg-surface-inset));
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+.tKeySide:disabled { opacity: 0.6; }
+.tActBtn {
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.tActBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.tMinus { background: var(--sla-critical-dim, #fee4e2); color: #b42318; border-color: #fda29b; font-size: 20px; font-weight: 800; }
+.tPlus { background: #d1fadf; color: #027a48; border-color: #a6f4c5; font-size: 20px; font-weight: 800; }
+
+.tBtnGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tBtn {
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.tBtn:hover:not(:disabled) { border-color: var(--accent-primary); }
+.tBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tBtnCash { background: #12b76a; border-color: #12b76a; color: #fff; }
+.tBtnCard { background: #039855; border-color: #039855; color: #fff; }
+.tBtnCash:hover:not(:disabled), .tBtnCard:hover:not(:disabled) { filter: brightness(1.05); }
+
+.tCatHdr { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 800; font-size: 16px; color: var(--text-primary); }
+.tDate { font-size: 13px; color: var(--text-muted); font-family: var(--font-mono); font-weight: 600; }
+/* Right panel: category tile grid (left, ~34%) + items & keypad (right, bigger). */
+.tRightBody { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(240px, 34%) 1fr; gap: 8px; }
+
+.tCatGrid {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-auto-rows: 56px;
+  gap: 6px;
+  align-content: start;
+  padding-right: 2px;
+}
+.tCat {
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  text-transform: uppercase;
+  line-height: 1.15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.tCat:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.tCatActive, .tCatActive:hover { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+
+/* Right column: item tiles fill the top, keypad sits at the bottom-right. */
+.tItemsCol { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.tItems {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+.tItemTile {
+  position: relative;
+  min-height: 70px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  text-align: left;
+}
+.tItemTile:hover { border-color: var(--accent-primary); }
+.tItemTileActive { border-color: var(--accent-primary); box-shadow: inset 0 0 0 1px var(--accent-primary); }
+.tItemTop { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.tItemPrice { font-weight: 700; color: var(--text-primary); }
+.tItemName { font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.2; }
+.tItemQtyBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tKeypadMain { display: flex; flex-direction: column; gap: 4px; }
+.tKeyDisplay {
+  height: 30px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.tKeypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.tKey {
+  min-height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-inset);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.tKey:disabled { opacity: 0.55; }
+
+.tStatusBar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+.tStatusItem {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.tStatusItem:hover { background: var(--bg-surface-inset); color: var(--accent-primary); }
+.tStatusSpacer { flex: 1; }
+.tStatusClock { font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); }

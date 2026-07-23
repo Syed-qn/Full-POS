@@ -258,6 +258,7 @@ async def get_customer_profile(
                 total=o.total,
                 created_at=o.created_at,
                 resale_of_order_id=o.resale_of_order_id,
+                order_type=getattr(o, "order_type", None),
             )
             for o in recent_orders_rows
         ],

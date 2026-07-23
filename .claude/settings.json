@@ -92,7 +92,26 @@
       "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant\" PYTHONPATH=src ./.venv/Scripts/python.exe scripts/seed_demo_staff.py 4)",
       "Bash(./.venv/Scripts/python.exe -c \"import app.main; import app.kds.router; print\\('IMPORT OK'\\)\")",
       "Bash(xargs rm -rf)",
-      "Bash(xargs rm -f)"
+      "Bash(xargs rm -f)",
+      "Bash(./.venv/Scripts/python.exe -c \"import app.main; import app.tables.router; print\\('IMPORT OK'\\)\")",
+      "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant\" PYTHONPATH=src ./.venv/Scripts/python.exe scripts/seed_demo_tables.py 4)",
+      "Bash(powershell.exe -NoProfile -Command '$s = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue; if \\($s\\) { $s.OwningProcess | Select-Object -Unique | ForEach-Object { taskkill.exe /F /PID $_ 2>$null } }; Start-Sleep 2')",
+      "Bash(grep -nE \"@router\\\\.post\\\\\\(\\\\\"/\\\\{order_id\\\\}/items|add.item|append|/items\\\\\"\" src/app/ordering/router.py)",
+      "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant\" PYTHONPATH=src ./.venv/Scripts/python.exe -m alembic heads)",
+      "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant\" PYTHONPATH=src ./.venv/Scripts/python.exe -m alembic stamp a1b2c3d4e5f6)",
+      "Bash(rm -f alembic/versions/a1b2c3d4e5f6_order_covers_party_size.py)",
+      "Bash(./.venv/Scripts/python.exe -c \"import app.ordering.pos_orders, app.ordering.router, app.tables.router; print\\('IMPORT OK'\\)\")",
+      "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant_test\" PYTHONPATH=src ./.venv/Scripts/python.exe -m pytest tests/ordering/ tests/payments/ tests/pos/ -x -q)",
+      "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant_test\" PYTHONPATH=src ./.venv/Scripts/python.exe -m pytest tests/pos/ -q)",
+      "Bash(APP_DATABASE_URL=\"postgresql+asyncpg://app:app@localhost:5433/restaurant\" PYTHONPATH=src ./.venv/Scripts/python.exe scripts/delete_restaurants.py 1 2 3)",
+      "Bash(awk '/export interface OrderDetailOut/,/^}/' src/lib/types.ts)",
+      "Bash(APP_DATABASE_URL=postgresql+asyncpg://app:app@localhost:5433/restaurant PYTHONPATH=src ./.venv/Scripts/python.exe -c \"import app.ordering.router; print\\('router import OK'\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/docs)",
+      "Bash(curl -s -w '\\\\nHTTP %{http_code}\\\\n' -X POST http://localhost:8000/api/v1/orders/19/items -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Content-Type: application/json' -d '{\"items\":[{\"dish_id\":49,\"qty\":2}]}')",
+      "Bash(taskkill.exe //F //PID 56368)",
+      "Bash(APP_DATABASE_URL=postgresql+asyncpg://app:app@localhost:5433/restaurant PYTHONPATH=src ./.venv/Scripts/python.exe -m uvicorn app.main:app --port 8000 --host 127.0.0.1)",
+      "Bash(curl -s -o /dev/null -w \"health: %{http_code}\\\\n\" http://localhost:8000/health)",
+      "Bash(curl -s -o /dev/null -w \"docs: %{http_code}\\\\n\" http://localhost:8000/docs)"
     ],
     "additionalDirectories": [
       "\\tmp"

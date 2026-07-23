@@ -46,3 +46,4 @@ terminals/
 releases/
 
 .worktrees/
+.env.bak

@@ -52,6 +52,8 @@ export type FetchOrdersOpts = {
   q?: string;
   /** Category 8 — filter by source_channel / aggregator_source */
   channel?: string;
+  /** Fulfillment type filter — e.g. "takeaway" for the cashier's pickup list. */
+  orderType?: string;
 };
 
 export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
@@ -63,6 +65,7 @@ export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
   if (opts?.toDate) params.set("to_date", opts.toDate);
   if (opts?.q) params.set("q", opts.q);
   if (opts?.channel) params.set("channel", opts.channel);
+  if (opts?.orderType) params.set("order_type", opts.orderType);
   if (opts?.previewBatch === false) params.set("preview_batch", "false");
   const qs = params.toString();
   const path = qs ? `/api/v1/orders?${qs}` : "/api/v1/orders";
@@ -106,4 +109,12 @@ export async function fetchOrder(id: number): Promise<OrderOut> {
     if (!match) throw err;
     return match;
   }
+}
+/**
+ * Acknowledge a late order's SLA breach so it leaves the Live Ops alert queue.
+ * Manager-gated and audited server-side — the order stays late, this only
+ * records that someone saw it. Idempotent.
+ */
+export async function acknowledgeSla(id: number): Promise<OrderOut> {
+  return apiClient.post<OrderOut>(`/api/v1/orders/${id}/sla-ack`, {});
 }

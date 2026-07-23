@@ -50,3 +50,46 @@ Restaurant #4 "Full POS Demo".
 ## NEXT / DECISIONS
 - Add rider role later only if own-fleet delivery is used.
 - Keep src/app/pos/cratis.py (core POS adapter — do not delete).
+
+## PAID-BUT-NEVER-BUMPED TICKETS  (agreed 2026-07-23, build later)
+
+PROBLEM
+- A till can close an order the kitchen never marked ready (takeaway is pay-first,
+  so "closed" = money collected, NOT food handed over). VERIFIED: paying leaves
+  Order.status = delivered while the item stays kitchen_status = received and the
+  ticket REMAINS on the KDS board.
+- If the kitchen then cooks and serves but forgets to press Ready, nothing ever
+  clears that ticket. It sits on the pass forever and the service record reads
+  "Kitchen ready - pending" for good.
+
+ALREADY DONE (shipped 2026-07-23)
+- Ticket stays on the board deliberately - removing it on close would mean a guest
+  who already paid silently never gets fed, with no record anywhere.
+- KDS TicketItemOut.order_settled (true when the order is closed but the line is
+  still on the pass) -> green "PAID - WAITING" badge on the card.
+- Cancelled / on_resale orders DO leave the board (DEAD_ORDER_STATUSES).
+
+WHY NOT A SHIFT / DAY-CLOSE SWEEP
+- Shift close is not used here: cash_drawer_sessions has ONE session, opened
+  2026-07-20, still open. A "close of shift" trigger would never fire.
+- A 24-hour operation (hotel kitchen) has no end of day at all - no rollover, no
+  quiet moment. Anything keyed to a day boundary is the wrong mechanism.
+
+TO BUILD - AGE-BASED, NOT BOUNDARY-BASED
+1. Visual escalation FIRST (few lines, no scheduler): a settled ticket still on the
+   pass past N minutes turns red like Late, so the pass itself surfaces it.
+2. Auto-clear only after a LONG window (default ~2 h), behind a setting that
+   defaults to OFF. Celery beat task (workers already run).
+3. The auto-clear must stamp actor="system", action "auto_cleared_unbumped", so the
+   service record reads "Auto-cleared - never bumped by kitchen" and NEVER
+   "bumped by Kitchen". A cook who did not call the order away is never credited.
+4. Both thresholds per-restaurant settings (a hotel tolerates more than a counter).
+5. Count of auto-cleared tickets = a real kitchen-discipline metric worth reporting.
+
+ALTERNATIVE IF THE TASK IS TOO MUCH
+- Manager-only "Clear ticket" button on the KDS card, same honest system stamp,
+  manual, no scheduler.
+
+DO NOT
+- Do not auto-bump on payment: it would write "bumped by Kitchen" when no cook
+  ever touched the ticket, which makes the whole audit trail untrustworthy.

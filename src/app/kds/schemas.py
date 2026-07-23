@@ -70,6 +70,17 @@ class TicketItemOut(BaseModel):
     is_delayed: bool = False
     station_id: int | None = None
     kitchen_code: str | None = None
+    # Real menu category ("Popcorn", "Paratha Spot") — shown on the board
+    # instead of the generic station preset name.
+    category: str | None = None
+    # Dine-in source table: the kitchen plates by table, not by order number.
+    table_id: int | None = None
+    table_label: str | None = None
+    # Parcel line on a dine-in bill — this one gets boxed, not plated.
+    is_takeaway: bool = False
+    # The bill is already settled and the order closed, but this line is still
+    # on the pass: the guest has paid and is standing at the counter waiting.
+    order_settled: bool = False
 
 
 class PackagingCheckOut(BaseModel):

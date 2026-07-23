@@ -2,14 +2,28 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+#: The only roles a person can be given. "owner" is not here on purpose — that
+#: is the restaurant account itself, not an assignable staff role.
+ASSIGNABLE_ROLES = ("manager", "waiter", "cashier", "kitchen")
 
 
 class StaffIn(BaseModel):
     name: str
     phone: str | None = None
-    role: str = "staff"
+    role: str = "waiter"
     pin: str
+
+    @field_validator("role")
+    @classmethod
+    def _known_role(cls, v: str) -> str:
+        r = (v or "").strip().lower()
+        if r not in ASSIGNABLE_ROLES:
+            raise ValueError(
+                f"role must be one of {', '.join(ASSIGNABLE_ROLES)}"
+            )
+        return r
 
 
 class StaffOut(BaseModel):

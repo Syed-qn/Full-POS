@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record_audit
+from app.audit.context import get_actor_staff_id
 from app.db import get_session
 from app.staff.deps import require_role
 from app.kds import service as kds_service
@@ -53,10 +54,32 @@ async def _get_owned_item(
     return item
 
 
+async def _table_labels_for(session: AsyncSession, order: Order | None) -> dict[int, str]:
+    """{table_id: label} for a single order — keeps dine-in tickets showing their
+    table after a mutation (bump / start-prep / ready) the same as on the board."""
+    if order is None or getattr(order, "table_id", None) is None:
+        return {}
+    from app.tables.models import DiningTable
+
+    table = await session.get(DiningTable, order.table_id)
+    return {table.id: table.label} if table is not None else {}
+
+
+async def _dish_category_for(session: AsyncSession, item: OrderItem) -> dict[int, str]:
+    """{dish_id: category} for one item — keeps the board chip showing the real
+    menu category after a mutation, same as on the list endpoint."""
+    if item.dish_id is None:
+        return {}
+    from app.menu.models import Dish
+
+    dish = await session.get(Dish, item.dish_id)
+    return {dish.id: dish.category} if dish is not None and dish.category else {}
+
+
 @router.post("/stations", response_model=StationOut, status_code=status.HTTP_201_CREATED)
 async def create_station(
     body: StationIn,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -79,7 +102,7 @@ async def create_station(
 @router.get("/stations", response_model=list[StationOut])
 async def list_stations(
     kitchen_code: str | None = Query(default=None),
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     stmt = select(KitchenStation).where(KitchenStation.restaurant_id == restaurant.id)
@@ -92,7 +115,7 @@ async def list_stations(
 @router.post("/stations/seed-defaults", response_model=list[StationOut])
 async def seed_default_stations(
     kitchen_code: str = Query(default="main"),
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     """Create grill/fry/beverage/dessert/pizza/cloud/main presets for a kitchen."""
@@ -110,7 +133,7 @@ async def seed_default_stations(
 )
 async def upsert_category_default(
     body: CategoryDefaultIn,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -129,7 +152,7 @@ async def upsert_category_default(
 
 @router.get("/category-defaults", response_model=list[CategoryDefaultOut])
 async def list_category_defaults(
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     rows = await session.scalars(
@@ -144,7 +167,7 @@ async def list_category_defaults(
 async def station_tickets(
     station_id: int,
     include_ready: bool = Query(default=False),
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     """Active tickets for a station — oldest first, rush/priority floated up."""
@@ -161,15 +184,19 @@ async def station_tickets(
 async def bump_item(
     item_id: int,
     body: BumpIn | None = None,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
     before = {"kitchen_status": item.kitchen_status}
     item.kitchen_status = "ready"
     item.bumped_at = datetime.now(timezone.utc)
-    if body and body.staff_id is not None:
-        item.bumped_by_staff_id = body.staff_id
+    # Who called it away: an explicit staff_id wins, otherwise whoever's KDS
+    # session made the call. Without this the bump is anonymous and the service
+    # record can only say "ready", never by whom.
+    bumped_by = (body.staff_id if body else None) or get_actor_staff_id()
+    if bumped_by is not None:
+        item.bumped_by_staff_id = bumped_by
     await record_audit(
         session,
         actor="kitchen",
@@ -178,30 +205,40 @@ async def bump_item(
         action="bump",
         restaurant_id=restaurant.id,
         before=before,
-        after={"kitchen_status": item.kitchen_status, "staff_id": body.staff_id if body else None},
+        after={"kitchen_status": item.kitchen_status, "staff_id": bumped_by},
     )
     await session.commit()
     order = await session.get(Order, item.order_id)
-    return kds_service.enrich_ticket(item, order)
+    return kds_service.enrich_ticket(
+        item,
+        order,
+        table_labels=await _table_labels_for(session, order),
+        dish_categories=await _dish_category_for(session, item),
+    )
 
 
 @router.patch("/items/{item_id}/start-prep", response_model=TicketItemOut)
 async def start_prep(
     item_id: int,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
     item.kitchen_status = "preparing"
     await session.commit()
     order = await session.get(Order, item.order_id)
-    return kds_service.enrich_ticket(item, order)
+    return kds_service.enrich_ticket(
+        item,
+        order,
+        table_labels=await _table_labels_for(session, order),
+        dish_categories=await _dish_category_for(session, item),
+    )
 
 
 @router.patch("/items/{item_id}/recall", response_model=TicketItemOut)
 async def recall_item(
     item_id: int,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
@@ -221,13 +258,18 @@ async def recall_item(
     )
     await session.commit()
     order = await session.get(Order, item.order_id)
-    return kds_service.enrich_ticket(item, order)
+    return kds_service.enrich_ticket(
+        item,
+        order,
+        table_labels=await _table_labels_for(session, order),
+        dish_categories=await _dish_category_for(session, item),
+    )
 
 
 @router.post("/items/{item_id}/packaging-check", response_model=PackagingCheckOut)
 async def packaging_check(
     item_id: int,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
@@ -242,7 +284,7 @@ async def packaging_check(
 @router.post("/items/{item_id}/quality-check", response_model=QualityCheckOut)
 async def quality_check(
     item_id: int,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
@@ -258,7 +300,7 @@ async def quality_check(
 async def missing_item_confirm(
     item_id: int,
     body: MissingItemIn | None = None,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     item = await _get_owned_item(session, item_id=item_id, restaurant_id=restaurant.id)
@@ -284,7 +326,7 @@ async def missing_item_confirm(
 
 @router.get("/ready-for-pickup", response_model=list[ReadyForPickupOrderOut])
 async def ready_for_pickup(
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     by_order = await kds_service.list_ready_for_pickup(session, restaurant_id=restaurant.id)
@@ -305,7 +347,7 @@ async def ready_for_pickup(
 async def kitchen_performance(
     start_date: date = Query(...),
     end_date: date = Query(...),
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     return await kds_service.kitchen_performance_report(
@@ -318,7 +360,7 @@ async def kitchen_performance(
 
 @router.get("/print-jobs/pending", response_model=list[PrintJobOut])
 async def pending_print_jobs(
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     rows = await session.scalars(
@@ -334,7 +376,7 @@ async def pending_print_jobs(
 async def update_print_job_status(
     job_id: int,
     new_status: str,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     job = await session.get(PrintJob, job_id)
@@ -364,7 +406,7 @@ async def update_print_job_status(
 async def printer_heartbeat(
     station_id: int,
     body: PrinterHeartbeatIn,
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     await _get_owned_station(session, station_id=station_id, restaurant_id=restaurant.id)
@@ -381,7 +423,7 @@ async def printer_heartbeat(
 
 @router.get("/printer-status", response_model=list[PrinterStatusOut])
 async def printer_status(
-    restaurant=Depends(require_role("manager", "kitchen", "staff")),
+    restaurant=Depends(require_role("manager", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ):
     return await get_printer_status(session, restaurant_id=restaurant.id)

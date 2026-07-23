@@ -3,7 +3,7 @@
  *
  * Backend model:
  * - Restaurant owner login → JWT aud="manager", no `role` claim → full access.
- * - Staff PIN login → JWT aud="staff", `role` claim from staff_members.role.
+ * - Staff PIN login → JWT aud=`role` claim from staff_members.role.
  *
  * Default / backward compatible: unknown or missing role → show all routes
  * (never lock out owners/managers who lack a role claim).
@@ -11,23 +11,38 @@
  * Placement SSOT: docs/ROLE_SCREEN_FEATURE_PLACEMENT.md
  */
 
+/**
+ * The four operational roles, plus `owner`.
+ *
+ * `owner` is NOT a staff role you assign — it is the restaurant account itself
+ * (the aud="manager" tenant token), so it has to stay in the union or the
+ * account cannot be typed. Everything a human is given at login is one of
+ * manager / waiter / cashier / kitchen.
+ *
+ * "staff" and "rider" were removed: staff was an undifferentiated catch-all
+ * that overlapped waiter, and rider delivery is not part of this build.
+ */
 export type StaffRole =
   | "owner"
   | "manager"
-  | "staff"
   | "waiter"
   | "kitchen"
-  | "cashier"
-  | "rider";
+  | "cashier";
 
 export const KNOWN_ROLES: readonly StaffRole[] = [
   "owner",
   "manager",
-  "staff",
   "waiter",
   "kitchen",
   "cashier",
-  "rider",
+] as const;
+
+/** Roles that can be ASSIGNED to a person (excludes the account itself). */
+export const ASSIGNABLE_ROLES: readonly StaffRole[] = [
+  "manager",
+  "waiter",
+  "cashier",
+  "kitchen",
 ] as const;
 
 /** Roles that always see every authenticated module. */
@@ -43,10 +58,12 @@ export type StaffSessionMeta = {
 };
 
 export type RoleChrome = {
-  /** Hide left nav (kitchen fullscreen). */
+  /** Hide left nav (kitchen + cashier fullscreen). */
   showSidebar: boolean;
+  /** Hide the top bar too (cashier runs a chrome-free single-screen terminal). */
+  showTopBar: boolean;
   /** Role mode string for data attributes / CSS. */
-  mode: "owner" | "waiter" | "cashier" | "kitchen" | "staff" | "rider" | "full";
+  mode: "owner" | "waiter" | "cashier" | "kitchen" | "full";
 };
 
 export function setStaffSession(meta: StaffSessionMeta | null): void {
@@ -150,15 +167,15 @@ export function getRoleHomePath(role: StaffRole | string | null | undefined): st
         : role;
   if (r == null) return "/";
   switch (r) {
-    case "staff":
-      return "/floor";
+    // Waiters start on their own namespaced floor: pick a table, then order.
     case "waiter":
+      return "/waiter/floor";
+    // Cashiers land on their own dark floor: pick the table asking for its
+    // bill, then collect. Takeaway/delivery tills come later.
     case "cashier":
-      return "/new-order";
+      return "/cashier/floor";
     case "kitchen":
       return "/kds";
-    case "rider":
-      return "/riders";
     case "owner":
     case "manager":
     default:
@@ -174,18 +191,23 @@ export function getRoleChrome(role: StaffRole | string | null | undefined): Role
       : typeof role === "string"
         ? normalizeRole(role)
         : role;
-  if (r === "kitchen") return { showSidebar: false, mode: "kitchen" };
-  if (r === "waiter") return { showSidebar: true, mode: "waiter" };
-  if (r === "cashier") return { showSidebar: true, mode: "cashier" };
-  if (r === "staff") return { showSidebar: true, mode: "staff" };
-  if (r === "rider") return { showSidebar: true, mode: "rider" };
-  return { showSidebar: true, mode: r === "owner" || r === "manager" ? "owner" : "full" };
+  // Kitchen = full-bleed dark board with its own header strip (incl. sign-out).
+  if (r === "kitchen") return { showSidebar: false, showTopBar: false, mode: "kitchen" };
+  // Waiter = full-bleed dark floor screen with its own header strip (no app chrome).
+  if (r === "waiter") return { showSidebar: false, showTopBar: false, mode: "waiter" };
+  // Cashier = chrome-free single-screen terminal (in-screen strip handles nav).
+  if (r === "cashier") return { showSidebar: false, showTopBar: false, mode: "cashier" };
+  return {
+    showSidebar: true,
+    showTopBar: true,
+    mode: r === "owner" || r === "manager" ? "owner" : "full",
+  };
 }
 
 /** True when role should not see payment / tender UI (waiter floor staff). */
 export function isWaiterRole(role?: StaffRole | string | null): boolean {
   const r = role === undefined ? getSessionRole() : typeof role === "string" ? normalizeRole(role) : role;
-  return r === "waiter" || r === "staff";
+  return r === "waiter";
 }
 
 /** True when role is kitchen cook board. */
@@ -205,17 +227,25 @@ export function isCashierRole(role?: StaffRole | string | null): boolean {
  * Paths are prefixes; longest match wins. Nested routes inherit.
  */
 export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
-  "/": ["owner", "manager", "staff", "waiter", "kitchen", "cashier", "rider"],
-  "/floor": ["owner", "manager", "staff", "waiter", "cashier"],
-  "/orders": ["owner", "manager", "staff", "waiter", "kitchen", "cashier", "rider"],
-  "/new-order": ["owner", "manager", "staff", "waiter", "cashier"],
-  "/kds": ["owner", "manager", "staff", "kitchen"],
+  // Live Ops is the manager oversight dashboard (SLA map, KPIs) — cashiers work
+  // from the POS terminal, not a dashboard, so they don't get it.
+  "/": ["owner", "manager"],
+  // Waiters + cashiers are locked to their own namespaces — no shared /floor.
+  "/floor": ["owner", "manager"],
+  // Waiter's own namespaced floor + order terminal (waiter's ONLY surface).
+  "/waiter": ["owner", "manager", "waiter"],
+  // Cashier's ONLY surfaces: /cashier/floor + /cashier/new-order, plus the
+  // checkout (/orders/:id/pay → "/payments" key below). Nothing else.
+  "/cashier": ["owner", "manager", "cashier"],
+  "/orders": ["owner", "manager"],
+  "/new-order": ["owner", "manager"],
+  "/kds": ["owner", "manager", "kitchen"],
   "/payments": ["owner", "manager", "cashier"],
-  "/riders": ["owner", "manager", "staff", "rider"],
-  "/conversations": ["owner", "manager", "staff"],
+  "/riders": ["owner", "manager"],
+  "/conversations": ["owner", "manager"],
   "/menu": ["owner", "manager"],
   "/inventory": ["owner", "manager"],
-  "/customers": ["owner", "manager", "staff", "cashier"],
+  "/customers": ["owner", "manager"],
   "/staff": ["owner", "manager"],
   "/marketing": ["owner", "manager"],
   "/reports": ["owner", "manager"],
@@ -224,7 +254,7 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/channels": ["owner", "manager"],
   "/reliability": ["owner", "manager"],
   "/settings": ["owner", "manager"],
-  "/tickets": ["owner", "manager", "staff"],
+  "/tickets": ["owner", "manager"],
   "/coupons": ["owner", "manager"],
   "/compliance": ["owner", "manager"],
   "/analytics": ["owner", "manager"],

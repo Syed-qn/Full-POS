@@ -23,15 +23,49 @@
   min-height: 0;
 }
 
+/* SyncConflictBanner always renders its div (a test asserts the node exists),
+   so with nothing to report it was a zero-height flex child that still earned
+   the 12px column gap — a dead strip above EVERY screen. */
+.main > [data-testid="sync-conflict-banner"]:empty {
+  display: none;
+}
+
 .main {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px 16px 16px;
+  /* No bottom padding: a sticky BottomActionBar sits flush on the status footer
+     (removes the white gap/stripe between the action bar and DesktopStatusBar). */
+  padding: 16px 16px 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   background: var(--bg-canvas);
   min-height: 0;
   font-size: var(--font-size-body, 16px);
+}
+
+/* Cashier terminal is chrome-free and must fill the viewport exactly — no page
+   scroll; the cart and menu panes scroll internally instead. */
+/* Cashier now runs the same full-bleed floor + order terminal as the waiter,
+   so it paints its own surface edge to edge — no shell padding/gap. */
+.shell[data-role-mode="cashier"] .main {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Waiter floor display is full-bleed: it paints its own dark surface edge to edge. */
+.shell[data-role-mode="waiter"] .main {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Kitchen display is a full-bleed dark board: no page scroll, the ticket grid
+   scrolls internally. */
+.shell[data-role-mode="kitchen"] .main {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
 }

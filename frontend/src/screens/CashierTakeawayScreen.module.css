@@ -1,0 +1,513 @@
+/* Cashier Take Away list — same themed POS skin as the floor / terminal. */
+
+.root {
+  --ink: #e8e6e1;
+  --ink-dim: #8b8880;
+  --line: #2b2b28;
+  --line-2: #3a3a35;
+  --panel: #1e1e1c;
+  --panel-2: #232320;
+  --bg: #161615;
+  --amber: #f79009;
+  --green: #12b76a;
+  --blue: #2e90fa;
+  --red: #f04438;
+  /* Text ON a filled amber/green button. The dark themes use bright fills, so
+     near-black reads best; light theme's fills are dark, so it flips to white. */
+  --on-amber: #1a1206;
+  --on-accent: #04160d;
+
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.root[data-theme="light"] {
+  --ink: #1b1b18;
+  --ink-dim: #6a6a64;
+  --line: #e3e1db;
+  --line-2: #cfccc4;
+  --panel: #ffffff;
+  --panel-2: #eeece6;
+  --bg: #f2f1ec;
+  --amber: #b45309;
+  --green: #047857;
+  --red: #dc2626;
+  --on-amber: #ffffff;
+  --on-accent: #ffffff;
+}
+
+.root[data-theme="blue"] {
+  --ink: #eaf1ff;
+  --ink-dim: #90a6cf;
+  --line: #1d3a63;
+  --line-2: #2a4a7a;
+  --panel: #13233f;
+  --panel-2: #1b2f50;
+  --bg: #0c1a31;
+  --amber: #ffb020;
+  --green: #2fd48f;
+  --red: #ff6b5e;
+}
+
+.root input { user-select: text; }
+.root :focus,
+.root :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, 34%) 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+/* ── left list ────────────────────────────────────────────────────────── */
+.list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 10px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.searchWrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.searchWrap input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+}
+.searchWrap input::placeholder { color: var(--ink-dim); }
+
+.newBtn {
+  flex: none;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--amber);
+  color: var(--on-amber);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.newBtn:hover { filter: brightness(1.08); }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+  padding: 10px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.chip {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:hover { border-color: var(--line-2); color: var(--ink); }
+.chipActive {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--on-amber);
+}
+
+.rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.row:hover { background: var(--panel-2); }
+.rowActive {
+  background: color-mix(in srgb, var(--amber) 14%, var(--bg));
+}
+
+.rowTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ref {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.time {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.rowName {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.rowFoot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rowMeta { font-size: 12px; color: var(--ink-dim); }
+
+.rowTotal {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+/* status pills — grouped FSM buckets */
+.pill {
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.p_pending { border-color: var(--line-2); color: var(--ink-dim); }
+.p_preparing {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+}
+.p_ready {
+  border-color: var(--green);
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+.p_completed {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+}
+.p_cancelled {
+  border-color: var(--red);
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.msg {
+  margin: 40px 16px;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+/* ── right detail ─────────────────────────────────────────────────────── */
+.detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--ink-dim);
+  font-size: 14px;
+}
+.emptyIcon { font-size: 40px; opacity: 0.5; }
+
+.newBtnGhost {
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.newBtnGhost:hover { border-color: var(--amber); color: var(--amber); }
+
+.detailInner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  padding: 16px 20px;
+  gap: 14px;
+}
+
+.detailHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+}
+
+.detailRef {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.detailSub {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.itemList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.itemRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.itemRow:last-child { border-bottom: none; }
+.itemName { color: var(--ink); }
+.itemAmt {
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.itemNote {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--amber);
+}
+
+.detailTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex: none;
+  padding: 0 4px;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+.detailTotal strong {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.detailActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: none;
+}
+
+.act {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.act:hover:not(:disabled) { filter: brightness(1.08); }
+.act:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Colour marks THE action, not an action: COD is the one that takes money and
+   closes the order, so it is the only filled button in the row. */
+.actPay {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-accent);
+}
+
+/* ── COD dialog ───────────────────────────────────────────────────────── */
+.modalBack {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(440px, 100%);
+  max-height: 80vh;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.modalHead {
+  flex: none;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.codList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.codRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  font-size: 14px;
+}
+.codName { color: var(--ink); }
+.codAmt {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.codTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex: none;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+.codTotal strong {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.codActions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  padding: 0 18px 18px;
+}
+
+.codCancel,
+.codCollect {
+  min-height: 48px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.codCancel {
+  flex: 0 0 auto;
+  padding: 0 20px;
+  border: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.codCollect {
+  flex: 1 1 auto;
+  border: none;
+  background: var(--green);
+  color: var(--on-accent);
+}
+.codCancel:disabled,
+.codCollect:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 900px) {
+  .body { grid-template-columns: 1fr; }
+}

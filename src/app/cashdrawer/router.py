@@ -11,7 +11,6 @@ from app.cashdrawer.service import (
     open_session,
 )
 from app.db import get_session
-from app.identity.deps import current_restaurant
 from app.staff.deps import require_role
 
 router = APIRouter(prefix="/api/v1/cash-drawer", tags=["cash-drawer"])
@@ -20,7 +19,7 @@ router = APIRouter(prefix="/api/v1/cash-drawer", tags=["cash-drawer"])
 @router.post("/sessions", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
 async def open_drawer_session(
     body: OpenSessionIn,
-    restaurant=Depends(require_role("manager")),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     opened_by = "manager"
@@ -48,7 +47,7 @@ async def open_drawer_session(
 
 @router.get("/sessions/current", response_model=SessionOut)
 async def current_drawer_session(
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     drawer = await get_current_session(session, restaurant_id=restaurant.id)
@@ -61,7 +60,7 @@ async def current_drawer_session(
 async def add_drawer_event(
     session_id: int,
     body: EventIn,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -79,7 +78,7 @@ async def add_drawer_event(
 async def close_drawer_session(
     session_id: int,
     body: CloseSessionIn,
-    restaurant=Depends(require_role("manager")),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     try:

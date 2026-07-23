@@ -22,7 +22,9 @@ class StaffMember(Base, TimestampMixin):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     name: Mapped[str] = mapped_column(String(128))
     phone: Mapped[str | None] = mapped_column(String(32))
-    role: Mapped[str] = mapped_column(String(32), default="staff")
+    # One of app.staff.schemas.ASSIGNABLE_ROLES. "owner" is the restaurant
+    # account, never a staff row.
+    role: Mapped[str] = mapped_column(String(32), default="waiter")
     pin_hash: Mapped[str] = mapped_column(String(256))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     # Training mode: orders attributed to this staff are flagged is_training

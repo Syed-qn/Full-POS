@@ -1,0 +1,936 @@
+/* Waiter order terminal — dark POS skin, self-contained palette. */
+
+.root {
+  /* Dark is the default theme. */
+  --ink: #e8e6e1;
+  --ink-dim: #8b8880;
+  --line: #2b2b28;
+  --line-2: #3a3a35;
+  --panel: #1e1e1c;
+  --panel-2: #232320;
+  --bg: #161615;
+  --amber: #f79009;
+  --green: #12b76a;
+  --red: #f04438;
+  /* Text ON a filled amber chip — white where the theme amber is dark. */
+  --on-amber: #1a1a18;
+
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  /* Touch POS: rapid taps must not drag-select label text. */
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.root[data-theme="light"] {
+  --ink: #1b1b18;
+  --ink-dim: #6a6a64;
+  --line: #e3e1db;
+  --line-2: #cfccc4;
+  --panel: #ffffff;
+  --panel-2: #eeece6;
+  --bg: #f2f1ec;
+  --amber: #b45309;
+  --green: #047857;
+  --red: #dc2626;
+  --on-amber: #ffffff;
+}
+
+.root[data-theme="blue"] {
+  --ink: #eaf1ff;
+  --ink-dim: #90a6cf;
+  --line: #1d3a63;
+  --line-2: #2a4a7a;
+  --panel: #13233f;
+  --panel-2: #1b2f50;
+  --bg: #0c1a31;
+  --amber: #ffb020;
+  --green: #2fd48f;
+  --red: #ff6b5e;
+}
+
+/* Inputs stay selectable — only the chrome is locked. */
+.root input {
+  user-select: text;
+}
+
+/* No focus ring on this touch surface. base.css paints a BLUE box-shadow ring
+   (--focus-ring-strong) on :focus-visible — outline:none alone will not remove
+   it, the box-shadow has to be cleared too. Selection is already shown by the
+   highlighted cart row / dish tile. */
+.root :focus,
+.root :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ── ticket strip ─────────────────────────────────────────────────────── */
+.ticketBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.backBtn {
+  border: none;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.backBtn:hover { color: var(--amber); background: rgba(247, 144, 9, 0.08); }
+
+.tokenChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+.tokenHash { color: var(--amber); font-weight: 800; }
+.tokenNum {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--amber);
+}
+
+.tableTag {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+  padding: 0 6px;
+}
+
+.waiterPick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.waiterPick select {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+.waiterPick select option { background: var(--panel-2); color: var(--ink); }
+
+.covers {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+}
+.covers button {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  line-height: 1;
+}
+.covers button:hover { border-color: var(--amber); color: var(--amber); }
+.covers strong { min-width: 16px; text-align: center; font-size: 15px; }
+
+.spacer { flex: 1; }
+
+/* ── body split ───────────────────────────────────────────────────────── */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(380px, 33%) 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+.left,
+.right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* ── cart ─────────────────────────────────────────────────────────────── */
+.cartHead,
+.cartRow {
+  display: grid;
+  /* last track fits the 34px delete button plus its 10px gutter */
+  grid-template-columns: 26px 46px 1fr 58px 96px 70px 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.cartHead {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.cartBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.cartRow {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+/* :not(.cartRowActive) matters — a plain :hover outranks the .cartRowActive
+   class, so hovering the selected line (e.g. reaching for its delete icon)
+   replaced the amber highlight with the grey hover tint and the selection
+   looked like it had vanished. */
+.cartRow:hover:not(.cartRowActive) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.cartRowActive { background: color-mix(in srgb, var(--amber) 12%, transparent); }
+
+/* Un-ticked = held back from the kitchen. Must be unmistakable at a glance. */
+.cartRowHeld {
+  background: rgba(240, 68, 56, 0.07);
+}
+/* Dim the DATA, not the flags — a parent opacity would fade the NOT SENT tag
+   too, which is the one thing that must stay readable on a held line. */
+.cartRowHeld .cNameText,
+.cartRowHeld .cCode,
+.cartRowHeld .cPrice,
+.cartRowHeld .cQty,
+.cartRowHeld .cAmt {
+  opacity: 0.5;
+}
+
+.sendBox {
+  width: 15px;
+  height: 15px;
+  accent-color: #12b76a;
+  cursor: pointer;
+}
+
+.cCode, .cPrice, .cQty, .cAmt {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.cPrice, .cAmt { text-align: right; }
+.cQty { text-align: center; }
+
+/* Inline per-line quantity stepper: − [n] + */
+.qtyStepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: center;
+}
+.qtyBtn {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.qtyBtn:hover { border-color: var(--amber); color: var(--amber); }
+.qtyNum {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Per-line delete (trailing column) */
+/* Sits right after the AMOUNT column, so it needs its own breathing room —
+   without the left margin the icon crowds the total and reads as part of it.
+   Red at rest, not just on hover: a destructive control the cashier cannot
+   find is worse than one that is visibly destructive. */
+.rowDel {
+  margin-left: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--red);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* No hover chip — the icon is already red at rest, so a filled box behind it
+   just adds visual noise. Brighten it slightly instead. */
+.rowDel:hover {
+  filter: brightness(1.2);
+}
+.cName {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 8px;
+}
+
+.cNameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Flags + note share a row beneath the name so the dish gets the full width. */
+.cFlags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.cFlags .lineParcel,
+.cFlags .lineHeld { margin-left: 0; }
+.cFlags .lineNote { display: inline; margin-left: 0; }
+.cAmt { font-weight: 700; }
+
+.cartEmpty {
+  margin: 40px 0;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.tabBanner {
+  margin: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(247, 144, 9, 0.4);
+  border-radius: 8px;
+  background: rgba(247, 144, 9, 0.08);
+}
+.tabBannerHead {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  margin-bottom: 6px;
+}
+.tabRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  padding: 2px 0;
+}
+.tabPending {
+  color: var(--red);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* Parcel marker on an already-on-tab line (matches the cart's parcel flag). */
+.tabParcel {
+  display: inline-block;
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #2e90fa;
+  border: 1px solid rgba(46, 144, 250, 0.6);
+  background: rgba(46, 144, 250, 0.16);
+  border-radius: 4px;
+  padding: 0 5px;
+  vertical-align: middle;
+}
+
+/* Release lines the kitchen has not been shown yet — the other half of holding. */
+.fireHeldBtn {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--amber);
+  background: rgba(247, 144, 9, 0.16);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.fireHeldBtn:hover:not(:disabled) { filter: brightness(1.2); }
+.fireHeldBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.tabHint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+/* Held line marker — sits on the row, replacing the old banner below the cart. */
+.lineHeld {
+  flex: none;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--red);
+  border: 1px solid rgba(240, 68, 56, 0.55);
+  background: rgba(240, 68, 56, 0.14);
+  border-radius: 4px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+
+/* ── totals ───────────────────────────────────────────────────────────── */
+.totals {
+  flex: none;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.totRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--ink-dim);
+  padding: 3px 0;
+}
+.totRow span:last-child { font-family: var(--font-mono, ui-monospace, monospace); color: var(--ink); }
+.totNet {
+  margin-top: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.totNet span:last-child { color: var(--amber); font-weight: 800; font-size: 18px; }
+
+/* ── keypad ───────────────────────────────────────────────────────────── */
+.padWrap {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 76px;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.pad { display: flex; flex-direction: column; gap: 6px; }
+
+.padDisplay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.padDisplay strong {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 16px;
+  color: var(--amber);
+}
+
+.padKeys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.key {
+  min-height: 38px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.key:hover { border-color: var(--amber); color: var(--amber); }
+
+.padActions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+.keyClear,
+.keyEnter {
+  min-height: 38px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.keyClear { background: #5a1f1f; color: #ffb4a9; }
+.keyEnter { background: #6b5510; color: #ffd68a; }
+
+.padSide { display: flex; flex-direction: column; gap: 5px; }
+
+.sideKey {
+  flex: 1;
+  min-height: 38px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sideKey:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+.sideKey:disabled { opacity: 0.35; cursor: not-allowed; }
+.sideDanger:hover:not(:disabled) { border-color: #f04438; color: #f04438; }
+.sideKeyOn { border-color: var(--amber); color: var(--amber); background: rgba(247, 144, 9, 0.12); }
+
+/* Kitchen note for the selected cart line. */
+.noteBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 0 10px;
+  height: 38px;
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+.noteBar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+}
+.noteBar input::placeholder { color: var(--ink-dim); }
+.noteBar button {
+  border: none;
+  background: transparent;
+  color: var(--amber);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+/* Parcel line on a dine-in bill — same bill, but the kitchen boxes it. */
+.lineParcel {
+  display: inline-block;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #2e90fa;
+  border: 1px solid #2e90fa;
+  background: rgba(46, 144, 250, 0.18);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 6px;
+}
+
+.actParcelOn {
+  border-color: #2e90fa;
+  color: #2e90fa;
+  background: rgba(46, 144, 250, 0.16);
+}
+
+.lineNote {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--amber);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── right: search, categories, dishes ────────────────────────────────── */
+.searchWrap {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px;
+  padding: 0 12px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.searchWrap input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  outline: none;
+}
+.searchWrap input::placeholder { color: var(--ink-dim); }
+
+.catGrid {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.cat {
+  min-height: 38px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.cat:hover { filter: brightness(1.15); }
+.catActive { border-color: #fff; }
+
+.dishScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.dishGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.dish {
+  position: relative;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.dish:hover { border-color: var(--amber); }
+.dishActive { border-color: var(--amber); background: rgba(247, 144, 9, 0.1); }
+
+.dishCode {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.dishName { font-size: 14px; font-weight: 600; line-height: 1.25; }
+.dishFoot { margin-top: auto; width: 100%; display: flex; justify-content: flex-end; }
+.dishPrice {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--amber);
+}
+.dishQty {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--amber);
+  color: var(--on-amber);
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg { color: var(--ink-dim); font-size: 13px; text-align: center; margin-top: 30px; }
+
+/* ── bottom action bar ────────────────────────────────────────────────── */
+.actionBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.act {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.act:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+.act:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.actKot {
+  background: #6b5510;
+  border-color: #8a6d15;
+  color: #ffd68a;
+}
+.actKot:hover:not(:disabled) { filter: brightness(1.15); color: #ffd68a; }
+
+.actSave {
+  background: #1f4636;
+  border-color: #2a6049;
+  color: #9fe3c2;
+}
+.actSave:hover:not(:disabled) { filter: brightness(1.2); color: #9fe3c2; }
+
+.actVoid { border-color: #7a2420; color: var(--red); }
+
+.ticketMeta {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  color: var(--ink-dim);
+  text-transform: capitalize;
+}
+
+/* ── transfer picker ──────────────────────────────────────────────────── */
+.modalBack {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.modal {
+  width: min(620px, 92vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modalHead {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.modalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.modalTable {
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(18, 183, 106, 0.5);
+  background: rgba(18, 183, 106, 0.1);
+  color: var(--ink);
+  cursor: pointer;
+}
+.modalTable:hover:not(:disabled) { border-color: #12b76a; background: rgba(18, 183, 106, 0.2); }
+.modalTable:disabled { opacity: 0.5; cursor: not-allowed; }
+.modalTable strong { font-size: 15px; font-weight: 800; }
+.modalTable span { font-size: 11px; color: var(--ink-dim); }
+
+.modalCancel {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.modalCancel:hover { border-color: var(--amber); color: var(--amber); }
+.modalCancel:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── COD collect dialog ───────────────────────────────────────────────── */
+.codList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.codRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.codRow:last-child { border-bottom: none; }
+.codName { color: var(--ink); }
+.codAmt {
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.codEmpty {
+  padding: 16px;
+  text-align: center;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+
+.codTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 4px 14px;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+.codTotal strong {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.codActions {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.codCancel {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.codCancel:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+.codCancel:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.codCollect {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 10px;
+  border: none;
+  background: #12b76a;
+  color: #04160d;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.codCollect:hover:not(:disabled) { background: #0e9d5a; }
+.codCollect:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.payNote {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px dashed var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+/* Cashier right-side payment cluster: Print Bill · COD · Other Pay. */
+.payCluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Cashier-only primary tender button in the action bar footer. */
+.payBtn {
+  background: #12b76a;
+  border-color: #12b76a;
+  color: #04160d;
+  font-weight: 800;
+}
+.payBtn:hover:not(:disabled) {
+  background: #0e9d5a;
+  border-color: #0e9d5a;
+  color: #04160d;
+}

@@ -79,7 +79,7 @@ def _txn_out(txn: PaymentTransaction, total: object | None = None) -> dict:
 @router.post("/charge", status_code=status.HTTP_201_CREATED)
 async def charge(
     body: ChargeIn,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     gateway = get_payment_port(restaurant)
@@ -103,13 +103,22 @@ async def charge(
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     await session.commit()
     total = await total_paid(session, order_id=body.order_id)
+    # On-premise orders (dine-in/takeaway/drive-thru) close on full payment —
+    # this drops them from the open-bills list and frees their table. No-op for
+    # delivery/online (they close when the rider marks delivered) and partials.
+    from app.ordering.service import settle_on_premise_if_paid
+
+    await settle_on_premise_if_paid(
+        session, order_id=body.order_id, restaurant_id=restaurant.id, actor="cashier"
+    )
+    await session.commit()
     return _txn_out(txn, total)
 
 
 @router.post("/wallet-session", status_code=status.HTTP_201_CREATED)
 async def wallet_session(
     body: WalletSessionIn,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     """Mint Apple Pay / Google Pay / Tap-to-Pay client session (PaymentIntent)."""
@@ -320,7 +329,7 @@ async def recon_import(
 async def recon_report(
     start: datetime | None = None,
     end: datetime | None = None,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     return await reconciliation_report(
@@ -373,7 +382,7 @@ async def public_link_complete(
 async def deposit(
     order_id: int,
     body: DepositIn,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     gateway = get_payment_port(restaurant)
@@ -527,7 +536,7 @@ async def order_discount(
 @orders_router.get("/{order_id}/payments")
 async def order_payments(
     order_id: int,
-    restaurant=Depends(current_restaurant),
+    restaurant=Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     rows = await list_order_transactions(

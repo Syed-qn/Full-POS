@@ -1,50 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { apiClient } from "../lib/apiClient";
 import { isDesktopShell } from "../lib/desktopEnv";
-import { getSessionRole, getStaffSession, isTrainingMode } from "../lib/navAccess";
-import type { RestaurantOut } from "../lib/types";
+import { isTrainingMode } from "../lib/navAccess";
 import { AlertCenter, type AlertItem } from "./AlertCenter";
-import { StaffSwitchModal } from "./StaffSwitchModal";
 import s from "./TopBar.module.css";
-
-const TITLES: Record<string, string> = {
-  "/": "Live Ops",
-  "/floor": "Floor Plan",
-  "/orders": "Orders",
-  "/new-order": "New Order",
-  "/kds": "Kitchen Display",
-  "/menu": "Menu",
-  "/inventory": "Inventory",
-  "/branches": "Branches",
-  "/riders": "Riders",
-  "/conversations": "Chats",
-  "/channels": "Channels",
-  "/customers": "Customers",
-  "/staff": "Staff",
-  "/tickets": "Complaints",
-  "/payments": "Payments",
-  "/coupons": "Coupons",
-  "/compliance": "Compliance",
-  "/reports": "Reports",
-  "/ai": "AI Insights",
-  "/analytics": "Analytics",
-  "/marketing": "Marketing",
-  "/reliability": "Reliability",
-  "/settings": "Settings",
-  "/predictions": "Demand Forecast",
-  "/rider-app": "Rider App",
-};
-
-function titleFor(path: string): string {
-  if (TITLES[path]) return TITLES[path];
-  if (path.match(/^\/orders\/[^/]+\/pay$/)) return "Checkout";
-  if (path.match(/^\/orders\/[^/]+$/)) return "Order Detail";
-  const hit = Object.keys(TITLES)
-    .filter((k) => k !== "/" && path.startsWith(k))
-    .sort((a, b) => b.length - a.length)[0];
-  return hit ? TITLES[hit] : "Full POS";
-}
 
 export function TopBar({
   offline = false,
@@ -56,23 +14,11 @@ export function TopBar({
   pendingCount?: number;
   alerts?: AlertItem[];
 }) {
-  const loc = useLocation();
-  const [name, setName] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [staffSwitchOpen, setStaffSwitchOpen] = useState(false);
   const desktop = isDesktopShell();
   const alertCount = alerts.filter((a) => a.level !== "info").length;
-  const role = getSessionRole();
-  const staffMeta = getStaffSession();
   const training = isTrainingMode();
-
-  useEffect(() => {
-    apiClient
-      .get<RestaurantOut>("/api/v1/me")
-      .then((r) => setName(r.name))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -82,17 +28,10 @@ export function TopBar({
   return (
     <header className={s.bar} data-training={training ? "true" : "false"}>
       <div className={s.left}>
-        <h1 className={s.pageTitle}>{titleFor(loc.pathname)}</h1>
-        <span className={s.sep}>/</span>
-        <span className={s.store} title="Restaurant / branch">
-          {name ?? "…"}
-        </span>
+        {/* Page title lives in each screen's PageHeader — no duplicate breadcrumb here. */}
         {desktop && <span className={s.pill}>Local app</span>}
-        {role && (
-          <span className={s.pill} title="Active staff role">
-            {staffMeta?.name ? `${staffMeta.name} · ${role}` : role}
-          </span>
-        )}
+        {/* The staff-name · role chip lived here, but the sidebar header
+            already shows both, so it was the same fact twice on one screen. */}
         {training && (
           <span
             className={s.trainingBadge}
@@ -124,17 +63,6 @@ export function TopBar({
         )}
       </div>
       <div className={s.right}>
-        <button
-          type="button"
-          className={s.staffBtn}
-          onClick={() => setStaffSwitchOpen(true)}
-          title="Switch staff with PIN — lands on that role’s home"
-          aria-label="Switch staff with PIN"
-          data-testid="topbar-staff-switch"
-        >
-          Staff
-        </button>
-        <StaffSwitchModal open={staffSwitchOpen} onClose={() => setStaffSwitchOpen(false)} />
         <div className={s.alertWrap}>
           <button
             type="button"
@@ -149,7 +77,7 @@ export function TopBar({
             aria-haspopup="dialog"
             aria-controls={alertsOpen ? "alert-center-panel" : undefined}
           >
-            Alerts
+            <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>🔔</span>
             {alertCount > 0 && (
               <span className={s.alertCount} aria-hidden="true">
                 {alertCount}
@@ -163,14 +91,6 @@ export function TopBar({
             />
           )}
         </div>
-        <Link
-          to="/reliability"
-          className={s.reliabilityLink}
-          title="System reliability"
-          aria-label="System reliability status"
-        >
-          Status
-        </Link>
         <time
           className={s.date}
           dateTime={now.toISOString()}

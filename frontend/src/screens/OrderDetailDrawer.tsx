@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
 import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
@@ -76,6 +76,7 @@ export function OrderDetailDrawer({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<OrderDetailOut | null>(null);
   const [basicOrder, setBasicOrder] = useState<OrderOut | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -222,6 +223,13 @@ export function OrderDetailDrawer({
     ? `Order ${basicOrder.order_number ?? `#${basicOrder.id}`}`
     : "Order";
 
+  // On-premise (dine-in/takeaway/drive-thru): no rider, no cashier-driven
+  // kitchen FSM — hide that UI and offer add-items instead.
+  const otype = String(basicOrder?.order_type ?? "");
+  const isOnPremise =
+    otype === "dine_in" || otype === "takeaway" || otype === "drive_thru";
+  const isDineIn = otype === "dine_in";
+
   return (
     <SideDrawer open={orderId !== null} title={title} onClose={onClose} wide>
       {loading && !detail ? (
@@ -231,8 +239,20 @@ export function OrderDetailDrawer({
       ) : (
         <div className={s.detail}>
           <div className={s.head}>
-            <StatusPill status={detail.status} />
-            {ACTIVE_SLA.has(detail.status) ? (
+            <StatusPill status={detail.status} orderType={basicOrder.order_type} />
+            {/* Dine-in/takeaway have no SLA/delivery clock — skip the countdown. */}
+            {isOnPremise ? (
+              detail.status === "delivered" && detail.delivered_at ? (
+                <span className={s.deliveredStamp}>
+                  ✓ Paid{" "}
+                  {new Date(detail.delivered_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Dubai",
+                  })}
+                </span>
+              ) : null
+            ) : ACTIVE_SLA.has(detail.status) ? (
               <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
             ) : detail.status === "delivered" && detail.delivered_at ? (
               <span className={s.deliveredStamp}>
@@ -246,7 +266,8 @@ export function OrderDetailDrawer({
             ) : null}
           </div>
 
-          {(detail.status === "confirmed" || detail.status === "preparing") &&
+          {!isOnPremise &&
+            (detail.status === "confirmed" || detail.status === "preparing") &&
             detail.prep_deadline && (
               <div
                 style={{
@@ -277,9 +298,36 @@ export function OrderDetailDrawer({
               </div>
             )}
 
-          {(KITCHEN_ADVANCEABLE.has(detail.status) || CANCELLABLE.has(detail.status)) && (
+          {(KITCHEN_ADVANCEABLE.has(detail.status) ||
+            CANCELLABLE.has(detail.status) ||
+            isDineIn) && (
             <div className={s.actionBar}>
-              {KITCHEN_ADVANCEABLE.has(detail.status) && (
+              {isDineIn && CANCELLABLE.has(detail.status) && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    onClose();
+                    navigate(
+                      basicOrder.table_id
+                        ? `/new-order?table=${basicOrder.table_id}`
+                        : "/new-order",
+                    );
+                  }}
+                >
+                  + Add items
+                </Button>
+              )}
+              {isOnPremise && CANCELLABLE.has(detail.status) && (
+                <Button
+                  onClick={() => {
+                    onClose();
+                    navigate(`/orders/${basicOrder.id}/pay`);
+                  }}
+                >
+                  💳 Pay bill
+                </Button>
+              )}
+              {KITCHEN_ADVANCEABLE.has(detail.status) && !isOnPremise && (
                 <Button onClick={advanceStatus} disabled={advancing || cancelling}>
                   {advancing ? "Saving…" : ADVANCE_LABEL[detail.status]}
                 </Button>
@@ -301,9 +349,10 @@ export function OrderDetailDrawer({
             </div>
           )}
 
-          {(detail.status === "ready" ||
-            detail.status === "preparing" ||
-            detail.status === "confirmed") &&
+          {!isOnPremise &&
+            (detail.status === "ready" ||
+              detail.status === "preparing" ||
+              detail.status === "confirmed") &&
             !detail.rider && (
               <div className={s.actionBar}>
                 <select
@@ -432,19 +481,23 @@ export function OrderDetailDrawer({
             </div>
           )}
 
-          <div className={s.tabs} role="tablist">
-            {(["overview", "timeline", "chat", "customer"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={tab === t}
-                className={`${s.tab} ${tab === t ? s.activeTab : ""}`}
-                onClick={() => setTab(t)}
-              >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
+          {/* Dine-in/takeaway: no rider timeline / WhatsApp chat / delivery customer
+              profile — just the bill. Show the tab bar only when there's more than one. */}
+          {!isOnPremise && (
+            <div className={s.tabs} role="tablist">
+              {(["overview", "timeline", "chat", "customer"] as Tab[]).map((t) => (
+                <button
+                  key={t}
+                  role="tab"
+                  aria-selected={tab === t}
+                  className={`${s.tab} ${tab === t ? s.activeTab : ""}`}
+                  onClick={() => setTab(t)}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className={s.tabContent}>
             {tab === "overview" && <OverviewTab detail={detail} />}
@@ -501,6 +554,8 @@ function DrawerSkeleton() {
 // ── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ detail }: { detail: OrderDetailOut }) {
+  const t = String(detail.order_type ?? "");
+  const isOnPremise = t === "dine_in" || t === "takeaway" || t === "drive_thru";
   return (
     <div className={s.overview}>
       {detail.convo_summary ? (
@@ -542,46 +597,65 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
           <div className={s.totalRow}>
             <span>Subtotal</span><span>AED {detail.subtotal}</span>
           </div>
-          <div className={s.totalRow}>
-            <span>Delivery</span><span>AED {detail.delivery_fee_aed}</span>
-          </div>
+          {!isOnPremise && (
+            <div className={s.totalRow}>
+              <span>Delivery</span><span>AED {detail.delivery_fee_aed}</span>
+            </div>
+          )}
           <div className={s.totalGrand}>
             <span>Total</span><span>AED {detail.total}</span>
           </div>
         </div>
         <div className={s.payRow}>
           <span className={s.payLabel}>Payment</span>
-          <span className={s.codBadge}>COD</span>
+          {isOnPremise ? (
+            detail.status === "delivered" ? (
+              <span className={s.codBadge}>Paid</span>
+            ) : (
+              <span
+                className={s.codBadge}
+                style={{ background: "var(--sla-warn, #f79009)" }}
+              >
+                Unpaid
+              </span>
+            )
+          ) : (
+            <span className={s.codBadge}>COD</span>
+          )}
         </div>
       </section>
 
-      <section className={s.card}>
-        <h4 className={s.cardTitle}>Delivery</h4>
-        <div className={s.infoGrid}>
-          {detail.address ? (
-            <>
-              <Field label="Receiver" value={detail.address.receiver_name ?? "—"} />
-              <Field
-                label="Address"
-                value={
-                  [detail.address.room_apartment, detail.address.building]
-                    .filter(Boolean)
-                    .join(", ") || "—"
-                }
-              />
-              {detail.address.additional_details && (
-                <Field label="Notes" value={detail.address.additional_details} />
-              )}
-            </>
-          ) : (
-            <p className={s.empty}>No address</p>
-          )}
-          <Field
-            label="Rider"
-            value={detail.rider ? `${detail.rider.name} · ${detail.rider.phone}` : "Unassigned"}
-          />
-        </div>
-      </section>
+      {!isOnPremise && (
+        <section className={s.card}>
+          <h4 className={s.cardTitle}>Delivery</h4>
+          <div className={s.infoGrid}>
+            {detail.address ? (
+              <>
+                <Field label="Receiver" value={detail.address.receiver_name ?? "—"} />
+                <Field
+                  label="Address"
+                  value={
+                    [detail.address.room_apartment, detail.address.building]
+                      .filter(Boolean)
+                      .join(", ") || "—"
+                  }
+                />
+                {detail.address.additional_details && (
+                  <Field label="Notes" value={detail.address.additional_details} />
+                )}
+              </>
+            ) : (
+              <p className={s.empty}>No address</p>
+            )}
+            <Field
+              label="Rider"
+              value={detail.rider ? `${detail.rider.name} · ${detail.rider.phone}` : "Unassigned"}
+            />
+          </div>
+        </section>
+      )}
+
+      <ServiceRecord detail={detail} />
 
       {detail.dispatch_explain ? (
         <DispatchExplainSection
@@ -591,6 +665,278 @@ function OverviewTab({ detail }: { detail: OrderDetailOut }) {
         />
       ) : null}
     </div>
+  );
+}
+
+// ── Service record (A→Z) ─────────────────────────────────────────────────────
+
+const TENDER_LABEL: Record<string, string> = {
+  cash: "Cash",
+  card: "Card",
+  wallet: "Wallet",
+  online: "Online",
+  cod: "Cash on delivery",
+  credit: "Store credit",
+  voucher: "Voucher",
+};
+
+/** "7:14 AM" — the times a manager reconciles against, not ISO strings. */
+function clock(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/** Gap between two stamps, e.g. "4 min" — blank when either is missing. */
+function gap(fromIso?: string | null, toIso?: string | null): string | null {
+  if (!fromIso || !toIso) return null;
+  const ms = Date.parse(toIso) - Date.parse(fromIso);
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return "<1 min";
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
+}
+
+type Step = {
+  key: string;
+  label: string;
+  ts?: string | null;
+  meta?: string | null;
+  done: boolean;
+  /** How many identical item-level rows this line collapses. */
+  count?: number;
+};
+
+/** "cashier" → "Cashier". Audit actors are ROLES, which is what the log stores. */
+const actorName = (a?: string | null) =>
+  a ? a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : null;
+
+/**
+ * Audit actions worth their own line on the journey. Everything else stays in
+ * the collapsed trail — a manager needs to see interventions (voids, holds,
+ * price changes, merges), not every internal state write.
+ */
+const JOURNEY_ACTIONS: Record<string, string> = {
+  order_items_added: "Items added",
+  order_item_edited: "Item edited",
+  order_item_cancelled: "Item voided",
+  order_modified: "Order modified",
+  covers_changed: "Covers changed",
+  held: "Order held",
+  unheld: "Order resumed",
+  recall: "Recalled from kitchen",
+  priority_set: "Priority changed",
+  order_merged: "Bill merged in",
+  order_unmerged: "Merge undone",
+  order_split_by_items: "Bill split",
+  order_refunded: "Refunded",
+  order_sla_acknowledged: "SLA breach acknowledged",
+  order_staff_transferred: "Handed to another staff member",
+  order_fired_to_kitchen: "Fired to kitchen",
+  course_fired: "Course fired",
+  // Kitchen-side, audited against the ITEM rather than the order.
+  bump: "Item bumped by kitchen",
+  missing_item_confirmed: "Missing item confirmed",
+  scheduled_released: "Scheduled order released",
+  resale_accepted: "Resale accepted",
+  deleted: "Order deleted",
+};
+
+/**
+ * The order's whole life on one card: who opened it, when the kitchen saw it,
+ * when it was plated, how it was settled, and the raw audit trail underneath.
+ * Every field comes from a real column — nothing here is inferred from status.
+ */
+function ServiceRecord({ detail }: { detail: OrderDetailOut }) {
+  const payments = detail.payments ?? [];
+  const settled = payments.filter((p) => p.status === "succeeded");
+  const tips = settled.reduce((n, p) => n + Number(p.tip_aed || 0), 0);
+  const paid = detail.paid_total_aed != null ? Number(detail.paid_total_aed) : null;
+  const outstanding = paid != null ? Number(detail.total) - paid : null;
+  const pending = detail.kitchen_pending_items ?? 0;
+  const cancelled = detail.status === "cancelled" || !!detail.cancelled_at;
+  const closedAt = cancelled ? detail.cancelled_at : detail.delivered_at;
+  // The audit row that carried the order into its terminal state names the actor.
+  const closingEvent = detail.timeline
+    .filter((e) => {
+      const st = e.after?.status;
+      return typeof st === "string" && (st === "delivered" || st === "cancelled");
+    })
+    .at(-1);
+  const closedBy = closingEvent?.actor_name ?? actorName(closingEvent?.actor);
+
+  // Interventions — anything a manager or staff member DID to this order after
+  // it was placed, interleaved with the milestones by time.
+  // Item-level actions log one row PER LINE, so bumping a two-dish ticket
+  // writes two identical rows a fraction of a second apart. Collapse a burst of
+  // the same action by the same person into one line with a count — it was one
+  // gesture, and printing it twice reads like a bug.
+  const BURST_MS = 10_000;
+  const interventions: Step[] = [];
+  for (const e of detail.timeline) {
+    const label = JOURNEY_ACTIONS[e.action];
+    if (!label) continue;
+    const who = e.actor_name ?? actorName(e.actor);
+    const reason =
+      typeof e.after?.reason === "string" && e.after.reason ? e.after.reason : null;
+    const prev = interventions.at(-1);
+    if (
+      prev &&
+      prev.key.startsWith(`audit-${e.action}-${who ?? ""}-`) &&
+      Date.parse(e.ts) - Date.parse(prev.ts!) < BURST_MS
+    ) {
+      prev.count = (prev.count ?? 1) + 1;
+      prev.label = `${label} ×${prev.count}`;
+      prev.ts = e.ts;
+      continue;
+    }
+    interventions.push({
+      key: `audit-${e.action}-${who ?? ""}-${e.ts}`,
+      label,
+      ts: e.ts,
+      meta: [who ? `by ${who}` : null, reason].filter(Boolean).join(" · "),
+      done: true,
+      count: 1,
+    });
+  }
+
+  const milestones: Step[] = [
+    {
+      key: "placed",
+      label: "Order placed",
+      ts: detail.created_at,
+      meta: detail.staff_name ? `by ${detail.staff_name}` : null,
+      done: true,
+    },
+    {
+      key: "kot",
+      label: "Sent to kitchen (KOT)",
+      ts: detail.kitchen_sent_at,
+      meta: detail.kitchen_sent_at ? gap(detail.created_at, detail.kitchen_sent_at) : null,
+      done: !!detail.kitchen_sent_at,
+    },
+    {
+      key: "ready",
+      label: "Kitchen ready",
+      ts: detail.kitchen_ready_at,
+      meta: detail.kitchen_ready_at
+        ? [
+            `cooked in ${gap(detail.kitchen_sent_at, detail.kitchen_ready_at) ?? "—"}`,
+            detail.kitchen_ready_by ? `bumped by ${detail.kitchen_ready_by}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : pending > 0
+          ? `${pending} item${pending === 1 ? "" : "s"} still on the pass`
+          : null,
+      done: !!detail.kitchen_ready_at,
+    },
+    ...settled.map((p, i) => ({
+      key: `pay-${p.id}`,
+      label: `Paid — ${TENDER_LABEL[p.tender_type] ?? p.tender_type}`,
+      ts: p.created_at,
+      meta: `AED ${p.amount_aed}${Number(p.tip_aed) > 0 ? ` + ${p.tip_aed} tip` : ""}${
+        settled.length > 1 ? ` · split ${i + 1}/${settled.length}` : ""
+      } · ${p.channel}`,
+      done: true,
+    })),
+    {
+      key: "closed",
+      label: cancelled ? "Cancelled" : "Order closed",
+      ts: closedAt,
+      // Who closed it comes from the audit row for that transition — the actor
+      // is a ROLE (manager / cashier), which is what the audit log records.
+      meta: closedAt
+        ? [
+            closedBy ? `by ${closedBy}` : null,
+            detail.cancellation_reason || null,
+            `open for ${gap(detail.created_at, closedAt)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : null,
+      done: !!closedAt,
+    },
+  ];
+
+  // One chronological rail: everything that happened, in the order it happened.
+  // Steps still to come keep their canonical order at the bottom — but a
+  // cancelled order has no future, so "Kitchen ready · pending" is dropped
+  // rather than left dangling under the cancellation.
+  const steps: Step[] = [
+    ...[...milestones.filter((st) => st.done && st.ts), ...interventions].sort(
+      (a, b) => Date.parse(a.ts!) - Date.parse(b.ts!),
+    ),
+    ...(cancelled ? [] : milestones.filter((st) => !st.done || !st.ts)),
+  ];
+
+  return (
+    <section className={s.card}>
+      <h4 className={s.cardTitle}>Service record</h4>
+
+      <div className={s.infoGrid}>
+        {detail.table_label && <Field label="Table" value={detail.table_label} />}
+        {detail.covers != null && <Field label="Covers" value={String(detail.covers)} />}
+        {detail.daily_token != null && (
+          <Field label="Token" value={`#${detail.daily_token}`} />
+        )}
+        <Field label="Taken by" value={detail.staff_name ?? "—"} />
+      </div>
+
+      <ol className={s.journey}>
+        {steps.map((st) => (
+          <li
+            key={st.key}
+            className={`${s.journeyStep} ${st.done ? s.journeyDone : s.journeyPending}`}
+          >
+            <span className={s.journeyDot} aria-hidden="true" />
+            <span className={s.journeyLabel}>{st.label}</span>
+            <span className={s.journeyTime}>{st.done ? clock(st.ts) : "pending"}</span>
+            {st.meta && <span className={s.journeyMeta}>{st.meta}</span>}
+          </li>
+        ))}
+      </ol>
+
+      {payments.length > 0 && (
+        <div className={s.totals}>
+          <div className={s.totalRow}>
+            <span>Paid</span>
+            <span>AED {paid?.toFixed(2) ?? "0.00"}</span>
+          </div>
+          {tips > 0 && (
+            <div className={s.totalRow}>
+              <span>Tips</span><span>AED {tips.toFixed(2)}</span>
+            </div>
+          )}
+          {outstanding != null && Math.abs(outstanding) >= 0.01 && (
+            <div className={s.totalRow}>
+              <span>{outstanding > 0 ? "Outstanding" : "Change / overpaid"}</span>
+              <span>AED {Math.abs(outstanding).toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {detail.timeline.length > 0 && (
+        <details className={s.auditWrap}>
+          <summary className={s.auditSummary}>
+            Full audit trail ({detail.timeline.length})
+          </summary>
+          <ul className={s.auditList}>
+            {detail.timeline.map((e, i) => (
+              <li key={i} className={s.auditRow}>
+                <span className={s.auditTime}>{clock(e.ts)}</span>
+                <span className={s.auditAction}>{timelineLabel(e)}</span>
+                <span className={s.auditActor}>{e.actor_name ?? e.actor}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }
 

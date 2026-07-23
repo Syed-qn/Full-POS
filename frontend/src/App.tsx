@@ -4,7 +4,14 @@ import { AppShell } from "./components/AppShell";
 import { NoAccessScreen } from "./components/NoAccessScreen";
 import { Toaster } from "./components/Toaster";
 import { isAuthenticated } from "./lib/auth";
-import { canAccess, getSessionRole } from "./lib/navAccess";
+import {
+  canAccess,
+  getRoleChrome,
+  getRoleHomePath,
+  getSessionRole,
+  isCashierRole,
+  isWaiterRole,
+} from "./lib/navAccess";
 import {
   readCachedOnboardingComplete,
   resolveOnboardingComplete,
@@ -38,9 +45,26 @@ import { ReliabilityScreen } from "./screens/ReliabilityScreen";
 import { ComplianceScreen } from "./screens/ComplianceScreen";
 import { AiInsightsScreen } from "./screens/AiInsightsScreen";
 import { FloorPlanScreen } from "./screens/FloorPlanScreen";
+import { WaiterFloorScreen } from "./screens/WaiterFloorScreen";
+import { WaiterOrderScreen } from "./screens/WaiterOrderScreen";
 import { OrderDetailScreen } from "./screens/OrderDetailScreen";
 import { CheckoutScreen } from "./screens/CheckoutScreen";
+import { CashierFloorScreen } from "./screens/CashierFloorScreen";
+import { CashierTakeawayScreen } from "./screens/CashierTakeawayScreen";
 import { RiderAppScreen } from "./screens/RiderAppScreen";
+
+/**
+ * /floor serves two audiences: waiters get the full-bleed dark floor display,
+ * managers/cashiers keep the admin floor plan with its transfer/merge tooling.
+ */
+function FloorRoute() {
+  return isWaiterRole() ? <WaiterFloorScreen /> : <FloorPlanScreen />;
+}
+
+/** Waiters and cashiers get the dark order terminal; everyone else keeps the POS screen. */
+function NewOrderRoute() {
+  return isWaiterRole() || isCashierRole() ? <WaiterOrderScreen /> : <NewOrderScreen />;
+}
 
 function Guarded({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
@@ -67,6 +91,17 @@ function Guarded({ children }: { children: React.ReactNode }) {
   // Soft role gate: keep shell chrome; show friendly no-access (public routes are unguarded).
   const role = getSessionRole();
   if (!canAccess(loc.pathname, role)) {
+    // Chrome-free roles (waiter/cashier/kitchen) have no sidebar to escape a
+    // dead-end "No access" wall, and each owns a single surface. So bounce them
+    // to THEIR home on ANY denied route — a waiter who lands on /floor (or "/")
+    // is sent to /waiter/floor. Sidebar roles (staff/rider) keep the friendly
+    // No-access screen since they can navigate away from it; everyone still gets
+    // bounced off the bare root.
+    const home = getRoleHomePath(role);
+    const chromeFree = !getRoleChrome(role).showSidebar;
+    if (home !== "/" && (loc.pathname === "/" || chromeFree)) {
+      return <Navigate to={home} replace />;
+    }
     return (
       <AppShell>
         <NoAccessScreen />
@@ -92,7 +127,12 @@ export default function App() {
       <Route path="/rider-track/:riderToken" element={<RiderTrackingScreen />} />
       <Route path="/order/:slug" element={<PublicStoreScreen />} />
       <Route path="/" element={<Guarded><LiveOpsScreen /></Guarded>} />
-      <Route path="/floor" element={<Guarded><FloorPlanScreen /></Guarded>} />
+      <Route path="/floor" element={<Guarded><FloorRoute /></Guarded>} />
+      <Route path="/waiter/floor" element={<Guarded><FloorRoute /></Guarded>} />
+      <Route path="/waiter/new-order" element={<Guarded><NewOrderRoute /></Guarded>} />
+      <Route path="/cashier/floor" element={<Guarded><CashierFloorScreen /></Guarded>} />
+      <Route path="/cashier/takeaway" element={<Guarded><CashierTakeawayScreen /></Guarded>} />
+      <Route path="/cashier/new-order" element={<Guarded><NewOrderRoute /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
       <Route
         path="/orders/:id/pay"
@@ -112,7 +152,7 @@ export default function App() {
       />
       <Route path="/customers" element={<Guarded><CustomersScreen /></Guarded>} />
       <Route path="/customers/:id" element={<Guarded><CustomerProfileScreen /></Guarded>} />
-      <Route path="/new-order" element={<Guarded><NewOrderScreen /></Guarded>} />
+      <Route path="/new-order" element={<Guarded><NewOrderRoute /></Guarded>} />
       <Route path="/menu" element={<Guarded><MenuManagerScreen /></Guarded>} />
       <Route path="/kds" element={<Guarded><KdsScreen /></Guarded>} />
       <Route path="/kds/:stationId" element={<Guarded><KdsScreen /></Guarded>} />

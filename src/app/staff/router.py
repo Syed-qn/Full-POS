@@ -441,7 +441,11 @@ async def attribute_tip_endpoint(
 @router.post("/approvals", response_model=ApprovalOut, status_code=status.HTTP_201_CREATED)
 async def create_approval_with_pin(
     body: ManagerPinIn,
-    restaurant=Depends(current_restaurant),
+    # A manager on a staff PIN session must be able to approve — gating this on
+    # the OWNER token made every void/cancel 403 "manager access required" for
+    # the very role the dialog asks for. The PIN is still verified inside
+    # approve_with_pin, so the caller needs the role AND the secret.
+    restaurant=Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
     try:

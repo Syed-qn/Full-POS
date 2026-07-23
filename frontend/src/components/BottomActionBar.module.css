@@ -11,5 +11,7 @@
   background: var(--bg-surface);
   border-top: 1px solid var(--border-default);
   box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.06);
-  margin: auto -16px -16px;
+  /* Bleed horizontally to the scroll-area edges; sit flush on the bottom (the
+     .main no longer adds bottom padding, so the bar meets the status footer). */
+  margin: auto -16px 0;
 }

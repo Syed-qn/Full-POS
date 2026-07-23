@@ -44,6 +44,10 @@ class OrderFSM:
         OrderStatus.CONFIRMED: {
             OrderStatus.PREPARING,
             OrderStatus.CANCELLED,
+            # On-premise (dine-in/takeaway) orders have no delivery leg: paying
+            # closes them straight to DELIVERED (= fulfilled & done). Gated to
+            # on-premise order types in service.settle_on_premise_if_paid.
+            OrderStatus.DELIVERED,
         },
         OrderStatus.PREPARING: {
             OrderStatus.READY,
@@ -52,11 +56,13 @@ class OrderFSM:
             # layer picks the edge by actor; the FSM permits both.
             OrderStatus.ON_RESALE,
             OrderStatus.CANCELLED,
+            OrderStatus.DELIVERED,  # on-premise paid-complete (see CONFIRMED note)
         },
         OrderStatus.READY: {
             OrderStatus.ASSIGNED,
             # Restaurant/POS may cancel until delivery (customer cancel blocked in service).
             OrderStatus.CANCELLED,
+            OrderStatus.DELIVERED,  # on-premise paid-complete (see CONFIRMED note)
         },
         OrderStatus.ASSIGNED: {
             OrderStatus.PICKED_UP,

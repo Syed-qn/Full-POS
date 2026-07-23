@@ -13,6 +13,10 @@ class OrderItemDetailOut(BaseModel):
     qty: int
     price_aed: Decimal
     notes: str | None = None  # special request (e.g. "double masala") — shown to kitchen
+    # Held lines are on the bill but deliberately withheld from the kitchen
+    # until the course is fired — the UI needs this to offer "fire held".
+    course_held: bool = False
+    is_takeaway: bool = False
 
     @computed_field  # type: ignore[misc]
     @property
@@ -67,8 +71,25 @@ class RiderDetailOut(BaseModel):
 class TimelineEventOut(BaseModel):
     ts: datetime
     action: str
-    actor: str
+    actor: str                       # the ROLE that acted
+    actor_name: str | None = None    # the person, when a staff session did it
     after: dict | None
+
+
+class PaymentDetailOut(BaseModel):
+    """One tender against the bill — how the guest actually paid. A split bill
+    produces several rows, which is why this is a list and not a single field."""
+
+    id: int
+    tender_type: str          # cash | card | wallet | ...
+    amount_aed: Decimal
+    tip_aed: Decimal
+    status: str               # pending | succeeded | failed | refunded
+    channel: str              # till | pos_cod | link | ...
+    provider: str
+    refunded_amount_aed: Decimal
+    reference_meta: str | None = None
+    created_at: datetime
 
 
 class ChatMessageOut(BaseModel):
@@ -86,7 +107,9 @@ class GpsPingOut(BaseModel):
 class OrderDetailOut(BaseModel):
     id: int
     order_number: str
+    daily_token: int | None = None
     status: str
+    order_type: str | None = None
     items: list[OrderItemDetailOut]
     address: AddressDetailOut | None
     customer: CustomerDetailOut
@@ -100,6 +123,19 @@ class OrderDetailOut(BaseModel):
     sla_started_at: datetime | None = None
     prep_deadline: datetime | None
     cook_estimate_minutes: int | None
+    # ── A→Z service record: who took it, when the kitchen saw it, when it was
+    #    ready, and how it was settled. Populated for every order type.
+    table_label: str | None = None
+    covers: int | None = None
+    staff_name: str | None = None          # who opened the tab (waiter / cashier)
+    kitchen_sent_at: datetime | None = None    # first item shown to the kitchen (KOT)
+    kitchen_ready_at: datetime | None = None   # last item bumped — whole order plated
+    kitchen_ready_by: str | None = None        # who bumped the last item
+    kitchen_pending_items: int = 0             # items not yet bumped
+    payments: list[PaymentDetailOut] = []
+    paid_total_aed: Decimal | None = None
+    cancelled_at: datetime | None = None
+    cancellation_reason: str | None = None
     timeline: list[TimelineEventOut]
     chat: list[ChatMessageOut]
     convo_summary: str | None = None  # kitchen digest: item notes + persisted order/address details
@@ -135,6 +171,7 @@ class OrderSummaryOut(BaseModel):
     total: Decimal
     created_at: datetime
     resale_of_order_id: int | None = None
+    order_type: str | None = None
 
     model_config = {"from_attributes": True}
 

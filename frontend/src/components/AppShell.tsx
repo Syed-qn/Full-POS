@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { getRoleChrome, getSessionRole, isTrainingMode } from "../lib/navAccess";
 import { useOfflineStatus } from "../lib/useOfflineStatus";
-import { DesktopStatusBar } from "./DesktopStatusBar";
 import { NavSidebar } from "./NavSidebar";
 import { SectionBanner } from "./SectionBanner";
 import { SyncConflictBanner } from "./SyncConflictBanner";
@@ -35,7 +34,9 @@ export function AppShell({
     >
       {chrome.showSidebar && <NavSidebar unread={unread} />}
       <div className={s.content}>
-        <TopBar offline={offline} pendingCount={status.pendingCount} alerts={alerts} />
+        {chrome.showTopBar && (
+          <TopBar offline={offline} pendingCount={status.pendingCount} alerts={alerts} />
+        )}
         <main className={s.main}>
           <SyncConflictBanner />
           {training && (
@@ -51,7 +52,6 @@ export function AppShell({
           )}
           {children}
         </main>
-        <DesktopStatusBar />
       </div>
     </div>
   );

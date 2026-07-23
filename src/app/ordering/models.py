@@ -135,6 +135,10 @@ class Order(Base, TimestampMixin):
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     order_number: Mapped[str] = mapped_column(String(32), index=True)
+    # Human-facing daily queue token (e.g. "626"). Per-restaurant, resets each
+    # Asia/Dubai day; assigned at order creation. Separate from order_number,
+    # which is the permanent unique invoice id. Null for legacy rows.
+    daily_token: Mapped[int | None] = mapped_column(Integer, index=True)
     status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
     priority: Mapped[str] = mapped_column(String(16), default="normal")
     # Fulfillment / channel type — see app.ordering.order_types.ORDER_TYPES.
@@ -150,11 +154,22 @@ class Order(Base, TimestampMixin):
     is_preorder: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # True once scheduled/pre-order has been released to kitchen (finalize path ran).
     scheduled_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SLA breach acknowledged on the Live Ops board: a manager has SEEN this
+    # late order and taken it off the alert queue. Deliberately server-side and
+    # not per-device — clearing an alert must hold across refreshes, devices and
+    # shifts, and must say who cleared it. It does NOT change the order FSM or
+    # stop the SLA clock; the order is still late, just no longer shouting.
+    sla_acked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sla_acked_by_staff_id: Mapped[int | None] = mapped_column(
+        ForeignKey("staff_members.id")
+    )
 
     address_id: Mapped[int | None] = mapped_column(ForeignKey("customer_addresses.id"))
     # Dine-in binding — null for delivery orders. Set when an order is opened
     # against a physical table (see app.tables).
     table_id: Mapped[int | None] = mapped_column(ForeignKey("tables.id"))
+    # Dine-in party size (number of guests seated). Null for non-dine-in.
+    covers: Mapped[int | None] = mapped_column(Integer)
     # Sales-per-server attribution — null when no staff member is tracked (e.g. self-service).
     staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
     # Tip attributed to a specific staff member (Category 9); null = pool only.
@@ -311,6 +326,9 @@ class OrderItem(Base, TimestampMixin):
     # on the row (audit trail) rather than deleted.
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     cancelled_reason: Mapped[str | None] = mapped_column(String(256))
+    # When this line was moved here by a table merge, the order it came from — so
+    # "undo last merge" can pop exactly these lines back to the original table.
+    merged_from_order_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
     # Snapshot of chosen modifiers at order time — [{"name": str, "price_delta_aed": str}, ...].
     selected_modifiers: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     # KDS: per-item kitchen ticket status (received|preparing|ready|bumped).
@@ -340,6 +358,13 @@ class OrderItem(Base, TimestampMixin):
     # until fire_course clears this flag and stamps fired_at.
     course_held: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Parcel / "to go" line on an otherwise dine-in bill: the guest is eating in
+    # but wants THIS item boxed. Stays on the same order and the same bill —
+    # order_type remains dine_in — but the kitchen must pack it, so the KDS
+    # ticket flags it. Not to be confused with a takeaway ORDER.
+    is_takeaway: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     # Allergen tags snapshotted from Dish.allergens at add-item time (same pattern as
     # dish_name/price_aed above) so a later menu edit never retroactively changes an
     # already-placed order's ticket. KDS renders this as a warning badge.

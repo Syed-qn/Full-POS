@@ -46,9 +46,9 @@
 }
 .deleteBtn { color: var(--text-muted); }
 .deleteBtn:hover {
-  border-color: #b02a2a;
-  color: #b02a2a;
-  background: #fdeaea;
+  border-color: var(--sla-critical);
+  color: var(--sla-critical);
+  background: var(--sla-critical-dim);
 }
 .top {
   display: flex;
@@ -67,7 +67,7 @@
   white-space: nowrap;
 }
 .waOn {
-  color: #128c4b;
+  color: var(--sla-safe);
   background: rgba(37, 211, 102, 0.14);
 }
 .waOff {
@@ -75,11 +75,11 @@
   background: var(--bg-surface-inset);
 }
 .waReview {
-  color: #b27300;
+  color: var(--sla-warn);
   background: rgba(245, 166, 35, 0.16);
 }
 .waPending {
-  color: #128c4b;
+  color: var(--sla-safe);
   background: rgba(37, 211, 102, 0.1);
 }
 .waBtn {

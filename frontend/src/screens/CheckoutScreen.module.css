@@ -1,87 +1,292 @@
+/* Checkout — themed POS skin, matching the waiter/cashier terminal. The
+   dark/light/blue palettes below mirror the terminal and Take Away list so the
+   whole cashier flow switches together off the shared posTheme store. */
+
 .root {
+  --ink: #e8e6e1;
+  --ink-dim: #8b8880;
+  --line: #2b2b28;
+  --panel: #1e1e1c;
+  --panel-2: #232320;
+  --panel-3: #2c2c28;
+  --bg: #161615;
+  --amber: #f79009;
+  --green: #12b76a;
+  --green-hover: #0e9d5a;
+  --blue: #2e90fa;
+  --red: #f04438;
+  /* Text ON a filled amber/green button — flips to white where the fill is dark. */
+  --on-amber: #1a1206;
+  --on-accent: #04160d;
+
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: calc(100vh - var(--topbar-height, 56px) - 48px);
-  padding-bottom: 8px;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
+.root[data-theme="light"] {
+  --ink: #1b1b18;
+  --ink-dim: #6a6a64;
+  --line: #e3e1db;
+  --panel: #ffffff;
+  --panel-2: #eeece6;
+  --panel-3: #e4e1d9;
+  --bg: #f2f1ec;
+  --amber: #b45309;
+  --green: #047857;
+  --green-hover: #036249;
+  --red: #dc2626;
+  --on-amber: #ffffff;
+  --on-accent: #ffffff;
+}
+
+.root[data-theme="blue"] {
+  --ink: #eaf1ff;
+  --ink-dim: #90a6cf;
+  --line: #1d3a63;
+  --panel: #13233f;
+  --panel-2: #1b2f50;
+  --panel-3: #24406b;
+  --bg: #0c1a31;
+  --amber: #ffb020;
+  --green: #2fd48f;
+  --green-hover: #21b877;
+  --red: #ff6b5e;
+}
+
+.root input {
+  user-select: text;
+}
+
+/* base.css paints a blue box-shadow focus ring; kill it on this touch surface. */
+.root :focus,
+.root :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ── header ───────────────────────────────────────────────────────────── */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  padding: 14px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.headTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.headSub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.backBtn:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+
+.stateMsg {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--ink-dim);
+  font-size: 15px;
+}
+
+/* ── grid ─────────────────────────────────────────────────────────────── */
 .grid {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.2fr) minmax(260px, 1fr);
-  gap: 16px;
-  align-items: start;
-  flex: 1;
+  grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.15fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px 20px;
+  overflow: hidden;
 }
 
 @media (max-width: 1100px) {
   .grid {
     grid-template-columns: 1fr;
+    overflow: auto;
   }
 }
 
 .panel {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg, 12px);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .panelTitle {
   margin: 0;
-  font-size: var(--font-size-ui, 14px);
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+
+/* ── bill (left) ──────────────────────────────────────────────────────── */
+.billScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .itemRow {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: var(--font-size-item, 18px);
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.itemLeft {
+  min-width: 0;
 }
 
 .itemName {
+  font-size: 15px;
   font-weight: 600;
+  color: var(--ink);
+}
+
+.itemQty {
+  color: var(--amber);
+  font-weight: 800;
 }
 
 .itemMeta {
-  font-size: var(--font-size-ui, 14px);
-  color: var(--text-muted);
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.itemPrice {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.billTotals {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 
 .line {
   display: flex;
   justify-content: space-between;
-  font-size: var(--font-size-body, 16px);
-  color: var(--text-secondary);
+  gap: 12px;
+  font-size: 14px;
+  color: var(--ink-dim);
 }
 
-.splitBar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.lineTotal {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.lineTotal span:last-child {
+  color: var(--amber);
 }
 
-.splitOn {
-  background: var(--accent-primary-dim);
-  border: 1px solid var(--accent-primary);
-  color: var(--accent-primary);
-  border-radius: var(--radius, 8px);
-  padding: 8px 12px;
+.mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.splitToggle {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 12px;
   font-weight: 700;
-  font-size: var(--font-size-ui, 14px);
+  cursor: pointer;
+}
+.splitToggle:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.splitToggleOn {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
 }
 
+.splitHint {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* ── tenders (center) ─────────────────────────────────────────────────── */
 .tenderGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -89,58 +294,28 @@
 }
 
 .tenderBtn {
-  min-height: var(--touch-primary, 64px);
-  border-radius: var(--radius-lg, 12px);
-  border: 2px solid var(--border-default);
-  background: var(--bg-surface);
-  font-size: var(--font-size-body, 16px);
+  min-height: 58px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--panel-2);
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  color: var(--text-primary);
+  color: var(--ink);
   padding: 8px 12px;
 }
-
-.tenderBtn:hover {
-  border-color: var(--accent-primary);
+/* :not(.tenderActive) matters — a plain :hover is MORE specific than the
+   .tenderActive class, so hovering the selected tender turned its label amber
+   on the amber fill and the text vanished. The cursor sits on the button you
+   just clicked, so this hit every selection. */
+.tenderBtn:hover:not(.tenderActive) {
+  border-color: var(--amber);
+  color: var(--amber);
 }
-
 .tenderActive {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary);
-  color: var(--text-inverse);
-}
-
-.amountBox {
-  padding: 12px;
-  border-radius: var(--radius-lg, 12px);
-  background: var(--bg-surface-inset);
-  border: 1px solid var(--border-subtle);
-}
-
-.keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.key {
-  min-height: var(--touch-min, 56px);
-  border-radius: var(--radius, 8px);
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  font-size: 22px;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  cursor: pointer;
-  color: var(--text-primary);
-}
-
-.key:hover {
-  background: var(--bg-surface-inset);
-}
-
-.keyWide {
-  grid-column: span 2;
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--on-amber);
 }
 
 .tipRow {
@@ -150,46 +325,253 @@
 }
 
 .tipBtn {
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 42px;
+  padding: 0 16px;
   border-radius: 999px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  font-weight: 600;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 14px;
   cursor: pointer;
 }
-
+.tipBtn:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
 .tipActive {
-  background: var(--accent-primary-dim);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.discountRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.refundLabel {
+  flex: 1;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* ── amount + keypad (right) ──────────────────────────────────────────── */
+.amountBox {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amountLabel {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+
+.amountValue {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.amountCur {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  margin-right: 4px;
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.key {
+  min-height: 54px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  color: var(--ink);
+}
+.key:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.key:active {
+  background: var(--panel-3);
+}
+
+.keyWide {
+  grid-column: span 2;
+}
+
+.keyClear {
+  color: var(--red);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.keyClear:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.keyExact {
+  color: var(--amber);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .changeDue {
-  font-size: var(--font-size-item, 18px);
-  font-weight: 700;
-  color: var(--accent-rider);
-  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
 }
 
 .error {
-  color: var(--status-cancelled);
-  font-size: var(--font-size-ui, 14px);
+  color: var(--red);
+  font-size: 13px;
   margin: 0;
+  font-weight: 700;
 }
 
 .success {
-  color: var(--status-delivered);
+  color: var(--green);
   font-weight: 700;
-  font-size: var(--font-size-body, 16px);
+  font-size: 13px;
+  margin: 0;
 }
 
 .input {
-  min-height: var(--touch-min, 56px);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius, 8px);
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 0 12px;
-  font-size: var(--font-size-body, 16px);
+  font-size: 15px;
   width: 100%;
   box-sizing: border-box;
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.input::placeholder {
+  color: var(--ink-dim);
+}
+
+/* shared small buttons */
+.ghostBtn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ghostBtn:hover:not(:disabled) {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.ghostBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dangerBtn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(240, 68, 56, 0.6);
+  background: transparent;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dangerBtn:hover:not(:disabled) {
+  background: rgba(240, 68, 56, 0.12);
+}
+.dangerBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── action bar ───────────────────────────────────────────────────────── */
+.actionBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 12px 20px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.confirmBtn {
+  min-height: 52px;
+  padding: 0 26px;
+  border-radius: 10px;
+  border: none;
+  background: var(--green);
+  color: var(--on-accent);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.confirmBtn:hover:not(:disabled) {
+  background: var(--green-hover);
+}
+.confirmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.act {
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.act:hover:not(:disabled) {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.act:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.barMeta {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
 }

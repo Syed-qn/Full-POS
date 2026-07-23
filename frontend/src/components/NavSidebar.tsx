@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  APP_THEME_ICON,
+  APP_THEME_LABEL,
+  cycleAppTheme,
+  nextAppTheme,
+  useAppTheme,
+} from "../lib/appTheme";
 import { logout } from "../lib/auth";
+import { useRestaurantName } from "../lib/brand";
 import { appProductName, isDesktopShell } from "../lib/desktopEnv";
 import { fetchConversations } from "../lib/conversationsApi";
 import { listCustomers } from "../lib/customerApi";
@@ -23,9 +31,9 @@ const GROUPS: NavGroup[] = [
     label: "Daily",
     items: [
       { to: "/", label: "Live Ops", icon: "⌂" },
-      { to: "/floor", label: "Floor Plan", icon: "▦" },
-      { to: "/orders", label: "Orders", icon: "☰" },
       { to: "/new-order", label: "New Order", icon: "+" },
+      { to: "/orders", label: "Orders", icon: "☰" },
+      { to: "/floor", label: "Floor Plan", icon: "▦" },
       { to: "/kds", label: "Kitchen", icon: "▣" },
       { to: "/payments", label: "Payments", icon: "¤" },
       { to: "/riders", label: "Riders", icon: "›" },
@@ -90,15 +98,6 @@ const PREFETCH: Record<string, { queryKey: readonly unknown[]; queryFn: () => Pr
   },
 };
 
-function groupContaining(path: string): string | null {
-  for (const g of GROUPS) {
-    for (const it of g.items) {
-      if (it.to === path || (it.to !== "/" && path.startsWith(it.to))) return g.id;
-    }
-  }
-  return path === "/" ? "daily" : null;
-}
-
 export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -121,21 +120,12 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
       }).filter((g) => g.items.length > 0),
     [role],
   );
-  const activeGroup = groupContaining(location.pathname);
+  const restaurantName = useRestaurantName();
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    for (const g of GROUPS) {
-      init[g.id] = g.id === "daily" || g.id === activeGroup;
-    }
-    return init;
-  });
+  const theme = useAppTheme();
+  const nextTheme = nextAppTheme();
 
   const desktop = useMemo(() => isDesktopShell(), []);
-
-  function toggleGroup(id: string) {
-    setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
 
   function prefetchRoute(to: string) {
     if (!canAccess(to, role)) return;
@@ -160,7 +150,10 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
         <span className={s.logoMark}>POS</span>
         {!collapsed && (
           <div className={s.logoText}>
-            <strong>{appProductName()}</strong>
+            {/* The RESTAURANT name, same source as the waiter/cashier top bar,
+                so the chrome never shows two different brands. Falls back to
+                the product name only until /me answers. */}
+            <strong>{restaurantName || appProductName()}</strong>
             <span>{desktop ? "Desktop" : role ? role : "Manager"}</span>
           </div>
         )}
@@ -178,24 +171,14 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
 
       <div className={s.scroll}>
         {visibleGroups.map((group) => {
-          const open = collapsed || (openGroups[group.id] ?? false);
           return (
             <div key={group.id} className={s.group}>
               {!collapsed && (
-                <button
-                  type="button"
-                  className={s.groupHead}
-                  onClick={() => toggleGroup(group.id)}
-                  aria-expanded={open}
-                  aria-controls={`nav-group-${group.id}`}
-                >
+                <div className={s.groupHead}>
                   <span>{group.label}</span>
-                  <span className={s.chev} aria-hidden="true">
-                    {open ? "▾" : "▸"}
-                  </span>
-                </button>
+                </div>
               )}
-              {open && (
+              {(
                 <div className={s.groupBody} id={`nav-group-${group.id}`} role="group" aria-label={group.label}>
                   {group.items.map((it) => {
                     // Collapsed = icon-only; title + aria-label keep an accessible name.
@@ -238,6 +221,22 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
           );
         })}
       </div>
+
+      {/* Theme sits with Sign out: both are "this device / this person"
+          settings rather than places to go, so they live below the nav list. */}
+      <button
+        type="button"
+        className={s.item}
+        onClick={cycleAppTheme}
+        title={`Theme: ${APP_THEME_LABEL[theme]} — switch to ${APP_THEME_LABEL[nextTheme]}`}
+        aria-label={`Theme ${APP_THEME_LABEL[theme]}, switch to ${APP_THEME_LABEL[nextTheme]}`}
+        data-testid="dashboard-theme"
+      >
+        <span className={s.icon} aria-hidden="true">
+          {APP_THEME_ICON[theme]}
+        </span>
+        {!collapsed && <span className={s.label}>{APP_THEME_LABEL[theme]}</span>}
+      </button>
 
       <button
         type="button"

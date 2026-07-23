@@ -48,6 +48,7 @@ async def create_pos_order(
     customer_name: str | None,
     items: list[dict],
     table_id: int | None = None,
+    covers: int | None = None,
     staff_id: int | None = None,
     apt_room: str | None = None,
     building: str | None = None,
@@ -64,7 +65,7 @@ async def create_pos_order(
 ) -> Order:
     """Create a POS order of any supported ``order_type``.
 
-    ``items`` entries: ``{dish_id, qty, notes?, course_number?, course_held?, seat_number?}``.
+    ``items`` entries: ``{dish_id, qty, notes?, course_number?, course_held?, is_takeaway?, seat_number?}``.
     Address fields are required only for delivery/online/aggregator types.
     Table is required for dine_in/qr/tableside.
     Future ``scheduled_for`` without auto-release leaves the order draft until
@@ -126,10 +127,19 @@ async def create_pos_order(
         if course_number < 1:
             raise ValueError("course_number must be >= 1")
         course_held = bool(raw.get("course_held", False))
+        is_takeaway = bool(raw.get("is_takeaway", False))
         seat_number = raw.get("seat_number")
         seat_number = int(seat_number) if seat_number is not None else None
         validated.append(
-            (dish, int(raw["qty"]), raw.get("notes"), course_number, course_held, seat_number)
+            (
+                dish,
+                int(raw["qty"]),
+                raw.get("notes"),
+                course_number,
+                course_held,
+                is_takeaway,
+                seat_number,
+            )
         )
 
     customer = await get_or_create_customer(
@@ -145,9 +155,13 @@ async def create_pos_order(
     order = await create_draft_order(
         session, restaurant_id=restaurant_id, customer_id=customer.id
     )
+    from app.ordering.service import allocate_daily_token
+
+    order.daily_token = await allocate_daily_token(session, restaurant_id)
     order.order_type = order_type
     order.priority = priority
     order.table_id = table_id
+    order.covers = covers
     order.staff_id = staff_id
     order.customer_allergy_notes = allergy
     order.scheduled_for = scheduled_for
@@ -185,7 +199,15 @@ async def create_pos_order(
 
     await session.flush()
 
-    for dish, qty, notes, course_number, course_held, seat_number in validated:
+    for (
+        dish,
+        qty,
+        notes,
+        course_number,
+        course_held,
+        is_takeaway,
+        seat_number,
+    ) in validated:
         item = await add_item(
             session,
             order=order,
@@ -194,6 +216,7 @@ async def create_pos_order(
             notes=notes,
             course_number=course_number,
             course_held=course_held,
+            is_takeaway=is_takeaway,
         )
         item.seat_number = seat_number
 

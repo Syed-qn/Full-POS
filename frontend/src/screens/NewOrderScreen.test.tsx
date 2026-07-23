@@ -215,7 +215,9 @@ describe("NewOrderScreen", () => {
     await waitFor(() =>
       expect(screen.getAllByText(/AED 22\.00/).length).toBeGreaterThan(0),
     );
-    expect(screen.getByText(/1× Chicken Biryani/)).toBeInTheDocument();
+    // Cart is a Code·Particulars·Qty·Amount grid — the dish name shows in the
+    // Particulars column and the qty (1) in its own cell.
+    expect(screen.getAllByText(/Chicken Biryani/).length).toBeGreaterThan(0);
   });
 
   it("Place Order button disabled when no items selected", async () => {
@@ -337,33 +339,38 @@ describe("NewOrderScreen role modes", () => {
     vi.restoreAllMocks();
   });
 
-  it("waiter mode shows Send to kitchen, not Place Order", async () => {
+  it("waiter mode defaults to dine-in and sends to kitchen (not Place & Pay)", async () => {
     setStaffSession({ role: "waiter", name: "W1" });
     renderScreen();
     await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
     expect(screen.getByRole("heading", { name: /table order/i })).toBeInTheDocument();
-    expect(screen.getByTestId("new-order-primary-cta")).toHaveTextContent(/send to kitchen/i);
-    expect(screen.queryByTestId("cashier-strip")).not.toBeInTheDocument();
+    // Counter roles now open on Dining, so the primary action is Save to Table
+    // (a kitchen-send with no payment) — never the cashier "Place & Pay".
+    const cta = screen.getByTestId("new-order-primary-cta");
+    expect(cta).toHaveTextContent(/save to table/i);
+    expect(cta).not.toHaveTextContent(/place & pay/i);
   });
 
-  it("cashier mode shows Place & Pay and cashier strip", async () => {
+  it("cashier mode renders the full-screen terminal with Cash/Card/KOT", async () => {
     setStaffSession({ role: "cashier", name: "C1" });
     renderScreen();
     await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
-    expect(screen.getByRole("heading", { name: /cashier terminal/i })).toBeInTheDocument();
-    expect(screen.getByTestId("cashier-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("new-order-primary-cta")).toHaveTextContent(/place & pay/i);
-    expect(screen.getByTestId("cashier-open-bills")).toBeInTheDocument();
-    expect(screen.getByTestId("cashier-drawer")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByTestId("cashier-open-bills-count")).toHaveTextContent("2"),
-    );
+    // Cashier gets the dedicated HANASIS-style terminal, not the standard form.
+    expect(screen.getByTestId("cashier-terminal")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-cash")).toHaveTextContent(/cash/i);
+    expect(screen.getByTestId("terminal-card")).toHaveTextContent(/card/i);
+    expect(screen.getByTestId("terminal-kot")).toHaveTextContent(/kot/i);
+    expect(screen.getByTestId("cashier-signout")).toBeInTheDocument();
+    // Order-type tabs still present in the terminal.
+    expect(screen.getByTestId("order-type-dine_in")).toBeInTheDocument();
   });
 
   it("cart line accepts item instructions and kitchen notes", async () => {
     renderScreen();
     await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
     fireEvent.click(screen.getAllByText("+")[0]);
+    // Per-item note is collapsed by default — open it via the ✎ Note toggle.
+    fireEvent.click(await screen.findByLabelText(/note for chicken biryani/i));
     const note = await screen.findByTestId("item-note-10");
     fireEvent.change(note, { target: { value: "extra raita" } });
     expect(note).toHaveValue("extra raita");

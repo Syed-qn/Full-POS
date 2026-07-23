@@ -46,11 +46,11 @@
 }
 .error {
   margin: 14px 20px 0;
-  background: #fdeaea;
-  border: 1px solid #e6a6a6;
+  background: var(--sla-critical-dim);
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 45%, transparent);
   border-radius: var(--radius);
   padding: 9px 12px;
-  color: #b02a2a;
+  color: var(--sla-critical);
   font-size: 13px;
 }
 .body {
@@ -147,7 +147,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: #b02a2a;
+  color: var(--sla-critical);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -202,8 +202,8 @@
   flex: 0 0 auto;
 }
 .variantRemove:hover {
-  border-color: #b02a2a;
-  color: #b02a2a;
+  border-color: var(--sla-critical);
+  color: var(--sla-critical);
 }
 .addVariant {
   align-self: flex-start;
@@ -299,15 +299,15 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   padding: 8px 16px;
-  color: #b02a2a;
+  color: var(--sla-critical);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
 .deleteBtn:hover {
-  border-color: #b02a2a;
-  background: #fdeaea;
+  border-color: var(--sla-critical);
+  background: var(--sla-critical-dim);
 }
 .deleteConfirm {
   display: inline-flex;
@@ -317,7 +317,7 @@
   color: var(--text-secondary);
 }
 .deleteYes {
-  background: #b02a2a;
+  background: var(--sla-critical);
   border: none;
   border-radius: var(--radius);
   padding: 7px 12px;

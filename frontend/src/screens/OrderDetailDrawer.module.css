@@ -419,3 +419,107 @@
 .toggleOff { background: var(--bg-surface-inset); border: 1px solid var(--border-default); color: var(--text-secondary); }
 
 .saveRow { margin-top: 4px; display: flex; justify-content: flex-end; }
+
+/* ── Service record: the order's A→Z ──────────────────────────────────────── */
+.journey {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0 0 0 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.journeyStep {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 8px 0 8px 0;
+  position: relative;
+}
+
+/* Connector between the dots — drawn on every step but the last. */
+.journeyStep:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 18px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--border-subtle);
+}
+
+.journeyDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border-default);
+  background: var(--bg-surface);
+  align-self: center;
+}
+
+.journeyDone .journeyDot {
+  border-color: var(--sla-safe, #12b76a);
+  background: var(--sla-safe, #12b76a);
+}
+
+.journeyLabel {
+  font-size: var(--font-size-ui);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.journeyTime {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Sits under the label, in the label's column. */
+.journeyMeta {
+  grid-column: 2 / -1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.journeyPending .journeyLabel,
+.journeyPending .journeyTime {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.auditWrap {
+  margin-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+
+.auditSummary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.auditSummary:hover { color: var(--text-primary); }
+
+.auditList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auditRow {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.auditTime { font-family: var(--font-mono); color: var(--text-muted); }
+.auditActor { color: var(--text-muted); text-transform: capitalize; }

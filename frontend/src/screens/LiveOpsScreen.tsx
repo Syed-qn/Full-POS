@@ -1,15 +1,12 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { BottomActionBar } from "../components/BottomActionBar";
-import { Button, TouchButton } from "../components/Button";
-import { DispatchKpiPanel } from "../components/DispatchKpiPanel";
+import { useNavigate } from "react-router-dom";
+import { TouchButton } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
-import { LiveOpsMap } from "../components/LiveOpsMap";
 import { SectionBanner } from "../components/SectionBanner";
-import { SLAOrderCard } from "../components/SLAOrderCard";
 import { StatusPill } from "../components/StatusPill";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
+import { orderStatusLabel } from "../lib/orderDisplay";
 import { useLiveOpsOrdersQuery } from "../lib/queries/dashboard";
 import { remainingMs, slaTier } from "../lib/sla";
 import type { OrderOut } from "../lib/types";
@@ -19,44 +16,39 @@ const ACTIVE: OrderOut["status"][] = [
   "confirmed", "preparing", "ready", "assigned", "picked_up", "arriving",
 ];
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Draft",
-  pending_confirmation: "Pending",
-  confirmed: "New",
-  preparing: "Cooking",
-  ready: "Ready",
-  assigned: "With Rider",
-  picked_up: "On the Way",
-  arriving: "Arriving",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-  on_resale: "On Resale",
-};
+/** Toggle above the table. "All" first — it is the default view, not a state. */
+type BoardTab = "all" | "dine" | "takeaway";
 
-type LaneKey = "new" | "preparing" | "ready" | "out" | "late";
-
-const LANES: { key: LaneKey; title: string; hint: string }[] = [
-  { key: "new", title: "New", hint: "Just confirmed" },
-  { key: "preparing", title: "Preparing", hint: "In kitchen" },
-  { key: "ready", title: "Ready", hint: "Awaiting rider" },
-  { key: "out", title: "Out", hint: "On the road" },
-  { key: "late", title: "Late", hint: "SLA risk" },
+const BOARD_TABS: { key: BoardTab; title: string }[] = [
+  { key: "all", title: "All" },
+  { key: "dine", title: "Dine In" },
+  { key: "takeaway", title: "Take Away" },
 ];
+
+/**
+ * Channel grouping, matching the KDS card badges so the two boards can never
+ * disagree about what counts as dine-in. Delivery/online is not in this build,
+ * so those order types fall outside both tabs and show only under "All".
+ */
+function channelOf(order: OrderOut): BoardTab | null {
+  switch (order.order_type) {
+    case "dine_in":
+    case "tableside":
+    case "qr":
+      return "dine";
+    case "takeaway":
+    case "drive_thru":
+      return "takeaway";
+    default:
+      return null;
+  }
+}
+
+/** Rows shown before the list defers to the full Orders screen. */
+const BOARD_LIMIT = 10;
 
 function isLate(order: OrderOut): boolean {
   return remainingMs(order.sla_started_at) <= 10 * 60_000;
-}
-
-function boardLane(order: OrderOut): LaneKey {
-  // Late is visually unavoidable — always take priority over status columns.
-  if (ACTIVE.includes(order.status) && isLate(order)) return "late";
-  if (order.status === "confirmed") return "new";
-  if (order.status === "preparing") return "preparing";
-  if (order.status === "ready") return "ready";
-  if (order.status === "assigned" || order.status === "picked_up" || order.status === "arriving") {
-    return "out";
-  }
-  return "new";
 }
 
 function LiveOpsSkeleton() {
@@ -74,16 +66,10 @@ function LiveOpsSkeleton() {
           </div>
         ))}
       </div>
-      <div className={s.board} style={{ marginTop: 20 }}>
-        {LANES.map((lane) => (
-          <div key={lane.key} className={s.lane}>
-            <div className={s.laneHead}>
-              <span className={`${s.sk} ${s.skLabel}`} />
-            </div>
-            {Array.from({ length: 2 }).map((_, i) => (
-              <span key={i} className={`${s.sk} ${s.skCard}`} />
-            ))}
-          </div>
+      {/* Skeleton mirrors the real table, not the retired lane board. */}
+      <div className={s.tableWrap} style={{ marginTop: 20 }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <span key={i} className={`${s.sk} ${s.skRow}`} />
         ))}
       </div>
     </div>
@@ -91,52 +77,85 @@ function LiveOpsSkeleton() {
 }
 
 function StatCard({
-  icon, label, value, accent, sub,
+  icon, label, value, accent, sub, onClick, active, testId,
 }: {
   icon: string; label: string; value: string; accent: string; sub?: string;
+  onClick?: () => void; active?: boolean; testId?: string;
 }) {
-  return (
-    <div className={s.stat} style={{ ["--accent" as string]: accent }}>
+  const body = (
+    <>
       <div className={s.statTop}>
         <span className={s.statIcon}>{icon}</span>
         <span className={s.statLabel}>{label}</span>
       </div>
       <span className={s.statValue}>{value}</span>
       {sub && <span className={s.statSub}>{sub}</span>}
-    </div>
+    </>
+  );
+  const style = { ["--accent" as string]: accent };
+  // A card that filters the board is a button, not a div — keyboard and
+  // screen readers get the same affordance the pointer does.
+  if (!onClick) return <div className={s.stat} style={style}>{body}</div>;
+  return (
+    <button
+      type="button"
+      className={`${s.stat} ${s.statAction} ${active ? s.statOn : ""}`}
+      style={style}
+      onClick={onClick}
+      aria-pressed={active}
+      data-testid={testId}
+    >
+      {body}
+    </button>
   );
 }
 
-function BoardCard({ order, onOpen }: { order: OrderOut; onOpen: () => void }) {
+/** One line of the order table. Rows, not cards: with two orders a five-lane
+ *  card board collapses into slivers of whitespace, while a table stays
+ *  readable at any count and puts every order's fields in the same column. */
+function BoardRow({ order, onOpen }: { order: OrderOut; onOpen: () => void }) {
   const tier = slaTier(order.sla_started_at);
   const late = isLate(order);
   const items = order.items.map((i) => `${i.qty}× ${i.name}`).join(", ");
   return (
-    <button
-      type="button"
-      className={`${s.orderCard} ${late ? s.orderCardLate : ""} ${s[`tier_${tier}`] ?? ""}`}
+    <tr
+      className={`${s.row} ${late ? s.rowLate : ""} ${s[`tier_${tier}`] ?? ""}`}
       onClick={onOpen}
+      tabIndex={0}
+      role="button"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpen();
+      }}
     >
-      <div className={s.orderCardTop}>
-        <span className={s.orderId}>#{order.id}</span>
-        <StatusPill status={order.status} />
-      </div>
-      <span className={s.orderCust}>{order.customer_name}</span>
-      <span className={s.orderItems} title={items}>{items || "—"}</span>
-      <div className={s.orderCardFoot}>
-        <span className={s.orderTotal}>AED {order.total_aed}</span>
+      <td className={s.cRef}>#{order.id}</td>
+      <td className={s.cCust}>{order.customer_name || "Walk-in"}</td>
+      <td className={s.cItems} title={items}>{items || "—"}</td>
+      <td className={s.cStatus}>
+        {/* Same wording as the Orders board: a dine-in / take-away tab has no
+            delivery leg, so it reads Open · Paid · Cancelled, not "Confirmed". */}
+        <StatusPill
+          status={order.status}
+          label={orderStatusLabel(order.status, {
+            resaleOfOrderId: order.resale_of_order_id,
+            orderNumber: order.order_number,
+            orderType: order.order_type,
+            cancellationReason: order.cancellation_reason,
+          })}
+        />
+      </td>
+      <td className={s.cTotal}>AED {order.total_aed}</td>
+      <td className={s.cTimer}>
         {late ? (
           <span className={s.lateChip}>
-            {tier === "breach" ? "OVERDUE" : "LATE RISK"}
+            {tier === "breach" ? "OVERDUE" : "LATE"}
           </span>
         ) : (
           <span className={s.timerChip}>
             <CountdownTimer slaStartedAt={order.sla_started_at} />
           </span>
         )}
-      </div>
-      {order.rider_name && <span className={s.orderRider}>{order.rider_name}</span>}
-    </button>
+      </td>
+    </tr>
   );
 }
 
@@ -145,12 +164,11 @@ export function LiveOpsScreen() {
   const loading = isPending && data == null;
   const orders = data ?? [];
   const nav = useNavigate();
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set());
 
   const activeOrders = orders.filter((o) => ACTIVE.includes(o.status));
   const urgent = activeOrders
     .filter((o) => isLate(o))
-    .filter((o) => !dismissed.has(o.id));
+    .filter((o) => !o.sla_acked_at);
 
   const kpis = useMemo(() => {
     const delivered = orders.filter((o) => o.status === "delivered").length;
@@ -167,22 +185,37 @@ export function LiveOpsScreen() {
     };
   }, [orders, activeOrders.length]);
 
-  const lanes = useMemo(() => {
-    const buckets: Record<LaneKey, OrderOut[]> = {
-      new: [],
-      preparing: [],
-      ready: [],
-      out: [],
-      late: [],
+  const [boardTab, setBoardTab] = useState<BoardTab>("all");
+
+  /** Counts per tab — always the FULL set, never the visible page, so a tab
+   *  cannot promise rows the table then truncates away. */
+  const laneCounts = useMemo(() => {
+    const c: Record<BoardTab, number> = {
+      all: activeOrders.length,
+      dine: 0,
+      takeaway: 0,
     };
     for (const o of activeOrders) {
-      buckets[boardLane(o)].push(o);
+      const ch = channelOf(o);
+      if (ch) c[ch] += 1;
     }
-    for (const key of Object.keys(buckets) as LaneKey[]) {
-      buckets[key].sort((a, b) => remainingMs(a.sla_started_at) - remainingMs(b.sla_started_at));
-    }
-    return buckets;
+    return c;
   }, [activeOrders]);
+
+  /** Most urgent first — least SLA time left at the top, which is the order a
+   *  manager needs to act in. */
+  const boardAll = useMemo(() => {
+    const rows =
+      boardTab === "all"
+        ? activeOrders
+        : activeOrders.filter((o) => channelOf(o) === boardTab);
+    return [...rows].sort(
+      (a, b) => remainingMs(a.sla_started_at) - remainingMs(b.sla_started_at),
+    );
+  }, [activeOrders, boardTab]);
+
+  const boardRows = boardAll.slice(0, BOARD_LIMIT);
+  const hiddenCount = boardAll.length - boardRows.length;
 
   return (
     <div className={s.screen}>
@@ -192,7 +225,7 @@ export function LiveOpsScreen() {
       <header className={s.pageHeader}>
         <div>
           <h1 className={s.h1}>Live Operations</h1>
-          <p className={s.sub}>Order board · SLA · fleet — rush-hour command center</p>
+          <p className={s.sub}>Order board — rush-hour command center</p>
         </div>
         <div className={s.headerRight}>
           <span className={s.livePill}><span className={s.liveDot} />LIVE</span>
@@ -212,42 +245,52 @@ export function LiveOpsScreen() {
           accent="var(--sla-safe)" sub={`${kpis.completion}% completion`} />
         <StatCard icon="💰" label="Money Collected" value={kpis.revenue}
           accent="var(--accent-revenue)" sub="collected today" />
+        {/* Channel tiles double as board filters — click one to narrow the
+            table below, click it again to go back to All. */}
+        <StatCard icon="🍽️" label="Dine In" value={String(laneCounts.dine)}
+          accent="var(--amber, var(--sla-warn))" sub="active dine-in"
+          testId="kpi-dine"
+          active={boardTab === "dine"}
+          onClick={() => setBoardTab(boardTab === "dine" ? "all" : "dine")} />
+        <StatCard icon="🥡" label="Take Away" value={String(laneCounts.takeaway)}
+          accent="var(--sla-safe)" sub="active take away"
+          testId="kpi-takeaway"
+          active={boardTab === "takeaway"}
+          onClick={() => setBoardTab(boardTab === "takeaway" ? "all" : "takeaway")} />
       </div>
 
-      <div className={s.dispatchKpiRow}>
-        <DispatchKpiPanel />
-      </div>
-
-      {urgent.length > 0 && (
-        <div className={s.urgentCard}>
-          <div className={s.urgentTitle}>
-            <span className={s.urgentPulse} />Needs Attention Now
-            <span className={s.urgentBadge}>{urgent.length}</span>
-          </div>
-          <div className={s.urgentList}>
-            {urgent.map((o) => (
-              <SLAOrderCard
-                key={o.id}
-                order={o}
-                onClick={() => nav(`/orders?id=${o.id}`)}
-                onDismiss={() =>
-                  setDismissed((prev) => new Set(prev).add(o.id))
-                }
-              />
+      {/* SLA "Needs Attention Now" list hidden for now. The board's Late tab
+          shows the same orders; the acknowledge flow behind it is still wired
+          (POST /orders/{id}/sla-ack) and can be brought back by restoring this
+          block. */}
+      {/* Order board — ONE table, filtered by a toggle. Was five lanes of
+          cards, which only works with a full board: at two orders four lanes
+          were empty slivers and the two real cards sat in 200px columns. */}
+      <section className={s.boardSection} aria-label="Order board">
+        <div className={s.boardHead}>
+          <h2 className={s.boardTitle}>Order board</h2>
+          <div className={s.boardTabs} role="tablist" aria-label="Filter orders">
+            {BOARD_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={boardTab === t.key}
+                className={`${s.boardTab} ${boardTab === t.key ? s.boardTabOn : ""}`}
+                onClick={() => setBoardTab(t.key)}
+                data-testid={`board-tab-${t.key}`}
+              >
+                {t.title} <b>{laneCounts[t.key]}</b>
+              </button>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Status board — cards by lane (no dense table) */}
-      <section className={s.boardSection} aria-label="Order status board">
-        <div className={s.boardHead}>
-          <h2 className={s.boardTitle}>Order board</h2>
-          <span className={s.boardMeta}>{activeOrders.length} active</span>
-        </div>
-        {activeOrders.length === 0 ? (
+        {boardRows.length === 0 ? (
           <EmptyState
-            title="No active orders"
+            title={boardTab === "all" ? "No active orders" : `Nothing in ${
+              BOARD_TABS.find((t) => t.key === boardTab)?.title ?? "this list"
+            }`}
             description="New confirmations appear here by status. Start a walk-in or WhatsApp order."
             action={
               <TouchButton type="button" onClick={() => nav("/new-order")}>
@@ -256,98 +299,49 @@ export function LiveOpsScreen() {
             }
           />
         ) : (
-          <div className={s.board}>
-            {LANES.map((lane) => {
-              const rows = lanes[lane.key];
-              return (
-                <div
-                  key={lane.key}
-                  className={`${s.lane} ${lane.key === "late" ? s.laneLate : ""}`}
-                >
-                  <div className={s.laneHead}>
-                    <div>
-                      <span className={s.laneTitle}>{lane.title}</span>
-                      <span className={s.laneHint}>{lane.hint}</span>
-                    </div>
-                    <span className={`${s.laneCount} ${lane.key === "late" && rows.length ? s.laneCountHot : ""}`}>
-                      {rows.length}
-                    </span>
-                  </div>
-                  <div className={s.laneBody}>
-                    {rows.length === 0 ? (
-                      <div className={s.laneEmpty}>None</div>
-                    ) : (
-                      rows.map((o) => (
-                        <BoardCard
-                          key={o.id}
-                          order={o}
-                          onOpen={() => nav(`/orders?id=${o.id}`)}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className={s.tableWrap}>
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th className={s.cRef}>Order</th>
+                  <th className={s.cCust}>Customer</th>
+                  <th className={s.cItems}>Items</th>
+                  {/* No Rider column — this build is dine-in and take away only. */}
+                  <th className={s.cStatus}>Status</th>
+                  <th className={s.cTotal}>Total</th>
+                  <th className={s.cTimer}>SLA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boardRows.map((o) => (
+                  <BoardRow
+                    key={o.id}
+                    order={o}
+                    onOpen={() => nav(`/orders?id=${o.id}`)}
+                  />
+                ))}
+              </tbody>
+            </table>
+            {/* Say what is hidden. A silently truncated list reads as "that is
+                everything", which on an ops board is the wrong belief. */}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                className={s.moreLink}
+                onClick={() => nav("/orders")}
+              >
+                {hiddenCount} more — open Orders
+              </button>
+            )}
           </div>
         )}
       </section>
 
-      <div className={s.card}>
-        <div className={s.cardTitle}>Fleet Map</div>
-        <LiveOpsMap />
-      </div>
-
-      {/* Compact distribution legend (not the primary board) */}
-      <div className={s.card}>
-        <div className={s.cardTitle}>Today by status</div>
-        {orders.length === 0 ? (
-          <div className={s.miniEmpty}>No orders yet today.</div>
-        ) : (
-          <div className={s.statusChips}>
-            {Object.entries(
-              orders.reduce<Record<string, number>>((acc, o) => {
-                acc[o.status] = (acc[o.status] || 0) + 1;
-                return acc;
-              }, {}),
-            )
-              .sort((a, b) => b[1] - a[1])
-              .map(([status, count]) => (
-                <span key={status} className={s.statusChip}>
-                  <StatusPill status={status as OrderOut["status"]} />
-                  <strong>{count}</strong>
-                  <span className={s.statusChipLabel}>{STATUS_LABEL[status] ?? status}</span>
-                </span>
-              ))}
-          </div>
-        )}
-      </div>
+      {/* Fleet Map and "Today by status" are hidden for now — delivery/fleet
+          is not part of this build, and the status distribution restated what
+          the order-board tabs already count. */}
       </>
       )}
-
-      <BottomActionBar>
-        <TouchButton type="button" onClick={() => nav("/new-order")}>
-          New Order
-        </TouchButton>
-        <Button type="button" variant="ghost" size="lg" onClick={() => nav("/orders")}>
-          Open Orders
-        </Button>
-        <Button type="button" variant="ghost" size="lg" onClick={() => nav("/floor")}>
-          Floor
-        </Button>
-        <Link className={s.barLink} to="/riders">
-          Riders
-        </Link>
-        <Link className={s.barLink} to="/kds">
-          Kitchen
-        </Link>
-        <Link className={s.barLink} to="/kds?view=expo">
-          Expo
-        </Link>
-        <Link className={s.barLink} to="/reports">
-          Reports
-        </Link>
-      </BottomActionBar>
     </div>
   );
 }

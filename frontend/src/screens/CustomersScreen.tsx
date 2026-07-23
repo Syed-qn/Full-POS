@@ -13,6 +13,17 @@ import f from "./CustomersScreen.module.css";
 
 const PAGE_SIZE = 20;
 
+/** Avatar initials: first two letters of name, else last 2 phone digits. */
+function initials(name?: string | null, phone?: string): string {
+  const n = (name ?? "").trim();
+  if (n) {
+    const parts = n.split(/\s+/);
+    return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+  }
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits.slice(-2) || "•";
+}
+
 type Marketing = "all" | "in" | "out";
 type Activity = "all" | "has" | "repeat" | "none";
 
@@ -80,15 +91,40 @@ export function CustomersScreen() {
   const showPagination = page > 1 || hasNextPage;
 
   const columns: Column<CustomerDetailOut>[] = [
-    { key: "name", header: "Name", render: (c) => c.name ?? "—" },
     {
-      key: "phone",
-      header: "Phone",
-      render: (c) => <span className={f.phoneCell}>{c.phone}</span>,
+      key: "name",
+      header: "Customer",
+      render: (c) => (
+        <div className={f.nameCell}>
+          <span className={f.avatar} aria-hidden="true">
+            {initials(c.name, c.phone)}
+          </span>
+          <div className={f.nameStack}>
+            <span className={f.custName}>{c.name?.trim() || "Guest"}</span>
+            <span className={f.phoneCell}>{c.phone}</span>
+          </div>
+        </div>
+      ),
     },
-    { key: "orders", header: "Orders", render: (c) => String(c.total_orders) },
-    { key: "spend", header: "Spend", render: (c) => `AED ${c.total_spend}` },
-    { key: "opt", header: "Marketing", render: (c) => c.marketing_opted_in ? "Opted In" : "Opted Out" },
+    {
+      key: "orders",
+      header: "Orders",
+      render: (c) => <span className={f.numCell}>{c.total_orders}</span>,
+    },
+    {
+      key: "spend",
+      header: "Spend",
+      render: (c) => <span className={f.spendCell}>AED {c.total_spend}</span>,
+    },
+    {
+      key: "opt",
+      header: "Marketing",
+      render: (c) => (
+        <span className={`${f.mktPill} ${c.marketing_opted_in ? f.mktIn : f.mktOut}`}>
+          {c.marketing_opted_in ? "Opted in" : "Opted out"}
+        </span>
+      ),
+    },
     {
       key: "open",
       header: "",
@@ -96,12 +132,23 @@ export function CustomersScreen() {
         <button
           type="button"
           className={f.rowOpen}
+          aria-label={`View ${c.name?.trim() || c.phone}`}
+          title="View customer"
           onClick={(e) => {
             e.stopPropagation();
             navigate(`/customers/${c.id}`);
           }}
         >
-          Open
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+          </svg>
         </button>
       ),
     },

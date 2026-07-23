@@ -29,6 +29,16 @@ export interface KdsTicketItem {
   is_delayed?: boolean;
   station_id?: number | null;
   kitchen_code?: string | null;
+  /** Real menu category ("Popcorn", "Paratha Spot") — shown on the board chip. */
+  category?: string | null;
+  /** Dine-in source: which table the waiter sent the ticket from. */
+  table_id?: number | null;
+  table_label?: string | null;
+  /** Parcel line on a dine-in bill — the kitchen must box this one. */
+  is_takeaway?: boolean;
+  /** Bill already settled while the line is still on the pass: the guest has
+   *  paid and is waiting at the counter. */
+  order_settled?: boolean;
 }
 
 export interface KdsStation {

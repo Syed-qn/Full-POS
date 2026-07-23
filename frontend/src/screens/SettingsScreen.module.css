@@ -278,6 +278,49 @@
   line-height: 1.45;
 }
 
+/* Live connection state next to a row title (WhatsApp connect/disconnect). */
+.rowBadge {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  vertical-align: 1px;
+  color: var(--sla-critical);
+  background: var(--sla-critical-dim);
+}
+.rowBadge[data-connected="yes"] {
+  color: var(--sla-safe);
+  background: var(--sla-safe-dim);
+}
+
+/* One-time POS API key hand-off after a successful connect. */
+.apiKeyBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--sla-safe);
+  border-radius: var(--radius);
+  background: var(--sla-safe-dim);
+}
+.apiKeyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.apiKeyValue {
+  flex: 1;
+  min-width: 200px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--text-primary);
+}
+
 /* ---- Collapsible restaurant-location map ---- */
 .locHead {
   display: flex;

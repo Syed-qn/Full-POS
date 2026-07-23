@@ -18,7 +18,9 @@ export async function fetchOrderDetail(
 
 /** Tab-specific include sets — overview first for ≤400ms open on Render. */
 export const DETAIL_INCLUDE_BY_TAB = {
-  overview: "overview",
+  // The overview carries the A→Z service record, whose audit trail is the
+  // timeline block — so it ships with the first fetch, not on a second tab.
+  overview: "overview,timeline",
   timeline: "overview,timeline,dispatch,route",
   chat: "overview,chat",
   customer: "overview",
@@ -52,6 +54,7 @@ export function orderOutFromDetail(d: OrderDetailOut): OrderOut {
     id: d.id,
     order_number: d.order_number,
     status: d.status,
+    order_type: d.order_type ?? null,
     customer_name: d.customer.name ?? "",
     customer_phone: d.customer.phone,
     items: d.items.map((i) => ({

@@ -1,0 +1,339 @@
+/* Waiter floor plan — a self-contained dark surface. This screen deliberately
+   hardcodes its palette instead of using the light app tokens: it is a
+   full-bleed floor display meant to be readable in a dim dining room. */
+
+.root {
+  /* Dark is the default theme. */
+  --ink: #e8e6e1;
+  --ink-dim: #8b8880;
+  --line: #2b2b28;
+  --line-2: #3a3a35;
+  --panel: #1e1e1c;
+  --panel-2: #232320;
+  --canvas-bg: #161615;
+  --amber: #f79009;
+  --green: #12b76a;
+  --blue: #2e90fa;
+  --grey: #667085;
+
+  display: flex;
+  flex-direction: column;
+  /* Bounded flex child of AppShell .main — flex+min-height:0 is what actually
+     lets .canvas scroll internally (height:100% alone does not). */
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  color: var(--ink);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  /* Touch POS: tapping tables must not drag-select their labels. */
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.root[data-theme="light"] {
+  --ink: #1b1b18;
+  --ink-dim: #6a6a64;
+  --line: #e3e1db;
+  --line-2: #cfccc4;
+  --panel: #ffffff;
+  --panel-2: #eeece6;
+  --canvas-bg: #f2f1ec;
+  --amber: #b45309;
+  --green: #047857;
+  --grey: #8a8a82;
+}
+
+.root[data-theme="blue"] {
+  --ink: #eaf1ff;
+  --ink-dim: #90a6cf;
+  --line: #1d3a63;
+  --line-2: #2a4a7a;
+  --panel: #13233f;
+  --panel-2: #1b2f50;
+  --canvas-bg: #0c1a31;
+  --amber: #ffb020;
+  --green: #2fd48f;
+  --grey: #6f86ad;
+}
+
+/* No focus ring on this touch surface. base.css paints a BLUE box-shadow ring
+   (--focus-ring-strong) on :focus-visible — outline:none alone will not remove
+   it, the box-shadow has to be cleared too. */
+.root :focus,
+.root :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Stats strip ─────────────────────────────────────────────────────── */
+.statsBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas-bg);
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stat strong {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.nAvailable { color: var(--green); }
+.nOccupied { color: var(--amber); }
+.nReserved { color: var(--blue); }
+.nCovers { color: var(--ink); }
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dotAvailable { background: var(--green); }
+.dotOccupied { background: var(--amber); }
+.dotReserved { background: var(--blue); }
+.dotCleaning { background: var(--grey); }
+.dotHeld { background: #eaaa08; }
+
+.editLayout {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editLayout:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Floor canvas ────────────────────────────────────────────────────── */
+.canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+  /* Faint blueprint grid behind the tables; the unit is set inline to match
+     the responsive table spacing. */
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+}
+
+.canvasMsg {
+  color: var(--ink-dim);
+  font-size: 14px;
+  text-align: center;
+  margin-top: 60px;
+}
+
+/* One continuous floor; every table is absolutely placed from pos_x/pos_y. */
+.floor {
+  position: relative;
+  width: 100%;
+}
+
+/* ── A table: chair dots above/below a rounded surface ───────────────── */
+.tableSlot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.tableSlot:hover { background: rgba(255, 255, 255, 0.04); }
+
+.chairRow {
+  display: flex;
+  gap: 8px;
+  min-height: 9px;
+}
+
+.chair {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-2);
+  background: transparent;
+  display: inline-block;
+}
+
+.table {
+  border-radius: 10px;
+  border: 1.5px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 14px;
+  box-sizing: border-box;
+}
+
+.tableRound { border-radius: 50%; }
+
+.tableLabel {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.tableSeats {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  /* Keep "AED 12.00" on one line instead of breaking into two. */
+  white-space: nowrap;
+}
+
+.tableCovers {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--amber);
+  line-height: 1;
+}
+
+/* Bucket colours — dark fill + saturated border, like the reference. */
+.b_available {
+  background: rgba(18, 183, 106, 0.14);
+  border-color: rgba(18, 183, 106, 0.75);
+}
+.b_available .tableSeats { color: var(--green); }
+
+.b_occupied {
+  background: rgba(247, 144, 9, 0.16);
+  border-color: rgba(247, 144, 9, 0.8);
+}
+.b_occupied .tableSeats { color: var(--amber); }
+
+.b_reserved {
+  background: rgba(46, 144, 250, 0.85);
+  border-color: rgba(46, 144, 250, 1);
+}
+.b_reserved .tableSeats { color: #eaf3ff; }
+
+.b_cleaning {
+  background: rgba(102, 112, 133, 0.2);
+  border-color: rgba(102, 112, 133, 0.7);
+}
+.b_cleaning .tableSeats { color: var(--grey); }
+
+.b_held {
+  background: rgba(234, 170, 8, 0.16);
+  border-color: rgba(234, 170, 8, 0.8);
+}
+.b_held .tableSeats { color: #eaaa08; }
+
+/* Cashier floor: a table whose waiter requested the bill — pulled forward
+ * with a saturated purple fill + a pulsing "BILL" badge so it can't be missed. */
+.b_billing {
+  background: rgba(105, 65, 198, 0.9);
+  border-color: rgba(105, 65, 198, 1);
+  box-shadow: 0 0 0 3px rgba(105, 65, 198, 0.35);
+  animation: billPulse 1.6s ease-in-out infinite;
+}
+.b_billing .tableLabel,
+.b_billing .tableSeats,
+.b_billing .tableCovers { color: #f2ecff; }
+
+@keyframes billPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(105, 65, 198, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(105, 65, 198, 0.18); }
+}
+
+.billBadge {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  z-index: 3;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #6941c6;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.dotBilling { background: #6941c6; }
+
+/* Entrance placed by the manager: absolute at its own grid coordinate,
+   centred on that point. Falls back to .entrance (bottom strip) when the
+   manager has never positioned it. */
+.entranceAt {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-dim);
+}
+
+.entrance {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--ink-dim);
+}

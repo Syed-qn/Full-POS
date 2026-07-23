@@ -89,8 +89,29 @@ function OrderCard({
   const items = order.items.map((i) => `${i.qty}× ${i.name}`);
   const itemsLabel =
     items.length <= 1 ? items[0] ?? "—" : `${items[0]} +${items.length - 1} more`;
-  const channel = order.source_channel || order.aggregator_source || order.order_type || "—";
   const batched = !!(order.batch_size && order.batch_size > 1);
+  // Dine-in / takeaway have no rider, batching, or delivery SLA — skip that footer.
+  const isOnPremise = ["dine_in", "takeaway", "drive_thru"].includes(
+    String(order.order_type ?? ""),
+  );
+  // Clean, human order-type label instead of the raw "dine_in" channel string.
+  const TYPE_LABELS: Record<string, string> = {
+    dine_in: "Dine-in",
+    takeaway: "Take away",
+    drive_thru: "Drive-thru",
+    delivery: "Delivery",
+    online: "Online",
+  };
+  const typeLabel =
+    TYPE_LABELS[String(order.order_type ?? "")] ??
+    order.source_channel ??
+    order.aggregator_source ??
+    "Order";
+  // Hide the walk-in placeholder phone; show a friendly tag instead.
+  const realPhone =
+    order.customer_phone && order.customer_phone.replace(/0/g, "") !== ""
+      ? order.customer_phone
+      : null;
 
   return (
     <button
@@ -107,19 +128,22 @@ function OrderCard({
           label={orderStatusLabel(order.status, {
             resaleOfOrderId: order.resale_of_order_id,
             orderNumber: order.order_number,
+            orderType: order.order_type,
+            cancellationReason: order.cancellation_reason,
           })}
         />
       </div>
-      <div className={s.cardName}>{order.customer_name}</div>
-      <div className={s.cardPhone}>{order.customer_phone || "—"}</div>
+      <div className={s.cardName}>{order.customer_name || "Walk-in"}</div>
+      {realPhone && <div className={s.cardPhone}>{realPhone}</div>}
       <div className={s.cardItems} title={items.join(", ")}>
         {itemsLabel}
       </div>
       <div className={s.cardMeta}>
-        <span className={s.cardChannel}>{channel}</span>
+        <span className={s.cardChannel}>{typeLabel}</span>
         <span className={s.cardTime}>{formatTime(order.created_at)}</span>
         <span className={s.cardTotal}>AED {order.total_aed}</span>
       </div>
+      {!isOnPremise && (
       <div className={s.cardFoot}>
         <span className={s.cardRider}>
           {order.rider_name ?? "No rider"}
@@ -159,16 +183,35 @@ function OrderCard({
           )}
         </span>
       </div>
+      )}
     </button>
   );
 }
 
+/** Fulfilment filter. Each chip covers a FAMILY of order types — a tableside
+ *  or QR order is still dine-in to a manager — sent as one comma-separated
+ *  order_type so the server does the filtering across all pages. */
+const TYPE_FILTERS = [
+  { key: "all", label: "All", types: undefined },
+  { key: "dine", label: "Dine In", types: "dine_in,tableside,qr" },
+  { key: "takeaway", label: "Take Away", types: "takeaway,drive_thru" },
+] as const;
+type TypeFilterKey = (typeof TYPE_FILTERS)[number]["key"];
+
+/** Coarse status buckets, worded the way the cards read: a dine-in or take-away
+ *  tab is Open until it is settled, then Paid. Sent as a comma-separated status
+ *  list so the server filters across every page. */
+const STATUS_BUCKETS: { key: string; label: string; statuses: string }[] = [
+  { key: "bucket_open", label: "Open", statuses: "draft,pending_confirmation,confirmed,preparing,ready" },
+  { key: "bucket_paid", label: "Paid", statuses: "delivered" },
+];
+
 export function OrdersScreen() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
-  const [batchFilter, setBatchFilter] = useState<string>("all");
-  const [channelFilter, setChannelFilter] = useState("all");
+  // Either a bucket key from STATUS_BUCKETS or a single raw OrderStatus.
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilterKey>("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [preset, setPreset] = useState<PresetKey>("all");
@@ -184,15 +227,18 @@ export function OrdersScreen() {
   const listFilters = useMemo(
     () => ({
       previewBatch: true as const,
-      status: statusFilter === "all" ? undefined : statusFilter,
+      status:
+        statusFilter === "all"
+          ? undefined
+          : (STATUS_BUCKETS.find((b) => b.key === statusFilter)?.statuses ?? statusFilter),
       fromDate: fromDate || undefined,
       toDate: toDate || undefined,
       q: debouncedSearch.trim() || undefined,
-      channel: channelFilter === "all" ? undefined : channelFilter,
+      orderType: TYPE_FILTERS.find((t) => t.key === typeFilter)?.types,
       page,
       limit: PAGE_SIZE,
     }),
-    [statusFilter, fromDate, toDate, debouncedSearch, channelFilter, page],
+    [statusFilter, fromDate, toDate, debouncedSearch, typeFilter, page],
   );
 
   const { data: orders = [], isLoading, isFetching, isError } = useOrdersQuery(listFilters);
@@ -230,27 +276,12 @@ export function OrdersScreen() {
     }
   }
 
-  const filtered = useMemo(() => {
-    let base = [...orders];
-    if (batchFilter === "single") {
-      base = base.filter((o) => !o.batch_preview && !(o.batch_size != null && o.batch_size > 1));
-    } else if (batchFilter !== "all") {
-      base = base.filter((o) => o.batch_preview === batchFilter);
-    }
-    return base;
-  }, [orders, batchFilter]);
-
-  const batchLabels = useMemo(
-    () =>
-      Array.from(
-        new Set(orders.map((o) => o.batch_preview).filter((b): b is string => !!b)),
-      ).sort(),
-    [orders],
-  );
+  // Every filter is server-side now; the list renders exactly what came back.
+  const filtered = orders;
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, fromDate, toDate, channelFilter]);
+  }, [debouncedSearch, statusFilter, fromDate, toDate, typeFilter]);
 
   const hasNextPage = orders.length === PAGE_SIZE;
   const pageRows = filtered;
@@ -259,128 +290,111 @@ export function OrdersScreen() {
     <div className={s.screen}>
       <PageHeader title="Orders" subtitle="Card board · search by phone or order # · open for detail" />
       <OfflineLimitsBanner surface="orders" />
+      {/* Every control is labelled and on the surface — no "More" drawer. A
+          filter you cannot see is a filter you forget is applied. */}
       <div className={s.filterBar}>
-        <div className={s.topRow}>
-          <div className={`${s.filterGroup} ${s.grow}`}>
-            <span className={s.filterLabel}>Search</span>
-            <div className={s.searchWrap}>
-              <span className={s.searchIcon} aria-hidden="true">🔍</span>
-              <input
-                className={s.search}
-                placeholder="Search #ID, name or phone"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                aria-label="Search orders"
-              />
-            </div>
-          </div>
-          <div className={s.filterGroup}>
-            <span className={s.filterLabel}>Status</span>
-            <select
-              className={s.statusSelect}
-              aria-label="Filter by status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | OrderStatus)}
-            >
-              <option value="all">All statuses</option>
-              {STATUS_OPTIONS.map((st) => (
-                <option key={st} value={st}>
-                  {STATUS_LABELS[st] ?? st}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={s.filterGroup}>
-            <span className={s.filterLabel}>Batching</span>
-            <select
-              className={s.statusSelect}
-              aria-label="Filter by batch"
-              value={batchFilter}
-              onChange={(e) => setBatchFilter(e.target.value)}
-            >
-              <option value="all">All orders</option>
-              <option value="single">Single orders</option>
-              {batchLabels.map((b) => (
-                <option key={b} value={b}>🔗 Batch {b}</option>
-              ))}
-            </select>
-          </div>
-          <div className={s.filterGroup}>
-            <span className={s.filterLabel}>Channel</span>
-            <select
-              className={s.statusSelect}
-              aria-label="Filter by channel"
-              value={channelFilter}
-              onChange={(e) => setChannelFilter(e.target.value)}
-            >
-              <option value="all">All channels</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="talabat">Talabat</option>
-              <option value="deliveroo">Deliveroo</option>
-              <option value="careem">Careem</option>
-              <option value="ubereats">Uber Eats</option>
-              <option value="noon">Noon</option>
-              <option value="zomato">Zomato</option>
-              <option value="website">Website</option>
-              <option value="mobile_app">Mobile app</option>
-              <option value="instagram">Instagram</option>
-              <option value="google_business">Google Business</option>
-              <option value="qr">QR table</option>
-              <option value="kiosk">Kiosk</option>
-              <option value="call_center">Call center</option>
-            </select>
+        <div className={s.field}>
+          <span className={s.filterLabel}>Search</span>
+          <div className={s.searchWrap}>
+            <span className={s.searchIcon} aria-hidden="true">🔍</span>
+            <input
+              className={s.search}
+              placeholder="Search #ID, name or phone"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search orders"
+            />
           </div>
         </div>
-        <div className={s.groups}>
-          <div className={s.filterGroup}>
-            <span className={s.filterLabel}>Date range</span>
-            <div className={s.dateRow}>
-              <div className={s.presets} role="group" aria-label="Date range presets">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    className={`${s.chip} ${preset === p.key ? s.chipActive : ""}`}
-                    aria-pressed={preset === p.key}
-                    onClick={() => applyPreset(p.key)}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <div className={s.dateGroup}>
-                <input
-                  type="date"
-                  aria-label="From date"
-                  className={s.date}
-                  value={fromDate}
-                  max={toDate || undefined}
-                  onClick={openPicker}
-                  onChange={(e) => setBound("from", e.target.value)}
-                />
-                <span className={s.arrow} aria-hidden="true">→</span>
-                <input
-                  type="date"
-                  aria-label="To date"
-                  className={s.date}
-                  value={toDate}
-                  min={fromDate || undefined}
-                  onClick={openPicker}
-                  onChange={(e) => setBound("to", e.target.value)}
-                />
-                {(fromDate || toDate) && (
-                  <button
-                    type="button"
-                    className={s.clearBtn}
-                    aria-label="Clear dates"
-                    title="Clear dates"
-                    onClick={() => applyPreset("all")}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            </div>
+        <div className={s.field}>
+          <span className={s.filterLabel}>Date</span>
+          <div className={s.presets} role="group" aria-label="Date range">
+            {PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={`${s.chip} ${preset === p.key ? s.chipActive : ""}`}
+                aria-pressed={preset === p.key}
+                onClick={() => applyPreset(p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className={s.field}>
+          <span className={s.filterLabel}>Type</span>
+          <div className={s.presets} role="group" aria-label="Fulfilment type">
+            {TYPE_FILTERS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className={`${s.chip} ${typeFilter === t.key ? s.chipActive : ""}`}
+                aria-pressed={typeFilter === t.key}
+                onClick={() => setTypeFilter(t.key)}
+                data-testid={`orders-type-${t.key}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className={s.field}>
+          <span className={s.filterLabel}>Status</span>
+          <select
+            className={s.statusSelect}
+            aria-label="Filter by status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All statuses</option>
+            {STATUS_BUCKETS.map((b) => (
+              <option key={b.key} value={b.key}>
+                {b.label}
+              </option>
+            ))}
+            {STATUS_OPTIONS.map((st) => (
+              <option key={st} value={st}>
+                {STATUS_LABELS[st] ?? st}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* Kept from the old More drawer — the presets cannot express "these two
+            days", and channel / batching only ever mattered for delivery. */}
+        <div className={s.field}>
+          <span className={s.filterLabel}>Custom range</span>
+          <div className={s.dateGroup}>
+            <input
+              type="date"
+              aria-label="From date"
+              className={s.date}
+              value={fromDate}
+              max={toDate || undefined}
+              onClick={openPicker}
+              onChange={(e) => setBound("from", e.target.value)}
+            />
+            <span className={s.arrow} aria-hidden="true">→</span>
+            <input
+              type="date"
+              aria-label="To date"
+              className={s.date}
+              value={toDate}
+              min={fromDate || undefined}
+              onClick={openPicker}
+              onChange={(e) => setBound("to", e.target.value)}
+            />
+            {(fromDate || toDate) && (
+              <button
+                type="button"
+                className={s.clearBtn}
+                aria-label="Clear dates"
+                title="Clear dates"
+                onClick={() => applyPreset("all")}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -76,11 +76,18 @@
 
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  /* Fill evenly for however many tabs render (2 today: Sign in · Staff PIN). */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-surface-inset);
+}
+
+/* Divider between tabs so the split reads clearly at any count. */
+.tab + .tab {
+  border-left: 1px solid var(--border-default);
 }
 
 .tab {

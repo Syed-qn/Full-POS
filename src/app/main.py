@@ -44,6 +44,7 @@ from app.menu.modifier_router import router as menu_modifier_router
 from app.menu.router import router as menu_router
 from app.menu.upsell_router import router as menu_upsell_router
 from app.menu.pricing_router import router as menu_pricing_router
+from app.middleware.actor import ActorContextMiddleware
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.timing import ResponseTimingMiddleware
 from app.ordering.customer_router import router as customer_router
@@ -166,6 +167,10 @@ def create_app() -> FastAPI:
     # so the last call here executes FIRST on the request path.
     # SecurityHeadersMiddleware runs last on request / first on response.
     app.add_middleware(ResponseTimingMiddleware)
+    # Resolves the staff token to a person so every audit row written while
+    # handling this request can name them. Position is not critical — it only
+    # has to wrap routing, which all middleware do.
+    app.add_middleware(ActorContextMiddleware)
     # Runs innermost (closest to routing): dedupes replayed mutating requests
     # carrying an Idempotency-Key header before/after the route handler.
     app.add_middleware(IdempotencyMiddleware)

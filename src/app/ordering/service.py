@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy import update as sa_update
 
 from app.audit.service import record_audit
@@ -249,7 +249,11 @@ async def list_orders_for_tenant(
     offset = max(offset, 0)
     stmt = select(Order).where(Order.restaurant_id == restaurant_id)
     if status:
-        stmt = stmt.where(Order.status == status)
+        # Comma-separated so the UI can offer coarse buckets ("Open" = every
+        # pre-settlement status) without a second query param.
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if statuses:
+            stmt = stmt.where(Order.status.in_(statuses))
     if scheduled_only:
         stmt = stmt.where(Order.scheduled_for.is_not(None))
     if open_only:
@@ -260,7 +264,11 @@ async def list_orders_for_tenant(
     if held_only:
         stmt = stmt.where(Order.held_at.is_not(None))
     if order_type:
-        stmt = stmt.where(Order.order_type == order_type)
+        # Comma-separated so a caller can ask for a FAMILY of types in one go:
+        # "dine_in,tableside,qr" is what a manager means by "Dine In".
+        types = [t.strip() for t in order_type.split(",") if t.strip()]
+        if types:
+            stmt = stmt.where(Order.order_type.in_(types))
     if channel:
         ch = channel.strip().lower()
         stmt = stmt.where(
@@ -623,6 +631,46 @@ async def create_draft_order(
     ) from last_error
 
 
+_DAILY_TOKEN_LOCK_CLASS = 4_919_003
+
+
+async def allocate_daily_token(session: "AsyncSession", restaurant_id: int) -> int:
+    """Next human-facing daily queue token for a restaurant (1, 2, 3, … per day).
+
+    Resets every Asia/Dubai calendar day. Unlike ``order_number`` (a permanent
+    unique invoice id), this is the short "Token 626" number staff call out and
+    print on the slip. We serialize allocation per restaurant with a
+    transaction-scoped advisory lock so two concurrent creates don't mint the
+    same token; on a non-Postgres backend we proceed unserialized.
+    """
+    from sqlalchemy import func, text
+
+    try:
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:c, :o)"),
+            {"c": _DAILY_TOKEN_LOCK_CLASS, "o": restaurant_id},
+        )
+    except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
+        _logger.debug("advisory daily-token lock unavailable; proceeding unserialized")
+
+    # Dubai-local "today" window, expressed in UTC to match created_at. The column
+    # is stored naive-UTC, so drop tzinfo to avoid naive/aware comparison errors.
+    now_dubai = datetime.now(ZoneInfo("Asia/Dubai"))
+    day_start = now_dubai.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_utc = day_start.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = (day_start + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
+
+    highest = await session.scalar(
+        select(func.max(Order.daily_token)).where(
+            Order.restaurant_id == restaurant_id,
+            Order.daily_token.is_not(None),
+            Order.created_at >= start_utc,
+            Order.created_at < end_utc,
+        )
+    )
+    return int(highest or 0) + 1
+
+
 async def _next_order_seq(session: "AsyncSession", restaurant_id: int) -> int:
     """Next per-tenant order sequence = 1 + the highest numeric suffix currently in use.
 
@@ -673,6 +721,7 @@ async def add_item(
     price_aed_override: Decimal | None = None,
     course_number: int = 1,
     course_held: bool = False,
+    is_takeaway: bool = False,
     selected_modifier_ids: list[int] | None = None,
     skip_modifier_validation: bool = False,
 ) -> OrderItem:
@@ -751,6 +800,10 @@ async def add_item(
                 if variant_name is None
                 else OrderItem.variant_name == variant_name,
                 OrderItem.course_number == course_number,
+                # A parcel line must never fold into an eat-in line of the same
+                # dish (and vice versa) — the kitchen has to box one and plate
+                # the other, so they stay separate lines.
+                OrderItem.is_takeaway.is_(is_takeaway),
                 notes_match,
                 OrderItem.cancelled.is_(False),
             )
@@ -774,6 +827,7 @@ async def add_item(
             allergens_snapshot=list(dish.allergens or []),
             course_number=course_number,
             course_held=course_held,
+            is_takeaway=is_takeaway,
             selected_modifiers=selected_modifiers,
         )
         session.add(item)
@@ -1623,6 +1677,8 @@ async def merge_orders(
     ).all()
     for item in items:
         item.order_id = primary.id
+        # Remember origin so "undo last merge" can pop these exact lines back.
+        item.merged_from_order_id = secondary.id
     await session.flush()
 
     await _recompute_totals_excluding_cancelled(session, primary)
@@ -1649,6 +1705,91 @@ async def merge_orders(
         },
     )
     return primary
+
+
+async def unmerge_last_merge(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    primary_order_id: int,
+    actor: str = "cashier",
+) -> Order:
+    """Reverse the most recent merge into ``primary_order_id``.
+
+    Pops the last-merged order's lines (tagged ``merged_from_order_id``) back onto
+    a revived copy of that original order — same order number, back on its own
+    table — and recomputes both totals. Raises ValueError if there's nothing to
+    un-merge. Caller commits.
+    """
+    primary = await get_order_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=primary_order_id
+    )
+    if primary is None:
+        raise ValueError("Order not found")
+
+    merged_ids = (
+        await session.scalars(
+            select(OrderItem.merged_from_order_id)
+            .where(
+                OrderItem.order_id == primary.id,
+                OrderItem.merged_from_order_id.isnot(None),
+            )
+            .distinct()
+        )
+    ).all()
+    if not merged_ids:
+        raise ValueError("Nothing to un-merge on this table")
+
+    # Most recently merged secondary = latest-cancelled of the tagged origins.
+    secondary = (
+        await session.scalars(
+            select(Order)
+            .where(Order.id.in_(list(merged_ids)))
+            .order_by(Order.updated_at.desc())
+        )
+    ).first()
+    if secondary is None:
+        raise ValueError("Nothing to un-merge on this table")
+
+    items = (
+        await session.scalars(
+            select(OrderItem).where(
+                OrderItem.order_id == primary.id,
+                OrderItem.merged_from_order_id == secondary.id,
+            )
+        )
+    ).all()
+    for item in items:
+        item.order_id = secondary.id
+        item.merged_from_order_id = None
+    await session.flush()
+
+    # Revive the secondary (the merge had cancelled it). This reverses an internal
+    # merge artifact, not a normal lifecycle step, so we set the status directly.
+    before = {"secondary_status": str(secondary.status)}
+    secondary.status = OrderStatus.CONFIRMED.value
+    secondary.cancellation_reason = None
+    if hasattr(secondary, "cancelled_at"):
+        secondary.cancelled_at = None
+
+    await _recompute_totals_excluding_cancelled(session, primary)
+    await _recompute_totals_excluding_cancelled(session, secondary)
+
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=restaurant_id,
+        entity="order",
+        entity_id=str(primary.id),
+        action="order_unmerged",
+        before=before,
+        after={
+            "revived_order_id": secondary.id,
+            "table_id": secondary.table_id,
+            "primary_total": str(primary.total),
+        },
+    )
+    return secondary
 
 
 async def transfer_order_staff(
@@ -1788,6 +1929,52 @@ async def advance_kitchen_status(
     from app.dispatch.preview_cache import invalidate_preview_cache
 
     await invalidate_preview_cache(order.restaurant_id)
+    return order
+
+
+#: Order types fulfilled on-premise — payment is the LAST step, so a full
+#: payment closes the order. Delivery/online/aggregator close via their own leg.
+ON_PREMISE_ORDER_TYPES = frozenset(
+    {"dine_in", "takeaway", "drive_thru", "tableside", "qr"}
+)
+
+_ORDER_TERMINAL_STATUSES = frozenset(
+    {"delivered", "cancelled", "undeliverable", "on_resale", "resold", "written_off"}
+)
+
+
+async def settle_on_premise_if_paid(
+    session: "AsyncSession",
+    *,
+    order_id: int,
+    restaurant_id: int,
+    actor: str = "cashier",
+) -> Order | None:
+    """Close an on-premise order once it is FULLY paid.
+
+    Dine-in/takeaway/drive-thru orders have no delivery leg, so payment is the
+    end of the flow: when total paid ≥ order total we transition the order to
+    DELIVERED (the existing "fulfilled & done" terminal), stamp delivered_at,
+    and let the table free itself (the floor only counts open orders). No-op for
+    delivery/online orders (they close when the rider marks delivered) and for
+    partial payments.
+    """
+    from app.payments.service import total_paid
+
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=order_id
+    )
+    if order is None:
+        return None
+    if str(order.order_type) not in ON_PREMISE_ORDER_TYPES:
+        return order
+    if str(order.status) in _ORDER_TERMINAL_STATUSES:
+        return order
+    paid = await total_paid(session, order_id=order_id)
+    if paid < (order.total or Decimal("0.00")):
+        return order
+    await fsm_transition(session, order, OrderStatus.DELIVERED, actor=actor)
+    order.delivered_at = datetime.now(timezone.utc)
     return order
 
 
@@ -2174,6 +2361,7 @@ async def get_order_detail(
         GpsPingOut,
         OrderDetailOut,
         OrderItemDetailOut,
+        PaymentDetailOut,
         RiderDetailOut,
         TimelineEventOut,
     )
@@ -2197,6 +2385,8 @@ async def get_order_detail(
             qty=i.qty,
             price_aed=i.price_aed,
             notes=i.notes,
+            course_held=bool(getattr(i, "course_held", False)),
+            is_takeaway=bool(getattr(i, "is_takeaway", False)),
         )
         for i in items_rows
     ]
@@ -2228,6 +2418,81 @@ async def get_order_detail(
         if r:
             rider = RiderDetailOut(id=r.id, name=r.name, phone=r.phone)
 
+    def _as_utc(dt: datetime | None) -> datetime | None:
+        """Tag a naive DB stamp as UTC. Without this the JSON has no offset and
+        every client silently reads it in its own zone."""
+        if dt is None:
+            return None
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+    # 5b. Service record — the A→Z a manager reads: who took the order, when the
+    #     kitchen saw it, when it was plated, and how it was settled.
+    from app.payments.models import PaymentTransaction
+    from app.staff.models import StaffMember
+    from app.tables.models import DiningTable
+
+    table_label: str | None = None
+    if order.table_id:
+        tbl = await session.get(DiningTable, order.table_id)
+        table_label = tbl.label if tbl else None
+
+    staff_name: str | None = None
+    if order.staff_id:
+        sm = await session.get(StaffMember, order.staff_id)
+        staff_name = sm.name if sm else None
+
+    sent_stamps = [
+        i.kitchen_received_at for i in items_rows if getattr(i, "kitchen_received_at", None)
+    ]
+    bumped_stamps = [i.bumped_at for i in items_rows if getattr(i, "bumped_at", None)]
+    kitchen_sent_at = min(sent_stamps) if sent_stamps else None
+    pending_items = sum(
+        1 for i in items_rows if getattr(i, "kitchen_received_at", None) and not i.bumped_at
+    )
+    # "Ready" only once NOTHING is still on the pass — a half-bumped order is not ready.
+    kitchen_ready_at = max(bumped_stamps) if bumped_stamps and pending_items == 0 else None
+    kitchen_ready_by: str | None = None
+    if kitchen_ready_at is not None:
+        # Whoever bumped the LAST item is the one who called the order away.
+        last_item = max(
+            (i for i in items_rows if i.bumped_at is not None), key=lambda i: i.bumped_at
+        )
+        if getattr(last_item, "bumped_by_staff_id", None):
+            bumper = await session.get(StaffMember, last_item.bumped_by_staff_id)
+            kitchen_ready_by = bumper.name if bumper else None
+
+    payment_rows = list(
+        (
+            await session.scalars(
+                select(PaymentTransaction)
+                .where(
+                    PaymentTransaction.order_id == order.id,
+                    PaymentTransaction.restaurant_id == restaurant_id,
+                )
+                .order_by(PaymentTransaction.created_at)
+            )
+        ).all()
+    )
+    payments = [
+        PaymentDetailOut(
+            id=p.id,
+            tender_type=p.tender_type,
+            amount_aed=p.amount_aed,
+            tip_aed=p.tip_aed,
+            status=p.status,
+            channel=p.channel,
+            provider=p.provider,
+            refunded_amount_aed=p.refunded_amount_aed,
+            reference_meta=p.reference_meta,
+            created_at=_as_utc(p.created_at),
+        )
+        for p in payment_rows
+    ]
+    paid_total = sum(
+        (p.amount_aed - p.refunded_amount_aed for p in payment_rows if p.status == "succeeded"),
+        Decimal("0"),
+    )
+
     assignment = None
     if _detail_wants("route", includes) or _detail_wants("dispatch", includes):
         assignment = await session.scalar(
@@ -2236,22 +2501,46 @@ async def get_order_detail(
 
     timeline: list[TimelineEventOut] = []
     if _detail_wants("timeline", includes):
+        # Item-level rows (bump, start prep, recall, quality/packaging checks)
+        # are audited against `order_item`, so a timeline reading only `order`
+        # silently dropped everything the kitchen did.
+        item_ids = [str(i.id) for i in items_rows]
         audit_rows = list(
             (
                 await session.scalars(
                     select(AuditLog)
-                    .where(AuditLog.entity == "order", AuditLog.entity_id == str(order.id))
+                    .where(
+                        or_(
+                            and_(
+                                AuditLog.entity == "order",
+                                AuditLog.entity_id == str(order.id),
+                            ),
+                            and_(
+                                AuditLog.entity == "order_item",
+                                AuditLog.entity_id.in_(item_ids or [""]),
+                            ),
+                        )
+                    )
                     .order_by(AuditLog.created_at)
                 )
             ).all()
         )
+        # Resolve every acting staff member in ONE query, not one per row.
+        actor_ids = {
+            row.actor_staff_id for row in audit_rows if getattr(row, "actor_staff_id", None)
+        }
+        actor_names: dict[int, str] = {}
+        if actor_ids:
+            for sm in await session.scalars(
+                select(StaffMember).where(StaffMember.id.in_(actor_ids))
+            ):
+                actor_names[sm.id] = sm.name
         timeline = [
             TimelineEventOut(
-                ts=row.created_at.replace(tzinfo=timezone.utc)
-                if row.created_at.tzinfo is None
-                else row.created_at,
+                ts=_as_utc(row.created_at),
                 action=row.action,
                 actor=row.actor,
+                actor_name=actor_names.get(getattr(row, "actor_staff_id", None) or -1),
                 after=row.after,
             )
             for row in audit_rows
@@ -2355,7 +2644,9 @@ async def get_order_detail(
     return OrderDetailOut(
         id=order.id,
         order_number=order.order_number,
+        daily_token=getattr(order, "daily_token", None),
         status=order.status,
+        order_type=getattr(order, "order_type", None),
         items=items,
         address=address,
         customer=CustomerDetailOut(
@@ -2372,12 +2663,26 @@ async def get_order_detail(
         subtotal=order.subtotal,
         delivery_fee_aed=order.delivery_fee_aed,
         total=order.total,
-        created_at=order.created_at,
-        delivered_at=order.delivered_at,
+        # orders.created_at is `timestamp WITHOUT time zone` holding UTC. Serialised
+        # naive it has no "Z", so a browser reads it as LOCAL time — which made a
+        # 2-second gap between placement and KOT render as "4h 00m" in Dubai.
+        created_at=_as_utc(order.created_at),
+        delivered_at=_as_utc(order.delivered_at),
         sla_deadline=order.sla_deadline,
         sla_started_at=order.sla_confirmed_at,
         prep_deadline=order.prep_deadline,
         cook_estimate_minutes=order.cook_estimate_minutes,
+        table_label=table_label,
+        covers=order.covers,
+        staff_name=staff_name,
+        kitchen_sent_at=kitchen_sent_at,
+        kitchen_ready_at=kitchen_ready_at,
+        kitchen_ready_by=kitchen_ready_by,
+        kitchen_pending_items=pending_items,
+        payments=payments,
+        paid_total_aed=paid_total,
+        cancelled_at=_as_utc(order.cancelled_at),
+        cancellation_reason=order.cancellation_reason,
         timeline=timeline,
         chat=chat,
         convo_summary=(
@@ -2526,3 +2831,51 @@ async def patch_address(
 
     await session.flush()
     return addr
+
+
+async def acknowledge_sla_breach(
+    session: "AsyncSession",
+    *,
+    restaurant_id: int,
+    order_id: int,
+    actor: str,
+    staff_id: int | None = None,
+) -> Order:
+    """Mark a late order's SLA alert as SEEN by a manager.
+
+    This is an acknowledgement, not a resolution: the order keeps its status,
+    its SLA clock and its lateness. All it does is take the card off the Live
+    Ops alert queue — server-side, so it holds across refreshes, devices and
+    shifts, and the audit trail records who cleared it.
+
+    Idempotent: acknowledging twice keeps the FIRST acknowledgement, so the
+    record answers "who first saw this", which is the question that matters.
+    """
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant_id, order_id=order_id
+    )
+    if order is None:
+        raise ValueError("Order not found")
+    if order.sla_acked_at is not None:
+        return order
+
+    before = {"sla_acked_at": None, "sla_acked_by_staff_id": None}
+    order.sla_acked_at = datetime.now(timezone.utc)
+    order.sla_acked_by_staff_id = staff_id
+    await session.flush()
+
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=order.restaurant_id,
+        entity="order",
+        entity_id=str(order.id),
+        action="order_sla_acknowledged",
+        before=before,
+        after={
+            "sla_acked_at": order.sla_acked_at.isoformat(),
+            "sla_acked_by_staff_id": staff_id,
+            "status": order.status,
+        },
+    )
+    return order

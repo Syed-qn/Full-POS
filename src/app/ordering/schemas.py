@@ -19,6 +19,7 @@ class OrderItemOut(BaseModel):
     cancelled_reason: Optional[str] = None
     course_number: int = 1
     course_held: bool = False
+    is_takeaway: bool = False
     seat_number: Optional[int] = None
 
 
@@ -26,6 +27,8 @@ class OrderOut(BaseModel):
     """Enriched order response — includes customer, items, rider, and address."""
     id: int
     order_number: str
+    # Human-facing daily queue token (e.g. 626); null for legacy rows.
+    daily_token: Optional[int] = None
     status: str
     customer_name: Optional[str]
     customer_phone: str
@@ -52,6 +55,9 @@ class OrderOut(BaseModel):
     batch_preview: Optional[str] = None
     # Set on resale copies (…-RS rows). Null on the cancelled original.
     resale_of_order_id: Optional[int] = None
+    # Why the order was cancelled — lets the UI tell a real cancel apart from a
+    # merge ("Merged into order …"), which shouldn't read as "Cancelled".
+    cancellation_reason: Optional[str] = None
     # Category-1 POS fields
     order_type: Optional[str] = "delivery"
     priority: Optional[str] = "normal"
@@ -66,6 +72,10 @@ class OrderOut(BaseModel):
     aggregator_source: Optional[str] = None
     aggregator_order_ref: Optional[str] = None
     source_channel: Optional[str] = None
+    # SLA breach acknowledged on the Live Ops board (ISO 8601), plus who did it.
+    # The order stays late — this only takes it off the alert queue.
+    sla_acked_at: Optional[str] = None
+    sla_acked_by_staff_id: Optional[int] = None
 
 
 class CustomerOut(BaseModel):
@@ -126,6 +136,8 @@ class PosOrderItemIn(BaseModel):
     notes: str | None = None
     course_number: int = Field(default=1, ge=1, le=20)
     course_held: bool = False
+    # Parcel this line even though the order is dine-in (same bill, boxed).
+    is_takeaway: bool = False
     seat_number: int | None = Field(default=None, ge=1, le=50)
 
 
@@ -137,6 +149,7 @@ class PosOrderIn(BaseModel):
     customer_name: str | None = None
     items: list[PosOrderItemIn] = Field(min_length=1)
     table_id: int | None = None
+    covers: int | None = Field(default=None, ge=1, le=50)
     staff_id: int | None = None
     address: ManualOrderAddressIn | None = None
     delivery_fee_aed: Decimal = Decimal("0.00")
@@ -145,6 +158,12 @@ class PosOrderIn(BaseModel):
     priority: str = "normal"
     customer_allergy_notes: str | None = None
     auto_confirm: bool = True
+
+
+class AddOrderItemsIn(BaseModel):
+    """Append more lines to an already-open order (dine-in tab: another round)."""
+
+    items: list[PosOrderItemIn] = Field(min_length=1)
 
 
 class HoldOrderIn(BaseModel):
@@ -157,6 +176,12 @@ class PriorityIn(BaseModel):
 
 class FireCourseIn(BaseModel):
     course_number: int = Field(ge=1, le=20)
+
+
+class CoversIn(BaseModel):
+    """Update a dine-in party size after seating (guests joined / left)."""
+
+    covers: int = Field(ge=1, le=50)
 
 
 class RepeatLastOrderIn(BaseModel):

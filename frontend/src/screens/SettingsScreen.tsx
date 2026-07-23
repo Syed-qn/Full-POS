@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
-import { disconnectMeta, resubscribeMeta } from "../lib/onboardingApi";
+import { disconnectMeta, fetchMetaConfig, type MetaConfig } from "../lib/onboardingApi";
+import { useMetaEmbeddedSignup } from "../lib/useMetaEmbeddedSignup";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import {
   createApiKey,
@@ -224,33 +225,32 @@ export function SettingsScreen() {
   const [legalNameAr, setLegalNameAr] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
-  // WhatsApp disconnect
+  // WhatsApp connect / disconnect — both happen HERE. Connect opens Meta's own
+  // Embedded Signup dialog in place (same popup the onboarding wizard uses);
+  // disconnect leaves the manager on this page with a Connect button, instead of
+  // bouncing them into the setup wizard to press one button.
   const [showDisconnect, setShowDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [resubscribing, setResubscribing] = useState(false);
+  const [metaCfg, setMetaCfg] = useState<MetaConfig | null>(null);
+  const meta = useMetaEmbeddedSignup((c) => setMetaCfg(c));
 
-  async function onResubscribeWhatsApp() {
-    setResubscribing(true);
-    try {
-      await resubscribeMeta();
-      toast("WhatsApp webhooks re-subscribed — send a test message now.", "success");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Re-subscribe failed", "error");
-    } finally {
-      setResubscribing(false);
-    }
-  }
+  useEffect(() => {
+    fetchMetaConfig().then(setMetaCfg).catch(() => {});
+  }, []);
 
   async function onDisconnectWhatsApp() {
     setDisconnecting(true);
     try {
-      await disconnectMeta();
-      // Onboarding gate must re-trigger — force a re-onboard on next route check.
-      writeCachedOnboardingComplete(false);
+      const c = await disconnectMeta();
+      setMetaCfg(c);
+      // Onboarding is incomplete again, but we do NOT route there: the Connect
+      // button below reopens the Meta dialog in place. Keep the cached flag true
+      // so the gate doesn't yank this page away mid-reconnect.
+      writeCachedOnboardingComplete(true);
       toast("WhatsApp disconnected — reconnect to keep operating");
-      nav("/onboarding", { replace: true });
     } catch (e) {
       toast(e instanceof Error ? e.message : "Couldn't disconnect");
+    } finally {
       setDisconnecting(false);
       setShowDisconnect(false);
     }
@@ -744,24 +744,63 @@ export function SettingsScreen() {
             style={{ marginTop: 24, borderTop: "1px solid var(--border, #334155)", paddingTop: 18 }}
           >
             <div className={s.rowLabel}>
-              <span className={s.rowName}>WhatsApp connection</span>
+              <span className={s.rowName}>
+                WhatsApp connection
+                {metaCfg && (
+                  <span className={s.rowBadge} data-connected={metaCfg.connected ? "yes" : "no"}>
+                    {metaCfg.connected ? "Connected" : "Not connected"}
+                  </span>
+                )}
+              </span>
               <span className={s.rowHint}>
-                Disconnect this restaurant's WhatsApp (Meta) account. You'll be taken
-                to onboarding to reconnect. Your menu, orders and settings are kept —
-                but the bot stops replying until you reconnect.
+                {metaCfg?.connected
+                  ? "Disconnect this restaurant's WhatsApp (Meta) account. Your menu, orders and settings are kept — but the bot stops replying until you reconnect."
+                  : "Link your Meta / WhatsApp Business account. The Facebook dialog opens right here — pick your number and we set the rest up."}
               </span>
             </div>
             <div className={s.actions}>
-              <Button
-                onClick={onResubscribeWhatsApp}
-                disabled={resubscribing}
-              >
-                {resubscribing ? "Re-subscribing…" : "Fix inbound (re-subscribe)"}
-              </Button>
-              <Button variant="ghost" onClick={() => setShowDisconnect(true)}>
-                Disconnect WhatsApp
-              </Button>
+              {metaCfg?.connected ? (
+                <Button variant="ghost" onClick={() => setShowDisconnect(true)}>
+                  Disconnect WhatsApp
+                </Button>
+              ) : meta.enabled ? (
+                <Button onClick={() => void meta.connect()} disabled={meta.busy}>
+                  {meta.busy ? "Connecting…" : "Connect WhatsApp"}
+                </Button>
+              ) : (
+                // Embedded Signup isn't configured on this deployment — the manual
+                // paste form only lives in the onboarding wizard, so send them there.
+                <Button variant="ghost" onClick={() => nav("/onboarding")}>
+                  Connect WhatsApp
+                </Button>
+              )}
             </div>
+            {/* POS API key minted by connect — shown ONCE and never retrievable,
+                so it gets its own row rather than a toast that can vanish. */}
+            {meta.apiKey && (
+              <div className={s.apiKeyBox}>
+                <span className={s.rowHint}>
+                  Your POS API key — copy it now, it is shown only once.
+                </span>
+                <div className={s.apiKeyRow}>
+                  <code className={s.apiKeyValue}>{meta.apiKey}</code>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      navigator.clipboard?.writeText(meta.apiKey ?? "").then(
+                        () => toast("API key copied"),
+                        () => toast("Copy failed — select and copy manually"),
+                      )
+                    }
+                  >
+                    Copy
+                  </Button>
+                  <Button variant="ghost" onClick={meta.clearApiKey}>
+                    Done
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1403,7 +1442,7 @@ export function SettingsScreen() {
       {showDisconnect && (
         <ConfirmDialog
           title="Disconnect WhatsApp?"
-          message="This clears your stored WhatsApp (Meta) connection and sends you to onboarding to reconnect. Your menu, orders and settings stay — but the bot won't reply on WhatsApp until you reconnect."
+          message="This clears your stored WhatsApp (Meta) connection. Your menu, orders and settings stay — but the bot won't reply on WhatsApp until you reconnect, which you can do right here."
           confirmLabel="Disconnect"
           danger
           busy={disconnecting}

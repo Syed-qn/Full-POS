@@ -14,7 +14,12 @@ class AuditLog(Base, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # The ROLE that acted ("manager", "cashier", "system", "customer").
     actor: Mapped[str] = mapped_column(String(64))
+    # WHICH person, when a staff session performed it. Null for owner-token,
+    # worker and webhook writes — no human is attributable there. Deliberately
+    # not a FK: the audit log is append-only and must outlive staff rows.
+    actor_staff_id: Mapped[int | None] = mapped_column(BigInteger)
     restaurant_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
     entity: Mapped[str] = mapped_column(String(64), index=True)
     entity_id: Mapped[str] = mapped_column(String(64), index=True)

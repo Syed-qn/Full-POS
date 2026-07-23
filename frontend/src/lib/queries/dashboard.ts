@@ -64,6 +64,10 @@ export function useOrderDetailQuery(
     queryFn: () => fetchOrderDetail(orderId!, { include }),
     enabled: orderId != null,
     staleTime: DETAIL_STALE_MS,
+    // An open drawer is a live view of a live order: the kitchen can bump or
+    // recall a line while a manager is reading it. Without this the service
+    // record froze at whatever it showed when the drawer opened.
+    refetchInterval: pollWhenVisible(DETAIL_STALE_MS),
     placeholderData: (prev) => prev,
   });
 }
