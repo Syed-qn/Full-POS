@@ -203,24 +203,39 @@ export function CustomerProfileScreen() {
             <label className={s.label}>Phone</label>
             <input className={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
             <div className={s.toggleRow}>
-              <label className={s.label}>WhatsApp Marketing</label>
+              <div className={s.toggleText}>
+                <span className={s.label}>WhatsApp Marketing</span>
+                <span className={s.toggleHint}>
+                  {optIn ? "Receives promotions" : "Won't be messaged"}
+                </span>
+              </div>
               <button
-                className={`${s.toggle} ${optIn ? s.toggleOn : s.toggleOff}`}
+                type="button"
+                role="switch"
+                aria-checked={optIn}
+                aria-label="WhatsApp marketing opt-in"
+                className={`${s.switch} ${optIn ? s.switchOn : ""}`}
                 onClick={() => setOptIn(!optIn)}
-                aria-pressed={optIn}
-                title="Tap to change marketing opt-in"
               >
-                {optIn ? "Opted in" : "Opted out"}
+                <span className={s.switchKnob} />
               </button>
             </div>
             <div className={s.toggleRow}>
-              <label className={s.label}>VIP</label>
+              <div className={s.toggleText}>
+                <span className={s.label}>VIP</span>
+                <span className={s.toggleHint}>
+                  {isVip ? "Priority customer" : "Standard customer"}
+                </span>
+              </div>
               <button
-                className={`${s.toggle} ${isVip ? s.toggleOn : s.toggleOff}`}
-                onClick={() => setIsVip(!isVip)}
+                type="button"
+                role="switch"
+                aria-checked={isVip}
                 aria-label="Toggle VIP"
+                className={`${s.switch} ${isVip ? s.switchOn : ""}`}
+                onClick={() => setIsVip(!isVip)}
               >
-                {isVip ? "VIP" : "Standard"}
+                <span className={s.switchKnob} />
               </button>
             </div>
             <label className={s.label}>Allergy notes</label>
@@ -237,22 +252,28 @@ export function CustomerProfileScreen() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
-            <label className={s.label}>Birthday</label>
-            <input
-              className={s.input}
-              type="date"
-              aria-label="Birthday"
-              value={birthday}
-              onChange={(e) => setBirthday(e.target.value)}
-            />
-            <label className={s.label}>Anniversary</label>
-            <input
-              className={s.input}
-              type="date"
-              aria-label="Anniversary"
-              value={anniversary}
-              onChange={(e) => setAnniversary(e.target.value)}
-            />
+            <div className={s.twoUp}>
+              <div className={s.field}>
+                <label className={s.label}>Birthday</label>
+                <input
+                  className={s.input}
+                  type="date"
+                  aria-label="Birthday"
+                  value={birthday}
+                  onChange={(e) => setBirthday(e.target.value)}
+                />
+              </div>
+              <div className={s.field}>
+                <label className={s.label}>Anniversary</label>
+                <input
+                  className={s.input}
+                  type="date"
+                  aria-label="Anniversary"
+                  value={anniversary}
+                  onChange={(e) => setAnniversary(e.target.value)}
+                />
+              </div>
+            </div>
             <div className={s.saveRow}>
               <Button onClick={saveIdentity} disabled={!identityDirty || saving}>
                 {saving ? "Saving…" : "Save"}

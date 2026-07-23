@@ -89,10 +89,13 @@ describe("CustomerProfileScreen", () => {
   });
 
   // 4. Shows marketing opt-in toggle state
-  it("shows marketing opt-in toggle as Opted in when marketing_opted_in is true", async () => {
+  it("shows the marketing switch as on when marketing_opted_in is true", async () => {
     renderProfile();
     await waitFor(() =>
-      expect(screen.getByText("Opted in")).toBeInTheDocument(),
+      expect(screen.getByRole("switch", { name: /marketing/i })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
     );
   });
 
@@ -140,7 +143,7 @@ describe("CustomerProfileScreen", () => {
     renderProfile();
     await waitFor(() => screen.getByText("Khalid Hassan"));
 
-    const toggleBtn = screen.getByText("Opted in");
+    const toggleBtn = screen.getByRole("switch", { name: /marketing/i });
     fireEvent.click(toggleBtn);
 
     const saveBtn = screen.getByRole("button", { name: /save/i });
