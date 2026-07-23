@@ -215,6 +215,9 @@ async def dry_plan_batches(
                     Rider.restaurant_id == restaurant_id,
                     Rider.status == "available",
                     Rider.on_duty.is_(True),
+                    # Only a paired rider can receive the run and share GPS — an
+                    # unpaired rider has no app, so never auto-assign to them.
+                    Rider.device_token.is_not(None),
                 )
             )
         ).all()
@@ -625,6 +628,7 @@ async def _dispatch_greedy(
                     Rider.restaurant_id == restaurant_id,
                     Rider.status == "available",
                     Rider.on_duty.is_(True),
+                    Rider.device_token.is_not(None),
                 )
             )
         ).all()
@@ -918,9 +922,14 @@ async def _dispatch_ortools(
         await session.scalars(
             select(Rider).where(
                 Rider.restaurant_id == restaurant_id,
-                # Off-duty idle riders take no new/movable orders; riders already
-                # holding movable orders stay in the pool to keep their in-flight work.
-                ((Rider.status == "available") & (Rider.on_duty.is_(True)))
+                # Off-duty or unpaired idle riders take no new/movable orders;
+                # riders already holding movable orders stay in the pool to keep
+                # their in-flight work.
+                (
+                    (Rider.status == "available")
+                    & (Rider.on_duty.is_(True))
+                    & (Rider.device_token.is_not(None))
+                )
                 | (Rider.id.in_(busy_rider_ids)),
             )
         )
@@ -1683,6 +1692,10 @@ async def reassign_order(
         raise ValueError("Rider not found")
     if new_rider.status == "deactivated":
         raise ValueError("Cannot reassign to a deactivated rider.")
+    if new_rider.device_token is None:
+        raise ValueError(
+            "Cannot reassign to an unpaired rider — they must pair the app first."
+        )
     if not new_rider.on_duty:
         raise ValueError("Cannot reassign to an off-duty rider — they must go on duty first.")
     old_rider_id = order.rider_id
@@ -1817,6 +1830,10 @@ async def assign_order(
         raise ValueError("Rider not found")
     if rider.status == "deactivated":
         raise ValueError("Cannot assign to a deactivated rider.")
+    if rider.device_token is None:
+        raise ValueError(
+            "Cannot assign to an unpaired rider — they must pair the app first."
+        )
     if not rider.on_duty:
         raise ValueError("Cannot assign to an off-duty rider — they must go on duty first.")
 

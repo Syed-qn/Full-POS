@@ -344,11 +344,18 @@ export function OrderDetailDrawer({
                   <option value="">Assign rider…</option>
                   {riders
                     .filter((r) => r.status !== "deactivated")
-                    .map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} ({r.status.replace(/_/g, " ")})
-                      </option>
-                    ))}
+                    .map((r) => {
+                      // An unpaired rider has no app, so they cannot receive the
+                      // run or share GPS. Keep them visible but unselectable so the
+                      // manager sees WHY, rather than the rider silently vanishing.
+                      const unpaired = r.app_paired === false;
+                      return (
+                        <option key={r.id} value={r.id} disabled={unpaired}>
+                          {r.name}{" "}
+                          {unpaired ? "(not paired)" : `(${r.status.replace(/_/g, " ")})`}
+                        </option>
+                      );
+                    })}
                 </select>
                 <Button onClick={assignAction} disabled={reassigning || reassignTo === ""}>
                   {reassigning ? "Assigning…" : "Assign rider"}
