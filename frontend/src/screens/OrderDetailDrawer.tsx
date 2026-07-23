@@ -5,7 +5,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { SideDrawer } from "../components/SideDrawer";
 import { StatusPill } from "../components/StatusPill";
 import { Button } from "../components/Button";
-import { CountdownTimer } from "../components/CountdownTimer";
 import { DispatchExplainSection } from "../components/DispatchExplainSection";
 import { PrepCountdown } from "../components/PrepCountdown";
 import { apiClient } from "../lib/apiClient";
@@ -40,17 +39,6 @@ import s from "./OrderDetailDrawer.module.css";
 
 type Tab = "overview" | "timeline" | "chat" | "customer";
 
-// The SLA clock only counts down while the order is in flight. For delivered
-// or other terminal states the timer is meaningless (it would freeze at 00:00).
-const ACTIVE_SLA = new Set([
-  "pending_confirmation",
-  "confirmed",
-  "preparing",
-  "ready",
-  "assigned",
-  "picked_up",
-  "arriving",
-]);
 const KITCHEN_ADVANCEABLE = new Set(["confirmed", "preparing"]);
 const ADVANCE_LABEL: Record<string, string> = {
   confirmed: "Start Preparing",
@@ -240,23 +228,12 @@ export function OrderDetailDrawer({
         <div className={s.detail}>
           <div className={s.head}>
             <StatusPill status={detail.status} orderType={basicOrder.order_type} />
-            {/* Dine-in/takeaway have no SLA/delivery clock — skip the countdown. */}
-            {isOnPremise ? (
-              detail.status === "delivered" && detail.delivered_at ? (
-                <span className={s.deliveredStamp}>
-                  ✓ Paid{" "}
-                  {new Date(detail.delivered_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: "Asia/Dubai",
-                  })}
-                </span>
-              ) : null
-            ) : ACTIVE_SLA.has(detail.status) ? (
-              <CountdownTimer slaStartedAt={basicOrder.sla_started_at} />
-            ) : detail.status === "delivered" && detail.delivered_at ? (
+            {/* The live SLA countdown was removed from this header on request. A
+                delivered order still shows its finish stamp so the drawer records
+                WHEN it closed; nothing counts down while it is in flight. */}
+            {detail.status === "delivered" && detail.delivered_at ? (
               <span className={s.deliveredStamp}>
-                ✓ Delivered{" "}
+                ✓ {isOnPremise ? "Paid" : "Delivered"}{" "}
                 {new Date(detail.delivered_at).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
