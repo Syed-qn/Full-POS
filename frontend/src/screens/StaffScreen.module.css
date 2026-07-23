@@ -34,14 +34,20 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  min-width: 140px;
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+.field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .field input,
 .field select {
-  min-height: 48px;
+  min-height: 46px;
   padding: 10px 12px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
@@ -49,34 +55,94 @@
   background: var(--bg-surface);
   color: var(--text-primary);
 }
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
 
+/* Roster table sits inside a card; scroll horizontally on narrow viewports. */
+.tableWrap {
+  overflow-x: auto;
+}
 .table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.table th,
+.table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+}
 .table td {
   text-align: left;
-  padding: 14px 12px;
+  padding: 12px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 14px;
+  color: var(--text-primary);
+}
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+.table tbody tr:hover td {
+  background: var(--bg-surface-inset);
 }
 
-.table tbody tr {
-  min-height: 56px;
+.nameCell { font-weight: 600; }
+.mono { font-family: var(--font-mono); color: var(--text-secondary); }
+.actionsCol { text-align: right; width: 1%; white-space: nowrap; }
+.rowActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.rowActions :global(button) {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.82rem;
 }
 
-.table :global(button) {
-  min-height: 48px;
-  min-width: 48px;
-  margin-right: 6px;
+/* Small status/role pills. */
+.rolePill,
+.statusPill,
+.trainingPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rolePill {
+  text-transform: capitalize;
+  color: var(--text-secondary);
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+}
+.statusOn { color: #067647; background: color-mix(in srgb, #12b76a 14%, var(--bg-surface)); border: 1px solid color-mix(in srgb, #12b76a 30%, transparent); }
+.statusBreak { color: #92660a; background: color-mix(in srgb, #f5b301 20%, var(--bg-surface)); border: 1px solid color-mix(in srgb, #f5b301 42%, transparent); }
+.statusOff { color: var(--text-muted); background: var(--bg-surface-inset); border: 1px solid var(--border-subtle); }
+.trainingPill {
+  margin-left: 6px;
+  color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 
 .loading,
 .error,
 .empty {
-  padding: 16px;
+  padding: 8px 0;
   font-size: 14px;
   color: var(--text-secondary);
 }
