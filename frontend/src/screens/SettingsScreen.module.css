@@ -153,6 +153,15 @@
   gap: 7px;
   min-width: 0;
 }
+/* Multi-field rows (e.g. General) wrap into a readable grid instead of cramming
+   every field onto one flex line. Fields keep a min width and reflow as the
+   viewport narrows; row hints get room to breathe. */
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: start;
+  gap: 20px 24px;
+}
 .col .input { width: 100%; max-width: none; }
 .col .inputNum { width: 110px; }
 /* Compact two-up (e.g. batching): tighter row, fields fill their columns. */

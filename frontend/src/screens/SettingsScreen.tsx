@@ -57,8 +57,9 @@ const TABS: { key: Tab; label: string; icon: string; desc: string; title: string
     title: "Loyalty", blurb: "Reward repeat customers with earned credit and tier-based perks. Everything here is yours to tune." },
   { key: "dispatch", label: "Dispatch & Kitchen", icon: "🧭", desc: "Engine & prep timing",
     title: "Dispatch & Kitchen", blurb: "Routing engine and the distance-driven kitchen plate-by timing." },
-  { key: "integrations", label: "API Keys", icon: "🔑", desc: "Partner access",
-    title: "Partner API Keys", blurb: "Issue keys so a partner system (e.g. a POS) can pull your data read-only." },
+  // "API Keys" (integrations) tab removed from the settings surface. The
+  // ApiKeysSection + partner-key flow stay wired below but are no longer
+  // reachable from the tab list.
   { key: "payments", label: "Payments", icon: "💳", desc: "Card processor",
     title: "Payment Processing", blurb: "Connect your own Stripe account to accept card payments. Without one, card charges run in test/mock mode." },
 ];
@@ -645,7 +646,7 @@ export function SettingsScreen() {
           <>
           {tab === "general" && (
         <div className={s.section}>
-          <div className={s.row2}>
+          <div className={`${s.row2} ${s.fieldGrid}`}>
             <label className={s.col}>
               <span className={s.rowName}>Restaurant Name</span>
               <input
