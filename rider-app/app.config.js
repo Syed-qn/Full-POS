@@ -12,22 +12,15 @@ module.exports = ({ config }) => {
     config.android?.config?.googleMaps?.apiKey ||
     "";
 
-  const plugins = [...(config.plugins || [])];
-  const hasMapsPlugin = plugins.some(
-    (p) => p === "react-native-maps" || (Array.isArray(p) && p[0] === "react-native-maps"),
-  );
-  if (!hasMapsPlugin) {
-    plugins.push([
-      "react-native-maps",
-      {
-        androidGoogleMapsApiKey: mapsKey,
-      },
-    ]);
-  }
+  // NOTE: do NOT add "react-native-maps" to plugins. It ships no config plugin
+  // (no app.plugin.js), so Expo falls back to requiring the package main —
+  // lib/index.js, which is untranspiled JSX meant for Metro — and every config
+  // read dies with `SyntaxError: Unexpected token '<'`, taking `eas build` with
+  // it. The Android Maps key belongs in android.config.googleMaps.apiKey below,
+  // which is the supported route and is all react-native-maps needs.
 
   return {
     ...config,
-    plugins,
     android: {
       ...config.android,
       googleServicesFile:
