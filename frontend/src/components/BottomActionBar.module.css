@@ -1,6 +1,9 @@
 .bar {
   position: sticky;
-  bottom: 0;
+  /* Cancel the scroll-area's bottom padding (--main-pad-b) so the bar still
+     stops flush on the status footer even though ordinary pages now keep a
+     bottom gap. Falls back to 0 outside the app shell. */
+  bottom: calc(-1 * var(--main-pad-b, 0px));
   z-index: 10;
   min-height: var(--bottom-bar-height, 80px);
   display: flex;
@@ -11,7 +14,7 @@
   background: var(--bg-surface);
   border-top: 1px solid var(--border-default);
   box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.06);
-  /* Bleed horizontally to the scroll-area edges; sit flush on the bottom (the
-     .main no longer adds bottom padding, so the bar meets the status footer). */
-  margin: auto -16px 0;
+  /* Bleed horizontally to the scroll-area edges, and down through the bottom
+     padding so it meets the footer with no white stripe. */
+  margin: auto -16px calc(-1 * var(--main-pad-b, 0px));
 }

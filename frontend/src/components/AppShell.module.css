@@ -34,9 +34,11 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  /* No bottom padding: a sticky BottomActionBar sits flush on the status footer
-     (removes the white gap/stripe between the action bar and DesktopStatusBar). */
-  padding: 16px 16px 0;
+  /* Ordinary scrolling pages get bottom breathing room so content never runs
+     into the viewport edge. A sticky BottomActionBar cancels this padding (via
+     --main-pad-b) so it still sits flush on the status footer. */
+  --main-pad-b: 20px;
+  padding: 16px 16px var(--main-pad-b);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -53,6 +55,7 @@
   padding: 0;
   gap: 0;
   overflow: hidden;
+  --main-pad-b: 0px;
 }
 
 /* Waiter floor display is full-bleed: it paints its own dark surface edge to edge. */
@@ -60,6 +63,7 @@
   padding: 0;
   gap: 0;
   overflow: hidden;
+  --main-pad-b: 0px;
 }
 
 /* Kitchen display is a full-bleed dark board: no page scroll, the ticket grid
@@ -68,4 +72,5 @@
   padding: 0;
   gap: 0;
   overflow: hidden;
+  --main-pad-b: 0px;
 }
