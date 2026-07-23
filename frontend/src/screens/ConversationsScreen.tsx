@@ -5,7 +5,6 @@ import { ConversationRow } from "../components/ConversationRow";
 import { MessageBubble } from "../components/MessageBubble";
 import { SectionBanner } from "../components/SectionBanner";
 import { sendMessage, setTakeover } from "../lib/conversationsApi";
-import { ChatCustomerPanel } from "../components/ChatCustomerPanel";
 import {
   useConversationMessagesQuery,
   useConversationsQuery,
@@ -251,21 +250,17 @@ export function ConversationsScreen() {
             <>
               <div className={s.viewerHead}>
                 {!isRiderTab && (
-                  <>
-                    <span
-                      className={`${s.aiState} ${takeover ? s.aiStateHuman : s.aiStateBot}`}
-                      data-testid="conversation-ai-state"
-                    >
-                      {takeover ? "🙋 Human takeover" : "🤖 AI handling"}
-                    </span>
-                    <Button
-                      variant={takeover ? "danger" : "primary"}
-                      size="touch"
-                      onClick={toggleTakeover}
-                    >
-                      {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
-                    </Button>
-                  </>
+                  // The AI-handling / takeover badge was removed as redundant: the
+                  // button already names the current mode ("Switch to Human Reply"
+                  // means AI is handling it), and an active takeover shows its own
+                  // banner below.
+                  <Button
+                    variant={takeover ? "danger" : "primary"}
+                    size="md"
+                    onClick={toggleTakeover}
+                  >
+                    {takeover ? "Switch to AI Reply" : "Switch to Human Reply"}
+                  </Button>
                 )}
                 {isRiderTab && (
                   <span className={s.riderHint}>
@@ -309,21 +304,6 @@ export function ConversationsScreen() {
             </>
           )}
         </section>
-
-        <aside className={s.contextPane} aria-label="Customer context">
-          <div className={s.contextHead}>Customer context</div>
-          <div className={s.contextBody}>
-            {activeId === null || isRiderTab ? (
-              <div className={s.contextEmpty}>
-                {isRiderTab
-                  ? "Driver chats have no customer CRM panel."
-                  : "Select a customer conversation."}
-              </div>
-            ) : (
-              <ChatCustomerPanel conversationId={activeId} alwaysOpen />
-            )}
-          </div>
-        </aside>
       </div>
     </div>
   );

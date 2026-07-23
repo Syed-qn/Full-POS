@@ -61,13 +61,13 @@ describe("ConversationsScreen", () => {
     await waitFor(() => expect(screen.getByText(/you are controlling this conversation/i)).toBeInTheDocument());
   });
 
-  it("uses a 3-pane layout with AI state and customer context", async () => {
+  it("uses a 2-pane layout (threads + viewer) with channel filters", async () => {
     renderWithProviders(<ConversationsScreen />);
     await waitFor(() => expect(screen.getByTestId("conversations-screen")).toBeInTheDocument());
-    expect(screen.getByLabelText(/customer context/i)).toBeInTheDocument();
-    await waitFor(() => screen.getByText("+971501234567"));
-    await userEvent.click(screen.getByText("+971501234567"));
-    expect(screen.getByTestId("conversation-ai-state")).toHaveTextContent(/ai handling/i);
+    // The customer-context pane and the AI-handling badge were removed; the
+    // channel filter tabs remain.
+    expect(screen.queryByLabelText(/customer context/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("conversation-ai-state")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ai handling/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /needs staff/i })).toBeInTheDocument();
   });

@@ -10,7 +10,9 @@
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(260px, 320px);
+  /* Customer-context pane removed — threads list + chat viewer only, with a
+     wider threads list. */
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: var(--space-3);
   flex: 1;
@@ -19,7 +21,7 @@
 
 @media (max-width: 1100px) {
   .layout {
-    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   }
 
   .contextPane {
