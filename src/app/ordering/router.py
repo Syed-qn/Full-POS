@@ -828,7 +828,9 @@ async def unmerge_last_endpoint(
 @router.post("/{order_id}/advance", response_model=OrderOut)
 async def advance_order(
     order_id: int,
-    restaurant: Restaurant = Depends(current_restaurant),
+    # KOT is a cashier action (confirmed -> preparing) and the kitchen advances
+    # preparing -> ready, so both roles need this alongside the manager/owner.
+    restaurant: Restaurant = Depends(require_role("manager", "cashier", "kitchen")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     order = await get_order_for_tenant(

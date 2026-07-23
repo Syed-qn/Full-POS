@@ -18,7 +18,7 @@ const THEME_LABEL: Record<string, string> = {
  * tables, while the other channels belong to the cashier terminal and the KDS.
  * The union is kept wider than the UI so re-enabling a section is a one-liner.
  */
-export type WaiterSection = "dining" | "takeaway" | "delivery" | "online" | "kitchen";
+export type WaiterSection = "dining" | "takeaway" | "whatsapp" | "delivery" | "online" | "kitchen";
 
 function clockLabel(d: Date): string {
   return d.toLocaleTimeString("en-US", {
@@ -95,6 +95,17 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             onClick={() => navigate("/cashier/takeaway")}
           >
             Take Away
+          </button>
+        )}
+        {showTakeaway && (
+          <button
+            type="button"
+            className={`${s.tab} ${active === "whatsapp" ? s.tabActive : ""}`}
+            aria-current={active === "whatsapp" ? "page" : undefined}
+            data-testid="cashier-whatsapp-tab"
+            onClick={() => navigate("/cashier/whatsapp")}
+          >
+            WhatsApp
           </button>
         )}
       </nav>

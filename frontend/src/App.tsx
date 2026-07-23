@@ -51,6 +51,7 @@ import { OrderDetailScreen } from "./screens/OrderDetailScreen";
 import { CheckoutScreen } from "./screens/CheckoutScreen";
 import { CashierFloorScreen } from "./screens/CashierFloorScreen";
 import { CashierTakeawayScreen } from "./screens/CashierTakeawayScreen";
+import { CashierWhatsappScreen } from "./screens/CashierWhatsappScreen";
 import { RiderAppScreen } from "./screens/RiderAppScreen";
 
 /**
@@ -132,6 +133,7 @@ export default function App() {
       <Route path="/waiter/new-order" element={<Guarded><NewOrderRoute /></Guarded>} />
       <Route path="/cashier/floor" element={<Guarded><CashierFloorScreen /></Guarded>} />
       <Route path="/cashier/takeaway" element={<Guarded><CashierTakeawayScreen /></Guarded>} />
+      <Route path="/cashier/whatsapp" element={<Guarded><CashierWhatsappScreen /></Guarded>} />
       <Route path="/cashier/new-order" element={<Guarded><NewOrderRoute /></Guarded>} />
       <Route path="/orders" element={<Guarded><OrdersScreen /></Guarded>} />
       <Route

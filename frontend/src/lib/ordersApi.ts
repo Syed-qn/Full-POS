@@ -95,6 +95,15 @@ export async function setOrderPriority(id: number, priority: string): Promise<Or
   return apiClient.patch<OrderOut>(`/api/v1/orders/${id}/priority`, { priority });
 }
 
+/**
+ * Advance an order one step through the kitchen FSM: confirmed → preparing
+ * (the cashier's KOT / "send to kitchen") or preparing → ready (the kitchen).
+ * The server rejects any other starting status with a 422.
+ */
+export async function advanceOrder(id: number): Promise<OrderOut> {
+  return apiClient.post<OrderOut>(`/api/v1/orders/${id}/advance`, {});
+}
+
 export async function markDeliveryFailed(id: number, reason: string): Promise<OrderOut> {
   return apiClient.post<OrderOut>(`/api/v1/orders/${id}/delivery-failed`, { reason });
 }

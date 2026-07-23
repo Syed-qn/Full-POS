@@ -209,6 +209,31 @@ async def bump_item(
     )
     await session.commit()
     order = await session.get(Order, item.order_id)
+
+    # Order-level READY: when every non-cancelled line on a PREPARING order has
+    # been bumped, the whole order is ready. Advance it so the cashier's WhatsApp
+    # queue reflects "Ready" and delivery orders enter auto-dispatch. Bumping a
+    # single line never moved the order before, so an order could sit in PREPARING
+    # forever with all its food plated.
+    if order is not None and str(order.status) == "preparing":
+        remaining = await session.scalar(
+            select(OrderItem)
+            .where(
+                OrderItem.order_id == order.id,
+                OrderItem.cancelled.is_(False),
+                OrderItem.kitchen_status != "ready",
+            )
+            .limit(1)
+        )
+        if remaining is None:
+            from app.ordering.service import advance_kitchen_status
+
+            try:
+                order = await advance_kitchen_status(session, order=order, actor="kitchen")
+            except ValueError:
+                # A concurrent transition already moved it — the board is still correct.
+                order = await session.get(Order, item.order_id)
+
     return kds_service.enrich_ticket(
         item,
         order,
