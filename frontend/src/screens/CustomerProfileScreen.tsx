@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/Button";
 import { StatusPill } from "../components/StatusPill";
+import { toast } from "../components/Toaster";
 import { orderStatusLabel } from "../lib/orderDisplay";
 import { Spinner } from "../components/Spinner";
 import {
@@ -477,6 +478,108 @@ export function CustomerProfileScreen() {
               </table>
             )}
           </section>
+
+          {/* Loyalty snapshot: tier (+ manager pin), points, stamp-card progress
+              and referral code — none of which were surfaced before. */}
+          {(profile.loyalty_tier ||
+            profile.stamp_card ||
+            profile.referral_code ||
+            (profile.loyalty_points ?? 0) > 0) && (
+            <section className={s.card}>
+              <h3 className={s.cardTitle}>Loyalty</h3>
+              <div className={s.loyaltyRows}>
+                {profile.loyalty_tier && (
+                  <div className={s.loyaltyRow}>
+                    <span className={s.loyaltyLabel}>Tier</span>
+                    <span className={s.loyaltyValue}>
+                      {{ gold: "🥇", silver: "🥈", bronze: "🥉" }[profile.loyalty_tier] ?? ""}{" "}
+                      <span className={s.cap}>{profile.loyalty_tier}</span>
+                      {profile.loyalty_tier_locked && (
+                        <span className={s.pin} title="Tier pinned by a manager — auto-recompute paused">
+                          {" "}📌 pinned
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                <div className={s.loyaltyRow}>
+                  <span className={s.loyaltyLabel}>Points</span>
+                  <span className={s.loyaltyValue}>{profile.loyalty_points ?? 0}</span>
+                </div>
+              </div>
+
+              {profile.stamp_card && (
+                <div className={s.stampWrap}>
+                  <div className={s.stampHead}>
+                    <span className={s.loyaltyLabel}>Stamp card</span>
+                    <span className={s.stampCount}>
+                      {profile.stamp_card.stamps}/{profile.stamp_card.stamps_required}
+                    </span>
+                  </div>
+                  <div className={s.stampBar}>
+                    <div
+                      className={s.stampFill}
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (profile.stamp_card.stamps /
+                            Math.max(1, profile.stamp_card.stamps_required)) *
+                            100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <span className={s.stampSub}>
+                    {profile.stamp_card.rewards_redeemed} reward
+                    {profile.stamp_card.rewards_redeemed === 1 ? "" : "s"} redeemed
+                  </span>
+                </div>
+              )}
+
+              {profile.referral_code && (
+                <div className={s.referral}>
+                  <span className={s.loyaltyLabel}>Referral code</span>
+                  <div className={s.referralRow}>
+                    <code className={s.referralCode}>{profile.referral_code}</code>
+                    <button
+                      type="button"
+                      className={s.copyBtn}
+                      onClick={() => {
+                        navigator.clipboard?.writeText(profile.referral_code ?? "");
+                        toast("Referral code copied");
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {(profile.phone_history?.length ?? 0) > 0 && (
+            <section className={s.card}>
+              <h3 className={s.cardTitle}>Phone history</h3>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>Number</th>
+                    <th>Changed by</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profile.phone_history!.map((p, i) => (
+                    <tr key={`${p.phone}-${i}`}>
+                      <td className={s.mono}>{p.phone}</td>
+                      <td>{p.changed_by}</td>
+                      <td>{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
         </div>
       </div>
     </div>
