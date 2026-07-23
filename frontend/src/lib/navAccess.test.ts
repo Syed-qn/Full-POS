@@ -137,7 +137,7 @@ describe("canAccess — default / manager / owner", () => {
       expect(canAccess(route, undefined)).toBe(true);
     }
     expect(canAccess("/settings", null)).toBe(true);
-    expect(canAccess("/staff", undefined)).toBe(true);
+    expect(canAccess("/waiter-management", undefined)).toBe(true);
   });
 
   it("allows everything for owner and manager", () => {
@@ -149,7 +149,7 @@ describe("canAccess — default / manager / owner", () => {
 
   it("allows unknown role strings (do not lock out)", () => {
     expect(canAccess("/settings", "superuser")).toBe(true);
-    expect(canAccess("/staff", "legacy_admin")).toBe(true);
+    expect(canAccess("/waiter-management", "legacy_admin")).toBe(true);
   });
 
   it("allows unmapped routes for restricted roles (no invented locks)", () => {
@@ -173,7 +173,7 @@ describe("canAccess — role matrix", () => {
         "/orders/9",
         "/menu",
         "/settings",
-        "/staff",
+        "/waiter-management",
         "/new-order",
         "/payments",
         "/floor",
@@ -205,7 +205,7 @@ describe("canAccess — role matrix", () => {
         "/customers",
         "/menu",
         "/kds",
-        "/staff",
+        "/waiter-management",
         "/settings",
         "/marketing",
         "/riders",
@@ -234,7 +234,7 @@ describe("canAccess — role matrix", () => {
         "/payments",
         "/orders/1/pay",
         "/kds",
-        "/staff",
+        "/waiter-management",
         "/settings",
         "/marketing",
         "/inventory",

@@ -246,7 +246,7 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/menu": ["owner", "manager"],
   "/inventory": ["owner", "manager"],
   "/customers": ["owner", "manager"],
-  "/staff": ["owner", "manager"],
+  "/waiter-management": ["owner", "manager"],
   "/marketing": ["owner", "manager"],
   "/reports": ["owner", "manager"],
   "/ai": ["owner", "manager"],

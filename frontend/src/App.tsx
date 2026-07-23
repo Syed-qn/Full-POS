@@ -170,7 +170,9 @@ export default function App() {
       <Route path="/reliability" element={<Guarded><ReliabilityScreen /></Guarded>} />
       <Route path="/compliance" element={<Guarded><ComplianceScreen /></Guarded>} />
       <Route path="/ai" element={<Guarded><AiInsightsScreen /></Guarded>} />
-      <Route path="/staff" element={<Guarded><StaffScreen /></Guarded>} />
+      <Route path="/waiter-management" element={<Guarded><StaffScreen /></Guarded>} />
+      {/* Old /staff path kept as a redirect for existing links/bookmarks. */}
+      <Route path="/staff" element={<Navigate to="/waiter-management" replace />} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />
       <Route path="/analytics" element={<Guarded><AnalyticsScreen /></Guarded>} />
       <Route path="/predictions" element={<Guarded><AnalyticsScreen /></Guarded>} />

@@ -37,7 +37,7 @@ const LIVE_ROUTES = new Set<string>([
   "/menu", // Menu
   "/customers", // Customers
   "/settings", // Settings
-  "/staff", // Staff
+  "/waiter-management", // Waiter Management
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
@@ -65,15 +65,22 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: "users",
+    /** People the restaurant manages: customers, delivery riders, floor waiters. */
+    label: "User Management",
+    items: [
+      { to: "/customers", label: "Customer Management", icon: "○" },
+      { to: "/riders", label: "Rider Management", icon: "›" },
+      { to: "/waiter-management", label: "Waiter Management", icon: "◎" },
+    ],
+  },
+  {
     id: "manage",
     /** Owner/manager admin surface (R5). Label stays Manage for floor roles that see partial list. */
     label: "Manage",
     items: [
-      { to: "/customers", label: "Customers", icon: "○" },
-      { to: "/riders", label: "Riders", icon: "›" },
       { to: "/menu", label: "Menu", icon: "◇" },
       { to: "/inventory", label: "Inventory", icon: "▦" },
-      { to: "/staff", label: "Waiter Management", icon: "◎" },
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },
       { to: "/branches", label: "Branches", icon: "▣" },
