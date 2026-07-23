@@ -17,7 +17,7 @@ import { chargePayment } from "../lib/paymentsApi";
 import { getStaffSession, isCashierRole } from "../lib/navAccess";
 import { usePosTheme } from "../lib/posTheme";
 import { fetchOrderDetail } from "../lib/orderDetailApi";
-import { listStaff } from "../lib/staffApi";
+import { getClockStatus, listStaff } from "../lib/staffApi";
 import type { StaffMember } from "../lib/types";
 import s from "./WaiterOrderScreen.module.css";
 
@@ -101,6 +101,7 @@ export function WaiterOrderScreen() {
   const { dishes, loading: menuLoading, error: menuError } = useLiveMenu({ cache: true });
   const [tables, setTables] = useState<ApiTable[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [onShiftIds, setOnShiftIds] = useState<Set<number>>(new Set());
   const [waiterId, setWaiterId] = useState<number | "">(staff?.staff_id ?? "");
   const [covers, setCovers] = useState(2);
   const [nextToken, setNextToken] = useState<number | null>(null);
@@ -177,8 +178,23 @@ export function WaiterOrderScreen() {
       .then(setNextToken)
       .catch(() => setNextToken(null));
     // Staff list is manager-scoped; fall back to just the signed-in waiter.
+    // Only CLOCKED-IN waiters can be picked, so read each waiter's shift status.
     listStaff()
-      .then((r) => setStaffList(Array.isArray(r) ? r : []))
+      .then((r) => {
+        const rows = Array.isArray(r) ? r : [];
+        setStaffList(rows);
+        const waiters = rows.filter((m) => m.role === "waiter");
+        void Promise.all(
+          waiters.map(async (m) => {
+            try {
+              const { status } = await getClockStatus(m.id);
+              return status === "clocked_in" || status === "on_break" ? m.id : null;
+            } catch {
+              return null;
+            }
+          }),
+        ).then((ids) => setOnShiftIds(new Set(ids.filter((x): x is number => x != null))));
+      })
       .catch(() => setStaffList([]));
   }, []);
 
@@ -590,7 +606,8 @@ export function WaiterOrderScreen() {
   const sendLabel = openTabOrderId
     ? `KOT · Add to ${selectedTable?.label ?? "tab"} & send`
     : "KOT · Send";
-  const waiterOptions = staffList.length > 0 ? staffList : [];
+  // Off-shift waiters are hidden — a waiter must be clocked in to take a table.
+  const waiterOptions = staffList.filter((m) => m.role === "waiter" && onShiftIds.has(m.id));
 
   return (
     <div className={s.root} data-theme={theme} data-testid="waiter-order-screen">
