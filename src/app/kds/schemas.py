@@ -47,6 +47,12 @@ class TicketItemOut(BaseModel):
     order_number: str | None = None
     order_priority: str | None = None
     order_type: str | None = None
+    # Origin channel: "pos" = cashier Home Delivery, else the customer WhatsApp
+    # channel. Both are order_type=delivery, so the board needs this to badge a
+    # Home Delivery as "Home DL" instead of "WhatsApp". Without it declared here,
+    # FastAPI's response_model strips it from the JSON even though enrich_ticket
+    # sets it — which is exactly why the kitchen pill read "WhatsApp".
+    source_channel: str | None = None
     dish_name: str
     variant_name: str | None
     qty: int
@@ -64,6 +70,10 @@ class TicketItemOut(BaseModel):
     course_held: bool = False
     customer_allergy_notes: str | None = None
     estimated_ready_at: str | None = None
+    # Start of the 40-min customer SLA (= order.sla_confirmed_at). Drives the
+    # board's count-DOWN-from-40 timer; also dropped by response_model until now,
+    # so the board silently fell back to counting the ticket's own age up.
+    sla_started_at: str | None = None
     age_seconds: int = 0
     age_minutes: float = 0.0
     urgency: str = "ok"
