@@ -41,6 +41,27 @@ function bucketOf(status: string): Bucket | null {
   return null;
 }
 
+/** Friendly pill text for the REAL status (finer than the filter bucket) so the
+ *  row shows the lifecycle step: Preparing → Ready → Assigned → On the way →
+ *  Delivered, matching the rider/kitchen hops. */
+const STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  pending_confirmation: "Pending",
+  confirmed: "Confirmed",
+  preparing: "Preparing",
+  ready: "Ready",
+  assigned: "Assigned",
+  out_for_delivery: "On the way",
+  delivered: "Delivered",
+  picked_up: "Delivered",
+  cancelled: "Cancelled",
+  undeliverable: "Undeliverable",
+  written_off: "Written off",
+};
+function statusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? status.replace(/_/g, " ");
+}
+
 /** Short clock for the list rows (order creation time). */
 function hhmm(iso?: string | null): string {
   if (!iso) return "n/a";
@@ -284,7 +305,7 @@ export function CashierDeliveryScreen() {
                     <span className={s.rowTop}>
                       <span className={s.ref}>{o.order_number}</span>
                       <span className={`${s.pill} ${b ? s[`p_${b}`] : ""}`}>
-                        {(b ?? String(o.status)).toUpperCase()}
+                        {statusLabel(String(o.status)).toUpperCase()}
                       </span>
                       <span className={s.time}>{hhmm(o.created_at)}</span>
                     </span>
@@ -334,7 +355,7 @@ export function CashierDeliveryScreen() {
                       : ""
                   }`}
                 >
-                  {(bucketOf(String(selected.status)) ?? String(selected.status)).toUpperCase()}
+                  {statusLabel(String(selected.status)).toUpperCase()}
                 </span>
               </div>
 

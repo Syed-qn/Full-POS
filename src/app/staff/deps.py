@@ -10,6 +10,29 @@ from app.staff.models import StaffMember
 _bearer = HTTPBearer(auto_error=False)
 
 
+async def current_actor(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """Who is performing this action, for FSM/audit attribution.
+
+    Returns the staff role ("cashier" / "kitchen" / "manager") for a staff token,
+    and "manager" for the owner token (which predates RBAC). Falls back to
+    "manager" when there is no/invalid token so attribution never blocks a call.
+    """
+    if creds is None:
+        return "manager"
+    try:
+        decode_token(creds.credentials, audience="manager")
+        return "manager"  # owner token
+    except ValueError:
+        pass
+    try:
+        claims = decode_token(creds.credentials, audience="staff")
+        return str(claims.get("role") or "manager")
+    except ValueError:
+        return "manager"
+
+
 async def current_restaurant_any(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     session: AsyncSession = Depends(get_session),

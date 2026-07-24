@@ -1083,18 +1083,15 @@ async def finalize_confirmation(
 
     await push_order_to_partner(session, order=order)
 
-    # KOT gate: a CUSTOMER delivery/online (WhatsApp) order is NOT sent to the
-    # kitchen at confirm. It waits in the cashier's WhatsApp queue until the
-    # cashier or a manager presses KOT, which fires the tickets on the
-    # confirmed->preparing hop (see advance_kitchen_status).
-    #
-    # A cashier-entered ("pos") Home Delivery is the exception: the cashier
-    # already pressed KOT at the till, so — like takeaway/dine-in — it fires to
-    # the kitchen immediately. Otherwise it sat Confirmed forever, never cooked.
+    # KOT gate: a delivery/online (WhatsApp OR cashier Home Delivery) order is NOT
+    # sent to the kitchen at confirm. It waits until KOT, which fires the tickets
+    # on the confirmed->preparing hop (see advance_kitchen_status). For a cashier
+    # Home Delivery the till issues that KOT right after create, so it still hits
+    # the kitchen immediately — just through the same preparing hop, so its status
+    # correctly reads "Preparing" instead of a stuck "Confirmed".
     from app.ordering.order_types import ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE
 
-    is_customer_channel = str(order.order_type) in (ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE)
-    if not is_customer_channel or order.source_channel == "pos":
+    if str(order.order_type) not in (ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE):
         from app.kds.service import create_tickets_for_order
 
         await create_tickets_for_order(session, restaurant_id=order.restaurant_id, order=order)

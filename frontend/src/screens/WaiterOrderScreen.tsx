@@ -15,6 +15,7 @@ import {
   setTableStatus,
 } from "../lib/manualOrderApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
+import { advanceOrder } from "../lib/ordersApi";
 import { chargePayment } from "../lib/paymentsApi";
 import { getStaffSession, isCashierRole } from "../lib/navAccess";
 import { usePosTheme } from "../lib/posTheme";
@@ -309,6 +310,27 @@ export function WaiterOrderScreen() {
         setTabItems(Array.isArray(d.items) ? d.items : []);
         setTabStatus(d.status ?? null);
         setTabTotal(Number(d.total ?? 0) || 0);
+        // Reopening a delivery order ("Add Item") must pull its saved customer +
+        // address back in, so the ticket-bar chip shows who/where instead of an
+        // empty "Add delivery details" — the address was captured on create.
+        if (orderType === "delivery") {
+          if (d.customer) {
+            setCustPhone(d.customer.phone ?? "");
+            setCustName(d.customer.name ?? "");
+          }
+          if (d.address) {
+            setAptRoom(d.address.room_apartment ?? "");
+            setBuilding(d.address.building ?? "");
+            setReceiverName(d.address.receiver_name ?? "");
+            setAddressNotes(d.address.additional_details ?? "");
+            if (d.address.latitude != null && d.address.longitude != null) {
+              setPin({ lat: d.address.latitude, lng: d.address.longitude });
+            }
+          }
+          if (d.delivery_fee_aed != null) {
+            setFee(Number(d.delivery_fee_aed).toFixed(2));
+          }
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -578,6 +600,21 @@ export function WaiterOrderScreen() {
       if (fire && orderId) {
         // No-op when the order was already auto-confirmed on create.
         await confirmOrder(orderId);
+        // Home Delivery: KOT also SENDS it to the kitchen. Delivery orders are
+        // KOT-gated (no tickets at confirm), so advance confirmed -> preparing —
+        // that hop fires the kitchen tickets and moves the pill to "Preparing"
+        // (kitchen then marks Ready, which auto-dispatches a rider).
+        //
+        // Only for a NEW order (or one still sitting at "confirmed"): appending
+        // items to an order that is already preparing/ready must NOT push its
+        // status forward, or "Add Item" would wrongly mark it Ready.
+        if (isDelivery && (openTabOrderId == null || tabStatus === "confirmed")) {
+          try {
+            await advanceOrder(orderId);
+          } catch {
+            /* raced past confirmed already — ignore */
+          }
+        }
       }
 
       const where = selectedTable ? ` on ${selectedTable.label}` : "";

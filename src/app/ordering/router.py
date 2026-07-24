@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.identity.models import Restaurant, Rider
-from app.staff.deps import current_restaurant_any, require_role
+from app.staff.deps import current_actor, current_restaurant_any, require_role
 from app.ordering.models import Customer, CustomerAddress, Order, OrderItem
 from app.ordering.schemas import (
     AddOrderItemsIn,
@@ -831,6 +831,9 @@ async def advance_order(
     # KOT is a cashier action (confirmed -> preparing) and the kitchen advances
     # preparing -> ready, so both roles need this alongside the manager/owner.
     restaurant: Restaurant = Depends(require_role("manager", "cashier", "kitchen")),
+    # Attribute the FSM hop to whoever pressed it, so the order timeline reads
+    # "by cashier" / "by kitchen" / "by manager" instead of a blanket "manager".
+    actor: str = Depends(current_actor),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     order = await get_order_for_tenant(
@@ -839,7 +842,7 @@ async def advance_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     try:
-        order = await advance_kitchen_status(session, order=order)
+        order = await advance_kitchen_status(session, order=order, actor=actor)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     # Deliver the customer status ping ("started preparing" / "ready") NOW, in this
