@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "../components/Toaster";
 import { WaiterTopBar } from "../components/WaiterTopBar";
-import { fetchOrders } from "../lib/ordersApi";
+import { assignOrder, fetchOrders, reassignOrder } from "../lib/ordersApi";
 import { chargePayment } from "../lib/paymentsApi";
+import { fetchRiders } from "../lib/ridersApi";
 import { usePosTheme } from "../lib/posTheme";
-import type { OrderOut } from "../lib/types";
+import type { OrderOut, RiderOut } from "../lib/types";
 import s from "./CashierTakeawayScreen.module.css";
 
 /**
@@ -94,6 +95,10 @@ export function CashierDeliveryScreen() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [codOpen, setCodOpen] = useState(false);
   const [paying, setPaying] = useState(false);
+  // Manual rider assignment (cashier override of the auto-dispatch on Ready).
+  const [riders, setRiders] = useState<RiderOut[]>([]);
+  const [assignTo, setAssignTo] = useState<number | "">("");
+  const [assigning, setAssigning] = useState(false);
 
   // On the FIRST load, an empty list skips straight to the delivery till
   // (replace: so Back still leaves the section). Guarded by a ref so the 20s
@@ -185,6 +190,48 @@ export function CashierDeliveryScreen() {
     const b = bucketOf(String(selected.status));
     return b === "completed" || b === "cancelled";
   }, [selected]);
+
+  /** Cooked (or beyond) and not yet out the door — a rider can be assigned. */
+  const canAssign = useMemo(() => {
+    const st = String(selected?.status ?? "");
+    return st === "ready" || st === "assigned";
+  }, [selected]);
+
+  // Pull the rider roster while an order is waiting on a rider, and sync the
+  // dropdown to whoever is already on it.
+  useEffect(() => {
+    if (!canAssign) {
+      setRiders([]);
+      setAssignTo("");
+      return;
+    }
+    let cancelled = false;
+    fetchRiders()
+      .then((r) => !cancelled && setRiders(Array.isArray(r) ? r : []))
+      .catch(() => !cancelled && setRiders([]));
+    setAssignTo(selected?.rider_id ?? "");
+    return () => {
+      cancelled = true;
+    };
+  }, [canAssign, selected?.id, selected?.rider_id]);
+
+  /** Assign (or reassign) the picked rider — sends the run to their app. */
+  async function assignRider() {
+    if (!selected || assignTo === "") return;
+    setAssigning(true);
+    try {
+      const already = selected.rider_id != null;
+      const updated = already
+        ? await reassignOrder(selected.id, Number(assignTo))
+        : await assignOrder(selected.id, Number(assignTo));
+      toast(`${updated.order_number} assigned to ${updated.rider_name ?? "rider"}.`);
+      await load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not assign rider", "error");
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   // Land on the top order so the right pane is useful immediately — and keep it
   // valid when a filter or the poll drops the current pick out of the list.
@@ -375,6 +422,58 @@ export function CashierDeliveryScreen() {
                 <span>Order total</span>
                 <strong>AED {selected.total_aed}</strong>
               </div>
+
+              {/* Manual rider assignment. Ready orders auto-dispatch, but the
+                  cashier can pick or swap the rider here — assigning sends the
+                  run to that rider's app. */}
+              {canAssign && (
+                <div className={s.assignRow} data-testid="delivery-assign">
+                  <span className={s.assignLabel}>
+                    {selected.rider_name
+                      ? `🛵 Rider: ${selected.rider_name}`
+                      : "🛵 No rider yet"}
+                  </span>
+                  <select
+                    className={s.assignSelect}
+                    value={assignTo}
+                    onChange={(e) =>
+                      setAssignTo(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    disabled={assigning}
+                    aria-label="Assign to rider"
+                  >
+                    <option value="">
+                      {selected.rider_id ? "Reassign rider…" : "Assign rider…"}
+                    </option>
+                    {riders
+                      .filter((r) => r.status !== "deactivated")
+                      .map((r) => {
+                        // Unpaired riders have no app, so they can't receive the
+                        // run — visible but disabled so the cashier sees why.
+                        const unpaired = r.app_paired === false;
+                        return (
+                          <option key={r.id} value={r.id} disabled={unpaired}>
+                            {r.name}{" "}
+                            {unpaired ? "(not paired)" : `(${r.status.replace(/_/g, " ")})`}
+                          </option>
+                        );
+                      })}
+                  </select>
+                  <button
+                    type="button"
+                    className={`${s.act} ${s.actPay}`}
+                    disabled={assigning || assignTo === "" || assignTo === selected.rider_id}
+                    onClick={() => void assignRider()}
+                    data-testid="delivery-assign-btn"
+                  >
+                    {assigning
+                      ? "Assigning…"
+                      : selected.rider_id
+                        ? "Reassign"
+                        : "Assign rider"}
+                  </button>
+                </div>
+              )}
 
               {/* Same payment cluster as the till's bottom-right corner. */}
               <div className={s.detailActions}>

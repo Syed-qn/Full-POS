@@ -385,6 +385,33 @@
   flex: none;
 }
 
+/* Manual rider assignment row (delivery only). */
+.assignRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-top: 1px solid var(--line, var(--border-subtle));
+}
+.assignLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink, var(--text-primary));
+  margin-right: auto;
+}
+.assignSelect {
+  min-height: 44px;
+  min-width: 180px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2, var(--border-default));
+  border-radius: 10px;
+  background: var(--panel-2, var(--bg-surface));
+  color: var(--ink, var(--text-primary));
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .act {
   min-height: 48px;
   padding: 0 20px;
