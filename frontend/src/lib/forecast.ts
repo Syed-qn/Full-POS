@@ -87,16 +87,30 @@ function periodForHour(hour: number): PeriodKey {
   return "late";
 }
 
-function toLocalYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+// The restaurant runs on Asia/Dubai (UTC+4, no daylight saving). Orders are
+// stored in UTC, so we shift every timestamp by +4h and then read its UTC
+// fields as Dubai wall-clock. Doing it by fixed offset (not the browser's local
+// time) means the forecast is identical whether viewed from Dubai, London, or a
+// CI runner — the meal windows and weekday buckets are always the restaurant's.
+const DUBAI_OFFSET_MS = 4 * 60 * 60 * 1000;
+
+/** Shift a UTC epoch into "Dubai clock" space (its UTC fields now read Dubai). */
+function toDubai(t: number): Date {
+  return new Date(t + DUBAI_OFFSET_MS);
+}
+
+/** YYYY-MM-DD from a Dubai-clock Date (read via UTC fields). */
+function dubaiYMD(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-function addDays(d: Date, n: number): Date {
+/** Add whole days in Dubai-clock space. */
+function addDubaiDays(d: Date, n: number): Date {
   const c = new Date(d);
-  c.setDate(c.getDate() + n);
+  c.setUTCDate(c.getUTCDate() + n);
   return c;
 }
 
@@ -123,6 +137,8 @@ export interface BuildForecastOpts {
 export function buildForecast(orders: OrderOut[], opts: BuildForecastOpts): ForecastModel {
   const { today, windowDays } = opts;
   const demand = orders.filter((o) => o.created_at && !EXCLUDED_STATUSES.has(o.status));
+  // "Now" in Dubai-clock space — anchors the next-7 window and the trend ranges.
+  const todayDubai = toDubai(today.getTime());
 
   // ── Per-date rollup (count + revenue + weekday) ────────────────────────────
   type DayAgg = { count: number; revenue: number; weekday: number };
@@ -137,15 +153,16 @@ export function buildForecast(orders: OrderOut[], opts: BuildForecastOpts): Fore
   const dishQty = new Map<string, number>();
 
   for (const o of demand) {
-    const dt = new Date(o.created_at);
-    if (Number.isNaN(dt.getTime())) continue;
-    const ymd = toLocalYMD(dt);
-    const agg = byDate.get(ymd) ?? { count: 0, revenue: 0, weekday: dt.getDay() };
+    const t = Date.parse(o.created_at);
+    if (Number.isNaN(t)) continue;
+    const dt = toDubai(t);
+    const ymd = dubaiYMD(dt);
+    const agg = byDate.get(ymd) ?? { count: 0, revenue: 0, weekday: dt.getUTCDay() };
     agg.count += 1;
     agg.revenue += Number.parseFloat(o.total_aed) || 0;
     byDate.set(ymd, agg);
 
-    periodCount[periodForHour(dt.getHours())] += 1;
+    periodCount[periodForHour(dt.getUTCHours())] += 1;
 
     for (const it of o.items ?? []) {
       const name = (it.name || "").trim();
@@ -170,10 +187,10 @@ export function buildForecast(orders: OrderOut[], opts: BuildForecastOpts): Fore
 
   const next7: DayForecast[] = [];
   for (let i = 0; i < 7; i++) {
-    const d = addDays(today, i);
-    const wd = d.getDay();
+    const d = addDubaiDays(todayDubai, i);
+    const wd = d.getUTCDay();
     next7.push({
-      date: toLocalYMD(d),
+      date: dubaiYMD(d),
       weekday: WEEKDAY_SHORT[wd],
       isToday: i === 0,
       predictedOrders: round(mean(wkCounts[wd])),
@@ -221,7 +238,7 @@ export function buildForecast(orders: OrderOut[], opts: BuildForecastOpts): Fore
   const sumRange = (fromInclusive: number, toInclusive: number): number => {
     let sum = 0;
     for (let i = fromInclusive; i <= toInclusive; i++) {
-      const agg = byDate.get(toLocalYMD(addDays(today, -i)));
+      const agg = byDate.get(dubaiYMD(addDubaiDays(todayDubai, -i)));
       if (agg) sum += agg.count;
     }
     return sum;

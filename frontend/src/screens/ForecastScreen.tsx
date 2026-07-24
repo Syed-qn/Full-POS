@@ -309,7 +309,8 @@ export function ForecastScreen() {
           Projected from {model!.historyOrders.toLocaleString()} orders across{" "}
           {model!.activeDays} active {model!.activeDays === 1 ? "day" : "days"} in the last{" "}
           {windowDays} days. Weekdays are predicted from the average of that same weekday;
-          revenue and prep counts follow the same history. Refreshes automatically.
+          revenue and prep counts follow the same history. All times use the restaurant's
+          timezone (Asia/Dubai). Refreshes automatically.
         </p>
       )}
     </div>

@@ -34,15 +34,18 @@ function order(partial: {
   };
 }
 
-// A fixed "today" so weekday math is deterministic.
-// 2026-07-24 is a Friday (getDay() === 5).
-const TODAY = new Date(2026, 6, 24, 15, 0, 0);
+// Fixed "today" — chosen so it lands on 2026-07-24 (a Friday) in DUBAI time,
+// regardless of the machine timezone the tests run on. Dubai = UTC+4, so a
+// Dubai 15:00 on the 24th is 11:00 UTC on the 24th.
+const TODAY = new Date(Date.UTC(2026, 6, 24, 11, 0, 0));
 
-/** ISO for a local datetime n days before TODAY at the given hour. */
-function daysAgo(n: number, hour: number): string {
-  const d = new Date(2026, 6, 24, hour, 0, 0);
-  d.setDate(d.getDate() - n);
-  return d.toISOString();
+/**
+ * ISO timestamp for `dubaiHour` on the Dubai day `n` days before 2026-07-24.
+ * Built from explicit UTC (dubaiHour − 4) so the test is timezone-independent.
+ */
+function daysAgo(n: number, dubaiHour: number): string {
+  const utcMs = Date.UTC(2026, 6, 24, dubaiHour - 4, 0, 0) - n * 86_400_000;
+  return new Date(utcMs).toISOString();
 }
 
 describe("buildForecast", () => {
