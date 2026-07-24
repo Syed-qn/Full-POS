@@ -113,6 +113,10 @@ class AddressOut(BaseModel):
     building: str
     receiver_name: str
     notes: str | None
+    # Saved drop-off pin, so a returning customer's exact map location is restored
+    # on lookup instead of being re-geocoded from the building text (or lost).
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class ManualOrderIn(BaseModel):

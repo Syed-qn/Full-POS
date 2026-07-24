@@ -286,6 +286,17 @@ export function WaiterOrderScreen() {
           setBuilding(result.last_address.building);
           setReceiverName(result.last_address.receiver_name);
           setAddressNotes(result.last_address.notes ?? "");
+          // Restore the saved drop-off pin so a returning customer's exact
+          // location auto-applies on the map (was left blank — the reported bug).
+          const { latitude, longitude } = result.last_address;
+          if (
+            typeof latitude === "number" &&
+            typeof longitude === "number" &&
+            Number.isFinite(latitude) &&
+            Number.isFinite(longitude)
+          ) {
+            setPin({ lat: latitude, lng: longitude });
+          }
         }
       } else {
         setLookupState("new");

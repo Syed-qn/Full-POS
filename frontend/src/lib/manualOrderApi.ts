@@ -6,6 +6,9 @@ export interface AddressOut {
   building: string;
   receiver_name: string;
   notes: string | null;
+  /** Saved drop-off pin — restores the returning customer's exact map location. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface CustomerLookupOut {

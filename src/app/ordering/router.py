@@ -293,6 +293,8 @@ async def customer_lookup(
             building=last_addr.building or "",
             receiver_name=last_addr.receiver_name or "",
             notes=last_addr.additional_details,
+            latitude=last_addr.latitude,
+            longitude=last_addr.longitude,
         )
     return CustomerLookupOut(name=customer.name, last_address=address_out)
 

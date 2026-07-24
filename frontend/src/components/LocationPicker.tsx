@@ -28,6 +28,12 @@ const NOMINATIM = "https://nominatim.openstreetmap.org";
 
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
+// A usable pin: finite and not the 0,0 "null island" the till passes when no
+// location is set yet. Treating 0,0 as real centred the map on the ocean (blank
+// tiles) instead of the Dubai fallback.
+const isRealCoord = (la: number, ln: number) =>
+  Number.isFinite(la) && Number.isFinite(ln) && !(la === 0 && ln === 0);
+
 const PIN_HTML =
   '<div style="width:18px;height:18px;border-radius:50% 50% 50% 0;' +
   "transform:rotate(-45deg);background:#33363b;border:2px solid #fff;" +
@@ -92,10 +98,9 @@ export function LocationPicker({ lat, lng, onChange, className = "", instant = f
     let cancelled = false;
     import("leaflet").then((L) => {
       if (cancelled || !mapRef.current || mapObj.current) return;
-      const start: [number, number] = [
-        Number.isFinite(lat) ? lat : FALLBACK[0],
-        Number.isFinite(lng) ? lng : FALLBACK[1],
-      ];
+      const start: [number, number] = isRealCoord(lat, lng)
+        ? [lat, lng]
+        : FALLBACK;
       const map = L.map(mapRef.current, { zoomControl: true }).setView(start, 15);
       mapObj.current = map;
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -131,7 +136,9 @@ export function LocationPicker({ lat, lng, onChange, className = "", instant = f
   // Keep the pin synced when lat/lng change from outside.
   useEffect(() => {
     if (!mapObj.current || !markerRef.current) return;
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    // Ignore the 0,0 "no pin" sentinel — snapping the marker to null island on
+    // reset would strand it in the ocean.
+    if (!isRealCoord(lat, lng)) return;
     const cur = markerRef.current.getLatLng();
     if (Math.abs(cur.lat - lat) > 1e-6 || Math.abs(cur.lng - lng) > 1e-6) {
       markerRef.current.setLatLng([lat, lng]);
