@@ -143,3 +143,42 @@
   gap: 8px;
   margin-top: 4px;
 }
+
+/* Sales-trend header: title on the left, metric toggle on the right. */
+.trendHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.toggle {
+  display: inline-flex;
+  gap: 4px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 4px;
+}
+.toggleBtn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 0 !important;
+}
+.toggleBtn:hover {
+  color: var(--text-primary);
+}
+.toggleActive {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+}
+.toggleActive:hover {
+  color: var(--text-inverse);
+}

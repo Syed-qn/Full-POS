@@ -52,13 +52,25 @@ describe("AnalyticsScreen", () => {
     });
   }
 
-  it("renders delivery, marketing, and forecast sections", async () => {
+  it("renders delivery, sales trend, and marketing sections", async () => {
     mockFetch();
     render(<AnalyticsScreen />);
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.getByText(/delivery & operations/i)).toBeInTheDocument();
+    expect(screen.getByText(/sales trend/i)).toBeInTheDocument();
     expect(screen.getByText(/marketing messages/i)).toBeInTheDocument();
-    expect(screen.getByText(/expected orders today/i)).toBeInTheDocument();
+  });
+
+  it("toggles the sales-trend metric between revenue and orders", async () => {
+    mockFetch();
+    render(<AnalyticsScreen />);
+    await vi.advanceTimersByTimeAsync(0);
+    // Default is revenue.
+    expect(screen.getByText(/revenue per day/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Orders" }));
+    await waitFor(() =>
+      expect(screen.getByText(/orders per day/i)).toBeInTheDocument(),
+    );
   });
 
   it("shows delivery KPIs and dispatch panel when orders load", async () => {
@@ -69,15 +81,6 @@ describe("AnalyticsScreen", () => {
     expect(screen.getByText("Revenue collected")).toBeInTheDocument();
     expect(screen.getByText("AED 50")).toBeInTheDocument();
     expect(screen.getByText("Completion rate")).toBeInTheDocument();
-  });
-
-  it("shows 'No predictions yet' when no forecast data available", async () => {
-    mockFetch();
-    render(<AnalyticsScreen />);
-    await vi.advanceTimersByTimeAsync(0);
-    await waitFor(() =>
-      expect(screen.getByText(/no predictions yet/i)).toBeInTheDocument(),
-    );
   });
 
   it("shows campaign empty state when no campaigns in range", async () => {
@@ -128,40 +131,6 @@ describe("AnalyticsScreen", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
     const campaignsSentLabel = screen.getByText("Campaigns sent");
     expect(campaignsSentLabel.previousElementSibling?.textContent).toBe("1");
-  });
-
-  it("renders forecast chart when forecast data is returned", async () => {
-    const forecast = {
-      run_id: 5,
-      horizon: "lunch",
-      target_date: "2026-06-06",
-      predictions: { order_count: 42 },
-      adjusted: false,
-    };
-    vi.mocked(fetch).mockImplementation((input: unknown) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("/predictions/latest") && url.includes("lunch"))
-        return Promise.resolve(new Response(JSON.stringify(forecast), { status: 200 }));
-      if (url.includes("/predictions/latest"))
-        return Promise.resolve(new Response("not found", { status: 404 }));
-      if (url.includes("/marketing/campaigns"))
-        return Promise.resolve(new Response("[]", { status: 200 }));
-      if (url.includes("/api/v1/orders"))
-        return Promise.resolve(new Response(JSON.stringify(fixtureOrders), { status: 200 }));
-      if (url.includes("/api/v1/dispatch/kpis"))
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ batch_rate_pct: 40, avg_stops: 2, engine_fallback_pct: 0 }),
-            { status: 200 },
-          ),
-        );
-      return Promise.resolve(new Response("not found", { status: 404 }));
-    });
-    render(<AnalyticsScreen />);
-    await vi.advanceTimersByTimeAsync(0);
-    await waitFor(() =>
-      expect(screen.queryByText(/no predictions yet/i)).not.toBeInTheDocument(),
-    );
   });
 
   it("changes period label when date preset is selected", async () => {

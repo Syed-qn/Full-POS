@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import {
-  Bar,
-  BarChart,
-  Cell,
+  Area,
+  AreaChart,
+  CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,6 +16,7 @@ import { DispatchKpiPanel } from "../components/DispatchKpiPanel";
 import { PageHeader } from "../components/PageHeader";
 import { ReportsDateRangePicker } from "../components/ReportsDateRangePicker";
 import { SectionBanner } from "../components/SectionBanner";
+import { useAppTheme } from "../lib/appTheme";
 import {
   computeCampaignSummary,
   filterCampaignsByDate,
@@ -24,31 +25,25 @@ import type { CampaignResponse } from "../lib/marketingApi";
 import { fetchCampaigns } from "../lib/marketingApi";
 import { computeOrderDeliveryKpis } from "../lib/orderDeliveryKpis";
 import { fetchOrders } from "../lib/ordersApi";
-import type { ForecastResult } from "../lib/predictionsApi";
-import { fetchLatestForecast } from "../lib/predictionsApi";
+import { buildDailySeries, type DailyPoint } from "../lib/salesSeries";
 import { boundsForPreset, type ReportsDatePreset } from "../lib/reportsDateRange";
 import { usePoll } from "../lib/usePoll";
 import s from "./AnalyticsScreen.module.css";
 
-const HORIZONS = ["breakfast", "lunch", "dinner", "midnight"] as const;
-type Horizon = (typeof HORIZONS)[number];
+type Metric = "revenue" | "orders";
 
-const HORIZON_EMOJI: Record<string, string> = {
-  breakfast: "🌅",
-  lunch: "☀️",
-  dinner: "🌙",
-  midnight: "🌃",
-};
-const HORIZON_COLORS = ["#2563eb", "#f59e0b", "#7c3aed", "#0891b2"];
-
-async function fetchAllForecasts(): Promise<Partial<Record<Horizon, ForecastResult>>> {
-  const results = await Promise.allSettled(HORIZONS.map((h) => fetchLatestForecast(h)));
-  const map: Partial<Record<Horizon, ForecastResult>> = {};
-  HORIZONS.forEach((h, i) => {
-    const r = results[i];
-    if (r.status === "fulfilled" && r.value !== null) map[h] = r.value;
-  });
-  return map;
+/** Chart palette per app theme — axes/grid must stay legible in dark + blue. */
+function chartColors(theme: string) {
+  const dark = theme === "dark" || theme === "blue";
+  return {
+    axis: dark ? "#94a3b8" : "#64748b",
+    grid: dark ? "rgba(148,163,184,0.18)" : "#e5e7eb",
+    stroke: "#2563eb",
+    fill: dark ? "rgba(37,99,235,0.28)" : "rgba(37,99,235,0.14)",
+    tooltipBg: dark ? "#1e293b" : "#ffffff",
+    tooltipBorder: dark ? "#334155" : "#e5e7eb",
+    tooltipText: dark ? "#e2e8f0" : "#111827",
+  };
 }
 
 async function fetchCampaignSummary(): Promise<CampaignResponse[]> {
@@ -57,30 +52,6 @@ async function fetchCampaignSummary(): Promise<CampaignResponse[]> {
   } catch {
     return [];
   }
-}
-
-function forecastCount(f: ForecastResult): number {
-  const p = f.predictions;
-  if (typeof p.order_count === "number") return p.order_count;
-  if (typeof p.total === "number") return p.total;
-  if (typeof p.count === "number") return p.count;
-  return Object.values(p)
-    .filter((v): v is number => typeof v === "number")
-    .reduce((a, b) => a + b, 0);
-}
-
-function ForecastSkeleton() {
-  const bars = [62, 88, 74, 96];
-  return (
-    <div className={s.skChart} aria-busy="true" aria-label="Loading forecast">
-      {bars.map((h, i) => (
-        <div key={i} className={s.skBarCol}>
-          <span className={`${s.sk} ${s.skBar}`} style={{ height: `${h}%` }} />
-          <span className={`${s.sk} ${s.skBarLabel}`} />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function DeliverySkeleton() {
@@ -96,14 +67,26 @@ function DeliverySkeleton() {
   );
 }
 
-export function AnalyticsScreen() {
-  const [datePreset, setDatePreset] = useState<ReportsDatePreset>("7d");
-  const dateBounds = useMemo(() => boundsForPreset(datePreset), [datePreset]);
-
-  const { data: forecasts, error: fErr } = usePoll<Partial<Record<Horizon, ForecastResult>>>(
-    fetchAllForecasts,
-    60_000,
+function TrendSkeleton() {
+  const bars = [40, 62, 54, 78, 68, 90, 72, 84];
+  return (
+    <div className={s.skChart} aria-busy="true" aria-label="Loading trend">
+      {bars.map((h, i) => (
+        <div key={i} className={s.skBarCol}>
+          <span className={`${s.sk} ${s.skBar}`} style={{ height: `${h}%` }} />
+        </div>
+      ))}
+    </div>
   );
+}
+
+export function AnalyticsScreen() {
+  const theme = useAppTheme();
+  const [datePreset, setDatePreset] = useState<ReportsDatePreset>("7d");
+  const [metric, setMetric] = useState<Metric>("revenue");
+  const dateBounds = useMemo(() => boundsForPreset(datePreset), [datePreset]);
+  const colors = useMemo(() => chartColors(theme), [theme]);
+
   const { data: campaigns, error: cErr } = usePoll<CampaignResponse[]>(
     fetchCampaignSummary,
     60_000,
@@ -114,7 +97,7 @@ export function AnalyticsScreen() {
         fromDate: dateBounds.fromDate,
         toDate: dateBounds.toDate,
         previewBatch: false,
-        limit: 500,
+        limit: 1000,
       }),
     [dateBounds.fromDate, dateBounds.toDate],
   );
@@ -132,24 +115,18 @@ export function AnalyticsScreen() {
     () => (orders ? computeOrderDeliveryKpis(orders) : null),
     [orders],
   );
+  const series: DailyPoint[] | null = useMemo(
+    () => (orders ? buildDailySeries(orders) : null),
+    [orders],
+  );
 
-  const hasForecasts = forecasts != null && Object.keys(forecasts).length > 0;
-  const error = fErr ?? cErr ?? oErr;
-
-  const forecastChart = useMemo(() => {
-    if (!forecasts) return [];
-    return HORIZONS.map((h, i) => ({
-      name: HORIZON_EMOJI[h] + " " + h.charAt(0).toUpperCase() + h.slice(1),
-      orders: forecasts[h] ? forecastCount(forecasts[h]!) : 0,
-      color: HORIZON_COLORS[i],
-    })).filter((d) => d.orders > 0);
-  }, [forecasts]);
+  const error = cErr ?? oErr;
 
   return (
     <div className={s.screen}>
       <PageHeader
-        title="Reports"
-        subtitle="Performance and delivery insights"
+        title="Analytics"
+        subtitle="What happened — performance, sales and delivery insights"
         right={
           <ReportsDateRangePicker value={datePreset} onChange={setDatePreset} />
         }
@@ -192,6 +169,107 @@ export function AnalyticsScreen() {
         <DispatchKpiPanel />
       </div>
 
+      {/* ── Sales trend over time ─────────────────────────────────────── */}
+      <div className={s.card}>
+        <div className={s.trendHead}>
+          <div className={s.cardHead}>
+            <span className={s.cardTitle}>Sales trend</span>
+            <span className={s.cardSub}>
+              {metric === "revenue" ? "Revenue" : "Orders"} per day for{" "}
+              {dateBounds.label.toLowerCase()}
+            </span>
+          </div>
+          <div className={s.toggle} role="group" aria-label="Trend metric">
+            <button
+              type="button"
+              className={`${s.toggleBtn} ${metric === "revenue" ? s.toggleActive : ""}`}
+              aria-pressed={metric === "revenue"}
+              onClick={() => setMetric("revenue")}
+            >
+              Revenue
+            </button>
+            <button
+              type="button"
+              className={`${s.toggleBtn} ${metric === "orders" ? s.toggleActive : ""}`}
+              aria-pressed={metric === "orders"}
+              onClick={() => setMetric("orders")}
+            >
+              Orders
+            </button>
+          </div>
+        </div>
+
+        {orders === null ? (
+          <TrendSkeleton />
+        ) : !series || series.length === 0 ? (
+          <div className={s.empty}>
+            <div className={s.emptyIcon}>📉</div>
+            <div className={s.emptyTitle}>No orders in this period</div>
+            <div className={s.emptyDesc}>
+              Widen the date range, or take a few orders — the trend fills in per day.
+            </div>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={series} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={colors.stroke} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={colors.stroke} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 12, fill: colors.axis }}
+                axisLine={{ stroke: colors.grid }}
+                tickLine={false}
+                minTickGap={24}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: colors.axis }}
+                axisLine={false}
+                tickLine={false}
+                width={48}
+                tickFormatter={(v) =>
+                  metric === "revenue"
+                    ? `${Math.round(Number(v) / (Number(v) >= 1000 ? 1000 : 1))}${
+                        Number(v) >= 1000 ? "k" : ""
+                      }`
+                    : String(v)
+                }
+              />
+              <Tooltip
+                contentStyle={{
+                  background: colors.tooltipBg,
+                  border: `1px solid ${colors.tooltipBorder}`,
+                  borderRadius: 8,
+                  fontSize: 13,
+                  color: colors.tooltipText,
+                }}
+                labelStyle={{ color: colors.tooltipText, fontWeight: 700 }}
+                formatter={(value, _name, item) => {
+                  const p = item?.payload as DailyPoint | undefined;
+                  return metric === "revenue"
+                    ? [`AED ${Math.round(Number(value)).toLocaleString()} · ${p?.orders ?? 0} orders`, "Revenue"]
+                    : [`${value} orders · AED ${Math.round(p?.revenue ?? 0).toLocaleString()}`, "Orders"];
+                }}
+                cursor={{ stroke: colors.stroke, strokeWidth: 1, strokeOpacity: 0.3 }}
+              />
+              <Area
+                type="monotone"
+                dataKey={metric}
+                stroke={colors.stroke}
+                strokeWidth={2}
+                fill="url(#trendFill)"
+                dot={series.length <= 31 ? { r: 2, fill: colors.stroke } : false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
       <div className={s.card}>
         <div className={s.cardHead}>
           <span className={s.cardTitle}>Marketing Messages</span>
@@ -213,60 +291,6 @@ export function AnalyticsScreen() {
           </div>
         ) : (
           <CampaignSummaryStrip summary={campaignStats} />
-        )}
-      </div>
-
-      <div className={s.card}>
-        <div className={s.cardHead}>
-          <span className={s.cardTitle}>Expected Orders Today</span>
-          <span className={s.cardSub}>Our prediction for each meal time</span>
-        </div>
-
-        {forecasts === null ? (
-          <ForecastSkeleton />
-        ) : !hasForecasts || forecastChart.length === 0 ? (
-          <div className={s.empty}>
-            <div className={s.emptyIcon}>📊</div>
-            <div className={s.emptyTitle}>No predictions yet</div>
-            <div className={s.emptyDesc}>
-              Predictions appear after a few days of orders. Keep taking orders!
-            </div>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart
-              data={forecastChart}
-              margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-              barSize={48}
-            >
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 13, fill: "#374151" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis hide />
-              <Tooltip
-                contentStyle={{
-                  background: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  fontSize: 13,
-                }}
-                formatter={(v) => [`${v} orders`, "Expected"]}
-                cursor={{ fill: "rgba(0,0,0,0.04)" }}
-              />
-              <Bar
-                dataKey="orders"
-                radius={[6, 6, 0, 0]}
-                label={{ position: "top", fontSize: 14, fontWeight: 700, fill: "#111827" }}
-              >
-                {forecastChart.map((d, i) => (
-                  <Cell key={i} fill={d.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
         )}
       </div>
     </div>
