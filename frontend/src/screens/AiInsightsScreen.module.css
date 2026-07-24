@@ -1,79 +1,218 @@
-.page {
+.screen {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
 }
 
-.tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* ── KPI overview strip (same as Forecast / Analytics) ─────────────── */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
-
-.tab {
-  min-height: 48px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
+@media (max-width: 720px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.kpi {
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kpiNum {
+  font-size: 30px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1;
+}
+.kpiLabel {
+  font-size: 13px;
   color: var(--text-secondary);
-  font-size: 14px;
+}
+
+/* ── Pills (tabs + filters) ────────────────────────────────────────── */
+.pills {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 4px;
+  width: fit-content;
+  max-width: 100%;
+}
+.pill {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
   font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
   cursor: pointer;
+  min-height: 0;
+}
+.pill:hover {
+  color: var(--text-primary);
+}
+.pillActive {
+  background: var(--accent-ai, #6941c6);
+  color: #fff;
+}
+.pillActive:hover {
+  color: #fff;
 }
 
-.tabActive {
-  background: var(--accent-ai-dim, rgba(105, 65, 198, 0.1));
-  border-color: var(--accent-ai, #6941c6);
-  color: var(--accent-ai, #6941c6);
-}
-
+/* ── Cards ─────────────────────────────────────────────────────────── */
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
-  padding: 18px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
-
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .cardTitle {
   margin: 0;
   font-size: var(--font-size-title, 18px);
   font-weight: 700;
   color: var(--text-primary);
 }
+.cardSub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
 
-.row2 {
+.focusCard {
+  border-left: 3px solid var(--accent-ai, #6941c6);
+}
+.focusText {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+/* ── Bento grid of result cards ────────────────────────────────────── */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+@media (max-width: 720px) {
+  .bento {
+    grid-template-columns: 1fr;
+  }
+}
+
+.insightCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-ai, #6941c6) 5%, var(--bg-surface));
+}
+.insightTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.insightSummary {
+  margin: 0;
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.tagAi,
+.tagWarn {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.tagAi {
+  color: var(--accent-ai, #6941c6);
+  background: color-mix(in srgb, var(--accent-ai, #6941c6) 12%, transparent);
+}
+.tagWarn {
+  color: var(--accent-warn, #b45309);
+  background: color-mix(in srgb, var(--accent-warn, #b45309) 14%, transparent);
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+.cardActions :global(button) {
+  min-height: 40px;
+}
+
+/* ── Action grid + forms ───────────────────────────────────────────── */
+.genGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.genGrid :global(button) {
+  min-height: 48px;
+  width: 100%;
+}
+
+.formRow {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: flex-end;
 }
-
-.col {
+.formRow :global(button) {
+  min-height: 48px;
+}
+.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 200px;
   min-width: 160px;
-  flex: 1 1 180px;
 }
-
-.rowName {
+.fieldNarrow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 140px;
+}
+.fieldName {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
 }
-
-.rowHint {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
 .input {
   min-height: 48px;
   border: 1px solid var(--border-default);
@@ -84,73 +223,64 @@
   color: var(--text-primary);
 }
 
-.list {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.insightGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-}
-
-.insightCard {
+/* ── Combos ────────────────────────────────────────────────────────── */
+.comboList {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px;
-  border-radius: 12px;
+}
+.comboRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--bg-surface-inset);
   border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--accent-ai) 6%, var(--bg-surface));
-  min-height: 160px;
 }
-
-.insightKind {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent-ai, #6941c6);
-}
-
-.insightTitle {
-  margin: 0;
-  font-size: 16px;
+.comboItems {
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
 }
-
-.insightSummary {
-  margin: 0;
-  flex: 1;
-  font-size: 14px;
+.comboMsg {
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.4;
 }
 
-.cardActions {
+/* ── Call transcript (chat bubbles) ────────────────────────────────── */
+.chat {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
-  margin-top: auto;
 }
-
-.cardActions :global(button) {
-  min-height: 48px;
-}
-
-.genActions {
+.bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.45;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 2px;
 }
-
-.genActions :global(button) {
-  min-height: var(--touch-min, 56px);
+.bubbleRole {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+.bubbleAi {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--accent-ai, #6941c6) 12%, var(--bg-surface));
+  color: var(--text-primary);
+  border-bottom-left-radius: 4px;
+}
+.bubbleUser {
+  align-self: flex-end;
+  background: var(--bg-surface-inset);
+  color: var(--text-primary);
+  border-bottom-right-radius: 4px;
 }

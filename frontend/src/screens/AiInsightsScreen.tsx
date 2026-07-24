@@ -33,10 +33,35 @@ import s from "./AiInsightsScreen.module.css";
 
 type Panel = "insights" | "marketing" | "reviews" | "reservations" | "calls";
 
+const PANELS: Array<[Panel, string]> = [
+  ["insights", "Insights"],
+  ["marketing", "Marketing AI"],
+  ["reviews", "Reviews"],
+  ["reservations", "Reservations"],
+  ["calls", "Calls"],
+];
+
+/** The eight insight generators, as clean labelled actions. */
+const GENERATORS: Array<{ label: string; run: () => Promise<AiInsight> }> = [
+  { label: "Daily sales summary", run: generateDailySales },
+  { label: "Why sales dropped", run: () => generateSalesDrop(7) },
+  { label: "Staff AI summary", run: () => generateStaffSummary(7) },
+  { label: "Slow moving items", run: () => generateSlowMoving(14) },
+  { label: "Food cost anomalies", run: generateFoodCost },
+  { label: "Low stock prediction", run: generateLowStock },
+  { label: "Customer segments", run: generateSegments },
+  { label: "Best menu bundles", run: generateBundles },
+];
+
+/** Prettify an insight kind slug ("sales_drop") into a label ("Sales drop"). */
+function prettyKind(kind: string): string {
+  if (!kind) return "Insight";
+  const t = kind.replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export function AiInsightsScreen() {
-  const [features, setFeatures] = useState<
-    Array<{ key: string; status: string; path?: string }>
-  >([]);
+  const [featureCount, setFeatureCount] = useState(0);
   const [insights, setInsights] = useState<AiInsight[]>([]);
   const [reviews, setReviews] = useState<
     Array<{ id: number; sentiment: string; suggested_reply: string; escalated: boolean }>
@@ -73,7 +98,7 @@ export function AiInsightsScreen() {
         listCalls().catch(() => []),
         getCombos().catch(() => ({ combos: [] })),
       ]);
-      setFeatures(f.features);
+      setFeatureCount(f.features.length);
       setInsights(i);
       setReviews(r);
       setReservations(res);
@@ -131,29 +156,38 @@ export function AiInsightsScreen() {
     void run(fn, (r) => setLatestSummary(r.summary));
   }
 
+  const kpis: Array<{ label: string; value: number }> = [
+    { label: "Insights", value: insights.length },
+    { label: "Review replies", value: reviews.length },
+    { label: "Reservations", value: reservations.length },
+    { label: "AI features live", value: featureCount },
+  ];
+
   return (
-    <div className={s.page}>
+    <div className={s.screen}>
       <PageHeader
         title="AI Insights"
-        subtitle="Sales, stock, reviews, upsell, festival, translation, calls, reservations — review then act"
+        subtitle="Generate sales and stock insights, reply to reviews, plan campaigns, and handle reservations and calls."
       />
 
-      <div className={s.tabs} role="tablist" aria-label="AI panels">
-        {(
-          [
-            ["insights", "Insights"],
-            ["marketing", "Marketing AI"],
-            ["reviews", "Reviews"],
-            ["reservations", "Reservations"],
-            ["calls", "Calls"],
-          ] as const
-        ).map(([key, label]) => (
+      {/* Overview KPIs — same glanceable strip as Forecast and Analytics. */}
+      <div className={s.kpis}>
+        {kpis.map((k) => (
+          <div className={s.kpi} key={k.label}>
+            <span className={s.kpiNum}>{k.value}</span>
+            <span className={s.kpiLabel}>{k.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className={s.pills} role="tablist" aria-label="AI panels">
+        {PANELS.map(([key, label]) => (
           <button
             key={key}
             type="button"
             role="tab"
             aria-selected={panel === key}
-            className={`${s.tab} ${panel === key ? s.tabActive : ""}`}
+            className={`${s.pill} ${panel === key ? s.pillActive : ""}`}
             onClick={() => setPanel(key)}
           >
             {label}
@@ -161,366 +195,323 @@ export function AiInsightsScreen() {
         ))}
       </div>
 
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>Feature catalog ({features.length})</h3>
-        {features.length === 0 ? (
-          <EmptyState title="No AI features listed" description="Features appear after the catalog loads." />
-        ) : (
-          <ul className={s.list}>
-            {features.map((f) => (
-              <li key={f.key}>
-                <strong>{f.key}</strong> · {f.status}
-                {f.path ? ` · ${f.path}` : ""}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Whatever the last generator/reply produced, pinned for quick copy. */}
+      {latestSummary && (
+        <div className={`${s.card} ${s.focusCard}`}>
+          <div className={s.cardHead}>
+            <h3 className={s.cardTitle}>Latest AI output</h3>
+            <span className={s.cardSub}>The most recent generated text</span>
+          </div>
+          <p className={s.focusText}>{latestSummary}</p>
+        </div>
+      )}
 
       {panel === "insights" && (
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>Generate insights</h3>
-        <div className={`${s.row2} ${s.genActions}`}>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(generateDailySales, (r) => setLatestSummary(r.summary))
-            }
-          >
-            Daily sales summary
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(() => generateSalesDrop(7), (r) => setLatestSummary(r.summary))
-            }
-          >
-            Why sales dropped
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(() => generateStaffSummary(7), (r) => setLatestSummary(r.summary))
-            }
-          >
-            Staff AI summary
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(() => generateSlowMoving(14), (r) => setLatestSummary(r.summary))
-            }
-          >
-            Slow-moving items
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(generateFoodCost, (r) => setLatestSummary(r.summary))
-            }
-          >
-            Food-cost anomalies
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(generateLowStock, (r) => setLatestSummary(r.summary))
-            }
-          >
-            Low-stock prediction
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(generateSegments, (r) => setLatestSummary(r.summary))
-            }
-          >
-            Customer segments
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(generateBundles, (r) => setLatestSummary(r.summary))
-            }
-          >
-            Best menu bundles
-          </Button>
-        </div>
-        {latestSummary && <p className={s.rowHint}>{latestSummary}</p>}
-        {kinds.length > 1 && (
-          <div className={s.tabs} role="group" aria-label="Insight kinds">
-            {kinds.map((k) => (
-              <button
-                key={k}
-                type="button"
-                className={`${s.tab} ${kindFilter === k ? s.tabActive : ""}`}
-                onClick={() => setKindFilter(k)}
-              >
-                {k === "all" ? "All" : k}
-              </button>
-            ))}
-          </div>
-        )}
-        {visibleInsights.length === 0 ? (
-          <EmptyState
-            title="No insights yet"
-            description="Run a generator above to create sales, stock, or menu insights."
-          />
-        ) : (
-          <div className={s.insightGrid}>
-            {visibleInsights.slice(0, 12).map((i) => (
-              <article key={i.id} className={s.insightCard}>
-                <span className={s.insightKind}>{i.kind || "insight"}</span>
-                <h4 className={s.insightTitle}>{i.title}</h4>
-                <p className={s.insightSummary}>{i.summary}</p>
-                <div className={s.cardActions}>
-                  <Button
+        <>
+          <section className={s.card}>
+            <div className={s.cardHead}>
+              <h3 className={s.cardTitle}>Generate an insight</h3>
+              <span className={s.cardSub}>Pick a report for the AI to write up</span>
+            </div>
+            <div className={s.genGrid}>
+              {GENERATORS.map((g) => (
+                <Button
+                  key={g.label}
+                  disabled={busy}
+                  variant="ghost"
+                  onClick={() => void run(g.run, (r) => setLatestSummary(r.summary))}
+                >
+                  {g.label}
+                </Button>
+              ))}
+            </div>
+          </section>
+
+          <section className={s.card}>
+            <div className={s.cardHead}>
+              <h3 className={s.cardTitle}>Insights</h3>
+              <span className={s.cardSub}>
+                {visibleInsights.length} of {insights.length} shown
+              </span>
+            </div>
+            {kinds.length > 1 && (
+              <div className={s.pills} role="group" aria-label="Insight kinds">
+                {kinds.map((k) => (
+                  <button
+                    key={k}
                     type="button"
-                    variant="ghost"
-                    onClick={() => setLatestSummary(i.summary)}
+                    className={`${s.pill} ${kindFilter === k ? s.pillActive : ""}`}
+                    onClick={() => setKindFilter(k)}
                   >
-                    Focus summary
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => regenerateForKind(i.kind)}
-                  >
-                    Regenerate
-                  </Button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                    {k === "all" ? "All" : prettyKind(k)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {visibleInsights.length === 0 ? (
+              <EmptyState
+                title="No insights yet"
+                description="Run a generator above to create sales, stock, or menu insights."
+              />
+            ) : (
+              <div className={s.bento}>
+                {visibleInsights.slice(0, 12).map((i) => (
+                  <article key={i.id} className={s.insightCard}>
+                    <span className={s.tagAi}>{prettyKind(i.kind)}</span>
+                    <h4 className={s.insightTitle}>{i.title}</h4>
+                    <p className={s.insightSummary}>{i.summary}</p>
+                    <div className={s.cardActions}>
+                      <Button type="button" variant="ghost" onClick={() => setLatestSummary(i.summary)}>
+                        Focus
+                      </Button>
+                      <Button type="button" disabled={busy} onClick={() => regenerateForKind(i.kind)}>
+                        Regenerate
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
       )}
 
       {panel === "marketing" && (
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>Marketing AI · upsell · recovery</h3>
-        <div className={s.row2}>
-          <label className={s.col}>
-            <span className={s.rowName}>Festival</span>
-            <input className={s.input} value={festival} onChange={(e) => setFestival(e.target.value)} />
-          </label>
-        </div>
-        <div className={s.row2}>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(() => generateFestival(festival), (r) => setLatestSummary(r.summary))
-            }
-          >
-            Festival campaign
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(reorderPrompt, (r) => setLatestSummary(r.body))
-            }
-          >
-            Reorder prompt copy
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(
-                () => abandonedCopy("2x Biryani"),
-                (r) => setLatestSummary(r.body),
-              )
-            }
-          >
-            Abandoned cart copy
-          </Button>
-          <Button disabled={busy} onClick={() => void run(translateMenu)}>
-            Translate menu → AR
-          </Button>
-        </div>
-        {combos.length > 0 && (
-          <ul className={s.list}>
-            {combos.slice(0, 5).map((c, idx) => (
-              <li key={idx}>
-                {c.items.join(" + ")} — {c.ai_message}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <section className={s.card}>
+          <div className={s.cardHead}>
+            <h3 className={s.cardTitle}>Marketing AI</h3>
+            <span className={s.cardSub}>Campaigns, upsell copy, and cart recovery</span>
+          </div>
+          <div className={s.formRow}>
+            <label className={s.field}>
+              <span className={s.fieldName}>Festival</span>
+              <input className={s.input} value={festival} onChange={(e) => setFestival(e.target.value)} />
+            </label>
+          </div>
+          <div className={s.genGrid}>
+            <Button
+              disabled={busy}
+              variant="ghost"
+              onClick={() => void run(() => generateFestival(festival), (r) => setLatestSummary(r.summary))}
+            >
+              Festival campaign
+            </Button>
+            <Button
+              disabled={busy}
+              variant="ghost"
+              onClick={() => void run(reorderPrompt, (r) => setLatestSummary(r.body))}
+            >
+              Reorder prompt copy
+            </Button>
+            <Button
+              disabled={busy}
+              variant="ghost"
+              onClick={() => void run(() => abandonedCopy("2x Biryani"), (r) => setLatestSummary(r.body))}
+            >
+              Abandoned cart copy
+            </Button>
+            <Button disabled={busy} variant="ghost" onClick={() => void run(translateMenu)}>
+              Translate menu to Arabic
+            </Button>
+          </div>
+          {combos.length > 0 && (
+            <div className={s.comboList}>
+              {combos.slice(0, 5).map((c, idx) => (
+                <div className={s.comboRow} key={idx}>
+                  <span className={s.comboItems}>{c.items.join(" + ")}</span>
+                  <span className={s.comboMsg}>{c.ai_message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {panel === "reviews" && (
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>Reviews · reply · escalation</h3>
-        <div className={s.row2}>
-          <label className={s.col}>
-            <span className={s.rowName}>Comment</span>
-            <input
-              className={s.input}
-              value={reviewComment}
-              onChange={(e) => setReviewComment(e.target.value)}
-            />
-          </label>
-          <label className={s.col}>
-            <span className={s.rowName}>Score (0–10)</span>
-            <input
-              className={s.input}
-              type="number"
-              min={0}
-              max={10}
-              value={reviewScore}
-              onChange={(e) => setReviewScore(Number(e.target.value))}
-            />
-          </label>
-        </div>
-        <div className={s.row2}>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(
-                () =>
-                  suggestReviewReply({
-                    comment: reviewComment,
-                    score: reviewScore,
-                    escalate: reviewScore <= 6,
-                  }),
-                (r) => setLatestSummary(r.suggested_reply),
-              )
-            }
-          >
-            Suggest reply
-          </Button>
-          <Button disabled={busy} onClick={() => void run(escalateNegativeReviews)}>
-            Escalate negative NPS
-          </Button>
-        </div>
-        {reviews.length > 0 ? (
-          <div className={s.insightGrid}>
-            {reviews.slice(0, 6).map((r) => (
-              <article key={r.id} className={s.insightCard}>
-                <span className={s.insightKind}>
-                  {r.sentiment}
-                  {r.escalated ? " · escalated" : ""}
-                </span>
-                <p className={s.insightSummary}>{r.suggested_reply}</p>
-                <div className={s.cardActions}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setLatestSummary(r.suggested_reply)}
-                  >
-                    Use reply
-                  </Button>
-                </div>
-              </article>
-            ))}
+        <section className={s.card}>
+          <div className={s.cardHead}>
+            <h3 className={s.cardTitle}>Reviews</h3>
+            <span className={s.cardSub}>Suggest replies and escalate the negative ones</span>
           </div>
-        ) : (
-          <EmptyState title="No review replies yet" description="Suggest a reply from a comment above." />
-        )}
-      </section>
+          <div className={s.formRow}>
+            <label className={s.field}>
+              <span className={s.fieldName}>Comment</span>
+              <input
+                className={s.input}
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+              />
+            </label>
+            <label className={s.fieldNarrow}>
+              <span className={s.fieldName}>Score (0 to 10)</span>
+              <input
+                className={s.input}
+                type="number"
+                min={0}
+                max={10}
+                value={reviewScore}
+                onChange={(e) => setReviewScore(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <div className={s.genGrid}>
+            <Button
+              disabled={busy}
+              variant="ghost"
+              onClick={() =>
+                void run(
+                  () =>
+                    suggestReviewReply({
+                      comment: reviewComment,
+                      score: reviewScore,
+                      escalate: reviewScore <= 6,
+                    }),
+                  (r) => setLatestSummary(r.suggested_reply),
+                )
+              }
+            >
+              Suggest reply
+            </Button>
+            <Button disabled={busy} variant="ghost" onClick={() => void run(escalateNegativeReviews)}>
+              Escalate negative NPS
+            </Button>
+          </div>
+          {reviews.length > 0 ? (
+            <div className={s.bento}>
+              {reviews.slice(0, 6).map((r) => (
+                <article key={r.id} className={s.insightCard}>
+                  <span className={r.escalated ? s.tagWarn : s.tagAi}>
+                    {r.sentiment}
+                    {r.escalated ? " · escalated" : ""}
+                  </span>
+                  <p className={s.insightSummary}>{r.suggested_reply}</p>
+                  <div className={s.cardActions}>
+                    <Button type="button" variant="ghost" onClick={() => setLatestSummary(r.suggested_reply)}>
+                      Use reply
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No review replies yet" description="Suggest a reply from a comment above." />
+          )}
+        </section>
       )}
 
       {panel === "reservations" && (
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>Reservations (AI handled)</h3>
-        <div className={s.row2}>
-          <label className={s.col}>
-            <span className={s.rowName}>Party size</span>
-            <input
-              className={s.input}
-              type="number"
-              min={1}
-              value={partySize}
-              onChange={(e) => setPartySize(Number(e.target.value) || 2)}
-            />
-          </label>
-          <label className={s.col}>
-            <span className={s.rowName}>Guest name</span>
-            <input className={s.input} value={guestName} onChange={(e) => setGuestName(e.target.value)} />
-          </label>
-        </div>
-        <Button
-          disabled={busy}
-          onClick={() => {
-            const when = new Date(Date.now() + 86400000).toISOString();
-            void run(
-              () =>
-                createReservation({
-                  party_size: partySize,
-                  requested_for: when,
-                  guest_name: guestName || "Guest",
-                }),
-              (r) => setLatestSummary((r as { ai_summary?: string }).ai_summary ?? "Booked"),
-            );
-          }}
-        >
-          Create reservation
-        </Button>
-        {reservations.length > 0 ? (
-          <ul className={s.list}>
-            {reservations.slice(0, 5).map((r) => (
-              <li key={r.id}>
-                #{r.id} {r.guest_name} · party {r.party_size} · {r.status}
-                {r.ai_summary ? ` — ${r.ai_summary}` : ""}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState title="No reservations" description="Create a reservation to see AI handling notes." />
-        )}
-      </section>
+        <section className={s.card}>
+          <div className={s.cardHead}>
+            <h3 className={s.cardTitle}>Reservations</h3>
+            <span className={s.cardSub}>AI handled bookings</span>
+          </div>
+          <div className={s.formRow}>
+            <label className={s.fieldNarrow}>
+              <span className={s.fieldName}>Party size</span>
+              <input
+                className={s.input}
+                type="number"
+                min={1}
+                value={partySize}
+                onChange={(e) => setPartySize(Number(e.target.value) || 2)}
+              />
+            </label>
+            <label className={s.field}>
+              <span className={s.fieldName}>Guest name</span>
+              <input className={s.input} value={guestName} onChange={(e) => setGuestName(e.target.value)} />
+            </label>
+          </div>
+          <div className={s.genGrid}>
+            <Button
+              disabled={busy}
+              variant="ghost"
+              onClick={() => {
+                const when = new Date(Date.now() + 86400000).toISOString();
+                void run(
+                  () =>
+                    createReservation({
+                      party_size: partySize,
+                      requested_for: when,
+                      guest_name: guestName || "Guest",
+                    }),
+                  (r) => setLatestSummary((r as { ai_summary?: string }).ai_summary ?? "Booked"),
+                );
+              }}
+            >
+              Create reservation
+            </Button>
+          </div>
+          {reservations.length > 0 ? (
+            <div className={s.bento}>
+              {reservations.slice(0, 6).map((r) => (
+                <article key={r.id} className={s.insightCard}>
+                  <span className={s.tagAi}>{r.status}</span>
+                  <h4 className={s.insightTitle}>
+                    {r.guest_name || "Guest"} · party of {r.party_size}
+                  </h4>
+                  {r.ai_summary && <p className={s.insightSummary}>{r.ai_summary}</p>}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No reservations" description="Create a reservation to see AI handling notes." />
+          )}
+        </section>
       )}
 
       {panel === "calls" && (
-      <section className={s.card}>
-        <h3 className={s.cardTitle}>AI call answering (mock IVR)</h3>
-        <div className={s.row2}>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(
-                () => startCall("+971500000001"),
-                (r) => {
-                  setCallId(r.id);
-                  setCallTranscript(r.transcript);
-                },
-              )
-            }
-          >
-            Start call
-          </Button>
-          <label className={s.col}>
-            <span className={s.rowName}>Caller text</span>
-            <input className={s.input} value={callText} onChange={(e) => setCallText(e.target.value)} />
-          </label>
-          <Button
-            disabled={busy || !callId}
-            onClick={() =>
-              void run(
-                () => turnCall(callId!, callText),
-                (r) => setCallTranscript(r.transcript),
-              )
-            }
-          >
-            Send turn
-          </Button>
-        </div>
-        {callTranscript.length > 0 && (
-          <ul className={s.list}>
-            {callTranscript.map((t, i) => (
-              <li key={i}>
-                <strong>{t.role}</strong>: {t.text}
-              </li>
-            ))}
-          </ul>
-        )}
-        {calls.length > 0 && (
-          <p className={s.rowHint}>
-            Sessions: {calls.map((c) => `#${c.id} ${c.status}/${c.outcome ?? "-"}`).join(" · ")}
-          </p>
-        )}
-      </section>
+        <section className={s.card}>
+          <div className={s.cardHead}>
+            <h3 className={s.cardTitle}>AI call answering</h3>
+            <span className={s.cardSub}>Mock IVR to preview how calls are handled</span>
+          </div>
+          <div className={s.formRow}>
+            <Button
+              disabled={busy}
+              variant="ghost"
+              onClick={() =>
+                void run(
+                  () => startCall("+971500000001"),
+                  (r) => {
+                    setCallId(r.id);
+                    setCallTranscript(r.transcript);
+                  },
+                )
+              }
+            >
+              Start call
+            </Button>
+            <label className={s.field}>
+              <span className={s.fieldName}>Caller text</span>
+              <input className={s.input} value={callText} onChange={(e) => setCallText(e.target.value)} />
+            </label>
+            <Button
+              disabled={busy || !callId}
+              variant="ghost"
+              onClick={() => void run(() => turnCall(callId!, callText), (r) => setCallTranscript(r.transcript))}
+            >
+              Send turn
+            </Button>
+          </div>
+          {callTranscript.length > 0 && (
+            <div className={s.chat}>
+              {callTranscript.map((t, i) => (
+                <div
+                  key={i}
+                  className={`${s.bubble} ${t.role === "assistant" ? s.bubbleAi : s.bubbleUser}`}
+                >
+                  <span className={s.bubbleRole}>{t.role === "assistant" ? "AI" : "Caller"}</span>
+                  {t.text}
+                </div>
+              ))}
+            </div>
+          )}
+          {calls.length > 0 && (
+            <p className={s.cardSub}>
+              {calls.length} call session{calls.length === 1 ? "" : "s"} recorded
+            </p>
+          )}
+        </section>
       )}
     </div>
   );
