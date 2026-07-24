@@ -1,5 +1,4 @@
 import {
-  boundsForPreset,
   REPORTS_DATE_PRESETS,
   type ReportsDatePreset,
 } from "../lib/reportsDateRange";
@@ -19,10 +18,8 @@ export function ReportsDateRangePicker({
   value: ReportsDatePreset;
   onChange: (preset: ReportsDatePreset) => void;
 }) {
-  const bounds = boundsForPreset(value);
   return (
     <div className={s.wrap}>
-      <span className={s.label}>Period</span>
       <div className={s.pills} role="group" aria-label="Report date range">
         {REPORTS_DATE_PRESETS.map((preset) => (
           <button
@@ -36,7 +33,6 @@ export function ReportsDateRangePicker({
           </button>
         ))}
       </div>
-      <span className={s.hint}>{bounds.label}</span>
     </div>
   );
 }

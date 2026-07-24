@@ -98,7 +98,7 @@ describe("AnalyticsScreen", () => {
         id: 1,
         type: "promotional",
         status: "sent",
-        stats: { sent: 100, converted: 12 },
+        stats: { sent: 100, converted: 13 },
         created_at: "2026-07-03T10:00:00Z",
       },
       {
@@ -128,7 +128,7 @@ describe("AnalyticsScreen", () => {
     await vi.advanceTimersByTimeAsync(0);
     await waitFor(() => expect(screen.getByText("Messages delivered")).toBeInTheDocument());
     expect(screen.getByText("100")).toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("13")).toBeInTheDocument();
     const campaignsSentLabel = screen.getByText("Campaigns sent");
     expect(campaignsSentLabel.previousElementSibling?.textContent).toBe("1");
   });

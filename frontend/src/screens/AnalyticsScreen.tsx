@@ -23,6 +23,12 @@ import {
 } from "../lib/campaignSummary";
 import type { CampaignResponse } from "../lib/marketingApi";
 import { fetchCampaigns } from "../lib/marketingApi";
+import {
+  hourlyHeatmap,
+  topDishes,
+  type DishSales,
+  type HeatmapResult,
+} from "../lib/analyticsBreakdowns";
 import { computeOrderDeliveryKpis } from "../lib/orderDeliveryKpis";
 import { fetchOrders } from "../lib/ordersApi";
 import { buildDailySeries, type DailyPoint } from "../lib/salesSeries";
@@ -44,6 +50,31 @@ function chartColors(theme: string) {
     tooltipBorder: dark ? "#334155" : "#e5e7eb",
     tooltipText: dark ? "#e2e8f0" : "#111827",
   };
+}
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** Blue heat scale, count ratio 0..1 → cell colour (works on light + dark). */
+function heatColor(ratio: number): string {
+  if (ratio <= 0) return "var(--bg-surface-inset)";
+  return `rgba(37, 99, 235, ${(0.12 + 0.88 * ratio).toFixed(3)})`;
+}
+
+/** One weekday row of the heatmap: label + 24 hour cells. */
+function ReactFragmentRow({ day, row, max }: { day: string; row: number[]; max: number }) {
+  return (
+    <>
+      <div className={s.heatDay}>{day}</div>
+      {row.map((count, h) => (
+        <div
+          key={h}
+          className={s.heatCell}
+          style={{ background: heatColor(max ? count / max : 0) }}
+          title={`${day} ${String(h).padStart(2, "0")}:00 · ${count} order${count === 1 ? "" : "s"}`}
+        />
+      ))}
+    </>
+  );
 }
 
 async function fetchCampaignSummary(): Promise<CampaignResponse[]> {
@@ -119,6 +150,18 @@ export function AnalyticsScreen() {
     () => (orders ? buildDailySeries(orders) : null),
     [orders],
   );
+  const dishes: DishSales[] | null = useMemo(
+    () => (orders ? topDishes(orders, 8) : null),
+    [orders],
+  );
+  const heat: HeatmapResult | null = useMemo(
+    () => (orders ? hourlyHeatmap(orders) : null),
+    [orders],
+  );
+  const maxDishRevenue = useMemo(
+    () => (dishes && dishes.length ? Math.max(...dishes.map((d) => d.revenue)) : 1),
+    [dishes],
+  );
 
   const error = cErr ?? oErr;
 
@@ -126,16 +169,17 @@ export function AnalyticsScreen() {
     <div className={s.screen}>
       <PageHeader
         title="Analytics"
-        subtitle="What happened — performance, sales and delivery insights"
+        subtitle="Performance, sales and delivery insights"
         right={
           <ReportsDateRangePicker value={datePreset} onChange={setDatePreset} />
         }
       />
       {error != null && (
-        <SectionBanner tone="warning">Could not load data — retrying…</SectionBanner>
+        <SectionBanner tone="warning">Could not load data, retrying…</SectionBanner>
       )}
 
-      <div className={s.card}>
+      <div className={s.bento}>
+      <div className={`${s.card} ${s.spanFull}`}>
         <div className={s.cardHead}>
           <span className={s.cardTitle}>Delivery &amp; Operations</span>
           <span className={s.cardSub}>
@@ -170,7 +214,7 @@ export function AnalyticsScreen() {
       </div>
 
       {/* ── Sales trend over time ─────────────────────────────────────── */}
-      <div className={s.card}>
+      <div className={`${s.card} ${s.spanFull}`}>
         <div className={s.trendHead}>
           <div className={s.cardHead}>
             <span className={s.cardTitle}>Sales trend</span>
@@ -206,7 +250,7 @@ export function AnalyticsScreen() {
             <div className={s.emptyIcon}>📉</div>
             <div className={s.emptyTitle}>No orders in this period</div>
             <div className={s.emptyDesc}>
-              Widen the date range, or take a few orders — the trend fills in per day.
+              Widen the date range, or take a few orders and the trend fills in per day.
             </div>
           </div>
         ) : (
@@ -270,6 +314,47 @@ export function AnalyticsScreen() {
         )}
       </div>
 
+      {/* ── Top sellers ───────────────────────────────────────────────── */}
+      <div className={s.card}>
+        <div className={s.cardHead}>
+          <span className={s.cardTitle}>Top sellers</span>
+          <span className={s.cardSub}>
+            Best dishes by revenue for {dateBounds.label.toLowerCase()}
+          </span>
+        </div>
+        {orders === null ? (
+          <TrendSkeleton />
+        ) : !dishes || dishes.length === 0 ? (
+          <div className={s.empty}>
+            <div className={s.emptyIcon}>🍽️</div>
+            <div className={s.emptyTitle}>No dishes sold in this period</div>
+            <div className={s.emptyDesc}>Widen the date range to see your best sellers.</div>
+          </div>
+        ) : (
+          <div className={s.dishList}>
+            {dishes.map((d, i) => (
+              <div key={d.name} className={s.dishRow}>
+                <div className={s.dishRank}>{i + 1}</div>
+                <div className={s.dishName} title={d.name}>
+                  {d.name}
+                </div>
+                <div className={s.dishBarTrack}>
+                  <div
+                    className={s.dishBarFill}
+                    style={{ width: `${(d.revenue / maxDishRevenue) * 100}%` }}
+                  />
+                </div>
+                <div className={s.dishVal}>
+                  AED {Math.round(d.revenue).toLocaleString()}
+                  <span className={s.dishValSub}>{d.qty} sold</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Marketing (paired beside Top sellers) ─────────────────────── */}
       <div className={s.card}>
         <div className={s.cardHead}>
           <span className={s.cardTitle}>Marketing Messages</span>
@@ -292,6 +377,56 @@ export function AnalyticsScreen() {
         ) : (
           <CampaignSummaryStrip summary={campaignStats} />
         )}
+      </div>
+
+      {/* ── Busy hours heatmap ────────────────────────────────────────── */}
+      <div className={`${s.card} ${s.spanFull}`}>
+        <div className={s.cardHead}>
+          <span className={s.cardTitle}>Busy hours</span>
+          <span className={s.cardSub}>
+            Orders by hour and weekday (Asia/Dubai) for {dateBounds.label.toLowerCase()}
+          </span>
+        </div>
+        {orders === null ? (
+          <TrendSkeleton />
+        ) : !heat || heat.total === 0 ? (
+          <div className={s.empty}>
+            <div className={s.emptyIcon}>🕒</div>
+            <div className={s.emptyTitle}>No orders in this period</div>
+            <div className={s.emptyDesc}>
+              The heatmap fills in once orders come through. Busiest slots go darkest.
+            </div>
+          </div>
+        ) : (
+          <div className={s.heatWrap}>
+            <div className={s.heat}>
+              <div />
+              {Array.from({ length: 24 }).map((_, h) => (
+                <div key={h} className={s.heatHour}>
+                  {h % 3 === 0 ? h : ""}
+                </div>
+              ))}
+              {WEEKDAY_LABELS.map((day, wd) => (
+                <ReactFragmentRow
+                  key={day}
+                  day={day}
+                  row={heat.grid[wd]}
+                  max={heat.max}
+                />
+              ))}
+            </div>
+            <div className={s.heatLegend}>
+              <span>Fewer</span>
+              <span className={s.heatLegendScale} aria-hidden="true">
+                {[0.12, 0.35, 0.6, 0.85, 1].map((r) => (
+                  <i key={r} style={{ background: heatColor(r) }} />
+                ))}
+              </span>
+              <span>More</span>
+            </div>
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );

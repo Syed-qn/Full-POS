@@ -4,6 +4,23 @@
   gap: 20px;
 }
 
+/* Bento grid: two equal columns; paired cards in a row stretch to match height
+   (grid rows align-stretch by default). Wide cards opt out via .spanFull. */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.spanFull {
+  grid-column: 1 / -1;
+}
+@media (max-width: 900px) {
+  .bento {
+    grid-template-columns: 1fr;
+  }
+}
+
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -181,4 +198,114 @@
 }
 .toggleActive:hover {
   color: var(--text-inverse);
+}
+
+/* ── Top sellers list ──────────────────────────────────────────────── */
+.dishList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dishRow {
+  display: grid;
+  grid-template-columns: 20px minmax(120px, 200px) 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.dishRank {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-align: center;
+}
+.dishName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dishBarTrack {
+  position: relative;
+  height: 22px;
+  background: var(--bg-surface-inset);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.dishBarFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 3px;
+  border-radius: 6px;
+  background: var(--accent-primary);
+  transition: width 200ms ease-out;
+}
+.dishVal {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  text-align: right;
+  min-width: 108px;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.dishValSub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--font-sans, inherit);
+}
+
+/* ── Busy-hours heatmap ────────────────────────────────────────────── */
+.heatWrap {
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.heat {
+  display: grid;
+  grid-template-columns: 40px repeat(24, minmax(18px, 1fr));
+  gap: 3px;
+  min-width: 620px;
+  align-items: center;
+}
+.heatHour {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-family: var(--font-mono);
+}
+.heatDay {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding-right: 4px;
+}
+.heatCell {
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  min-width: 16px;
+}
+.heatLegend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.heatLegendScale {
+  display: inline-flex;
+  gap: 3px;
+}
+.heatLegendScale i {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
 }
