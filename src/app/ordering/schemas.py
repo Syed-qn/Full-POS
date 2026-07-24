@@ -128,6 +128,12 @@ class ManualOrderIn(BaseModel):
     table_id: int | None = None
     staff_id: int | None = None
     customer_allergy_notes: str | None = None
+    # Cashier "KOT" intent: send the order to the kitchen immediately after it is
+    # created. Delivery/online orders are KOT-gated (no tickets at confirm), so
+    # without this a cashier Home Delivery would sit at "confirmed" with no ticket
+    # unless a second /advance call fired it — and a lost/failed advance would
+    # silently strand the order off the kitchen board. Firing here makes it atomic.
+    fire_to_kitchen: bool = False
 
 
 class PosOrderItemIn(BaseModel):

@@ -543,6 +543,11 @@ export function WaiterOrderScreen() {
 
       let orderId = openTabOrderId;
       let orderNumber = "";
+      // A brand-new Home Delivery fires to the kitchen ATOMICALLY on create
+      // (fire_to_kitchen below), so the confirm/advance dance underneath must
+      // NOT run for it — advancing an already-"preparing" order would wrongly
+      // push it to "ready".
+      let firedOnCreate = false;
 
       if (!hasItems) {
         // fire-only: nothing to append, just confirm the parked order below.
@@ -552,7 +557,9 @@ export function WaiterOrderScreen() {
       } else if (isDelivery) {
         // Home delivery goes through the manual-order endpoint, which persists
         // the real customer + address + fee the rider needs (not the walk-in
-        // placeholder the POS create uses for dine-in / takeaway).
+        // placeholder the POS create uses for dine-in / takeaway). When the
+        // cashier hit KOT (fire), the server also sends it straight to the
+        // kitchen in the same request — no fragile follow-up /advance to lose.
         const created = await createManualOrder({
           customer_phone: custPhone.trim(),
           customer_name: custName.trim() || null,
@@ -567,9 +574,11 @@ export function WaiterOrderScreen() {
           },
           delivery_fee_aed: fee || "0.00",
           order_type: "delivery",
+          fire_to_kitchen: fire,
         });
         orderId = created?.id ?? null;
         orderNumber = created?.order_number ?? "";
+        firedOnCreate = fire;
         // Keep the till pointed at what we just opened so the next round appends
         // and the payment buttons have something to charge.
         if (orderId) setTakeawayOrderId(orderId);
@@ -597,22 +606,32 @@ export function WaiterOrderScreen() {
         if (orderType !== "dine_in" && orderId) setTakeawayOrderId(orderId);
       }
 
-      if (fire && orderId) {
+      if (fire && orderId && !firedOnCreate) {
         // No-op when the order was already auto-confirmed on create.
         await confirmOrder(orderId);
         // Home Delivery: KOT also SENDS it to the kitchen. Delivery orders are
         // KOT-gated (no tickets at confirm), so advance confirmed -> preparing —
         // that hop fires the kitchen tickets and moves the pill to "Preparing"
-        // (kitchen then marks Ready, which auto-dispatches a rider).
+        // (kitchen then marks Ready, which auto-dispatches a rider). A brand-new
+        // Home Delivery already fired atomically on create (firedOnCreate); this
+        // path only runs when firing an EXISTING confirmed tab (append case).
         //
-        // Only for a NEW order (or one still sitting at "confirmed"): appending
-        // items to an order that is already preparing/ready must NOT push its
-        // status forward, or "Add Item" would wrongly mark it Ready.
-        if (isDelivery && (openTabOrderId == null || tabStatus === "confirmed")) {
+        // Only for an order still sitting at "confirmed": appending items to one
+        // that is already preparing/ready must NOT push its status forward, or
+        // "Add Item" would wrongly mark it Ready.
+        if (isDelivery && openTabOrderId != null && tabStatus === "confirmed") {
+          // Surface a real failure instead of silently stranding the order off
+          // the kitchen board — the whole reason a KOT could look "sent" yet
+          // never reach the kitchen. A 409/no-op race still resolves fine.
           try {
             await advanceOrder(orderId);
-          } catch {
-            /* raced past confirmed already — ignore */
+          } catch (e) {
+            toast(
+              e instanceof Error
+                ? `Sent, but kitchen not notified: ${e.message}`
+                : "Sent, but the kitchen was not notified — retry KOT.",
+              "error",
+            );
           }
         }
       }

@@ -317,11 +317,14 @@ async def next_token_endpoint(
 async def create_manual_order_endpoint(
     body: ManualOrderIn,
     restaurant: Restaurant = Depends(require_role("manager", "cashier", "waiter")),
+    # Attribute the KOT hop (confirmed -> preparing) to whoever pressed it, so the
+    # order timeline reads "by cashier" / "by manager" rather than a blanket value.
+    actor: str = Depends(current_actor),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     # Prefer unified POS create when order_type is non-delivery or table-bound;
     # keep legacy create_manual_order path for pure delivery (back-compat).
-    from app.ordering.order_types import ORDER_TYPE_DELIVERY
+    from app.ordering.order_types import ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE
     from app.ordering.pos_orders import create_pos_order
 
     try:
@@ -370,6 +373,28 @@ async def create_manual_order_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await session.commit()
+
+    # KOT: a cashier Home Delivery is fired to the kitchen the moment it is taken.
+    # Delivery/online orders are KOT-gated (no tickets at confirm), so advance the
+    # freshly-confirmed order confirmed -> preparing, which cuts the station
+    # tickets. Doing it here (same request, same transaction boundary) makes the
+    # order reach the kitchen atomically instead of relying on a separate client
+    # /advance whose failure would silently strand it at "confirmed". A future
+    # pre-order stays draft (status != confirmed) and is left for its release.
+    if (
+        body.fire_to_kitchen
+        and str(order.order_type) in (ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE)
+        and str(order.status) == "confirmed"
+    ):
+        from app.ordering.service import advance_kitchen_status
+
+        try:
+            await advance_kitchen_status(session, order=order, actor=actor)
+        except ValueError:
+            # Raced past confirmed already (double submit) — it is on the kitchen
+            # either way; never fail the create over an already-fired order.
+            pass
+
     from app.partner.webhooks.dispatch import flush_pending_partner_webhooks
 
     await flush_pending_partner_webhooks(session, restaurant_id=restaurant.id)

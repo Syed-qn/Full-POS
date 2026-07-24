@@ -39,6 +39,11 @@ export interface ManualOrderIn {
   delivery_fee_aed: string;
   /** Fulfillment type — defaults to "delivery" server-side. */
   order_type?: string;
+  /** Cashier "KOT": fire the order to the kitchen atomically on create. Delivery
+   *  orders are KOT-gated, so without this a Home Delivery would be created
+   *  "confirmed" with no kitchen ticket. The server advances it to "preparing"
+   *  in the same request, so a failed follow-up call can never strand it. */
+  fire_to_kitchen?: boolean;
 }
 
 /** Unified POS create — used for order types that don't require a delivery address. */
