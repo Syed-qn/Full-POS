@@ -181,6 +181,12 @@
   padding: 0;
 }
 
+/* Keep the scrollbar from stealing width off one side — otherwise the centred
+   icons drift left of the footer icons (which sit outside the scroll area). */
+.collapsed .scroll {
+  scrollbar-gutter: stable both-edges;
+}
+
 .item:hover {
   background: var(--bg-surface-inset);
   color: var(--text-primary);
