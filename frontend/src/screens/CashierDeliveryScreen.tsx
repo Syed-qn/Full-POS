@@ -326,6 +326,14 @@ export function CashierDeliveryScreen() {
         {/* ── LEFT: order list ─────────────────────────────────────────── */}
         <section className={s.list}>
           <div className={s.listHead}>
+            <button
+              type="button"
+              className={s.backBtn}
+              onClick={() => navigate("/cashier/new-order?type=delivery")}
+              data-testid="delivery-back-till"
+            >
+              ‹ Back
+            </button>
             <label className={s.searchWrap}>
               <span aria-hidden>🔍</span>
               <input
