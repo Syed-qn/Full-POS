@@ -247,6 +247,18 @@
   color: var(--green);
   background: color-mix(in srgb, var(--green) 14%, transparent);
 }
+/* Rider on the order but not yet collected — violet, one step past Ready. */
+.p_assigned {
+  border-color: #7a5af8;
+  color: #7a5af8;
+  background: color-mix(in srgb, #7a5af8 14%, transparent);
+}
+/* Rider has the food and is en route — purple, the last hop before Completed. */
+.p_picked {
+  border-color: #9e77ed;
+  color: #9e77ed;
+  background: color-mix(in srgb, #9e77ed 16%, transparent);
+}
 .p_completed {
   border-color: var(--blue);
   color: var(--blue);

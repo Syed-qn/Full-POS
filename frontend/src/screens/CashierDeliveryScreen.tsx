@@ -13,23 +13,38 @@ import s from "./CashierTakeawayScreen.module.css";
  * Buckets shown as filter chips. These GROUP the real order FSM statuses —
  * no invented states. Anything unmapped falls into "all" only.
  */
-type Bucket = "all" | "pending" | "preparing" | "ready" | "completed" | "cancelled";
+type Bucket =
+  | "all"
+  | "pending"
+  | "preparing"
+  | "ready"
+  | "assigned"
+  | "picked"
+  | "completed"
+  | "cancelled";
 
 const BUCKET_STATUSES: Record<Exclude<Bucket, "all">, readonly string[]> = {
   pending: ["draft", "pending_confirmation", "confirmed"],
   preparing: ["preparing"],
-  // For delivery, READY means cooked and waiting on / with a rider.
-  ready: ["ready", "assigned", "out_for_delivery"],
-  // A delivery is finished once it reaches the customer.
-  completed: ["delivered", "picked_up"],
+  // Cooked and waiting for a rider (auto-dispatch or the cashier's manual pick).
+  ready: ["ready"],
+  // A rider is on the order but has not collected it yet.
+  assigned: ["assigned"],
+  // Rider has the food and is heading to / at the customer.
+  picked: ["picked_up", "out_for_delivery", "arriving"],
+  // Delivered = handed to the customer, the delivery is done.
+  completed: ["delivered"],
   cancelled: ["cancelled", "undeliverable", "written_off"],
 };
 
-/** Key order IS the chip order — the live queue first, ALL as the fallback. */
+/** Key order IS the chip order — the delivery lifecycle left to right, ALL last:
+ *  Pending → Preparing → Ready → Assigned → Picked Up → Completed → Cancelled. */
 const BUCKET_LABEL: Record<Bucket, string> = {
   pending: "PENDING",
   preparing: "PREPARING",
   ready: "READY",
+  assigned: "ASSIGNED",
+  picked: "PICKED UP",
   completed: "COMPLETED",
   cancelled: "CANCELLED",
   all: "ALL",
@@ -52,9 +67,10 @@ const STATUS_LABEL: Record<string, string> = {
   preparing: "Preparing",
   ready: "Ready",
   assigned: "Assigned",
+  picked_up: "Picked Up",
   out_for_delivery: "On the way",
+  arriving: "Arriving",
   delivered: "Delivered",
-  picked_up: "Delivered",
   cancelled: "Cancelled",
   undeliverable: "Undeliverable",
   written_off: "Written off",
@@ -147,6 +163,8 @@ export function CashierDeliveryScreen() {
       pending: 0,
       preparing: 0,
       ready: 0,
+      assigned: 0,
+      picked: 0,
       completed: 0,
       cancelled: 0,
     };
@@ -184,11 +202,12 @@ export function CashierDeliveryScreen() {
     [visible, selectedId],
   );
 
-  /** Delivered / cancelled — the order is closed, so it is read-only. */
+  /** Once a rider has the order (assigned/picked) or it is delivered/cancelled,
+   *  it is read-only — no more items can be rung onto it (the kitchen is done). */
   const settled = useMemo(() => {
     if (!selected) return false;
     const b = bucketOf(String(selected.status));
-    return b === "completed" || b === "cancelled";
+    return b === "assigned" || b === "picked" || b === "completed" || b === "cancelled";
   }, [selected]);
 
   /** Cooked (or beyond) and not yet out the door — a rider can be assigned. */
