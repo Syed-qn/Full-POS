@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  APP_THEME_ICON,
+  APP_THEME_LABEL,
+  cycleAppTheme,
+  useAppTheme,
+} from "../lib/appTheme";
+import {
   bumpItem,
   fetchKitchenPerformance,
   fetchPrinterStatus,
@@ -30,14 +36,6 @@ type Tab = "tickets" | "pickup" | "performance";
 /** Board slice selected by the filter chips. Single-select; "all" is the reset. */
 type BoardFilter = "all" | "late" | "rush" | "dine" | "takeaway" | "homedelivery";
 
-/** KDS board theme; persisted per device. */
-type KdsTheme = "dark" | "light" | "blue";
-const KDS_THEME_KEY = "kds_theme";
-const THEME_NEXT_LABEL: Record<KdsTheme, string> = {
-  dark: "🌙 Dark",
-  light: "☀️ Light",
-  blue: "🌊 Blue",
-};
 
 /** Card = one order. Items are the station lines belonging to that order. */
 interface TicketCard {
@@ -196,18 +194,12 @@ export function KdsScreen() {
     Array<{ station_id: number; healthy: boolean }>
   >([]);
   const [tab, setTab] = useState<Tab>(isExpoView ? "pickup" : "tickets");
-  // Board theme (dark default). Persisted per device so a station keeps its look.
-  const [theme, setTheme] = useState<KdsTheme>(() => {
-    const saved = localStorage.getItem(KDS_THEME_KEY);
-    return saved === "light" || saved === "blue" || saved === "dark" ? saved : "dark";
-  });
-  const cycleTheme = () => {
-    setTheme((t) => {
-      const next: KdsTheme = t === "dark" ? "light" : t === "light" ? "blue" : "dark";
-      localStorage.setItem(KDS_THEME_KEY, next);
-      return next;
-    });
-  };
+  // Follow the manager's global dashboard theme so the board matches the rest of
+  // the manager UI (was a separate per-device "kds_theme" that ignored the
+  // dashboard toggle — the reported "theme not applied" bug). Same light/dark/blue
+  // palette; toggling here or in the topbar keeps both in sync (per-device store).
+  const theme = useAppTheme();
+  const cycleTheme = cycleAppTheme;
   // Ready tickets stay on the board until bumped; the "Show ready" toggle was
   // removed, so this is fixed off (ready items show via their own ✓ state).
   const includeReady = false;
@@ -444,10 +436,10 @@ export function KdsScreen() {
             type="button"
             className={s.chromeBtn}
             data-testid="kds-theme"
-            title="Switch board theme (dark → light → blue)"
+            title="Switch theme (light → dark → blue)"
             onClick={cycleTheme}
           >
-            {THEME_NEXT_LABEL[theme]}
+            {APP_THEME_ICON[theme]} {APP_THEME_LABEL[theme]}
           </button>
           <button
             type="button"
