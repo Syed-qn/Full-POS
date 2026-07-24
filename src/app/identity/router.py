@@ -393,7 +393,9 @@ async def create_rider(
 
 @router.get("/riders", response_model=list[RiderOut])
 async def list_riders(
-    restaurant: Restaurant = Depends(require_role("manager")),
+    # The cashier's Home Delivery screen lists riders to assign a run, so the
+    # money-terminal role can read the roster (read-only) alongside the manager.
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ):
     return await service.list_riders(session, restaurant.id)

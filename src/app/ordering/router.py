@@ -1121,7 +1121,10 @@ async def transfer_order_staff_endpoint(
 async def reassign_order_endpoint(
     order_id: int,
     body: ReassignOrderIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    # The cashier assigns Home Delivery riders from the till too, not just the
+    # manager, so the money-terminal role is allowed here.
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
+    actor: str = Depends(current_actor),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     """Manually reassign an ASSIGNED order to a chosen rider (recovery path when
@@ -1135,6 +1138,7 @@ async def reassign_order_endpoint(
             restaurant_id=restaurant.id,
             order_id=order_id,
             new_rider_id=body.rider_id,
+            actor=actor,
         )
     except ValueError as exc:
         msg = str(exc)
@@ -1154,7 +1158,9 @@ async def reassign_order_endpoint(
 async def assign_order_endpoint(
     order_id: int,
     body: ReassignOrderIn,
-    restaurant: Restaurant = Depends(current_restaurant),
+    # Cashier assigns Home Delivery riders from the till, alongside the manager.
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
+    actor: str = Depends(current_actor),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     """Manually assign an unassigned ready/preparing order to a chosen rider."""
@@ -1166,6 +1172,7 @@ async def assign_order_endpoint(
             restaurant_id=restaurant.id,
             order_id=order_id,
             rider_id=body.rider_id,
+            actor=actor,
         )
     except ValueError as exc:
         msg = str(exc)
