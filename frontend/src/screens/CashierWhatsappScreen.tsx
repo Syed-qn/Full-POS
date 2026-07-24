@@ -55,6 +55,28 @@ function bucketOf(status: string): Bucket | null {
   return null;
 }
 
+/**
+ * Filter chips the cashier sees: the whole live lifecycle (new → preparing →
+ * ready → out) lives under ACTIVE — each row still shows its exact stage via its
+ * pill, so per-stage chips were just noise. Completed and Cancelled stay separate.
+ */
+type Filter = "active" | "completed" | "cancelled";
+const FILTER_LABEL: Record<Filter, string> = {
+  active: "ACTIVE",
+  completed: "COMPLETED",
+  cancelled: "CANCELLED",
+};
+const FILTER_CHIPS: Filter[] = ["active", "completed", "cancelled"];
+
+/** Map an order's status onto one of the three filter groups. */
+function filterOf(status: string): Filter | null {
+  const b = bucketOf(status);
+  if (b === null) return null;
+  if (b === "delivered") return "completed";
+  if (b === "cancelled") return "cancelled";
+  return "active"; // new / preparing / ready / out
+}
+
 function hhmm(iso?: string | null): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
@@ -71,7 +93,7 @@ export function CashierWhatsappScreen() {
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [bucket, setBucket] = useState<Bucket>("new");
+  const [bucket, setBucket] = useState<Filter>("active");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [kotBusy, setKotBusy] = useState(false);
@@ -112,13 +134,10 @@ export function CashierWhatsappScreen() {
   }, [load]);
 
   const counts = useMemo(() => {
-    const c = { new: 0, preparing: 0, ready: 0, out: 0, delivered: 0, cancelled: 0 } as Record<
-      Bucket,
-      number
-    >;
+    const c = { active: 0, completed: 0, cancelled: 0 } as Record<Filter, number>;
     for (const o of orders) {
-      const b = bucketOf(String(o.status));
-      if (b) c[b] += 1;
+      const f = filterOf(String(o.status));
+      if (f) c[f] += 1;
     }
     return c;
   }, [orders]);
@@ -126,7 +145,7 @@ export function CashierWhatsappScreen() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = orders.filter((o) => {
-      if (bucketOf(String(o.status)) !== bucket) return false;
+      if (filterOf(String(o.status)) !== bucket) return false;
       if (!q) return true;
       return (
         (o.order_number ?? "").toLowerCase().includes(q) ||
@@ -195,7 +214,7 @@ export function CashierWhatsappScreen() {
           </div>
 
           <div className={s.chips} role="tablist" aria-label="Order status">
-            {(Object.keys(BUCKET_LABEL) as Bucket[]).map((b) => (
+            {FILTER_CHIPS.map((b) => (
               <button
                 key={b}
                 type="button"
@@ -204,7 +223,7 @@ export function CashierWhatsappScreen() {
                 className={`${s.chip} ${bucket === b ? s.chipActive : ""}`}
                 onClick={() => setBucket(b)}
               >
-                {BUCKET_LABEL[b]} ({counts[b]})
+                {FILTER_LABEL[b]} ({counts[b]})
               </button>
             ))}
           </div>
