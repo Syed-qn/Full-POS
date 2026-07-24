@@ -332,7 +332,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
               onChange={(e) => onUpload(e.target.files)}
               data-testid="menu-upload"
             />
-            <Button variant="ghost" onClick={onAddDish}>+ Add dish</Button>
+            <Button variant="ghost" size="md" onClick={onAddDish}>+ Add dish</Button>
             {menuStatus === "pending_confirmation" && (
               <Button onClick={onSubmitForApproval} disabled={submittingApproval}>
                 {submittingApproval ? "Submitting…" : "Submit for Approval"}
@@ -343,7 +343,7 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
                 {approving ? "Approving…" : "Approve & Activate"}
               </Button>
             )}
-            <Button onClick={() => fileRef.current?.click()}>
+            <Button size="md" onClick={() => fileRef.current?.click()}>
               {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
             </Button>
           </>

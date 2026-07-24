@@ -141,7 +141,7 @@ export function UnifiedMenuPanel({
           )}
         </div>
         <div className={s.actions}>
-          <Button onClick={doPullOnly} disabled={syncing || !catalogId.trim()}>
+          <Button size="md" onClick={doPullOnly} disabled={syncing || !catalogId.trim()}>
             {syncing ? "Pulling…" : "Pull from Meta"}
           </Button>
         </div>
