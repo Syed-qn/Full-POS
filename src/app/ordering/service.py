@@ -232,6 +232,7 @@ async def list_orders_for_tenant(
     held_only: bool = False,
     order_type: str | None = None,
     channel: str | None = None,
+    exclude_channel: str | None = None,
 ) -> list[Order]:
     """List orders for the tenant, newest first, with optional server-side filters.
 
@@ -276,6 +277,13 @@ async def list_orders_for_tenant(
                 Order.source_channel == ch,
                 Order.aggregator_source == ch,
             )
+        )
+    if exclude_channel:
+        # Drop rows tagged with this source_channel — lets the WhatsApp queue
+        # show customer orders only, minus cashier-entered "pos" Home Delivery.
+        ex = exclude_channel.strip().lower()
+        stmt = stmt.where(
+            or_(Order.source_channel != ex, Order.source_channel.is_(None))
         )
     if from_date:
         stmt = stmt.where(Order.created_at >= _dubai_day_start(from_date))
@@ -1075,13 +1083,18 @@ async def finalize_confirmation(
 
     await push_order_to_partner(session, order=order)
 
-    # KOT gate: a delivery/online (WhatsApp) order is NOT sent to the kitchen at
-    # confirm. It waits in the cashier's WhatsApp queue until the cashier or a
-    # manager presses KOT, which fires the tickets on the confirmed->preparing hop
-    # (see advance_kitchen_status). Any other type still fires at confirm.
+    # KOT gate: a CUSTOMER delivery/online (WhatsApp) order is NOT sent to the
+    # kitchen at confirm. It waits in the cashier's WhatsApp queue until the
+    # cashier or a manager presses KOT, which fires the tickets on the
+    # confirmed->preparing hop (see advance_kitchen_status).
+    #
+    # A cashier-entered ("pos") Home Delivery is the exception: the cashier
+    # already pressed KOT at the till, so — like takeaway/dine-in — it fires to
+    # the kitchen immediately. Otherwise it sat Confirmed forever, never cooked.
     from app.ordering.order_types import ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE
 
-    if str(order.order_type) not in (ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE):
+    is_customer_channel = str(order.order_type) in (ORDER_TYPE_DELIVERY, ORDER_TYPE_ONLINE)
+    if not is_customer_channel or order.source_channel == "pos":
         from app.kds.service import create_tickets_for_order
 
         await create_tickets_for_order(session, restaurant_id=order.restaurant_id, order=order)
@@ -2229,6 +2242,11 @@ async def create_manual_order(
     order.address_id = address.id
     order.scheduled_for = scheduled_for
     order.order_type = "delivery"
+    # Tag the origin so the cashier's Home Delivery till and the customer
+    # WhatsApp queue stay separate lists: both are order_type=delivery, so the
+    # only thing that tells a phone/counter delivery apart from a WhatsApp
+    # self-service order is who entered it. "pos" = a cashier-entered order.
+    order.source_channel = "pos"
     if scheduled_for is not None:
         order.is_preorder = True
     await session.flush()

@@ -67,6 +67,10 @@ async def test_create_manual_order_new_customer(db_session, restaurant):
     assert order.status == "confirmed"
     assert order.sla_confirmed_at is not None
     assert order.sla_deadline is not None
+    # Cashier-entered deliveries are tagged "pos" so the Home Delivery till and
+    # the customer WhatsApp queue stay separate lists.
+    assert order.order_type == "delivery"
+    assert order.source_channel == "pos"
 
     items = (
         await db_session.scalars(select(OrderItem).where(OrderItem.order_id == order.id))

@@ -17,19 +17,21 @@ const ACTIVE: OrderOut["status"][] = [
 ];
 
 /** Toggle above the table. "All" first — it is the default view, not a state. */
-type BoardTab = "all" | "dine" | "takeaway" | "whatsapp";
+type BoardTab = "all" | "dine" | "takeaway" | "whatsapp" | "homedelivery";
 
 const BOARD_TABS: { key: BoardTab; title: string }[] = [
   { key: "all", title: "All" },
   { key: "dine", title: "Dine In" },
   { key: "takeaway", title: "Take Away" },
+  { key: "homedelivery", title: "Home Delivery" },
   { key: "whatsapp", title: "WhatsApp" },
 ];
 
 /**
  * Channel grouping, matching the KDS card badges so the two boards can never
- * disagree about what counts as dine-in. Delivery/online orders are the
- * WhatsApp channel (same mapping the KDS badge and Orders filter use).
+ * disagree about what counts as dine-in. A cashier-entered ("pos") delivery is
+ * Home Delivery; every other delivery/online order is the customer WhatsApp
+ * channel (same split the KDS badge and Orders filter use).
  */
 function channelOf(order: OrderOut): BoardTab | null {
   switch (order.order_type) {
@@ -42,7 +44,7 @@ function channelOf(order: OrderOut): BoardTab | null {
       return "takeaway";
     case "delivery":
     case "online":
-      return "whatsapp";
+      return order.source_channel === "pos" ? "homedelivery" : "whatsapp";
     default:
       return null;
   }
@@ -199,6 +201,7 @@ export function LiveOpsScreen() {
       dine: 0,
       takeaway: 0,
       whatsapp: 0,
+      homedelivery: 0,
     };
     for (const o of activeOrders) {
       const ch = channelOf(o);

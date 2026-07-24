@@ -104,11 +104,15 @@ function OrderCard({
     delivery: "WhatsApp",
     online: "Online",
   };
+  // A cashier-entered delivery is "Home Delivery", not the customer WhatsApp
+  // channel — same order_type, told apart by source_channel="pos".
   const typeLabel =
-    TYPE_LABELS[String(order.order_type ?? "")] ??
-    order.source_channel ??
-    order.aggregator_source ??
-    "Order";
+    order.source_channel === "pos" && String(order.order_type ?? "") === "delivery"
+      ? "Home Delivery"
+      : (TYPE_LABELS[String(order.order_type ?? "")] ??
+        order.source_channel ??
+        order.aggregator_source ??
+        "Order");
   // Hide the walk-in placeholder phone; show a friendly tag instead.
   const realPhone =
     order.customer_phone && order.customer_phone.replace(/0/g, "") !== ""
@@ -194,14 +198,18 @@ function OrderCard({
  *  or QR order is still dine-in to a manager — sent as one comma-separated
  *  order_type so the server does the filtering across all pages. */
 const TYPE_FILTERS = [
-  { key: "all", label: "All", types: undefined },
-  { key: "dine", label: "Dine In", types: "dine_in,tableside,qr" },
-  { key: "takeaway", label: "Take Away", types: "takeaway,drive_thru" },
+  { key: "all", label: "All", types: undefined, channel: undefined, excludeChannel: undefined },
+  { key: "dine", label: "Dine In", types: "dine_in,tableside,qr", channel: undefined, excludeChannel: undefined },
+  { key: "takeaway", label: "Take Away", types: "takeaway,drive_thru", channel: undefined, excludeChannel: undefined },
+  // Home Delivery = a cashier-entered delivery (source_channel="pos"). Same
+  // order_type as WhatsApp, told apart by the channel tag.
+  { key: "homedelivery", label: "Home Delivery", types: "delivery", channel: "pos", excludeChannel: undefined },
   // A customer WhatsApp order is a delivery order — order_types.py: "WhatsApp
   // defaults use delivery". `online` is the same self-service channel on the web.
   // Aggregator orders (Talabat etc.) are order_type "aggregator", so they stay
-  // out of this tab on purpose.
-  { key: "whatsapp", label: "WhatsApp", types: "delivery,online" },
+  // out of this tab on purpose. Exclude "pos" so cashier Home Delivery orders
+  // don't double-show here.
+  { key: "whatsapp", label: "WhatsApp", types: "delivery,online", channel: undefined, excludeChannel: "pos" },
 ] as const;
 type TypeFilterKey = (typeof TYPE_FILTERS)[number]["key"];
 
@@ -242,6 +250,8 @@ export function OrdersScreen() {
       toDate: toDate || undefined,
       q: debouncedSearch.trim() || undefined,
       orderType: TYPE_FILTERS.find((t) => t.key === typeFilter)?.types,
+      channel: TYPE_FILTERS.find((t) => t.key === typeFilter)?.channel,
+      excludeChannel: TYPE_FILTERS.find((t) => t.key === typeFilter)?.excludeChannel,
       page,
       limit: PAGE_SIZE,
     }),

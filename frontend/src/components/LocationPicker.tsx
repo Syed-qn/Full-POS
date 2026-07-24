@@ -8,6 +8,12 @@ interface Props {
   onChange: (lat: number, lng: number) => void;
   /** Extra class on the card root (e.g. to drop the max-width inside a dialog). */
   className?: string;
+  /**
+   * Commit each pin move immediately via onChange instead of staging it behind
+   * the "Save location" confirm bar. Use inside a dialog that already has its own
+   * Save button, so the pin isn't lost to a second, easily-missed confirm step.
+   */
+  instant?: boolean;
 }
 
 interface Place {
@@ -47,7 +53,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
   return d.display_name ?? null;
 }
 
-export function LocationPicker({ lat, lng, onChange, className = "" }: Props) {
+export function LocationPicker({ lat, lng, onChange, className = "", instant = false }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<import("leaflet").Map | null>(null);
   const markerRef = useRef<import("leaflet").Marker | null>(null);
@@ -65,12 +71,18 @@ export function LocationPicker({ lat, lng, onChange, className = "" }: Props) {
   // discards it (Cancel) — so a stray drag never silently changes the location.
   const [pending, setPending] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Stage a new pin position without committing it upstream yet.
+  // Stage a new pin position. In `instant` mode we commit straight away (the
+  // host dialog owns the Save button); otherwise it waits for the confirm bar.
   function propose(la: number, ln: number) {
     const r = { lat: round6(la), lng: round6(ln) };
-    setPending(r);
     markerRef.current?.setLatLng([r.lat, r.lng]);
     mapObj.current?.panTo([r.lat, r.lng]);
+    if (instant) {
+      onChangeRef.current(r.lat, r.lng);
+      setPending(null);
+    } else {
+      setPending(r);
+    }
   }
   const proposeRef = useRef(propose);
   proposeRef.current = propose;
@@ -102,7 +114,10 @@ export function LocationPicker({ lat, lng, onChange, className = "" }: Props) {
         proposeRef.current(e.latlng.lat, e.latlng.lng);
       });
 
-      setTimeout(() => map.invalidateSize(), 120);
+      // A map mounted inside a dialog often initialises at 0×0 (the dialog is
+      // still animating/laying out), so tiles for the real viewport never load
+      // and it shows blank. Re-measure a few times as the layout settles.
+      [120, 350, 700].forEach((t) => setTimeout(() => map.invalidateSize(), t));
     });
     return () => {
       cancelled = true;

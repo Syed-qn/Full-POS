@@ -28,7 +28,7 @@ import s from "./KdsScreen.module.css";
 type Tab = "tickets" | "pickup" | "performance";
 
 /** Board slice selected by the filter chips. Single-select; "all" is the reset. */
-type BoardFilter = "all" | "late" | "rush" | "dine" | "takeaway";
+type BoardFilter = "all" | "late" | "rush" | "dine" | "takeaway" | "homedelivery";
 
 /** KDS board theme; persisted per device. */
 type KdsTheme = "dark" | "light" | "blue";
@@ -44,6 +44,7 @@ interface TicketCard {
   orderId: number;
   orderNumber: string;
   orderType: string | null;
+  sourceChannel: string | null;
   /** Dine-in table this ticket came from — null for takeaway/delivery. */
   tableLabel: string | null;
   priority: string | null;
@@ -71,8 +72,14 @@ function modifierLabel(m: { name?: string } | string): string {
  * `app.ordering.order_types` are mapped — anything else falls back to the raw
  * value so the board never displays an invented channel.
  */
-function orderTypeBadge(orderType: string | null | undefined): string | null {
+function orderTypeBadge(
+  orderType: string | null | undefined,
+  sourceChannel?: string | null,
+): string | null {
   if (!orderType) return null;
+  // A cashier-entered delivery ("pos") is Home Delivery, not the customer
+  // WhatsApp channel — same order_type, told apart by source_channel.
+  if (orderType === "delivery" && sourceChannel === "pos") return "Home DL";
   switch (orderType) {
     case "dine_in":
     case "tableside":
@@ -120,6 +127,7 @@ export function groupTicketsByOrder(items: KdsTicketItem[]): TicketCard[] {
         orderId: item.order_id,
         orderNumber: item.order_number ?? String(item.order_id),
         orderType: item.order_type ?? null,
+        sourceChannel: item.source_channel ?? null,
         tableLabel: item.table_label ?? null,
         priority: item.order_priority ?? null,
         urgency,
@@ -322,7 +330,9 @@ export function KdsScreen() {
     if (f === "all") return true;
     if (f === "late") return c.urgency === "late";
     if (f === "rush") return isRushCard(c);
-    return orderTypeBadge(c.orderType) === (f === "dine" ? "DINE" : "TK");
+    const badge = orderTypeBadge(c.orderType, c.sourceChannel);
+    if (f === "homedelivery") return badge === "Home DL";
+    return badge === (f === "dine" ? "DINE" : "TK");
   };
 
   /** What selecting this chip would actually show. */
@@ -561,6 +571,17 @@ export function KdsScreen() {
           >
             Take Away <b>{countFor("takeaway")}</b>
           </button>
+          <button
+            type="button"
+            className={`${s.counter} ${boardFilter === "homedelivery" ? s.counterOn : ""}`}
+            aria-pressed={boardFilter === "homedelivery"}
+            onClick={() =>
+              setBoardFilter(boardFilter === "homedelivery" ? "all" : "homedelivery")
+            }
+            data-testid="kds-filter-homedelivery"
+          >
+            Home Delivery <b>{countFor("homedelivery")}</b>
+          </button>
           {printers.length > 0 ? (
             <span
               className={`${s.counter} ${s.counterStatic} ${
@@ -583,7 +604,7 @@ export function KdsScreen() {
             <div className={s.empty}>No active tickets</div>
           ) : (
             cards.map((card) => {
-              const channel = orderTypeBadge(card.orderType);
+              const channel = orderTypeBadge(card.orderType, card.sourceChannel);
               const isRush =
                 card.priority === "rush" || card.priority === "priority";
               return (

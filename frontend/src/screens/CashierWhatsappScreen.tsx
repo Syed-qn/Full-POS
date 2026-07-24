@@ -88,7 +88,13 @@ export function CashierWhatsappScreen() {
       });
       const list = Array.isArray(rows) ? rows : [];
       // "after confirmed, no draft": hide anything the customer hasn't confirmed.
-      setOrders(list.filter((o) => bucketOf(String(o.status)) !== null));
+      // Also exclude cashier-entered (POS) deliveries — those are the Home
+      // Delivery till's list, kept separate from the customer WhatsApp queue.
+      setOrders(
+        list.filter(
+          (o) => bucketOf(String(o.status)) !== null && o.source_channel !== "pos",
+        ),
+      );
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load WhatsApp orders");

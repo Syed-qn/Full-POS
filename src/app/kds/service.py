@@ -387,6 +387,9 @@ def enrich_ticket(
         "order_number": order.order_number if order else None,
         "order_priority": getattr(order, "priority", None) if order else None,
         "order_type": getattr(order, "order_type", None) if order else None,
+        # Origin channel — lets the board tell a cashier "pos" Home Delivery apart
+        # from a customer WhatsApp order (both are order_type=delivery).
+        "source_channel": getattr(order, "source_channel", None) if order else None,
         # Paid and closed, yet still on the pass — the guest is already waiting.
         "order_settled": bool(order is not None and order.status == "delivered"),
         "dish_name": item.dish_name,

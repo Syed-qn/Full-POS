@@ -1548,13 +1548,14 @@ export function WaiterOrderScreen() {
 
               <div className={s.delMap}>
                 <span className={s.delMapLabel}>
-                  Pin the exact drop-off {pin ? "" : "— required"}
+                  {pin ? "📍 Drop-off pinned" : "Pin the exact drop-off — required"}
                 </span>
                 <LocationPicker
                   lat={pin?.lat ?? 0}
                   lng={pin?.lng ?? 0}
                   onChange={(lat, lng) => setPin({ lat, lng })}
                   className={s.delPicker}
+                  instant
                 />
               </div>
             </div>

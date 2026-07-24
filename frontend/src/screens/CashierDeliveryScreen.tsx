@@ -88,7 +88,11 @@ export function CashierDeliveryScreen() {
         limit: 100,
         previewBatch: false,
       });
-      const list = Array.isArray(rows) ? rows : [];
+      // Only cashier-entered (POS) deliveries live here; customer WhatsApp
+      // orders — same order_type — belong to the WhatsApp queue.
+      const list = (Array.isArray(rows) ? rows : []).filter(
+        (o) => o.source_channel === "pos",
+      );
       setOrders(list);
       setError(null);
       if (!firstLoadDone.current) {

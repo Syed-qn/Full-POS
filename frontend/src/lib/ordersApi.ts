@@ -52,6 +52,8 @@ export type FetchOrdersOpts = {
   q?: string;
   /** Category 8 — filter by source_channel / aggregator_source */
   channel?: string;
+  /** Drop rows with this source_channel (e.g. "pos" to hide Home Delivery). */
+  excludeChannel?: string;
   /** Fulfillment type filter — e.g. "takeaway" for the cashier's pickup list. */
   orderType?: string;
 };
@@ -65,6 +67,7 @@ export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
   if (opts?.toDate) params.set("to_date", opts.toDate);
   if (opts?.q) params.set("q", opts.q);
   if (opts?.channel) params.set("channel", opts.channel);
+  if (opts?.excludeChannel) params.set("exclude_channel", opts.excludeChannel);
   if (opts?.orderType) params.set("order_type", opts.orderType);
   if (opts?.previewBatch === false) params.set("preview_batch", "false");
   const qs = params.toString();

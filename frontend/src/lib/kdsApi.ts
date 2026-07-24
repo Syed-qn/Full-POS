@@ -6,6 +6,7 @@ export interface KdsTicketItem {
   order_number?: string | null;
   order_priority?: string | null;
   order_type?: string | null;
+  source_channel?: string | null;
   dish_name: string;
   variant_name: string | null;
   qty: number;

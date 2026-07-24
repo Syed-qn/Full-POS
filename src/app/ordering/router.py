@@ -1342,6 +1342,11 @@ async def list_orders(
     held_only: bool = Query(default=False),
     order_type: str | None = Query(default=None),
     channel: str | None = Query(default=None, description="source_channel / aggregator filter"),
+    exclude_channel: str | None = Query(
+        default=None,
+        description="drop rows with this source_channel (e.g. 'pos' so the WhatsApp "
+        "queue excludes cashier-entered Home Delivery orders)",
+    ),
     restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
@@ -1360,6 +1365,7 @@ async def list_orders(
         held_only=held_only,
         order_type=order_type,
         channel=channel,
+        exclude_channel=exclude_channel,
     )
     preview: dict[int, str] = {}
     if preview_batch:
