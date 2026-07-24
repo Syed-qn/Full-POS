@@ -45,9 +45,9 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   ready: "READY",
   assigned: "ASSIGNED",
   picked: "PICKED UP",
-  completed: "COMPLETED ORDERS",
-  cancelled: "CANCELLED ORDERS",
-  all: "ACTIVE ORDERS",
+  completed: "COMPLETED",
+  cancelled: "CANCELLED",
+  all: "ACTIVE",
 };
 
 /**
