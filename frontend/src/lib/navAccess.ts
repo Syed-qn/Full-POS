@@ -258,7 +258,7 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/coupons": ["owner", "manager"],
   "/compliance": ["owner", "manager"],
   "/analytics": ["owner", "manager"],
-  "/predictions": ["owner", "manager"],
+  "/forecast": ["owner", "manager"],
 };
 
 /** Normalize a pathname for map lookup (strip query/hash; collapse nested). */

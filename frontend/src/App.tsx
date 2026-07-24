@@ -187,7 +187,9 @@ export default function App() {
       <Route path="/staff" element={<Navigate to="/waiter-management" replace />} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />
       <Route path="/analytics" element={<Guarded><AnalyticsScreen /></Guarded>} />
-      <Route path="/predictions" element={<Guarded><AnalyticsScreen /></Guarded>} />
+      <Route path="/forecast" element={<Guarded><AnalyticsScreen /></Guarded>} />
+      {/* Old /predictions path kept as a redirect for existing links/bookmarks. */}
+      <Route path="/predictions" element={<Navigate to="/forecast" replace />} />
       <Route path="/reports" element={<Guarded><ReportsScreen /></Guarded>} />
       <Route path="/settings" element={<Guarded><SettingsScreen /></Guarded>} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -33,7 +33,7 @@ const LIVE_ROUTES = new Set<string>([
   "/waiter-management", // Waiter Management
   "/coupons", // Coupons
   "/tickets", // Complaints
-  "/predictions", // Forecast
+  "/forecast", // Forecast
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
@@ -93,7 +93,7 @@ const GROUPS: NavGroup[] = [
       { to: "/payments", label: "Payments", icon: "¤" },
       { to: "/compliance", label: "Compliance", icon: "§" },
       { to: "/analytics", label: "Analytics", icon: "▴" },
-      { to: "/predictions", label: "Forecast", icon: "◈" },
+      { to: "/forecast", label: "Forecast", icon: "◈" },
     ],
   },
 ];

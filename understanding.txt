@@ -1116,3 +1116,5 @@ STILL OPEN: alembic migration for is_takeaway; RUSH is manager-only server-side 
 - 2026-07-24 - MENU buttons downsized (user: felt too big). Set "+ Add dish", "Upload new menu" (MenuManagerScreen) and "Pull from Meta" (UnifiedMenuPanel) from the default Button size="lg" to size="md" (the compact admin size). tsc clean.
 
 - [2026-07-24 15:39] nav: enabled Forecast (/predictions → AnalyticsScreen, already role-mapped) by adding it to LIVE_ROUTES in NavSidebar.tsx so it drops the 'Soon' pill and becomes a real link. Collapsed sidebar polish: icons bumped 16px→22px and set full-width for true centring, brand mark centred in the narrow rail (NavSidebar.module.css). tsc clean.
+
+- [2026-07-24 15:44] nav: renamed Forecast route /predictions -> /forecast to match the sidebar label. Updated App.tsx (route + /predictions redirect kept for old links), NavSidebar LIVE_ROUTES + nav item, navAccess ROUTE_ROLE_MAP. Backend predictions API paths untouched. tsc clean.
