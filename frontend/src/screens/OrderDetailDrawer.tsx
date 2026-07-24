@@ -217,6 +217,13 @@ export function OrderDetailDrawer({
   const isOnPremise =
     otype === "dine_in" || otype === "takeaway" || otype === "drive_thru";
   const isDineIn = otype === "dine_in";
+  // A cashier-entered Home Delivery ("pos") is a counter order, not a customer
+  // WhatsApp conversation — the Chat tab would always be empty, so drop it and
+  // leave Overview (with its full Service Record / audit), Timeline, Customer.
+  const isPosDelivery = String(basicOrder?.source_channel ?? "") === "pos";
+  const drawerTabs: Tab[] = isPosDelivery
+    ? ["overview", "timeline", "customer"]
+    : ["overview", "timeline", "chat", "customer"];
 
   return (
     <SideDrawer open={orderId !== null} title={title} onClose={onClose} wide>
@@ -469,7 +476,7 @@ export function OrderDetailDrawer({
               profile — just the bill. Show the tab bar only when there's more than one. */}
           {!isOnPremise && (
             <div className={s.tabs} role="tablist">
-              {(["overview", "timeline", "chat", "customer"] as Tab[]).map((t) => (
+              {drawerTabs.map((t) => (
                 <button
                   key={t}
                   role="tab"
@@ -486,7 +493,7 @@ export function OrderDetailDrawer({
           <div className={s.tabContent}>
             {tab === "overview" && <OverviewTab detail={detail} />}
             {tab === "timeline" && <TimelineTab detail={detail} />}
-            {tab === "chat" && <ChatTab detail={detail} />}
+            {tab === "chat" && !isPosDelivery && <ChatTab detail={detail} />}
             {tab === "customer" && (
               <CustomerTab
                 detail={detail}
