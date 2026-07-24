@@ -66,8 +66,8 @@ function bucketOf(status: string): Bucket | null {
 }
 
 /** Friendly pill text for the REAL status (finer than the filter bucket) so the
- *  row shows the lifecycle step: Preparing → Ready → Assigned → On the way →
- *  Delivered, matching the rider/kitchen hops. */
+ *  row shows the lifecycle step: Preparing → Ready → Assigned → Picked Up →
+ *  Arriving → Delivered, matching the rider/kitchen hops. */
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",
   pending_confirmation: "Pending",
@@ -76,7 +76,6 @@ const STATUS_LABEL: Record<string, string> = {
   ready: "Ready",
   assigned: "Assigned",
   picked_up: "Picked Up",
-  out_for_delivery: "On the way",
   arriving: "Arriving",
   delivered: "Delivered",
   cancelled: "Cancelled",

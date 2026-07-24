@@ -49,7 +49,6 @@ const STATUS_LABEL: Record<string, string> = {
   ready: "READY",
   assigned: "ASSIGNED",
   picked_up: "PICKED UP",
-  out_for_delivery: "ON THE WAY",
   arriving: "ARRIVING",
   delivered: "DELIVERED",
   cancelled: "CANCELLED",
