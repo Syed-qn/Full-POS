@@ -190,15 +190,7 @@ export function CashierFloorScreen() {
             <i className={`${s.dot} ${s.dotAvailable}`} />
             Available
           </span>
-          <span className={s.legendItem}>
-            <i className={`${s.dot} ${s.dotCleaning}`} />
-            Cleaning
-          </span>
         </div>
-
-        <button type="button" className={s.editLayout} disabled title="Cashier — dine-in only">
-          💵 Collect Bills
-        </button>
       </div>
 
       {/* ── Floor canvas ────────────────────────────────────────────────── */}
