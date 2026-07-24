@@ -98,6 +98,16 @@ export function ForecastScreen() {
     () => (model ? Math.max(1, ...model.periods.map((p) => p.avgPerDay)) : 1),
     [model],
   );
+  // Next-7-days rollup for the "Weekly outlook" card (fills the left column).
+  const outlook = useMemo(() => {
+    const week = model?.next7 ?? [];
+    if (!week.length) return null;
+    const orders = week.reduce((a, d) => a + d.predictedOrders, 0);
+    const revenue = week.reduce((a, d) => a + d.predictedRevenue, 0);
+    const busiest = week.reduce((b, d) => (d.predictedOrders > b.predictedOrders ? d : b));
+    const quietest = week.reduce((b, d) => (d.predictedOrders < b.predictedOrders ? d : b));
+    return { orders, revenue, busiest, quietest };
+  }, [model]);
 
   const hasHistory = model != null && model.historyOrders > 0;
   const confBadge =
@@ -181,8 +191,9 @@ export function ForecastScreen() {
         </div>
       </div>
 
+      <div className={s.bento}>
       {/* ── Next 7 days ────────────────────────────────────────────── */}
-      <div className={s.card}>
+      <div className={`${s.card} ${s.spanFull}`}>
         <div className={s.cardHead}>
           <div className={s.cardHeadText}>
             <span className={s.cardTitle}>Next 7 days</span>
@@ -245,7 +256,7 @@ export function ForecastScreen() {
               <span className={s.cardSub}>Average orders per day by service window</span>
             </div>
           </div>
-          <div className={s.barList}>
+          <div className={`${s.barList} ${s.fillList}`}>
             {model!.periods.map((p) => (
               <div key={p.key} className={s.barRow}>
                 <div className={s.barLabel}>
@@ -268,9 +279,43 @@ export function ForecastScreen() {
         </div>
       )}
 
+      {/* ── Weekly outlook (fills the left column) ─────────────────── */}
+      {hasHistory && outlook && (
+        <div className={s.card}>
+          <div className={s.cardHead}>
+            <div className={s.cardHeadText}>
+              <span className={s.cardTitle}>Weekly outlook</span>
+              <span className={s.cardSub}>Your next 7 days at a glance</span>
+            </div>
+          </div>
+          <div className={`${s.outList} ${s.fillList}`}>
+            <div className={s.outRow}>
+              <span className={s.outLabel}>Expected orders</span>
+              <span className={s.outVal}>{outlook.orders}</span>
+            </div>
+            <div className={s.outRow}>
+              <span className={s.outLabel}>Expected revenue</span>
+              <span className={s.outVal}>{aed(outlook.revenue)}</span>
+            </div>
+            <div className={s.outRow}>
+              <span className={s.outLabel}>Busiest day</span>
+              <span className={s.outVal}>
+                {outlook.busiest.weekday} · {outlook.busiest.predictedOrders}
+              </span>
+            </div>
+            <div className={s.outRow}>
+              <span className={s.outLabel}>Quietest day</span>
+              <span className={s.outVal}>
+                {outlook.quietest.weekday} · {outlook.quietest.predictedOrders}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Prep-ahead dishes ──────────────────────────────────────── */}
       {hasHistory && model!.topDishes.length > 0 && (
-        <div className={s.card}>
+        <div className={`${s.card} ${s.spanFull}`}>
           <div className={s.cardHead}>
             <div className={s.cardHeadText}>
               <span className={s.cardTitle}>Prep ahead</span>
@@ -303,6 +348,7 @@ export function ForecastScreen() {
           </table>
         </div>
       )}
+      </div>
 
       {hasHistory && (
         <p className={s.foot}>

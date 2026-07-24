@@ -12,7 +12,9 @@
   padding: 4px;
 }
 
-.pill {
+/* Extra selectors raise specificity so this beats the Analytics screen's
+   blanket `min-height: 48px` touch-target rule, matching the Forecast pill. */
+.wrap .pills .pill {
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -20,6 +22,7 @@
   font-size: 13px;
   font-weight: 600;
   padding: 6px 14px;
+  min-height: 0;
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;

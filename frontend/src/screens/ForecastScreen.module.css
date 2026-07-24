@@ -4,6 +4,58 @@
   gap: 20px;
 }
 
+/* Bento grid: two equal columns; paired cards in a row stretch to equal height.
+   Wide/hero cards opt out with .spanFull. Collapses to one column when narrow. */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  /* Stretch so the paired short cards (When demand hits | Weekly outlook) match
+     height exactly. Their inner lists grow to fill, so neither shows a gap. */
+  align-items: stretch;
+}
+.spanFull {
+  grid-column: 1 / -1;
+}
+/* Inner lists grow to fill a stretched card so the paired cards have no empty
+   bottom — rows spread evenly to the card's full height. */
+.fillList {
+  flex: 1;
+  justify-content: space-between;
+}
+@media (max-width: 900px) {
+  .bento {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Weekly-outlook stat rows. */
+.outList {
+  display: flex;
+  flex-direction: column;
+}
+.outRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.outRow:last-child {
+  border-bottom: none;
+}
+.outLabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.outVal {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
 .card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
