@@ -45,10 +45,18 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   ready: "READY",
   assigned: "ASSIGNED",
   picked: "PICKED UP",
-  completed: "COMPLETED",
-  cancelled: "CANCELLED",
-  all: "ALL",
+  completed: "COMPLETED ORDERS",
+  cancelled: "CANCELLED ORDERS",
+  all: "ACTIVE ORDERS",
 };
+
+/**
+ * Filter chips the cashier actually sees. The whole live lifecycle (pending →
+ * preparing → ready → assigned → picked up) lives under ALL — each order's ROW
+ * still shows its exact stage via its status pill, so separate per-stage chips
+ * were just noise. Completed and Cancelled stay as their own quick filters.
+ */
+const FILTER_CHIPS: Bucket[] = ["all", "completed", "cancelled"];
 
 function bucketOf(status: string): Bucket | null {
   for (const [b, list] of Object.entries(BUCKET_STATUSES)) {
@@ -106,7 +114,7 @@ export function CashierDeliveryScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Open on the live queue, not the full history.
-  const [bucket, setBucket] = useState<Bucket>("pending");
+  const [bucket, setBucket] = useState<Bucket>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [codOpen, setCodOpen] = useState(false);
@@ -159,7 +167,7 @@ export function CashierDeliveryScreen() {
 
   const counts = useMemo(() => {
     const c: Record<Bucket, number> = {
-      all: orders.length,
+      all: 0,
       pending: 0,
       preparing: 0,
       ready: 0,
@@ -171,6 +179,8 @@ export function CashierDeliveryScreen() {
     for (const o of orders) {
       const b = bucketOf(String(o.status));
       if (b) c[b] += 1;
+      // ALL = the live queue only: everything that isn't finished or cancelled.
+      if (b !== "completed" && b !== "cancelled") c.all += 1;
     }
     return c;
   }, [orders]);
@@ -178,7 +188,14 @@ export function CashierDeliveryScreen() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = orders.filter((o) => {
-      if (bucket !== "all" && bucketOf(String(o.status)) !== bucket) return false;
+      const b = bucketOf(String(o.status));
+      // ALL shows the live lifecycle only (pending → picked up); Completed and
+      // Cancelled are their own chips, so they're excluded from ALL.
+      if (bucket === "all") {
+        if (b === "completed" || b === "cancelled") return false;
+      } else if (b !== bucket) {
+        return false;
+      }
       if (!q) return true;
       return (
         (o.order_number ?? "").toLowerCase().includes(q) ||
@@ -332,7 +349,7 @@ export function CashierDeliveryScreen() {
           </div>
 
           <div className={s.chips} role="tablist" aria-label="Order status">
-            {(Object.keys(BUCKET_LABEL) as Bucket[]).map((b) => (
+            {FILTER_CHIPS.map((b) => (
               <button
                 key={b}
                 type="button"
