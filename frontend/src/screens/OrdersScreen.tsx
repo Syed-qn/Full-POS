@@ -131,11 +131,14 @@ function OrderCard({
         </span>
         <StatusPill
           status={order.status}
+          orderType={order.order_type}
+          kitchenStage={order.kitchen_stage}
           label={orderStatusLabel(order.status, {
             resaleOfOrderId: order.resale_of_order_id,
             orderNumber: order.order_number,
             orderType: order.order_type,
             cancellationReason: order.cancellation_reason,
+            kitchenStage: order.kitchen_stage,
           })}
         />
       </div>

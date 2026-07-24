@@ -11,6 +11,10 @@ export function orderStatusLabel(
     orderNumber?: string;
     orderType?: string | null;
     cancellationReason?: string | null;
+    /** On-premise kitchen progress ("preparing" | "ready"). order.status stays
+     *  "confirmed" through the kitchen, so this is what turns the pill from
+     *  "Open" into Preparing/Ready. */
+    kitchenStage?: string | null;
   },
 ): string {
   if (status === "on_resale") {
@@ -33,6 +37,10 @@ export function orderStatusLabel(
         String(status),
       )
     ) {
+      // Surface the kitchen stage while the order sits at "confirmed": the pill
+      // reads Preparing (on the pass) → Ready (all bumped), else "Open".
+      if (opts?.kitchenStage === "ready") return "Ready";
+      if (opts?.kitchenStage === "preparing") return "Preparing";
       return "Open";
     }
   }

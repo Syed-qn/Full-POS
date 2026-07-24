@@ -30,6 +30,12 @@ class OrderOut(BaseModel):
     # Human-facing daily queue token (e.g. 626); null for legacy rows.
     daily_token: Optional[int] = None
     status: str
+    # Kitchen progress for on-premise orders (dine-in/takeaway), whose ORDER
+    # status stays "confirmed" the whole time — only the items move through the
+    # kitchen. "preparing" = on the pass with items not yet all bumped; "ready" =
+    # every item bumped (plated); None = not sent to the kitchen yet. Lets the
+    # cashier/manager pill read Preparing -> Ready instead of a stuck "confirmed".
+    kitchen_stage: Optional[str] = None
     customer_name: Optional[str]
     customer_phone: str
     items: list[OrderItemOut]

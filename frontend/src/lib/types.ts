@@ -158,6 +158,10 @@ export interface OrderOut {
   /** Human-facing daily queue token (e.g. 626); null for legacy rows. */
   daily_token?: number | null;
   status: OrderStatus;
+  /** Kitchen progress for on-premise orders whose status stays "confirmed" the
+   *  whole time: "preparing" (on the pass) → "ready" (all items bumped), null
+   *  before anything is fired. Lets the pill read Preparing/Ready. */
+  kitchen_stage?: "preparing" | "ready" | null;
   customer_name: string;
   customer_phone: string;
   items: OrderItemOut[];

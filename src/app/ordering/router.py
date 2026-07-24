@@ -80,6 +80,25 @@ def _order_item_out(i: OrderItem) -> OrderItemOut:
     )
 
 
+def _kitchen_stage(items: list[OrderItem]) -> str | None:
+    """Aggregate kitchen progress from the order's items (same rule the detail
+    view uses for kitchen_ready_at): 'ready' once every fired item is bumped,
+    'preparing' while any is still on the pass, None before anything is fired.
+
+    On-premise orders keep order.status == 'confirmed' the whole time, so this is
+    what lets the pill read Preparing -> Ready without an order-level FSM hop.
+    """
+    fired = [
+        i
+        for i in items
+        if getattr(i, "kitchen_received_at", None) and not getattr(i, "cancelled", False)
+    ]
+    if not fired:
+        return None
+    all_bumped = all(getattr(i, "bumped_at", None) for i in fired)
+    return "ready" if all_bumped else "preparing"
+
+
 def _address_parts(addr: CustomerAddress) -> tuple[str | None, float | None, float | None]:
     parts = [p for p in [addr.room_apartment, addr.building] if p]
     return ", ".join(parts) or None, addr.latitude, addr.longitude
@@ -212,6 +231,7 @@ async def _enrich_orders_bulk(
                 resale_of_order_id=order.resale_of_order_id,
                 cancellation_reason=getattr(order, "cancellation_reason", None),
                 status=str(order.status),
+                kitchen_stage=_kitchen_stage(items_by_order.get(order.id, [])),
                 customer_name=customer_name,
                 customer_phone=customer_phone,
                 items=[_order_item_out(i) for i in items_by_order.get(order.id, [])],

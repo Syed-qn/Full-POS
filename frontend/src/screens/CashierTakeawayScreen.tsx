@@ -40,6 +40,22 @@ function bucketOf(status: string): Bucket | null {
   return null;
 }
 
+/**
+ * On-premise (takeaway) order.status stays "confirmed" the whole time it's in
+ * the kitchen — only the items advance. So for the pill/bucket, surface the real
+ * kitchen stage (preparing → ready) while the order sits at a pre-kitchen
+ * status; fall through to the order status for open (not yet fired) and terminal
+ * (paid/cancelled) states. Without this the pill was stuck on PENDING even after
+ * the kitchen marked it ready.
+ */
+function effStatus(o: OrderOut): string {
+  const st = String(o.status);
+  if (o.kitchen_stage && ["draft", "pending_confirmation", "confirmed"].includes(st)) {
+    return o.kitchen_stage; // "preparing" | "ready"
+  }
+  return st;
+}
+
 /** Short clock for the list rows (order creation time). */
 function hhmm(iso?: string | null): string {
   if (!iso) return "—";
@@ -119,7 +135,7 @@ export function CashierTakeawayScreen() {
       cancelled: 0,
     };
     for (const o of orders) {
-      const b = bucketOf(String(o.status));
+      const b = bucketOf(effStatus(o));
       if (b) c[b] += 1;
     }
     return c;
@@ -128,7 +144,7 @@ export function CashierTakeawayScreen() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = orders.filter((o) => {
-      if (bucket !== "all" && bucketOf(String(o.status)) !== bucket) return false;
+      if (bucket !== "all" && bucketOf(effStatus(o)) !== bucket) return false;
       if (!q) return true;
       return (
         (o.order_number ?? "").toLowerCase().includes(q) ||
@@ -157,7 +173,7 @@ export function CashierTakeawayScreen() {
   /** Picked up / delivered / cancelled — the order is closed, so it is read-only. */
   const settled = useMemo(() => {
     if (!selected) return false;
-    const b = bucketOf(String(selected.status));
+    const b = bucketOf(effStatus(selected));
     return b === "completed" || b === "cancelled";
   }, [selected]);
 
@@ -268,7 +284,7 @@ export function CashierTakeawayScreen() {
               </p>
             ) : (
               visible.map((o) => {
-                const b = bucketOf(String(o.status));
+                const b = bucketOf(effStatus(o));
                 return (
                   <button
                     key={o.id}
@@ -325,12 +341,12 @@ export function CashierTakeawayScreen() {
                 </div>
                 <span
                   className={`${s.pill} ${
-                    bucketOf(String(selected.status))
-                      ? s[`p_${bucketOf(String(selected.status))}`]
+                    bucketOf(effStatus(selected))
+                      ? s[`p_${bucketOf(effStatus(selected))}`]
                       : ""
                   }`}
                 >
-                  {(bucketOf(String(selected.status)) ?? String(selected.status)).toUpperCase()}
+                  {(bucketOf(effStatus(selected)) ?? String(selected.status)).toUpperCase()}
                 </span>
               </div>
 
