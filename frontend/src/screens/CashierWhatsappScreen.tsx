@@ -29,15 +29,6 @@ const BUCKET_STATUSES: Record<Bucket, readonly string[]> = {
   cancelled: ["cancelled", "undeliverable", "written_off", "on_resale"],
 };
 
-const BUCKET_LABEL: Record<Bucket, string> = {
-  new: "NEW",
-  preparing: "PREPARING",
-  ready: "READY",
-  out: "OUT",
-  delivered: "DELIVERED",
-  cancelled: "CANCELLED",
-};
-
 // Reuse the takeaway pill colours (the css module only defines these five).
 const PILL_CLASS: Record<Bucket, string> = {
   new: "p_pending",
@@ -47,6 +38,28 @@ const PILL_CLASS: Record<Bucket, string> = {
   delivered: "p_completed",
   cancelled: "p_cancelled",
 };
+
+/** Per-status pill text so the row shows the REAL stage (Assigned → Picked Up →
+ *  Arriving), not the coarse "OUT" bucket that collapses them into one word. */
+const STATUS_LABEL: Record<string, string> = {
+  draft: "DRAFT",
+  pending_confirmation: "PENDING",
+  confirmed: "NEW",
+  preparing: "PREPARING",
+  ready: "READY",
+  assigned: "ASSIGNED",
+  picked_up: "PICKED UP",
+  out_for_delivery: "ON THE WAY",
+  arriving: "ARRIVING",
+  delivered: "DELIVERED",
+  cancelled: "CANCELLED",
+  undeliverable: "UNDELIVERABLE",
+  written_off: "WRITTEN OFF",
+  on_resale: "ON RESALE",
+};
+function statusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? status.replace(/_/g, " ").toUpperCase();
+}
 
 function bucketOf(status: string): Bucket | null {
   for (const [b, list] of Object.entries(BUCKET_STATUSES)) {
@@ -253,7 +266,7 @@ export function CashierWhatsappScreen() {
                     <span className={s.rowTop}>
                       <span className={s.ref}>{o.order_number}</span>
                       <span className={`${s.pill} ${b ? s[PILL_CLASS[b]] : ""}`}>
-                        {b ? BUCKET_LABEL[b] : String(o.status).toUpperCase()}
+                        {statusLabel(String(o.status))}
                       </span>
                       <span className={s.time}>{hhmm(o.created_at)}</span>
                     </span>
@@ -293,7 +306,7 @@ export function CashierWhatsappScreen() {
                   </p>
                 </div>
                 <span className={`${s.pill} ${selBucket ? s[PILL_CLASS[selBucket]] : ""}`}>
-                  {selBucket ? BUCKET_LABEL[selBucket] : String(selected.status).toUpperCase()}
+                  {statusLabel(String(selected.status))}
                 </span>
               </div>
 
@@ -337,7 +350,7 @@ export function CashierWhatsappScreen() {
                   </span>
                 ) : (
                   <span className={s.actState} role="status" data-testid="whatsapp-state">
-                    {selBucket ? BUCKET_LABEL[selBucket] : String(selected.status).toUpperCase()}
+                    {statusLabel(String(selected.status))}
                   </span>
                 )}
               </div>
