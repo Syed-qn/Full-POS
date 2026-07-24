@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import record_audit
 from app.audit.context import get_actor_staff_id
 from app.db import get_session
-from app.staff.deps import require_role
+from app.staff.deps import current_staff_id, require_role
 from app.kds import service as kds_service
 from app.kds.models import CategoryStationDefault, KitchenStation, PrintJob
 from app.kds.printer_status import get_printer_status, record_printer_heartbeat
@@ -23,6 +23,7 @@ from app.kds.schemas import (
     PrinterStatusOut,
     PrintJobOut,
     QualityCheckOut,
+    ReadyAlertOut,
     ReadyForPickupOrderOut,
     StationIn,
     StationOut,
@@ -366,6 +367,103 @@ async def ready_for_pickup(
             }
         )
     return result
+
+
+@router.get("/ready-alerts", response_model=list[ReadyAlertOut])
+async def ready_alerts(
+    since: datetime | None = Query(default=None),
+    restaurant=Depends(require_role("manager", "cashier", "waiter", "kitchen")),
+    staff_id: int | None = Depends(current_staff_id),
+    session: AsyncSession = Depends(get_session),
+):
+    """"Your order is ready" pings for the CURRENT staff member (the order's
+    creator) — powers the waiter/cashier top-bar bell.
+
+    Whole-order readiness: an order qualifies when every non-cancelled line has
+    been bumped (``kitchen_status == "ready"``). ``since`` is the client's
+    watermark (ISO 8601); only orders whose latest bump is newer are returned,
+    so a poll never re-alerts the same order and the first load (``since`` = now)
+    returns nothing. Scoped to ``Order.staff_id == me``, which is why a
+    cashier-created order only rings the cashier and a waiter's table only rings
+    that waiter — no cross-talk. Manager/owner tokens carry no staff id and get
+    an empty list (they use the manager alert center)."""
+    from collections import defaultdict
+    from datetime import timedelta
+
+    if staff_id is None:
+        return []
+
+    def _naive_utc(dt: datetime) -> datetime:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since_ts = _naive_utc(since) if since is not None else now
+    # Only look at recent orders — a shift's worth — so the scan stays cheap.
+    cutoff = now - timedelta(hours=12)
+
+    orders = (
+        await session.scalars(
+            select(Order).where(
+                Order.restaurant_id == restaurant.id,
+                Order.staff_id == staff_id,
+                Order.status.notin_(["delivered", "cancelled"]),
+                Order.created_at >= cutoff,
+            )
+        )
+    ).all()
+    if not orders:
+        return []
+    order_by_id = {o.id: o for o in orders}
+
+    items = (
+        await session.scalars(
+            select(OrderItem).where(OrderItem.order_id.in_(list(order_by_id.keys())))
+        )
+    ).all()
+    items_by_order: dict[int, list[OrderItem]] = defaultdict(list)
+    for it in items:
+        items_by_order[it.order_id].append(it)
+
+    # Resolve dine-in table labels in one pass.
+    from app.tables.models import DiningTable
+
+    table_ids = {o.table_id for o in orders if getattr(o, "table_id", None) is not None}
+    labels: dict[int, str] = {}
+    if table_ids:
+        for t in (
+            await session.scalars(
+                select(DiningTable).where(DiningTable.id.in_(list(table_ids)))
+            )
+        ).all():
+            labels[t.id] = t.label
+
+    result: list[ReadyAlertOut] = []
+    for oid, its in items_by_order.items():
+        active = [i for i in its if not i.cancelled]
+        if not active:
+            continue
+        if any(i.kitchen_status != "ready" for i in active):
+            continue  # still cooking — not the whole order yet
+        stamps = [_naive_utc(i.bumped_at) for i in active if i.bumped_at is not None]
+        if not stamps:
+            continue
+        ready_at = max(stamps)
+        if ready_at <= since_ts:
+            continue  # already alerted before the client's watermark
+        o = order_by_id[oid]
+        result.append(
+            ReadyAlertOut(
+                order_id=o.id,
+                order_number=o.order_number,
+                daily_token=getattr(o, "daily_token", None),
+                table_label=labels.get(getattr(o, "table_id", None)),
+                order_type=getattr(o, "order_type", None),
+                ready_at=ready_at.isoformat(),
+            )
+        )
+
+    result.sort(key=lambda r: r.ready_at, reverse=True)
+    return result[:20]
 
 
 @router.get("/performance", response_model=KitchenPerformanceOut)

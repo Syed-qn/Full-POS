@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class OrderItemOut(BaseModel):
@@ -198,6 +198,40 @@ class CoversIn(BaseModel):
     """Update a dine-in party size after seating (guests joined / left)."""
 
     covers: int = Field(ge=1, le=50)
+
+
+class DiscountIn(BaseModel):
+    """Apply a till discount to an open order — either a flat AED amount or a
+    percentage of the current subtotal. Provide exactly one; percent is resolved
+    to an AED amount server-side against the live subtotal."""
+
+    amount_aed: Optional[Decimal] = Field(default=None, ge=0, le=100000)
+    percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "DiscountIn":
+        if (self.amount_aed is None) == (self.percent is None):
+            raise ValueError("Provide exactly one of amount_aed or percent")
+        return self
+
+
+class DeliveryQuoteIn(BaseModel):
+    """A drop-off pin to price. The restaurant origin comes from auth, so the
+    till only needs to send where the food is going."""
+
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class DeliveryQuoteOut(BaseModel):
+    """Computed delivery fee for a pinned drop-off. ``out_of_radius`` flags a
+    drop beyond the service radius (fee is null then — the order can't be taken
+    to that address)."""
+
+    fee_aed: Optional[str] = None
+    distance_km: float
+    distance_source: str          # "road" | "haversine_fallback"
+    out_of_radius: bool = False
 
 
 class RepeatLastOrderIn(BaseModel):

@@ -72,6 +72,26 @@ async def current_restaurant_any(
     return restaurant
 
 
+async def current_staff_id(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> int | None:
+    """The acting STAFF member's id (staff_members.id) from a staff PIN token, or
+    None for an owner/manager token (which carries a restaurant id, not a staff
+    id) or no token. Unlike the audit context var — stamped by middleware and
+    subject to BaseHTTPMiddleware context quirks — this reads the bearer directly
+    in the request scope, so it is reliable inside endpoints (and under tests)."""
+    if creds is None:
+        return None
+    try:
+        claims = decode_token(creds.credentials, audience="staff")
+    except ValueError:
+        return None
+    try:
+        return int(claims["sub"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def require_role(*roles: str):
     """Manager-only-style guard: the restaurant OWNER token always passes
     (it predates RBAC and must keep working unchanged); a STAFF token must

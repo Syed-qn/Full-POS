@@ -180,12 +180,6 @@ export function CashierTakeawayScreen() {
   );
 
   /** Picked up / delivered / cancelled — the order is closed, so it is read-only. */
-  const settled = useMemo(() => {
-    if (!selected) return false;
-    const b = bucketOf(effStatus(selected));
-    return b === "completed" || b === "cancelled";
-  }, [selected]);
-
   // Land on the top order so the right pane is useful immediately — and keep it
   // valid when a filter or the poll drops the current pick out of the list.
   useEffect(() => {
@@ -205,12 +199,6 @@ export function CashierTakeawayScreen() {
     toast(
       selected ? "Bill print queued (when printer configured)." : "Select an order first.",
     );
-  }
-
-  /** Card / wallet / split — the full checkout screen handles those. */
-  function otherPay() {
-    if (!selected) return;
-    navigate(`/orders/${selected.id}/pay?tender=card`);
   }
 
   /** COD quick-collect: charge the whole order as cash and settle in place. */
@@ -244,6 +232,14 @@ export function CashierTakeawayScreen() {
         {/* ── LEFT: order list ─────────────────────────────────────────── */}
         <section className={s.list}>
           <div className={s.listHead}>
+            <button
+              type="button"
+              className={s.backBtn}
+              onClick={() => navigate("/cashier/new-order?type=takeaway")}
+              data-testid="takeaway-back-till"
+            >
+              ‹ Back
+            </button>
             <label className={s.searchWrap}>
               <span aria-hidden>🔍</span>
               <input
@@ -376,23 +372,9 @@ export function CashierTakeawayScreen() {
                 <strong>AED {selected.total_aed}</strong>
               </div>
 
-              {/* Same payment cluster as the till's bottom-right corner. */}
+              {/* Read-only list view: payment + edit happen in the till.
+                  Only Print Bill is exposed here. */}
               <div className={s.detailActions}>
-                {/* Reopens this ticket in the till so the next round APPENDS.
-                    Hidden once the order is done — you cannot cook more food
-                    onto an order that has already left or been cancelled. */}
-                {!settled && (
-                  <button
-                    type="button"
-                    className={s.act}
-                    onClick={() =>
-                      navigate(`/cashier/new-order?type=takeaway&order=${selected.id}`)
-                    }
-                    data-testid="takeaway-add-item"
-                  >
-                    ➕ Add Item
-                  </button>
-                )}
                 <button
                   type="button"
                   className={s.act}
@@ -400,26 +382,6 @@ export function CashierTakeawayScreen() {
                   data-testid="takeaway-print-bill"
                 >
                   🧾 Print Bill
-                </button>
-                <button
-                  type="button"
-                  className={s.act}
-                  disabled={paying || settled}
-                  onClick={otherPay}
-                  data-testid="takeaway-other-pay"
-                >
-                  💳 Other Pay
-                </button>
-                {/* Last = closest to the screen edge: the fastest target for the
-                    button pressed on nearly every takeaway order. */}
-                <button
-                  type="button"
-                  className={`${s.act} ${s.actPay}`}
-                  disabled={paying || settled}
-                  onClick={() => setCodOpen(true)}
-                  data-testid="takeaway-cod"
-                >
-                  💵 Cash
                 </button>
               </div>
             </div>

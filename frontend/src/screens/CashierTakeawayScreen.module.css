@@ -114,6 +114,21 @@
 }
 .searchWrap input::placeholder { color: var(--ink-dim); }
 
+.backBtn {
+  flex: none;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.14));
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.backBtn:hover { background: rgba(0, 0, 0, 0.05); }
+
 .newBtn {
   flex: none;
   height: 38px;

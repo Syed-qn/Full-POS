@@ -138,6 +138,20 @@ class ReadyForPickupOrderOut(BaseModel):
     items: list[ReadyForPickupItemOut]
 
 
+class ReadyAlertOut(BaseModel):
+    """A "your order is ready" ping for the staff member who created the order.
+    Whole-order readiness (every non-cancelled line bumped), surfaced by the
+    waiter/cashier top-bar bell. Read/unread state is a client-side watermark,
+    so there is no server ack here."""
+
+    order_id: int
+    order_number: str
+    daily_token: int | None = None
+    table_label: str | None = None
+    order_type: str | None = None
+    ready_at: str  # ISO 8601 — the latest bump time on the order
+
+
 class PrintJobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

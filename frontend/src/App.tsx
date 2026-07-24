@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { NoAccessScreen } from "./components/NoAccessScreen";
 import { Toaster } from "./components/Toaster";
@@ -64,9 +64,20 @@ function FloorRoute() {
   return isWaiterRole() ? <WaiterFloorScreen /> : <FloorPlanScreen />;
 }
 
-/** Waiters and cashiers get the dark order terminal; everyone else keeps the POS screen. */
+/** Waiters and cashiers get the dark order terminal; everyone else keeps the POS screen.
+ *
+ * The terminal stays mounted across channel tabs (they share the /new-order route),
+ * so switching Home Delivery → Take Away would otherwise carry the cart, discount,
+ * and customer over. Key the screen on the channel (and any reopened order id) to
+ * force a fresh till per channel — while still remounting to load an existing tab. */
 function NewOrderRoute() {
-  return isWaiterRole() || isCashierRole() ? <WaiterOrderScreen /> : <NewOrderScreen />;
+  const [params] = useSearchParams();
+  const key = `${params.get("type") ?? "dine_in"}:${params.get("order") ?? params.get("table") ?? "new"}`;
+  return isWaiterRole() || isCashierRole() ? (
+    <WaiterOrderScreen key={key} />
+  ) : (
+    <NewOrderScreen key={key} />
+  );
 }
 
 /** Redirect an old /customers/:id profile link to the renamed path, keeping the id. */

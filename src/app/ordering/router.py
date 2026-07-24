@@ -19,6 +19,9 @@ from app.ordering.schemas import (
     CoversIn,
     CustomerLookupOut,
     DeliveryFailedIn,
+    DeliveryQuoteIn,
+    DeliveryQuoteOut,
+    DiscountIn,
     DeliveryPhotoIn,
     EditOrderItemIn,
     FireCourseIn,
@@ -652,6 +655,109 @@ async def set_order_covers_endpoint(
     return await _enrich(session, order)
 
 
+@router.post("/{order_id}/discount", response_model=OrderOut)
+async def apply_discount_endpoint(
+    order_id: int,
+    body: DiscountIn,
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
+    session: AsyncSession = Depends(get_session),
+    actor: str = Depends(current_actor),
+) -> OrderOut:
+    """Apply a till discount (flat AED or a percentage of the subtotal) to an
+    open order. Stored as ``staff_discount_aed`` and folded into the total by
+    ``recompute_order_total``, so payment charges the discounted amount. Audited.
+    Passing 0 (amount or percent) clears any existing till discount.
+    """
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from app.audit.service import record_audit
+    from app.ordering.payments import recompute_order_total
+
+    _CENT = Decimal("0.01")
+    order = await get_order_for_tenant(
+        session, restaurant_id=restaurant.id, order_id=order_id
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if str(order.status) in ("delivered", "cancelled"):
+        raise HTTPException(
+            status_code=409, detail="Cannot discount a closed order."
+        )
+
+    subtotal = Decimal(order.subtotal or 0)
+    if body.percent is not None:
+        amount = (subtotal * body.percent / Decimal(100)).quantize(
+            _CENT, rounding=ROUND_HALF_UP
+        )
+    else:
+        amount = Decimal(body.amount_aed or 0).quantize(_CENT)
+    # Never discount below zero or beyond the subtotal itself.
+    amount = max(Decimal(0), min(amount, subtotal))
+
+    before = Decimal(getattr(order, "staff_discount_aed", None) or 0)
+    order.staff_discount_aed = amount
+    new_total = await recompute_order_total(session, order=order)
+
+    await record_audit(
+        session,
+        actor=actor,
+        restaurant_id=restaurant.id,
+        entity="order",
+        entity_id=str(order.id),
+        action="discount_applied",
+        before={"staff_discount_aed": str(before)},
+        after={
+            "staff_discount_aed": str(amount),
+            "percent": str(body.percent) if body.percent is not None else None,
+            "total": str(new_total),
+        },
+    )
+    await session.commit()
+    return await _enrich(session, order)
+
+
+@router.post("/delivery-quote", response_model=DeliveryQuoteOut)
+async def delivery_quote_endpoint(
+    body: DeliveryQuoteIn,
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
+    session: AsyncSession = Depends(get_session),
+) -> DeliveryQuoteOut:
+    """Price a delivery drop-off from its map pin, so the till fee matches real
+    driving distance instead of the cashier hand-picking a tier. Distance uses
+    the geo provider (road) with a haversine fallback; the fee is the tenant's
+    configured tiers / zones (``resolve_delivery_fee``). A drop beyond the service
+    radius returns ``out_of_radius`` with a null fee (the order can't go there)."""
+    from app.conversation.engine import _road_distance_km
+    from app.geo.fees import OutOfRadiusError, resolve_delivery_fee
+    from app.ordering.fees import UndeliverableError
+
+    rest_lat = restaurant.lat if restaurant.lat is not None else 25.2048
+    rest_lng = restaurant.lng if restaurant.lng is not None else 55.2708
+    dist, source = await _road_distance_km(
+        rest_lat, rest_lng, body.latitude, body.longitude
+    )
+    try:
+        fee = resolve_delivery_fee(
+            dist,
+            drop_lat=body.latitude,
+            drop_lon=body.longitude,
+            restaurant_settings=restaurant.settings,
+        )
+    except (OutOfRadiusError, UndeliverableError):
+        return DeliveryQuoteOut(
+            fee_aed=None,
+            distance_km=round(dist, 2),
+            distance_source=source,
+            out_of_radius=True,
+        )
+    return DeliveryQuoteOut(
+        fee_aed=f"{fee:.2f}",
+        distance_km=round(dist, 2),
+        distance_source=source,
+        out_of_radius=False,
+    )
+
+
 @router.post("/repeat-last", response_model=OrderOut)
 async def repeat_last_order_endpoint(
     body: RepeatLastOrderIn,
@@ -735,7 +841,7 @@ async def unhold_order_endpoint(
 async def set_priority_endpoint(
     order_id: int,
     body: PriorityIn,
-    restaurant: Restaurant = Depends(require_role("manager")),
+    restaurant: Restaurant = Depends(require_role("manager", "cashier")),
     session: AsyncSession = Depends(get_session),
 ) -> OrderOut:
     from app.ordering.pos_orders import set_order_priority

@@ -4,6 +4,8 @@ import { logout } from "../lib/auth";
 import { useRestaurantName } from "../lib/brand";
 import { getSessionRole, getStaffSession, isCashierRole } from "../lib/navAccess";
 import { cyclePosTheme, usePosTheme } from "../lib/posTheme";
+import { ReadyAlertsBell } from "./ReadyAlertsBell";
+import { ViewBillDialog } from "./ViewBillDialog";
 import s from "./WaiterTopBar.module.css";
 
 const THEME_LABEL: Record<string, string> = {
@@ -18,7 +20,14 @@ const THEME_LABEL: Record<string, string> = {
  * tables, while the other channels belong to the cashier terminal and the KDS.
  * The union is kept wider than the UI so re-enabling a section is a one-liner.
  */
-export type WaiterSection = "dining" | "takeaway" | "whatsapp" | "delivery" | "online" | "kitchen";
+export type WaiterSection =
+  | "dining"
+  | "takeaway"
+  | "whatsapp"
+  | "delivery"
+  | "online"
+  | "kitchen"
+  | "viewbill";
 
 function clockLabel(d: Date): string {
   return d.toLocaleTimeString("en-US", {
@@ -27,13 +36,6 @@ function clockLabel(d: Date): string {
     minute: "2-digit",
     second: "2-digit",
   });
-}
-
-function initials(name?: string | null): string {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "WT";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 /**
@@ -51,6 +53,8 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
       : "/floor";
   // Take Away is a cashier till (no table); waiters work dine-in only.
   const showTakeaway = isCashierRole();
+  // View Bill opens a lookup dialog in place — it doesn't navigate anywhere.
+  const [billOpen, setBillOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const brand = useRestaurantName();
   const staff = getStaffSession();
@@ -92,7 +96,7 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             className={`${s.tab} ${active === "takeaway" ? s.tabActive : ""}`}
             aria-current={active === "takeaway" ? "page" : undefined}
             data-testid="cashier-takeaway-tab"
-            onClick={() => navigate("/cashier/takeaway")}
+            onClick={() => navigate("/cashier/new-order?type=takeaway")}
           >
             Take Away
           </button>
@@ -103,7 +107,7 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             className={`${s.tab} ${active === "delivery" ? s.tabActive : ""}`}
             aria-current={active === "delivery" ? "page" : undefined}
             data-testid="cashier-delivery-tab"
-            onClick={() => navigate("/cashier/delivery")}
+            onClick={() => navigate("/cashier/new-order?type=delivery")}
           >
             Home Delivery
           </button>
@@ -119,7 +123,21 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             WhatsApp
           </button>
         )}
+        {showTakeaway && (
+          <button
+            type="button"
+            className={`${s.tab} ${billOpen ? s.tabActive : ""}`}
+            aria-haspopup="dialog"
+            aria-expanded={billOpen}
+            data-testid="cashier-viewbill-tab"
+            onClick={() => setBillOpen(true)}
+          >
+            View Bill
+          </button>
+        )}
       </nav>
+
+      {billOpen && <ViewBillDialog onClose={() => setBillOpen(false)} />}
 
       <div className={s.topRight}>
         <button
@@ -131,11 +149,11 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
         >
           {THEME_LABEL[theme]}
         </button>
-        <span className={s.online}>● ONLINE</span>
+        <ReadyAlertsBell />
         <span className={s.clock}>{clockLabel(now)}</span>
         <button
           type="button"
-          className={s.avatar}
+          className={s.themeBtn}
           title={`${staff?.name ?? "Waiter"} — sign out`}
           data-testid="waiter-signout"
           onClick={() => {
@@ -143,7 +161,7 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             navigate("/login", { replace: true });
           }}
         >
-          {initials(staff?.name)}
+          ⏻ Sign out
         </button>
       </div>
     </header>

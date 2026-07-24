@@ -171,9 +171,6 @@ export function WaiterFloorScreen() {
             <strong className={s.nOccupied}>{stats.occupied}</strong> DINING
           </span>
           <span className={s.stat}>
-            <strong className={s.nReserved}>{stats.reserved}</strong> RESERVED
-          </span>
-          <span className={s.stat}>
             <strong className={s.nCovers}>{stats.covers}</strong> COVERS
           </span>
         </div>
@@ -186,10 +183,6 @@ export function WaiterFloorScreen() {
           <span className={s.legendItem}>
             <i className={`${s.dot} ${s.dotOccupied}`} />
             Dining
-          </span>
-          <span className={s.legendItem}>
-            <i className={`${s.dot} ${s.dotReserved}`} />
-            Reserved
           </span>
         </div>
 

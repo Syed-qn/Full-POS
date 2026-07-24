@@ -105,6 +105,27 @@
   font-size: 13px;
   color: var(--ink-dim);
 }
+.taFields {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.taInput {
+  height: 34px;
+  width: 140px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 13px;
+}
+.taInput::placeholder { color: var(--ink-dim); }
+.taInput:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+
 .tokenHash { color: var(--amber); font-weight: 800; }
 .tokenNum {
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -119,6 +140,25 @@
   font-weight: 800;
   color: var(--ink);
   padding: 0 6px;
+}
+
+/* Table pill — same chip treatment as the Token chip, with a labelled value. */
+.tableChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+.tableChipNum {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--amber);
 }
 
 .waiterPick {
@@ -196,7 +236,7 @@
   grid-template-columns: 26px 46px 1fr 58px 96px 70px 44px;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px;
+  padding: 2px 10px;
   text-align: left;
 }
 
@@ -267,8 +307,8 @@
   justify-content: center;
 }
 .qtyBtn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   flex: none;
   border-radius: 6px;
   border: 1px solid var(--line);
@@ -297,8 +337,8 @@
    find is worse than one that is visibly destructive. */
 .rowDel {
   margin-left: 10px;
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
@@ -441,7 +481,7 @@
 /* ── totals ───────────────────────────────────────────────────────────── */
 .totals {
   flex: none;
-  padding: 8px 12px;
+  padding: 2px 12px 3px;
   border-top: 1px solid var(--line);
   background: var(--panel);
 }
@@ -450,12 +490,12 @@
   justify-content: space-between;
   font-size: 13px;
   color: var(--ink-dim);
-  padding: 3px 0;
+  padding: 0;
 }
 .totRow span:last-child { font-family: var(--font-mono, ui-monospace, monospace); color: var(--ink); }
 .totNet {
-  margin-top: 5px;
-  padding-top: 7px;
+  margin-top: 2px;
+  padding-top: 2px;
   border-top: 1px solid var(--line);
   font-size: 16px;
   font-weight: 800;
@@ -469,7 +509,7 @@
   display: grid;
   grid-template-columns: 1fr 76px;
   gap: 6px;
-  padding: 8px;
+  padding: 3px 8px 8px;
   border-top: 1px solid var(--line);
 }
 
@@ -709,6 +749,17 @@
 }
 
 .msg { color: var(--ink-dim); font-size: 13px; text-align: center; margin-top: 30px; }
+
+/* Menu still fetching: center the notice in the whole dish area (no category
+   strip is shown yet), instead of a line pinned to the top. */
+.loadingWrap {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-dim);
+  font-size: 14px;
+}
 
 /* ── bottom action bar ────────────────────────────────────────────────── */
 .actionBar {

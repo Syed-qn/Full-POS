@@ -128,6 +128,25 @@ export function recallItem(itemId: number) {
   return apiClient.patch<KdsTicketItem>(`/api/v1/kds/items/${itemId}/recall`);
 }
 
+export interface ReadyAlert {
+  order_id: number;
+  order_number: string;
+  daily_token?: number | null;
+  table_label?: string | null;
+  order_type?: string | null;
+  ready_at: string;
+}
+
+/**
+ * "Your order is ready" pings for the CURRENT staff member (the order's creator).
+ * `since` is the client watermark (ISO); the server only returns orders whose
+ * whole-order readiness is newer, so a poll never re-alerts the same order.
+ */
+export function fetchReadyAlerts(since?: string) {
+  const q = since ? `?since=${encodeURIComponent(since)}` : "";
+  return apiClient.get<ReadyAlert[]>(`/api/v1/kds/ready-alerts${q}`);
+}
+
 export function startPrep(itemId: number) {
   return apiClient.patch<KdsTicketItem>(`/api/v1/kds/items/${itemId}/start-prep`);
 }

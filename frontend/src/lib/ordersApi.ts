@@ -99,6 +99,40 @@ export async function setOrderPriority(id: number, priority: string): Promise<Or
 }
 
 /**
+ * Apply a till discount to an open order. Pass a flat AED amount OR a percentage
+ * (server resolves percent against the live subtotal). Passing 0 clears it.
+ * Persisted as staff_discount_aed and folded into the order total server-side.
+ */
+export async function applyDiscount(
+  id: number,
+  body: { amountAed?: number; percent?: number },
+): Promise<OrderOut> {
+  const payload =
+    body.percent != null ? { percent: body.percent } : { amount_aed: body.amountAed ?? 0 };
+  return apiClient.post<OrderOut>(`/api/v1/orders/${id}/discount`, payload);
+}
+
+export type DeliveryQuote = {
+  fee_aed: string | null;
+  distance_km: number;
+  distance_source: string;
+  out_of_radius: boolean;
+};
+
+/**
+ * Price a delivery drop-off from its map pin. The restaurant origin is resolved
+ * from auth server-side; we only send where the food is going. Returns the
+ * distance-tier fee (or null + out_of_radius when the pin is beyond the service
+ * radius). Used by the till to auto-fill the delivery fee when the pin moves.
+ */
+export async function quoteDeliveryFee(lat: number, lng: number): Promise<DeliveryQuote> {
+  return apiClient.post<DeliveryQuote>(`/api/v1/orders/delivery-quote`, {
+    latitude: lat,
+    longitude: lng,
+  });
+}
+
+/**
  * Advance an order one step through the kitchen FSM: confirmed → preparing
  * (the cashier's KOT / "send to kitchen") or preparing → ready (the kitchen).
  * The server rejects any other starting status with a 422.
