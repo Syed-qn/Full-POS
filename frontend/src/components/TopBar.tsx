@@ -79,10 +79,19 @@ export function TopBar({
           title={`Theme: ${APP_THEME_LABEL[theme]} — switch to ${APP_THEME_LABEL[nextTheme]}`}
           aria-label={`Theme ${APP_THEME_LABEL[theme]}, switch to ${APP_THEME_LABEL[nextTheme]}`}
           data-testid="dashboard-theme"
+          // Icon + name pill: override the round icon-only sizing so the label fits.
+          style={{
+            width: "auto",
+            height: 36,
+            padding: "0 12px",
+            borderRadius: 999,
+            gap: 6,
+          }}
         >
-          <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>
+          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
             {APP_THEME_ICON[theme]}
           </span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>{APP_THEME_LABEL[theme]}</span>
         </button>
         <div className={s.alertWrap}>
           <button

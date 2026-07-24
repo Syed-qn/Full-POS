@@ -10,8 +10,6 @@ import { ApiError } from "../lib/apiClient";
 import {
   activateMenu,
   approveMenu,
-  bulkCsvImport,
-  bulkPriceUpdate,
   createBlankMenu,
   deleteDish,
   fetchActiveMenu,
@@ -48,7 +46,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
   // kept off WhatsApp until ready, shown with an "In review" pill.
   const [waReviewIds, setWaReviewIds] = useState<Set<number>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
-  const csvRef = useRef<HTMLInputElement>(null);
 
   const onMenuLoaded = useCallback((m: UnifiedMenu) => {
     const linked = m.items.filter((i) => i.link_status === "linked" && i.dish_id != null);
@@ -244,36 +241,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
     }
   }
 
-  async function onBulkPercent(delta: string) {
-    if (activeMenuId === null || dishes.length === 0) return;
-    try {
-      const res = await bulkPriceUpdate(activeMenuId, {
-        dish_ids: dishes.map((d) => d.id),
-        percent_delta: delta,
-      });
-      toast(`Updated prices on ${res.updated} dishes (${delta}%).`);
-      reloadDishes();
-    } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "Bulk price update failed.", "error");
-    }
-  }
-
-  async function onCsvImport(files: FileList | null) {
-    if (!files?.length || activeMenuId === null) return;
-    try {
-      const res = await bulkCsvImport(activeMenuId, files[0]);
-      toast(
-        `CSV import: ${res.created} created, ${res.updated} updated` +
-          (res.errors.length ? ` (${res.errors.length} errors)` : ""),
-      );
-      reloadDishes();
-    } catch (err) {
-      toast(err instanceof ApiError ? err.detail : "CSV import failed.", "error");
-    } finally {
-      if (csvRef.current) csvRef.current.value = "";
-    }
-  }
-
   const hasErrors = (pending?.diff_vs_active?.conflicts.length ?? 0) > 0;
 
   // Next free dish number — assigned automatically to new dishes.
@@ -376,20 +343,6 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
                 {approving ? "Approving…" : "Approve & Activate"}
               </Button>
             )}
-            <input
-              ref={csvRef}
-              type="file"
-              accept=".csv,text/csv"
-              hidden
-              onChange={(e) => onCsvImport(e.target.files)}
-              data-testid="menu-csv-import"
-            />
-            <Button variant="ghost" onClick={() => csvRef.current?.click()}>
-              Import CSV
-            </Button>
-            <Button variant="ghost" onClick={() => onBulkPercent("10")}>
-              +10% prices
-            </Button>
             <Button onClick={() => fileRef.current?.click()}>
               {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
             </Button>

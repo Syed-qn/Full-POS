@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  APP_THEME_ICON,
-  APP_THEME_LABEL,
-  cycleAppTheme,
-  useAppTheme,
-} from "../lib/appTheme";
+import { useAppTheme } from "../lib/appTheme";
 import {
   bumpItem,
   fetchKitchenPerformance,
@@ -199,7 +194,6 @@ export function KdsScreen() {
   // dashboard toggle — the reported "theme not applied" bug). Same light/dark/blue
   // palette; toggling here or in the topbar keeps both in sync (per-device store).
   const theme = useAppTheme();
-  const cycleTheme = cycleAppTheme;
   // Ready tickets stay on the board until bumped; the "Show ready" toggle was
   // removed, so this is fixed off (ready items show via their own ✓ state).
   const includeReady = false;
@@ -432,15 +426,6 @@ export function KdsScreen() {
         </div>
 
         <div className={s.topRight}>
-          <button
-            type="button"
-            className={s.chromeBtn}
-            data-testid="kds-theme"
-            title="Switch theme (light → dark → blue)"
-            onClick={cycleTheme}
-          >
-            {APP_THEME_ICON[theme]} {APP_THEME_LABEL[theme]}
-          </button>
           <button
             type="button"
             className={s.chromeBtn}
