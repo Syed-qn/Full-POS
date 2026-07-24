@@ -17,6 +17,7 @@ import {
   resolveOnboardingComplete,
 } from "./lib/onboardingGate";
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
+import { ForecastScreen } from "./screens/ForecastScreen";
 import { BranchOpsScreen } from "./screens/BranchOpsScreen";
 import { ConversationsScreen } from "./screens/ConversationsScreen";
 import { CustomerProfileScreen } from "./screens/CustomerProfileScreen";
@@ -187,7 +188,7 @@ export default function App() {
       <Route path="/staff" element={<Navigate to="/waiter-management" replace />} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />
       <Route path="/analytics" element={<Guarded><AnalyticsScreen /></Guarded>} />
-      <Route path="/forecast" element={<Guarded><AnalyticsScreen /></Guarded>} />
+      <Route path="/forecast" element={<Guarded><ForecastScreen /></Guarded>} />
       {/* Old /predictions path kept as a redirect for existing links/bookmarks. */}
       <Route path="/predictions" element={<Navigate to="/forecast" replace />} />
       <Route path="/reports" element={<Guarded><ReportsScreen /></Guarded>} />
