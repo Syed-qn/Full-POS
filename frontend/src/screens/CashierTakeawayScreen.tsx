@@ -23,15 +23,6 @@ const BUCKET_STATUSES: Record<Exclude<Bucket, "all">, readonly string[]> = {
   cancelled: ["cancelled", "undeliverable", "written_off"],
 };
 
-/** Key order IS the chip order — the live queue first, ALL as the fallback. */
-const BUCKET_LABEL: Record<Bucket, string> = {
-  pending: "PENDING",
-  preparing: "PREPARING",
-  ready: "READY",
-  completed: "COMPLETED",
-  cancelled: "CANCELLED",
-  all: "ALL",
-};
 
 function bucketOf(status: string): Bucket | null {
   for (const [b, list] of Object.entries(BUCKET_STATUSES)) {
@@ -54,6 +45,28 @@ function effStatus(o: OrderOut): string {
     return o.kitchen_stage; // "preparing" | "ready"
   }
   return st;
+}
+
+/**
+ * Filter chips the cashier sees: the whole live lifecycle (pending → preparing →
+ * ready) lives under ACTIVE — each row still shows its exact stage via its pill,
+ * so per-stage chips were just noise. Completed and Cancelled stay separate.
+ */
+type Filter = "active" | "completed" | "cancelled";
+const FILTER_LABEL: Record<Filter, string> = {
+  active: "ACTIVE",
+  completed: "COMPLETED",
+  cancelled: "CANCELLED",
+};
+const FILTER_CHIPS: Filter[] = ["active", "completed", "cancelled"];
+
+/** Map an order onto one of the three filter groups (via its kitchen stage). */
+function filterOf(o: OrderOut): Filter | null {
+  const b = bucketOf(effStatus(o));
+  if (b === null) return null;
+  if (b === "completed") return "completed";
+  if (b === "cancelled") return "cancelled";
+  return "active"; // pending / preparing / ready
 }
 
 /** Short clock for the list rows (order creation time). */
@@ -80,7 +93,7 @@ export function CashierTakeawayScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Open on the live queue, not the full history.
-  const [bucket, setBucket] = useState<Bucket>("pending");
+  const [bucket, setBucket] = useState<Filter>("active");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [codOpen, setCodOpen] = useState(false);
@@ -126,17 +139,10 @@ export function CashierTakeawayScreen() {
   }, [load]);
 
   const counts = useMemo(() => {
-    const c: Record<Bucket, number> = {
-      all: orders.length,
-      pending: 0,
-      preparing: 0,
-      ready: 0,
-      completed: 0,
-      cancelled: 0,
-    };
+    const c: Record<Filter, number> = { active: 0, completed: 0, cancelled: 0 };
     for (const o of orders) {
-      const b = bucketOf(effStatus(o));
-      if (b) c[b] += 1;
+      const f = filterOf(o);
+      if (f) c[f] += 1;
     }
     return c;
   }, [orders]);
@@ -144,7 +150,7 @@ export function CashierTakeawayScreen() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = orders.filter((o) => {
-      if (bucket !== "all" && bucketOf(effStatus(o)) !== bucket) return false;
+      if (filterOf(o) !== bucket) return false;
       if (!q) return true;
       return (
         (o.order_number ?? "").toLowerCase().includes(q) ||
@@ -154,13 +160,16 @@ export function CashierTakeawayScreen() {
       );
     });
     // The API returns newest-first, which is what a cashier wants almost
-    // everywhere: the order just rung up sits on top and is auto-selected.
-    // READY is the exception — those are people standing at the counter, so
-    // whoever has waited longest is served first.
-    if (bucket === "ready") {
-      return [...rows].sort(
-        (a, b) => Date.parse(a.created_at ?? "") - Date.parse(b.created_at ?? ""),
-      );
+    // everywhere: the order just rung up sits on top and is auto-selected. In
+    // the ACTIVE queue, a READY order (someone standing at the counter) floats
+    // to the top so whoever is waiting on food is served first.
+    if (bucket === "active") {
+      return [...rows].sort((a, b) => {
+        const aReady = bucketOf(effStatus(a)) === "ready" ? 0 : 1;
+        const bReady = bucketOf(effStatus(b)) === "ready" ? 0 : 1;
+        if (aReady !== bReady) return aReady - bReady;
+        return Date.parse(a.created_at ?? "") - Date.parse(b.created_at ?? "");
+      });
     }
     return rows;
   }, [orders, bucket, search]);
@@ -257,7 +266,7 @@ export function CashierTakeawayScreen() {
           </div>
 
           <div className={s.chips} role="tablist" aria-label="Order status">
-            {(Object.keys(BUCKET_LABEL) as Bucket[]).map((b) => (
+            {FILTER_CHIPS.map((b) => (
               <button
                 key={b}
                 type="button"
@@ -266,7 +275,7 @@ export function CashierTakeawayScreen() {
                 className={`${s.chip} ${bucket === b ? s.chipActive : ""}`}
                 onClick={() => setBucket(b)}
               >
-                {BUCKET_LABEL[b]} ({counts[b]})
+                {FILTER_LABEL[b]} ({counts[b]})
               </button>
             ))}
           </div>
