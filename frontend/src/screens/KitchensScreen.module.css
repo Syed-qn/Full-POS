@@ -12,12 +12,18 @@
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 .cardHead {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cardHeadText {
+  display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .cardTitle {
   margin: 0;
@@ -35,36 +41,63 @@
   font-size: 14px;
 }
 
-/* ── Kitchens list ─────────────────────────────────────────────────── */
-.kList {
+/* ── Kitchens grid ─────────────────────────────────────────────────── */
+.kGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.kTile {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.kRow {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   background: var(--bg-surface-inset);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.kActions {
-  display: inline-flex;
+.kTile:hover {
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
+}
+.kTileMain {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 32%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 5%, var(--bg-surface-inset));
+}
+
+.kTileTop {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+.kIcon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
+  font-size: 19px;
+}
+.kNameWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 .kName {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mainBadge {
+  align-self: flex-start;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -74,25 +107,75 @@
   padding: 2px 7px;
   border-radius: 999px;
 }
+.kMeta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .kNameInput {
+  width: 100%;
   min-height: 40px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border: 1px solid var(--accent-primary, #2563eb);
+  border-radius: 9px;
   padding: 8px 10px;
   font-size: 15px;
   font-weight: 600;
   background: var(--bg-surface);
   color: var(--text-primary);
 }
-.kMeta {
-  font-size: 13px;
-  color: var(--text-secondary);
-  white-space: nowrap;
+
+.kActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: auto;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+.kSpacer {
+  flex: 1;
 }
 .kNote {
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+/* Quiet text-link actions inside a tile (no loud filled buttons). */
+.linkBtn,
+.linkBtnDanger,
+.openLink {
+  border: none;
+  background: none;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.linkBtn {
+  color: var(--text-secondary);
+}
+.linkBtn:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.linkBtnDanger {
+  color: var(--accent-danger, #dc2626);
+}
+.linkBtnDanger:hover {
+  text-decoration: underline;
+}
+.openLink {
+  color: var(--accent-primary, #2563eb);
+}
+.openLink:hover {
+  text-decoration: underline;
+}
+.linkBtn:disabled,
+.linkBtnDanger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .addRow {
@@ -118,7 +201,7 @@
 /* ── Category routing table ────────────────────────────────────────── */
 .wireTable {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 10px;
 }
 .wireRow {
@@ -126,18 +209,32 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   background: var(--bg-surface-inset);
 }
 .wireCat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.wireCatName {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.wireCatDest {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.wireCatDestActive {
+  color: var(--accent-primary, #2563eb);
 }
 .wireSelect {
   min-height: 40px;
@@ -148,5 +245,5 @@
   background: var(--bg-surface);
   color: var(--text-primary);
   flex: 0 0 auto;
-  max-width: 50%;
+  max-width: 46%;
 }

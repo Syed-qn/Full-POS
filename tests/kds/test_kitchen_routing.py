@@ -95,6 +95,29 @@ async def test_delete_kitchen_rehomes_to_main(client, auth_headers, db_session):
         station_id_snapshot=juice.id,
     )
     db_session.add(item)
+    # FK-referencing rows that must NOT block the delete: a print job (station_id
+    # is NOT NULL), a printer heartbeat, and a sibling station whose printer
+    # fallback points at Juice. These reproduce the production "Remove" failure.
+    from datetime import datetime, timezone
+
+    from app.kds.models import PrintJob
+    from app.kds.printer_status import PrinterStatus
+
+    grill = KitchenStation(
+        restaurant_id=restaurant.id, name="Grill", station_type="grill",
+        fallback_station_id=juice.id,
+    )
+    db_session.add_all([
+        PrintJob(
+            restaurant_id=restaurant.id, station_id=juice.id, order_id=order.id,
+            payload="x", original_station_id=juice.id,
+        ),
+        PrinterStatus(
+            restaurant_id=restaurant.id, station_id=juice.id, healthy=True,
+            last_heartbeat_at=datetime.now(timezone.utc),
+        ),
+        grill,
+    ])
     await db_session.commit()
 
     # Main is protected.
@@ -107,8 +130,22 @@ async def test_delete_kitchen_rehomes_to_main(client, auth_headers, db_session):
 
     await db_session.refresh(dish)
     await db_session.refresh(item)
+    await db_session.refresh(grill)
     assert dish.station_id is None                    # override cleared
     assert item.station_id_snapshot == main.id        # ticket moved to Main
+    assert grill.fallback_station_id is None           # dangling fallback cleared
+    # Print jobs re-homed to Main, heartbeat rows gone.
+    from sqlalchemy import select as _select
+
+    jobs = (await db_session.scalars(
+        _select(PrintJob).where(PrintJob.order_id == order.id)
+    )).all()
+    assert all(j.station_id == main.id for j in jobs)
+    assert all(j.original_station_id is None for j in jobs)
+    stat = (await db_session.scalars(
+        _select(PrinterStatus).where(PrinterStatus.station_id == juice.id)
+    )).all()
+    assert stat == []
     wiring = await client.get("/api/v1/kds/category-defaults", headers=auth_headers)
     assert all(w["category"] != "Fresh Juice" for w in wiring.json())  # wiring dropped
 

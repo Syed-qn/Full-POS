@@ -264,6 +264,51 @@ async def delete_station(
     for it in items:
         it.station_id_snapshot = main.id
 
+    # Everything else that FK-references this station must be cleared/re-homed
+    # first, or the DELETE hits a foreign-key violation (the real reason "Remove"
+    # failed in production once a kitchen had ever fired a ticket).
+    from app.kds.printer_status import PrinterStatus
+
+    # Print jobs (station_id is NOT NULL) → re-home to Main; drop the now-stale
+    # "original station" pointer where it named this station.
+    print_jobs = (
+        await session.scalars(
+            select(PrintJob).where(PrintJob.station_id == station.id)
+        )
+    ).all()
+    for job in print_jobs:
+        job.station_id = main.id
+    orig_jobs = (
+        await session.scalars(
+            select(PrintJob).where(PrintJob.original_station_id == station.id)
+        )
+    ).all()
+    for job in orig_jobs:
+        job.original_station_id = None
+
+    # Printer heartbeat rows are per-station and meaningless once it is gone.
+    statuses = (
+        await session.scalars(
+            select(PrinterStatus).where(PrinterStatus.station_id == station.id)
+        )
+    ).all()
+    for st in statuses:
+        await session.delete(st)
+
+    # Any other station using this one as its printer fallback → clear it.
+    fallbacks = (
+        await session.scalars(
+            select(KitchenStation).where(
+                KitchenStation.restaurant_id == restaurant.id,
+                KitchenStation.fallback_station_id == station.id,
+            )
+        )
+    ).all()
+    for fb in fallbacks:
+        fb.fallback_station_id = None
+
+    await session.flush()
+
     await record_audit(
         session, actor="manager", restaurant_id=restaurant.id,
         entity="kitchen_station", entity_id=str(station.id), action="station_deleted",

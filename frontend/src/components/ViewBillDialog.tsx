@@ -72,7 +72,7 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
     try {
       const d = await fetchOrderDetail(orderId);
       setDetail(d);
-      setMatches([]);
+      // Keep `matches` so the receipt can offer a "‹ Back" to the picker.
       setMessage(null);
     } catch {
       setMessage("Could not load that bill. Try again.");
@@ -192,7 +192,7 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
 
-        {matches.length > 0 && (
+        {matches.length > 0 && !detail && (
           <div className={s.matches} data-testid="view-bill-matches">
             <p className={s.matchHead}>
               {matches.length} bills share this token — pick by date:
@@ -219,6 +219,16 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
 
         {detail && (
           <>
+            {matches.length > 0 && (
+              <button
+                type="button"
+                className={s.backBtn}
+                onClick={() => setDetail(null)}
+                data-testid="view-bill-back"
+              >
+                ‹ Back to list
+              </button>
+            )}
             {/* Thermal-receipt slip (mono, paper-white). Format is a placeholder
                 the user will refine later — kept faithful to the sample. */}
             <div className={s.receipt} data-testid="view-bill-receipt">

@@ -35,6 +35,7 @@ export function KitchensScreen() {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +68,14 @@ export function KitchensScreen() {
   }, [dishes]);
 
   const mainId = stations.find((x) => x.name === MAIN)?.id ?? null;
+  // Main leads (it is the fallback everything falls back to), then the rest by name.
+  const orderedStations = useMemo(() => {
+    const rest = stations
+      .filter((x) => x.name !== MAIN)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const main = stations.find((x) => x.name === MAIN);
+    return main ? [main, ...rest] : rest;
+  }, [stations]);
   const categoryToStation = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of defaults) m.set(d.category, d.station_id);
@@ -100,6 +109,7 @@ export function KitchensScreen() {
   }
 
   function renameKitchen(st: KdsStation, name: string) {
+    setEditingId(null);
     const next = name.trim();
     if (!next || next === st.name) return;
     void run(() => patchStation(st.id, { name: next }));
@@ -135,64 +145,11 @@ export function KitchensScreen() {
       {/* ── Kitchens ─────────────────────────────────────────────────── */}
       <section className={s.card}>
         <div className={s.cardHead}>
-          <h3 className={s.cardTitle}>Kitchens</h3>
-          <span className={s.cardSub}>Each kitchen has its own KDS board</span>
-        </div>
-
-        {loading ? (
-          <p className={s.muted}>Loading…</p>
-        ) : (
-          <div className={s.kList}>
-            {stations.map((st) => {
-              const isMain = st.name === MAIN;
-              const wiredCount = defaults.filter((d) => d.station_id === st.id).length;
-              return (
-                <div className={s.kRow} key={st.id}>
-                  {isMain ? (
-                    <span className={s.kName}>
-                      {st.name} <span className={s.mainBadge}>Fallback</span>
-                    </span>
-                  ) : (
-                    <input
-                      className={s.kNameInput}
-                      defaultValue={st.name}
-                      disabled={busy}
-                      aria-label={`Kitchen name (${st.name})`}
-                      onBlur={(e) => renameKitchen(st, e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                      }}
-                    />
-                  )}
-                  <span className={s.kMeta}>
-                    {wiredCount} categor{wiredCount === 1 ? "y" : "ies"}
-                  </span>
-                  <div className={s.kActions}>
-                    <Button
-                      variant="ghost"
-                      onClick={() => navigate(`/kds/${st.id}`)}
-                      data-testid={`kitchen-open-${st.id}`}
-                    >
-                      Open board →
-                    </Button>
-                    {isMain ? (
-                      <span className={s.kNote}>Cannot be removed</span>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => removeKitchen(st)}
-                        data-testid={`kitchen-delete-${st.id}`}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className={s.cardHeadText}>
+            <h3 className={s.cardTitle}>Kitchens</h3>
+            <span className={s.cardSub}>Each kitchen has its own KDS board</span>
           </div>
-        )}
+        </div>
 
         <div className={s.addRow}>
           <input
@@ -211,15 +168,103 @@ export function KitchensScreen() {
             Add kitchen
           </Button>
         </div>
+
+        {loading ? (
+          <p className={s.muted}>Loading…</p>
+        ) : (
+          <div className={s.kGrid}>
+            {orderedStations.map((st) => {
+              const isMain = st.name === MAIN;
+              const wiredCount = defaults.filter((d) => d.station_id === st.id).length;
+              const editing = editingId === st.id;
+              return (
+                <div
+                  className={`${s.kTile} ${isMain ? s.kTileMain : ""}`}
+                  key={st.id}
+                >
+                  <div className={s.kTileTop}>
+                    <span className={s.kIcon} aria-hidden>
+                      {isMain ? "🍳" : "🍽️"}
+                    </span>
+                    {editing ? (
+                      <input
+                        className={s.kNameInput}
+                        defaultValue={st.name}
+                        disabled={busy}
+                        autoFocus
+                        aria-label={`Kitchen name (${st.name})`}
+                        onBlur={(e) => renameKitchen(st, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setEditingId(null);
+                        }}
+                      />
+                    ) : (
+                      <div className={s.kNameWrap}>
+                        <span className={s.kName}>{st.name}</span>
+                        {isMain && <span className={s.mainBadge}>Fallback</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <span className={s.kMeta}>
+                    {isMain
+                      ? "Catches anything not routed elsewhere"
+                      : `${wiredCount} categor${wiredCount === 1 ? "y" : "ies"} routed here`}
+                  </span>
+
+                  <div className={s.kActions}>
+                    {isMain ? (
+                      <span className={s.kNote}>Protected</span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className={s.linkBtn}
+                          disabled={busy || editing}
+                          onClick={() => setEditingId(st.id)}
+                          data-testid={`kitchen-rename-${st.id}`}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className={s.linkBtnDanger}
+                          disabled={busy}
+                          onClick={() => removeKitchen(st)}
+                          data-testid={`kitchen-delete-${st.id}`}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
+                    <span className={s.kSpacer} />
+                    <button
+                      type="button"
+                      className={s.openLink}
+                      onClick={() => navigate(`/kds/${st.id}`)}
+                      data-testid={`kitchen-open-${st.id}`}
+                    >
+                      Open board →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* ── Category routing ─────────────────────────────────────────── */}
       <section className={s.card}>
         <div className={s.cardHead}>
-          <h3 className={s.cardTitle}>Route categories</h3>
-          <span className={s.cardSub}>
-            Pick which kitchen cooks each category. Default is Main.
-          </span>
+          <div className={s.cardHeadText}>
+            <h3 className={s.cardTitle}>Route categories</h3>
+            <span className={s.cardSub}>
+              Pick which kitchen cooks each menu category. Anything left on Main
+              goes to the fallback board.
+            </span>
+          </div>
         </div>
 
         {categories.length === 0 ? (
@@ -227,10 +272,25 @@ export function KitchensScreen() {
         ) : (
           <div className={s.wireTable}>
             {categories.map((cat) => {
-              const current = categoryToStation.get(cat) ?? "";
+              // A category wired straight to Main is just the default — treat it
+              // the same as "no row" so it isn't shown as specially routed (and
+              // the <select>, whose only options are "" and the OTHER kitchens,
+              // matches instead of falling back to the first option).
+              const wired = categoryToStation.get(cat);
+              const current = wired != null && wired !== mainId ? wired : "";
+              const destName =
+                otherKitchens.find((k) => k.id === current)?.name ?? MAIN;
+              const routed = current !== "";
               return (
                 <div className={s.wireRow} key={cat}>
-                  <span className={s.wireCat}>{cat}</span>
+                  <span className={s.wireCat}>
+                    <span className={s.wireCatName}>{cat}</span>
+                    <span
+                      className={`${s.wireCatDest} ${routed ? s.wireCatDestActive : ""}`}
+                    >
+                      → {destName}
+                    </span>
+                  </span>
                   <select
                     className={s.wireSelect}
                     value={current}

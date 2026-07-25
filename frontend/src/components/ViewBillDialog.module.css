@@ -15,12 +15,12 @@
 .modal {
   width: 100%;
   max-width: 380px;
-  background: var(--panel, #1e1e1c);
-  color: var(--ink, #e8e6e1);
-  border: 1px solid var(--line, #2b2b28);
+  background: var(--bg-surface, #ffffff);
+  color: var(--text-primary, #17150f);
+  border: 1px solid var(--border-subtle, #e6e2d8);
   border-radius: 14px;
   padding: 14px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
   font-family: var(--font-sans, Inter, system-ui, sans-serif);
 }
 
@@ -38,14 +38,14 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid var(--line, #2b2b28);
+  border: 1px solid var(--border-subtle, #e6e2d8);
   background: transparent;
   color: inherit;
   font-size: 14px;
   cursor: pointer;
 }
 .close:hover {
-  border-color: var(--amber, #f79009);
+  border-color: var(--accent-primary, #f79009);
 }
 
 .searchRow {
@@ -58,15 +58,19 @@
   height: 42px;
   padding: 0 12px;
   border-radius: 9px;
-  border: 1px solid var(--line, #2b2b28);
-  background: var(--bg, #161615);
-  color: inherit;
+  border: 1px solid var(--border-default, #d6d1c4);
+  background: var(--bg-surface-inset, #f6f4ee);
+  color: var(--text-primary, #17150f);
   font-size: 15px;
   font-weight: 700;
 }
 .searchInput::placeholder {
-  color: var(--ink-dim, #8b8880);
+  color: var(--text-muted, #8b8880);
   font-weight: 400;
+}
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent-primary, #f79009);
 }
 .searchBtn {
   flex: none;
@@ -74,8 +78,8 @@
   padding: 0 18px;
   border-radius: 9px;
   border: none;
-  background: var(--amber, #f79009);
-  color: var(--on-amber, #1a1206);
+  background: var(--accent-primary, #f79009);
+  color: #ffffff;
   font-size: 15px;
   font-weight: 800;
   cursor: pointer;
@@ -87,7 +91,7 @@
 
 .msg {
   margin: 12px 2px 0;
-  color: var(--ink-dim, #8b8880);
+  color: var(--text-muted, #8b8880);
   font-size: 13px;
 }
 
@@ -100,7 +104,7 @@
 }
 .matchHead {
   margin: 0 0 2px;
-  color: var(--ink-dim, #8b8880);
+  color: var(--text-muted, #8b8880);
   font-size: 12px;
 }
 .matchRow {
@@ -110,35 +114,36 @@
   gap: 2px 10px;
   padding: 8px 10px;
   border-radius: 9px;
-  border: 1px solid var(--line, #2b2b28);
-  background: var(--bg, #161615);
-  color: inherit;
+  border: 1px solid var(--border-subtle, #e6e2d8);
+  background: var(--bg-surface-inset, #f6f4ee);
+  color: var(--text-primary, #17150f);
   text-align: left;
   cursor: pointer;
 }
 .matchRow:hover {
-  border-color: var(--amber, #f79009);
+  border-color: var(--accent-primary, #f79009);
 }
 .matchRef {
   grid-area: ref;
   font-weight: 800;
+  color: var(--text-primary, #17150f);
 }
 .matchDate {
   grid-area: date;
   align-self: center;
-  color: var(--amber, #f79009);
+  color: var(--accent-primary, #f79009);
   font-weight: 700;
   font-size: 12px;
 }
 .matchMeta {
   grid-area: meta;
   text-align: right;
-  color: var(--ink-dim, #8b8880);
+  color: var(--text-secondary, #6b6860);
   font-size: 12px;
 }
 .matchName {
   grid-area: name;
-  color: var(--ink-dim, #8b8880);
+  color: var(--text-muted, #8b8880);
   font-size: 13px;
 }
 
@@ -221,13 +226,31 @@
   height: 40px;
   padding: 0 18px;
   border-radius: 9px;
-  border: 1px solid var(--line-2, #3a3a35);
-  background: var(--panel-2, #232320);
-  color: var(--ink, #e8e6e1);
+  border: 1px solid var(--border-default, #d6d1c4);
+  background: var(--bg-surface-inset, #f6f4ee);
+  color: var(--text-primary, #17150f);
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
 }
 .reprintBtn:hover {
-  border-color: var(--amber, #f79009);
+  border-color: var(--accent-primary, #f79009);
+}
+
+/* Back to the multi-match picker from an opened receipt. */
+.backBtn {
+  margin: 12px 0 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border-default, #d6d1c4);
+  background: transparent;
+  color: var(--text-secondary, #6b6860);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.backBtn:hover {
+  border-color: var(--accent-primary, #f79009);
+  color: var(--text-primary, #17150f);
 }
