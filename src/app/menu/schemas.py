@@ -90,6 +90,8 @@ class DishOut(BaseModel):
     available_from: date | None = None
     available_until: date | None = None
     category_id: int | None = None
+    # Kitchen routing override (null = route by category / Main).
+    station_id: int | None = None
 
 
 class MenuOut(BaseModel):
@@ -151,6 +153,9 @@ class DishIn(BaseModel):
     available_from: date | None = None
     available_until: date | None = None
     category_id: int | None = None
+    # Kitchen routing override: pin this dish to a specific kitchen/station.
+    # null clears the override so the dish routes by its category (or Main).
+    station_id: int | None = None
 
     @field_validator("condition")
     @classmethod
@@ -201,6 +206,9 @@ class DishPatch(BaseModel):
     available_from: date | None = None
     available_until: date | None = None
     category_id: int | None = None
+    # Kitchen routing override: pin this dish to a specific kitchen/station.
+    # null clears the override so the dish routes by its category (or Main).
+    station_id: int | None = None
 
     @field_validator("condition")
     @classmethod

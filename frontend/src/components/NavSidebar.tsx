@@ -24,6 +24,7 @@ const LIVE_ROUTES = new Set<string>([
   "/floor", // Floor Plan
   "/orders", // Orders
   "/kds", // Kitchen
+  "/kitchens", // Kitchen setup
   "/conversations", // Chats
   "/marketing", // Promotion
   "/rider-management", // Rider Management
@@ -80,6 +81,7 @@ const GROUPS: NavGroup[] = [
     /** Owner/manager admin surface (R5). Label stays Manage for floor roles that see partial list. */
     label: "Manage",
     items: [
+      { to: "/kitchens", label: "Kitchens", icon: "◲" },
       { to: "/inventory", label: "Inventory", icon: "▦" },
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },

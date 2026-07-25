@@ -83,6 +83,8 @@ export interface DishOut {
   available_from?: string | null;
   available_until?: string | null;
   category_id?: number | null;
+  /** Kitchen routing override (null = route by category / Main). */
+  station_id?: number | null;
 }
 
 export interface DiffOut {

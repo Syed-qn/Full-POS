@@ -107,6 +107,57 @@ export function fetchStations(kitchenCode?: string) {
   return apiClient.get<KdsStation[]>(`/api/v1/kds/stations${q}`);
 }
 
+/** Create a kitchen/station (a "kitchen board"). */
+export function createStation(body: {
+  name: string;
+  station_type?: string;
+  kitchen_code?: string;
+}) {
+  return apiClient.post<KdsStation>(`/api/v1/kds/stations`, {
+    name: body.name,
+    station_type: body.station_type ?? "general",
+    kitchen_code: body.kitchen_code ?? "main",
+  });
+}
+
+/** Rename a kitchen or toggle it active (Main cannot be renamed). */
+export function patchStation(
+  id: number,
+  body: { name?: string; is_active?: boolean; station_type?: string },
+) {
+  return apiClient.patch<KdsStation>(`/api/v1/kds/stations/${id}`, body);
+}
+
+/** Delete a kitchen; everything wired to it re-homes to Main. */
+export function deleteStation(id: number) {
+  return apiClient.delete<void>(`/api/v1/kds/stations/${id}`);
+}
+
+export interface CategoryDefault {
+  id: number;
+  category: string;
+  station_id: number;
+}
+
+export function fetchCategoryDefaults() {
+  return apiClient.get<CategoryDefault[]>(`/api/v1/kds/category-defaults`);
+}
+
+/** Wire a category to a kitchen (upsert). */
+export function wireCategory(category: string, stationId: number) {
+  return apiClient.post<CategoryDefault>(`/api/v1/kds/category-defaults`, {
+    category,
+    station_id: stationId,
+  });
+}
+
+/** Unwire a category so its dishes fall back to Main. */
+export function unwireCategory(category: string) {
+  return apiClient.delete<void>(
+    `/api/v1/kds/category-defaults/${encodeURIComponent(category)}`,
+  );
+}
+
 export function seedDefaultStations(kitchenCode = "main") {
   return apiClient.post<KdsStation[]>(
     `/api/v1/kds/stations/seed-defaults?kitchen_code=${encodeURIComponent(kitchenCode)}`,

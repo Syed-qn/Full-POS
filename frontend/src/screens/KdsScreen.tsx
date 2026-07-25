@@ -426,6 +426,26 @@ export function KdsScreen() {
         </div>
 
         <div className={s.topRight}>
+          {/* Kitchen picker: scope the board to one kitchen, or show them all.
+              Each kitchen is a KDS station; "All" merges every station. */}
+          {stations.length > 1 && (
+            <select
+              className={s.chromeBtn}
+              value={stationId ?? ""}
+              onChange={(e) =>
+                navigate(e.target.value === "" ? "/kds" : `/kds/${e.target.value}`)
+              }
+              aria-label="Kitchen"
+              data-testid="kds-kitchen-picker"
+            >
+              <option value="">All kitchens</option>
+              {stations.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             type="button"
             className={s.chromeBtn}

@@ -26,6 +26,7 @@ from app.kds.schemas import (
     ReadyAlertOut,
     ReadyForPickupOrderOut,
     StationIn,
+    StationPatch,
     StationOut,
     TicketItemOut,
 )
@@ -162,6 +163,142 @@ async def list_category_defaults(
         )
     )
     return list(rows)
+
+
+@router.patch("/stations/{station_id}", response_model=StationOut)
+async def update_station(
+    station_id: int,
+    body: StationPatch,
+    restaurant=Depends(require_role("manager", "kitchen")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Rename a kitchen or toggle it active. The Main kitchen is the routing
+    fallback (any dish not wired lands there), so it can be deactivated but not
+    renamed away from "Main" — that would orphan the fallback."""
+    station = await _get_owned_station(
+        session, station_id=station_id, restaurant_id=restaurant.id
+    )
+    changes = body.model_dump(exclude_unset=True)
+    if station.name == "Main" and "name" in changes and changes["name"] != "Main":
+        raise HTTPException(status_code=409, detail="The Main kitchen cannot be renamed.")
+    if "name" in changes:
+        new_name = (changes["name"] or "").strip()
+        if not new_name:
+            raise HTTPException(status_code=422, detail="Kitchen name cannot be empty.")
+        dup = await session.scalar(
+            select(KitchenStation).where(
+                KitchenStation.restaurant_id == restaurant.id,
+                KitchenStation.kitchen_code == station.kitchen_code,
+                KitchenStation.name == new_name,
+                KitchenStation.id != station.id,
+            )
+        )
+        if dup is not None:
+            raise HTTPException(status_code=409, detail="A kitchen with that name exists.")
+        changes["name"] = new_name
+    before = {k: getattr(station, k) for k in changes}
+    for key, value in changes.items():
+        setattr(station, key, value)
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant.id,
+        entity="kitchen_station", entity_id=str(station.id), action="station_edited",
+        before=before, after=changes,
+    )
+    await session.commit()
+    await session.refresh(station)
+    return station
+
+
+@router.delete("/stations/{station_id}", status_code=204)
+async def delete_station(
+    station_id: int,
+    restaurant=Depends(require_role("manager", "kitchen")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete a kitchen and re-home everything pointing at it to Main, so nothing
+    is ever orphaned: category wirings drop (fall back to Main), dish overrides
+    clear, and any in-flight tickets move to Main's board. The Main kitchen
+    itself cannot be deleted — it is the fallback."""
+    from app.menu.models import Dish
+    from app.ordering.models import OrderItem
+
+    station = await _get_owned_station(
+        session, station_id=station_id, restaurant_id=restaurant.id
+    )
+    if station.name == "Main":
+        raise HTTPException(status_code=409, detail="The Main kitchen cannot be deleted.")
+
+    main = await kds_service.get_or_create_main_station(
+        session, restaurant_id=restaurant.id, kitchen_code=station.kitchen_code
+    )
+
+    # Category wirings → drop (unwired categories fall back to Main).
+    defaults = (
+        await session.scalars(
+            select(CategoryStationDefault).where(
+                CategoryStationDefault.restaurant_id == restaurant.id,
+                CategoryStationDefault.station_id == station.id,
+            )
+        )
+    ).all()
+    for d in defaults:
+        await session.delete(d)
+
+    # Dish overrides → clear (fall back to category default / Main).
+    dishes = (
+        await session.scalars(
+            select(Dish).where(
+                Dish.restaurant_id == restaurant.id, Dish.station_id == station.id
+            )
+        )
+    ).all()
+    for dish in dishes:
+        dish.station_id = None
+
+    # In-flight tickets snapshotted to this station → move to Main's board.
+    items = (
+        await session.scalars(
+            select(OrderItem).where(OrderItem.station_id_snapshot == station.id)
+        )
+    ).all()
+    for it in items:
+        it.station_id_snapshot = main.id
+
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant.id,
+        entity="kitchen_station", entity_id=str(station.id), action="station_deleted",
+        before={"name": station.name, "kitchen_code": station.kitchen_code},
+        after={"reassigned_to_main": main.id, "categories_dropped": len(defaults),
+               "dishes_cleared": len(dishes), "tickets_moved": len(items)},
+    )
+    await session.delete(station)
+    await session.commit()
+    return None
+
+
+@router.delete("/category-defaults/{category}", status_code=204)
+async def delete_category_default(
+    category: str,
+    restaurant=Depends(require_role("manager", "kitchen")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Unwire a category so its dishes fall back to Main (or their dish override)."""
+    row = await session.scalar(
+        select(CategoryStationDefault).where(
+            CategoryStationDefault.restaurant_id == restaurant.id,
+            CategoryStationDefault.category == category,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Category is not wired.")
+    await session.delete(row)
+    await record_audit(
+        session, actor="manager", restaurant_id=restaurant.id,
+        entity="category_station_default", entity_id=category, action="category_unwired",
+        before={"category": category, "station_id": row.station_id}, after={},
+    )
+    await session.commit()
+    return None
 
 
 @router.get("/stations/{station_id}/tickets", response_model=list[TicketItemOut])

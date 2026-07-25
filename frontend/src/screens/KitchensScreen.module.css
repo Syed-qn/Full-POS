@@ -1,0 +1,152 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-title, 18px);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.cardSub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ── Kitchens list ─────────────────────────────────────────────────── */
+.kList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-surface-inset);
+}
+.kActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.kName {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mainBadge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-primary, #2563eb);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 14%, transparent);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.kNameInput {
+  min-height: 40px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.kMeta {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.kNote {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.addRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.addRow :global(button) {
+  min-height: 44px;
+}
+.addInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--font-size-body, 16px);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* ── Category routing table ────────────────────────────────────────── */
+.wireTable {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.wireRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-surface-inset);
+}
+.wireCat {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wireSelect {
+  min-height: 40px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  flex: 0 0 auto;
+  max-width: 50%;
+}

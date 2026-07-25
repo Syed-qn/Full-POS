@@ -14,6 +14,16 @@ class StationIn(BaseModel):
     is_active: bool = True
 
 
+class StationPatch(BaseModel):
+    """Rename a kitchen/station or toggle it active. All fields optional."""
+
+    name: str | None = None
+    station_type: str | None = None
+    printer_ip: str | None = None
+    printer_port: int | None = None
+    is_active: bool | None = None
+
+
 class StationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

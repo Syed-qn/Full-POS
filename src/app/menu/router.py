@@ -300,6 +300,18 @@ async def patch_dish(
     if dish is None or dish.menu_id != menu.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dish not found")
     changes = body.model_dump(exclude_unset=True)
+    if changes.get("station_id") is not None:
+        # Kitchen override must be one of this restaurant's own stations.
+        from app.kds.models import KitchenStation
+
+        owned = await session.scalar(
+            select(KitchenStation).where(
+                KitchenStation.id == changes["station_id"],
+                KitchenStation.restaurant_id == restaurant.id,
+            )
+        )
+        if owned is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "unknown kitchen station")
     if "variants" in changes:
         # Serialize to canonical JSONB shape (string prices); None means "clear".
         changes["variants"] = serialize_variants(body.variants or [])

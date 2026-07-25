@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { toast } from "./Toaster";
+import { fetchStations, type KdsStation } from "../lib/kdsApi";
 import {
   addDish,
   createPriceRule,
@@ -69,6 +70,14 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
   const [name, setName] = useState(d?.name ?? "");
   const [price, setPrice] = useState(d?.price_aed ?? "");
   const [category, setCategory] = useState(d?.category ?? "");
+  // Kitchen routing override for this dish (null = route by category / Main).
+  const [stationId, setStationId] = useState<number | null>(d?.station_id ?? null);
+  const [stations, setStations] = useState<KdsStation[]>([]);
+  useEffect(() => {
+    fetchStations()
+      .then(setStations)
+      .catch(() => setStations([]));
+  }, []);
   const [description, setDescription] = useState(d?.description ?? "");
   // ── Meta catalogue product fields ──────────────────────────────────────────
   // Only the fields a restaurant actually sets are shown: the Photo (Meta requires
@@ -184,6 +193,8 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
       name: name.trim(),
       price_aed: price.trim(),
       category: category.trim() || null,
+      // Per-dish kitchen override (null = route by category / Main).
+      station_id: stationId,
       description: description.trim() || null,
       // Meta catalogue product fields (rest are auto-filled on the server).
       image_url: imageUrl.trim() || null,
@@ -421,6 +432,24 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                 <option value="">— Select category —</option>
                 {categoryOptions.map((c) => (
                   <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <label className={s.field}>
+              <span className={s.label}>Kitchen</span>
+              <select
+                className={s.input}
+                value={stationId ?? ""}
+                onChange={(e) =>
+                  setStationId(e.target.value === "" ? null : Number(e.target.value))
+                }
+                data-testid="dish-kitchen"
+              >
+                <option value="">Default (by category)</option>
+                {stations.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name}
+                  </option>
                 ))}
               </select>
             </label>
