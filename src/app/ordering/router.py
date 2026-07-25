@@ -1545,6 +1545,10 @@ async def list_orders(
         description="drop rows with this source_channel (e.g. 'pos' so the WhatsApp "
         "queue excludes cashier-entered Home Delivery orders)",
     ),
+    token: int | None = Query(
+        default=None,
+        description="exact monthly queue-token match across all history (View Bill lookup)",
+    ),
     restaurant: Restaurant = Depends(current_restaurant_any),
     session: AsyncSession = Depends(get_session),
 ) -> list[OrderOut]:
@@ -1564,6 +1568,7 @@ async def list_orders(
         order_type=order_type,
         channel=channel,
         exclude_channel=exclude_channel,
+        token=token,
     )
     preview: dict[int, str] = {}
     if preview_batch:

@@ -17,6 +17,7 @@ function toYMD(d: Date): string {
 function applyFixtureFilters(orders: OrderOut[], opts?: FetchOrdersOpts): OrderOut[] {
   let rows = [...orders];
   if (opts?.status) rows = rows.filter((o) => o.status === opts.status);
+  if (opts?.token != null) rows = rows.filter((o) => o.daily_token === opts.token);
   if (opts?.fromDate || opts?.toDate) {
     rows = rows.filter((o) => {
       const day = o.created_at ? toYMD(new Date(o.created_at)) : "";
@@ -56,6 +57,8 @@ export type FetchOrdersOpts = {
   excludeChannel?: string;
   /** Fulfillment type filter — e.g. "takeaway" for the cashier's pickup list. */
   orderType?: string;
+  /** Exact monthly queue-token, across all history — the View Bill lookup. */
+  token?: number;
 };
 
 export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
@@ -69,6 +72,7 @@ export async function fetchOrders(opts?: FetchOrdersOpts): Promise<OrderOut[]> {
   if (opts?.channel) params.set("channel", opts.channel);
   if (opts?.excludeChannel) params.set("exclude_channel", opts.excludeChannel);
   if (opts?.orderType) params.set("order_type", opts.orderType);
+  if (opts?.token != null) params.set("token", String(opts.token));
   if (opts?.previewBatch === false) params.set("preview_batch", "false");
   const qs = params.toString();
   const path = qs ? `/api/v1/orders?${qs}` : "/api/v1/orders";

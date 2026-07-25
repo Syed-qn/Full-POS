@@ -105,8 +105,8 @@
 }
 .matchRow {
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: "ref meta" "name name";
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "ref date meta" "name name name";
   gap: 2px 10px;
   padding: 8px 10px;
   border-radius: 9px;
@@ -122,6 +122,13 @@
 .matchRef {
   grid-area: ref;
   font-weight: 800;
+}
+.matchDate {
+  grid-area: date;
+  align-self: center;
+  color: var(--amber, #f79009);
+  font-weight: 700;
+  font-size: 12px;
 }
 .matchMeta {
   grid-area: meta;

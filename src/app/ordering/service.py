@@ -233,6 +233,7 @@ async def list_orders_for_tenant(
     order_type: str | None = None,
     channel: str | None = None,
     exclude_channel: str | None = None,
+    token: int | None = None,
 ) -> list[Order]:
     """List orders for the tenant, newest first, with optional server-side filters.
 
@@ -285,6 +286,11 @@ async def list_orders_for_tenant(
         stmt = stmt.where(
             or_(Order.source_channel != ex, Order.source_channel.is_(None))
         )
+    if token is not None:
+        # Exact monthly-token match, across ALL history — the View Bill lookup.
+        # Returns every month's row that shares this token so the picker can
+        # disambiguate them by date (newest first, via the order_by below).
+        stmt = stmt.where(Order.daily_token == token)
     if from_date:
         stmt = stmt.where(Order.created_at >= _dubai_day_start(from_date))
     if to_date:
@@ -643,13 +649,19 @@ _DAILY_TOKEN_LOCK_CLASS = 4_919_003
 
 
 async def allocate_daily_token(session: "AsyncSession", restaurant_id: int) -> int:
-    """Next human-facing daily queue token for a restaurant (1, 2, 3, … per day).
+    """Next human-facing queue token for a restaurant (1, 2, 3, … per month).
 
-    Resets every Asia/Dubai calendar day. Unlike ``order_number`` (a permanent
-    unique invoice id), this is the short "Token 626" number staff call out and
-    print on the slip. We serialize allocation per restaurant with a
-    transaction-scoped advisory lock so two concurrent creates don't mint the
-    same token; on a non-Postgres backend we proceed unserialized.
+    Resets every Asia/Dubai calendar MONTH — so the number stays small within a
+    month and repeats only across months (this month's Token 1 vs last month's
+    Token 1). Unlike ``order_number`` (a permanent unique invoice id), this is
+    the short "Token 626" number staff call out and print on the slip. Because
+    it repeats across months, a bill lookup by token can match several rows — the
+    View Bill picker disambiguates by date. We serialize allocation per
+    restaurant with a transaction-scoped advisory lock so two concurrent creates
+    don't mint the same token; on a non-Postgres backend we proceed unserialized.
+
+    (Name kept as ``allocate_daily_token`` / column ``daily_token`` for
+    back-compat; the reset window is monthly.)
     """
     from sqlalchemy import func, text
 
@@ -661,12 +673,19 @@ async def allocate_daily_token(session: "AsyncSession", restaurant_id: int) -> i
     except Exception:  # noqa: BLE001 — non-Postgres backend; proceed without the lock
         _logger.debug("advisory daily-token lock unavailable; proceeding unserialized")
 
-    # Dubai-local "today" window, expressed in UTC to match created_at. The column
-    # is stored naive-UTC, so drop tzinfo to avoid naive/aware comparison errors.
+    # Dubai-local "this month" window, expressed in UTC to match created_at. The
+    # column is stored naive-UTC, so drop tzinfo to avoid naive/aware mismatches.
     now_dubai = datetime.now(ZoneInfo("Asia/Dubai"))
-    day_start = now_dubai.replace(hour=0, minute=0, second=0, microsecond=0)
-    start_utc = day_start.astimezone(timezone.utc).replace(tzinfo=None)
-    end_utc = (day_start + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
+    month_start = now_dubai.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    next_month = (
+        month_start.replace(year=month_start.year + 1, month=1)
+        if month_start.month == 12
+        else month_start.replace(month=month_start.month + 1)
+    )
+    start_utc = month_start.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = next_month.astimezone(timezone.utc).replace(tzinfo=None)
 
     highest = await session.scalar(
         select(func.max(Order.daily_token)).where(

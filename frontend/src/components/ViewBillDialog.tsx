@@ -5,12 +5,14 @@ import { fetchOrders } from "../lib/ordersApi";
 import type { OrderDetailOut, OrderOut } from "../lib/types";
 import s from "./ViewBillDialog.module.css";
 
-/** Dubai calendar day (UTC+4, no DST) as YYYY-MM-DD — matches how the token is
- *  bucketed server-side, so "today's token N" resolves the same regardless of
- *  where the cashier's browser clock is set. */
-function dubaiToday(): string {
-  const d = new Date(Date.now() + 4 * 60 * 60 * 1000);
-  return d.toISOString().slice(0, 10);
+/** "24 Jul 2026" — compact date to tell same-token bills apart in the picker. */
+function fmtDate(iso?: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /** A full bill number has a dash (R4-0030); a bare token is just digits. */
@@ -50,12 +52,13 @@ function fmtTime(iso?: string | null): string {
 }
 
 /**
- * Cashier "View Bill" dialog — smart lookup by full bill number OR today's
- * token, rendered as a thermal-receipt slip.
+ * Cashier "View Bill" dialog — smart lookup by full bill number OR queue token,
+ * rendered as a thermal-receipt slip.
  *
  * Full order number (has a dash, e.g. R4-0030) → exact bill. A bare number is
- * read as TODAY's token (the daily counter resets each Dubai day). If several
- * rows match, a picker is shown instead of guessing.
+ * read as a queue token. The token resets each Dubai MONTH, so the same number
+ * recurs across months; we search all history for it and, when several bills
+ * share it, show a date-labelled picker so the cashier chooses the right month.
  */
 export function ViewBillDialog({ onClose }: { onClose: () => void }) {
   const [term, setTerm] = useState("");
@@ -98,9 +101,10 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
         );
         if (exact) hits = [exact];
       } else if (/^\d+$/.test(raw)) {
-        const today = dubaiToday();
-        const rows = await fetchOrders({ fromDate: today, toDate: today, limit: 300 });
-        hits = rows.filter((o) => o.daily_token === Number(raw));
+        // The queue token resets monthly, so the same number recurs across
+        // months. Search ALL history for that token and let the picker below
+        // disambiguate by date (server returns newest first).
+        hits = await fetchOrders({ token: Number(raw), limit: 50 });
       } else {
         hits = await fetchOrders({ q: raw, limit: 25 });
       }
@@ -108,7 +112,7 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
       if (hits.length === 0) {
         setMessage(
           /^\d+$/.test(raw)
-            ? `No order with token ${raw} today. Try the full bill number (e.g. R4-0030).`
+            ? `No bill with token ${raw}. Try the full bill number (e.g. R4-0030).`
             : `No bill found for "${raw}".`,
         );
       } else if (hits.length === 1) {
@@ -190,7 +194,9 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
 
         {matches.length > 0 && (
           <div className={s.matches} data-testid="view-bill-matches">
-            <p className={s.matchHead}>{matches.length} bills match — pick one:</p>
+            <p className={s.matchHead}>
+              {matches.length} bills share this token — pick by date:
+            </p>
             {matches.map((o) => (
               <button
                 key={o.id}
@@ -199,6 +205,7 @@ export function ViewBillDialog({ onClose }: { onClose: () => void }) {
                 onClick={() => void openBill(o.id)}
               >
                 <span className={s.matchRef}>{o.order_number}</span>
+                <span className={s.matchDate}>{fmtDate(o.created_at)}</span>
                 <span className={s.matchMeta}>
                   {o.daily_token != null ? `Token ${o.daily_token}` : ""}
                 </span>
