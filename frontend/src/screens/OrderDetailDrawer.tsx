@@ -672,12 +672,32 @@ const TENDER_LABEL: Record<string, string> = {
 };
 
 /** "7:14 AM" — the times a manager reconciles against, not ISO strings. */
+/** Dubai calendar day as YYYY-MM-DD, for "is this event today?" comparison. */
+function dubaiYMD(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Dubai" });
+}
+
 function clock(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (Number.isNaN(d.getTime())) return "—";
+  const time = d.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Dubai",
+  });
+  // Prefix a short date when the event is NOT from today (Dubai). An order that
+  // spans midnight — placed 11:37 PM yesterday, paid 12:10 PM today — otherwise
+  // reads as out-of-order because only the clock shows. "24 Jul · 11:37 PM".
+  if (dubaiYMD(d) !== dubaiYMD(new Date())) {
+    const date = d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      timeZone: "Asia/Dubai",
+    });
+    return `${date} · ${time}`;
+  }
+  return time;
 }
 
 /** Gap between two stamps, e.g. "4 min" — blank when either is missing. */
@@ -1014,12 +1034,7 @@ function TimelineTab({ detail }: { detail: OrderDetailOut }) {
                 <div className={s.timelineBody}>
                   <span className={s.timelineAction}>{timelineLabel(event)}</span>
                   <span className={s.timelineMeta}>
-                    {new Date(event.ts).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      timeZone: "Asia/Dubai",
-                    })}{" "}
-                    · {event.actor}
+                    {clock(event.ts)} · {event.actor}
                   </span>
                 </div>
               </li>
