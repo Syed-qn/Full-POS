@@ -38,6 +38,85 @@ _HOLDABLE = {
     OrderStatus.PREPARING,
 }
 
+# Spec: order modification is allowed only before the kitchen marks it ready.
+# A table's open tab in one of these statuses can still take another round, so
+# a duplicate create is merged into it rather than opening a second order.
+_ADDABLE_STATUSES = frozenset(
+    {"draft", "pending_confirmation", "confirmed", "preparing"}
+)
+
+
+async def _merge_round_into_tab(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    order: Order,
+    validated: list,
+) -> Order:
+    """Append a freshly-validated round onto an existing open tab.
+
+    Mirrors the ``add_items_to_order`` router flow: bills the lines, and if the
+    tab is already with the kitchen (confirmed/preparing) cuts station tickets
+    for the new lines and clears any stale bill request so the table reads
+    Occupied again — not stuck on BILL. The tab's ``staff_id`` (original creator)
+    is deliberately never touched.
+    """
+    from app.ordering.service import add_item
+    from app.tables.models import DiningTable
+
+    added: list = []
+    for (dish, qty, notes, course_number, course_held, is_takeaway, seat_number) in validated:
+        item = await add_item(
+            session,
+            order=order,
+            dish=dish,
+            qty=qty,
+            notes=notes,
+            course_number=course_number,
+            course_held=course_held,
+            is_takeaway=is_takeaway,
+        )
+        item.seat_number = seat_number
+        added.append(item)
+
+    order.total = order.subtotal + (order.delivery_fee_aed or Decimal("0.00"))
+    await session.flush()
+
+    if str(order.status) not in ("draft", "pending_confirmation"):
+        from app.kds.service import create_tickets_for_items
+
+        fireable = [
+            i
+            for i in added
+            if not getattr(i, "course_held", False) and not getattr(i, "cancelled", False)
+        ]
+        if fireable:
+            await create_tickets_for_items(
+                session,
+                restaurant_id=restaurant_id,
+                order=order,
+                items=fireable,
+            )
+        if order.table_id is not None:
+            table = await session.get(DiningTable, order.table_id)
+            if table is not None and table.status == "needs_bill":
+                table.status = "ordered"
+
+    await record_audit(
+        session,
+        restaurant_id=restaurant_id,
+        actor="manager",
+        entity="order",
+        entity_id=str(order.id),
+        action="pos_round_merged",
+        after={
+            "into_status": str(order.status),
+            "added": [{"dish_id": d.id, "qty": q} for (d, q, *_rest) in validated],
+        },
+    )
+    await session.flush()
+    return order
+
 
 async def create_pos_order(
     session: AsyncSession,
@@ -141,6 +220,31 @@ async def create_pos_order(
                 seat_number,
             )
         )
+
+    # Prevent split tabs. If this table already has an open, still-addable tab,
+    # attach this round to it instead of opening a SECOND order. A POS screen
+    # holds a table snapshot (no live poll), so if the waiter opened the table
+    # while it was free and the cashier then started the tab (or vice-versa),
+    # the stale screen would create a duplicate order — and the floor can only
+    # surface one per table, silently hiding the other's bill. Merging keeps a
+    # single bill and PRESERVES the original creator's staff_id (never rewritten).
+    if requires_table(order_type) and table_id is not None:
+        existing = await session.scalar(
+            select(Order)
+            .where(
+                Order.restaurant_id == restaurant_id,
+                Order.table_id == table_id,
+                Order.status.in_(_ADDABLE_STATUSES),
+            )
+            .order_by(Order.created_at.desc())
+        )
+        if existing is not None:
+            return await _merge_round_into_tab(
+                session,
+                restaurant_id=restaurant_id,
+                order=existing,
+                validated=validated,
+            )
 
     customer = await get_or_create_customer(
         session, restaurant_id=restaurant_id, phone=customer_phone

@@ -286,6 +286,34 @@ async def _enrich_orders_bulk(
     return out
 
 
+async def _clear_stale_bill_request(session: AsyncSession, order: Order) -> None:
+    """A KOT/fire on a dine-in tab means the table is dining again, not waiting
+    to pay — so clear a stale ``needs_bill`` back to ``ordered``. Without this,
+    "add a dish + KOT" on a table that had asked for the bill leaves it stuck
+    showing "BILL" on the cashier floor instead of "Occupied"."""
+    table_id = getattr(order, "table_id", None)
+    if table_id is None:
+        return
+    from app.tables.models import DiningTable
+
+    table = await session.get(DiningTable, table_id)
+    if table is None or table.status != "needs_bill":
+        return
+    from app.audit.service import record_audit
+
+    table.status = "ordered"
+    await record_audit(
+        session,
+        actor="cashier",
+        restaurant_id=order.restaurant_id,
+        entity="table",
+        entity_id=str(table.id),
+        action="status_change",
+        before={"status": "needs_bill"},
+        after={"status": "ordered", "reason": "kot_fired"},
+    )
+
+
 async def _enrich(
     session: AsyncSession, order: Order, *, batch_preview: str | None = None
 ) -> OrderOut:
@@ -541,6 +569,11 @@ async def add_items_to_order_endpoint(
                 order=order,
                 items=fireable,
             )
+            # Firing a new round means the table is dining again, not waiting to
+            # pay — so clear a stale bill request. Otherwise "add a dish + KOT" on
+            # a table that had asked for the bill leaves it stuck showing "BILL"
+            # on the cashier floor instead of "Occupied".
+            await _clear_stale_bill_request(session, order)
 
     from app.audit.service import record_audit
 
@@ -592,9 +625,11 @@ async def confirm_order_endpoint(
     await finalize_confirmation(session, order=order, actor="waiter")
 
     # A parked dine-in table sits at "seated"; firing it makes it "ordered".
+    # A table that had asked for the bill (needs_bill) is dining again once a new
+    # round fires, so clear that too — otherwise it stays stuck on "BILL".
     if order.table_id is not None:
         table = await session.get(DiningTable, order.table_id)
-        if table is not None and table.status in ("available", "seated"):
+        if table is not None and table.status in ("available", "seated", "needs_bill"):
             table.status = "ordered"
 
     from app.audit.service import record_audit

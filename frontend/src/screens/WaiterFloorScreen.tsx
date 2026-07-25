@@ -21,14 +21,16 @@ type ApiTable = {
   seated_since?: string | null;
 };
 
-type Bucket = "available" | "occupied" | "reserved" | "cleaning" | "held";
+type Bucket = "available" | "occupied" | "billing" | "reserved" | "cleaning" | "held";
 
-/** Collapse the table FSM into the five buckets the floor legend shows. */
+/** Collapse the table FSM into the buckets the floor shows. `needs_bill` — the
+ *  waiter asked for the bill — wins even over an open order so the waiter who
+ *  requested it sees the same purple BILL badge the cashier does. */
 function bucketOf(status: string, hasOrder: boolean): Bucket {
+  if (status === "needs_bill") return "billing";
   if (hasOrder) return "occupied";
   switch (status) {
     case "ordered":
-    case "needs_bill":
     case "seated":
       return "occupied";
     case "reserved":
@@ -110,7 +112,7 @@ export function WaiterFloorScreen() {
     for (const t of tables) {
       const b = bucketOf(t.status, !!t.order_id);
       if (b === "available") available += 1;
-      else if (b === "occupied") {
+      else if (b === "occupied" || b === "billing") {
         occupied += 1;
         covers += t.guests ?? 0;
       } else if (b === "reserved") reserved += 1;
@@ -241,6 +243,7 @@ export function WaiterFloorScreen() {
                       height: seats >= 8 ? 100 : 60,
                     }}
                   >
+                    {bucket === "billing" && <span className={s.billBadge}>BILL</span>}
                     <span className={s.tableLabel}>{t.label}</span>
                     <span className={s.tableSeats}>👥 {t.seats}</span>
                     {hasOrder && t.guests != null && (
