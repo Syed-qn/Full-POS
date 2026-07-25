@@ -68,12 +68,14 @@ const GROUPS: NavGroup[] = [
   },
   {
     id: "users",
-    /** People the restaurant manages: customers, delivery riders, floor waiters. */
-    label: "User Management",
+    /** People and stations the restaurant manages: customers, riders, waiters,
+     *  and the kitchen boards. */
+    label: "Management",
     items: [
       { to: "/customer-management", label: "Customer Management", icon: "○" },
       { to: "/rider-management", label: "Rider Management", icon: "›" },
       { to: "/waiter-management", label: "Waiter Management", icon: "◎" },
+      { to: "/kitchens", label: "Kitchen Management", icon: "◲" },
     ],
   },
   {
@@ -81,7 +83,6 @@ const GROUPS: NavGroup[] = [
     /** Owner/manager admin surface (R5). Label stays Manage for floor roles that see partial list. */
     label: "Manage",
     items: [
-      { to: "/kitchens", label: "Kitchens", icon: "◲" },
       { to: "/inventory", label: "Inventory", icon: "▦" },
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },
