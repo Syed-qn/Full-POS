@@ -102,8 +102,26 @@
 }
 
 .nameCell { font-weight: 600; }
+.nameBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.nameBtn:hover { color: var(--accent-primary); text-decoration: underline; }
 .mono { font-family: var(--font-mono); color: var(--text-secondary); }
-.actionsCol { text-align: right; width: 1%; white-space: nowrap; }
+/* Higher specificity than `.table th`/`.table td` so the header right-aligns
+   over the Edit/Remove buttons (was left-aligned → misaligned with the row). */
+.table th.actionsCol,
+.table td.actionsCol {
+  text-align: right;
+  white-space: nowrap;
+  width: 150px;
+}
 
 /* Row "view" control: icon-only, no outer ring. */
 .viewBtn {
@@ -120,12 +138,14 @@
 }
 .viewBtn:hover { color: var(--accent-primary); }
 
-/* Row action row: view icon + edit/remove text links. */
+/* Row action row: edit/remove text links, always on a single line. */
 .rowActions {
-  display: inline-flex;
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
   justify-content: flex-end;
+  gap: 16px;
+  flex-wrap: nowrap;
 }
 .linkBtn,
 .linkBtnDanger {

@@ -213,7 +213,6 @@ export function StaffScreen() {
                 <tr>
                   <th>Name</th>
                   <th>Phone</th>
-                  <th>Role</th>
                   <th>Status</th>
                   <th>Shift</th>
                   <th>Training</th>
@@ -223,8 +222,8 @@ export function StaffScreen() {
               <tbody>
                 {Array.from({ length: 4 }).map((_, r) => (
                   <tr key={r}>
-                    {[38, 30, 26, 30, 22, 22, 18].map((w, c) => (
-                      <td key={c} className={c === 6 ? s.actionsCol : undefined}>
+                    {[38, 30, 30, 22, 22, 18].map((w, c) => (
+                      <td key={c} className={c === 5 ? s.actionsCol : undefined}>
                         <span className={s.sk} style={{ width: `${w}%` }} />
                       </td>
                     ))}
@@ -256,7 +255,6 @@ export function StaffScreen() {
                 <tr>
                   <th>Name</th>
                   <th>Phone</th>
-                  <th>Role</th>
                   <th>Status</th>
                   <th>Shift</th>
                   <th>Training</th>
@@ -266,11 +264,18 @@ export function StaffScreen() {
               <tbody>
                 {waiters.map((m) => (
                   <tr key={m.id}>
-                    <td className={s.nameCell}>{m.name}</td>
-                    <td className={s.mono}>{m.phone ?? "—"}</td>
-                    <td>
-                      <span className={s.rolePill}>{m.role}</span>
+                    <td className={s.nameCell}>
+                      <button
+                        type="button"
+                        className={s.nameBtn}
+                        onClick={() => setSelected(m)}
+                        title="View details"
+                        data-testid={`waiter-view-${m.id}`}
+                      >
+                        {m.name}
+                      </button>
                     </td>
+                    <td className={s.mono}>{m.phone ?? "—"}</td>
                     <td>
                       <span
                         className={`${s.statusPill} ${m.is_active === false ? s.statusOff : s.statusOn}`}
@@ -310,24 +315,6 @@ export function StaffScreen() {
                     </td>
                     <td className={s.actionsCol}>
                       <div className={s.rowActions}>
-                        <button
-                          type="button"
-                          className={s.viewBtn}
-                          aria-label={`View ${m.name}`}
-                          title="View details"
-                          onClick={() => setSelected(m)}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path
-                              d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                          </svg>
-                        </button>
                         <button
                           type="button"
                           className={s.linkBtn}

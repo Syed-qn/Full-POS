@@ -1337,6 +1337,19 @@ export function WaiterOrderScreen() {
         )}
 
         <span className={s.spacer} />
+
+        {/* Open the kitchen display in a NEW TAB so the till stays put — the KDS
+            board is a chrome-free surface with no "back to till", so navigating
+            there in-place would strand the cashier/waiter. Both roles get it. */}
+        <button
+          type="button"
+          className={s.backBtn}
+          onClick={() => window.open("/kds", "_blank", "noopener,noreferrer")}
+          data-testid="open-kitchen-screen"
+          title="Open the kitchen screen in a new tab"
+        >
+          Kitchen Screen ↗
+        </button>
       </div>
 
       {/* ── body ─────────────────────────────────────────────────────── */}

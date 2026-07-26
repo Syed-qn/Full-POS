@@ -247,7 +247,10 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/cashier": ["owner", "manager", "cashier"],
   "/orders": ["owner", "manager"],
   "/new-order": ["owner", "manager"],
-  "/kds": ["owner", "manager", "kitchen"],
+  // Cashier + waiter can OPEN the kitchen board (read-only glance at ticket
+  // progress) via the "Kitchen Screen" button on their till — it opens in a new
+  // tab, so allow them here or the guard would bounce that tab to their home.
+  "/kds": ["owner", "manager", "kitchen", "cashier", "waiter"],
   "/kitchens": ["owner", "manager", "kitchen"],
   "/payments": ["owner", "manager", "cashier"],
   "/rider-management": ["owner", "manager"],

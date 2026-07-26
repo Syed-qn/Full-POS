@@ -12,6 +12,7 @@ import {
   isWaiterRole,
   matchRouteKey,
   normalizeRole,
+  OWNER_ONLY_ROUTES,
   ROUTE_ROLE_MAP,
   setStaffSession,
   type StaffRole,
@@ -140,10 +141,11 @@ describe("canAccess — default / manager / owner", () => {
     expect(canAccess("/waiter-management", undefined)).toBe(true);
   });
 
-  it("allows everything for owner and manager", () => {
+  it("allows everything for owner; manager gets all but owner-only routes", () => {
     for (const route of Object.keys(ROUTE_ROLE_MAP)) {
       expect(canAccess(route, "owner")).toBe(true);
-      expect(canAccess(route, "manager")).toBe(true);
+      // Owner-only routes (e.g. Manager Management) exclude managers by design.
+      expect(canAccess(route, "manager")).toBe(!OWNER_ONLY_ROUTES.includes(route));
     }
   });
 
@@ -182,8 +184,9 @@ describe("canAccess — role matrix", () => {
       ],
     },
     {
-      // Cashier's ONLY surfaces: /cashier/floor, /cashier/new-order, and the
-      // checkout (/orders/:id/pay → "/payments"). Everything else denied.
+      // Cashier's surfaces: /cashier/floor, /cashier/new-order, the checkout
+      // (/orders/:id/pay → "/payments"), plus a read-only glance at the kitchen
+      // board (/kds) via the till's "Kitchen Screen" button. Everything else denied.
       role: "cashier",
       allowed: [
         "/cashier",
@@ -195,6 +198,8 @@ describe("canAccess — role matrix", () => {
         "/orders/1/pay",
         "/orders/40/pay",
         "/orders/40/pay?table=3&label=T03",
+        "/kds",
+        "/kds/1",
       ],
       denied: [
         "/",
@@ -204,7 +209,6 @@ describe("canAccess — role matrix", () => {
         "/new-order",
         "/customer-management",
         "/menu",
-        "/kds",
         "/waiter-management",
         "/settings",
         "/marketing",
@@ -213,7 +217,8 @@ describe("canAccess — role matrix", () => {
       ],
     },
     {
-      // Waiters are locked to their own /waiter namespace — nothing else.
+      // Waiters: their own /waiter namespace, plus a read-only glance at the
+      // kitchen board (/kds) via the till's "Kitchen Screen" button.
       role: "waiter",
       allowed: [
         "/waiter",
@@ -222,6 +227,8 @@ describe("canAccess — role matrix", () => {
         // Any table/label query is stripped before matching → all tables allowed.
         "/waiter/new-order?table=3&label=T03",
         "/waiter/new-order?table=99&label=T99",
+        "/kds",
+        "/kds/1",
       ],
       denied: [
         "/",
@@ -233,7 +240,6 @@ describe("canAccess — role matrix", () => {
         "/menu",
         "/payments",
         "/orders/1/pay",
-        "/kds",
         "/waiter-management",
         "/settings",
         "/marketing",
@@ -270,9 +276,9 @@ describe("filterNavItems", () => {
     expect(out.map((i) => i.to)).toEqual(["/kds"]);
   });
 
-  it("filters for waiter — locked out of shared nav (waiter uses /waiter/* only)", () => {
+  it("filters for waiter — only the kitchen board is shared (waiter uses /waiter/* + /kds)", () => {
     const out = filterNavItems(items, "waiter");
-    expect(out.map((i) => i.to)).toEqual([]);
+    expect(out.map((i) => i.to)).toEqual(["/kds"]);
   });
 });
 
