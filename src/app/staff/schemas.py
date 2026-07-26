@@ -53,6 +53,16 @@ class ManagerUpdateIn(BaseModel):
     is_active: bool | None = None
 
 
+class StaffPatchIn(BaseModel):
+    """Edit a non-manager staff member (waiter/cashier/kitchen). Every field
+    optional; the PIN is only reset when a new one is supplied."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    phone: str | None = None
+    pin: str | None = Field(default=None, min_length=4, max_length=128)
+    is_active: bool | None = None
+
+
 class ClockIn(BaseModel):
     type: str  # clock_in | clock_out | break_start | break_end
 

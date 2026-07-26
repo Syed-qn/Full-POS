@@ -41,6 +41,7 @@ from app.staff.schemas import (
     StaffIn,
     StaffLoginIn,
     StaffOut,
+    StaffPatchIn,
     SuspiciousOut,
     TrainingModeIn,
 )
@@ -146,6 +147,84 @@ async def list_staff(
         select(StaffMember).where(StaffMember.restaurant_id == restaurant.id)
     )
     return list(rows)
+
+
+@router.patch("/{staff_id}", response_model=StaffOut)
+async def update_staff(
+    staff_id: int,
+    body: StaffPatchIn,
+    restaurant=Depends(require_role("owner", "manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Edit a non-manager staff member (waiter / cashier / kitchen). Managers and
+    owners are handled by the owner-only Manager Management surface, so they are
+    rejected here to keep that boundary intact."""
+    staff = await _get_owned_staff(
+        session, staff_id=staff_id, restaurant_id=restaurant.id
+    )
+    if staff.role in ("manager", "owner"):
+        raise HTTPException(
+            status_code=409,
+            detail="Managers are edited in Manager Management (owner only).",
+        )
+    before = {"name": staff.name, "phone": staff.phone, "is_active": staff.is_active}
+    if body.name is not None:
+        staff.name = body.name
+    if body.phone is not None:
+        staff.phone = body.phone
+    if body.is_active is not None:
+        staff.is_active = body.is_active
+    if body.pin is not None:
+        staff.pin_hash = hash_password(body.pin)
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant.id,
+        entity="staff_member",
+        entity_id=str(staff.id),
+        action="staff_updated",
+        before=before,
+        after={
+            "name": staff.name,
+            "phone": staff.phone,
+            "is_active": staff.is_active,
+            "pin_reset": body.pin is not None,
+        },
+    )
+    await session.commit()
+    await session.refresh(staff)
+    return staff
+
+
+@router.delete("/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_staff(
+    staff_id: int,
+    restaurant=Depends(require_role("owner", "manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Soft-delete a non-manager staff member (deactivate the login; history
+    preserved). Managers/owners are excluded — use Manager Management."""
+    staff = await _get_owned_staff(
+        session, staff_id=staff_id, restaurant_id=restaurant.id
+    )
+    if staff.role in ("manager", "owner"):
+        raise HTTPException(
+            status_code=409,
+            detail="Managers are removed in Manager Management (owner only).",
+        )
+    staff.is_active = False
+    await record_audit(
+        session,
+        actor="manager",
+        restaurant_id=restaurant.id,
+        entity="staff_member",
+        entity_id=str(staff.id),
+        action="staff_deactivated",
+        before={"is_active": True},
+        after={"is_active": False},
+    )
+    await session.commit()
+    return None
 
 
 # ── Manager management (OWNER ONLY) ──────────────────────────────────────────

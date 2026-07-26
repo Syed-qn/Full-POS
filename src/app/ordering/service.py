@@ -2573,25 +2573,31 @@ async def get_order_detail(
         # are audited against `order_item`, so a timeline reading only `order`
         # silently dropped everything the kitchen did.
         item_ids = [str(i.id) for i in items_rows]
+        stmt = select(AuditLog).where(
+            or_(
+                and_(
+                    AuditLog.entity == "order",
+                    AuditLog.entity_id == str(order.id),
+                ),
+                and_(
+                    AuditLog.entity == "order_item",
+                    AuditLog.entity_id.in_(item_ids or [""]),
+                ),
+            )
+        )
+        # An order cannot have events before it existed. Bound the timeline to the
+        # order's own creation so recycled ids never surface a PREVIOUS order's
+        # audit trail: after a DB reset/restore, orders/order_items reuse ids
+        # (1..N) while the append-only audit_log keeps the old rows, so today's
+        # order 60 would otherwise inherit last month's order 60 "kitchen bump"
+        # events. A 1-minute grace absorbs any create-vs-audit timestamp skew.
+        if order.created_at is not None:
+            floor = order.created_at
+            if floor.tzinfo is not None:
+                floor = floor.astimezone(timezone.utc).replace(tzinfo=None)
+            stmt = stmt.where(AuditLog.created_at >= floor - timedelta(minutes=1))
         audit_rows = list(
-            (
-                await session.scalars(
-                    select(AuditLog)
-                    .where(
-                        or_(
-                            and_(
-                                AuditLog.entity == "order",
-                                AuditLog.entity_id == str(order.id),
-                            ),
-                            and_(
-                                AuditLog.entity == "order_item",
-                                AuditLog.entity_id.in_(item_ids or [""]),
-                            ),
-                        )
-                    )
-                    .order_by(AuditLog.created_at)
-                )
-            ).all()
+            (await session.scalars(stmt.order_by(AuditLog.created_at))).all()
         )
         # Resolve every acting staff member in ONE query, not one per row.
         actor_ids = {

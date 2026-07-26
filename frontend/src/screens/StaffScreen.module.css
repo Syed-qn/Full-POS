@@ -120,6 +120,28 @@
 }
 .viewBtn:hover { color: var(--accent-primary); }
 
+/* Row action row: view icon + edit/remove text links. */
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.linkBtn,
+.linkBtnDanger {
+  border: none;
+  background: none;
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.linkBtn { color: var(--accent-primary, #2563eb); }
+.linkBtnDanger { color: var(--accent-danger, #dc2626); }
+.linkBtn:hover,
+.linkBtnDanger:hover { text-decoration: underline; }
+
 /* ---- Waiter detail drawer ---- */
 .detail { display: flex; flex-direction: column; gap: 22px; }
 .detailBlock { display: flex; flex-direction: column; gap: 10px; }

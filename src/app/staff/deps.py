@@ -95,8 +95,10 @@ async def current_staff_id(
 def require_role(*roles: str):
     """Manager-only-style guard: the restaurant OWNER token always passes
     (it predates RBAC and must keep working unchanged); a STAFF token must
-    carry one of the given roles. Returns the Restaurant either way, so it
-    drops in wherever `Depends(current_restaurant)` is used today."""
+    carry one of the given roles. A staff token with role=owner is a SUPERUSER
+    and always passes, regardless of the listed roles — an owner has every
+    manager/staff permission plus owner-only ones. Returns the Restaurant either
+    way, so it drops in wherever `Depends(current_restaurant)` is used today."""
 
     async def dependency(
         creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
@@ -119,7 +121,8 @@ def require_role(*roles: str):
         except ValueError:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
 
-        if claims.get("role") not in roles:
+        # owner is a superuser — passes any role-gated endpoint.
+        if claims.get("role") not in roles and claims.get("role") != "owner":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "insufficient role")
 
         staff = await session.get(StaffMember, int(claims["sub"]))

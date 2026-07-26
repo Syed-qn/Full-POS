@@ -16,14 +16,16 @@ async def current_restaurant(
     """Tenant context for the manager/admin surface.
 
     Accepts EITHER the owner login token (aud=manager) OR a staff PIN token whose
-    role is ``manager``. It used to accept the owner token only, which made every
-    one of its ~270 call sites 403 for a manager signed in with a PIN — the whole
-    manager nav (riders, menu, settings, reports, inventory…) was unusable for the
-    role it was built for, and the failures were silent in the UI: a rejected
-    request just left a button disabled or a list empty.
+    role is ``manager`` or ``owner``. It used to accept the owner token only, which
+    made every one of its ~270 call sites 403 for a manager signed in with a PIN —
+    the whole manager nav (riders, menu, settings, reports, inventory…) was unusable
+    for the role it was built for, and the failures were silent in the UI: a
+    rejected request just left a button disabled or a list empty.
 
-    Non-manager staff (cashier, waiter, kitchen) still get 403 here — their
-    surfaces use ``current_restaurant_any`` or an explicit ``require_role``.
+    ``owner`` is a superuser: a staff member with role=owner has the full manager
+    surface plus owner-only screens, so it passes here alongside ``manager``.
+    Non-privileged staff (cashier, waiter, kitchen) still get 403 — their surfaces
+    use ``current_restaurant_any`` or an explicit ``require_role``.
     """
     if creds is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing token")
@@ -38,7 +40,7 @@ async def current_restaurant(
             claims = decode_token(creds.credentials, audience="staff")
         except ValueError:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
-        if claims.get("role") != "manager":
+        if claims.get("role") not in ("manager", "owner"):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "manager access required")
         # Manager on a PIN session — resolve the tenant through their staff row.
         from app.staff.models import StaffMember

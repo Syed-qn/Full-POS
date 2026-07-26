@@ -9,6 +9,7 @@ import { toast } from "../components/Toaster";
 import {
   clockStaff,
   createStaff,
+  deleteStaff,
   getClockStatus,
   getHours,
   getSales,
@@ -16,6 +17,7 @@ import {
   listMistakes,
   listStaff,
   setTrainingMode,
+  updateStaff,
 } from "../lib/staffApi";
 import type { StaffCreateIn, StaffMember } from "../lib/types";
 import s from "./StaffScreen.module.css";
@@ -36,6 +38,7 @@ export function StaffScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
+  const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
   const [selected, setSelected] = useState<StaffMember | null>(null);
   const [clockStatuses, setClockStatuses] = useState<Record<number, "clocked_out" | "clocked_in" | "on_break">>({});
   const [name, setName] = useState("");
@@ -47,7 +50,35 @@ export function StaffScreen() {
     setName("");
     setPhone("");
     setPin("");
+    setEditTarget(null);
     setShowAdd(true);
+  }
+
+  function openEdit(m: StaffMember) {
+    setName(m.name);
+    setPhone(m.phone ?? "");
+    setPin(""); // blank = keep current PIN
+    setShowAdd(false);
+    setEditTarget(m);
+  }
+
+  function closeModal() {
+    setShowAdd(false);
+    setEditTarget(null);
+  }
+
+  const modalOpen = showAdd || editTarget !== null;
+
+  async function removeWaiter(m: StaffMember) {
+    if (!window.confirm(`Remove waiter "${m.name}"? They will no longer be able to sign in.`))
+      return;
+    try {
+      await deleteStaff(m.id);
+      setStaff((prev) => prev.filter((x) => x.id !== m.id));
+      toast(`Waiter removed: ${m.name}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not remove waiter.", "error");
+    }
   }
 
   // This screen is waiter-only, but the API returns every role — keep just waiters.
@@ -114,22 +145,51 @@ export function StaffScreen() {
   }
 
   async function submit() {
-    if (!name.trim() || !pin.trim()) {
-      toast("Name and PIN are required.", "error");
+    if (!name.trim()) {
+      toast("Name is required.", "error");
+      return;
+    }
+    // Add requires a PIN; edit keeps the current PIN when the box is left blank.
+    if (!editTarget && !pin.trim()) {
+      toast("PIN is required.", "error");
+      return;
+    }
+    if (pin.trim() && pin.trim().length < 4) {
+      toast("PIN must be at least 4 digits.", "error");
       return;
     }
     setSubmitting(true);
-    const body: StaffCreateIn = { name, pin, role: NEW_STAFF_ROLE, ...(phone ? { phone } : {}) };
     try {
-      const created = await createStaff(body);
+      if (editTarget) {
+        const body: { name?: string; phone?: string | null; pin?: string } = {
+          name: name.trim(),
+          phone: phone.trim() || null,
+        };
+        if (pin.trim()) body.pin = pin.trim();
+        const updated = await updateStaff(editTarget.id, body);
+        setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+        closeModal();
+        toast(`Waiter updated: ${updated.name}`);
+      } else {
+        const body: StaffCreateIn = {
+          name,
+          pin,
+          role: NEW_STAFF_ROLE,
+          ...(phone ? { phone } : {}),
+        };
+        const created = await createStaff(body);
+        setStaff((prev) => [created, ...prev]);
+        closeModal();
+        toast(`Waiter added: ${created.name}`);
+      }
       setName("");
       setPhone("");
       setPin("");
-      setStaff((prev) => [created, ...prev]);
-      setShowAdd(false);
-      toast(`Waiter added: ${created.name}`);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not add waiter.", "error");
+      toast(
+        e instanceof Error ? e.message : `Could not ${editTarget ? "update" : "add"} waiter.`,
+        "error",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +217,7 @@ export function StaffScreen() {
                   <th>Status</th>
                   <th>Shift</th>
                   <th>Training</th>
-                  <th className={s.actionsCol}>View</th>
+                  <th className={s.actionsCol}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,7 +260,7 @@ export function StaffScreen() {
                   <th>Status</th>
                   <th>Shift</th>
                   <th>Training</th>
-                  <th className={s.actionsCol}>View</th>
+                  <th className={s.actionsCol}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,24 +309,42 @@ export function StaffScreen() {
                       </button>
                     </td>
                     <td className={s.actionsCol}>
-                      <button
-                        type="button"
-                        className={s.viewBtn}
-                        aria-label={`View ${m.name}`}
-                        title="View details"
-                        onClick={() => setSelected(m)}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <path
-                            d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                        </svg>
-                      </button>
+                      <div className={s.rowActions}>
+                        <button
+                          type="button"
+                          className={s.viewBtn}
+                          aria-label={`View ${m.name}`}
+                          title="View details"
+                          onClick={() => setSelected(m)}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path
+                              d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className={s.linkBtn}
+                          onClick={() => openEdit(m)}
+                          data-testid={`waiter-edit-${m.id}`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={s.linkBtnDanger}
+                          onClick={() => void removeWaiter(m)}
+                          data-testid={`waiter-delete-${m.id}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -284,18 +362,18 @@ export function StaffScreen() {
         {selected && <WaiterDetail waiter={selected} />}
       </SideDrawer>
 
-      {showAdd &&
+      {modalOpen &&
         createPortal(
-          <div className={s.overlay} onClick={submitting ? undefined : () => setShowAdd(false)}>
+          <div className={s.overlay} onClick={submitting ? undefined : closeModal}>
             <div className={s.modal} onClick={(e) => e.stopPropagation()}>
               <div className={s.modalHead}>
-                <h3 className={s.cardTitle}>New waiter</h3>
+                <h3 className={s.cardTitle}>{editTarget ? "Edit waiter" : "New waiter"}</h3>
                 <button
                   type="button"
                   className={s.close}
                   aria-label="Close"
                   disabled={submitting}
-                  onClick={() => setShowAdd(false)}
+                  onClick={closeModal}
                 >
                   ×
                 </button>
@@ -315,12 +393,13 @@ export function StaffScreen() {
                   <input aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
                 </label>
                 <label className={s.field}>
-                  <span>PIN</span>
+                  <span>{editTarget ? "New PIN (blank = keep)" : "PIN"}</span>
                   <input
-                    aria-label="New staff PIN"
+                    aria-label={editTarget ? "New PIN" : "New staff PIN"}
                     type="password"
                     value={pin}
                     onChange={(e) => setPin(e.target.value)}
+                    placeholder={editTarget ? "Leave blank to keep current" : ""}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") void submit();
                     }}
@@ -328,11 +407,17 @@ export function StaffScreen() {
                 </label>
               </div>
               <div className={s.modalFoot}>
-                <Button type="button" variant="ghost" disabled={submitting} onClick={() => setShowAdd(false)}>
+                <Button type="button" variant="ghost" disabled={submitting} onClick={closeModal}>
                   Cancel
                 </Button>
                 <Button type="button" disabled={submitting} onClick={() => void submit()}>
-                  {submitting ? "Adding…" : "Add waiter"}
+                  {submitting
+                    ? editTarget
+                      ? "Saving…"
+                      : "Adding…"
+                    : editTarget
+                      ? "Save changes"
+                      : "Add waiter"}
                 </Button>
               </div>
             </div>

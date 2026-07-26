@@ -112,3 +112,24 @@ async def test_owner_role_staff_can_manage(client, auth_headers, db_session):
         headers=hdr,
     )
     assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.anyio
+async def test_owner_role_has_full_manager_surface(client, auth_headers, db_session):
+    """An owner staff token reaches current_restaurant-guarded manager endpoints
+    (e.g. the staff/waiter list) that previously 403'd for anyone but a manager."""
+    from app.identity.auth import hash_password
+    from app.staff.models import StaffMember
+
+    restaurant = await _restaurant(db_session)
+    owner = StaffMember(
+        restaurant_id=restaurant.id, name="Owner2", role="owner",
+        pin_hash=hash_password("1234"), is_active=True,
+    )
+    db_session.add(owner)
+    await db_session.commit()
+    hdr = _staff_headers(owner.id, "owner")
+
+    # current_restaurant-guarded (list_staff) — owner must be allowed now.
+    listing = await client.get("/api/v1/staff", headers=hdr)
+    assert listing.status_code == 200, listing.text

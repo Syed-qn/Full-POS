@@ -16,6 +16,17 @@ export async function createStaff(body: StaffCreateIn): Promise<StaffMember> {
   return apiClient.post<StaffMember>("/api/v1/staff", body);
 }
 
+export async function updateStaff(
+  id: number,
+  body: { name?: string; phone?: string | null; pin?: string; is_active?: boolean },
+): Promise<StaffMember> {
+  return apiClient.patch<StaffMember>(`/api/v1/staff/${id}`, body);
+}
+
+export async function deleteStaff(id: number): Promise<void> {
+  return apiClient.delete<void>(`/api/v1/staff/${id}`);
+}
+
 // ── Manager management (owner only) ──────────────────────────────────────────
 export async function listManagers(): Promise<StaffMember[]> {
   return apiClient.get<StaffMember[]>("/api/v1/staff/managers");
