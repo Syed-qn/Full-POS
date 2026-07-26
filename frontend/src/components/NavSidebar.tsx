@@ -38,6 +38,7 @@ const LIVE_ROUTES = new Set<string>([
   "/forecast", // Forecast
   "/analytics", // Analytics
   "/ai", // AI Insights
+  "/branches", // Branches (franchise HQ — separate organization account)
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
@@ -51,7 +52,7 @@ const GROUPS: NavGroup[] = [
       { to: "/floor", label: "Floor Plan", icon: "▦" },
       { to: "/new-order", label: "New Order", icon: "+" },
       { to: "/orders", label: "Orders", icon: "☰" },
-      { to: "/kds", label: "Kitchen", icon: "▣" },
+      { to: "/kds", label: "Live Kitchen Board", icon: "▣" },
       { to: "/menu", label: "Menu", icon: "◇" },
     ],
   },
@@ -89,7 +90,6 @@ const GROUPS: NavGroup[] = [
       { to: "/reports", label: "Reports", icon: "≡" },
       { to: "/ai", label: "AI Insights", icon: "◆" },
       { to: "/branches", label: "Branches", icon: "▣" },
-      { to: "/channels", label: "Channels", icon: "⇄" },
       { to: "/reliability", label: "Reliability", icon: "⟳" },
     ],
   },

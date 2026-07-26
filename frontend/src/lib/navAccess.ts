@@ -54,7 +54,7 @@ export const FULL_ACCESS_ROLES: readonly StaffRole[] = ["owner", "manager"] as c
  * passes; a staff token must carry role="owner". Checked before the full-access
  * bypass in canAccess.
  */
-export const OWNER_ONLY_ROUTES: readonly string[] = ["/manager-management"] as const;
+export const OWNER_ONLY_ROUTES: readonly string[] = ["/manager-management", "/reports"] as const;
 
 const SESSION_KEY = "ops_staff_session";
 
@@ -264,7 +264,7 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   // full-access role). Backend mirrors this with require_role("owner").
   "/manager-management": ["owner"],
   "/marketing": ["owner", "manager"],
-  "/reports": ["owner", "manager"],
+  "/reports": ["owner"],
   "/ai": ["owner", "manager"],
   "/branches": ["owner", "manager"],
   "/channels": ["owner", "manager"],

@@ -138,7 +138,7 @@ export function RidersScreen() {
       <PageHeader
         title="Rider Dispatch"
         subtitle="Your fleet: duty, pairing, cash settlement"
-        right={<Button onClick={() => setShowAdd(true)}>+ Add Rider</Button>}
+        right={<Button size="md" onClick={() => setShowAdd(true)}>+ Add Rider</Button>}
       />
 
       {riders.length > 0 && (

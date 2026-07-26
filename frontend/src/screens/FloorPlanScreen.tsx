@@ -503,9 +503,9 @@ export function FloorPlanScreen() {
         </div>
 
         <div className={s.toolActions}>
-          <button type="button" className={s.toolBtn} onClick={openAdd} data-testid="add-table">
+          <Button type="button" size="md" onClick={openAdd} data-testid="add-table">
             ＋ Add table
-          </button>
+          </Button>
           <button
             type="button"
             className={`${s.toolBtn} ${editing ? s.toolBtnOn : ""}`}
