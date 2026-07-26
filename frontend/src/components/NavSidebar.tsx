@@ -39,6 +39,7 @@ const LIVE_ROUTES = new Set<string>([
   "/analytics", // Analytics
   "/ai", // AI Insights
   "/branches", // Branches (franchise HQ — separate organization account)
+  "/reports", // Reports (owner only)
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
