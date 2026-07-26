@@ -54,6 +54,11 @@ async def item_performance(
         select(Order).where(
             Order.restaurant_id == restaurant_id,
             Order.created_at >= day_start, Order.created_at <= day_end,
+            # Cancelled/draft orders never sold — excluding them here keeps item
+            # performance, gross profit and food cost on the same order set as
+            # sales_rollup (otherwise cancelled items inflate "revenue" past the
+            # real headline total, e.g. gross profit > sales).
+            Order.status.notin_(_EXCLUDED_STATUSES),
         )
     )).all()
     order_ids = [o.id for o in orders]

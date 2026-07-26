@@ -9,6 +9,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.ordering.models import Order, OrderItem
 from app.reports.analytics import _day_window, _EXCLUDED_STATUSES, item_performance
 
@@ -519,7 +520,18 @@ async def average_delivery_time(
     durations = [
         (o.delivered_at - o.sla_confirmed_at).total_seconds() / 60.0 for o in orders
     ]
-    late = sum(1 for o in orders if o.late)
+    # `Order.late` is stamped at delivery (delivery.py) as now > sla_deadline, but
+    # it can be NULL for orders delivered through a path/import that never set it —
+    # counting only the flag then reports "0% late" even when the measured average
+    # is hours over SLA (the two numbers must not contradict). Fall back to the
+    # actual duration vs the customer SLA whenever the flag is unset, so late_pct
+    # is always consistent with avg_delivery_minutes.
+    sla_min = get_settings().sla_customer_minutes
+    late = sum(
+        1
+        for o, dur in zip(orders, durations)
+        if (o.late if o.late is not None else dur > sla_min)
+    )
     return {
         "delivery_count": len(orders),
         "avg_delivery_minutes": round(sum(durations) / len(durations), 2)

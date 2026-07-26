@@ -207,6 +207,7 @@ export async function getAvgDeliveryTime(startDate: string, endDate: string) {
   return apiClient.get<{
     delivery_count: number;
     avg_delivery_minutes: number | null;
+    p50_minutes: number | null;
     late_count: number;
     late_pct: number;
   }>(`/api/v1/reports/avg-delivery-time?start_date=${startDate}&end_date=${endDate}`);

@@ -38,7 +38,6 @@ const LIVE_ROUTES = new Set<string>([
   "/forecast", // Forecast
   "/analytics", // Analytics
   "/ai", // AI Insights
-  "/branches", // Branches (franchise HQ — separate organization account)
   "/reports", // Reports (owner only)
 ]);
 

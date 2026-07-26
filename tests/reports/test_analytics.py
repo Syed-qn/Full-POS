@@ -57,6 +57,56 @@ async def test_item_performance_ranks_by_revenue(db_session, restaurant):
 
 
 @pytest.mark.anyio
+async def test_item_performance_excludes_cancelled_and_draft_orders(db_session, restaurant):
+    # A cancelled order's items are not sales — they must not inflate item
+    # revenue (which feeds gross-profit / food-cost). Regression for gross
+    # profit reading HIGHER than headline sales.
+    from app.menu.models import Dish, Menu
+    from app.ordering.models import Customer, Order, OrderItem
+
+    menu = Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[])
+    db_session.add(menu)
+    await db_session.flush()
+    dish = Dish(
+        menu_id=menu.id, restaurant_id=restaurant.id, dish_number=1, name="Kebab",
+        price_aed=Decimal("20.00"), is_available=True, name_normalized="kebab",
+    )
+    db_session.add(dish)
+    await db_session.flush()
+    cust = Customer(restaurant_id=restaurant.id, phone="+971500000012", name="Cancel Test")
+    db_session.add(cust)
+    await db_session.flush()
+
+    for number, status in (("C-0001", "delivered"), ("C-0002", "cancelled"), ("C-0003", "draft")):
+        order = Order(
+            restaurant_id=restaurant.id, customer_id=cust.id, order_number=number,
+            status=status, subtotal=Decimal("20.00"), total=Decimal("20.00"),
+        )
+        db_session.add(order)
+        await db_session.flush()
+        db_session.add(OrderItem(
+            order_id=order.id, dish_id=dish.id, dish_number=1, dish_name="Kebab",
+            price_aed=Decimal("20.00"), qty=1,
+        ))
+    await db_session.commit()
+
+    # Query a ±1-day window so the assertion doesn't straddle the UTC midnight
+    # boundary (server timestamps are UTC; date.today() is local — they diverge
+    # for a few hours a day and would otherwise drop the just-created rows).
+    today = date.today()
+    results = await item_performance(
+        db_session,
+        restaurant_id=restaurant.id,
+        start_date=today - timedelta(days=1),
+        end_date=today + timedelta(days=1),
+    )
+    # Only the delivered order counts: 1 × AED 20, not 3.
+    assert len(results) == 1
+    assert results[0]["order_count"] == 1
+    assert results[0]["revenue_aed"] == Decimal("20.00")
+
+
+@pytest.mark.anyio
 async def test_inventory_usage_walks_confirmed_orders_recipes(db_session, restaurant):
     from app.inventory.models import DishIngredient, Ingredient
     from app.menu.models import Dish, Menu
