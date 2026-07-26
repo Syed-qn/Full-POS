@@ -70,8 +70,10 @@ export function StaffSwitchModal({
   }
 
   async function submit() {
-    const id = Number(staffId.trim());
-    if (!Number.isFinite(id) || id <= 0) {
+    const raw = staffId.trim();
+    const id = Number(raw);
+    // Allow id 0 (owner) — reject only empty / non-integer / negative.
+    if (raw === "" || !Number.isInteger(id) || id < 0) {
       setError("Enter your staff ID number");
       return;
     }

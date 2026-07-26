@@ -48,6 +48,14 @@ export const ASSIGNABLE_ROLES: readonly StaffRole[] = [
 /** Roles that always see every authenticated module. */
 export const FULL_ACCESS_ROLES: readonly StaffRole[] = ["owner", "manager"] as const;
 
+/**
+ * Routes only the OWNER may open — even a manager (otherwise full-access) is
+ * excluded. The restaurant account token (no role claim → null) is the owner and
+ * passes; a staff token must carry role="owner". Checked before the full-access
+ * bypass in canAccess.
+ */
+export const OWNER_ONLY_ROUTES: readonly string[] = ["/manager-management"] as const;
+
 const SESSION_KEY = "ops_staff_session";
 
 export type StaffSessionMeta = {
@@ -248,6 +256,10 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/inventory": ["owner", "manager"],
   "/customer-management": ["owner", "manager"],
   "/waiter-management": ["owner", "manager"],
+  // Manager management is OWNER ONLY — a manager must not be able to create or
+  // remove other managers. Enforced specially below (managers are otherwise a
+  // full-access role). Backend mirrors this with require_role("owner").
+  "/manager-management": ["owner"],
   "/marketing": ["owner", "manager"],
   "/reports": ["owner", "manager"],
   "/ai": ["owner", "manager"],
@@ -299,13 +311,23 @@ export function canAccess(
         ? normalizeRole(role)
         : role;
 
+  const key = matchRouteKey(route);
+
+  // Owner-only routes: managers (and every non-owner staff role) are excluded.
+  // The restaurant account (no role → null) IS the owner and passes; a staff
+  // token must carry role="owner". Checked BEFORE the full-access bypass so a
+  // manager cannot slip through.
+  if (OWNER_ONLY_ROUTES.includes(key)) {
+    if (role == null || role === "") return true; // restaurant owner account
+    return normalized === "owner";
+  }
+
   // Unknown raw string that failed normalize → treat as full access
   if (role != null && role !== "" && normalized == null) return true;
 
   if (normalized == null) return true;
   if ((FULL_ACCESS_ROLES as readonly string[]).includes(normalized)) return true;
 
-  const key = matchRouteKey(route);
   const allowed = ROUTE_ROLE_MAP[key];
   if (!allowed) return true;
   return (allowed as readonly string[]).includes(normalized);

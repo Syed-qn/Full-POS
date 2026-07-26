@@ -25,6 +25,7 @@ import { CustomersScreen } from "./screens/CustomersScreen";
 import { InventoryScreen } from "./screens/InventoryScreen";
 import { KdsScreen } from "./screens/KdsScreen";
 import { KitchensScreen } from "./screens/KitchensScreen";
+import { ManagerManagementScreen } from "./screens/ManagerManagementScreen";
 import { LiveOpsScreen } from "./screens/LiveOpsScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { MenuManagerScreen } from "./screens/MenuManagerScreen";
@@ -197,6 +198,7 @@ export default function App() {
       <Route path="/compliance" element={<Guarded><ComplianceScreen /></Guarded>} />
       <Route path="/ai" element={<Guarded><AiInsightsScreen /></Guarded>} />
       <Route path="/waiter-management" element={<Guarded><StaffScreen /></Guarded>} />
+      <Route path="/manager-management" element={<Guarded><ManagerManagementScreen /></Guarded>} />
       {/* Old /staff path kept as a redirect for existing links/bookmarks. */}
       <Route path="/staff" element={<Navigate to="/waiter-management" replace />} />
       <Route path="/marketing" element={<Guarded><MarketingScreen /></Guarded>} />

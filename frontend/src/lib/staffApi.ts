@@ -16,6 +16,30 @@ export async function createStaff(body: StaffCreateIn): Promise<StaffMember> {
   return apiClient.post<StaffMember>("/api/v1/staff", body);
 }
 
+// ── Manager management (owner only) ──────────────────────────────────────────
+export async function listManagers(): Promise<StaffMember[]> {
+  return apiClient.get<StaffMember[]>("/api/v1/staff/managers");
+}
+
+export async function createManager(body: {
+  name: string;
+  phone?: string | null;
+  pin: string;
+}): Promise<StaffMember> {
+  return apiClient.post<StaffMember>("/api/v1/staff/managers", body);
+}
+
+export async function updateManager(
+  id: number,
+  body: { name?: string; phone?: string | null; pin?: string; is_active?: boolean },
+): Promise<StaffMember> {
+  return apiClient.patch<StaffMember>(`/api/v1/staff/managers/${id}`, body);
+}
+
+export async function deleteManager(id: number): Promise<void> {
+  return apiClient.delete<void>(`/api/v1/staff/managers/${id}`);
+}
+
 export async function staffLogin(staffId: number, pin: string) {
   // Wrong PIN must not clear the current shell session (staff switch / login pad).
   return apiClient.post<{

@@ -86,8 +86,11 @@ export function LoginScreen() {
 
   async function submitPin(e?: React.FormEvent) {
     e?.preventDefault();
-    const id = Number(staffId.trim());
-    if (!Number.isFinite(id) || id <= 0) {
+    const raw = staffId.trim();
+    const id = Number(raw);
+    // Allow id 0 (the owner account) — reject only an empty field, a non-integer,
+    // or a negative id. A plain `id <= 0` here locks the owner out.
+    if (raw === "" || !Number.isInteger(id) || id < 0) {
       setError("Enter your staff ID number");
       return;
     }

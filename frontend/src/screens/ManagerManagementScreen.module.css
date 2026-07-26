@@ -1,0 +1,167 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.cardHeadText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-title, 18px);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.cardSub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.muted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ── Add form ──────────────────────────────────────────────────────── */
+.addRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.addRow :global(button) {
+  min-height: 44px;
+}
+.input,
+.inputPin {
+  min-height: 44px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--font-size-body, 16px);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.input {
+  flex: 1;
+  min-width: 140px;
+}
+.inputPin {
+  width: 110px;
+  flex: 0 0 auto;
+  letter-spacing: 0.14em;
+}
+.input:focus,
+.inputPin:focus {
+  outline: none;
+  border-color: var(--accent-primary, #2563eb);
+}
+
+/* ── Managers list ─────────────────────────────────────────────────── */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--bg-surface-inset);
+}
+.rowEditing {
+  border-color: var(--accent-primary, #2563eb);
+  align-items: flex-start;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
+  font-size: 18px;
+}
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.rowName {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.rowMeta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.editFields {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
+.linkBtn,
+.linkBtnDanger,
+.linkBtnMuted {
+  border: none;
+  background: none;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.linkBtn {
+  color: var(--accent-primary, #2563eb);
+}
+.linkBtnDanger {
+  color: var(--accent-danger, #dc2626);
+}
+.linkBtnMuted {
+  color: var(--text-muted);
+}
+.linkBtn:hover,
+.linkBtnDanger:hover,
+.linkBtnMuted:hover {
+  text-decoration: underline;
+}
+.linkBtn:disabled,
+.linkBtnDanger:disabled,
+.linkBtnMuted:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

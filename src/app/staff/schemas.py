@@ -36,6 +36,23 @@ class StaffOut(BaseModel):
     training_mode: bool = False
 
 
+class ManagerCreateIn(BaseModel):
+    """Owner-only: create a manager staff member (role is forced to manager)."""
+
+    name: str = Field(min_length=1, max_length=128)
+    phone: str | None = None
+    pin: str = Field(min_length=4, max_length=128)
+
+
+class ManagerUpdateIn(BaseModel):
+    """Owner-only: patch a manager. Every field optional; pin only reset if given."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    phone: str | None = None
+    pin: str | None = Field(default=None, min_length=4, max_length=128)
+    is_active: bool | None = None
+
+
 class ClockIn(BaseModel):
     type: str  # clock_in | clock_out | break_start | break_end
 

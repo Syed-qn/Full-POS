@@ -32,6 +32,7 @@ const LIVE_ROUTES = new Set<string>([
   "/customer-management", // Customer Management
   "/settings", // Settings
   "/waiter-management", // Waiter Management
+  "/manager-management", // Manager Management (owner only)
   "/coupons", // Coupons
   "/tickets", // Complaints
   "/forecast", // Forecast
@@ -75,6 +76,7 @@ const GROUPS: NavGroup[] = [
       { to: "/customer-management", label: "Customer Management", icon: "○" },
       { to: "/rider-management", label: "Rider Management", icon: "›" },
       { to: "/waiter-management", label: "Waiter Management", icon: "◎" },
+      { to: "/manager-management", label: "Manager Management", icon: "★" },
       { to: "/kitchens", label: "Kitchen Management", icon: "◲" },
     ],
   },

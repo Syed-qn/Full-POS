@@ -31,7 +31,9 @@ from app.staff.schemas import (
     ApprovalOut,
     AttributeTipIn,
     ClockIn,
+    ManagerCreateIn,
     ManagerPinIn,
+    ManagerUpdateIn,
     MistakeIn,
     MistakeOut,
     ShiftIn,
@@ -144,6 +146,135 @@ async def list_staff(
         select(StaffMember).where(StaffMember.restaurant_id == restaurant.id)
     )
     return list(rows)
+
+
+# ── Manager management (OWNER ONLY) ──────────────────────────────────────────
+# The restaurant OWNER token and a staff token with role="owner" pass
+# require_role("owner"); managers/cashiers/waiters/kitchen get 403. Scoped to
+# role="manager" rows so an owner can never touch other roles through here.
+
+
+async def _get_owned_manager(
+    session: AsyncSession, *, staff_id: int, restaurant_id: int
+) -> StaffMember:
+    staff = await session.get(StaffMember, staff_id)
+    if staff is None or staff.restaurant_id != restaurant_id or staff.role != "manager":
+        raise HTTPException(status_code=404, detail="manager not found")
+    return staff
+
+
+@router.get("/managers", response_model=list[StaffOut])
+async def list_managers(
+    restaurant=Depends(require_role("owner")),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await session.scalars(
+        select(StaffMember)
+        .where(
+            StaffMember.restaurant_id == restaurant.id,
+            StaffMember.role == "manager",
+            StaffMember.is_active.is_(True),
+        )
+        .order_by(StaffMember.name)
+    )
+    return list(rows)
+
+
+@router.post("/managers", response_model=StaffOut, status_code=status.HTTP_201_CREATED)
+async def create_manager(
+    body: ManagerCreateIn,
+    restaurant=Depends(require_role("owner")),
+    session: AsyncSession = Depends(get_session),
+):
+    staff = StaffMember(
+        restaurant_id=restaurant.id,
+        name=body.name,
+        phone=body.phone,
+        role="manager",
+        pin_hash=hash_password(body.pin),
+        is_active=True,
+        training_mode=False,
+    )
+    session.add(staff)
+    await session.flush()
+    await record_audit(
+        session,
+        actor="owner",
+        restaurant_id=restaurant.id,
+        entity="staff_member",
+        entity_id=str(staff.id),
+        action="manager_created",
+        after={"name": staff.name, "role": "manager"},
+    )
+    await session.commit()
+    await session.refresh(staff)
+    return staff
+
+
+@router.patch("/managers/{staff_id}", response_model=StaffOut)
+async def update_manager(
+    staff_id: int,
+    body: ManagerUpdateIn,
+    restaurant=Depends(require_role("owner")),
+    session: AsyncSession = Depends(get_session),
+):
+    mgr = await _get_owned_manager(
+        session, staff_id=staff_id, restaurant_id=restaurant.id
+    )
+    before = {"name": mgr.name, "phone": mgr.phone, "is_active": mgr.is_active}
+    if body.name is not None:
+        mgr.name = body.name
+    if body.phone is not None:
+        mgr.phone = body.phone
+    if body.is_active is not None:
+        mgr.is_active = body.is_active
+    if body.pin is not None:
+        mgr.pin_hash = hash_password(body.pin)
+    await record_audit(
+        session,
+        actor="owner",
+        restaurant_id=restaurant.id,
+        entity="staff_member",
+        entity_id=str(mgr.id),
+        action="manager_updated",
+        before=before,
+        after={
+            "name": mgr.name,
+            "phone": mgr.phone,
+            "is_active": mgr.is_active,
+            "pin_reset": body.pin is not None,
+        },
+    )
+    await session.commit()
+    await session.refresh(mgr)
+    return mgr
+
+
+@router.delete("/managers/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_manager(
+    staff_id: int,
+    restaurant=Depends(require_role("owner")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Soft-delete: deactivate the manager (they can no longer log in). We keep
+    the row so their historical order/shift attribution stays intact rather than
+    hard-deleting and breaking those foreign keys."""
+    mgr = await _get_owned_manager(
+        session, staff_id=staff_id, restaurant_id=restaurant.id
+    )
+    mgr.is_active = False
+    await record_audit(
+        session,
+        actor="owner",
+        restaurant_id=restaurant.id,
+        entity="staff_member",
+        entity_id=str(mgr.id),
+        action="manager_deactivated",
+        before={"is_active": True},
+        after={"is_active": False},
+    )
+    await session.commit()
+    return None
 
 
 @router.post("/{staff_id}/clock")
