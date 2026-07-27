@@ -2,6 +2,8 @@ from decimal import Decimal
 
 import pytest
 
+from tests.helpers import store_key
+
 
 @pytest.mark.anyio
 async def test_non_manager_staff_cannot_void_order(client, auth_headers, db_session):
@@ -24,11 +26,11 @@ async def test_non_manager_staff_cannot_void_order(client, auth_headers, db_sess
     await db_session.commit()
 
     staff_resp = await client.post(
-        "/api/v1/staff", json={"name": "Cashier Nour", "role": "cashier", "pin": "4444"},
+        "/api/v1/staff", json={"name": "Cashier Nour", "role": "cashier", "pin": "4471"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "4444"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "4471"})
     staff_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
     resp = await client.post(f"/api/v1/orders/{order.id}/cancel", headers=staff_headers)
@@ -56,11 +58,11 @@ async def test_manager_role_staff_can_void_order(client, auth_headers, db_sessio
     await db_session.commit()
 
     staff_resp = await client.post(
-        "/api/v1/staff", json={"name": "Manager Fatima", "role": "manager", "pin": "5555"},
+        "/api/v1/staff", json={"name": "Manager Fatima", "role": "manager", "pin": "5573"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "5555"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "5573"})
     staff_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
     resp = await client.post(f"/api/v1/orders/{order.id}/cancel", headers=staff_headers)

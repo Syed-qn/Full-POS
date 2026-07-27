@@ -1,4 +1,4 @@
-import { ApiError } from "./apiClient";
+import { apiClient, ApiError } from "./apiClient";
 import type {
   BranchComparisonOut,
   OrganizationBranchIn,
@@ -12,6 +12,17 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 export const ORG_TOKEN_KEY = "ops_org_token";
+
+/** Response from POST /api/v1/organizations/bootstrap (restaurant owner JWT). */
+export type OrgBootstrapOut = {
+  id: number;
+  name: string;
+  owner_email: string;
+  created: boolean;
+  restaurant_id: number;
+  access_token: string;
+  token_type: string;
+};
 
 export function getOrgToken(): string | null {
   return localStorage.getItem(ORG_TOKEN_KEY);
@@ -100,6 +111,17 @@ export function signupOrganization(name: string, ownerEmail: string, password: s
     owner_email: ownerEmail,
     password,
   });
+}
+
+/**
+ * Owner-only: link the current restaurant into multi-branch HQ using the normal
+ * restaurant session (ops_token). Stores the returned org JWT so the rest of the
+ * Branches APIs keep working without a second email/password login.
+ */
+export async function bootstrapOrganizationFromRestaurant(): Promise<OrgBootstrapOut> {
+  const res = await apiClient.post<OrgBootstrapOut>("/api/v1/organizations/bootstrap");
+  if (res.access_token) setOrgToken(res.access_token);
+  return res;
 }
 
 function query(params: Record<string, string | undefined>): string {

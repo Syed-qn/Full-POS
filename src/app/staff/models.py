@@ -6,8 +6,10 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,9 +19,17 @@ from app.db import Base, TimestampMixin
 
 class StaffMember(Base, TimestampMixin):
     __tablename__ = "staff_members"
+    __table_args__ = (
+        UniqueConstraint("restaurant_id", "staff_code", name="uq_staff_code_per_restaurant"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
+    # The number the person actually types at the terminal. Restarts at 1 for
+    # every restaurant, so each branch has its own "manager 1" — `id` is a
+    # platform-wide surrogate key and must never be shown to staff. Nullable only
+    # for rows created outside the staff API (fixtures); the API always sets it.
+    staff_code: Mapped[int | None] = mapped_column(Integer)
     name: Mapped[str] = mapped_column(String(128))
     phone: Mapped[str | None] = mapped_column(String(32))
     # One of app.staff.schemas.ASSIGNABLE_ROLES. "owner" is the restaurant

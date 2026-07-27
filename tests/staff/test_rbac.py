@@ -1,16 +1,18 @@
 import pytest
 
+from tests.helpers import store_key
+
 
 @pytest.mark.anyio
 async def test_staff_login_returns_token_with_role(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Manager Ali", "role": "manager", "pin": "9999"},
+        "/api/v1/staff", json={"name": "Manager Ali", "role": "manager", "pin": "9917"},
         headers=auth_headers,
     )
     staff_id = resp.json()["id"]
 
     login = await client.post(
-        "/api/v1/staff/login", json={"staff_id": staff_id, "pin": "9999"},
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "9917"},
     )
     assert login.status_code == 200
     assert "access_token" in login.json()
@@ -19,13 +21,13 @@ async def test_staff_login_returns_token_with_role(client, auth_headers):
 @pytest.mark.anyio
 async def test_staff_login_wrong_pin_rejected(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Cook Sam", "role": "kitchen", "pin": "1111"},
+        "/api/v1/staff", json={"name": "Cook Sam", "role": "kitchen", "pin": "1176"},
         headers=auth_headers,
     )
     staff_id = resp.json()["id"]
 
     login = await client.post(
-        "/api/v1/staff/login", json={"staff_id": staff_id, "pin": "0000"},
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "0473"},
     )
     assert login.status_code == 401
 
@@ -33,11 +35,11 @@ async def test_staff_login_wrong_pin_rejected(client, auth_headers):
 @pytest.mark.anyio
 async def test_manager_only_endpoint_rejects_non_manager_staff(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Cook Amina", "role": "kitchen", "pin": "2222"},
+        "/api/v1/staff", json={"name": "Cook Amina", "role": "kitchen", "pin": "2287"},
         headers=auth_headers,
     )
     staff_id = resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "2222"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "2287"})
     staff_token = login.json()["access_token"]
     staff_headers = {"Authorization": f"Bearer {staff_token}"}
 
@@ -51,11 +53,11 @@ async def test_manager_only_endpoint_rejects_non_manager_staff(client, auth_head
 @pytest.mark.anyio
 async def test_manager_only_endpoint_allows_manager_role_staff(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Manager Zaid", "role": "manager", "pin": "3333"},
+        "/api/v1/staff", json={"name": "Manager Zaid", "role": "manager", "pin": "3382"},
         headers=auth_headers,
     )
     staff_id = resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "3333"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "3382"})
     staff_token = login.json()["access_token"]
     staff_headers = {"Authorization": f"Bearer {staff_token}"}
 

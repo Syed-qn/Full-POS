@@ -29,10 +29,29 @@ function monthStartYMD() {
   return todayYMD().slice(0, 8) + "01";
 }
 
-// Staff is scoped to waiters for now — the only role a manager adds here.
-const NEW_STAFF_ROLE = "waiter" as const;
+/** Operational roles managed from this screen (not managers — those are owner-only). */
+export type ManagedStaffRole = "waiter" | "cashier";
 
-export function StaffScreen() {
+const ROLE_COPY: Record<
+  ManagedStaffRole,
+  { title: string; singular: string; plural: string; addLabel: string }
+> = {
+  waiter: {
+    title: "Waiter Management",
+    singular: "waiter",
+    plural: "Waiters",
+    addLabel: "+ Add waiter",
+  },
+  cashier: {
+    title: "Cashier Management",
+    singular: "cashier",
+    plural: "Cashiers",
+    addLabel: "+ Add cashier",
+  },
+};
+
+export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedStaffRole }) {
+  const copy = ROLE_COPY[managedRole];
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -69,20 +88,26 @@ export function StaffScreen() {
 
   const modalOpen = showAdd || editTarget !== null;
 
-  async function removeWaiter(m: StaffMember) {
-    if (!window.confirm(`Remove waiter "${m.name}"? They will no longer be able to sign in.`))
+  async function removeMember(m: StaffMember) {
+    if (
+      !window.confirm(
+        `Remove ${copy.singular} "${m.name}"? They will no longer be able to sign in.`,
+      )
+    )
       return;
     try {
       await deleteStaff(m.id);
       setStaff((prev) => prev.filter((x) => x.id !== m.id));
-      toast(`Waiter removed: ${m.name}`);
+      toast(
+        `${copy.singular[0].toUpperCase()}${copy.singular.slice(1)} removed: ${m.name}`,
+      );
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not remove waiter.", "error");
+      toast(e instanceof Error ? e.message : `Could not remove ${copy.singular}.`, "error");
     }
   }
 
-  // This screen is waiter-only, but the API returns every role — keep just waiters.
-  const waiters = staff.filter((m) => m.role === NEW_STAFF_ROLE);
+  // API returns every role — keep only the managed role for this screen.
+  const members = staff.filter((m) => m.role === managedRole);
 
   async function loadClockStatuses(members: StaffMember[]) {
     const results = await Promise.all(
@@ -108,10 +133,10 @@ export function StaffScreen() {
     try {
       const rows = await listStaff();
       setStaff(rows);
-      void loadClockStatuses(rows.filter((m) => m.role === NEW_STAFF_ROLE));
+      void loadClockStatuses(rows.filter((m) => m.role === managedRole));
     } catch (e) {
       setStaff([]);
-      setLoadError(e instanceof Error ? e.message : "Could not load waiters.");
+      setLoadError(e instanceof Error ? e.message : `Could not load ${copy.plural.toLowerCase()}.`);
     } finally {
       setLoaded(true);
     }
@@ -169,25 +194,31 @@ export function StaffScreen() {
         const updated = await updateStaff(editTarget.id, body);
         setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
         closeModal();
-        toast(`Waiter updated: ${updated.name}`);
+        toast(
+          `${copy.singular[0].toUpperCase()}${copy.singular.slice(1)} updated: ${updated.name}`,
+        );
       } else {
         const body: StaffCreateIn = {
           name,
           pin,
-          role: NEW_STAFF_ROLE,
+          role: managedRole,
           ...(phone ? { phone } : {}),
         };
         const created = await createStaff(body);
         setStaff((prev) => [created, ...prev]);
         closeModal();
-        toast(`Waiter added: ${created.name}`);
+        toast(
+          `${copy.singular[0].toUpperCase()}${copy.singular.slice(1)} added: ${created.name}`,
+        );
       }
       setName("");
       setPhone("");
       setPin("");
     } catch (e) {
       toast(
-        e instanceof Error ? e.message : `Could not ${editTarget ? "update" : "add"} waiter.`,
+        e instanceof Error
+          ? e.message
+          : `Could not ${editTarget ? "update" : "add"} ${copy.singular}.`,
         "error",
       );
     } finally {
@@ -195,22 +226,36 @@ export function StaffScreen() {
     }
   }
 
+  const roleCap = copy.singular[0].toUpperCase() + copy.singular.slice(1);
+
   return (
     <div className={s.root}>
       <PageHeader
-        title="Waiter Management"
-        subtitle="Add waiters and see your team"
-        right={<Button type="button" size="md" onClick={openAdd}>+ Add waiter</Button>}
+        title={copy.title}
+        subtitle={`Add ${copy.plural.toLowerCase()} and see your team`}
+        right={
+          <Button type="button" size="md" onClick={openAdd}>
+            {copy.addLabel}
+          </Button>
+        }
       />
 
       <section className={s.card}>
-        <h3 className={s.cardTitle}>Waiters{loaded && waiters.length > 0 ? ` (${waiters.length})` : ""}</h3>
+        <h3 className={s.cardTitle}>
+          {copy.plural}
+          {loaded && members.length > 0 ? ` (${members.length})` : ""}
+        </h3>
 
         {!loaded && (
-          <div className={s.tableWrap} aria-busy="true" aria-label="Loading waiters">
+          <div
+            className={s.tableWrap}
+            aria-busy="true"
+            aria-label={`Loading ${copy.plural.toLowerCase()}`}
+          >
             <table className={s.table}>
               <thead>
                 <tr>
+                  <th>No.</th>
                   <th>Name</th>
                   <th>Phone</th>
                   <th>Status</th>
@@ -222,8 +267,8 @@ export function StaffScreen() {
               <tbody>
                 {Array.from({ length: 4 }).map((_, r) => (
                   <tr key={r}>
-                    {[38, 30, 30, 22, 22, 18].map((w, c) => (
-                      <td key={c} className={c === 5 ? s.actionsCol : undefined}>
+                    {[12, 38, 30, 30, 22, 22, 18].map((w, c) => (
+                      <td key={c} className={c === 6 ? s.actionsCol : undefined}>
                         <span className={s.sk} style={{ width: `${w}%` }} />
                       </td>
                     ))}
@@ -235,7 +280,7 @@ export function StaffScreen() {
         )}
         {loadError && (
           <ErrorState
-            title="Could not load waiters"
+            title={`Could not load ${copy.plural.toLowerCase()}`}
             description={loadError}
             action={
               <Button type="button" onClick={() => void reload()}>
@@ -244,15 +289,19 @@ export function StaffScreen() {
             }
           />
         )}
-        {loaded && !loadError && waiters.length === 0 && (
-          <EmptyState title="No waiters yet" description="Add a waiter above to get started." />
+        {loaded && !loadError && members.length === 0 && (
+          <EmptyState
+            title={`No ${copy.plural.toLowerCase()} yet`}
+            description={`Add a ${copy.singular} above to get started.`}
+          />
         )}
 
-        {loaded && waiters.length > 0 && (
+        {loaded && members.length > 0 && (
           <div className={s.tableWrap}>
             <table className={s.table}>
               <thead>
                 <tr>
+                  <th>No.</th>
                   <th>Name</th>
                   <th>Phone</th>
                   <th>Status</th>
@@ -262,15 +311,19 @@ export function StaffScreen() {
                 </tr>
               </thead>
               <tbody>
-                {waiters.map((m) => (
+                {members.map((m) => (
                   <tr key={m.id}>
+                    {/* The branch-local sign-in number. The internal id is
+                        deliberately not shown — staff typing it was how sign-in
+                        used to cross into another restaurant. */}
+                    <td className={s.mono}>{m.staff_code ?? "—"}</td>
                     <td className={s.nameCell}>
                       <button
                         type="button"
                         className={s.nameBtn}
                         onClick={() => setSelected(m)}
                         title="View details"
-                        data-testid={`waiter-view-${m.id}`}
+                        data-testid={`${managedRole}-view-${m.id}`}
                       >
                         {m.name}
                       </button>
@@ -319,15 +372,15 @@ export function StaffScreen() {
                           type="button"
                           className={s.linkBtn}
                           onClick={() => openEdit(m)}
-                          data-testid={`waiter-edit-${m.id}`}
+                          data-testid={`${managedRole}-edit-${m.id}`}
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           className={s.linkBtnDanger}
-                          onClick={() => void removeWaiter(m)}
-                          data-testid={`waiter-delete-${m.id}`}
+                          onClick={() => void removeMember(m)}
+                          data-testid={`${managedRole}-delete-${m.id}`}
                         >
                           Remove
                         </button>
@@ -343,10 +396,10 @@ export function StaffScreen() {
 
       <SideDrawer
         open={selected !== null}
-        title={selected ? selected.name : "Waiter"}
+        title={selected ? selected.name : roleCap}
         onClose={() => setSelected(null)}
       >
-        {selected && <WaiterDetail waiter={selected} />}
+        {selected && <StaffDetail member={selected} roleLabel={roleCap} />}
       </SideDrawer>
 
       {modalOpen &&
@@ -354,7 +407,9 @@ export function StaffScreen() {
           <div className={s.overlay} onClick={submitting ? undefined : closeModal}>
             <div className={s.modal} onClick={(e) => e.stopPropagation()}>
               <div className={s.modalHead}>
-                <h3 className={s.cardTitle}>{editTarget ? "Edit waiter" : "New waiter"}</h3>
+                <h3 className={s.cardTitle}>
+                  {editTarget ? `Edit ${copy.singular}` : `New ${copy.singular}`}
+                </h3>
                 <button
                   type="button"
                   className={s.close}
@@ -404,7 +459,7 @@ export function StaffScreen() {
                       : "Adding…"
                     : editTarget
                       ? "Save changes"
-                      : "Add waiter"}
+                      : `Add ${copy.singular}`}
                 </Button>
               </div>
             </div>
@@ -423,10 +478,16 @@ const CLOCK_LABEL: Record<string, string> = {
 
 type Mistake = { id: number; staff_id: number; mistake_type: string; amount_aed: string };
 
-/** Manager/owner view of a waiter: profile, today's shift & sales, tips this
- *  month, and any recorded mistakes. Everything is best-effort — a failing
- *  endpoint just shows "—" rather than breaking the drawer. */
-function WaiterDetail({ waiter }: { waiter: StaffMember }) {
+/** Manager/owner view of a staff member: profile, today's shift & sales, tips
+ *  this month, and any recorded mistakes. Best-effort — a failing endpoint
+ *  just shows "—" rather than breaking the drawer. */
+function StaffDetail({
+  member,
+  roleLabel,
+}: {
+  member: StaffMember;
+  roleLabel: string;
+}) {
   const [clock, setClock] = useState<string | null>(null);
   const [hoursToday, setHoursToday] = useState<number | null>(null);
   const [salesToday, setSalesToday] = useState<string | null>(null);
@@ -436,19 +497,19 @@ function WaiterDetail({ waiter }: { waiter: StaffMember }) {
   useEffect(() => {
     let alive = true;
     const today = todayYMD();
-    getClockStatus(waiter.id).then((r) => alive && setClock(r.status)).catch(() => {});
-    getHours(waiter.id, today).then((r) => alive && setHoursToday(r.hours)).catch(() => {});
-    getSales(waiter.id, today).then((r) => alive && setSalesToday(r.sales_aed)).catch(() => {});
+    getClockStatus(member.id).then((r) => alive && setClock(r.status)).catch(() => {});
+    getHours(member.id, today).then((r) => alive && setHoursToday(r.hours)).catch(() => {});
+    getSales(member.id, today).then((r) => alive && setSalesToday(r.sales_aed)).catch(() => {});
     getTipsByStaff(monthStartYMD(), today)
-      .then((m) => alive && setTipsMonth(m?.[String(waiter.id)] ?? "0.00"))
+      .then((m) => alive && setTipsMonth(m?.[String(member.id)] ?? "0.00"))
       .catch(() => {});
-    listMistakes(waiter.id)
+    listMistakes(member.id)
       .then((rows) => alive && setMistakes(rows as Mistake[]))
       .catch(() => alive && setMistakes([]));
     return () => {
       alive = false;
     };
-  }, [waiter.id]);
+  }, [member.id]);
 
   return (
     <div className={s.detail}>
@@ -457,19 +518,19 @@ function WaiterDetail({ waiter }: { waiter: StaffMember }) {
         <dl className={s.detailList}>
           <div className={s.detailRow}>
             <dt>Role</dt>
-            <dd className={s.cap}>{waiter.role}</dd>
+            <dd className={s.cap}>{roleLabel}</dd>
           </div>
           <div className={s.detailRow}>
             <dt>Phone</dt>
-            <dd className={s.mono}>{waiter.phone ?? "—"}</dd>
+            <dd className={s.mono}>{member.phone ?? "—"}</dd>
           </div>
           <div className={s.detailRow}>
             <dt>Status</dt>
-            <dd>{waiter.is_active === false ? "Inactive" : "Active"}</dd>
+            <dd>{member.is_active === false ? "Inactive" : "Active"}</dd>
           </div>
           <div className={s.detailRow}>
             <dt>Training mode</dt>
-            <dd>{waiter.training_mode ? "On" : "Off"}</dd>
+            <dd>{member.training_mode ? "On" : "Off"}</dd>
           </div>
         </dl>
       </section>

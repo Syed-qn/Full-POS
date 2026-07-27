@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.auth import create_access_token, verify_password
+from app.identity.models import Restaurant
 from app.organizations.deps import current_organization
 from app.organizations.franchise import (
     approve_menu_publish,
@@ -52,6 +53,7 @@ from app.organizations.schemas import (
 )
 from app.organizations.service import (
     add_branch,
+    bootstrap_organization_for_restaurant,
     branch_comparison,
     list_branches,
     organization_inventory_summary,
@@ -59,9 +61,38 @@ from app.organizations.service import (
     signup_organization,
 )
 from app.organizations.stock_transfer import complete_stock_transfer, create_stock_transfer
+from app.staff.deps import require_role
 
 router = APIRouter(prefix="/api/v1/organizations", tags=["organizations"])
 stock_transfer_router = APIRouter(prefix="/api/v1/stock-transfers", tags=["organizations"])
+
+
+@router.post("/bootstrap", status_code=status.HTTP_200_OK)
+async def bootstrap_organization(
+    restaurant: Restaurant = Depends(require_role("owner")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Owner-only: link the current restaurant into multi-branch HQ.
+
+    Idempotent. Returns an ``aud=org`` access token so the Branches UI can keep
+    using organization endpoints without a second email/password login.
+    Branch managers (staff role=manager) receive 403 — they run one store only.
+    """
+    try:
+        org, created = await bootstrap_organization_for_restaurant(session, restaurant)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    token = create_access_token(org_id=org.id, audience="org")
+    return {
+        "id": org.id,
+        "name": org.name,
+        "owner_email": org.owner_email,
+        "created": created,
+        "restaurant_id": restaurant.id,
+        "access_token": token,
+        "token_type": "bearer",
+    }
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -134,25 +165,35 @@ async def create_branch(
     org: Organization = Depends(current_organization),
     session: AsyncSession = Depends(get_session),
 ):
-    branch = await add_branch(
-        session,
-        organization_id=org.id,
-        name=body.name,
-        lat=body.lat,
-        lng=body.lng,
-        region=body.region,
-        currency=body.currency,
-        locale=body.locale,
-        is_central_kitchen=body.is_central_kitchen,
-    )
+    try:
+        branch = await add_branch(
+            session,
+            organization_id=org.id,
+            name=body.name,
+            lat=body.lat,
+            lng=body.lng,
+            email=body.email,
+            password=body.password,
+            region=body.region,
+            currency=body.currency,
+            locale=body.locale,
+            is_central_kitchen=body.is_central_kitchen,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        code = 409 if detail == "email_already_registered" else 400
+        raise HTTPException(status_code=code, detail=detail) from exc
     await session.commit()
     return {
         "id": branch.id,
         "name": branch.name,
+        "email": branch.email,
         "region": branch.region,
         "currency": branch.currency,
         "locale": branch.locale,
         "is_central_kitchen": branch.is_central_kitchen,
+        "lat": branch.lat,
+        "lng": branch.lng,
     }
 
 
@@ -166,6 +207,7 @@ async def get_branches(
         {
             "id": b.id,
             "name": b.name,
+            "email": b.email,
             "region": b.region,
             "currency": getattr(b, "currency", "AED"),
             "locale": getattr(b, "locale", "en"),

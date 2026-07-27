@@ -3,6 +3,8 @@ they belong to the owner-only Manager Management surface."""
 
 import pytest
 
+from tests.helpers import store_key
+
 
 async def _restaurant(db_session):
     from sqlalchemy import select
@@ -22,7 +24,7 @@ async def test_edit_and_remove_waiter(client, auth_headers, db_session):
     restaurant = await _restaurant(db_session)
     w = StaffMember(
         restaurant_id=restaurant.id, name="Wal", role="waiter",
-        pin_hash=hash_password("1111"), is_active=True,
+        pin_hash=hash_password("1176"), is_active=True,
     )
     db_session.add(w)
     await db_session.commit()
@@ -36,13 +38,13 @@ async def test_edit_and_remove_waiter(client, auth_headers, db_session):
     assert resp.status_code == 200, resp.text
     assert resp.json()["name"] == "Wal Ali"
 
-    login = await client.post("/api/v1/staff/login", json={"staff_id": w.id, "pin": "2468"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": w.id, "pin": "2468"})
     assert login.status_code == 200
 
     # Remove (soft delete) → login rejected afterwards.
     deleted = await client.delete(f"/api/v1/staff/{w.id}", headers=auth_headers)
     assert deleted.status_code == 204
-    relogin = await client.post("/api/v1/staff/login", json={"staff_id": w.id, "pin": "2468"})
+    relogin = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": w.id, "pin": "2468"})
     assert relogin.status_code == 401
 
 
@@ -54,7 +56,7 @@ async def test_generic_edit_rejects_manager(client, auth_headers, db_session):
     restaurant = await _restaurant(db_session)
     mgr = StaffMember(
         restaurant_id=restaurant.id, name="Boss", role="manager",
-        pin_hash=hash_password("1111"), is_active=True,
+        pin_hash=hash_password("1176"), is_active=True,
     )
     db_session.add(mgr)
     await db_session.commit()

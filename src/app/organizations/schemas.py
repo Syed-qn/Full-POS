@@ -19,6 +19,9 @@ class BranchIn(BaseModel):
     name: str
     lat: float
     lng: float
+    # Manager login for this store — required so every branch is sign-in ready.
+    email: str
+    password: str = Field(min_length=6)
     region: str | None = None
     currency: str = "AED"
     locale: str = "en"

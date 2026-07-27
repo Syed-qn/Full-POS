@@ -18,6 +18,15 @@ from app.staff.approvals import (
     raise_suspicious,
 )
 from app.staff.deps import require_role
+from app.staff.identity import (
+    DuplicatePinError,
+    WeakPinError,
+    assert_pin_unique_in_restaurant,
+    find_staff_for_login,
+    next_staff_code,
+    resolve_store,
+    validate_pin_strength,
+)
 from app.staff.mistakes import list_mistakes, record_mistake
 from app.staff.models import StaffMember
 from app.staff.performance import attendance_for_date, performance_report
@@ -42,6 +51,7 @@ from app.staff.schemas import (
     StaffLoginIn,
     StaffOut,
     StaffPatchIn,
+    StoreIdentityOut,
     SuspiciousOut,
     TrainingModeIn,
 )
@@ -82,9 +92,28 @@ def _approval_out(row) -> ApprovalOut:
 
 @router.post("/login")
 async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_session)):
-    staff = await session.get(StaffMember, body.staff_id)
+    """Sign in a staff member INSIDE one branch.
+
+    Staff numbers restart at 1 per restaurant, so the branch key (`store`) is what
+    makes the number unambiguous. Resolving it first is also what stops a staff
+    member from reaching a restaurant that is not theirs by typing a low id.
+    """
+    restaurant = await resolve_store(session, body.store)
+    staff = (
+        None
+        if restaurant is None
+        else await find_staff_for_login(
+            session,
+            restaurant_id=restaurant.id,
+            staff_code=body.staff_code,
+            staff_id=body.staff_id,
+        )
+    )
+    # One indistinguishable failure for unknown store / unknown staff / wrong PIN —
+    # a distinct "no such store" reply would turn this endpoint into a directory
+    # of every branch on the platform.
     if staff is None or not staff.is_active or not verify_password(body.pin, staff.pin_hash):
-        raise HTTPException(status_code=401, detail="invalid staff_id or pin")
+        raise HTTPException(status_code=401, detail="invalid store, staff number or PIN")
     token = create_access_token(
         staff_id=staff.id, audience="staff", extra_claims={"role": staff.role}
     )
@@ -93,9 +122,46 @@ async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_se
         "token_type": "bearer",
         "role": staff.role,
         "staff_id": staff.id,
+        "staff_code": staff.staff_code,
         "name": staff.name,
         "training_mode": bool(staff.training_mode),
     }
+
+
+@router.get("/store-identity", response_model=StoreIdentityOut)
+async def store_identity(restaurant=Depends(require_role("owner"))):
+    """The pairing keys for THIS branch, so an owner can set up a new terminal.
+    Owner-only: handing these out freely would re-expose branch selection."""
+    return StoreIdentityOut(
+        store_code=restaurant.store_code,
+        location_uuid=restaurant.location_uuid,
+        name=restaurant.name,
+    )
+
+
+async def _guard_pin(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    pin: str,
+    exclude_staff_id: int | None = None,
+) -> str:
+    """Validate a new/changed PIN: strong enough, and unique inside this branch.
+
+    Cross-restaurant duplicates stay legal — branch-scoped login makes them safe —
+    but a duplicate *within* a branch breaks manager-approval attribution.
+    """
+    try:
+        checked = validate_pin_strength(pin)
+        await assert_pin_unique_in_restaurant(
+            session,
+            restaurant_id=restaurant_id,
+            pin=checked,
+            exclude_staff_id=exclude_staff_id,
+        )
+    except (WeakPinError, DuplicatePinError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return checked
 
 
 async def _get_owned_staff(
@@ -113,12 +179,14 @@ async def create_staff(
     restaurant=Depends(current_restaurant),
     session: AsyncSession = Depends(get_session),
 ):
+    pin = await _guard_pin(session, restaurant_id=restaurant.id, pin=body.pin)
     staff = StaffMember(
         restaurant_id=restaurant.id,
+        staff_code=await next_staff_code(session, restaurant_id=restaurant.id),
         name=body.name,
         phone=body.phone,
         role=body.role,
-        pin_hash=hash_password(body.pin),
+        pin_hash=hash_password(pin),
         is_active=True,
         training_mode=False,
     )
@@ -175,7 +243,14 @@ async def update_staff(
     if body.is_active is not None:
         staff.is_active = body.is_active
     if body.pin is not None:
-        staff.pin_hash = hash_password(body.pin)
+        staff.pin_hash = hash_password(
+            await _guard_pin(
+                session,
+                restaurant_id=restaurant.id,
+                pin=body.pin,
+                exclude_staff_id=staff.id,
+            )
+        )
     await record_audit(
         session,
         actor="manager",
@@ -265,12 +340,14 @@ async def create_manager(
     restaurant=Depends(require_role("owner")),
     session: AsyncSession = Depends(get_session),
 ):
+    pin = await _guard_pin(session, restaurant_id=restaurant.id, pin=body.pin)
     staff = StaffMember(
         restaurant_id=restaurant.id,
+        staff_code=await next_staff_code(session, restaurant_id=restaurant.id),
         name=body.name,
         phone=body.phone,
         role="manager",
-        pin_hash=hash_password(body.pin),
+        pin_hash=hash_password(pin),
         is_active=True,
         training_mode=False,
     )
@@ -308,7 +385,14 @@ async def update_manager(
     if body.is_active is not None:
         mgr.is_active = body.is_active
     if body.pin is not None:
-        mgr.pin_hash = hash_password(body.pin)
+        mgr.pin_hash = hash_password(
+            await _guard_pin(
+                session,
+                restaurant_id=restaurant.id,
+                pin=body.pin,
+                exclude_staff_id=mgr.id,
+            )
+        )
     await record_audit(
         session,
         actor="owner",

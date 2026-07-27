@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+import secrets
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,56 @@ async def signup_organization(
     return org
 
 
+async def bootstrap_organization_for_restaurant(
+    session: AsyncSession, restaurant: Restaurant
+) -> tuple[Organization, bool]:
+    """Idempotently attach ``restaurant`` to an Organization for multi-branch HQ.
+
+    - If the restaurant already has ``organization_id``, return that org.
+    - Else create an Organization from the restaurant's name/email (or link to an
+      existing org that already uses the same owner email) and set
+      ``restaurant.organization_id``.
+
+    Used so a restaurant **owner** can open Branches with their normal login —
+    no second organization email/password required. Branch **managers** must not
+    call this (enforced at the router with ``require_role("owner")``).
+
+    Returns ``(org, created_new_org)``.
+    """
+    if restaurant.organization_id is not None:
+        org = await session.get(Organization, restaurant.organization_id)
+        if org is None:
+            raise ValueError("organization_missing")
+        return org, False
+
+    email = (restaurant.email or "").strip() or f"org-{restaurant.id}@branches.local"
+    existing = await session.scalar(
+        select(Organization).where(Organization.owner_email == email)
+    )
+    if existing is not None:
+        restaurant.organization_id = existing.id
+        await session.flush()
+        return existing, False
+
+    # Reuse the restaurant password hash when present so optional org email login
+    # still works; otherwise mint an unusable random hash (HQ uses owner JWT).
+    password_hash = (
+        restaurant.password_hash
+        if (restaurant.password_hash or "").strip()
+        else hash_password(secrets.token_urlsafe(32))
+    )
+    org = Organization(
+        name=(restaurant.name or "Organization").strip() or "Organization",
+        owner_email=email,
+        password_hash=password_hash,
+    )
+    session.add(org)
+    await session.flush()
+    restaurant.organization_id = org.id
+    await session.flush()
+    return org, True
+
+
 async def add_branch(
     session: AsyncSession,
     *,
@@ -25,21 +76,43 @@ async def add_branch(
     name: str,
     lat: float,
     lng: float,
+    email: str,
+    password: str,
     region: str | None = None,
     currency: str = "AED",
     locale: str = "en",
     is_central_kitchen: bool = False,
 ) -> Restaurant:
+    """Create a sister store under ``organization_id`` with a real owner login.
+
+    Every branch is a full ``Restaurant`` row. Email + password are required so
+    the store can sign in on the dashboard immediately (same as a normal signup).
+    """
+    from app.identity.models import DEFAULT_SETTINGS
+
+    email_norm = (email or "").strip().lower()
+    if not email_norm:
+        raise ValueError("email_required")
+    if not (password or "").strip() or len(password.strip()) < 6:
+        raise ValueError("password_min_6")
+
+    existing = await session.scalar(select(Restaurant).where(Restaurant.email == email_norm))
+    if existing is not None:
+        raise ValueError("email_already_registered")
+
     branch = Restaurant(
         name=name,
+        email=email_norm,
         lat=lat,
         lng=lng,
-        password_hash="",
+        password_hash=hash_password(password.strip()),
         organization_id=organization_id,
         region=region,
         currency=(currency or "AED").upper()[:8],
         locale=locale or "en",
         is_central_kitchen=is_central_kitchen,
+        # New branches still run onboarding (menu / Meta) like a normal signup.
+        settings={**DEFAULT_SETTINGS, "onboarding_complete": False},
     )
     session.add(branch)
     await session.flush()

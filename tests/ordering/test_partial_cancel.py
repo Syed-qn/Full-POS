@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+
+from tests.helpers import store_key
 from sqlalchemy import select
 
 from app.audit.models import AuditLog
@@ -200,11 +202,11 @@ async def test_non_manager_staff_cannot_cancel_order_item(client, auth_headers, 
     items = await _order_items(db_session, order.id)
 
     staff_resp = await client.post(
-        "/api/v1/staff", json={"name": "Cashier Nour", "role": "cashier", "pin": "4321"},
+        "/api/v1/staff", json={"name": "Cashier Nour", "role": "cashier", "pin": "4396"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "4321"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "4396"})
     staff_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
     resp = await client.post(
@@ -223,11 +225,11 @@ async def test_manager_role_staff_can_cancel_order_item(client, auth_headers, db
     items = await _order_items(db_session, order.id)
 
     staff_resp = await client.post(
-        "/api/v1/staff", json={"name": "Manager Fatima", "role": "manager", "pin": "5432"},
+        "/api/v1/staff", json={"name": "Manager Fatima", "role": "manager", "pin": "5417"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "5432"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "5417"})
     staff_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
     resp = await client.post(

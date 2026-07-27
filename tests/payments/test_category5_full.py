@@ -151,7 +151,7 @@ async def test_gift_card_issue_and_redeem(db_session, restaurant):
         db_session,
         restaurant_id=restaurant.id,
         amount_aed=Decimal("50.00"),
-        pin="1234",
+        pin="1286",
         code="GCATEST1",
     )
     assert card.balance_aed == Decimal("50.00")
@@ -159,7 +159,7 @@ async def test_gift_card_issue_and_redeem(db_session, restaurant):
         db_session,
         restaurant_id=restaurant.id,
         code="GCATEST1",
-        pin="1234",
+        pin="1286",
         order_id=order.id,
         amount_aed=Decimal("25.00"),
     )
@@ -267,7 +267,7 @@ async def test_category5_http_paths(client, auth_headers, db_session):
     gc = await client.post(
         "/api/v1/gift-cards/issue",
         headers=auth_headers,
-        json={"amount_aed": "30.00", "pin": "9999", "code": "HTTPCARD1"},
+        json={"amount_aed": "30.00", "pin": "9917", "code": "HTTPCARD1"},
     )
     assert gc.status_code == 201, gc.text
     redeem = await client.post(
@@ -275,7 +275,7 @@ async def test_category5_http_paths(client, auth_headers, db_session):
         headers=auth_headers,
         json={
             "code": "HTTPCARD1",
-            "pin": "9999",
+            "pin": "9917",
             "order_id": order.id,
             "amount_aed": "15.00",
         },

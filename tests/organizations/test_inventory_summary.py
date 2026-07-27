@@ -19,10 +19,10 @@ async def _seed_org_with_inventory(db_session):
         password="hunter2!",
     )
     branch_1 = await add_branch(
-        db_session, organization_id=org.id, name="Downtown", lat=25.1, lng=55.1,
+        db_session, organization_id=org.id, name="Downtown", email="b_18188833@t.local", password="hunter2!", lat=25.1, lng=55.1,
     )
     branch_2 = await add_branch(
-        db_session, organization_id=org.id, name="Marina", lat=25.2, lng=55.2,
+        db_session, organization_id=org.id, name="Marina", email="b_14730981@t.local", password="hunter2!", lat=25.2, lng=55.2,
     )
     db_session.add_all([
         Ingredient(

@@ -5,6 +5,8 @@ import itertools
 from decimal import Decimal
 
 import pytest
+
+from tests.helpers import store_key
 from sqlalchemy import select
 
 _order_number_seq = itertools.count(1)
@@ -96,7 +98,7 @@ async def _restaurant_by_email(db_session, email="owner@biryani.ae"):
     return await db_session.scalar(select(Restaurant).where(Restaurant.email == email))
 
 
-async def _manager_staff_headers(client, auth_headers, name="Manager Layla", pin="7777"):
+async def _manager_staff_headers(client, auth_headers, name="Manager Layla", pin="7726"):
     staff_resp = await client.post(
         "/api/v1/staff",
         json={"name": name, "role": "manager", "pin": pin},
@@ -104,12 +106,12 @@ async def _manager_staff_headers(client, auth_headers, name="Manager Layla", pin
     )
     staff_id = staff_resp.json()["id"]
     login = await client.post(
-        "/api/v1/staff/login", json={"staff_id": staff_id, "pin": pin}
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": pin}
     )
     return {"Authorization": f"Bearer {login.json()['access_token']}"}, staff_id
 
 
-async def _cashier_staff_headers(client, auth_headers, name="Cashier Nadia", pin="8888"):
+async def _cashier_staff_headers(client, auth_headers, name="Cashier Nadia", pin="8862"):
     staff_resp = await client.post(
         "/api/v1/staff",
         json={"name": name, "role": "cashier", "pin": pin},
@@ -117,7 +119,7 @@ async def _cashier_staff_headers(client, auth_headers, name="Cashier Nadia", pin
     )
     staff_id = staff_resp.json()["id"]
     login = await client.post(
-        "/api/v1/staff/login", json={"staff_id": staff_id, "pin": pin}
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": pin}
     )
     return {"Authorization": f"Bearer {login.json()['access_token']}"}, staff_id
 
@@ -548,7 +550,7 @@ async def test_transfer_order_staff_router(client, auth_headers, db_session):
 
     staff_resp = await client.post(
         "/api/v1/staff",
-        json={"name": "Server Huda", "role": "server", "pin": "9999"},
+        json={"name": "Server Huda", "role": "server", "pin": "9917"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]

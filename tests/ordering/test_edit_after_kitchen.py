@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.audit.models import AuditLog
 from app.ordering.fsm import OrderStatus
 
+from tests.helpers import store_key
 from tests.ordering.test_partial_cancel import _order_items, _seed_confirmed_order_two_items
 
 
@@ -137,11 +138,11 @@ async def test_non_manager_staff_cannot_edit_order_item(client, auth_headers, db
     items = await _order_items(db_session, order.id)
 
     staff_resp = await client.post(
-        "/api/v1/staff", json={"name": "Cashier Nour", "role": "cashier", "pin": "9876"},
+        "/api/v1/staff", json={"name": "Cashier Nour", "role": "cashier", "pin": "9853"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "9876"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "9853"})
     staff_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
     resp = await client.patch(
@@ -162,11 +163,11 @@ async def test_manager_role_staff_can_edit_order_item(client, auth_headers, db_s
     items = await _order_items(db_session, order.id)
 
     staff_resp = await client.post(
-        "/api/v1/staff", json={"name": "Manager Fatima", "role": "manager", "pin": "6789"},
+        "/api/v1/staff", json={"name": "Manager Fatima", "role": "manager", "pin": "6743"},
         headers=auth_headers,
     )
     staff_id = staff_resp.json()["id"]
-    login = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "6789"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "6743"})
     staff_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
     resp = await client.patch(

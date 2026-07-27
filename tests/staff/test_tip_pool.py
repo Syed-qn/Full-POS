@@ -3,6 +3,8 @@ from decimal import Decimal
 
 import pytest
 
+from tests.helpers import store_key
+
 from app.ordering.models import Customer, Order
 from app.payments.models import PaymentTransaction
 from app.staff.models import StaffMember
@@ -109,11 +111,11 @@ async def test_distribute_tip_pool_empty_when_no_tips(db_session, restaurant):
 @pytest.mark.anyio
 async def test_tip_pool_router_manager_only(client, auth_headers):
     resp_staff = await client.post(
-        "/api/v1/staff", json={"name": "Cook Sam", "role": "kitchen", "pin": "1111"},
+        "/api/v1/staff", json={"name": "Cook Sam", "role": "kitchen", "pin": "1176"},
         headers=auth_headers,
     )
     staff_id = resp_staff.json()["id"]
-    login_kitchen = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "1111"})
+    login_kitchen = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "1176"})
     kitchen_headers = {"Authorization": f"Bearer {login_kitchen.json()['access_token']}"}
 
     denied = await client.get(

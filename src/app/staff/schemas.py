@@ -29,6 +29,8 @@ class StaffIn(BaseModel):
 class StaffOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    #: Branch-local number the person signs in with (1, 2, 3… per restaurant).
+    staff_code: int | None = None
     name: str
     phone: str | None
     role: str
@@ -68,8 +70,35 @@ class ClockIn(BaseModel):
 
 
 class StaffLoginIn(BaseModel):
-    staff_id: int
+    """Branch-scoped staff sign-in.
+
+    ``store`` is mandatory: without it the server cannot tell restaurant A's
+    "manager 1" from restaurant C's, and the lookup degrades to the platform-wide
+    search that let staff sign into the wrong tenant.
+    """
+
+    store: str = Field(min_length=4, max_length=64)
+    staff_code: int | None = Field(default=None, ge=0)
+    #: Legacy surrogate id — still accepted, but now resolved inside ``store`` only.
+    staff_id: int | None = Field(default=None, ge=0)
     pin: str
+
+    @field_validator("staff_id")
+    @classmethod
+    def _need_one_identifier(cls, v, info):
+        if v is None and info.data.get("staff_code") is None:
+            raise ValueError("staff_code (or staff_id) is required")
+        return v
+
+
+class StoreIdentityOut(BaseModel):
+    """Owner-only. The pairing keys an operator types once when setting up a
+    terminal — shown in Settings, never on the public site."""
+
+    model_config = ConfigDict(from_attributes=True)
+    store_code: str
+    location_uuid: str
+    name: str
 
 
 class ShiftIn(BaseModel):

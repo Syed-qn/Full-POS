@@ -2,6 +2,8 @@ from datetime import date, datetime, timezone
 
 import pytest
 
+from tests.helpers import store_key
+
 from app.staff.models import StaffMember
 from app.staff.scheduling import create_shift, list_shifts_for_week
 
@@ -54,20 +56,20 @@ async def test_list_shifts_for_week_scopes_to_week_and_restaurant(db_session, re
 @pytest.mark.anyio
 async def test_create_shift_router_manager_only(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Manager Ali", "role": "manager", "pin": "9999"},
+        "/api/v1/staff", json={"name": "Manager Ali", "role": "manager", "pin": "9917"},
         headers=auth_headers,
     )
     manager_id = resp.json()["id"]
     resp_staff = await client.post(
-        "/api/v1/staff", json={"name": "Cook Sam", "role": "kitchen", "pin": "1111"},
+        "/api/v1/staff", json={"name": "Cook Sam", "role": "kitchen", "pin": "1176"},
         headers=auth_headers,
     )
     staff_id = resp_staff.json()["id"]
 
-    login = await client.post("/api/v1/staff/login", json={"staff_id": manager_id, "pin": "9999"})
+    login = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": manager_id, "pin": "9917"})
     manager_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-    login_kitchen = await client.post("/api/v1/staff/login", json={"staff_id": staff_id, "pin": "1111"})
+    login_kitchen = await client.post("/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "1176"})
     kitchen_headers = {"Authorization": f"Bearer {login_kitchen.json()['access_token']}"}
 
     body = {
@@ -87,7 +89,7 @@ async def test_create_shift_router_manager_only(client, auth_headers):
 @pytest.mark.anyio
 async def test_list_shifts_for_week_router(client, auth_headers):
     resp_staff = await client.post(
-        "/api/v1/staff", json={"name": "Bilal", "pin": "5678"}, headers=auth_headers,
+        "/api/v1/staff", json={"name": "Bilal", "pin": "5673"}, headers=auth_headers,
     )
     staff_id = resp_staff.json()["id"]
 

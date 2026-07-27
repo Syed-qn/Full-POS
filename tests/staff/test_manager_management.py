@@ -3,6 +3,8 @@ staff) can CRUD managers; a manager token is forbidden."""
 
 import pytest
 
+from tests.helpers import store_key
+
 
 async def _restaurant(db_session):
     from sqlalchemy import select
@@ -28,7 +30,7 @@ async def test_owner_can_crud_managers(client, auth_headers, db_session):
     # auth_headers is the restaurant OWNER account token (aud=manager).
     created = await client.post(
         "/api/v1/staff/managers",
-        json={"name": "Sara", "phone": "+971500000010", "pin": "4321"},
+        json={"name": "Sara", "phone": "+971500000010", "pin": "4396"},
         headers=auth_headers,
     )
     assert created.status_code == 201, created.text
@@ -41,7 +43,7 @@ async def test_owner_can_crud_managers(client, auth_headers, db_session):
 
     patched = await client.patch(
         f"/api/v1/staff/managers/{mid}",
-        json={"name": "Sara Ali", "pin": "9999"},
+        json={"name": "Sara Ali", "pin": "9917"},
         headers=auth_headers,
     )
     assert patched.status_code == 200
@@ -49,7 +51,7 @@ async def test_owner_can_crud_managers(client, auth_headers, db_session):
 
     # New PIN works for login.
     login = await client.post(
-        "/api/v1/staff/login", json={"staff_id": mid, "pin": "9999"}
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": mid, "pin": "9917"}
     )
     assert login.status_code == 200
     assert login.json()["role"] == "manager"
@@ -63,7 +65,7 @@ async def test_owner_can_crud_managers(client, auth_headers, db_session):
     assert all(m["id"] != mid for m in listing2.json())
     # Deactivated → login now rejected.
     relogin = await client.post(
-        "/api/v1/staff/login", json={"staff_id": mid, "pin": "9999"}
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": mid, "pin": "9917"}
     )
     assert relogin.status_code == 401
 
@@ -76,7 +78,7 @@ async def test_manager_role_is_forbidden(client, auth_headers, db_session):
     restaurant = await _restaurant(db_session)
     boss = StaffMember(
         restaurant_id=restaurant.id, name="Boss", role="manager",
-        pin_hash=hash_password("1111"), is_active=True,
+        pin_hash=hash_password("1176"), is_active=True,
     )
     db_session.add(boss)
     await db_session.commit()
@@ -86,7 +88,7 @@ async def test_manager_role_is_forbidden(client, auth_headers, db_session):
     assert (await client.get("/api/v1/staff/managers", headers=hdr)).status_code == 403
     forbidden = await client.post(
         "/api/v1/staff/managers",
-        json={"name": "X", "pin": "2222"},
+        json={"name": "X", "pin": "2287"},
         headers=hdr,
     )
     assert forbidden.status_code == 403
@@ -100,7 +102,7 @@ async def test_owner_role_staff_can_manage(client, auth_headers, db_session):
     restaurant = await _restaurant(db_session)
     owner = StaffMember(
         restaurant_id=restaurant.id, name="Owner", role="owner",
-        pin_hash=hash_password("1234"), is_active=True,
+        pin_hash=hash_password("1286"), is_active=True,
     )
     db_session.add(owner)
     await db_session.commit()
@@ -108,7 +110,7 @@ async def test_owner_role_staff_can_manage(client, auth_headers, db_session):
 
     resp = await client.post(
         "/api/v1/staff/managers",
-        json={"name": "New Mgr", "pin": "5555"},
+        json={"name": "New Mgr", "pin": "5573"},
         headers=hdr,
     )
     assert resp.status_code == 201, resp.text
@@ -124,7 +126,7 @@ async def test_owner_role_has_full_manager_surface(client, auth_headers, db_sess
     restaurant = await _restaurant(db_session)
     owner = StaffMember(
         restaurant_id=restaurant.id, name="Owner2", role="owner",
-        pin_hash=hash_password("1234"), is_active=True,
+        pin_hash=hash_password("1286"), is_active=True,
     )
     db_session.add(owner)
     await db_session.commit()

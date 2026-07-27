@@ -17,7 +17,7 @@ async def test_sales_by_channel_and_waiter(db_session, restaurant):
         restaurant_id=restaurant.id,
         name="Waiter A",
         role="staff",
-        pin_hash=hash_password("1111"),
+        pin_hash=hash_password("1176"),
     )
     db_session.add(staff)
     cust = Customer(

@@ -66,7 +66,13 @@ describe("organizationsApi", () => {
     setOrgToken("org-token");
 
     await listBranches();
-    await createBranch({ name: "Downtown", lat: 25.2048, lng: 55.2708 });
+    await createBranch({
+      name: "Downtown",
+      lat: 25.2048,
+      lng: 55.2708,
+      email: "downtown@example.com",
+      password: "secret1",
+    });
     await getRollupSales("2026-07-09");
     await getBranchComparison(4, "2026-07-01", "2026-07-09");
     await getOrganizationInventorySummary();
@@ -82,7 +88,13 @@ describe("organizationsApi", () => {
       "/api/v1/organizations/inventory-summary",
     ]);
     expect(fetchMock.mock.calls[1][1]?.method).toBe("POST");
-    expect(bodyOf(fetchMock.mock.calls[1][1])).toEqual({ name: "Downtown", lat: 25.2048, lng: 55.2708 });
+    expect(bodyOf(fetchMock.mock.calls[1][1])).toEqual({
+      name: "Downtown",
+      lat: 25.2048,
+      lng: 55.2708,
+      email: "downtown@example.com",
+      password: "secret1",
+    });
   });
 
   it("creates and completes stock transfers with the organization token", async () => {

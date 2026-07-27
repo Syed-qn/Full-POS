@@ -1,4 +1,5 @@
 import copy
+import secrets
 import uuid
 from datetime import datetime
 
@@ -16,6 +17,19 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base, TimestampMixin
+
+#: Store-code alphabet with the look-alike characters removed — a code is read
+#: off a screen and typed on a touch keypad, so O/0 and I/1 must not collide.
+STORE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+STORE_CODE_LENGTH = 8
+
+
+def generate_store_code() -> str:
+    """Random, non-guessable branch code (~40 bits). Not a secret, but it must
+    not be enumerable: guessing another branch's code is the only way a staff
+    member could reach a restaurant that is not theirs."""
+    return "".join(secrets.choice(STORE_CODE_ALPHABET) for _ in range(STORE_CODE_LENGTH))
+
 
 DEFAULT_SETTINGS: dict = {
     "max_orders_per_batch": 3,
@@ -172,6 +186,19 @@ class Restaurant(Base, TimestampMixin):
     # Public storefront / QR / kiosk / social order-link slug (Category 8).
     # Unique when set; null until manager enables website/mobile/channel links.
     public_slug: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+    # --- Terminal / branch identity (the "location" half of account+location) ---
+    # Machine identifier a provisioned till stores once and sends on every staff
+    # login. Random so one branch can never be reached by guessing another's.
+    location_uuid: Mapped[str] = mapped_column(
+        String(36), unique=True, index=True, default=lambda: str(uuid.uuid4())
+    )
+    # Human-typed twin of location_uuid, entered ONCE when pairing a terminal to
+    # this branch. Unambiguous alphabet (no O/0/I/1) and random for the same
+    # reason: staff numbers are only unique *within* a branch, so the branch key
+    # is what keeps R1's "manager 1" separate from R3's.
+    store_code: Mapped[str] = mapped_column(
+        String(16), unique=True, index=True, default=lambda: generate_store_code()
+    )
     # Multi-branch grouping — null for today's standalone restaurants, set when
     # a branch is added under an Organization (see app.organizations).
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))

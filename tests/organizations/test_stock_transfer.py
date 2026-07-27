@@ -13,8 +13,8 @@ async def _make_org_with_branches(db_session, suffix: str):
         password="hunter2!",
     )
     await db_session.commit()
-    b1 = await add_branch(db_session, organization_id=org.id, name=f"Branch A {suffix}", lat=25.1, lng=55.1)
-    b2 = await add_branch(db_session, organization_id=org.id, name=f"Branch B {suffix}", lat=25.2, lng=55.2)
+    b1 = await add_branch(db_session, organization_id=org.id, name=f"Branch A {suffix}", email="b_13491102@t.local", password="hunter2!", lat=25.1, lng=55.1)
+    b2 = await add_branch(db_session, organization_id=org.id, name=f"Branch B {suffix}", email="b_79747802@t.local", password="hunter2!", lat=25.2, lng=55.2)
     await db_session.commit()
     return org, b1, b2
 
@@ -27,7 +27,7 @@ async def test_create_stock_transfer_validates_same_org(db_session):
     )
     await db_session.commit()
     outside_branch = await add_branch(
-        db_session, organization_id=other_org.id, name="Outside Branch", lat=25.3, lng=55.3,
+        db_session, organization_id=other_org.id, name="Outside Branch", email="b_12352862@t.local", password="hunter2!", lat=25.3, lng=55.3,
     )
     await db_session.commit()
 
@@ -129,10 +129,10 @@ async def test_stock_transfer_router_create_and_complete(client, db_session):
     headers = {"Authorization": f"Bearer {token}"}
 
     b1 = await client.post(
-        "/api/v1/organizations/branches", json={"name": "R Branch A", "lat": 25.1, "lng": 55.1}, headers=headers,
+        "/api/v1/organizations/branches", json={"name": "R Branch A", "email": "branch_56026425@test.local", "password": "hunter2!", "lat": 25.1, "lng": 55.1}, headers=headers,
     )
     b2 = await client.post(
-        "/api/v1/organizations/branches", json={"name": "R Branch B", "lat": 25.2, "lng": 55.2}, headers=headers,
+        "/api/v1/organizations/branches", json={"name": "R Branch B", "email": "branch_78337845@test.local", "password": "hunter2!", "lat": 25.2, "lng": 55.2}, headers=headers,
     )
     # org id is embedded in the JWT sub claim; decoding it is unnecessary —
     # branches endpoint is org-scoped via the bearer token, so grab org id from db.

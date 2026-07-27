@@ -365,43 +365,6 @@ export interface DriverPerformanceRow {
   late_pct: number;
 }
 
-export interface LiveMapStopOut {
-  order_id: number;
-  order_number: string;
-  sequence: number;
-  lat: number;
-  lng: number;
-  sla_deadline?: string | null;
-}
-
-export interface LiveMapBatchOut {
-  batch_id: number;
-  rider_id: number;
-  rider_name?: string | null;
-  status: string;
-  color: string;
-  stops: LiveMapStopOut[];
-  polyline: number[][];
-  total_est_min?: number | null;
-}
-
-export interface SlaRingOut {
-  order_id: number;
-  order_number: string;
-  lat: number;
-  lng: number;
-  sla_deadline: string;
-  minutes_remaining: number;
-  urgency: "safe" | "warn" | "critical" | string;
-  radius_km: number;
-}
-
-export interface LiveOpsMapOut {
-  origin: { lat: number; lng: number; name?: string };
-  batches: LiveMapBatchOut[];
-  sla_rings: SlaRingOut[];
-}
-
 /** One tender against a bill — a split bill produces several. */
 export interface PaymentDetailOut {
   id: number;
@@ -675,7 +638,10 @@ export interface CouponCreateIn {
 }
 
 export interface StaffMember {
+  /** Platform-wide surrogate key — internal only, never shown to staff. */
   id: number;
+  /** The number this person types to sign in; restarts at 1 in every branch. */
+  staff_code: number | null;
   name: string;
   phone: string | null;
   role: string;
@@ -955,6 +921,10 @@ export interface OrganizationBranchIn {
   name: string;
   lat: number;
   lng: number;
+  /** Manager login email for this store (required — branch is sign-in ready). */
+  email: string;
+  /** Manager login password (min 6 chars). */
+  password: string;
   region?: string;
   currency?: string;
   locale?: string;
@@ -964,6 +934,7 @@ export interface OrganizationBranchIn {
 export interface OrganizationBranchOut {
   id: number;
   name: string;
+  email?: string;
   region?: string | null;
   currency?: string;
   locale?: string;

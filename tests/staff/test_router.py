@@ -6,7 +6,7 @@ import pytest
 @pytest.mark.anyio
 async def test_create_clock_in_out_and_query_hours(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Ahmed", "pin": "1234"}, headers=auth_headers,
+        "/api/v1/staff", json={"name": "Ahmed", "pin": "1286"}, headers=auth_headers,
     )
     assert resp.status_code == 201
     staff_id = resp.json()["id"]
@@ -41,7 +41,7 @@ async def test_create_clock_in_out_and_query_hours(client, auth_headers):
 @pytest.mark.anyio
 async def test_double_clock_in_returns_409(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Bilal", "pin": "5678"}, headers=auth_headers,
+        "/api/v1/staff", json={"name": "Bilal", "pin": "5673"}, headers=auth_headers,
     )
     staff_id = resp.json()["id"]
     await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)
@@ -52,7 +52,7 @@ async def test_double_clock_in_returns_409(client, auth_headers):
 @pytest.mark.anyio
 async def test_hours_endpoint_reports_overtime(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Fatima", "pin": "9999"}, headers=auth_headers,
+        "/api/v1/staff", json={"name": "Fatima", "pin": "9917"}, headers=auth_headers,
     )
     staff_id = resp.json()["id"]
 
@@ -65,7 +65,7 @@ async def test_hours_endpoint_reports_overtime(client, auth_headers):
 @pytest.mark.anyio
 async def test_break_start_and_end_via_router(client, auth_headers):
     resp = await client.post(
-        "/api/v1/staff", json={"name": "Karim", "pin": "1111"}, headers=auth_headers,
+        "/api/v1/staff", json={"name": "Karim", "pin": "1176"}, headers=auth_headers,
     )
     staff_id = resp.json()["id"]
     await client.post(f"/api/v1/staff/{staff_id}/clock", json={"type": "clock_in"}, headers=auth_headers)

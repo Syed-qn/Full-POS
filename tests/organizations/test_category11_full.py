@@ -22,7 +22,7 @@ async def test_central_menu_publish_and_branch_price(client):
     b1 = await client.post(
         "/api/v1/organizations/branches",
         json={
-            "name": "Marina",
+            "name": "Marina", "email": "branch_70326826@test.local", "password": "hunter2!",
             "lat": 25.08,
             "lng": 55.14,
             "region": "dubai",
@@ -33,7 +33,7 @@ async def test_central_menu_publish_and_branch_price(client):
     b2 = await client.post(
         "/api/v1/organizations/branches",
         json={
-            "name": "JLT",
+            "name": "JLT", "email": "branch_2279992@test.local", "password": "hunter2!",
             "lat": 25.07,
             "lng": 55.15,
             "region": "dubai",
@@ -113,13 +113,13 @@ async def test_royalty_region_loyalty_promo_member_kitchen(client, db_session):
 
     b1 = await client.post(
         "/api/v1/organizations/branches",
-        json={"name": "R1", "lat": 25.0, "lng": 55.0, "region": "abu_dhabi"},
+        json={"name": "R1", "email": "branch_50857541@test.local", "password": "hunter2!", "lat": 25.0, "lng": 55.0, "region": "abu_dhabi"},
         headers=headers,
     )
     b2 = await client.post(
         "/api/v1/organizations/branches",
         json={
-            "name": "CK",
+            "name": "CK", "email": "branch_25176603@test.local", "password": "hunter2!",
             "lat": 25.1,
             "lng": 55.1,
             "region": "dubai",

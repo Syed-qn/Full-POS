@@ -5,6 +5,7 @@ import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
 import { disconnectMeta, fetchMetaConfig, type MetaConfig } from "../lib/onboardingApi";
 import { useMetaEmbeddedSignup } from "../lib/useMetaEmbeddedSignup";
+import { getStoreIdentity, type StoreIdentity } from "../lib/storeIdentity";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import {
   createApiKey,
@@ -216,6 +217,7 @@ function defaultHours(): DayHours[] {
 export function SettingsScreen() {
   const nav = useNavigate();
   const [me, setMe] = useState<RestaurantOut | null>(null);
+  const [storeIdentity, setStoreIdentity] = useState<StoreIdentity | null>(null);
   const [tab, setTab] = useState<Tab>("general");
 
   // General tab
@@ -239,6 +241,12 @@ export function SettingsScreen() {
 
   useEffect(() => {
     fetchMetaConfig().then(setMetaCfg).catch(() => {});
+  }, []);
+
+  // Pairing keys for this branch. Owner-only endpoint; a non-owner viewing
+  // Settings simply sees the placeholder rather than an error.
+  useEffect(() => {
+    getStoreIdentity().then(setStoreIdentity).catch(() => {});
   }, []);
 
   async function onDisconnectWhatsApp() {
@@ -672,6 +680,35 @@ export function SettingsScreen() {
           <>
           {tab === "general" && (
         <div className={s.section}>
+          {/* Terminal pairing. Staff numbers restart at 1 in every branch, so a
+              till must know WHICH branch it belongs to before anyone signs in.
+              Read-only: the code identifies this restaurant and is not editable. */}
+          <div className={`${s.row2} ${s.fieldGrid}`}>
+            <label className={s.col}>
+              <span className={s.rowName}>Store code (terminal pairing)</span>
+              <input
+                type="text"
+                value={storeIdentity?.store_code ?? "…"}
+                readOnly
+                className={s.input}
+                aria-describedby="store-code-help"
+              />
+              <span id="store-code-help" className={s.rowHint}>
+                Enter this once on each till. Staff then sign in with their own
+                number and PIN.
+              </span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Location ID (integrations)</span>
+              <input
+                type="text"
+                value={storeIdentity?.location_uuid ?? "…"}
+                readOnly
+                className={s.input}
+              />
+            </label>
+          </div>
+
           {/* Row 1 — identity: name, Arabic legal name, WhatsApp number. */}
           <div className={`${s.row2} ${s.fieldGrid}`}>
             <label className={s.col}>

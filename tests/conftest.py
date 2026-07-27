@@ -390,3 +390,16 @@ async def auth_headers(client):
         json={"email": "owner@biryani.ae", "password": "hunter2!"},
     )
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest.fixture
+async def store_code(client, auth_headers) -> str:
+    """Branch key for the auth_headers restaurant.
+
+    Staff sign-in is branch-scoped, so every /staff/login call needs the store the
+    terminal is paired with. The code is random per restaurant, so tests read it
+    back rather than hard-coding one.
+    """
+    resp = await client.get("/api/v1/staff/store-identity", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["store_code"]

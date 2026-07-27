@@ -38,10 +38,51 @@ describe("LoginScreen — login", () => {
   it("exposes a large staff PIN pad mode", async () => {
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
-    expect(screen.getByLabelText(/staff id/i)).toBeInTheDocument();
+    // Staff numbers restart at 1 per branch, so the pad asks for the store too.
+    expect(screen.getByLabelText(/store code/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/staff number/i)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /pin pad/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Digit 5" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign in with pin/i })).toBeInTheDocument();
+  });
+
+  it("refuses to sign in without a store code", async () => {
+    render(<MemoryRouter><LoginScreen /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
+    await userEvent.type(screen.getByLabelText(/staff number/i), "1");
+    await userEvent.click(screen.getByRole("button", { name: "Digit 5" }));
+    await userEvent.click(screen.getByRole("button", { name: /sign in with pin/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/store code for this terminal/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("remembers the store code only after a successful sign-in", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "t", token_type: "bearer", role: "manager",
+          staff_id: 42, staff_code: 1, name: "Sara", training_mode: false,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    render(<MemoryRouter><LoginScreen /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
+    await userEvent.type(screen.getByLabelText(/store code/i), "k7qm4rtb");
+    await userEvent.type(screen.getByLabelText(/staff number/i), "1");
+    for (const d of ["8", "4", "7", "1"]) {
+      await userEvent.click(screen.getByRole("button", { name: `Digit ${d}` }));
+    }
+    await userEvent.click(screen.getByRole("button", { name: /sign in with pin/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    // Upper-cased, and sent as the branch scope alongside the branch-local number.
+    expect(body).toMatchObject({ store: "K7QM4RTB", staff_code: 1, pin: "8471" });
+    await waitFor(() =>
+      expect(localStorage.getItem("pos.store_code")).toBe("K7QM4RTB"),
+    );
   });
 });
 

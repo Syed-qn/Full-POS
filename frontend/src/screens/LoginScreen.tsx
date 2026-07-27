@@ -10,6 +10,7 @@ import {
   setStaffSession,
 } from "../lib/navAccess";
 import { staffLogin } from "../lib/staffApi";
+import { getPairedStore, normalizeStoreCode, setPairedStore } from "../lib/storeIdentity";
 import s from "./LoginScreen.module.css";
 
 type Mode = "login" | "signup" | "pin";
@@ -21,11 +22,13 @@ export function LoginScreen() {
   // out of the box. Created via /auth/signup; change or clear before real use.
   const [email, setEmail] = useState("manager@fullpos.ae");
   const [password, setPassword] = useState("FullPOS@2026");
-  // Demo convenience prefill for the Staff PIN pad (staff id 1 = Demo Manager,
-  // PIN 1234). Staff PIN login routes by role and skips the manager onboarding
-  // gate; clear these before real use.
-  const [staffId, setStaffId] = useState("1");
-  const [pin, setPin] = useState("1234");
+  // Staff PIN login routes by role and skips the manager onboarding gate.
+  // The staff number is branch-local (every restaurant numbers its own people
+  // from 1), so it is only meaningful next to the store code below.
+  const [staffId, setStaffId] = useState("");
+  const [pin, setPin] = useState("");
+  // Entered once per terminal, then remembered — staff type only number + PIN.
+  const [storeCode, setStoreCode] = useState(getPairedStore());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
@@ -35,9 +38,7 @@ export function LoginScreen() {
   function switchMode(m: Mode) {
     setMode(m);
     setError(null);
-    // Demo convenience: seed the demo PIN when entering the PIN pad so Staff PIN
-    // sign-in works out of the box (staff id 1 = Demo Manager). Clear otherwise.
-    setPin(m === "pin" ? "1234" : "");
+    setPin("");
   }
 
   function pinPress(key: string) {
@@ -86,12 +87,17 @@ export function LoginScreen() {
 
   async function submitPin(e?: React.FormEvent) {
     e?.preventDefault();
+    const store = normalizeStoreCode(storeCode);
+    if (!store) {
+      setError("Enter the store code for this terminal");
+      return;
+    }
     const raw = staffId.trim();
     const id = Number(raw);
-    // Allow id 0 (the owner account) — reject only an empty field, a non-integer,
-    // or a negative id. A plain `id <= 0` here locks the owner out.
+    // Allow 0 (the owner account) — reject only an empty field, a non-integer,
+    // or a negative number. A plain `id <= 0` here locks the owner out.
     if (raw === "" || !Number.isInteger(id) || id < 0) {
-      setError("Enter your staff ID number");
+      setError("Enter your staff number");
       return;
     }
     if (pin.length < 4) {
@@ -107,7 +113,10 @@ export function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      const res = await staffLogin(id, pin);
+      const res = await staffLogin(store, id, pin);
+      // Only remember the code once it has actually opened a session, so a typo
+      // never gets pinned to the device.
+      setPairedStore(store);
       setToken(res.access_token);
       setStaffSession({
         role: res.role,
@@ -117,7 +126,9 @@ export function LoginScreen() {
       });
       nav(getRoleHomePath(res.role), { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Invalid staff ID or PIN");
+      setError(
+        err instanceof ApiError ? err.detail : "Invalid store, staff number or PIN",
+      );
       setPin("");
     } finally {
       setBusy(false);
@@ -166,16 +177,31 @@ export function LoginScreen() {
         {mode === "pin" ? (
           <form className={s.pinForm} onSubmit={submitPin} noValidate>
             <label className={s.field}>
-              <span className={s.label}>Staff ID</span>
+              <span className={s.label}>Store code</span>
               <input
-                aria-label="Staff ID"
+                aria-label="Store code"
+                value={storeCode}
+                onChange={(e) => setStoreCode(normalizeStoreCode(e.target.value))}
+                placeholder="e.g. K7QM4RTB"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={36}
+                autoFocus={!storeCode}
+              />
+            </label>
+
+            <label className={s.field}>
+              <span className={s.label}>Staff number</span>
+              <input
+                aria-label="Staff number"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={staffId}
                 onChange={(e) => setStaffId(e.target.value.replace(/\D/g, ""))}
-                placeholder="Your staff number"
+                placeholder="Your number at this branch"
                 autoComplete="username"
-                autoFocus
+                autoFocus={Boolean(storeCode)}
               />
             </label>
 

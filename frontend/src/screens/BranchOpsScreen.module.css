@@ -1,7 +1,406 @@
 .screen {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
+}
+
+/* ---- loading skeleton ---- */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skKpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.skTile,
+.skCard,
+.skTable {
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface-inset, #f3f4f6) 25%,
+    var(--bg-surface, #fff) 50%,
+    var(--bg-surface-inset, #f3f4f6) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+  border: 1px solid var(--border-subtle);
+}
+
+.skTile {
+  min-height: 88px;
+}
+
+.skCards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.skCard {
+  min-height: 160px;
+}
+
+.skTable {
+  min-height: 220px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* ---- header tools ---- */
+.headerTools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  justify-content: flex-end;
+}
+
+.dateField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dateField span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dateField input,
+.range input,
+.formGrid input,
+.formGridSingle input,
+.formGridSingle select,
+.formGrid2 input,
+.formGrid2 select,
+.inlineFields input {
+  min-height: 42px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 15px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  color-scheme: light dark;
+}
+
+/* ---- KPIs ---- */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi {
+  min-height: 88px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.kpi span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.kpi strong {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- add-branch dialog ---- */
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 22, 25, 0.45);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.dialogHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dialogHead h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dialogHead p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.dialogClose {
+  border: 0;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-muted, var(--text-secondary));
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.dialogClose:hover {
+  color: var(--text-primary);
+}
+
+.dialogClose:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dialogBody {
+  padding: 16px 20px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.dialogBody .formGridSingle {
+  max-width: none;
+}
+
+.dialogFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---- branch cards ---- */
+.branchGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.branchCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.branchTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.branchName {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.branchMeta {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pin {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-muted, var(--text-secondary));
+  background: var(--bg-surface-inset, color-mix(in srgb, var(--bg-surface) 85%, #000 6%));
+  border-radius: 999px;
+  padding: 4px 8px;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branchStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+.branchStats span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.branchStats strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.branchFoot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.emptyCard {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 160px;
+  padding: 24px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+}
+
+.emptyCard p {
+  margin: 0;
+}
+
+/* ---- cards / forms ---- */
+.card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cardHead h2,
+.cardHeadRow h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cardHead span,
+.cardHeadRow span,
+.range span,
+.formGrid span,
+.formGridSingle span,
+.formGrid2 span,
+.inlineFields span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cardHeadRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: end;
+}
+
+.range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.range label,
+.formGrid label,
+.formGridSingle label,
+.formGrid2 label,
+.inlineFields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formGridSingle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.formGrid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.inlineFields {
+  display: grid;
+  grid-template-columns: 0.7fr 1fr;
+  gap: 10px;
 }
 
 .actions {
@@ -11,156 +410,128 @@
   justify-content: flex-end;
 }
 
-.actions :global(button),
-.card :global(button) {
-  min-height: var(--touch-min, 56px);
-}
-
-.date,
-.range input,
-.formGrid input,
-.formGridSingle input,
-.formGridSingle select,
-.inlineFields input {
-  min-height: 48px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: var(--font-size-body, 16px);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.metric,
-.card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
-
-.metric {
-  min-height: 88px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.metric span {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.metric strong {
-  font-family: var(--font-mono);
-  font-size: 24px;
-  line-height: 1.1;
-  color: var(--text-primary);
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.75fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.sideStack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.card {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.cardHead {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.cardHead h2 {
+.hint {
   margin: 0;
-  font-size: 16px;
-  color: var(--text-primary);
-}
-
-.cardHead span,
-.range span,
-.formGrid span,
-.formGridSingle span,
-.inlineFields span {
-  font-size: 12px;
   color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
-.range,
-.formGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(130px, 1fr));
-  gap: 12px;
-  align-items: end;
+.banner {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--border-subtle));
+  background: color-mix(in srgb, #f59e0b 12%, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: 14px;
 }
 
-.range label,
-.formGrid label,
-.formGridSingle label,
-.inlineFields label {
+.advanced {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: var(--bg-surface);
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* ---- location ---- */
+.locBlock {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-
-.formGridSingle {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.inlineFields {
-  display: grid;
-  grid-template-columns: 0.8fr 1fr;
   gap: 10px;
 }
 
+.locHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.locLabel {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.mapBtn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--accent-primary, #2563eb);
+  border-radius: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mapBtn:hover {
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 10%, transparent);
+}
+
+.coordRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.locHint {
+  margin: 0;
+  color: var(--text-muted, var(--text-secondary));
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ---- table ---- */
 .tableWrap {
-  overflow-x: auto;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  max-height: 420px;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 760px;
+  min-width: 640px;
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 14px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 14px;
-}
-
-.table tbody tr {
-  height: 56px;
+  font-variant-numeric: tabular-nums;
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface-inset, var(--bg-surface));
   color: var(--text-secondary);
   font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  z-index: 1;
+}
+
+.table td:not(:first-child),
+.table th:not(:first-child) {
+  text-align: right;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .badgeOk,
@@ -189,22 +560,31 @@
 .empty {
   padding: 16px;
   color: var(--text-secondary);
-  text-align: center;
+  text-align: center !important;
 }
 
-@media (max-width: 1100px) {
-  .metrics,
-  .grid {
+@media (max-width: 900px) {
+  .kpis,
+  .skKpis {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .formGrid,
+  .formGrid2 {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 760px) {
-  .metrics,
-  .grid,
-  .range,
-  .formGrid,
-  .inlineFields {
+@media (max-width: 560px) {
+  .kpis,
+  .skKpis,
+  .skCards,
+  .coordRow {
     grid-template-columns: 1fr;
+  }
+
+  .headerTools {
+    width: 100%;
+    justify-content: stretch;
   }
 }

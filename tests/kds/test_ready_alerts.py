@@ -6,6 +6,8 @@ from decimal import Decimal
 
 import pytest
 
+from tests.helpers import store_key
+
 
 async def _auth_restaurant(db_session):
     """The tenant the owner token (auth_headers) belongs to — staff and orders
@@ -28,7 +30,7 @@ async def _cashier_headers(client, auth_headers, name, pin):
     )
     staff_id = staff_resp.json()["id"]
     login = await client.post(
-        "/api/v1/staff/login", json={"staff_id": staff_id, "pin": pin}
+        "/api/v1/staff/login", json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": pin}
     )
     return {"Authorization": f"Bearer {login.json()['access_token']}"}, staff_id
 

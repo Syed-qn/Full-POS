@@ -22,7 +22,7 @@ async def test_add_branch_creates_restaurant_under_org(db_session):
     )
     await db_session.commit()
     branch = await add_branch(
-        db_session, organization_id=org.id, name="Acme Downtown", lat=25.2, lng=55.3,
+        db_session, organization_id=org.id, name="Acme Downtown", email="b_31704075@t.local", password="hunter2!", lat=25.2, lng=55.3,
     )
     await db_session.commit()
     assert branch.organization_id == org.id
@@ -36,8 +36,8 @@ async def test_rollup_sales_sums_across_branches(db_session):
         db_session, name="Acme Group 3", owner_email="owner3@acme.ae", password="hunter2!",
     )
     await db_session.commit()
-    b1 = await add_branch(db_session, organization_id=org.id, name="Branch 1", lat=25.1, lng=55.1)
-    b2 = await add_branch(db_session, organization_id=org.id, name="Branch 2", lat=25.2, lng=55.2)
+    b1 = await add_branch(db_session, organization_id=org.id, name="Branch 1", email="b_34253027@t.local", password="hunter2!", lat=25.1, lng=55.1)
+    b2 = await add_branch(db_session, organization_id=org.id, name="Branch 2", email="b_70369910@t.local", password="hunter2!", lat=25.2, lng=55.2)
     await db_session.commit()
 
     for branch, amount in ((b1, "50.00"), (b2, "30.00")):

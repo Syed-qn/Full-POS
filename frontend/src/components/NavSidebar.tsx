@@ -32,6 +32,7 @@ const LIVE_ROUTES = new Set<string>([
   "/customer-management", // Customer Management
   "/settings", // Settings
   "/waiter-management", // Waiter Management
+  "/cashier-management", // Cashier Management
   "/manager-management", // Manager Management (owner only)
   "/coupons", // Coupons
   "/tickets", // Complaints
@@ -39,6 +40,7 @@ const LIVE_ROUTES = new Set<string>([
   "/analytics", // Analytics
   "/ai", // AI Insights
   "/reports", // Reports (owner only)
+  "/branches", // Multi-branch HQ (owner only)
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
@@ -77,6 +79,7 @@ const GROUPS: NavGroup[] = [
       { to: "/customer-management", label: "Customer Management", icon: "○" },
       { to: "/rider-management", label: "Rider Management", icon: "›" },
       { to: "/waiter-management", label: "Waiter Management", icon: "◎" },
+      { to: "/cashier-management", label: "Cashier Management", icon: "▣" },
       { to: "/manager-management", label: "Manager Management", icon: "★" },
       { to: "/kitchens", label: "Kitchen Management", icon: "◲" },
     ],

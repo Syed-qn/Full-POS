@@ -14,8 +14,8 @@ async def test_branch_comparison_sorts_by_revenue_desc(db_session):
         db_session, name="Compare Group", owner_email="owner@compare.ae", password="hunter2!",
     )
     await db_session.commit()
-    b1 = await add_branch(db_session, organization_id=org.id, name="Low Branch", lat=25.1, lng=55.1)
-    b2 = await add_branch(db_session, organization_id=org.id, name="High Branch", lat=25.2, lng=55.2)
+    b1 = await add_branch(db_session, organization_id=org.id, name="Low Branch", email="b_95076301@t.local", password="hunter2!", lat=25.1, lng=55.1)
+    b2 = await add_branch(db_session, organization_id=org.id, name="High Branch", email="b_93968229@t.local", password="hunter2!", lat=25.2, lng=55.2)
     await db_session.commit()
 
     for branch, amounts in ((b1, ["20.00"]), (b2, ["50.00", "40.00"])):
@@ -58,7 +58,7 @@ async def test_branch_comparison_router(client, db_session):
     headers = {"Authorization": f"Bearer {token}"}
 
     branch = await client.post(
-        "/api/v1/organizations/branches", json={"name": "RC Branch", "lat": 25.1, "lng": 55.1}, headers=headers,
+        "/api/v1/organizations/branches", json={"name": "RC Branch", "email": "branch_690913@test.local", "password": "hunter2!", "lat": 25.1, "lng": 55.1}, headers=headers,
     )
     branch_id = branch.json()["id"]
 

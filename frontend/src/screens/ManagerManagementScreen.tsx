@@ -169,7 +169,9 @@ export function ManagerManagementScreen() {
                   <div className={s.rowMain}>
                     <span className={s.rowName}>{m.name}</span>
                     <span className={s.rowMeta}>
-                      ID {m.id}
+                      {/* The sign-in number, not the internal id — showing the id
+                          is what led staff to type another branch's number. */}
+                      No. {m.staff_code ?? "—"}
                       {m.phone ? ` · ${m.phone}` : ""}
                     </span>
                   </div>

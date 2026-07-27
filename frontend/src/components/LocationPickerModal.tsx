@@ -13,12 +13,15 @@ export function LocationPickerModal({
   lat,
   lng,
   saving = false,
+  title = "Set restaurant location",
   onSave,
   onClose,
 }: {
   lat: number;
   lng: number;
   saving?: boolean;
+  /** Dialog heading (e.g. branch location vs restaurant location). */
+  title?: string;
   onSave: (lat: number, lng: number) => void;
   onClose: () => void;
 }) {
@@ -29,7 +32,7 @@ export function LocationPickerModal({
     <div className={s.overlay} onClick={saving ? undefined : onClose}>
       <div className={s.modal} onClick={(e) => e.stopPropagation()}>
         <div className={s.header}>
-          <h2 className={s.title}>Set restaurant location</h2>
+          <h2 className={s.title}>{title}</h2>
           <button
             className={s.close}
             onClick={onClose}

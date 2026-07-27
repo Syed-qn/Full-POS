@@ -55,12 +55,6 @@ const queueOrders = [
   },
 ];
 
-const emptyMap = {
-  origin: { lat: 25.2, lng: 55.27, name: "HQ" },
-  batches: [],
-  sla_rings: [],
-};
-
 vi.mock("../lib/ridersApi", async (importOriginal) => {
   const actual = await importOriginal<typeof ridersApi>();
   return {
@@ -78,14 +72,6 @@ vi.mock("../lib/ordersApi", async (importOriginal) => {
   };
 });
 
-vi.mock("../components/LiveOpsMap", () => ({
-  LiveOpsMap: ({ fillHeight }: { fillHeight?: boolean }) => (
-    <div data-testid="live-ops-map" data-fill={fillHeight ? "1" : "0"}>
-      map
-    </div>
-  ),
-}));
-
 describe("RidersScreen", () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -96,9 +82,6 @@ describe("RidersScreen", () => {
           return Promise.resolve(
             new Response(JSON.stringify({ phone: "+971500000000" }), { status: 200 }),
           );
-        }
-        if (u.includes("/api/v1/dispatch/live-map")) {
-          return Promise.resolve(new Response(JSON.stringify(emptyMap), { status: 200 }));
         }
         if (u.includes("/api/v1/orders")) {
           return Promise.resolve(new Response(JSON.stringify(queueOrders), { status: 200 }));
@@ -131,7 +114,6 @@ describe("RidersScreen", () => {
     renderWithProviders(<RidersScreen />);
     await waitFor(() => expect(screen.getAllByText("Ali Hassan").length).toBeGreaterThan(0));
     expect(screen.queryByTestId("riders-ops-layout")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("live-ops-map")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dispatch-queue-101")).not.toBeInTheDocument();
     expect(screen.queryByTestId("riders-late-risk")).not.toBeInTheDocument();
     expect(screen.queryByTestId("riders-manual-assign")).not.toBeInTheDocument();

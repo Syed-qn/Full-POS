@@ -5,6 +5,8 @@ from decimal import Decimal
 
 import pytest
 
+from tests.helpers import store_key
+
 
 @pytest.mark.anyio
 async def test_manager_pin_approval(db_session, restaurant):
@@ -16,7 +18,7 @@ async def test_manager_pin_approval(db_session, restaurant):
         restaurant_id=restaurant.id,
         name="Boss",
         role="manager",
-        pin_hash=hash_password("9999"),
+        pin_hash=hash_password("9917"),
         is_active=True,
     )
     db_session.add(mgr)
@@ -26,7 +28,7 @@ async def test_manager_pin_approval(db_session, restaurant):
         db_session,
         restaurant=restaurant,
         action_type="discount",
-        pin="9999",
+        pin="9917",
         amount_aed=Decimal("25.00"),
         reason="VIP",
     )
@@ -38,7 +40,7 @@ async def test_manager_pin_approval(db_session, restaurant):
             db_session,
             restaurant=restaurant,
             action_type="void",
-            pin="0000",
+            pin="0473",
         )
 
 
@@ -54,7 +56,7 @@ async def test_shift_open_close_and_attendance(db_session, restaurant):
         restaurant_id=restaurant.id,
         name="Ali",
         role="staff",
-        pin_hash=hash_password("1234"),
+        pin_hash=hash_password("1286"),
     )
     db_session.add(staff)
     await db_session.flush()
@@ -110,7 +112,7 @@ async def test_mistake_training_tips_performance(db_session, restaurant):
         restaurant_id=restaurant.id,
         name="Sara",
         role="staff",
-        pin_hash=hash_password("1111"),
+        pin_hash=hash_password("1176"),
     )
     db_session.add(staff)
     cust = Customer(
@@ -197,7 +199,7 @@ async def test_cash_drawer_staff_assignment(db_session, restaurant):
         restaurant_id=restaurant.id,
         name="Cashier",
         role="staff",
-        pin_hash=hash_password("2222"),
+        pin_hash=hash_password("2287"),
     )
     db_session.add(staff)
     await db_session.flush()
@@ -218,7 +220,7 @@ async def test_api_staff_cat9_endpoints(client, auth_headers, restaurant):
     create = await client.post(
         "/api/v1/staff",
         headers=auth_headers,
-        json={"name": "C9 Worker", "pin": "4321", "role": "staff"},
+        json={"name": "C9 Worker", "pin": "4396", "role": "staff"},
     )
     assert create.status_code == 201, create.text
     staff_id = create.json()["id"]
@@ -227,7 +229,7 @@ async def test_api_staff_cat9_endpoints(client, auth_headers, restaurant):
     mgr = await client.post(
         "/api/v1/staff",
         headers=auth_headers,
-        json={"name": "C9 Mgr", "pin": "8888", "role": "manager"},
+        json={"name": "C9 Mgr", "pin": "8862", "role": "manager"},
     )
     assert mgr.status_code == 201
     mgr_id = mgr.json()["id"]
@@ -235,7 +237,7 @@ async def test_api_staff_cat9_endpoints(client, auth_headers, restaurant):
     # Login
     login = await client.post(
         "/api/v1/staff/login",
-        json={"staff_id": staff_id, "pin": "4321"},
+        json={"store": await store_key(client, auth_headers), "staff_id": staff_id, "pin": "4396"},
     )
     assert login.status_code == 200
     assert login.json()["role"] == "staff"
@@ -277,7 +279,7 @@ async def test_api_staff_cat9_endpoints(client, auth_headers, restaurant):
         "/api/v1/staff/approvals",
         headers=auth_headers,
         json={
-            "pin": "8888",
+            "pin": "8862",
             "action_type": "discount",
             "amount_aed": "30.00",
             "reason": "test",
