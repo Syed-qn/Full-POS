@@ -46,6 +46,74 @@ describe("LoginScreen — login", () => {
     expect(screen.getByRole("button", { name: /sign in with pin/i })).toBeInTheDocument();
   });
 
+  it("a ?store= pairing link opens the PIN pad with the branch filled in", async () => {
+    render(
+      <MemoryRouter initialEntries={["/login?location=v6uwmuwv"]}>
+        <LoginScreen />
+      </MemoryRouter>,
+    );
+    // No tab click: the link is the pairing, so the pad is where it lands.
+    expect(screen.getByLabelText(/store code/i)).toHaveValue("V6UWMUWV");
+    expect(screen.getByRole("group", { name: /pin pad/i })).toBeInTheDocument();
+  });
+
+  it("names the branch a pairing link resolves to", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ name: "POS MANAGEMENT Deira", lat: 25.2681, lng: 55.3094 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    render(
+      <MemoryRouter initialEntries={["/login?location=V6UWMUWV"]}>
+        <LoginScreen />
+      </MemoryRouter>,
+    );
+    // The name is the check a human can actually make; two branches a few
+    // streets apart differ only in the third decimal of their coordinates.
+    await waitFor(() =>
+      expect(screen.getByText("POS MANAGEMENT Deira")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/25\.2681, 55\.3094/)).toBeInTheDocument();
+  });
+
+  it("flags a link whose coordinates point at a different branch", async () => {
+    // Same store key, but the link carries the OTHER Dubai branch's location.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(
+        JSON.stringify({ name: "Deira Branch", lat: 25.2681, lng: 55.3094 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    render(
+      <MemoryRouter
+        initialEntries={["/login?location=V6UWMUWV&lat=25.2048&lng=55.2708"]}
+      >
+        <LoginScreen />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Deira Branch")).toBeInTheDocument());
+    expect(screen.getByText(/points .* m away/)).toBeInTheDocument();
+  });
+
+  it("stays quiet when the link's coordinates match the branch", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(
+        JSON.stringify({ name: "Deira Branch", lat: 25.2681, lng: 55.3094 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    render(
+      <MemoryRouter
+        initialEntries={["/login?location=V6UWMUWV&lat=25.2681&lng=55.3094"]}
+      >
+        <LoginScreen />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Deira Branch")).toBeInTheDocument());
+    expect(screen.queryByText(/points .* m away/)).not.toBeInTheDocument();
+  });
+
   it("refuses to sign in without a store code", async () => {
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
@@ -58,15 +126,23 @@ describe("LoginScreen — login", () => {
   });
 
   it("remembers the store code only after a successful sign-in", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          access_token: "t", token_type: "bearer", role: "manager",
-          staff_id: 42, staff_code: 1, name: "Sara", training_mode: false,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    // A fresh Response per call: a body can only be read once, and the
+    // store-pairing lookup fires before the login POST.
+    const json = (b: unknown) =>
+      new Response(JSON.stringify(b), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (url) =>
+        String(url).includes("/staff/login")
+          ? json({
+              access_token: "t", token_type: "bearer", role: "manager",
+              staff_id: 42, staff_code: 1, name: "Sara", training_mode: false,
+            })
+          : json({ name: "Test Branch", lat: 25.2048, lng: 55.2708 }),
+      );
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
     await userEvent.type(screen.getByLabelText(/store code/i), "k7qm4rtb");
@@ -76,10 +152,18 @@ describe("LoginScreen — login", () => {
     }
     await userEvent.click(screen.getByRole("button", { name: /sign in with pin/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    // The store-pairing lookup also fires, so target the login call specifically.
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((c) => String(c[0]).includes("/staff/login")),
+      ).toBe(true),
+    );
+    const loginCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/staff/login"),
+    )!;
+    const body = JSON.parse(String(loginCall[1]?.body));
     // Upper-cased, and sent as the branch scope alongside the branch-local number.
-    expect(body).toMatchObject({ store: "K7QM4RTB", staff_code: 1, pin: "8471" });
+    expect(body).toMatchObject({ location: "K7QM4RTB", staff_code: 1, pin: "8471" });
     await waitFor(() =>
       expect(localStorage.getItem("pos.store_code")).toBe("K7QM4RTB"),
     );

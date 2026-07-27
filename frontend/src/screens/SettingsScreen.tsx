@@ -5,7 +5,7 @@ import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
 import { disconnectMeta, fetchMetaConfig, type MetaConfig } from "../lib/onboardingApi";
 import { useMetaEmbeddedSignup } from "../lib/useMetaEmbeddedSignup";
-import { getStoreIdentity, type StoreIdentity } from "../lib/storeIdentity";
+import { getStoreIdentity, pairingLink, type StoreIdentity } from "../lib/storeIdentity";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import {
   createApiKey,
@@ -694,18 +694,43 @@ export function SettingsScreen() {
                 aria-describedby="store-code-help"
               />
               <span id="store-code-help" className={s.rowHint}>
-                Enter this once on each till. Staff then sign in with their own
-                number and PIN.
+                Enter this once on each till, or open the pairing link below.
+                Staff then sign in with their own number and PIN.
               </span>
             </label>
             <label className={s.col}>
-              <span className={s.rowName}>Location ID (integrations)</span>
+              <span className={s.rowName}>Location ID</span>
               <input
                 type="text"
                 value={storeIdentity?.location_uuid ?? "…"}
                 readOnly
                 className={s.input}
               />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Terminal pairing link</span>
+              <input
+                type="text"
+                value={
+                  storeIdentity && me
+                    ? pairingLink(window.location.origin, {
+                        account_uuid: storeIdentity.account_uuid,
+                        location_uuid: storeIdentity.location_uuid,
+                        lat: me.lat,
+                        lng: me.lng,
+                      })
+                    : "…"
+                }
+                readOnly
+                className={s.input}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <span className={s.rowHint}>
+                Opening this on a till pairs it with this branch and jumps
+                straight to the PIN pad — nothing to type. It carries the branch
+                id and its coordinates, so a link meant for another branch is
+                flagged before anyone signs in.
+              </span>
             </label>
           </div>
 

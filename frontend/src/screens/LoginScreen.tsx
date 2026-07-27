@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, TouchButton } from "../components/Button";
 import { SectionBanner } from "../components/SectionBanner";
 import { ApiError } from "../lib/apiClient";
@@ -10,13 +10,41 @@ import {
   setStaffSession,
 } from "../lib/navAccess";
 import { staffLogin } from "../lib/staffApi";
-import { getPairedStore, normalizeStoreCode, setPairedStore } from "../lib/storeIdentity";
+import {
+  PAIRING_TOLERANCE_M,
+  getPairedStore,
+  lookupStore,
+  metresBetween,
+  normalizeStoreCode,
+  setPairedStore,
+  type StorePairing,
+} from "../lib/storeIdentity";
 import s from "./LoginScreen.module.css";
 
 type Mode = "login" | "signup" | "pin";
 
 export function LoginScreen() {
-  const [mode, setMode] = useState<Mode>("login");
+  // A pairing link — /login?store=V6UWMUWV — carries the branch the way an
+  // integration URL carries account+location: the terminal is told which store
+  // it belongs to instead of a person typing it. Falls back to whatever this
+  // device was last paired with. The code alone opens nothing; a staff number
+  // and PIN are still required, and both are checked inside this branch only.
+  const [params] = useSearchParams();
+  const linkedStore = normalizeStoreCode(
+    params.get("location") ?? params.get("store") ?? "",
+  );
+  // Which business the branch belongs to. Sent alongside the location so a link
+  // whose account does not own that branch is refused rather than followed.
+  const linkedAccount = (params.get("account") ?? "").trim() || null;
+  // The link also carries where that branch IS. The id says which branch; these
+  // let the till check the link it was given still points at the same place —
+  // the case that matters when two branches sit a few streets apart.
+  const linkedLat = Number(params.get("lat"));
+  const linkedLng = Number(params.get("lng"));
+  const hasLinkedCoords =
+    Number.isFinite(linkedLat) && Number.isFinite(linkedLng) &&
+    params.get("lat") !== null && params.get("lng") !== null;
+  const [mode, setMode] = useState<Mode>(linkedStore ? "pin" : "login");
   const [name, setName] = useState("");
   // Demo convenience prefill (all builds) — a real account so Sign In works
   // out of the box. Created via /auth/signup; change or clear before real use.
@@ -27,13 +55,46 @@ export function LoginScreen() {
   // from 1), so it is only meaningful next to the store code below.
   const [staffId, setStaffId] = useState("");
   const [pin, setPin] = useState("");
-  // Entered once per terminal, then remembered — staff type only number + PIN.
-  const [storeCode, setStoreCode] = useState(getPairedStore());
+  // ?store= wins over the remembered value, so re-pairing a terminal to another
+  // branch is just a new link rather than clearing site data.
+  const [storeCode, setStoreCode] = useState(linkedStore || getPairedStore());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
 
   const pinDisplay = useMemo(() => "•".repeat(pin.length) || "Enter PIN", [pin]);
+
+  // Name the branch the key resolves to. Two branches in the same city have
+  // near-identical coordinates, so the NAME is what makes a wrong pairing link
+  // obvious before staff start taking orders on the wrong till.
+  const [pairing, setPairing] = useState<StorePairing | null>(null);
+
+  // Distance between where the LINK says the branch is and where the branch
+  // actually is. Null when there is nothing to compare or they agree.
+  const coordDriftM = useMemo(() => {
+    if (!pairing || !hasLinkedCoords) return null;
+    const d = metresBetween(linkedLat, linkedLng, pairing.lat, pairing.lng);
+    return d > PAIRING_TOLERANCE_M ? d : null;
+  }, [pairing, hasLinkedCoords, linkedLat, linkedLng]);
+  useEffect(() => {
+    const key = normalizeStoreCode(storeCode);
+    // Short code is 8 chars, uuid is 36 — below 8 there is nothing to resolve.
+    if (key.length < 8) {
+      setPairing(null);
+      return;
+    }
+    let live = true;
+    // Debounced: the field is typed on a keypad, one lookup per pause not per key.
+    const t = setTimeout(() => {
+      void lookupStore(key, linkedAccount).then((p) => {
+        if (live) setPairing(p);
+      });
+    }, 350);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [storeCode, linkedAccount]);
 
   function switchMode(m: Mode) {
     setMode(m);
@@ -113,7 +174,7 @@ export function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      const res = await staffLogin(store, id, pin);
+      const res = await staffLogin(store, id, pin, linkedAccount);
       // Only remember the code once it has actually opened a session, so a typo
       // never gets pinned to the device.
       setPairedStore(store);
@@ -190,6 +251,23 @@ export function LoginScreen() {
                 autoFocus={!storeCode}
               />
             </label>
+
+            {pairing && (
+              <div className={s.pairing} role="status">
+                <span className={s.pairingLabel}>Signing in at</span>
+                <strong className={s.pairingName}>{pairing.name}</strong>
+                <span className={s.pairingCoords}>
+                  {pairing.lat.toFixed(4)}, {pairing.lng.toFixed(4)}
+                </span>
+                {coordDriftM !== null && (
+                  <span className={s.pairingWarn}>
+                    ⚠ This link points {Math.round(coordDriftM)} m away
+                    ({linkedLat.toFixed(4)}, {linkedLng.toFixed(4)}). It may be
+                    for a different branch — check before signing in.
+                  </span>
+                )}
+              </div>
+            )}
 
             <label className={s.field}>
               <span className={s.label}>Staff number</span>

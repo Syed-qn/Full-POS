@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 #: The only roles a person can be given. "owner" is not here on purpose — that
 #: is the restaurant account itself, not an assignable staff role.
@@ -77,18 +77,43 @@ class StaffLoginIn(BaseModel):
     search that let staff sign into the wrong tenant.
     """
 
-    store: str = Field(min_length=4, max_length=64)
+    #: Branch id — the ``location`` half of account+location. A provisioned
+    #: terminal sends this; ``store`` remains for the typed short-code path.
+    location: str | None = Field(default=None, min_length=4, max_length=64)
+    #: Owning business. Optional, and checked as a second factor when present:
+    #: a link whose account does not own the location is refused.
+    account: str | None = Field(default=None, min_length=4, max_length=64)
+    store: str | None = Field(default=None, min_length=4, max_length=64)
     staff_code: int | None = Field(default=None, ge=0)
     #: Legacy surrogate id — still accepted, but now resolved inside ``store`` only.
     staff_id: int | None = Field(default=None, ge=0)
     pin: str
 
-    @field_validator("staff_id")
-    @classmethod
-    def _need_one_identifier(cls, v, info):
-        if v is None and info.data.get("staff_code") is None:
+    # A model validator, not field validators: pydantic skips field validators for
+    # fields that were never supplied, which is exactly the case being rejected
+    # here — a body with no branch at all must fail loudly, not fall through to
+    # an empty lookup and surface as "wrong PIN".
+    @model_validator(mode="after")
+    def _need_branch_and_identifier(self):
+        if not (self.location or self.store):
+            raise ValueError("location (or store) is required")
+        if self.staff_code is None and self.staff_id is None:
             raise ValueError("staff_code (or staff_id) is required")
-        return v
+        return self
+
+
+class StorePairingOut(BaseModel):
+    """What a terminal shows BEFORE anyone signs in, so whoever is pairing it can
+    see which branch the link resolved to.
+
+    Two branches a few streets apart have unrelated ids but near-identical
+    coordinates, so the NAME is what makes a wrong link obvious to a human; the
+    coordinates are shown only as a secondary confirmation.
+    """
+
+    name: str
+    lat: float
+    lng: float
 
 
 class StoreIdentityOut(BaseModel):
@@ -96,8 +121,12 @@ class StoreIdentityOut(BaseModel):
     terminal — shown in Settings, never on the public site."""
 
     model_config = ConfigDict(from_attributes=True)
-    store_code: str
+    #: The pair a terminal link carries. ``account`` is null for a standalone
+    #: restaurant that is not under an organization yet.
+    account_uuid: str | None = None
     location_uuid: str
+    #: Short typeable form of location_uuid, for keypad entry with no link.
+    store_code: str
     name: str
 
 

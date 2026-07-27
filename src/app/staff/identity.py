@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.identity.auth import verify_password
 from app.identity.models import Restaurant
+from app.organizations.models import Organization
 from app.staff.models import StaffMember
 
 
@@ -127,6 +128,35 @@ async def resolve_store(session: AsyncSession, store: str) -> Restaurant | None:
             | (Restaurant.location_uuid == key.lower())
         )
     )
+
+
+async def resolve_location(
+    session: AsyncSession, *, account: str | None, location: str
+) -> Restaurant | None:
+    """Resolve an account + location pair to one branch.
+
+    ``location`` alone already identifies the branch — it is a uuid, unique
+    platform-wide. ``account`` is checked as a second factor: a link whose
+    account does not own that location is rejected rather than followed, which
+    is what turns a mistyped or stale pairing link into a refusal instead of a
+    sign-in somewhere unintended.
+    """
+    restaurant = await resolve_store(session, location)
+    if restaurant is None:
+        return None
+    if account:
+        org = (
+            await session.scalar(
+                select(Organization).where(
+                    Organization.account_uuid == account.strip().lower()
+                )
+            )
+            if account.strip()
+            else None
+        )
+        if org is None or restaurant.organization_id != org.id:
+            return None
+    return restaurant
 
 
 async def find_staff_for_login(

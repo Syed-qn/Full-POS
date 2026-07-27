@@ -18,13 +18,14 @@ from app.staff.approvals import (
     raise_suspicious,
 )
 from app.staff.deps import require_role
+from app.organizations.models import Organization
 from app.staff.identity import (
     DuplicatePinError,
     WeakPinError,
     assert_pin_unique_in_restaurant,
     find_staff_for_login,
     next_staff_code,
-    resolve_store,
+    resolve_location,
     validate_pin_strength,
 )
 from app.staff.mistakes import list_mistakes, record_mistake
@@ -52,6 +53,7 @@ from app.staff.schemas import (
     StaffOut,
     StaffPatchIn,
     StoreIdentityOut,
+    StorePairingOut,
     SuspiciousOut,
     TrainingModeIn,
 )
@@ -98,7 +100,9 @@ async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_se
     makes the number unambiguous. Resolving it first is also what stops a staff
     member from reaching a restaurant that is not theirs by typing a low id.
     """
-    restaurant = await resolve_store(session, body.store)
+    restaurant = await resolve_location(
+        session, account=body.account, location=body.location or body.store or ""
+    )
     staff = (
         None
         if restaurant is None
@@ -113,7 +117,9 @@ async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_se
     # a distinct "no such store" reply would turn this endpoint into a directory
     # of every branch on the platform.
     if staff is None or not staff.is_active or not verify_password(body.pin, staff.pin_hash):
-        raise HTTPException(status_code=401, detail="invalid store, staff number or PIN")
+        raise HTTPException(
+            status_code=401, detail="invalid location, staff number or PIN"
+        )
     token = create_access_token(
         staff_id=staff.id, audience="staff", extra_claims={"role": staff.role}
     )
@@ -128,13 +134,46 @@ async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_se
     }
 
 
+@router.get("/store-pairing", response_model=StorePairingOut)
+async def store_pairing(
+    location: str | None = Query(default=None, min_length=4, max_length=64),
+    account: str | None = Query(default=None, min_length=4, max_length=64),
+    store: str | None = Query(default=None, min_length=4, max_length=64),
+    session: AsyncSession = Depends(get_session),
+):
+    """Name the branch a pairing key points at, before any sign-in.
+
+    Unauthenticated by necessity — the terminal has no session yet. It discloses
+    only what the caller already had to know the key for, and the keys are random
+    (~40 bits for the short code, 122 for the uuid), so this is not a way to walk
+    the list of restaurants on the platform. It carries no staff or order data.
+    """
+    key = location or store
+    if not key:
+        raise HTTPException(status_code=422, detail="location (or store) is required")
+    restaurant = await resolve_location(session, account=account, location=key)
+    if restaurant is None:
+        raise HTTPException(status_code=404, detail="unknown location")
+    return StorePairingOut(
+        name=restaurant.name, lat=restaurant.lat, lng=restaurant.lng
+    )
+
+
 @router.get("/store-identity", response_model=StoreIdentityOut)
-async def store_identity(restaurant=Depends(require_role("owner"))):
+async def store_identity(
+    restaurant=Depends(require_role("owner")),
+    session: AsyncSession = Depends(get_session),
+):
     """The pairing keys for THIS branch, so an owner can set up a new terminal.
     Owner-only: handing these out freely would re-expose branch selection."""
+    account_uuid = None
+    if restaurant.organization_id:
+        org = await session.get(Organization, restaurant.organization_id)
+        account_uuid = org.account_uuid if org else None
     return StoreIdentityOut(
-        store_code=restaurant.store_code,
+        account_uuid=account_uuid,
         location_uuid=restaurant.location_uuid,
+        store_code=restaurant.store_code,
         name=restaurant.name,
     )
 

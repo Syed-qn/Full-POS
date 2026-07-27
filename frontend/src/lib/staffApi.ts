@@ -57,7 +57,12 @@ export async function deleteManager(id: number): Promise<void> {
  * `store` is required: staff numbers restart at 1 per restaurant, so without it
  * the server cannot tell this branch's "manager 1" from another's.
  */
-export async function staffLogin(store: string, staffCode: number, pin: string) {
+export async function staffLogin(
+  location: string,
+  staffCode: number,
+  pin: string,
+  account?: string | null,
+) {
   // Wrong PIN must not clear the current shell session (staff switch / login pad).
   return apiClient.post<{
     access_token: string;
@@ -69,7 +74,7 @@ export async function staffLogin(store: string, staffCode: number, pin: string) 
     training_mode: boolean;
   }>(
     "/api/v1/staff/login",
-    { store, staff_code: staffCode, pin },
+    { location, account: account ?? undefined, staff_code: staffCode, pin },
     { skipAuthRedirect: true },
   );
 }

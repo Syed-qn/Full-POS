@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -26,6 +27,12 @@ class Organization(Base, TimestampMixin):
     __tablename__ = "organizations"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # The business a branch belongs to, as an opaque id. Pairs with
+    # Restaurant.location_uuid the way an integration payload carries
+    # account + location: account says whose, location says which.
+    account_uuid: Mapped[str] = mapped_column(
+        String(36), unique=True, index=True, default=lambda: str(uuid.uuid4())
+    )
     name: Mapped[str] = mapped_column(String(255))
     owner_email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))

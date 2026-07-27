@@ -117,7 +117,7 @@ async def test_unknown_store_is_indistinguishable_from_a_bad_pin(client, auth_he
         json={"store": "ZZZZZZZZ", "staff_code": 1, "pin": "8471"},
     )
     assert resp.status_code == 401
-    assert "store" in resp.json()["detail"].lower()
+    assert "location" in resp.json()["detail"].lower()
 
 
 @pytest.mark.anyio
