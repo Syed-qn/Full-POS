@@ -20,8 +20,9 @@ ACCESS.md
 # local tool state
 .superpowers/
 
-# graphify run metadata (not useful to team)
-graphify-out/cost.json
+# graphify build output: regenerated from source by `/graphify`, ~300MB and
+# thousands of cache files that churn on every run. Rebuild it, don't clone it.
+graphify-out/
 
 # Python build artifacts
 build/
