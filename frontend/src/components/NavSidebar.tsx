@@ -194,7 +194,12 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
                 so the chrome never shows two different brands. Falls back to
                 the product name only until /me answers. */}
             <strong>{restaurantName || appProductName()}</strong>
-            <span>{desktop ? "Desktop" : role ? role : "Manager"}</span>
+            {/* No staff role means this session came from the email+password
+                login, and that credential lives on the restaurant row itself —
+                so the only person it can be is the owner. It used to fall back
+                to "Manager", which told the owner they were something they are
+                not. Same null-is-owner reading as the group labels above. */}
+            <span>{desktop ? "Desktop" : (role ?? "Owner")}</span>
           </div>
         )}
       </div>

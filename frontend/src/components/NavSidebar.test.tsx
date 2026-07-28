@@ -18,6 +18,36 @@ function renderNav(path = "/") {
   );
 }
 
+function fakeJwt(payload: Record<string, unknown>): string {
+  const part = (o: unknown) =>
+    btoa(JSON.stringify(o)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  return `${part({ alg: "none", typ: "JWT" })}.${part(payload)}.sig`;
+}
+
+describe("NavSidebar identity label", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("names an email/password session Owner, not Manager", () => {
+    // aud=manager with no role claim is the /auth/login token, and that
+    // credential lives on the restaurant row — i.e. the owner. Labelling it
+    // "Manager" told the owner they were a lesser role than they are.
+    localStorage.setItem("ops_token", fakeJwt({ sub: "1", aud: "manager" }));
+    renderNav("/");
+    expect(screen.getByText(/^owner$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^manager$/i)).not.toBeInTheDocument();
+  });
+
+  it("still shows the real role for a staff PIN session", () => {
+    localStorage.setItem("ops_token", fakeJwt({ sub: "9", aud: "staff", role: "manager" }));
+    renderNav("/");
+    expect(screen.getByText(/^manager$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^owner$/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("NavSidebar logout", () => {
   beforeEach(() => localStorage.clear());
 
