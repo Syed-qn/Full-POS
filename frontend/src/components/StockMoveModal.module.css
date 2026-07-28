@@ -1,0 +1,47 @@
+/* Segmented action picker. The modal shell itself comes from
+   DishEditModal.module.css, so only the pieces that stylesheet has no
+   equivalent for live here. */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+.tab {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: var(--radius-sm);
+  padding: 9px 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.tab:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.tabActive {
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  color: var(--accent-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.tab:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.hint {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}

@@ -160,10 +160,10 @@ export function IngredientAddModal({
 
         <div className={s.footer}>
           <div className={s.footerRight}>
-            <Button variant="ghost" onClick={onClose} disabled={busy}>
+            <Button size="md" variant="ghost" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
-            <Button onClick={() => void save()} disabled={!canSave}>
+            <Button size="md" onClick={() => void save()} disabled={!canSave}>
               {busy ? "Adding…" : "Add ingredient"}
             </Button>
           </div>

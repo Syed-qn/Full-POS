@@ -11,6 +11,10 @@ class IngredientIn(BaseModel):
     low_stock_threshold: Decimal = Decimal("0.000")
     par_level: Decimal = Decimal("0.000")
     cost_per_unit_aed: Decimal = Decimal("0.0000")
+    # Count tolerance for THIS ingredient. None means use the default, so a
+    # cheap high-turnover item can be held looser than saffron without forcing
+    # a number onto every row.
+    count_variance_threshold_pct: Decimal | None = None
 
 
 class IngredientOut(BaseModel):
@@ -22,6 +26,7 @@ class IngredientOut(BaseModel):
     low_stock_threshold: Decimal
     par_level: Decimal
     cost_per_unit_aed: Decimal
+    count_variance_threshold_pct: Decimal | None = None
 
 
 class CostIn(BaseModel):
@@ -47,6 +52,11 @@ class RestockIn(BaseModel):
 
 class StockCountIn(BaseModel):
     counted_qty: Decimal
+    # Why the counted figure differs. See COUNT_REASON_CODES — an unknown value
+    # is stored as "other" rather than rejected, so a count is never lost to a
+    # spelling mistake.
+    reason_code: str | None = None
+    reason: str | None = None
 
 
 class StockCountOut(BaseModel):
@@ -54,6 +64,12 @@ class StockCountOut(BaseModel):
     previous_stock: Decimal
     counted_stock: Decimal
     variance_pct: float | None = None
+    # What the difference cost, so a shortfall counted away still shows up in
+    # money and not only in kilos.
+    variance_value_aed: Decimal | None = None
+    reason_code: str | None = None
+    threshold_pct: float | None = None
+    flagged: bool | None = None
 
 
 class BatchIn(BaseModel):

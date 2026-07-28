@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import record_audit
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.inventory.events import _commit_and_announce
 from app.inventory.models import DishIngredient, Ingredient, StockLocation
 from app.inventory.schemas import (
     AnomalyCheckIn,
@@ -48,6 +49,7 @@ from app.inventory.service import (
     reject_stock_adjustment,
     request_stock_adjustment,
     spoilage_report,
+    stock_closing_history,
     stock_variance_report,
     suggest_reorder_quantities,
     take_stock_closing_snapshot,
@@ -72,7 +74,7 @@ async def create_ingredient(
 ):
     ingredient = Ingredient(restaurant_id=restaurant.id, **body.model_dump())
     session.add(ingredient)
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(ingredient)
     return ingredient
 
@@ -167,6 +169,17 @@ async def anomaly_alerts_endpoint(
     ]
 
 
+@router.get("/reports/closing-history")
+async def closing_history_endpoint(
+    days: int = Query(default=14, ge=1, le=90),
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Days already captured, newest first. Read only — no commit, so this is
+    deliberately NOT wired to _commit_and_announce."""
+    return await stock_closing_history(session, restaurant_id=restaurant.id, days=days)
+
+
 @router.post("/reports/closing-snapshot")
 async def closing_snapshot_endpoint(
     target_date: date | None = Query(default=None),
@@ -176,7 +189,7 @@ async def closing_snapshot_endpoint(
     rows = await take_stock_closing_snapshot(
         session, restaurant_id=restaurant.id, target_date=target_date
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     return rows
 
 
@@ -193,7 +206,7 @@ async def create_location(
         kitchen_role=body.kitchen_role,
     )
     session.add(loc)
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(loc)
     return loc
 
@@ -237,7 +250,7 @@ async def approve_stock_adjustment_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(adjustment)
     return adjustment
 
@@ -255,7 +268,7 @@ async def reject_stock_adjustment_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(adjustment)
     return adjustment
 
@@ -288,7 +301,7 @@ async def link_recipe(
         yield_pct=body.yield_pct,
     )
     session.add(link)
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     return {
         "id": link.id,
         "dish_id": link.dish_id,
@@ -330,7 +343,7 @@ async def create_stock_adjustment(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(adjustment)
     return adjustment
 
@@ -362,7 +375,7 @@ async def log_waste(
             "reason_type": body.reason_type,
         },
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     ingredient = await session.get(Ingredient, ingredient_id)
     return ingredient
 
@@ -381,7 +394,7 @@ async def restock(
         action="restock", restaurant_id=restaurant.id, before=None,
         after={"quantity": str(body.quantity)},
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(ingredient)
     return ingredient
 
@@ -401,7 +414,7 @@ async def update_cost(
         action="cost_update", restaurant_id=restaurant.id,
         before={"cost_per_unit_aed": before}, after={"cost_per_unit_aed": str(body.cost_per_unit_aed)},
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(ingredient)
     return ingredient
 
@@ -415,9 +428,10 @@ async def stock_count(
 ):
     await _get_owned_ingredient(session, ingredient_id=ingredient_id, restaurant_id=restaurant.id)
     result = await record_stock_count(
-        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id, counted_qty=body.counted_qty,
+        session, restaurant_id=restaurant.id, ingredient_id=ingredient_id,
+        counted_qty=body.counted_qty, reason_code=body.reason_code, reason=body.reason,
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     return result
 
 
@@ -438,7 +452,7 @@ async def create_batch(
         location_id=body.location_id,
         update_stock=True,
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(batch)
     return batch
 
@@ -456,7 +470,7 @@ async def check_anomaly(
         expected_qty=body.expected_qty, actual_qty=body.actual_qty,
         threshold_pct=body.threshold_pct,
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     return result
 
 
@@ -477,7 +491,7 @@ async def create_substitute(
         conversion_factor=body.conversion_factor,
         priority=body.priority,
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(substitute)
     return substitute
 

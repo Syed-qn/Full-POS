@@ -16,7 +16,7 @@
 
 .actions button {
   /* A label long enough to wrap made one button two lines tall while the rest
-     stayed one. Keep them on a single line and let the row scroll instead. */
+     stayed one. Keep them on a single line and let the row wrap instead. */
   white-space: nowrap;
 }
 
@@ -26,49 +26,64 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 16px 18px;
+  padding: 14px 18px;
   border-radius: var(--radius-lg, 12px);
-  border: 1px solid color-mix(in srgb, var(--sla-warn) 45%, var(--border-default));
-  background: color-mix(in srgb, var(--sla-warn) 12%, var(--bg-surface));
-  box-shadow: var(--shadow-sm);
+  border: 1px solid color-mix(in srgb, var(--sla-warn) 40%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-warn) 9%, var(--bg-surface));
+  box-shadow: var(--shadow-xs);
 }
 
 .lowStockCopy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .lowStockCopy strong {
-  font-size: var(--font-size-item, 18px);
+  font-size: var(--font-size-ui, 14px);
+  font-weight: 700;
   color: var(--text-primary);
 }
 
 .lowStockCopy span {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.35;
 }
 
-.lowStockActions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.lowStockBtn {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--sla-warn) 55%, var(--border-default));
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-revenue);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
 }
 
-.metricAlert {
-  border-color: color-mix(in srgb, var(--sla-warn) 50%, var(--border-subtle));
-  background: color-mix(in srgb, var(--sla-warn) 10%, var(--bg-surface));
+.lowStockBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--sla-warn) 14%, var(--bg-surface));
+  border-color: var(--sla-warn);
 }
 
-.rowLow td {
-  background: color-mix(in srgb, var(--sla-warn) 8%, transparent);
+.lowStockBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
+/* ── Metrics ─────────────────────────────────────────────────────────────── */
+
+/* auto-fit rather than a fixed four: dropping the Pending approvals metric
+   left a fourth track holding nothing. */
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 12px;
 }
 
@@ -77,84 +92,157 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 .metric {
-  min-height: 88px;
-  padding: 16px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 8px;
 }
 
 .metricLabel {
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .metric strong {
   font-family: var(--font-mono);
-  font-size: 24px;
-  line-height: 1.1;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
+
+.metricAlert {
+  border-color: color-mix(in srgb, var(--sla-warn) 45%, var(--border-subtle));
+}
+
+.metricAlert strong {
+  color: var(--accent-revenue);
+}
+
+/* ── Sub navigation ──────────────────────────────────────────────────────── */
+/* Same bar as the Promotion screen, so the two pages behave alike. */
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 14px);
+  padding: 8px 12px;
+  box-shadow: var(--shadow-card);
+}
+
+.tabGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  min-height: 44px;
+  padding: 10px 18px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+}
+
+.tabActive,
+.tabActive:hover {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+}
+
+/* Pending approvals count. Hidden behind a tab, work waiting on a decision is
+   invisible, so it is pulled onto the tab itself. */
+.tabCount {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--sla-warn);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tabActive .tabCount {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
 
 .card {
-  padding: 18px;
+  padding: 16px 18px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+  min-width: 0;
 }
 
+/* Title on the left, this card's own action on the right. The actions used to
+   live in a single strip at the top of the page, which said nothing about
+   which section they belonged to. */
 .cardHead {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.cardHeadText {
+  display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .cardHead h2 {
   margin: 0;
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
 .cardHead span {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.formGrid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.formGrid label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
-.formGrid input,
-.select,
-.input {
-  width: 100%;
-  min-height: 48px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: var(--font-size-body, 16px);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
+/* ── Layout ──────────────────────────────────────────────────────────────── */
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.7fr);
   gap: 16px;
   align-items: start;
 }
@@ -163,68 +251,148 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
+
+/* Tab content. auto-fit, so a tab holding two cards shows two columns and a
+   tab holding one shows a single full-width card. A fixed three-column track
+   left the Counts and Waste tabs as a narrow card against two empty thirds. */
+.panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
 
 .tableWrap {
   overflow-x: auto;
+  margin: -4px -4px 0;
+  padding: 0 4px;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 680px;
+  min-width: 640px;
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 14px 12px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 14px;
-  min-height: 56px;
-}
-
-.table tbody tr {
-  height: 56px;
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 .table th {
+  padding: 0 12px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background: var(--bg-surface-inset);
+}
+
+.cellName {
+  font-weight: 600;
+}
+
+/* Figures line up column to column: tabular mono, right aligned. Left aligned
+   proportional digits made every quantity a different width. */
+.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.table th.num {
+  font-family: inherit;
+}
+
+.cellAction {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Quiet until the row is hovered, so a column of buttons does not compete with
+   the figures it sits beside. */
+.rowBtn {
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-secondary);
-  font-weight: 700;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.table tbody tr:hover .rowBtn,
+.rowBtn:focus-visible {
+  opacity: 1;
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.rowLow td {
+  background: color-mix(in srgb, var(--sla-warn) 7%, transparent);
+}
+
+.rowLow:hover td {
+  background: color-mix(in srgb, var(--sla-warn) 12%, transparent);
 }
 
 .badgeOk,
 .badgeWarn {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .badgeOk {
-  color: #166534;
-  background: #dcfce7;
+  color: var(--sla-safe);
+  background: var(--sla-safe-dim);
 }
 
 .badgeWarn {
-  color: #92400e;
-  background: #fef3c7;
+  color: var(--accent-revenue);
+  background: var(--sla-warn-dim);
 }
+
+/* ── Lists ───────────────────────────────────────────────────────────────── */
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .listItem,
 .approval {
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
   background: var(--bg-surface-inset);
 }
 
@@ -232,12 +400,14 @@
 .approval > div:first-child {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .listItem strong,
 .approval strong {
   font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -256,22 +426,58 @@
 
 .rowActions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .rowActions :global(button) {
-  min-height: var(--touch-min, 56px);
-  min-width: var(--touch-min, 56px);
-  padding: 12px 16px;
-  font-size: 15px;
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Blind count: recorded figures replaced by a placeholder, so a counter cannot
+   simply retype what the screen already says. */
+.blindNote {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-default);
+  background: var(--bg-surface-inset);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.hidden {
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+}
+
+/* Money impact of a count variance, beside the quantity. */
+.lossValue,
+.gainValue {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lossValue {
+  color: var(--sla-critical);
+}
+
+.gainValue {
+  color: var(--sla-safe);
 }
 
 .empty {
-  padding: 16px;
-  color: var(--text-secondary);
+  padding: 20px 16px;
+  color: var(--text-muted);
   text-align: center;
+  font-size: 13px;
 }
 
 @media (max-width: 1100px) {
@@ -279,17 +485,18 @@
   .grid {
     grid-template-columns: 1fr 1fr;
   }
-
-  .formGrid {
-    grid-template-columns: repeat(3, minmax(120px, 1fr));
-  }
 }
 
 @media (max-width: 760px) {
   .metrics,
   .grid,
-  .formGrid {
+  .panels {
     grid-template-columns: 1fr;
+  }
+
+  .cardHead {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .approval {

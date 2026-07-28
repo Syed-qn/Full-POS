@@ -35,7 +35,7 @@ _CHANNEL_PREFIX = "rt:"
 
 #: What a terminal may be told changed. Deliberately coarse: a handful of
 #: topics a screen can map to "refetch this list", not a per-field diff.
-TOPICS = ("orders", "tables", "kds")
+TOPICS = ("orders", "tables", "kds", "inventory")
 
 _redis_client: Any = None
 

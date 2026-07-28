@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
@@ -248,15 +248,31 @@ async def record_stock_count(
     ingredient_id: int,
     counted_qty: Decimal,
     counted_by: str = "manager",
-    anomaly_threshold_pct: float = 15.0,
+    anomaly_threshold_pct: float | None = None,
+    reason_code: str | None = None,
+    reason: str | None = None,
 ) -> dict:
+    from app.inventory.models import (
+        COUNT_REASON_CODES,
+        DEFAULT_COUNT_VARIANCE_THRESHOLD_PCT,
+    )
+
     ingredient = await session.get(Ingredient, ingredient_id)
     if ingredient is None or ingredient.restaurant_id != restaurant_id:
         raise ValueError("ingredient not found")
 
+    code = (reason_code or "").strip().lower() or None
+    if code is not None and code not in COUNT_REASON_CODES:
+        code = "other"
+
     previous_stock = ingredient.current_stock
     variance = counted_qty - previous_stock
     ingredient.current_stock = counted_qty
+
+    # What the difference COST. Recording only the quantity let a shortfall be
+    # counted away with no effect on food cost, which is exactly how shrinkage
+    # hides. Negative for a loss, positive for a gain.
+    variance_value = (variance * ingredient.cost_per_unit_aed).quantize(MONEY)
 
     session.add(
         StockCountLog(
@@ -266,15 +282,31 @@ async def record_stock_count(
             counted_stock=counted_qty,
             variance=variance,
             counted_by=counted_by,
+            reason_code=code,
+            reason=reason,
+            variance_value_aed=variance_value,
         )
     )
+
+    # Tolerance: this ingredient's own figure, else the caller's, else the
+    # default. Industry practice is one to two percent either way — the old
+    # hardcoded 15% was loose enough to wave a real loss through.
+    if anomaly_threshold_pct is None:
+        per_ingredient = getattr(ingredient, "count_variance_threshold_pct", None)
+        threshold = float(
+            per_ingredient
+            if per_ingredient is not None
+            else DEFAULT_COUNT_VARIANCE_THRESHOLD_PCT
+        )
+    else:
+        threshold = float(anomaly_threshold_pct)
 
     # Persist count variance alert when large swing
     if previous_stock != 0:
         variance_pct = float(abs(variance) / abs(previous_stock) * 100)
     else:
         variance_pct = 100.0 if variance != 0 else 0.0
-    if variance_pct > anomaly_threshold_pct:
+    if variance_pct > threshold:
         alert_type = "theft_loss" if variance < 0 else "count_variance"
         session.add(
             StockAnomalyAlert(
@@ -284,7 +316,10 @@ async def record_stock_count(
                 expected_qty=previous_stock,
                 actual_qty=counted_qty,
                 variance_pct=Decimal(str(round(variance_pct, 2))),
-                message=f"Stock count variance {variance_pct:.1f}%",
+                message=(
+                    f"Stock count variance {variance_pct:.1f}% "
+                    f"({variance_value} AED){f' — {code}' if code else ''}"
+                ),
             )
         )
 
@@ -292,7 +327,12 @@ async def record_stock_count(
         session, actor=counted_by, entity="ingredient", entity_id=str(ingredient_id),
         action="stock_count", restaurant_id=restaurant_id,
         before={"current_stock": str(previous_stock)},
-        after={"current_stock": str(counted_qty), "variance": str(variance)},
+        after={
+            "current_stock": str(counted_qty),
+            "variance": str(variance),
+            "variance_value_aed": str(variance_value),
+            "reason_code": code,
+        },
     )
     await session.flush()
     return {
@@ -300,6 +340,10 @@ async def record_stock_count(
         "previous_stock": previous_stock,
         "counted_stock": counted_qty,
         "variance_pct": variance_pct,
+        "variance_value_aed": variance_value,
+        "reason_code": code,
+        "threshold_pct": threshold,
+        "flagged": variance_pct > threshold,
     }
 
 
@@ -493,6 +537,42 @@ async def take_stock_closing_snapshot(
     return result
 
 
+async def stock_closing_history(
+    session: AsyncSession, *, restaurant_id: int, days: int = 14,
+) -> list[dict]:
+    """One row per day: what the stock was worth at close.
+
+    The snapshot button wrote rows nobody could read — every existing reader
+    took a single target_date, so seeing a trend meant one request per day.
+    This returns the days already captured, newest first, so the screen can
+    show what pressing the button actually produced.
+    """
+    cutoff = date.today() - timedelta(days=max(1, days) - 1)
+    rows = (
+        await session.execute(
+            select(
+                StockClosingSnapshot.closing_date,
+                func.sum(StockClosingSnapshot.valuation_aed),
+                func.count(StockClosingSnapshot.id),
+            )
+            .where(
+                StockClosingSnapshot.restaurant_id == restaurant_id,
+                StockClosingSnapshot.closing_date >= cutoff,
+            )
+            .group_by(StockClosingSnapshot.closing_date)
+            .order_by(StockClosingSnapshot.closing_date.desc())
+        )
+    ).all()
+    return [
+        {
+            "closing_date": closing_date.isoformat(),
+            "total_value_aed": (total or Decimal("0.00")).quantize(MONEY),
+            "items": int(items),
+        }
+        for closing_date, total, items in rows
+    ]
+
+
 async def daily_stock_closing(
     session: AsyncSession, *, restaurant_id: int, target_date: date,
 ) -> list[dict]:
@@ -562,6 +642,10 @@ async def stock_variance_report(
             "counted_stock": r.counted_stock,
             "variance": r.variance,
             "counted_by": r.counted_by,
+            "reason_code": r.reason_code,
+            "reason": r.reason,
+            "variance_value_aed": r.variance_value_aed,
+            "reviewed": r.reviewed,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows

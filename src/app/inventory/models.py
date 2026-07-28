@@ -19,6 +19,28 @@ from app.db import Base, TimestampMixin
 # Waste / spoilage reason classification
 WASTE_REASON_TYPES = frozenset({"wastage", "spoilage", "theft", "over_portion", "other"})
 
+#: Why the counted figure differs from the recorded one. A count without a
+#: reason records THAT stock moved but not WHY, which is the difference between
+#: an audit trail and a number that changed. These are the categories standard
+#: inventory systems use (count error, damage, spoilage, shrinkage, transfer,
+#: system correction).
+COUNT_REASON_CODES = frozenset(
+    {
+        "count_error",       # the previous figure was wrong, not the stock
+        "damage",            # broken, dropped, unusable
+        "spoilage",          # went bad
+        "shrinkage",         # unexplained loss — the theft bucket
+        "transfer_variance", # sent or received across locations/branches
+        "system_correction", # fixing a data-entry mistake
+        "other",
+    }
+)
+
+#: Tolerance above which a count is flagged for investigation. Industry practice
+#: is one to two percent either way; the old 15% default was set to keep an
+#: empty system quiet and would have let a real kitchen bleed unnoticed.
+DEFAULT_COUNT_VARIANCE_THRESHOLD_PCT = Decimal("2.00")
+
 # Kitchen role for multi-location / commissary inventory
 KITCHEN_ROLES = frozenset({"branch", "central", "commissary"})
 
@@ -55,6 +77,10 @@ class Ingredient(Base, TimestampMixin):
     location_id: Mapped[int | None] = mapped_column(ForeignKey("stock_locations.id"), index=True)
     # Preferred vendor for reorders.
     preferred_vendor_id: Mapped[int | None] = mapped_column(ForeignKey("vendors.id"), index=True)
+    # Per-ingredient count tolerance. NULL means use the restaurant default, so
+    # a cheap high-turnover item can be held to a looser figure than saffron
+    # without forcing a number onto every row.
+    count_variance_threshold_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
 
 
 class DishIngredient(Base, TimestampMixin):
@@ -203,6 +229,17 @@ class StockCountLog(Base, TimestampMixin):
     counted_stock: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     variance: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     counted_by: Mapped[str] = mapped_column(String(64), default="manager")
+    # Why it differed. See COUNT_REASON_CODES.
+    reason_code: Mapped[str | None] = mapped_column(String(24))
+    reason: Mapped[str | None] = mapped_column(String(256))
+    # What the difference COST. Without this the stock number changes and the
+    # money silently does not, so a shortfall counted away leaves food cost
+    # looking healthy. Negative for a loss, positive for a gain.
+    variance_value_aed: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0.00"), server_default="0.00"
+    )
+    # Whether a human has looked at a flagged variance yet.
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class StockClosingSnapshot(Base, TimestampMixin):

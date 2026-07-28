@@ -50,6 +50,18 @@ class Organization(Base, TimestampMixin):
     settings: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
 
+#: A transfer is two events, not one. Stock physically leaves the sending
+#: branch before it arrives, so a single "it moved" step would either show the
+#: same kilos in both branches at once or in neither.
+#:
+#: pending    — created by HQ, nothing has moved (the original org-level flow)
+#: in_transit — DISPATCHED: deducted from the sender, not yet at the receiver
+#: completed  — RECEIVED: added to the receiver, using the quantity that
+#:              actually turned up
+#: cancelled  — called back before arrival; the sender gets its stock returned
+STOCK_TRANSFER_STATUSES = frozenset({"pending", "in_transit", "completed", "cancelled"})
+
+
 class StockTransfer(Base, TimestampMixin):
     """A stock movement between two branches (Restaurant rows) of the same org."""
 
@@ -60,6 +72,10 @@ class StockTransfer(Base, TimestampMixin):
     from_restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     to_restaurant_id: Mapped[int] = mapped_column(ForeignKey("restaurants.id"), index=True)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    # Who moved it, for the same reason a count records who counted.
+    dispatched_by: Mapped[str | None] = mapped_column(String(64))
+    received_by: Mapped[str | None] = mapped_column(String(64))
+    note: Mapped[str | None] = mapped_column(String(256))
 
 
 class StockTransferLine(Base, TimestampMixin):
@@ -70,6 +86,10 @@ class StockTransferLine(Base, TimestampMixin):
     ingredient_name: Mapped[str] = mapped_column(String(128))
     unit: Mapped[str] = mapped_column(String(16))
     quantity: Mapped[Decimal] = mapped_column(Numeric(10, 3))
+    # What actually turned up. NULL until the receiving branch confirms. Kept
+    # separate from `quantity` so a short delivery stays visible as a
+    # discrepancy instead of quietly rewriting what was sent.
+    qty_received: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
 
 
 class OrgMenuItem(Base, TimestampMixin):

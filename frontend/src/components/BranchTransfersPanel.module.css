@@ -1,0 +1,80 @@
+/* Only the two forms. Cards, lists and row buttons come from
+   InventoryScreen.module.css so a transfer row looks like every other row on
+   the Inventory screen rather than a bolted-on second design. */
+
+.sendForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field input,
+.field select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--accent);
+}
+
+/* Shown inside an incoming row, so it indents under the line it corrects
+   rather than reading as a separate card. */
+.shortForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-default);
+}
+
+.shortRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.shortRow input {
+  /* Wide enough for "12.500" and no wider — it holds one quantity. */
+  width: 96px;
+  flex: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.shortActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

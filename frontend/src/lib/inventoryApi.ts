@@ -17,6 +17,7 @@ import type {
   StockAdjustmentOut,
   StockAdjustmentStatus,
   StockAnomalyAlertOut,
+  StockClosingHistoryRow,
   StockClosingOut,
   StockCountIn,
   StockCountOut,
@@ -212,6 +213,13 @@ export function getSpoilageReport(startDate: string, endDate: string): Promise<
 export function getAnomalyAlerts(status = "open"): Promise<StockAnomalyAlertOut[]> {
   return apiClient.get<StockAnomalyAlertOut[]>(
     `/api/v1/ingredients/reports/anomaly-alerts${query({ status })}`,
+  );
+}
+
+/** Days already captured by the End of day snapshot button, newest first. */
+export function getClosingHistory(days = 14): Promise<StockClosingHistoryRow[]> {
+  return apiClient.get<StockClosingHistoryRow[]>(
+    `/api/v1/ingredients/reports/closing-history${query({ days: String(days) })}`,
   );
 }
 

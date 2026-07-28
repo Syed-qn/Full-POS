@@ -721,6 +721,9 @@ export interface WasteIn {
 
 export interface StockCountIn {
   counted_qty: DecimalString;
+  /** Why the counted figure differs. See COUNT_REASON_CODES on the server. */
+  reason_code?: string | null;
+  reason?: string | null;
 }
 
 export interface StockCountOut {
@@ -728,6 +731,11 @@ export interface StockCountOut {
   previous_stock: DecimalString;
   counted_stock: DecimalString;
   variance_pct?: number | null;
+  /** What the difference cost. Negative for a loss, positive for a gain. */
+  variance_value_aed?: DecimalString | null;
+  reason_code?: string | null;
+  threshold_pct?: number | null;
+  flagged?: boolean | null;
 }
 
 export interface RecipeLinkIn {
@@ -855,7 +863,17 @@ export interface StockVarianceRow {
   counted_stock: DecimalString;
   variance: DecimalString;
   counted_by: string;
+  reason_code?: string | null;
+  reason?: string | null;
+  variance_value_aed?: DecimalString | null;
+  reviewed?: boolean;
   created_at: string | null;
+}
+
+export interface StockClosingHistoryRow {
+  closing_date: string;
+  total_value_aed: DecimalString;
+  items: number;
 }
 
 export interface StockAnomalyAlertOut {
@@ -1000,6 +1018,45 @@ export interface StockTransferOut {
   status: string;
   from_restaurant_id?: number;
   to_restaurant_id?: number;
+}
+
+/** A branch this one may send stock to. From /branch-transfers/branches, which
+ *  a manager PIN can read — /organizations/branches is HQ-only. */
+export interface SiblingBranchOut {
+  id: number;
+  name: string;
+}
+
+export interface BranchTransferLineOut {
+  ingredient_name: string;
+  unit: string;
+  quantity: DecimalString;
+  /** What actually turned up. Null until the destination confirms; different
+   *  from quantity when the delivery was short — that gap IS the loss record. */
+  qty_received: DecimalString | null;
+}
+
+export interface BranchTransferOut {
+  id: number;
+  status: "pending" | "in_transit" | "completed" | "cancelled";
+  /** Whose side of it you are on. The same row reads "sent" or "arriving"
+   *  depending on which branch is logged in. */
+  direction: "out" | "in";
+  from_restaurant_id: number;
+  from_branch_name: string;
+  to_restaurant_id: number;
+  to_branch_name: string;
+  dispatched_by: string | null;
+  received_by: string | null;
+  note: string | null;
+  created_at: string | null;
+  lines: BranchTransferLineOut[];
+}
+
+export interface BranchTransferDispatchIn {
+  to_restaurant_id: number;
+  lines: Array<{ ingredient_name: string; quantity: DecimalString; unit?: string }>;
+  note?: string | null;
 }
 
 export interface SalesRollupRow {

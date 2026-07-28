@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.inventory.events import _commit_and_announce
 from app.inventory.models import PurchaseOrder, PurchaseOrderLine
 from app.inventory.purchasing import (
     create_grn,
@@ -52,7 +53,7 @@ async def create_vendor_endpoint(
         email=body.email,
         notes=body.notes,
     )
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(vendor)
     return vendor
 
@@ -84,7 +85,7 @@ async def update_vendor_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(vendor)
     return vendor
 
@@ -109,7 +110,7 @@ async def create_purchase_order_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(po)
     return await _load_po_out(session, po)
 
@@ -136,7 +137,7 @@ async def receive_purchase_order_endpoint(
         po = await receive_purchase_order(session, restaurant_id=restaurant.id, po_id=po_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(po)
     return await _load_po_out(session, po)
 
@@ -161,7 +162,7 @@ async def create_grn_endpoint(
         msg = str(exc)
         code = 404 if "not found" in msg else 422
         raise HTTPException(status_code=code, detail=msg) from exc
-    await session.commit()
+    await _commit_and_announce(session, restaurant.id)
     await session.refresh(grn)
     return grn
 

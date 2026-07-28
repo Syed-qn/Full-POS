@@ -22,7 +22,7 @@ import { TOKEN_KEY } from "./apiClient";
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 /** Coarse areas a screen can care about. Matches the server's TOPICS. */
-export type LiveTopic = "orders" | "tables" | "kds";
+export type LiveTopic = "orders" | "tables" | "kds" | "inventory";
 
 export type LiveEvent = {
   topic: LiveTopic;
