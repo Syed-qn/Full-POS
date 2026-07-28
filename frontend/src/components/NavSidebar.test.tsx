@@ -72,6 +72,18 @@ describe("NavSidebar logout", () => {
     expect(screen.getByRole("button", { name: /admin/i })).toBeInTheDocument();
   });
 
+  it("offers Inventory as a real link, not a Soon pill", () => {
+    // The screen, its route and its API were all already built; only the
+    // LIVE_ROUTES flag still marked it unshipped, so it rendered as an inert
+    // row nobody could open.
+    renderNav("/");
+    expect(screen.getByRole("link", { name: /inventory/i })).toHaveAttribute(
+      "href",
+      "/inventory",
+    );
+    expect(screen.queryByLabelText(/inventory, coming soon/i)).not.toBeInTheDocument();
+  });
+
   it("collapses navigation width and keeps accessible names on icon-only links", () => {
     renderNav("/");
     const nav = screen.getByRole("navigation", { name: /main/i });

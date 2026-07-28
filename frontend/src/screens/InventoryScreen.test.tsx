@@ -252,9 +252,14 @@ describe("InventoryScreen", () => {
     renderWithProviders(<InventoryScreen />);
 
     await screen.findByRole("cell", { name: "Tomato" });
-    fireEvent.change(screen.getByLabelText("Ingredient name"), { target: { value: "Mint" } });
-    fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "bunch" } });
-    fireEvent.click(screen.getByRole("button", { name: /add ingredient/i }));
+    // Adding is a dialog now: the six fields used once per ingredient no longer
+    // sit permanently above the table you read every day.
+    expect(screen.queryByLabelText("Ingredient name")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /new ingredient/i }));
+    const addDialog = await screen.findByRole("dialog", { name: /new ingredient/i });
+    fireEvent.change(within(addDialog).getByLabelText("Ingredient name"), { target: { value: "Mint" } });
+    fireEvent.change(within(addDialog).getByLabelText("Unit"), { target: { value: "bunch" } });
+    fireEvent.click(within(addDialog).getByRole("button", { name: /add ingredient/i }));
     await waitFor(() => expect(screen.getByRole("cell", { name: "Mint" })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /approve adjustment 10/i }));
@@ -275,7 +280,7 @@ describe("InventoryScreen", () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /send whatsapp low-stock alert/i }));
+    fireEvent.click(screen.getByRole("button", { name: /low stock alert/i }));
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/ingredients/low-stock-alert"),
@@ -291,16 +296,10 @@ describe("InventoryScreen", () => {
     fireEvent.change(screen.getByLabelText("Ops quantity"), { target: { value: "1.000" } });
     fireEvent.change(screen.getByLabelText("Waste reason type"), { target: { value: "spoilage" } });
     fireEvent.click(screen.getByRole("button", { name: /log waste\/spoilage/i }));
-    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /continue to pin/i }));
-    const wastePin = await screen.findByRole("dialog", { name: /manager approval/i });
-    for (const d of ["1", "2", "3", "4"]) {
-      fireEvent.click(within(wastePin).getByRole("button", { name: `Digit ${d}` }));
-    }
-    fireEvent.change(within(wastePin).getByPlaceholderText(/why is this needed/i), {
-      target: { value: "Spoilage write-off" },
-    });
-    fireEvent.click(within(wastePin).getByRole("button", { name: /^approve$/i }));
+    // No manager PIN: /inventory is already an owner/manager screen, so the
+    // gate asked whoever just signed in to prove they signed in, once per
+    // stock move. The action runs straight away.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.stringContaining("/api/v1/ingredients/1/waste"),

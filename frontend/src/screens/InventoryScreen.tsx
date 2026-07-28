@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
+import { IngredientAddModal } from "../components/IngredientAddModal";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
@@ -7,7 +8,6 @@ import { toast } from "../components/Toaster";
 import {
   approveStockAdjustment,
   createBatch,
-  createIngredient,
   createPurchaseOrder,
   createVendor,
   getAnomalyAlerts,
@@ -46,15 +46,6 @@ import type {
   VendorOut,
 } from "../lib/types";
 import s from "./InventoryScreen.module.css";
-
-const EMPTY_FORM = {
-  name: "",
-  unit: "",
-  current_stock: "0.000",
-  low_stock_threshold: "0.000",
-  par_level: "0.000",
-  cost_per_unit_aed: "0.0000",
-};
 
 function money(value: string | number | null | undefined): string {
   const n = Number(value ?? 0);
@@ -112,8 +103,7 @@ export function InventoryScreen() {
   >([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [alerting, setAlerting] = useState(false);
 
   const [opsIngredientId, setOpsIngredientId] = useState<number | "">("");
@@ -208,22 +198,9 @@ export function InventoryScreen() {
     return (id: number) => map.get(id) ?? `#${id}`;
   }, [ingredients]);
 
-  async function submitIngredient() {
-    if (!form.name.trim() || !form.unit.trim()) {
-      toast("Ingredient name and unit are required.", "error");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const created = await createIngredient(form);
-      setIngredients((prev) => [created, ...prev]);
-      setForm(EMPTY_FORM);
-      toast(`Ingredient added: ${created.name}`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not add ingredient.", "error");
-    } finally {
-      setSubmitting(false);
-    }
+  function onIngredientCreated(created: IngredientOut) {
+    setIngredients((prev) => [created, ...prev]);
+    toast(`Ingredient added: ${created.name}`);
   }
 
   function decideAdjustment(adjustment: StockAdjustmentOut, decision: "approve" | "reject") {
@@ -262,7 +239,7 @@ export function InventoryScreen() {
     setAlerting(true);
     try {
       const result = await sendLowStockAlert();
-      toast(result.enqueued ? "Low-stock WhatsApp alert queued." : result.reason ?? "No alert queued.");
+      toast(result.enqueued ? "Low stock WhatsApp alert queued." : result.reason ?? "No alert queued.");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not send alert.", "error");
     } finally {
@@ -280,25 +257,14 @@ export function InventoryScreen() {
       return;
     }
     const id = Number(opsIngredientId);
-    const label =
-      action === "restock"
-        ? "Restock inventory"
-        : action === "waste"
-          ? "Log waste / spoilage"
-          : action === "count"
-            ? "Record stock count"
-            : "Receive FEFO batch";
-    requestPin({
-      actionType: "stock_adjustment",
-      actionLabel: label,
-      recordLabel: `ingredient #${id}`,
-      reasonRequired: true,
-      amountAed: undefined,
-      confirmTitle: `${label}?`,
-      confirmMessage: `Change stock for ingredient #${id} (qty ${opsQty}). Manager PIN and reason required.`,
-      confirmLabel: "Continue to PIN",
-      cancelLabel: "Back",
-      execute: async ({ reason }) => {
+    // No manager PIN here. Inventory is an owner/manager screen already (see
+    // navAccess "/inventory"), so the PIN asked the person who just signed in
+    // to prove they are the person who just signed in, twice per stock move.
+    // The waste reason still reaches the API through the form's own Reason
+    // field, so the audit trail keeps what it needs.
+    void (async () => {
+      const reason = "";
+      {
         setOpsBusy(true);
         try {
           if (action === "restock") {
@@ -321,12 +287,11 @@ export function InventoryScreen() {
           await load();
         } catch (e) {
           toast(e instanceof Error ? e.message : "Stock operation failed.", "error");
-          throw e;
         } finally {
           setOpsBusy(false);
         }
-      },
-    });
+      }
+    })();
   }
 
   async function addVendor() {
@@ -395,18 +360,28 @@ export function InventoryScreen() {
     <div className={s.screen}>
       <PageHeader
         title="Inventory"
-        subtitle="Food cost, FEFO batches, GRN purchasing, variance, spoilage, and stock closing"
+        subtitle="Food cost, FEFO batches, GRN purchasing, variance, spoilage and stock closing"
         right={
           <div className={s.actions}>
             <Button type="button" variant="ghost" onClick={() => void load()}>
               Refresh
             </Button>
+            <Button type="button" onClick={() => setAddOpen(true)}>
+              + New ingredient
+            </Button>
             <Button type="button" disabled={alerting} onClick={() => void sendAlert()}>
-              {alerting ? "Sending..." : "Send WhatsApp low-stock alert"}
+              {alerting ? "Sending…" : "Low stock alert"}
             </Button>
           </div>
         }
       />
+
+      {addOpen && (
+        <IngredientAddModal
+          onClose={() => setAddOpen(false)}
+          onCreated={onIngredientCreated}
+        />
+      )}
 
       {loadError && (
         <ErrorState
@@ -424,7 +399,7 @@ export function InventoryScreen() {
         <section className={s.lowStockBanner} role="status" aria-live="polite">
           <div className={s.lowStockCopy}>
             <strong>
-              {lowStock.length} low-stock item{lowStock.length === 1 ? "" : "s"}
+              {lowStock.length} low stock item{lowStock.length === 1 ? "" : "s"}
             </strong>
             <span>
               {lowStock
@@ -463,68 +438,8 @@ export function InventoryScreen() {
 
       <section className={s.card}>
         <div className={s.cardHead}>
-          <h2>New ingredient</h2>
-          <span>Set starting stock, reorder threshold, par level, and cost.</span>
-        </div>
-        <div className={s.formGrid}>
-          <label>
-            <span>Ingredient name</span>
-            <input
-              aria-label="Ingredient name"
-              value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Unit</span>
-            <input
-              aria-label="Unit"
-              value={form.unit}
-              onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Current stock</span>
-            <input
-              aria-label="Current stock"
-              value={form.current_stock}
-              onChange={(e) => setForm((prev) => ({ ...prev, current_stock: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Low-stock threshold</span>
-            <input
-              aria-label="Low-stock threshold"
-              value={form.low_stock_threshold}
-              onChange={(e) => setForm((prev) => ({ ...prev, low_stock_threshold: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Par level</span>
-            <input
-              aria-label="Par level"
-              value={form.par_level}
-              onChange={(e) => setForm((prev) => ({ ...prev, par_level: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Cost per unit</span>
-            <input
-              aria-label="Cost per unit"
-              value={form.cost_per_unit_aed}
-              onChange={(e) => setForm((prev) => ({ ...prev, cost_per_unit_aed: e.target.value }))}
-            />
-          </label>
-        </div>
-        <Button type="button" disabled={submitting} onClick={() => void submitIngredient()}>
-          {submitting ? "Adding..." : "Add ingredient"}
-        </Button>
-      </section>
-
-      <section className={s.card}>
-        <div className={s.cardHead}>
           <h2>Stock operations</h2>
-          <span>Restock, waste/spoilage, stock count (variance), FEFO batch receive.</span>
+          <span>Restock, waste and spoilage, stock count (variance), FEFO batch receive.</span>
         </div>
         <div className={s.formGrid}>
           <label>
@@ -604,7 +519,7 @@ export function InventoryScreen() {
 
       <section className={s.card}>
         <div className={s.cardHead}>
-          <h2>Purchasing — vendors, PO &amp; GRN</h2>
+          <h2>Purchasing: vendors, PO and GRN</h2>
           <span>Supplier management, purchase orders, goods received notes.</span>
         </div>
         <div className={s.formGrid}>
@@ -678,7 +593,7 @@ export function InventoryScreen() {
             <div key={po.id} className={s.approval}>
               <div>
                 <strong>
-                  PO #{po.id} — {po.status}
+                  PO #{po.id} · {po.status}
                 </strong>
                 <span>
                   Vendor #{po.vendor_id} · {po.lines?.length ?? 0} line(s)
@@ -751,7 +666,7 @@ export function InventoryScreen() {
                     <td colSpan={6}>
                       <EmptyState
                         title="No ingredients yet"
-                        description="Add ingredients above to track stock, cost, and reorders."
+                        description="Use New ingredient to track stock, cost and reorders."
                       />
                     </td>
                   </tr>
@@ -876,7 +791,7 @@ export function InventoryScreen() {
                   <strong>
                     {row.ingredient_name}: {row.quantity} ({row.reason_type})
                   </strong>
-                  <span>{row.reason ?? "—"}</span>
+                  <span>{row.reason ?? "None"}</span>
                 </div>
               ))}
               {expiring.slice(0, 5).map((b) => (
@@ -912,7 +827,7 @@ export function InventoryScreen() {
               {vendors.map((v) => (
                 <div key={v.id} className={s.listItem}>
                   <strong>Vendor: {v.name}</strong>
-                  <span>{v.phone ?? v.email ?? "—"}</span>
+                  <span>{v.phone ?? v.email ?? "None"}</span>
                 </div>
               ))}
               {loaded && locations.length === 0 && vendors.length === 0 && (

@@ -9,6 +9,15 @@
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  /* Stretch, so a button whose label wraps does not end up shorter than its
+     neighbours: the header buttons used to sit at visibly different heights. */
+  align-items: stretch;
+}
+
+.actions button {
+  /* A label long enough to wrap made one button two lines tall while the rest
+     stayed one. Keep them on a single line and let the row scroll instead. */
+  white-space: nowrap;
 }
 
 .lowStockBanner {
