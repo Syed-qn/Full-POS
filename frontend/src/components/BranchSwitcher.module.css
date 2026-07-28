@@ -1,0 +1,29 @@
+/* Which branch the dashboard is scoped to. Sits in the top bar because it
+   governs every screen below it, not any one of them. */
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.select {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-caption);
+  max-width: 200px;
+}
+
+.select:disabled {
+  opacity: 0.6;
+}

@@ -219,6 +219,36 @@ async def get_branches(
     ]
 
 
+@router.post("/branches/{restaurant_id}/session")
+async def open_branch_session(
+    restaurant_id: int,
+    org: Organization = Depends(current_organization),
+    session: AsyncSession = Depends(get_session),
+):
+    """Exchange HQ/owner authority for a token scoped to ONE branch.
+
+    Every branch-level surface — staff, menu, orders, inventory, reports — already
+    resolves its restaurant from the bearer token. So switching branch is issuing a
+    different token, not threading a restaurant_id through several hundred
+    endpoints; each of those would be a place to forget the ownership check.
+
+    The check lives here instead, once: the branch must belong to the caller's
+    organization. Without it this endpoint would mint a token for any restaurant
+    on the platform from an id in the path.
+    """
+    branch = await session.get(Restaurant, restaurant_id)
+    if branch is None or branch.organization_id != org.id:
+        raise HTTPException(status_code=404, detail="branch not found")
+    return {
+        "access_token": create_access_token(
+            restaurant_id=branch.id, audience="manager"
+        ),
+        "token_type": "bearer",
+        "restaurant_id": branch.id,
+        "name": branch.name,
+    }
+
+
 @router.patch("/branches/{restaurant_id}")
 async def patch_branch(
     restaurant_id: int,

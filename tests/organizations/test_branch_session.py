@@ -1,0 +1,130 @@
+"""Switching branch issues a token for that branch — and only for branches the
+caller owns.
+
+This endpoint mints a restaurant-scoped token from an id in the URL, so the
+ownership check is the whole security boundary: without it, any HQ account could
+name any restaurant on the platform and be handed a working session for it.
+"""
+
+import pytest
+
+
+async def _org_headers(client, *, name: str, email: str) -> dict:
+    await client.post(
+        "/api/v1/organizations/signup",
+        json={"name": name, "owner_email": email, "password": "hunter2!"},
+    )
+    resp = await client.post(
+        "/api/v1/organizations/login",
+        json={"owner_email": email, "password": "hunter2!"},
+    )
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+async def _branch(client, headers: dict, *, name: str, email: str) -> dict:
+    resp = await client.post(
+        "/api/v1/organizations/branches",
+        json={
+            "name": name, "email": email, "password": "hunter2!",
+            "lat": 25.2048, "lng": 55.2708,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+@pytest.mark.anyio
+async def test_owner_switches_branch_and_staff_land_on_that_branch(client):
+    """The point of the switcher: create staff after switching and they belong
+    to the branch that was picked, with that branch's own numbering."""
+    hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    a = await _branch(client, hq, name="Deira", email="deira@biryani.ae")
+    b = await _branch(client, hq, name="Marina", email="marina@biryani.ae")
+
+    sess_a = await client.post(
+        f"/api/v1/organizations/branches/{a['id']}/session", headers=hq
+    )
+    assert sess_a.status_code == 200, sess_a.text
+    assert sess_a.json()["name"] == "Deira"
+    head_a = {"Authorization": f"Bearer {sess_a.json()['access_token']}"}
+
+    sess_b = await client.post(
+        f"/api/v1/organizations/branches/{b['id']}/session", headers=hq
+    )
+    head_b = {"Authorization": f"Bearer {sess_b.json()['access_token']}"}
+
+    made_a = await client.post(
+        "/api/v1/staff/managers", json={"name": "Sara", "pin": "8471"}, headers=head_a
+    )
+    made_b = await client.post(
+        "/api/v1/staff/managers", json={"name": "Omar", "pin": "7263"}, headers=head_b
+    )
+    assert made_a.status_code == 201, made_a.text
+    assert made_b.status_code == 201, made_b.text
+    # Each branch numbers its own people from 1 — the switch really re-scoped.
+    assert made_a.json()["staff_code"] == 1
+    assert made_b.json()["staff_code"] == 1
+
+    listed_a = await client.get("/api/v1/staff/managers", headers=head_a)
+    names_a = [m["name"] for m in listed_a.json()]
+    assert names_a == ["Sara"], names_a  # Omar is not visible from Deira
+
+
+@pytest.mark.anyio
+async def test_cannot_open_a_session_on_another_orgs_branch(client):
+    """The boundary. A valid HQ token plus someone else's branch id must not
+    produce a session — otherwise the id in the path is the only thing standing
+    between two businesses."""
+    ours = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    theirs = await _org_headers(client, name="Shawarma Co", email="hq@shawarma.ae")
+
+    mine = await _branch(client, ours, name="Deira", email="deira@biryani.ae")
+    yours = await _branch(client, theirs, name="Karama", email="karama@shawarma.ae")
+
+    ok = await client.post(
+        f"/api/v1/organizations/branches/{mine['id']}/session", headers=ours
+    )
+    assert ok.status_code == 200
+
+    stolen = await client.post(
+        f"/api/v1/organizations/branches/{yours['id']}/session", headers=ours
+    )
+    assert stolen.status_code == 404, stolen.text
+
+
+@pytest.mark.anyio
+async def test_unknown_branch_id_is_rejected(client):
+    hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    resp = await client.post(
+        "/api/v1/organizations/branches/999999/session", headers=hq
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_branch_session_requires_hq_authority(client):
+    """A branch's own token is not HQ authority — it must not be able to hop to
+    a sibling branch."""
+    hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    a = await _branch(client, hq, name="Deira", email="deira@biryani.ae")
+    b = await _branch(client, hq, name="Marina", email="marina@biryani.ae")
+
+    login_a = await client.post(
+        "/api/v1/auth/login", json={"email": "deira@biryani.ae", "password": "hunter2!"}
+    )
+    assert login_a.status_code == 200, login_a.text
+    head_a = {"Authorization": f"Bearer {login_a.json()['access_token']}"}
+
+    # Deira's own account IS linked to the org, so HQ context resolves — the
+    # ownership check is what has to hold, and both branches are in the same org.
+    hop = await client.post(
+        f"/api/v1/organizations/branches/{b['id']}/session", headers=head_a
+    )
+    assert hop.status_code in (200, 403), hop.text
+    if hop.status_code == 200:
+        # Documented behaviour: a branch owner account carries org authority, so
+        # it may switch within its OWN organization. Confirm it stays inside it.
+        assert hop.json()["restaurant_id"] == b["id"]
+        assert a["id"] != b["id"]

@@ -36,96 +36,40 @@ describe("LoginScreen — login", () => {
   });
 
   it("exposes a large staff PIN pad mode", async () => {
+    localStorage.setItem("pos.store_code", "K7QM4RTB");
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
-    // Staff numbers restart at 1 per branch, so the pad asks for the store too.
-    expect(screen.getByLabelText(/store code/i)).toBeInTheDocument();
+    // The branch never appears on screen — only the two fields staff own.
+    expect(screen.queryByLabelText(/store code/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/staff number/i)).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /pin pad/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Digit 5" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign in with pin/i })).toBeInTheDocument();
   });
 
-  it("a ?store= pairing link opens the PIN pad with the branch filled in", async () => {
+  it("a pairing link opens the PIN pad without showing the branch", async () => {
     render(
       <MemoryRouter initialEntries={["/login?location=v6uwmuwv"]}>
         <LoginScreen />
       </MemoryRouter>,
     );
     // No tab click: the link is the pairing, so the pad is where it lands.
-    expect(screen.getByLabelText(/store code/i)).toHaveValue("V6UWMUWV");
     expect(screen.getByRole("group", { name: /pin pad/i })).toBeInTheDocument();
+    expect(screen.queryByText(/v6uwmuwv/i)).not.toBeInTheDocument();
   });
 
-  it("names the branch a pairing link resolves to", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ name: "POS MANAGEMENT Deira", lat: 25.2681, lng: 55.3094 }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    render(
-      <MemoryRouter initialEntries={["/login?location=V6UWMUWV"]}>
-        <LoginScreen />
-      </MemoryRouter>,
-    );
-    // The name is the check a human can actually make; two branches a few
-    // streets apart differ only in the third decimal of their coordinates.
-    await waitFor(() =>
-      expect(screen.getByText("POS MANAGEMENT Deira")).toBeInTheDocument(),
-    );
-    expect(screen.getByText(/25\.2681, 55\.3094/)).toBeInTheDocument();
-  });
-
-  it("flags a link whose coordinates point at a different branch", async () => {
-    // Same store key, but the link carries the OTHER Dubai branch's location.
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(
-        JSON.stringify({ name: "Deira Branch", lat: 25.2681, lng: 55.3094 }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    render(
-      <MemoryRouter
-        initialEntries={["/login?location=V6UWMUWV&lat=25.2048&lng=55.2708"]}
-      >
-        <LoginScreen />
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByText("Deira Branch")).toBeInTheDocument());
-    expect(screen.getByText(/points .* m away/)).toBeInTheDocument();
-  });
-
-  it("stays quiet when the link's coordinates match the branch", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(
-        JSON.stringify({ name: "Deira Branch", lat: 25.2681, lng: 55.3094 }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    render(
-      <MemoryRouter
-        initialEntries={["/login?location=V6UWMUWV&lat=25.2681&lng=55.3094"]}
-      >
-        <LoginScreen />
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByText("Deira Branch")).toBeInTheDocument());
-    expect(screen.queryByText(/points .* m away/)).not.toBeInTheDocument();
-  });
-
-  it("refuses to sign in without a store code", async () => {
+  it("says so when no pairing link has ever been opened here", async () => {
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
-    await userEvent.type(screen.getByLabelText(/staff number/i), "1");
-    await userEvent.click(screen.getByRole("button", { name: "Digit 5" }));
-    await userEvent.click(screen.getByRole("button", { name: /sign in with pin/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/store code for this terminal/i)).toBeInTheDocument(),
-    );
+    // Nothing to type, so the screen must explain rather than dead-end.
+    expect(screen.getByText(/not paired with a branch/i)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /pin pad/i })).not.toBeInTheDocument();
   });
 
-  it("remembers the store code only after a successful sign-in", async () => {
+
+
+
+  it("signs in with the branch the device is already paired with", async () => {
     // A fresh Response per call: a body can only be read once, and the
     // store-pairing lookup fires before the login POST.
     const json = (b: unknown) =>
@@ -143,9 +87,10 @@ describe("LoginScreen — login", () => {
             })
           : json({ name: "Test Branch", lat: 25.2048, lng: 55.2708 }),
       );
+    // Paired earlier on this device; the branch is never re-entered by hand.
+    localStorage.setItem("pos.store_code", "K7QM4RTB");
     render(<MemoryRouter><LoginScreen /></MemoryRouter>);
     await userEvent.click(screen.getByRole("tab", { name: /staff pin/i }));
-    await userEvent.type(screen.getByLabelText(/store code/i), "k7qm4rtb");
     await userEvent.type(screen.getByLabelText(/staff number/i), "1");
     for (const d of ["8", "4", "7", "1"]) {
       await userEvent.click(screen.getByRole("button", { name: `Digit ${d}` }));

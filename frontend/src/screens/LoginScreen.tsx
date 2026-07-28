@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, TouchButton } from "../components/Button";
 import { SectionBanner } from "../components/SectionBanner";
@@ -10,25 +10,16 @@ import {
   setStaffSession,
 } from "../lib/navAccess";
 import { staffLogin } from "../lib/staffApi";
-import {
-  PAIRING_TOLERANCE_M,
-  getPairedStore,
-  lookupStore,
-  metresBetween,
-  normalizeStoreCode,
-  setPairedStore,
-  type StorePairing,
-} from "../lib/storeIdentity";
+import { getPairedStore, normalizeStoreCode, setPairedStore } from "../lib/storeIdentity";
 import s from "./LoginScreen.module.css";
 
 type Mode = "login" | "signup" | "pin";
 
 export function LoginScreen() {
-  // A pairing link — /login?store=V6UWMUWV — carries the branch the way an
-  // integration URL carries account+location: the terminal is told which store
-  // it belongs to instead of a person typing it. Falls back to whatever this
-  // device was last paired with. The code alone opens nothing; a staff number
-  // and PIN are still required, and both are checked inside this branch only.
+  // The pairing link — /login?account=<uuid>&location=<uuid> — is the ONLY way
+  // a branch reaches this screen; it is never shown or typed. Falls back to
+  // whatever this device was last paired with. The link alone opens nothing: a
+  // staff number and PIN are still required, checked inside that branch only.
   const [params] = useSearchParams();
   const linkedStore = normalizeStoreCode(
     params.get("location") ?? params.get("store") ?? "",
@@ -36,65 +27,25 @@ export function LoginScreen() {
   // Which business the branch belongs to. Sent alongside the location so a link
   // whose account does not own that branch is refused rather than followed.
   const linkedAccount = (params.get("account") ?? "").trim() || null;
-  // The link also carries where that branch IS. The id says which branch; these
-  // let the till check the link it was given still points at the same place —
-  // the case that matters when two branches sit a few streets apart.
-  const linkedLat = Number(params.get("lat"));
-  const linkedLng = Number(params.get("lng"));
-  const hasLinkedCoords =
-    Number.isFinite(linkedLat) && Number.isFinite(linkedLng) &&
-    params.get("lat") !== null && params.get("lng") !== null;
   const [mode, setMode] = useState<Mode>(linkedStore ? "pin" : "login");
   const [name, setName] = useState("");
   // Demo convenience prefill (all builds) — a real account so Sign In works
   // out of the box. Created via /auth/signup; change or clear before real use.
   const [email, setEmail] = useState("manager@fullpos.ae");
   const [password, setPassword] = useState("FullPOS@2026");
-  // Staff PIN login routes by role and skips the manager onboarding gate.
-  // The staff number is branch-local (every restaurant numbers its own people
-  // from 1), so it is only meaningful next to the store code below.
+  // Staff PIN login routes by role and skips the manager onboarding gate. The
+  // staff number is branch-local (every restaurant numbers its own people from
+  // 1), so it is only meaningful against the branch the link supplied.
   const [staffId, setStaffId] = useState("");
   const [pin, setPin] = useState("");
-  // ?store= wins over the remembered value, so re-pairing a terminal to another
-  // branch is just a new link rather than clearing site data.
-  const [storeCode, setStoreCode] = useState(linkedStore || getPairedStore());
+  // The link wins over the remembered value, so re-pairing a terminal to
+  // another branch is just a new link rather than clearing site data.
+  const [storeCode] = useState(linkedStore || getPairedStore());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
 
   const pinDisplay = useMemo(() => "•".repeat(pin.length) || "Enter PIN", [pin]);
-
-  // Name the branch the key resolves to. Two branches in the same city have
-  // near-identical coordinates, so the NAME is what makes a wrong pairing link
-  // obvious before staff start taking orders on the wrong till.
-  const [pairing, setPairing] = useState<StorePairing | null>(null);
-
-  // Distance between where the LINK says the branch is and where the branch
-  // actually is. Null when there is nothing to compare or they agree.
-  const coordDriftM = useMemo(() => {
-    if (!pairing || !hasLinkedCoords) return null;
-    const d = metresBetween(linkedLat, linkedLng, pairing.lat, pairing.lng);
-    return d > PAIRING_TOLERANCE_M ? d : null;
-  }, [pairing, hasLinkedCoords, linkedLat, linkedLng]);
-  useEffect(() => {
-    const key = normalizeStoreCode(storeCode);
-    // Short code is 8 chars, uuid is 36 — below 8 there is nothing to resolve.
-    if (key.length < 8) {
-      setPairing(null);
-      return;
-    }
-    let live = true;
-    // Debounced: the field is typed on a keypad, one lookup per pause not per key.
-    const t = setTimeout(() => {
-      void lookupStore(key, linkedAccount).then((p) => {
-        if (live) setPairing(p);
-      });
-    }, 350);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [storeCode, linkedAccount]);
 
   function switchMode(m: Mode) {
     setMode(m);
@@ -150,7 +101,7 @@ export function LoginScreen() {
     e?.preventDefault();
     const store = normalizeStoreCode(storeCode);
     if (!store) {
-      setError("Enter the store code for this terminal");
+      setError("This terminal is not paired with a branch.");
       return;
     }
     const raw = staffId.trim();
@@ -188,7 +139,7 @@ export function LoginScreen() {
       nav(getRoleHomePath(res.role), { replace: true });
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.detail : "Invalid store, staff number or PIN",
+        err instanceof ApiError ? err.detail : "Invalid staff number or PIN",
       );
       setPin("");
     } finally {
@@ -235,40 +186,22 @@ export function LoginScreen() {
           </SectionBanner>
         )}
 
-        {mode === "pin" ? (
+        {mode === "pin" && !storeCode ? (
+          // No link opened here and nothing remembered. There is no field to
+          // type a branch into any more, so say what to do rather than letting
+          // staff punch in a PIN that can never resolve.
+          <div className={s.unpaired} role="status">
+            <strong>This terminal is not paired with a branch.</strong>
+            <span>
+              Open the pairing link for this branch — an owner can copy it from
+              Settings → General → Terminal pairing link.
+            </span>
+          </div>
+        ) : mode === "pin" ? (
           <form className={s.pinForm} onSubmit={submitPin} noValidate>
-            <label className={s.field}>
-              <span className={s.label}>Store code</span>
-              <input
-                aria-label="Store code"
-                value={storeCode}
-                onChange={(e) => setStoreCode(normalizeStoreCode(e.target.value))}
-                placeholder="e.g. K7QM4RTB"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                maxLength={36}
-                autoFocus={!storeCode}
-              />
-            </label>
-
-            {pairing && (
-              <div className={s.pairing} role="status">
-                <span className={s.pairingLabel}>Signing in at</span>
-                <strong className={s.pairingName}>{pairing.name}</strong>
-                <span className={s.pairingCoords}>
-                  {pairing.lat.toFixed(4)}, {pairing.lng.toFixed(4)}
-                </span>
-                {coordDriftM !== null && (
-                  <span className={s.pairingWarn}>
-                    ⚠ This link points {Math.round(coordDriftM)} m away
-                    ({linkedLat.toFixed(4)}, {linkedLng.toFixed(4)}). It may be
-                    for a different branch — check before signing in.
-                  </span>
-                )}
-              </div>
-            )}
-
+            {/* The branch is not shown or typed — it arrives with the pairing
+                link and stays on the device. Staff see only their own two
+                fields; an unpaired terminal is caught below, before the pad. */}
             <label className={s.field}>
               <span className={s.label}>Staff number</span>
               <input

@@ -9,6 +9,7 @@ import {
 import { isDesktopShell } from "../lib/desktopEnv";
 import { isTrainingMode } from "../lib/navAccess";
 import { AlertCenter, type AlertItem } from "./AlertCenter";
+import { BranchSwitcher } from "./BranchSwitcher";
 import s from "./TopBar.module.css";
 
 export function TopBar({
@@ -37,6 +38,9 @@ export function TopBar({
   return (
     <header className={s.bar} data-training={training ? "true" : "false"}>
       <div className={s.left}>
+        {/* Scopes every screen below, so it belongs above them all. Hides itself
+            for single-branch accounts. */}
+        <BranchSwitcher />
         {/* Page title lives in each screen's PageHeader — no duplicate breadcrumb here. */}
         {desktop && <span className={s.pill}>Local app</span>}
         {/* The staff-name · role chip lived here, but the sidebar header

@@ -225,42 +225,19 @@
   opacity: 0.85;
 }
 
-/* Which branch this terminal is about to sign in at. Shown above the staff
-   number so a wrong pairing link is caught before anyone takes an order on it. */
-.pairing {
+
+
+/* Shown instead of the pad when no pairing link has ever been opened here.
+   Staff cannot type a branch, so the screen has to say what to do. */
+.unpaired {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-4);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-surface-inset);
-}
-
-.pairingLabel {
   font-size: var(--font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  line-height: 1.5;
   color: var(--text-secondary);
-}
-
-.pairingName {
-  font-size: var(--font-size-body);
-  color: var(--text-primary);
-}
-
-.pairingCoords {
-  font-size: var(--font-size-caption);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-}
-
-/* Shown when the link's coordinates disagree with the branch's own — the signal
-   that a terminal was handed a link meant for a different, nearby branch. */
-.pairingWarn {
-  margin-top: var(--space-2);
-  font-size: var(--font-size-caption);
-  line-height: 1.4;
-  color: var(--danger-fg, #b42318);
 }
