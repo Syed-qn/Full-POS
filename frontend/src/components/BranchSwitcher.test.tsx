@@ -37,6 +37,7 @@ function stubApi(opts: { branches?: unknown[]; meId?: number } = {}) {
 describe("BranchSwitcher", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     localStorage.setItem("ops_token", "owner-jwt");
   });
   afterEach(() => vi.restoreAllMocks());
@@ -85,6 +86,54 @@ describe("BranchSwitcher", () => {
     await waitFor(() => expect(localStorage.getItem("ops_token")).toBe("branch-jwt"));
     expect(calls).toContain("POST /api/v1/organizations/branches/2/session");
     expect(reload).toHaveBeenCalled();
+  });
+
+  it("is on screen immediately after the reload, not seconds later", async () => {
+    // Switching hard-reloads the page. Without a cache the control renders
+    // nothing until /branches returns, which against a remote DB measured ~3.5s
+    // — the field visibly disappeared and came back on every switch.
+    sessionStorage.setItem("pos.branches", JSON.stringify(BRANCHES));
+    sessionStorage.setItem("pos.branch_current", "2");
+
+    let resolveBranches: (v: Response) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/organizations/branches")) {
+          return new Promise<Response>((r) => {
+            resolveBranches = r;
+          });
+        }
+        return new Response(JSON.stringify({ id: 2, name: "La Cafe 2" }), { status: 200 });
+      }),
+    );
+
+    render(<BranchSwitcher />);
+
+    // Rendered from cache while /branches is still in flight, already showing
+    // the branch that was switched to.
+    const select = screen.getByRole("combobox", { name: /branch/i }) as HTMLSelectElement;
+    expect(select.value).toBe("2");
+
+    resolveBranches(new Response(JSON.stringify(BRANCHES), { status: 200 }));
+    await waitFor(() => expect(select.value).toBe("2"));
+  });
+
+  it("keeps rendering when a refresh fails, instead of vanishing", async () => {
+    sessionStorage.setItem("pos.branches", JSON.stringify(BRANCHES));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 500 })));
+
+    render(<BranchSwitcher />);
+    const select = screen.getByRole("combobox", { name: /branch/i });
+    // Give the failed fetches time to settle; the control must survive them.
+    await waitFor(() => expect(select).toBeInTheDocument());
+  });
+
+  it("ignores a corrupt cache rather than throwing during render", async () => {
+    sessionStorage.setItem("pos.branches", "{not json");
+    stubApi({ meId: 1 });
+    render(<BranchSwitcher />);
+    expect(await screen.findByRole("combobox", { name: /branch/i })).toBeInTheDocument();
   });
 
   it("renders nothing for a single-branch account", async () => {

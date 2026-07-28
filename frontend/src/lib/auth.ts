@@ -30,6 +30,11 @@ export function logout(): void {
   // NEXT account inherits the previous one's name — switch to a branch, sign
   // out, sign back in as HQ, and the chrome still reads the branch.
   resetRestaurantNameCache();
+  // Same reasoning as the name cache: the branch list and the selected branch
+  // are remembered so the switcher survives its own reload, and they must not
+  // outlive the session that fetched them.
+  sessionStorage.removeItem("pos.branches");
+  sessionStorage.removeItem("pos.branch_current");
   desktopBridge()?.setAuthToken(null);
 }
 

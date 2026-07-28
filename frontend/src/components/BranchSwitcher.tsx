@@ -17,23 +17,72 @@ import s from "./BranchSwitcher.module.css";
  * Renders nothing for a single-branch account: a picker with one entry is just
  * a control that can go wrong.
  */
+/**
+ * Last known branches + selection, so the control survives the reload that
+ * switching triggers. Session-scoped: cleared on sign-out with the rest of the
+ * session, so a different account never inherits another's branch list.
+ */
+const CACHE_KEY = "pos.branches";
+const CURRENT_KEY = "pos.branch_current";
+
+function readCachedBranches(): OrganizationBranchOut[] | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Guard the shape: a half-written or stale-format entry must not throw
+    // during render and blank the whole top bar.
+    if (!Array.isArray(parsed) || !parsed.every((b) => typeof b?.id === "number")) {
+      return null;
+    }
+    return parsed as OrganizationBranchOut[];
+  } catch {
+    return null;
+  }
+}
+
 export function BranchSwitcher() {
-  const [branches, setBranches] = useState<OrganizationBranchOut[] | null>(null);
-  const [currentId, setCurrentId] = useState<number | null>(null);
+  // Seed from cache so the field is on screen immediately after the reload,
+  // rather than popping in seconds later when the round trip lands.
+  const [branches, setBranches] = useState<OrganizationBranchOut[] | null>(
+    () => readCachedBranches(),
+  );
+  const [currentId, setCurrentId] = useState<number | null>(() => {
+    const raw = sessionStorage.getItem(CURRENT_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isInteger(n) && n > 0 ? n : null;
+  });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     // A standalone restaurant has no organization, so this 403s — that is the
     // normal single-branch case, not an error worth surfacing.
     listBranches()
-      .then(setBranches)
-      .catch(() => setBranches([]));
+      .then((list) => {
+        setBranches(list);
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(list));
+        } catch {
+          /* private mode / quota — the control still works, just without the cache */
+        }
+      })
+      // Only fall back to "no branches" when nothing was cached; a failed
+      // refresh must not tear down a control that was rendering fine.
+      .catch(() => setBranches((prev) => prev ?? []));
     // Which store this session is actually looking at, so the control shows the
     // truth instead of an empty "Switch branch…" prompt. The token decides the
-    // branch, so /me is the only honest source.
+    // branch, so /me is the only honest source — the cached value above is just
+    // an optimistic head start until this answers.
     apiClient
       .get<{ id: number }>("/api/v1/me")
-      .then((me) => setCurrentId(me.id))
+      .then((me) => {
+        setCurrentId(me.id);
+        try {
+          sessionStorage.setItem(CURRENT_KEY, String(me.id));
+        } catch {
+          /* ignore */
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -44,6 +93,14 @@ export function BranchSwitcher() {
         `/api/v1/organizations/branches/${id}/session`,
       );
       setToken(res.access_token);
+      // Record the target before reloading so the control comes back already
+      // showing the branch you picked, instead of flashing the previous one
+      // until /me answers.
+      try {
+        sessionStorage.setItem(CURRENT_KEY, String(id));
+      } catch {
+        /* ignore */
+      }
       // Full reload rather than a state update: every screen has already cached
       // data for the previous branch, and a hard boundary is cheaper to reason
       // about than invalidating each of them.
