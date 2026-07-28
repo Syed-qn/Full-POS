@@ -50,6 +50,29 @@ describe("FloorPlanScreen", () => {
     expect(screen.getByTestId("floor-entrance")).toBeInTheDocument();
   });
 
+  it("does not blow up the canvas height when the room is nearly empty", async () => {
+    // The grid unit auto-fits the canvas width, so a single table (span.x ~ 1)
+    // divides by ~2.6 and produced a ~590px unit on a wide screen — a ~1900px
+    // floor with one table on it, and a page that scrolled over empty space.
+    stubApi([{ id: 1, label: "T01", seats: 4, status: "available", pos_x: 1, pos_y: 1 }]);
+    // jsdom reports clientWidth 0; give the canvas a realistic desktop width so
+    // the measuring pass actually runs.
+    const widthSpy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(1500);
+
+    renderWithProviders(<FloorPlanScreen />);
+    const floor = await screen.findByTestId("floor-canvas");
+
+    await waitFor(() => {
+      const h = Number.parseFloat(String(floor.style.height).replace("px", ""));
+      expect(h).toBeGreaterThan(0);
+      // (span.y + 2.2) * unit with the unit capped at 152 → at most ~486px.
+      expect(h).toBeLessThan(600);
+    });
+    widthSpy.mockRestore();
+  });
+
   it("keeps the side pane hidden until layout edit mode is on", async () => {
     const user = userEvent.setup();
     renderWithProviders(<FloorPlanScreen />);

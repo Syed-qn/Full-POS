@@ -78,6 +78,17 @@ function seatedFor(iso?: string | null): string | null {
 
 /** Fallback grid unit in px — pos_x/pos_y are float GRID coords, not pixels. */
 const BASE_UNIT = 76;
+/**
+ * Ceiling for the auto-fit unit below.
+ *
+ * The unit stretches to spread tables across the canvas width, which is right
+ * for a full room but absurd for a nearly empty one: a single table gives
+ * span.x ≈ 1, so the divisor is ~2.6 and a 1500px canvas yields a ~590px unit.
+ * Floor height is (span.y + 2.2) * unit, so one table produced a ~1900px floor
+ * and the page scrolled with nothing in it. Cap the growth; tables are drawn at
+ * fixed pixel sizes anyway, so a larger unit only adds empty space.
+ */
+const MAX_UNIT = BASE_UNIT * 2;
 /** Drag snap, in grid units. Quarter-unit keeps rows visually aligned while
  *  still allowing a table to be nudged off a strict lattice. */
 const SNAP = 0.25;
@@ -211,7 +222,9 @@ export function FloorPlanScreen() {
     if (!el || span.x <= 0) return;
     const measure = () => {
       const usable = el.clientWidth - 40;
-      if (usable > 0) setUnit(Math.max(56, usable / (span.x + 1.6)));
+      if (usable > 0) {
+        setUnit(Math.min(MAX_UNIT, Math.max(56, usable / (span.x + 1.6))));
+      }
     };
     measure();
     // jsdom (unit tests) has no ResizeObserver — one measure pass is enough there.

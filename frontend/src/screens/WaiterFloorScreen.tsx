@@ -45,6 +45,11 @@ function bucketOf(status: string, hasOrder: boolean): Bucket {
 /** Fallback grid unit in px — pos_x/pos_y are float grid coords, not pixels.
  *  The live unit is derived from the canvas width so the floor fills the room. */
 const BASE_UNIT = 76;
+/** Ceiling for the auto-fit unit: a nearly empty room gives a tiny divisor,
+ *  which inflated the unit (and so the floor height) until the page scrolled
+ *  with one table on it. Must match FloorPlanScreen so the layout a manager
+ *  arranges is the layout floor staff see. */
+const MAX_UNIT = BASE_UNIT * 2;
 
 /** Module-level table cache so returning to the floor paints instantly instead
  *  of flashing "Loading floor…". Refreshed live (poll + on each mount). */
@@ -145,7 +150,9 @@ export function WaiterFloorScreen() {
     const measure = () => {
       // +1.6 leaves a margin past the right-most table for its chairs/padding.
       const usable = el.clientWidth - 40;
-      if (usable > 0) setUnit(Math.max(56, usable / (span.x + 1.6)));
+      if (usable > 0) {
+        setUnit(Math.min(MAX_UNIT, Math.max(56, usable / (span.x + 1.6))));
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
