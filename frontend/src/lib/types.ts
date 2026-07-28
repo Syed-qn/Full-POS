@@ -921,10 +921,14 @@ export interface OrganizationBranchIn {
   name: string;
   lat: number;
   lng: number;
-  /** Manager login email for this store (required — branch is sign-in ready). */
-  email: string;
-  /** Manager login password (min 6 chars). */
-  password: string;
+  /**
+   * Optional per-store login. Normally omitted: one owner account manages every
+   * branch through the branch switcher. Supply BOTH or neither; an email with no
+   * password is rejected by the server.
+   */
+  email?: string;
+  /** Manager login password (min 6 chars). Only with `email`. */
+  password?: string;
   region?: string;
   currency?: string;
   locale?: string;
@@ -934,7 +938,10 @@ export interface OrganizationBranchIn {
 export interface OrganizationBranchOut {
   id: number;
   name: string;
-  email?: string;
+  /** Null when the branch has no login of its own (the normal case). */
+  email?: string | null;
+  /** False when the branch is reachable only through the owner account. */
+  has_login?: boolean;
   region?: string | null;
   currency?: string;
   locale?: string;

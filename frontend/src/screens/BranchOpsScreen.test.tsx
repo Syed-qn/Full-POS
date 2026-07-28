@@ -164,9 +164,12 @@ describe("BranchOpsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: /^\+ add branch$/i }));
     expect(screen.getByRole("dialog", { name: /add branch/i })).toBeInTheDocument();
 
+    // A branch has no login of its own, so the dialog asks for a name and a
+    // place and nothing else.
+    expect(screen.queryByLabelText(/login email/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/login password/i)).not.toBeInTheDocument();
+
     fireEvent.change(screen.getByLabelText("Branch name"), { target: { value: "Jumeirah" } });
-    fireEvent.change(screen.getByLabelText("Login email"), { target: { value: "jumeirah@test.ae" } });
-    fireEvent.change(screen.getByLabelText("Login password"), { target: { value: "secret12" } });
     fireEvent.change(screen.getByLabelText("Latitude"), { target: { value: "25.20" } });
     fireEvent.change(screen.getByLabelText("Longitude"), { target: { value: "55.25" } });
     fireEvent.click(screen.getByRole("button", { name: /^add branch$/i }));
@@ -176,5 +179,18 @@ describe("BranchOpsScreen", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+
+    // And no credential is smuggled into the request body.
+    const call = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/api/v1/organizations/branches") &&
+          (init as RequestInit)?.method === "POST",
+      );
+    const body = JSON.parse(String((call?.[1] as RequestInit).body));
+    expect(body).toMatchObject({ name: "Jumeirah", lat: 25.2, lng: 55.25 });
+    expect(body.email).toBeUndefined();
+    expect(body.password).toBeUndefined();
   });
 });

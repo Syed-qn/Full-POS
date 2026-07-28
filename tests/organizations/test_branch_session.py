@@ -22,14 +22,14 @@ async def _org_headers(client, *, name: str, email: str) -> dict:
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 
 
-async def _branch(client, headers: dict, *, name: str, email: str) -> dict:
+async def _branch(client, headers: dict, *, name: str, email: str | None = None) -> dict:
+    """Create a branch. Omitting ``email`` is the normal case: the branch has no
+    login of its own and is managed through the owner account."""
+    body: dict = {"name": name, "lat": 25.2048, "lng": 55.2708}
+    if email:
+        body |= {"email": email, "password": "hunter2!"}
     resp = await client.post(
-        "/api/v1/organizations/branches",
-        json={
-            "name": name, "email": email, "password": "hunter2!",
-            "lat": 25.2048, "lng": 55.2708,
-        },
-        headers=headers,
+        "/api/v1/organizations/branches", json=body, headers=headers,
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
@@ -92,6 +92,66 @@ async def test_cannot_open_a_session_on_another_orgs_branch(client):
         f"/api/v1/organizations/branches/{yours['id']}/session", headers=ours
     )
     assert stolen.status_code == 404, stolen.text
+
+
+@pytest.mark.anyio
+async def test_branch_without_credentials_cannot_be_signed_into(client, db_session):
+    """A branch created with no email/password gets no usable credential at all.
+
+    The placeholder email the column mints must not be reported as if it were a
+    real login, and no password may open it — otherwise "one owner login" would
+    quietly leave a second, weaker door on every store.
+    """
+    hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    made = await _branch(client, hq, name="Deira")  # no email, no password
+
+    assert made["email"] is None
+    assert made["has_login"] is False
+
+    listed = await client.get("/api/v1/organizations/branches", headers=hq)
+    assert [b["email"] for b in listed.json()] == [None]
+
+    # The stored placeholder is a real column value; prove it opens nothing.
+    from sqlalchemy import select
+
+    from app.identity.models import Restaurant
+
+    row = await db_session.scalar(
+        select(Restaurant).where(Restaurant.id == made["id"])
+    )
+    placeholder = row.email
+    assert placeholder.endswith("@auto.local")
+
+    # "!" is the stored hash itself — a caller who learns the sentinel must not
+    # be able to present it as the password.
+    for attempt in ("", "hunter2!", "!", "password"):
+        resp = await client.post(
+            "/api/v1/auth/login", json={"email": placeholder, "password": attempt}
+        )
+        # 401 from the hash check, or 422 when the schema rejects the input
+        # first (the empty string). Either way no session is issued.
+        assert resp.status_code in (401, 422), (attempt, resp.text)
+        assert "access_token" not in resp.text
+
+    # But the OWNER still reaches it, which is the whole point.
+    sess = await client.post(
+        f"/api/v1/organizations/branches/{made['id']}/session", headers=hq
+    )
+    assert sess.status_code == 200, sess.text
+    assert sess.json()["name"] == "Deira"
+
+
+@pytest.mark.anyio
+async def test_branch_credentials_must_be_given_as_a_pair(client):
+    """An email with no password would look like an account and be none."""
+    hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    resp = await client.post(
+        "/api/v1/organizations/branches",
+        json={"name": "Deira", "lat": 25.2, "lng": 55.2, "email": "deira@biryani.ae"},
+        headers=hq,
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "email_and_password_together"
 
 
 @pytest.mark.anyio

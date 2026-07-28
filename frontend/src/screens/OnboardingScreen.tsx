@@ -21,10 +21,10 @@ function hasPin(lat: number, lng: number): boolean {
 /**
  * One page, one required thing: where the restaurant is.
  *
- * Signup never asks for coordinates, so a new restaurant starts at 0.0/0.0 —
- * a point in the Gulf of Guinea, ~4,500 km from Dubai. Delivery radius, the fee
- * tiers, batching proximity and rider distances are all measured from it, so
- * every one of them is wrong until it is set. That is why it is the gate.
+ * Signup never asks for coordinates, so a new restaurant starts at 0.0/0.0, a
+ * point in the Gulf of Guinea roughly 4,500 km from Dubai. Delivery radius, the
+ * fee tiers, batching proximity and rider distances are all measured from it,
+ * so every one of them is wrong until it is set. That is why it is the gate.
  *
  * WhatsApp is offered here but optional: it can be connected any time from
  * Settings, and blocking the dashboard on an external Meta signup flow stopped
@@ -75,7 +75,9 @@ export function OnboardingScreen() {
       return;
     }
     if (!hasPin(lat, lng)) {
-      setError("Set your restaurant location on the map — delivery distances are measured from it.");
+      setError(
+        "Set your restaurant location on the map. Delivery distances are measured from it.",
+      );
       return;
     }
     setFinishing(true);
@@ -97,8 +99,8 @@ export function OnboardingScreen() {
   const located = hasPin(lat, lng);
 
   return (
-    <div className={s.screen}>
-      <div className={s.shell}>
+    <div className={`${s.screen} ${s.singleScreen}`}>
+      <div className={`${s.shell} ${s.singleShell}`}>
         <header className={s.top}>
           <div className={s.brand}>
             <span className={s.brandMark}>POS</span>
@@ -119,8 +121,8 @@ export function OnboardingScreen() {
 
             <h1 className={s.h1}>Set up your restaurant</h1>
             <p className={s.lead}>
-              Two details and you're on the floor. Everything else — menu, staff PINs,
-              WhatsApp — is set up inside the dashboard whenever you're ready.
+              Two details and you're on the floor. Everything else (menu, staff PINs,
+              WhatsApp) is set up inside the dashboard whenever you're ready.
             </p>
 
             <label className={s.field}>

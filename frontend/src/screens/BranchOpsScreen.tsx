@@ -70,8 +70,6 @@ export function BranchOpsScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [stockOpen, setStockOpen] = useState(false);
   const [branchName, setBranchName] = useState("");
-  const [branchEmail, setBranchEmail] = useState("");
-  const [branchPassword, setBranchPassword] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [branchRegion, setBranchRegion] = useState("");
@@ -188,39 +186,27 @@ export function BranchOpsScreen() {
   async function submitBranch() {
     const parsedLat = Number(lat);
     const parsedLng = Number(lng);
-    const email = branchEmail.trim().toLowerCase();
-    const password = branchPassword;
     if (!branchName.trim() || !Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
       toast("Branch name and a map location (or lat/lng) are required.", "error");
       return;
     }
-    if (!email || !email.includes("@")) {
-      toast("Login email is required for this branch.", "error");
-      return;
-    }
-    if (password.trim().length < 6) {
-      toast("Password must be at least 6 characters.", "error");
-      return;
-    }
     setSubmitting(true);
     try {
+      // No email/password: the branch is reached through the owner's own login
+      // via the Branch switcher, so it gets no credential of its own.
       const created = await createBranch({
         name: branchName.trim(),
         lat: parsedLat,
         lng: parsedLng,
-        email,
-        password,
         region: branchRegion.trim() || undefined,
       });
       setBranches((prev) => [...prev, created]);
       setBranchName("");
-      setBranchEmail("");
-      setBranchPassword("");
       setLat("");
       setLng("");
       setBranchRegion("");
       setAddOpen(false);
-      toast(`Branch added: ${created.name}. Login: ${created.email ?? email}`);
+      toast(`Branch added: ${created.name}. Switch to it from the Branch menu.`);
       await loadData();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not add branch.", "error");
@@ -695,31 +681,14 @@ export function BranchOpsScreen() {
                       autoFocus
                     />
                   </label>
-                  <label>
-                    <span>Login email</span>
-                    <input
-                      aria-label="Login email"
-                      type="email"
-                      autoComplete="off"
-                      value={branchEmail}
-                      onChange={(e) => setBranchEmail(e.target.value)}
-                      placeholder="marina@yourbrand.ae"
-                    />
-                  </label>
-                  <label>
-                    <span>Login password</span>
-                    <input
-                      aria-label="Login password"
-                      type="password"
-                      autoComplete="new-password"
-                      value={branchPassword}
-                      onChange={(e) => setBranchPassword(e.target.value)}
-                      placeholder="Min 6 characters"
-                    />
-                  </label>
+                  {/* No login fields: a branch has no credential of its own.
+                      Your owner account manages every branch through the Branch
+                      switcher, so a second password per store would be one more
+                      thing to leak and rotate for no extra reach. */}
                   <p className={s.locHint}>
-                    Staff will sign in on the dashboard with this email and password (same as a
-                    normal restaurant login).
+                    You manage this branch with your own owner login. Use the Branch switcher
+                    at the top to move between stores. Staff sign in at the branch with their
+                    number and PIN.
                   </p>
                   <div className={s.locBlock}>
                     <div className={s.locHead}>

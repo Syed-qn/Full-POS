@@ -233,17 +233,40 @@
 }
 
 /* Single-page layout: no side rail, one centred column that stays readable on a
-   wide terminal instead of stretching a short form across the whole screen. */
+   wide terminal instead of stretching a short form across the whole screen.
+
+   base.css pins html/body/#root to height:100% with overflow:hidden, so the
+   DOCUMENT can never scroll and every screen must own an inner scroll pane.
+   .screen/.shell used min-height (100vh and 100vh-32px), which lets them grow
+   past a viewport that cannot scroll, so the overflow was simply clipped and
+   the bottom of the form was unreachable. Pin both to the available height and
+   give .single the only scroll box. The footer sits OUTSIDE it, so it stays
+   visible instead of relying on position:sticky resolving correctly. */
+.singleScreen {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.singleShell {
+  min-height: 0;
+  height: 100%;
+}
+
 .single {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .single .panel {
   max-width: 720px;
   margin: 0 auto;
   width: 100%;
+  /* .panel carries overflow:auto for the old two-pane layout; a scroll box
+     inside a page that already scrolls just traps the wheel. */
+  overflow: visible;
 }
 
 .field {

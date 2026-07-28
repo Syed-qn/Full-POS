@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.identity.auth import create_access_token, verify_password
+from app.identity.auth import create_access_token, is_login_disabled, verify_password
 from app.identity.models import Restaurant
 from app.organizations.deps import current_organization
 from app.organizations.franchise import (
@@ -187,7 +187,11 @@ async def create_branch(
     return {
         "id": branch.id,
         "name": branch.name,
-        "email": branch.email,
+        # Null for a branch with no login of its own. The stored value is an
+        # auto-generated ``r-<uuid>@auto.local`` placeholder that nobody can sign
+        # in with; showing it would read as a real address staff might try.
+        "email": None if is_login_disabled(branch.password_hash) else branch.email,
+        "has_login": not is_login_disabled(branch.password_hash),
         "region": branch.region,
         "currency": branch.currency,
         "locale": branch.locale,
@@ -207,7 +211,8 @@ async def get_branches(
         {
             "id": b.id,
             "name": b.name,
-            "email": b.email,
+            "email": None if is_login_disabled(b.password_hash) else b.email,
+            "has_login": not is_login_disabled(b.password_hash),
             "region": b.region,
             "currency": getattr(b, "currency", "AED"),
             "locale": getattr(b, "locale", "en"),

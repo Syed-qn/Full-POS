@@ -13,8 +13,22 @@ _ph = PasswordHasher()
 _ALGO = "HS256"
 
 
+#: Stored in ``password_hash`` for accounts that must never be signed into
+#: directly — currently branches, which are managed entirely through their
+#: organization's owner login. It is not a valid PHC string, so
+#: ``verify_password`` fails it via InvalidHashError for EVERY input, including
+#: the empty string. The column is NOT NULL, so a sentinel is the way to say
+#: "no password" without weakening it to nullable.
+UNUSABLE_PASSWORD_HASH = "!"
+
+
 def hash_password(plain: str) -> str:
     return _ph.hash(plain)
+
+
+def is_login_disabled(hashed: str | None) -> bool:
+    """True when this account has no usable password at all."""
+    return not hashed or hashed == UNUSABLE_PASSWORD_HASH
 
 
 def verify_password(plain: str, hashed: str) -> bool:

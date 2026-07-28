@@ -15,6 +15,37 @@ describe("auth store", () => {
     expect(getToken()).toBeNull();
   });
 
+  it("logout drops the cached restaurant name so the next account is not mislabelled", async () => {
+    // Reproduces a real report: switch to a branch, sign out, sign back in as
+    // the owner, and the chrome still read the BRANCH name. The name lives in a
+    // module-level cache that only dies on a full page load, and signing out is
+    // a client-side route change.
+    const { useRestaurantName } = await import("./brand");
+    const { renderHook, waitFor } = await import("@testing-library/react");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ name: "La Cafe 2" }), { status: 200 }),
+      ),
+    );
+    setToken("branch-token");
+    const first = renderHook(() => useRestaurantName());
+    await waitFor(() => expect(first.result.current).toBe("La Cafe 2"));
+
+    logout();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ name: "La Cafe" }), { status: 200 }),
+      ),
+    );
+    setToken("owner-token");
+    const second = renderHook(() => useRestaurantName());
+    await waitFor(() => expect(second.result.current).toBe("La Cafe"));
+  });
+
   it("login posts credentials and persists token", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ access_token: "jwt-xyz", token_type: "bearer" }), {

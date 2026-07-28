@@ -5,7 +5,7 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.identity.auth import hash_password
+from app.identity.auth import UNUSABLE_PASSWORD_HASH, hash_password
 from app.identity.models import Restaurant
 from app.organizations.models import Organization
 
@@ -76,36 +76,54 @@ async def add_branch(
     name: str,
     lat: float,
     lng: float,
-    email: str,
-    password: str,
+    email: str | None = None,
+    password: str | None = None,
     region: str | None = None,
     currency: str = "AED",
     locale: str = "en",
     is_central_kitchen: bool = False,
 ) -> Restaurant:
-    """Create a sister store under ``organization_id`` with a real owner login.
+    """Create a sister store under ``organization_id``.
 
-    Every branch is a full ``Restaurant`` row. Email + password are required so
-    the store can sign in on the dashboard immediately (same as a normal signup).
+    A branch normally has NO login of its own. One owner account runs the whole
+    organization and reaches each store through the branch switcher, which mints
+    a per-branch token after checking ownership — so a second credential per
+    store is one more thing to leak and rotate for no extra capability.
+
+    Email and password stay OPTIONAL rather than being removed: an operator who
+    genuinely wants a store to sign in on its own (a franchisee, say) can still
+    supply them. Omitting them leaves the branch with the auto-generated
+    placeholder email and an unusable password hash, so no credential exists to
+    sign in with. The branch's location/coordinates come from the picker either
+    way — a store is defined by where it is, not by an inbox.
     """
     from app.identity.models import DEFAULT_SETTINGS
 
     email_norm = (email or "").strip().lower()
-    if not email_norm:
-        raise ValueError("email_required")
-    if not (password or "").strip() or len(password.strip()) < 6:
+    password_clean = (password or "").strip()
+
+    # Half a credential is worse than none: an email with no password is an
+    # account that looks signable-in but is not, and a password with no email
+    # has nothing to sign in as.
+    if bool(email_norm) != bool(password_clean):
+        raise ValueError("email_and_password_together")
+    if password_clean and len(password_clean) < 6:
         raise ValueError("password_min_6")
 
-    existing = await session.scalar(select(Restaurant).where(Restaurant.email == email_norm))
-    if existing is not None:
-        raise ValueError("email_already_registered")
+    if email_norm:
+        existing = await session.scalar(
+            select(Restaurant).where(Restaurant.email == email_norm)
+        )
+        if existing is not None:
+            raise ValueError("email_already_registered")
 
     branch = Restaurant(
         name=name,
-        email=email_norm,
         lat=lat,
         lng=lng,
-        password_hash=hash_password(password.strip()),
+        password_hash=(
+            hash_password(password_clean) if password_clean else UNUSABLE_PASSWORD_HASH
+        ),
         organization_id=organization_id,
         region=region,
         currency=(currency or "AED").upper()[:8],
@@ -114,6 +132,11 @@ async def add_branch(
         # New branches still run onboarding (menu / Meta) like a normal signup.
         settings={**DEFAULT_SETTINGS, "onboarding_complete": False},
     )
+    # Assign only when given: the column's Python-side default mints a unique
+    # ``r-<uuid>@auto.local`` placeholder, and passing None instead would violate
+    # the NOT NULL constraint rather than trigger that default.
+    if email_norm:
+        branch.email = email_norm
     session.add(branch)
     await session.flush()
     return branch

@@ -19,9 +19,12 @@ class BranchIn(BaseModel):
     name: str
     lat: float
     lng: float
-    # Manager login for this store — required so every branch is sign-in ready.
-    email: str
-    password: str = Field(min_length=6)
+    # Optional per-store login. Omit both and the branch has NO credential of its
+    # own: the organization's owner account manages it through the branch
+    # switcher, which is the normal case. Supply both only for a store that must
+    # sign in independently (e.g. a franchisee).
+    email: str | None = None
+    password: str | None = Field(default=None, min_length=6)
     region: str | None = None
     currency: str = "AED"
     locale: str = "en"

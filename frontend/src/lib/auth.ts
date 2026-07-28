@@ -1,4 +1,5 @@
 import { apiClient } from "./apiClient";
+import { resetRestaurantNameCache } from "./brand";
 import { clearStaffSession } from "./navAccess";
 import { clearCachedOnboardingComplete } from "./onboardingGate";
 import type { TokenOut } from "./types";
@@ -24,6 +25,11 @@ export function logout(): void {
   localStorage.removeItem(TOKEN_KEY);
   clearCachedOnboardingComplete();
   clearStaffSession();
+  // The restaurant name lives in a module-level cache that only dies on a full
+  // page load. Signing out is a client-side route change, so without this the
+  // NEXT account inherits the previous one's name — switch to a branch, sign
+  // out, sign back in as HQ, and the chrome still reads the branch.
+  resetRestaurantNameCache();
   desktopBridge()?.setAuthToken(null);
 }
 
