@@ -79,6 +79,30 @@ describe("SettingsScreen", () => {
     expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
   });
 
+  it("says why the pairing link is empty instead of showing a blank box", async () => {
+    // It needs two slow calls; a bare empty field reads as broken. And the
+    // endpoint is manager-and-above, so a cashier's 403 has to be stated, not
+    // swallowed into silence.
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (String(url).includes("/staff/store-identity")) {
+        return Promise.resolve(new Response(JSON.stringify({ detail: "forbidden" }), { status: 403 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(me), { status: 200 }));
+    }));
+
+    render(<SettingsScreen />);
+    const field = (await screen.findByLabelText(
+      /terminal pairing link/i,
+    )) as HTMLInputElement;
+
+    await waitFor(() =>
+      expect(field.placeholder).toMatch(/manager access to see the pairing link/i),
+    );
+    expect(field.value).toBe("");
+    expect(screen.getByRole("button", { name: /^copy$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
   it("loads current batching settings", async () => {
     render(<SettingsScreen />);
     // Navigate to batching tab

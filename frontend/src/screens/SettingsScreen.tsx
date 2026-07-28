@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
-import { apiClient } from "../lib/apiClient";
+import { ApiError, apiClient } from "../lib/apiClient";
 import { disconnectMeta, fetchMetaConfig, type MetaConfig } from "../lib/onboardingApi";
 import { useMetaEmbeddedSignup } from "../lib/useMetaEmbeddedSignup";
 import { getStoreIdentity, pairingLink, type StoreIdentity } from "../lib/storeIdentity";
@@ -231,6 +231,7 @@ export function SettingsScreen() {
   const [savingLoc, setSavingLoc] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
   const [pairCopied, setPairCopied] = useState(false);
+  const [pairError, setPairError] = useState<string | null>(null);
   // WhatsApp connect / disconnect — both happen HERE. Connect opens Meta's own
   // Embedded Signup dialog in place (same popup the onboarding wizard uses);
   // disconnect leaves the manager on this page with a Connect button, instead of
@@ -244,11 +245,28 @@ export function SettingsScreen() {
     fetchMetaConfig().then(setMetaCfg).catch(() => {});
   }, []);
 
-  // Pairing keys for this branch. Owner-only endpoint; a non-owner viewing
-  // Settings simply sees the placeholder rather than an error.
-  useEffect(() => {
-    getStoreIdentity().then(setStoreIdentity).catch(() => {});
+  // Pairing keys for this branch. Manager and above, so a cashier or waiter
+  // gets a 403 here; that is expected, not a fault, but it must still be SAID.
+  // The failure used to be swallowed, leaving an empty box with no explanation.
+  const loadStoreIdentity = useCallback(() => {
+    setPairError(null);
+    return getStoreIdentity()
+      .then((v) => {
+        setStoreIdentity(v);
+        setPairError(null);
+      })
+      .catch((e) => {
+        setPairError(
+          e instanceof ApiError && e.status === 403
+            ? "You need manager access to see the pairing link."
+            : "Couldn't load the pairing link.",
+        );
+      });
   }, []);
+
+  useEffect(() => {
+    void loadStoreIdentity();
+  }, [loadStoreIdentity]);
 
   async function onDisconnectWhatsApp() {
     setDisconnecting(true);
@@ -727,6 +745,10 @@ export function SettingsScreen() {
                 readOnly
                 className={s.input}
                 aria-label="Terminal pairing link"
+                // An empty box says nothing about WHY it is empty. The link
+                // needs two slow calls, so say it is coming — or what went
+                // wrong — rather than looking broken while it loads.
+                placeholder={pairError ?? "Loading…"}
                 onFocus={(e) => e.currentTarget.select()}
               />
               <Button
@@ -737,10 +759,15 @@ export function SettingsScreen() {
               >
                 {pairCopied ? "Copied" : "Copy"}
               </Button>
+              {pairError && (
+                <Button type="button" variant="ghost" onClick={loadStoreIdentity}>
+                  Retry
+                </Button>
+              )}
             </div>
             <span className={s.rowHint}>
-              Open this on a till to pair it with this branch and go straight to
-              the PIN pad. Staff then sign in with their own number and PIN.
+              {pairError ??
+                "Open this on a till to pair it with this branch and go straight to the PIN pad. Staff then sign in with their own number and PIN."}
             </span>
           </label>
 

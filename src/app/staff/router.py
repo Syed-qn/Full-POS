@@ -161,11 +161,20 @@ async def store_pairing(
 
 @router.get("/store-identity", response_model=StoreIdentityOut)
 async def store_identity(
-    restaurant=Depends(require_role("owner")),
+    restaurant=Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
-    """The pairing keys for THIS branch, so an owner can set up a new terminal.
-    Owner-only: handing these out freely would re-expose branch selection."""
+    """The pairing keys for THIS branch, so a terminal can be set up.
+
+    Manager and above. Setting up a till is floor work a branch manager does,
+    and it lives on the Settings page they already have; owner-only meant the
+    field sat permanently blank for the person actually doing the job.
+
+    This does not widen who can reach WHAT: the keys only identify THIS branch,
+    and the caller is already inside it. Cashiers/waiters/kitchen still cannot
+    read them, and the link alone opens nothing — a staff number and PIN are
+    still checked, inside this branch only.
+    """
     account_uuid = None
     if restaurant.organization_id:
         org = await session.get(Organization, restaurant.organization_id)

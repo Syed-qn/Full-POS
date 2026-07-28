@@ -163,15 +163,36 @@ async def test_duplicate_pin_rejected_within_a_restaurant_only(client, auth_head
 
 
 @pytest.mark.anyio
-async def test_store_identity_is_owner_only(client, auth_headers):
+async def test_store_identity_is_manager_and_above(client, auth_headers):
+    """Setting up a till is work a branch manager does, on the Settings page
+    they already have — owner-only left the field permanently blank for the
+    person actually doing the job. Below manager stays out: the keys name this
+    branch, and only manager+ has any reason to hand them to a terminal."""
     from app.identity.auth import create_access_token
 
+    def staff_headers(staff_id: int, role: str) -> dict:
+        return {
+            "Authorization": "Bearer "
+            + create_access_token(
+                staff_id=staff_id, audience="staff", extra_claims={"role": role}
+            )
+        }
+
     mgr = await _manager(client, auth_headers, name="Sara", pin="8471")
-    mgr_headers = {
-        "Authorization": "Bearer "
-        + create_access_token(
-            staff_id=mgr["id"], audience="staff", extra_claims={"role": "manager"}
-        )
-    }
-    resp = await client.get("/api/v1/staff/store-identity", headers=mgr_headers)
-    assert resp.status_code == 403, resp.text
+    ok = await client.get(
+        "/api/v1/staff/store-identity", headers=staff_headers(mgr["id"], "manager")
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["location_uuid"]
+
+    cashier = await client.post(
+        "/api/v1/staff",
+        json={"name": "Ali", "role": "cashier", "pin": "5926"},
+        headers=auth_headers,
+    )
+    assert cashier.status_code == 201, cashier.text
+    denied = await client.get(
+        "/api/v1/staff/store-identity",
+        headers=staff_headers(cashier.json()["id"], "cashier"),
+    )
+    assert denied.status_code == 403, denied.text
