@@ -29,10 +29,10 @@ export function LoginScreen() {
   const linkedAccount = (params.get("account") ?? "").trim() || null;
   const [mode, setMode] = useState<Mode>(linkedStore ? "pin" : "login");
   const [name, setName] = useState("");
-  // Demo convenience prefill (all builds) — a real account so Sign In works
-  // out of the box. Created via /auth/signup; change or clear before real use.
-  const [email, setEmail] = useState("manager@fullpos.ae");
-  const [password, setPassword] = useState("FullPOS@2026");
+  // No prefill: the demo account these once held has been deleted, and a
+  // prefilled password is a credential shipped in the bundle either way.
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   // Staff PIN login routes by role and skips the manager onboarding gate. The
   // staff number is branch-local (every restaurant numbers its own people from
   // 1), so it is only meaningful against the branch the link supplied.
@@ -177,6 +177,17 @@ export function LoginScreen() {
             onClick={() => switchMode("pin")}
           >
             STAFF PIN
+          </button>
+          {/* Without this tab the signup form below is unreachable — the mode
+              exists, the handler exists, but nothing can select it. */}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "signup"}
+            className={`${s.tab} ${mode === "signup" ? s.tabActive : ""}`}
+            onClick={() => switchMode("signup")}
+          >
+            SIGN UP
           </button>
         </div>
 

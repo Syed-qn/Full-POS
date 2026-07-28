@@ -76,7 +76,7 @@
 
 .tabs {
   display: grid;
-  /* Fill evenly for however many tabs render (2 today: Sign in · Staff PIN). */
+  /* Fill evenly for however many tabs render (3: Sign in · Staff PIN · Sign up). */
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   border: 1px solid var(--border-default);
