@@ -11,9 +11,14 @@ const BRANCHES = [
 /** Answer /branches, /me and the session exchange; record what was asked. */
 function stubApi(opts: { branches?: unknown[]; meId?: number } = {}) {
   const calls: string[] = [];
-  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const fetchMock: ReturnType<typeof vi.fn> = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
     calls.push(`${init?.method ?? "GET"} ${u}`);
+    // The server rejects a call with no bearer. Modelling that is the whole
+    // point here: a stub that answers unauthenticated requests would pass just
+    // as happily with the wrong token, proving nothing about which one is used.
+    const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+    if (!auth) return new Response(JSON.stringify({ detail: "missing token" }), { status: 401 });
     if (u.includes("/organizations/branches") && u.includes("/session")) {
       return new Response(
         JSON.stringify({ access_token: "branch-jwt", name: "La Cafe 2", restaurant_id: 2 }),
@@ -134,6 +139,26 @@ describe("BranchSwitcher", () => {
     stubApi({ meId: 1 });
     render(<BranchSwitcher />);
     expect(await screen.findByRole("combobox", { name: /branch/i })).toBeInTheDocument();
+  });
+
+  it("works with only the owner token, no org token", async () => {
+    // The org token (ops_org_token) is minted by the Branches screen's
+    // bootstrap call. The top bar renders on every page, so it usually has no
+    // org token at all — authenticating with it made the switcher 401 and
+    // silently render nothing everywhere except the Branches page itself.
+    localStorage.removeItem("ops_org_token");
+    const calls = stubApi({ meId: 1 });
+
+    render(<BranchSwitcher />);
+    expect(await screen.findByRole("combobox", { name: /branch/i })).toBeInTheDocument();
+
+    expect(calls).toContain("GET /api/v1/organizations/branches");
+    const branchCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([u]) => String(u).includes("/organizations/branches"));
+    expect((branchCall?.[1] as RequestInit).headers).toMatchObject({
+      Authorization: "Bearer owner-jwt",
+    });
   });
 
   it("renders nothing for a single-branch account", async () => {

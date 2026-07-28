@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../lib/apiClient";
 import { setToken } from "../lib/auth";
-import { listBranches } from "../lib/organizationsApi";
 import type { OrganizationBranchOut } from "../lib/types";
 import s from "./BranchSwitcher.module.css";
 
@@ -55,9 +54,18 @@ export function BranchSwitcher() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // apiClient, NOT organizationsApi.listBranches: that helper authenticates
+    // with the separate ORG token, which only exists after the Branches screen
+    // runs bootstrap. In the top bar there is usually no org token yet, so the
+    // call 401'd and the switcher silently rendered nothing — branches visible
+    // on their own page, no way to switch from anywhere else.
+    //
+    // The endpoint accepts a restaurant OWNER token directly whenever that
+    // restaurant is linked to an organization, which is exactly this case.
     // A standalone restaurant has no organization, so this 403s — that is the
     // normal single-branch case, not an error worth surfacing.
-    listBranches()
+    apiClient
+      .get<OrganizationBranchOut[]>("/api/v1/organizations/branches")
       .then((list) => {
         setBranches(list);
         try {
