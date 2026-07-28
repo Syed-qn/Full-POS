@@ -144,9 +144,33 @@ async def add_branch(
 
 async def list_branches(session: AsyncSession, *, organization_id: int) -> list[Restaurant]:
     rows = await session.scalars(
-        select(Restaurant).where(Restaurant.organization_id == organization_id)
+        select(Restaurant)
+        .where(Restaurant.organization_id == organization_id)
+        .order_by(Restaurant.id)
     )
     return list(rows)
+
+
+def main_branch_id(branches: list[Restaurant], org: Organization) -> int | None:
+    """Which store is the organization's main branch.
+
+    There is no column for it. An organization is bootstrapped FROM its founding
+    restaurant, copying that restaurant's email into ``owner_email``, so that
+    match identifies the original store. Branches added later have either their
+    own address or an ``@auto.local`` placeholder, neither of which can collide.
+
+    Falls back to the lowest id when nothing matches — an org whose founding
+    restaurant was renamed or deleted still has an oldest store, and returning
+    None there would leave the UI with no default selection at all.
+    """
+    if not branches:
+        return None
+    owner_email = (org.owner_email or "").strip().lower()
+    if owner_email:
+        for b in branches:
+            if (b.email or "").strip().lower() == owner_email:
+                return b.id
+    return min(b.id for b in branches)
 
 
 async def rollup_sales(session: AsyncSession, *, organization_id: int, target_date: date) -> dict:

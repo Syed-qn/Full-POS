@@ -142,6 +142,53 @@ async def test_branch_without_credentials_cannot_be_signed_into(client, db_sessi
 
 
 @pytest.mark.anyio
+async def test_exactly_one_branch_is_flagged_main(client):
+    """The founding store is the main branch, and only it.
+
+    There is no column for this: the organization is bootstrapped from its first
+    restaurant, copying that email into owner_email, so the match is what
+    identifies the original. Branches added later cannot collide because they
+    carry either their own address or an @auto.local placeholder.
+    """
+    hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")
+    # This org was created by /organizations/signup, which makes NO restaurant,
+    # so no store carries owner_email and the oldest-store fallback decides.
+    first = await _branch(client, hq, name="Deira")
+    await _branch(client, hq, name="Marina")
+
+    listed = (await client.get("/api/v1/organizations/branches", headers=hq)).json()
+    flagged = [b["id"] for b in listed if b["is_main"]]
+    assert flagged == [first["id"]], listed
+
+
+@pytest.mark.anyio
+async def test_founding_restaurant_is_main_even_when_not_the_oldest_row(client):
+    """The realistic shape: a restaurant signs up, later becomes an organization.
+
+    Its email becomes owner_email, so it is the main branch by identity rather
+    than by being the lowest id — which is what makes the flag meaningful.
+    """
+    await client.post(
+        "/api/v1/auth/signup",
+        json={"name": "La Cafe", "email": "lacafe@test.ae", "password": "hunter2!"},
+    )
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": "lacafe@test.ae", "password": "hunter2!"}
+    )
+    owner = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    boot = await client.post("/api/v1/organizations/bootstrap", headers=owner)
+    assert boot.status_code in (200, 201), boot.text
+
+    await _branch(client, owner, name="Marina")
+
+    listed = (await client.get("/api/v1/organizations/branches", headers=owner)).json()
+    by_name = {b["name"]: b for b in listed}
+    assert by_name["La Cafe"]["is_main"] is True
+    assert by_name["Marina"]["is_main"] is False
+
+
+@pytest.mark.anyio
 async def test_branch_credentials_must_be_given_as_a_pair(client):
     """An email with no password would look like an account and be none."""
     hq = await _org_headers(client, name="Biryani Group", email="hq@biryani.ae")

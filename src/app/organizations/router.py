@@ -56,6 +56,7 @@ from app.organizations.service import (
     bootstrap_organization_for_restaurant,
     branch_comparison,
     list_branches,
+    main_branch_id,
     organization_inventory_summary,
     rollup_sales,
     signup_organization,
@@ -207,12 +208,14 @@ async def get_branches(
     session: AsyncSession = Depends(get_session),
 ):
     branches = await list_branches(session, organization_id=org.id)
+    main_id = main_branch_id(branches, org)
     return [
         {
             "id": b.id,
             "name": b.name,
             "email": None if is_login_disabled(b.password_hash) else b.email,
             "has_login": not is_login_disabled(b.password_hash),
+            "is_main": b.id == main_id,
             "region": b.region,
             "currency": getattr(b, "currency", "AED"),
             "locale": getattr(b, "locale", "en"),

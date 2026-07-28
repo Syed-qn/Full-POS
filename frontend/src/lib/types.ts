@@ -942,6 +942,8 @@ export interface OrganizationBranchOut {
   email?: string | null;
   /** False when the branch is reachable only through the owner account. */
   has_login?: boolean;
+  /** The organization's founding store. Exactly one branch carries this. */
+  is_main?: boolean;
   region?: string | null;
   currency?: string;
   locale?: string;

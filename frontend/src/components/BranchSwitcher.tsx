@@ -19,6 +19,7 @@ import s from "./BranchSwitcher.module.css";
  */
 export function BranchSwitcher() {
   const [branches, setBranches] = useState<OrganizationBranchOut[] | null>(null);
+  const [currentId, setCurrentId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,13 @@ export function BranchSwitcher() {
     listBranches()
       .then(setBranches)
       .catch(() => setBranches([]));
+    // Which store this session is actually looking at, so the control shows the
+    // truth instead of an empty "Switch branch…" prompt. The token decides the
+    // branch, so /me is the only honest source.
+    apiClient
+      .get<{ id: number }>("/api/v1/me")
+      .then((me) => setCurrentId(me.id))
+      .catch(() => {});
   }, []);
 
   async function switchTo(id: number) {
@@ -47,6 +55,12 @@ export function BranchSwitcher() {
 
   if (!branches || branches.length < 2) return null;
 
+  // Show the branch actually in use. Until /me answers, fall back to the main
+  // branch rather than a blank prompt — a control that reads "Switch branch…"
+  // never tells you where you already are.
+  const fallback = branches.find((b) => b.is_main)?.id ?? branches[0].id;
+  const selected = currentId ?? fallback;
+
   return (
     <label className={s.wrap}>
       <span className={s.label}>Branch</span>
@@ -54,18 +68,15 @@ export function BranchSwitcher() {
         className={s.select}
         aria-label="Branch"
         disabled={busy}
-        defaultValue=""
+        value={String(selected)}
         onChange={(e) => {
           const id = Number(e.target.value);
-          if (Number.isInteger(id) && id > 0) void switchTo(id);
+          if (Number.isInteger(id) && id > 0 && id !== selected) void switchTo(id);
         }}
       >
-        <option value="" disabled>
-          {busy ? "Switching…" : "Switch branch…"}
-        </option>
         {branches.map((b) => (
           <option key={b.id} value={b.id}>
-            {b.name}
+            {b.is_main ? `${b.name} (Main)` : b.name}
           </option>
         ))}
       </select>

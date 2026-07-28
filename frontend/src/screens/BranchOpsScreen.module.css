@@ -249,6 +249,24 @@
   font-size: 17px;
   font-weight: 700;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Marks the organization's founding store, so a list of similarly named
+   branches ("La Cafe", "La Cafe 2") says which one is the original. */
+.mainPill {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--accent-primary, #175cd3);
+  background: color-mix(in srgb, var(--accent-primary, #175cd3) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-primary, #175cd3) 25%, transparent);
 }
 
 .branchMeta {

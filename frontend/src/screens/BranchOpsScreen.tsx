@@ -390,7 +390,10 @@ export function BranchOpsScreen() {
             <article key={branch.id} className={s.branchCard}>
               <div className={s.branchTop}>
                 <div>
-                  <h2 className={s.branchName}>{branch.name}</h2>
+                  <h2 className={s.branchName}>
+                    {branch.name}
+                    {branch.is_main && <span className={s.mainPill}>Main branch</span>}
+                  </h2>
                   <p className={s.branchMeta}>
                     #{branch.id}
                     {branch.email ? ` · ${branch.email}` : ""}
