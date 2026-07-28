@@ -667,12 +667,23 @@
 }
 .searchWrap input::placeholder { color: var(--ink-dim); }
 
+/* Fixed-width chips that wrap, NOT a stretching grid.
+   This was repeat(auto-fit, minmax(180px, 1fr)): auto-fit collapses the empty
+   tracks and hands their space to the ones left, so a menu with two categories
+   rendered two buttons half the screen wide each. A category button should be
+   the same size whether the restaurant has two of them or twenty. */
 .catGrid {
   flex: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 0 8px 8px;
+}
+
+.catGrid > .cat {
+  flex: 0 0 180px;
+  /* Below ~196px of usable width a fixed 180px would overflow the row. */
+  max-width: 100%;
 }
 
 .cat {
