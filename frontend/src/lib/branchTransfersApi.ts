@@ -9,8 +9,11 @@ import { apiClient } from "./apiClient";
 import type {
   BranchTransferDispatchIn,
   BranchTransferOut,
+  BranchTransferRequestIn,
   SiblingBranchOut,
 } from "./types";
+
+type TransferResult = Promise<{ id: number; status: string }>;
 
 /** Branches you may send to. Empty for a single-site restaurant — the caller
  *  uses that to keep the Transfers tab off screen entirely. */
@@ -28,6 +31,35 @@ export function dispatchBranchTransfer(
   body: BranchTransferDispatchIn,
 ): Promise<{ id: number; status: string }> {
   return apiClient.post<{ id: number; status: string }>("/api/v1/branch-transfers", body);
+}
+
+/** Ask another branch to send you stock. Moves nothing until they agree. */
+export function requestBranchStock(body: BranchTransferRequestIn): TransferResult {
+  return apiClient.post("/api/v1/branch-transfers/requests", body);
+}
+
+/** Agree to a request and send it. Pass lines only to send LESS than was
+ *  asked for — the request stays on the record either way. */
+export function approveBranchRequest(
+  transferId: number,
+  lines: Array<{ ingredient_name: string; quantity: string }> = [],
+): TransferResult {
+  return apiClient.post(`/api/v1/branch-transfers/${transferId}/approve`, { lines });
+}
+
+/** Turn a request down. Nothing has moved, so nothing is returned. */
+export function declineBranchRequest(
+  transferId: number,
+  reason?: string,
+): TransferResult {
+  return apiClient.post(`/api/v1/branch-transfers/${transferId}/decline`, {
+    reason: reason || null,
+  });
+}
+
+/** Take back a request you raised, before the other branch acts on it. */
+export function withdrawBranchRequest(transferId: number): TransferResult {
+  return apiClient.post(`/api/v1/branch-transfers/${transferId}/withdraw`, {});
 }
 
 /** Confirm arrival. Pass nothing when everything came as sent, which is the

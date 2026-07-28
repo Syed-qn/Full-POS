@@ -136,6 +136,185 @@ async def dispatch_stock_transfer(
     return transfer
 
 
+async def request_stock_transfer(
+    session: AsyncSession,
+    *,
+    requesting_restaurant_id: int,
+    from_restaurant_id: int,
+    lines: list[dict],
+    requested_by: str,
+    note: str | None = None,
+) -> StockTransfer:
+    """Ask another branch to send you stock. Moves nothing.
+
+    The full trade flow is request -> dispatch -> receive; this is the first
+    leg, and it exists because the branch that RUNS OUT is the one that knows.
+    Without it the holder has to guess, which in practice means a phone call
+    that leaves no record of what was asked for or whether it was ever sent.
+
+    Deliberately no stock effect: the holder has not agreed yet, and deducting
+    on a request would let any branch empty another's store by asking.
+    """
+    if not lines:
+        raise ValueError("a request needs at least one line")
+    mine, holder = await _sibling_branch(
+        session, restaurant_id=requesting_restaurant_id, other_id=from_restaurant_id
+    )
+
+    # from/to describe where the STOCK will travel, so a request is stored the
+    # same way round as a dispatch: out of the holder, into the asker. Nothing
+    # downstream has to special-case which end is which.
+    transfer = StockTransfer(
+        organization_id=mine.organization_id,
+        from_restaurant_id=holder.id,
+        to_restaurant_id=mine.id,
+        status="pending",
+        note=note,
+    )
+    session.add(transfer)
+    await session.flush()
+
+    for line in lines:
+        name = str(line["ingredient_name"]).strip()
+        qty = Decimal(str(line["quantity"]))
+        if qty <= 0:
+            raise ValueError("requested quantity must be greater than zero")
+        # The unit comes from whichever branch knows the item. A request may
+        # name something the asking branch has never stocked — that is often
+        # exactly why they are asking.
+        known = await session.scalar(
+            select(Ingredient).where(
+                Ingredient.restaurant_id.in_([mine.id, holder.id]),
+                Ingredient.name == name,
+            )
+        )
+        session.add(
+            StockTransferLine(
+                transfer_id=transfer.id,
+                ingredient_name=name,
+                unit=line.get("unit") or (known.unit if known else "unit"),
+                qty_requested=qty,
+                quantity=qty,
+            )
+        )
+    await session.flush()
+    return transfer
+
+
+async def approve_stock_transfer(
+    session: AsyncSession,
+    *,
+    transfer_id: int,
+    from_restaurant_id: int,
+    dispatched_by: str,
+    quantities: dict[str, Decimal] | None = None,
+) -> StockTransfer:
+    """Agree to a request and send it. Only the branch being asked may do this.
+
+    ``quantities`` sends less than was asked for — the ordinary case when you
+    have some to spare but not all of it. The request stays on the line as
+    ``qty_requested``, so "asked 10, sent 6" survives instead of the document
+    claiming 6 was all anyone ever wanted.
+    """
+    transfer = await session.get(StockTransfer, transfer_id)
+    if transfer is None:
+        raise ValueError("stock transfer not found")
+    if transfer.from_restaurant_id != from_restaurant_id:
+        raise ValueError("only the branch being asked can approve this request")
+    if transfer.status != "pending":
+        raise ValueError(f"cannot approve a transfer that is {transfer.status}")
+
+    lines = (
+        await session.scalars(
+            select(StockTransferLine).where(StockTransferLine.transfer_id == transfer.id)
+        )
+    ).all()
+
+    sending = []
+    for line in lines:
+        asked = line.qty_requested if line.qty_requested is not None else line.quantity
+        qty = Decimal(str((quantities or {}).get(line.ingredient_name, asked)))
+        if qty < 0:
+            raise ValueError("approved quantity cannot be negative")
+        if qty > asked:
+            raise ValueError(
+                f"cannot send {qty} of {line.ingredient_name}: only {asked} was asked for"
+            )
+        line.quantity = qty
+        if qty > 0:
+            sending.append(line)
+
+    if not sending:
+        raise ValueError("approving nothing is a decline — use decline instead")
+
+    for line in sending:
+        source = await session.scalar(
+            select(Ingredient).where(
+                Ingredient.restaurant_id == transfer.from_restaurant_id,
+                Ingredient.name == line.ingredient_name,
+            )
+        )
+        if source is None:
+            raise ValueError(f"this branch has no ingredient named {line.ingredient_name!r}")
+        if source.current_stock < line.quantity:
+            raise ValueError(
+                f"only {source.current_stock} {source.unit} of "
+                f"{line.ingredient_name} in stock"
+            )
+        source.current_stock -= line.quantity
+
+    transfer.status = "in_transit"
+    transfer.dispatched_by = dispatched_by
+    await session.flush()
+    return transfer
+
+
+async def decline_stock_transfer(
+    session: AsyncSession,
+    *,
+    transfer_id: int,
+    from_restaurant_id: int,
+    reason: str | None = None,
+) -> StockTransfer:
+    """Turn a request down. Nothing has moved, so nothing is returned."""
+    transfer = await session.get(StockTransfer, transfer_id)
+    if transfer is None:
+        raise ValueError("stock transfer not found")
+    if transfer.from_restaurant_id != from_restaurant_id:
+        raise ValueError("only the branch being asked can decline this request")
+    if transfer.status != "pending":
+        raise ValueError(f"cannot decline a transfer that is {transfer.status}")
+    transfer.status = "cancelled"
+    if reason:
+        # A bare "cancelled" tells the asking branch nothing about whether to
+        # ask again, ask elsewhere, or buy it in.
+        transfer.note = f"Declined: {reason}" if not transfer.note else (
+            f"{transfer.note} · Declined: {reason}"
+        )
+    await session.flush()
+    return transfer
+
+
+async def withdraw_stock_request(
+    session: AsyncSession, *, transfer_id: int, requesting_restaurant_id: int
+) -> StockTransfer:
+    """Take back a request you raised, before the other branch acts on it."""
+    transfer = await session.get(StockTransfer, transfer_id)
+    if transfer is None:
+        raise ValueError("stock transfer not found")
+    if transfer.to_restaurant_id != requesting_restaurant_id:
+        raise ValueError("only the branch that asked can withdraw this request")
+    if transfer.status == "cancelled":
+        return transfer
+    if transfer.status != "pending":
+        # Once it has been sent it is a delivery, not a request; taking it back
+        # is the sender's cancel, which has stock to return.
+        raise ValueError(f"cannot withdraw a transfer that is {transfer.status}")
+    transfer.status = "cancelled"
+    await session.flush()
+    return transfer
+
+
 async def receive_stock_transfer(
     session: AsyncSession,
     *,
@@ -308,6 +487,9 @@ async def list_branch_transfers(
                 {
                     "ingredient_name": line.ingredient_name,
                     "unit": line.unit,
+                    "qty_requested": (
+                        None if line.qty_requested is None else str(line.qty_requested)
+                    ),
                     "quantity": str(line.quantity),
                     "qty_received": (
                         None if line.qty_received is None else str(line.qty_received)

@@ -300,19 +300,26 @@ export function InventoryScreen() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load]);
 
-  // Deliveries sent to this branch that nobody has confirmed yet. Until one is
-  // confirmed the stock sits in neither branch's count, so it is worth a number
-  // on the tab rather than something you find by opening the tab.
-  const awaitingReceipt = useMemo(
-    () => transfers.filter((t) => t.direction === "in" && t.status === "in_transit").length,
+  // Everything another branch is blocked on: a request nobody has answered,
+  // and a delivery nobody has confirmed — until that second one is confirmed
+  // the stock sits in neither branch's count. Both belong on the tab rather
+  // than behind it. Direction is the direction the STOCK travels, so a pending
+  // row going "out" is another branch asking YOU for something.
+  const awaitingMe = useMemo(
+    () =>
+      transfers.filter(
+        (t) =>
+          (t.status === "pending" && t.direction === "out") ||
+          (t.status === "in_transit" && t.direction === "in"),
+      ).length,
     [transfers],
   );
   const visibleTabs = useMemo<Array<{ id: TabId; label: string; badge?: number }>>(
     () =>
       siblings.length > 0
-        ? [...TABS, { id: "transfers" as TabId, label: "Transfers", badge: awaitingReceipt }]
+        ? [...TABS, { id: "transfers" as TabId, label: "Transfers", badge: awaitingMe }]
         : TABS,
-    [siblings.length, awaitingReceipt],
+    [siblings.length, awaitingMe],
   );
   // The tab can disappear — the last sibling branch is removed, or the reload
   // came back without it — and leaving `tab` pointing at it would render an
@@ -467,7 +474,7 @@ export function InventoryScreen() {
             >
               {t.label}
               {t.badge ? (
-                <span className={s.tabCount} aria-label={`${t.badge} to confirm`}>
+                <span className={s.tabCount} aria-label={`${t.badge} waiting on you`}>
                   {t.badge}
                 </span>
               ) : null}

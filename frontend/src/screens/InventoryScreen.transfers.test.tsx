@@ -34,7 +34,38 @@ const INCOMING = {
   note: null,
   created_at: "2026-07-29T06:00:00",
   lines: [
-    { ingredient_name: "Chicken", unit: "kg", quantity: "10.000", qty_received: null },
+    {
+      ingredient_name: "Chicken",
+      unit: "kg",
+      qty_requested: null,
+      quantity: "10.000",
+      qty_received: null,
+    },
+  ],
+};
+
+/** Another branch asking THIS one for stock. Direction is the direction the
+ *  stock will travel, so a request sits "out" on the holder's side. */
+const REQUEST_TO_ME = {
+  id: 9,
+  status: "pending",
+  direction: "out",
+  from_restaurant_id: 1,
+  from_branch_name: "Marina",
+  to_restaurant_id: 2,
+  to_branch_name: "Deira",
+  dispatched_by: null,
+  received_by: null,
+  note: "before the dinner rush",
+  created_at: "2026-07-29T07:00:00",
+  lines: [
+    {
+      ingredient_name: "Chicken",
+      unit: "kg",
+      qty_requested: "10.000",
+      quantity: "10.000",
+      qty_received: null,
+    },
   ],
 };
 
@@ -103,7 +134,7 @@ describe("InventoryScreen — branch transfers", () => {
     mockApi([{ id: 2, name: "Deira" }], [INCOMING]);
     renderWithProviders(<InventoryScreen />);
     fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
-    await screen.findByText(/From Deira/);
+    await screen.findByText(/on the way from Deira/i);
 
     fireEvent.click(screen.getByRole("button", { name: /all arrived/i }));
     await waitFor(() => {
@@ -132,10 +163,79 @@ describe("InventoryScreen — branch transfers", () => {
     });
   });
 
+  it("asks another branch for stock without moving any", async () => {
+    mockApi([{ id: 2, name: "Deira" }], []);
+    renderWithProviders(<InventoryScreen />);
+    fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
+    // Asking is the default: the branch that runs out is the one that knows.
+    fireEvent.change(await screen.findByLabelText(/ask which branch/i), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText(/^item$/i), { target: { value: "Chicken" } });
+    fireEvent.change(screen.getByLabelText(/quantity/i), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: /send request/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === "POST" && c.path.includes("/requests"));
+      expect(post).toBeTruthy();
+      const body = post?.body as Record<string, unknown>;
+      // from_restaurant_id is who you are ASKING; the asker is the token.
+      expect(body.from_restaurant_id).toBe(2);
+      expect(body.lines).toEqual([{ ingredient_name: "Chicken", quantity: "10" }]);
+      // Nothing may hit dispatch — a request that quietly moved stock would let
+      // any branch empty another's store by asking.
+      expect(
+        calls.some((c) => c.method === "POST" && c.path.endsWith("/api/v1/branch-transfers")),
+      ).toBe(false);
+    });
+  });
+
+  it("answers a request from another branch in one click", async () => {
+    mockApi([{ id: 2, name: "Deira" }], [REQUEST_TO_ME]);
+    renderWithProviders(<InventoryScreen />);
+    fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
+    await screen.findByText(/Deira asked for/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /send it all/i }));
+    await waitFor(() => {
+      const post = calls.find((c) => c.path.includes("/9/approve"));
+      expect(post).toBeTruthy();
+      // No lines means "exactly what was asked for", so the ordinary answer
+      // cannot be mistyped.
+      expect(post?.body).toEqual({ lines: [] });
+    });
+  });
+
+  it("sends less than was asked for, keeping the request on the record", async () => {
+    mockApi([{ id: 2, name: "Deira" }], [REQUEST_TO_ME]);
+    renderWithProviders(<InventoryScreen />);
+    fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /send less/i }));
+
+    fireEvent.change(screen.getByLabelText(/chicken to send/i), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: /send this much/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.path.includes("/9/approve"));
+      expect(post?.body).toEqual({
+        lines: [{ ingredient_name: "Chicken", quantity: "6" }],
+      });
+    });
+  });
+
+  it("counts requests to answer as well as deliveries to confirm", async () => {
+    mockApi([{ id: 2, name: "Deira" }], [REQUEST_TO_ME, INCOMING]);
+    renderWithProviders(<InventoryScreen />);
+    const tab = await screen.findByRole("tab", { name: /transfers/i });
+    // Both block another branch, so both belong on the tab and not behind it.
+    expect(tab.textContent).toContain("2");
+  });
+
   it("sends stock without ever naming the branch it comes from", async () => {
     mockApi([{ id: 2, name: "Deira" }], []);
     renderWithProviders(<InventoryScreen />);
     fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
+    fireEvent.click(await screen.findByRole("tab", { name: /send stock/i }));
 
     fireEvent.change(await screen.findByLabelText(/to branch/i), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText(/^item$/i), { target: { value: "Chicken" } });

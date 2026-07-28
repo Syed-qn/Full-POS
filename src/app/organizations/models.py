@@ -85,6 +85,12 @@ class StockTransferLine(Base, TimestampMixin):
     transfer_id: Mapped[int] = mapped_column(ForeignKey("stock_transfers.id"), index=True)
     ingredient_name: Mapped[str] = mapped_column(String(128))
     unit: Mapped[str] = mapped_column(String(16))
+    # What was asked for, when the movement began as a request. NULL when a
+    # branch simply sent stock unprompted. Kept apart from `quantity` for the
+    # same reason `qty_received` is: asked 10, sent 6, got 5 are three
+    # different facts, and collapsing them loses the two that explain a gap.
+    qty_requested: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    # What was sent.
     quantity: Mapped[Decimal] = mapped_column(Numeric(10, 3))
     # What actually turned up. NULL until the receiving branch confirms. Kept
     # separate from `quantity` so a short delivery stays visible as a

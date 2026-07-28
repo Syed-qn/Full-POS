@@ -18,11 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.identity.deps import current_restaurant
 from app.organizations.stock_transfer_branch import (
+    approve_stock_transfer,
     cancel_stock_transfer,
+    decline_stock_transfer,
     dispatch_stock_transfer,
     list_branch_transfers,
     list_sibling_branches,
     receive_stock_transfer,
+    request_stock_transfer,
+    withdraw_stock_request,
 )
 from app.realtime.hooks import queue_event
 
@@ -91,6 +95,121 @@ async def dispatch(
     # accept. Announcing only our own would leave the other till stale.
     queue_event(session, restaurant.id, "inventory")
     queue_event(session, body.to_restaurant_id, "inventory")
+    await session.commit()
+    return {"id": transfer.id, "status": transfer.status}
+
+
+class RequestIn(BaseModel):
+    """``from_restaurant_id`` is who you are ASKING. The branch doing the
+    asking is the caller, taken from the token."""
+
+    from_restaurant_id: int
+    lines: list[TransferLineIn]
+    note: str | None = None
+
+
+class ApproveIn(BaseModel):
+    # Empty means "send exactly what was asked for". Lines send less.
+    lines: list[TransferLineIn] = []
+
+
+class DeclineIn(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/requests", status_code=status.HTTP_201_CREATED)
+async def request_stock(
+    body: RequestIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Ask another branch to send you stock. Moves nothing until they agree."""
+    try:
+        transfer = await request_stock_transfer(
+            session,
+            requesting_restaurant_id=restaurant.id,
+            from_restaurant_id=body.from_restaurant_id,
+            lines=[line.model_dump() for line in body.lines],
+            requested_by="manager",
+            note=body.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    queue_event(session, restaurant.id, "inventory")
+    queue_event(session, body.from_restaurant_id, "inventory")
+    await session.commit()
+    return {"id": transfer.id, "status": transfer.status}
+
+
+@router.post("/{transfer_id}/approve")
+async def approve(
+    transfer_id: int,
+    body: ApproveIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Agree to a request and send it. Deducts from this branch now."""
+    try:
+        transfer = await approve_stock_transfer(
+            session,
+            transfer_id=transfer_id,
+            from_restaurant_id=restaurant.id,
+            dispatched_by="manager",
+            quantities={line.ingredient_name: line.quantity for line in body.lines}
+            or None,
+        )
+    except ValueError as exc:
+        if "only the branch being asked" in str(exc) or "not found" in str(exc):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "stock transfer not found") from exc
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    queue_event(session, restaurant.id, "inventory")
+    queue_event(session, transfer.to_restaurant_id, "inventory")
+    await session.commit()
+    return {"id": transfer.id, "status": transfer.status}
+
+
+@router.post("/{transfer_id}/decline")
+async def decline(
+    transfer_id: int,
+    body: DeclineIn,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Turn a request down. Nothing has moved, so nothing is returned."""
+    try:
+        transfer = await decline_stock_transfer(
+            session,
+            transfer_id=transfer_id,
+            from_restaurant_id=restaurant.id,
+            reason=body.reason,
+        )
+    except ValueError as exc:
+        if "only the branch being asked" in str(exc) or "not found" in str(exc):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "stock transfer not found") from exc
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    queue_event(session, restaurant.id, "inventory")
+    queue_event(session, transfer.to_restaurant_id, "inventory")
+    await session.commit()
+    return {"id": transfer.id, "status": transfer.status}
+
+
+@router.post("/{transfer_id}/withdraw")
+async def withdraw(
+    transfer_id: int,
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Take back a request you raised, before the other branch acts on it."""
+    try:
+        transfer = await withdraw_stock_request(
+            session, transfer_id=transfer_id, requesting_restaurant_id=restaurant.id
+        )
+    except ValueError as exc:
+        if "only the branch that asked" in str(exc) or "not found" in str(exc):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "stock transfer not found") from exc
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    queue_event(session, restaurant.id, "inventory")
+    queue_event(session, transfer.from_restaurant_id, "inventory")
     await session.commit()
     return {"id": transfer.id, "status": transfer.status}
 

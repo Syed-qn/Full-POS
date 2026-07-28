@@ -1030,6 +1030,11 @@ export interface SiblingBranchOut {
 export interface BranchTransferLineOut {
   ingredient_name: string;
   unit: string;
+  /** What was asked for, when this began as a request. Null when a branch
+   *  simply sent stock unprompted. Asked 10, sent 6, got 5 are three separate
+   *  facts and collapsing them loses the two that explain a gap. */
+  qty_requested: DecimalString | null;
+  /** What was sent. */
   quantity: DecimalString;
   /** What actually turned up. Null until the destination confirms; different
    *  from quantity when the delivery was short — that gap IS the loss record. */
@@ -1055,6 +1060,14 @@ export interface BranchTransferOut {
 
 export interface BranchTransferDispatchIn {
   to_restaurant_id: number;
+  lines: Array<{ ingredient_name: string; quantity: DecimalString; unit?: string }>;
+  note?: string | null;
+}
+
+/** `from_restaurant_id` is the branch you are ASKING. The branch doing the
+ *  asking is the caller, taken from the token. */
+export interface BranchTransferRequestIn {
+  from_restaurant_id: number;
   lines: Array<{ ingredient_name: string; quantity: DecimalString; unit?: string }>;
   note?: string | null;
 }
