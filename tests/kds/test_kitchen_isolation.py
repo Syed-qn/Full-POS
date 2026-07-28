@@ -211,3 +211,81 @@ async def test_kitchen_board_needs_a_session_at_all(client):
     for path in ("/api/v1/kds/stations", "/api/v1/kds/ready-for-pickup"):
         resp = await client.get(path)
         assert resp.status_code == 401, (path, resp.status_code)
+
+
+async def _staff_headers(client, auth_headers: dict, *, name: str, role: str, pin: str) -> dict:
+    """A real staff PIN session for ``role`` at the caller's restaurant."""
+    from app.identity.auth import create_access_token
+
+    made = await client.post(
+        "/api/v1/staff", json={"name": name, "role": role, "pin": pin},
+        headers=auth_headers,
+    )
+    assert made.status_code == 201, made.text
+    return {
+        "Authorization": "Bearer "
+        + create_access_token(
+            staff_id=made.json()["id"], audience="staff", extra_claims={"role": role}
+        )
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("role", ["cashier", "waiter"])
+async def test_floor_roles_can_work_the_kitchen_board(client, auth_headers, role):
+    """Cashier and waiter WORK the board.
+
+    The frontend has always offered /kds to them; the API used to allow only
+    manager and kitchen, so those two roles got a screen that loaded and then
+    403'd on every call.
+    """
+    head = await _staff_headers(
+        client, auth_headers, name=f"Floor {role}", pin="8471" if role == "cashier" else "7263",
+        role=role,
+    )
+
+    stations = await client.get("/api/v1/kds/stations", headers=head)
+    assert stations.status_code == 200, stations.text
+
+    for path in (
+        "/api/v1/kds/ready-for-pickup",
+        "/api/v1/kds/ready-alerts",
+        "/api/v1/kds/category-defaults",
+        "/api/v1/kds/printer-status",
+    ):
+        resp = await client.get(path, headers=head)
+        assert resp.status_code == 200, (role, path, resp.status_code, resp.text)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("role", ["cashier", "waiter"])
+async def test_floor_roles_cannot_reconfigure_the_kitchen(client, auth_headers, role):
+    """Working the board is not the same as owning its layout.
+
+    Creating or deleting a kitchen, or rewiring which category prints where, is
+    setup done once — a mis-tap sends every dish in a category to the wrong
+    pass, and it would be invisible until food stopped arriving.
+    """
+    head = await _staff_headers(
+        client, auth_headers, name=f"Cfg {role}", pin="5926" if role == "cashier" else "4708",
+        role=role,
+    )
+
+    created = await client.post(
+        "/api/v1/kds/stations", json={"name": "Rogue"}, headers=head
+    )
+    assert created.status_code == 403, (role, created.text)
+
+    seeded = await client.post("/api/v1/kds/stations/seed-defaults", headers=head)
+    assert seeded.status_code == 403, (role, seeded.text)
+
+    # And a manager really can do what the floor role just could not, so the
+    # 403s above mean "not your job", not "endpoint broken for everyone".
+    ok = await client.post(
+        "/api/v1/kds/stations", json={"name": "Grill"}, headers=auth_headers
+    )
+    assert ok.status_code == 201, ok.text
+    gone = await client.delete(
+        f"/api/v1/kds/stations/{ok.json()['id']}", headers=head
+    )
+    assert gone.status_code == 403, (role, gone.text)
