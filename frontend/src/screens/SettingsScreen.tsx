@@ -230,6 +230,7 @@ export function SettingsScreen() {
   const [mapOpen, setMapOpen] = useState(false);
   const [savingLoc, setSavingLoc] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
+  const [pairCopied, setPairCopied] = useState(false);
   // WhatsApp connect / disconnect — both happen HERE. Connect opens Meta's own
   // Embedded Signup dialog in place (same popup the onboarding wizard uses);
   // disconnect leaves the manager on this page with a Connect button, instead of
@@ -428,6 +429,37 @@ export function SettingsScreen() {
 
   // Persist just the map pin from the "Set on map" dialog, independently of the
   // rest of the General form, then close the dialog.
+  // The full pairing URL, or "" until both calls it depends on have answered.
+  // Empty rather than a placeholder, so the Copy button can disable itself
+  // instead of putting an ellipsis on someone's clipboard.
+  const pairing =
+    storeIdentity && me
+      ? pairingLink(window.location.origin, {
+          account_uuid: storeIdentity.account_uuid,
+          location_uuid: storeIdentity.location_uuid,
+          lat: me.lat,
+          lng: me.lng,
+        })
+      : "";
+
+  async function copyPairing() {
+    if (!pairing) return;
+    try {
+      await navigator.clipboard.writeText(pairing);
+    } catch {
+      // Clipboard API needs a secure context and permission; on http:// or a
+      // denied prompt it throws. Select the text so Ctrl+C still works rather
+      // than leaving the click doing nothing.
+      const el = document.querySelector<HTMLInputElement>(
+        'input[aria-label="Terminal pairing link"]',
+      );
+      el?.select();
+      return;
+    }
+    setPairCopied(true);
+    setTimeout(() => setPairCopied(false), 2000);
+  }
+
   async function saveLocation(la: number, ln: number) {
     setSavingLoc(true);
     try {
@@ -683,56 +715,34 @@ export function SettingsScreen() {
           {/* Terminal pairing. Staff numbers restart at 1 in every branch, so a
               till must know WHICH branch it belongs to before anyone signs in.
               Read-only: the code identifies this restaurant and is not editable. */}
-          <div className={`${s.row2} ${s.fieldGrid}`}>
-            <label className={s.col}>
-              <span className={s.rowName}>Store code (terminal pairing)</span>
+          {/* One field, one button. The store code and location id were shown
+              beside this link, but both are already inside it — three read-only
+              boxes to copy from is three chances to copy the wrong one. */}
+          <label className={s.col}>
+            <span className={s.rowName}>Terminal pairing link</span>
+            <div className={s.pairRow}>
               <input
                 type="text"
-                value={storeIdentity?.store_code ?? "…"}
+                value={pairing}
                 readOnly
                 className={s.input}
-                aria-describedby="store-code-help"
-              />
-              <span id="store-code-help" className={s.rowHint}>
-                Enter this once on each till, or open the pairing link below.
-                Staff then sign in with their own number and PIN.
-              </span>
-            </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Location ID</span>
-              <input
-                type="text"
-                value={storeIdentity?.location_uuid ?? "…"}
-                readOnly
-                className={s.input}
-              />
-            </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Terminal pairing link</span>
-              <input
-                type="text"
-                value={
-                  storeIdentity && me
-                    ? pairingLink(window.location.origin, {
-                        account_uuid: storeIdentity.account_uuid,
-                        location_uuid: storeIdentity.location_uuid,
-                        lat: me.lat,
-                        lng: me.lng,
-                      })
-                    : "…"
-                }
-                readOnly
-                className={s.input}
+                aria-label="Terminal pairing link"
                 onFocus={(e) => e.currentTarget.select()}
               />
-              <span className={s.rowHint}>
-                Opening this on a till pairs it with this branch and jumps
-                straight to the PIN pad — nothing to type. It carries the branch
-                id and its coordinates, so a link meant for another branch is
-                flagged before anyone signs in.
-              </span>
-            </label>
-          </div>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!pairing}
+                onClick={copyPairing}
+              >
+                {pairCopied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+            <span className={s.rowHint}>
+              Open this on a till to pair it with this branch and go straight to
+              the PIN pad. Staff then sign in with their own number and PIN.
+            </span>
+          </label>
 
           {/* Row 1 — identity: name, Arabic legal name, WhatsApp number. */}
           <div className={`${s.row2} ${s.fieldGrid}`}>

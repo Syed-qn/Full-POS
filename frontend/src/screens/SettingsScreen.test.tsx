@@ -45,6 +45,40 @@ describe("SettingsScreen", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it("shows one pairing link with a copy button, not three read-only boxes", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (String(url).includes("/staff/store-identity")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          account_uuid: "acct-1", location_uuid: "loc-1",
+          store_code: "3NZNBR68", name: "Test Resto",
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(me), { status: 200 }));
+    }));
+
+    render(<SettingsScreen />);
+
+    const field = (await screen.findByLabelText(
+      /terminal pairing link/i,
+    )) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toContain("location=loc-1"));
+    expect(field.value).toContain("account=acct-1");
+
+    // The store code and location id are inside the link; showing them as
+    // separate copyable boxes is three chances to copy the wrong one.
+    expect(screen.queryByText(/store code/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^location id$/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^copy$/i }));
+    expect(writeText).toHaveBeenCalledWith(field.value);
+    expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
+  });
+
   it("loads current batching settings", async () => {
     render(<SettingsScreen />);
     // Navigate to batching tab
