@@ -3,64 +3,57 @@ import { useNavigate } from "react-router-dom";
 import { BottomActionBar } from "../components/BottomActionBar";
 import { Button, TouchButton } from "../components/Button";
 import { SectionBanner } from "../components/SectionBanner";
+import { LocationPickerModal } from "../components/LocationPickerModal";
 import { MetaConnectPanel } from "../components/MetaConnectPanel";
 import { toast } from "../components/Toaster";
+import { apiClient } from "../lib/apiClient";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
 import { completeOnboarding, fetchOnboardingStatus } from "../lib/onboardingApi";
 import { logout } from "../lib/auth";
+import type { RestaurantOut } from "../lib/types";
 import s from "./OnboardingScreen.module.css";
 
-const STEPS = [
-  { id: "welcome", title: "Welcome", short: "1. Start" },
-  { id: "whatsapp", title: "Connect WhatsApp", short: "2. WhatsApp" },
-  { id: "next", title: "You’re ready", short: "3. Finish" },
-] as const;
+/** A restaurant still at the signup default has no usable location. */
+function hasPin(lat: number, lng: number): boolean {
+  return lat !== 0 || lng !== 0;
+}
 
 /**
- * Onboarding is a single product gate: connect WhatsApp (Meta). The wizard
- * wraps that in a touch-friendly multi-step shell without extra backend steps.
- * Menu, location and catalogue are finished inside the dashboard after.
+ * One page, one required thing: where the restaurant is.
+ *
+ * Signup never asks for coordinates, so a new restaurant starts at 0.0/0.0 —
+ * a point in the Gulf of Guinea, ~4,500 km from Dubai. Delivery radius, the fee
+ * tiers, batching proximity and rider distances are all measured from it, so
+ * every one of them is wrong until it is set. That is why it is the gate.
+ *
+ * WhatsApp is offered here but optional: it can be connected any time from
+ * Settings, and blocking the dashboard on an external Meta signup flow stopped
+ * restaurants from doing the setup they CAN finish on their own.
  */
 export function OnboardingScreen() {
   const nav = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState(0);
+  const [name, setName] = useState("");
+  const [lat, setLat] = useState(0);
+  const [lng, setLng] = useState(0);
+  const [mapOpen, setMapOpen] = useState(false);
   const [hasMeta, setHasMeta] = useState(false);
   const [finishing, setFinishing] = useState(false);
 
-  async function finalizeAndGo() {
-    setFinishing(true);
-    try {
-      await completeOnboarding();
-      writeCachedOnboardingComplete(true);
-      toast("You're all set. Welcome to your dashboard");
-    } catch {
-      /* complete gates on Meta; if it races, the router gate still lets them in */
-    }
-    nav("/menu", { replace: true });
-  }
-
-  async function onConnected() {
-    setHasMeta(true);
-    setStep(2);
-    await finalizeAndGo();
-  }
-
-  async function refreshStatus() {
-    try {
-      const st = await fetchOnboardingStatus();
-      if (st.has_meta) {
-        setHasMeta(true);
-        await onConnected();
-      }
-    } catch {
-      setError("Couldn't load your status. Please retry.");
-    }
-  }
-
   useEffect(() => {
-    refreshStatus().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only status check
+    // Prefill from the account that was just created, so the owner confirms
+    // rather than retypes.
+    apiClient
+      .get<RestaurantOut>("/api/v1/me")
+      .then((me) => {
+        setName(me.name ?? "");
+        setLat(Number(me.lat) || 0);
+        setLng(Number(me.lng) || 0);
+      })
+      .catch(() => setError("Couldn't load your restaurant. Please refresh."));
+    fetchOnboardingStatus()
+      .then((st) => setHasMeta(st.has_meta))
+      .catch(() => {});
   }, []);
 
   function signOut() {
@@ -68,29 +61,40 @@ export function OnboardingScreen() {
     nav("/login", { replace: true });
   }
 
-  function goBack() {
+  function pickLocation(la: number, ln: number) {
+    setLat(la);
+    setLng(ln);
+    setMapOpen(false);
     setError(null);
-    setStep((n) => Math.max(0, n - 1));
   }
 
-  function goContinue() {
+  async function finish() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Restaurant name is required.");
+      return;
+    }
+    if (!hasPin(lat, lng)) {
+      setError("Set your restaurant location on the map — delivery distances are measured from it.");
+      return;
+    }
+    setFinishing(true);
     setError(null);
-    if (step === 0) {
-      setStep(1);
-      return;
+    try {
+      // Save the pin BEFORE completing: the server gates completion on the
+      // stored location, so completing first would just be refused.
+      await apiClient.patch<RestaurantOut>("/api/v1/me", { name: trimmed, lat, lng });
+      await completeOnboarding();
+      writeCachedOnboardingComplete(true);
+      toast("You're all set. Welcome to your dashboard");
+      nav("/", { replace: true });
+    } catch {
+      setError("Couldn't save your setup. Please try again.");
+      setFinishing(false);
     }
-    if (step === 1) {
-      if (!hasMeta) {
-        setError("Connect WhatsApp to continue — orders and chats need it.");
-        return;
-      }
-      setStep(2);
-      return;
-    }
-    void finalizeAndGo();
   }
 
-  const current = STEPS[step];
+  const located = hasPin(lat, lng);
 
   return (
     <div className={s.screen}>
@@ -100,40 +104,12 @@ export function OnboardingScreen() {
             <span className={s.brandMark}>POS</span>
             <div>
               <strong>Full POS setup</strong>
-              <span>A few steps · under 5 minutes</span>
+              <span>One page · about a minute</span>
             </div>
           </div>
-          <ol className={s.steps} aria-label="Onboarding steps">
-            {STEPS.map((st, i) => (
-              <li
-                key={st.id}
-                className={`${s.stepChip} ${i === step ? s.stepActive : ""} ${i < step ? s.stepDone : ""}`}
-                aria-current={i === step ? "step" : undefined}
-              >
-                {st.short}
-              </li>
-            ))}
-          </ol>
         </header>
 
-        <div className={s.body}>
-          <aside className={s.rail} aria-hidden={false}>
-            <h2 className={s.railTitle}>{current.title}</h2>
-            <p className={s.railCopy}>
-              {step === 0 &&
-                "We’ll connect your restaurant WhatsApp, then open the menu tools so you can take orders."}
-              {step === 1 &&
-                "Link your Meta / WhatsApp Business account. This is required before live ordering."}
-              {step === 2 &&
-                "Next inside the dashboard: activate a menu, set delivery location, and invite staff."}
-            </p>
-            <ul className={s.checklist}>
-              <li className={hasMeta ? s.checkDone : undefined}>WhatsApp channel</li>
-              <li>Active menu (in dashboard)</li>
-              <li>Branch pin &amp; fees (in dashboard)</li>
-            </ul>
-          </aside>
-
+        <div className={s.single}>
           <main className={s.panel}>
             {error && (
               <SectionBanner tone="error" onDismiss={() => setError(null)}>
@@ -141,66 +117,82 @@ export function OnboardingScreen() {
               </SectionBanner>
             )}
 
-            {step === 0 && (
-              <div className={s.welcome}>
-                <h1 className={s.h1}>Set up your POS terminal</h1>
-                <p className={s.lead}>
-                  Full POS runs delivery and counter work on one surface — WhatsApp ordering,
-                  kitchen, riders, and payments.
-                </p>
-                <div className={s.cards}>
-                  <div className={s.infoCard}>
-                    <strong>1. WhatsApp</strong>
-                    <span>Connect the number customers already message.</span>
-                  </div>
-                  <div className={s.infoCard}>
-                    <strong>2. Menu &amp; location</strong>
-                    <span>Finished after this wizard inside Live Ops / Menu.</span>
-                  </div>
-                  <div className={s.infoCard}>
-                    <strong>3. Staff PINs</strong>
-                    <span>Add crew under Staff so the PIN pad works at the counter.</span>
-                  </div>
-                </div>
-              </div>
-            )}
+            <h1 className={s.h1}>Set up your restaurant</h1>
+            <p className={s.lead}>
+              Two details and you're on the floor. Everything else — menu, staff PINs,
+              WhatsApp — is set up inside the dashboard whenever you're ready.
+            </p>
 
-            {step === 1 && (
-              <div className={s.metaStep}>
-                <h1 className={s.h1}>Connect WhatsApp</h1>
-                <p className={s.lead}>Use Facebook Embedded Signup or enter credentials manually.</p>
-                <MetaConnectPanel onSaved={refreshStatus} hideBadge />
-              </div>
-            )}
+            <label className={s.field}>
+              <span className={s.fieldLabel}>
+                Restaurant name <em className={s.req}>required</em>
+              </span>
+              <input
+                aria-label="Restaurant name"
+                className={s.input}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Biryani House"
+              />
+            </label>
 
-            {step === 2 && (
-              <div className={s.welcome}>
-                <h1 className={s.h1}>You’re ready for the floor</h1>
-                <p className={s.lead}>
-                  WhatsApp is linked. Open the dashboard to activate a menu and start taking orders.
-                </p>
-                <div className={s.infoCard}>
-                  <strong>Tip</strong>
-                  <span>
-                    After finish you’ll land on Menu — activate dishes with numbers and prices before
-                    New Order.
-                  </span>
-                </div>
+            <div className={s.field}>
+              <span className={s.fieldLabel}>
+                Restaurant location <em className={s.req}>required</em>
+              </span>
+              <div className={s.locCard} data-set={located ? "yes" : "no"}>
+                {located ? (
+                  <div className={s.locText}>
+                    <strong>Location set</strong>
+                    <span className={s.locCoords}>
+                      {lat.toFixed(5)}, {lng.toFixed(5)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className={s.locText}>
+                    <strong>No location yet</strong>
+                    <span>
+                      Delivery radius, fees and rider distances are all measured from this
+                      pin.
+                    </span>
+                  </div>
+                )}
+                <Button type="button" variant="ghost" onClick={() => setMapOpen(true)}>
+                  {located ? "Change on map" : "Set on map"}
+                </Button>
               </div>
-            )}
+            </div>
+
+            <div className={s.field}>
+              <span className={s.fieldLabel}>
+                WhatsApp <em className={s.opt}>optional</em>
+              </span>
+              <p className={s.optCopy}>
+                Connect the number customers message to take WhatsApp orders. You can skip
+                this and connect it later under Settings → WhatsApp.
+                {hasMeta ? " Already connected." : ""}
+              </p>
+              <MetaConnectPanel onSaved={() => setHasMeta(true)} hideBadge />
+            </div>
           </main>
         </div>
+
+        {mapOpen && (
+          <LocationPickerModal
+            lat={lat}
+            lng={lng}
+            onSave={pickLocation}
+            onClose={() => setMapOpen(false)}
+          />
+        )}
 
         <BottomActionBar className={s.footerBar}>
           <Button type="button" variant="ghost" size="lg" onClick={signOut}>
             Sign out
           </Button>
           <div className={s.footerSpacer} />
-          <Button type="button" variant="ghost" size="lg" onClick={goBack} disabled={step === 0 || finishing}>
-            Back
-          </Button>
-          <TouchButton type="button" onClick={goContinue} disabled={finishing}>
-            {finishing ? "Opening…" : step === 2 ? "Open dashboard" : "Continue"}
+          <TouchButton type="button" onClick={finish} disabled={finishing}>
+            {finishing ? "Saving…" : "Finish setup"}
           </TouchButton>
         </BottomActionBar>
       </div>

@@ -405,9 +405,16 @@ async def update_profile(
 async def get_onboarding_status(
     session: AsyncSession, *, restaurant: Restaurant
 ) -> dict:
-    """Onboarding now gates ONLY on connecting WhatsApp (Meta). Menu, location and
-    the Meta catalogue are configured later inside the dashboard, so `complete`
-    depends solely on the Meta connection. The other fields are informational."""
+    """Onboarding gates ONLY on the restaurant's location. Everything else —
+    WhatsApp, menu, catalogue — is optional here and set up inside the dashboard.
+
+    Location is the one thing that cannot wait: delivery radius (10 km), the fee
+    tiers, batching proximity and rider distances are all measured from this
+    point, and a restaurant left at the 0.0/0.0 signup default sits ~4,500 km
+    from Dubai, so every real address falls outside the radius. WhatsApp used to
+    be the gate, which blocked a restaurant from even reaching the dashboard
+    until Meta was connected, while letting it operate on coordinates that make
+    every distance wrong."""
     from app.identity.meta_config import meta_connected
     from app.menu.models import Menu
 
@@ -421,7 +428,7 @@ async def get_onboarding_status(
     catalog_id = (settings.get("catalog_id") or "").strip()
     has_location = restaurant.lat != 0.0 or restaurant.lng != 0.0
     return {
-        "complete": meta,
+        "complete": has_location,
         "has_location": has_location,
         "has_menu": has_menu,
         "has_catalog_id": bool(catalog_id),
@@ -433,11 +440,11 @@ async def get_onboarding_status(
 async def complete_onboarding(
     session: AsyncSession, *, restaurant: Restaurant
 ) -> Restaurant:
-    """Finish onboarding — requires ONLY a connected WhatsApp (Meta) account. Menu,
-    location and catalogue are set up later in the dashboard."""
+    """Finish onboarding — requires ONLY the restaurant's location. WhatsApp, menu
+    and catalogue are connected later from inside the dashboard."""
     status = await get_onboarding_status(session, restaurant=restaurant)
-    if not status.get("has_meta"):
-        raise ValueError("Connect your WhatsApp (Meta) account before finishing onboarding.")
+    if not status.get("has_location"):
+        raise ValueError("Set your restaurant location before finishing onboarding.")
     return await update_settings(
         session,
         restaurant=restaurant,

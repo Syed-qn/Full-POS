@@ -51,7 +51,9 @@ def test_disconnect_meta_also_clears_catalog_id():
     out = disconnect_meta(r)
     assert out["catalog_id"] == ""
     assert r.settings.get("catalog_id") is None
-    assert r.settings["onboarding_complete"] is False
+    # WhatsApp is optional, so dropping it must NOT re-open onboarding and throw a
+    # working restaurant back into the setup wizard.
+    assert r.settings["onboarding_complete"] is True
     assert r.settings["max_radius_km"] == 10  # non-Meta settings untouched
 
 
@@ -302,10 +304,12 @@ async def test_meta_connect_surfaces_exchange_failure(
     assert cfg.json()["connected"] is False
 
 
-async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
+async def test_meta_disconnect_clears_creds_without_reopening_onboarding(
     client, auth_headers, monkeypatch
 ):
-    """Disconnect clears creds, flips connected→false, and re-opens onboarding."""
+    """Disconnect clears creds and flips connected→false, but leaves onboarding
+    complete — WhatsApp is optional, so losing it must not lock the restaurant
+    out of its dashboard."""
     from app.identity import meta_embed
 
     unsubscribed: list[tuple[str, str]] = []
@@ -354,10 +358,10 @@ async def test_meta_disconnect_clears_creds_and_reopens_onboarding(
     assert body["wa_phone_number_id"] == ""
     assert body["wa_access_token_set"] is False
 
-    # Onboarding gate re-triggers (complete → false because meta gone).
+    # The gate is location, which is untouched — so the restaurant stays in.
     st = (await client.get("/api/v1/onboarding/status", headers=auth_headers)).json()
-    assert st["complete"] is False
     assert st["has_meta"] is False
+    assert st["complete"] is True
 
 
 async def test_meta_resubscribe_while_connected(client, auth_headers, monkeypatch):
@@ -396,28 +400,41 @@ async def test_meta_resubscribe_requires_connection(client, auth_headers):
     assert r.status_code == 400
 
 
-async def test_onboarding_incomplete_until_meta_connected(db_session, restaurant):
-    """Onboarding gates ONLY on Meta: no connection → not complete, even with a
-    menu + catalog already present (those are configured later in the dashboard)."""
+async def test_onboarding_incomplete_until_location_is_set(db_session, restaurant):
+    """Onboarding gates ONLY on location: a restaurant still at the 0.0/0.0 signup
+    default is not complete, even with a menu and catalog already present."""
     from app.menu.models import Menu
 
+    restaurant.lat = 0.0
+    restaurant.lng = 0.0
     restaurant.settings = {**restaurant.settings, "catalog_id": "CAT1"}
     db_session.add(Menu(restaurant_id=restaurant.id, version=1, status="active", source_files=[]))
     await db_session.commit()
     st = await get_onboarding_status(db_session, restaurant=restaurant)
-    assert st["has_meta"] is False
-    assert st["complete"] is False  # menu + catalog present, but no Meta → gated
+    assert st["has_location"] is False
+    assert st["complete"] is False  # menu + catalog present, but no pin → gated
 
 
-async def test_onboarding_complete_once_meta_connected(db_session, restaurant):
-    """Connecting WhatsApp (Meta) alone completes onboarding — no menu required."""
-    from app.identity.meta_config import apply_meta_settings
-
-    apply_meta_settings(
-        restaurant,
-        {"wa_phone_number_id": "PID-1", "wa_access_token": "TOK-1"},
-    )
+async def test_onboarding_complete_on_location_alone_without_whatsapp(
+    db_session, restaurant
+):
+    """Setting the location alone completes onboarding. WhatsApp is optional and
+    connected later from Settings, so it must not hold the restaurant back."""
+    restaurant.lat = 25.2048
+    restaurant.lng = 55.2708
     await db_session.commit()
     st = await get_onboarding_status(db_session, restaurant=restaurant)
-    assert st["has_meta"] is True
+    assert st["has_meta"] is False  # never connected
     assert st["complete"] is True
+
+
+async def test_complete_onboarding_refuses_without_location(db_session, restaurant):
+    """The endpoint enforces the gate too — the UI is not the only thing stopping
+    a restaurant from going live at 0.0/0.0."""
+    from app.identity.service import complete_onboarding
+
+    restaurant.lat = 0.0
+    restaurant.lng = 0.0
+    await db_session.commit()
+    with pytest.raises(ValueError, match="location"):
+        await complete_onboarding(db_session, restaurant=restaurant)

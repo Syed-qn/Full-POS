@@ -51,11 +51,16 @@ def apply_meta_settings(restaurant: Restaurant, patch: dict[str, Any]) -> dict[s
 
 
 def disconnect_meta(restaurant: Restaurant) -> dict[str, Any]:
-    """Clear this restaurant's WhatsApp connection and re-open onboarding.
+    """Clear this restaurant's WhatsApp connection.
 
-    Removes the stored number/token/WABA and flips onboarding_complete off, so the
-    onboarding gate re-triggers and the manager must reconnect Meta to operate
-    again. Menu/catalogue/data are untouched. Caller commits.
+    Removes the stored number/token/WABA. Menu/catalogue/data are untouched.
+    Caller commits.
+
+    Deliberately leaves onboarding_complete ALONE. It used to flip to False here,
+    which made sense while WhatsApp was the onboarding gate — but onboarding now
+    gates on location, and WhatsApp is optional. Re-opening the setup wizard just
+    to disconnect a number would lock a working restaurant out of its own
+    dashboard over an optional integration.
     """
     settings = dict(restaurant.settings or {})
     # catalog_id is part of the Meta connection (a pointer to that account's catalog),
@@ -67,7 +72,6 @@ def disconnect_meta(restaurant: Restaurant) -> dict[str, Any]:
         "catalog_id", "wa_2fa_pin",
     ):
         settings.pop(key, None)
-    settings["onboarding_complete"] = False
     restaurant.settings = settings
     return meta_settings(restaurant)
 
