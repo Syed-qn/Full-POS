@@ -29,6 +29,7 @@ from app.payments.router import customers_router as payments_customers_router
 from app.payments.router import orders_router as payments_orders_router
 from app.payments.router import public_router as payments_public_router
 from app.staff.router import router as staff_router
+from app.realtime.router import router as realtime_router
 from app.tables.router import router as tables_router
 from app.config import get_settings
 from app.conversation.router import router as conversation_router
@@ -107,6 +108,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from app.dispatch.preview_cache import set_preview_cache_redis
 
         set_preview_cache_redis(redis_conn)
+    if redis_conn is not None:
+        # The realtime bus falls back to in-process fan-out without this, which
+        # is correct for one worker and silently partial across several.
+        from app.realtime.bus import set_realtime_redis
+
+        set_realtime_redis(redis_conn)
 
     # In-process dispatch sweep: re-runs dispatch for restaurants with ready+
     # unassigned orders so held (batch-window) orders are released once they mature
@@ -207,6 +214,7 @@ def create_app() -> FastAPI:
     app.include_router(inventory_router)
     app.include_router(purchasing_router)
     app.include_router(staff_router)
+    app.include_router(realtime_router)
     app.include_router(organizations_router)
     app.include_router(stock_transfer_router)
     app.include_router(giftcards_router)

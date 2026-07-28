@@ -11,6 +11,7 @@ import { useLiveOpsOrdersQuery } from "../lib/queries/dashboard";
 import { remainingMs, slaTier } from "../lib/sla";
 import type { OrderOut } from "../lib/types";
 import s from "./LiveOpsScreen.module.css";
+import { useLiveInvalidate } from "../lib/useLiveRefresh";
 
 const ACTIVE: OrderOut["status"][] = [
   "confirmed", "preparing", "ready", "assigned", "picked_up", "arriving",
@@ -167,6 +168,11 @@ function BoardRow({ order, onOpen }: { order: OrderOut; onOpen: () => void }) {
 
 export function LiveOpsScreen() {
   const { data, error, isPending } = useLiveOpsOrdersQuery();
+
+  // Push beats the 4s poll: a walk-in rung up on a till shows here at once.
+  // Invalidate rather than refetch, so a tab left open in the background costs
+  // nothing until someone looks at it.
+  useLiveInvalidate(["orders"], [["orders", "list"]]);
   const loading = isPending && data == null;
   const orders = data ?? [];
   const nav = useNavigate();

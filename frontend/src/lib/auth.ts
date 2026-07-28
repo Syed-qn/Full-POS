@@ -1,5 +1,6 @@
 import { apiClient } from "./apiClient";
 import { resetRestaurantNameCache } from "./brand";
+import { stopLiveEvents } from "./liveEvents";
 import { clearStaffSession } from "./navAccess";
 import { clearCachedOnboardingComplete } from "./onboardingGate";
 import type { TokenOut } from "./types";
@@ -35,6 +36,9 @@ export function logout(): void {
   // outlive the session that fetched them.
   sessionStorage.removeItem("pos.branches");
   sessionStorage.removeItem("pos.branch_current");
+  // Close the live stream: it authenticates with the token we just
+  // dropped, and it would otherwise sit reconnecting against a 401.
+  stopLiveEvents();
   desktopBridge()?.setAuthToken(null);
 }
 

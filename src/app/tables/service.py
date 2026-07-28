@@ -15,6 +15,18 @@ _TRANSITIONS: dict[str, set[str]] = {
 }
 
 
+def _announce(session: AsyncSession, restaurant_id: int, **fields) -> None:
+    """Tell this branch's terminals the floor changed.
+
+    Queued against the transaction, not sent now: these helpers flush but leave
+    the commit to their caller, so pushing here would have other tills refetch
+    the table before the new status is committed.
+    """
+    from app.realtime.hooks import queue_event
+
+    queue_event(session, restaurant_id, "tables", **fields)
+
+
 class TableNotFoundError(Exception):
     pass
 
@@ -118,6 +130,7 @@ async def transition_status(
         raise InvalidTableTransitionError(f"cannot move table from {table.status} to {to_status}")
     table.status = to_status
     await session.flush()
+    _announce(session, restaurant_id, table_id=table_id)
     return table
 
 
@@ -130,6 +143,7 @@ async def update_table_position(
     table.pos_x = pos_x
     table.pos_y = pos_y
     await session.flush()
+    _announce(session, restaurant_id, table_id=table_id)
     return table
 
 

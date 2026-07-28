@@ -5,6 +5,7 @@ import { apiClient } from "../lib/apiClient";
 import { fetchFloorLayout } from "../lib/floorApi";
 import { usePosTheme } from "../lib/posTheme";
 import s from "./WaiterFloorScreen.module.css";
+import { useLiveRefresh } from "../lib/useLiveRefresh";
 
 type ApiTable = {
   id: number;
@@ -98,9 +99,16 @@ export function CashierFloorScreen() {
 
   useEffect(() => {
     void load();
-    const id = setInterval(() => void load(), 15_000);
+    // Fallback only. The live stream below is what keeps this current; this
+    // slow tick just repairs anything missed while the connection was down,
+    // which is why it is minutes rather than seconds.
+    const id = setInterval(() => void load(), 120_000);
     return () => clearInterval(id);
   }, [load]);
+
+  // Another till seating a table, or the kitchen moving an order, lands here
+  // immediately instead of on the next poll.
+  useLiveRefresh(["tables", "orders"], load);
 
   const stats = useMemo(() => {
     let available = 0;

@@ -166,3 +166,14 @@ async def transition(
     from app.ordering.service import recompute_customer_stats
 
     await recompute_customer_stats(session, order.customer_id)
+
+    # Push the change to every open terminal of this branch. Queued, not sent:
+    # this function does not commit, so announcing now would race the caller's
+    # transaction and have terminals refetch the pre-transition row.
+    from app.realtime.hooks import queue_event
+
+    queue_event(session, order.restaurant_id, "orders", order_id=order.id)
+    queue_event(session, order.restaurant_id, "kds", order_id=order.id)
+    if getattr(order, "table_id", None):
+        # A status change frees or occupies the table, so the floor view moves too.
+        queue_event(session, order.restaurant_id, "tables", table_id=order.table_id)

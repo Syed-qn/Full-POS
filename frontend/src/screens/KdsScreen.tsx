@@ -25,6 +25,7 @@ import { useRestaurantName } from "../lib/brand";
 import { logout } from "../lib/auth";
 import { getRoleChrome, getSessionRole } from "../lib/navAccess";
 import s from "./KdsScreen.module.css";
+import { useLiveRefresh } from "../lib/useLiveRefresh";
 
 type Tab = "tickets" | "pickup" | "performance";
 
@@ -283,9 +284,17 @@ export function KdsScreen() {
   useEffect(() => {
     if (tab !== "tickets") return;
     reloadTickets();
-    const interval = setInterval(reloadTickets, 5000);
+    // Fallback tick. The live stream below carries new and changed tickets;
+    // this only repairs a gap left by a dropped connection.
+    const interval = setInterval(reloadTickets, 60_000);
     return () => clearInterval(interval);
   }, [tab, reloadTickets]);
+
+  // A new order or a status change reaches the pass immediately, rather than
+  // sitting invisible for up to five seconds while food waits.
+  useLiveRefresh(["kds", "orders"], () => {
+    if (tab === "tickets") reloadTickets();
+  });
 
   useEffect(() => {
     // Printer health drives the header pill on every view, not just Performance.

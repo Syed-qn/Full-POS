@@ -12,6 +12,7 @@ import { OrderDetailDrawer } from "./OrderDetailDrawer";
 import { PageHeader } from "../components/PageHeader";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import s from "./OrdersScreen.module.css";
+import { useLiveInvalidate } from "../lib/useLiveRefresh";
 
 const PAGE_SIZE = 20;
 
@@ -262,6 +263,11 @@ export function OrdersScreen() {
   );
 
   const { data: orders = [], isLoading, isFetching, isError } = useOrdersQuery(listFilters);
+
+  // Push beats the 4s poll: a walk-in rung up on a till shows here at once.
+  // Invalidate rather than refetch, so a tab left open in the background costs
+  // nothing until someone looks at it.
+  useLiveInvalidate(["orders"], [["orders", "list"]]);
   const loading = isLoading && orders.length === 0;
 
   useEffect(() => {
