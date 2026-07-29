@@ -140,3 +140,18 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Sits below the list, not inside it, so the rows keep their own rhythm. */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px 16px;
+}
+
+.pageCount {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}

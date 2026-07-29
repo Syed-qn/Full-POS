@@ -29,6 +29,10 @@ import type { BranchTransferOut, IngredientOut, SiblingBranchOut } from "../lib/
 import s from "../screens/InventoryScreen.module.css";
 import p from "./BranchTransfersPanel.module.css";
 
+/** Enough to see a working week of movements without the history column
+ *  growing taller than the two beside it. */
+const HISTORY_PAGE_SIZE = 5;
+
 const STATUS_LABEL: Record<string, string> = {
   pending: "waiting for an answer",
   in_transit: "on the way",
@@ -104,10 +108,8 @@ export function BranchTransfersPanel({
   // is wrong and a form for the normal case is a form people learn to skip.
   const [adjust, setAdjust] = useState<Adjust | null>(null);
   const [adjustQty, setAdjustQty] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(0);
 
-  // Direction is the direction the STOCK travels, so a request sits the same
-  // way round as a delivery: out of the holder, into the asker. On a pending
-  // row that means "out" is someone asking YOU.
   // Which branch YOU are. Derived from the rows rather than plumbed in: the
   // server scoped them by the token, and on any row "out" means the from side
   // is us, so this can never disagree with the data it labels. The two screens
@@ -118,11 +120,23 @@ export function BranchTransfersPanel({
     transfers.find((t) => t.direction === "in")?.to_branch_name ??
     null;
 
+  // Direction is the direction the STOCK travels, so a request sits the same
+  // way round as a delivery: out of the holder, into the asker. On a pending
+  // row that means "out" is someone asking YOU.
   const askedOfMe = transfers.filter((t) => t.status === "pending" && t.direction === "out");
   const iAsked = transfers.filter((t) => t.status === "pending" && t.direction === "in");
   const incoming = transfers.filter((t) => t.status === "in_transit" && t.direction === "in");
   const outgoing = transfers.filter((t) => t.status === "in_transit" && t.direction === "out");
   const history = transfers.filter((t) => t.status === "completed" || t.status === "cancelled");
+
+  // Clamped rather than reset: answering a request removes a row from the
+  // waiting list and ADDS one here, so the page you are on can shift under you.
+  // Holding an out-of-range page would show an empty card with no way back.
+  const pageCount = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const firstShown = safePage * HISTORY_PAGE_SIZE + 1;
+  const pageRows = history.slice(firstShown - 1, firstShown - 1 + HISTORY_PAGE_SIZE);
+  const lastShown = firstShown + pageRows.length - 1;
 
   async function run(action: () => Promise<unknown>, done: string): Promise<void> {
     setBusy(true);
@@ -526,7 +540,7 @@ export function BranchTransfersPanel({
           </div>
         </div>
         <div className={s.list}>
-          {history.slice(0, 10).map((t) => (
+          {pageRows.map((t) => (
             <div key={t.id} className={s.listItem}>
               <strong>
                 {t.direction === "out" ? `To ${t.to_branch_name}` : `From ${t.from_branch_name}`}:{" "}
@@ -540,6 +554,31 @@ export function BranchTransfersPanel({
           ))}
           {loaded && history.length === 0 && <div className={s.empty}>No transfers yet.</div>}
         </div>
+        {pageCount > 1 && (
+          <div className={p.pager}>
+            <button
+              type="button"
+              className={`${s.rowBtn} ${p.secondary}`}
+              disabled={safePage === 0}
+              onClick={() => setPage(safePage - 1)}
+            >
+              Back
+            </button>
+            {/* The range, not just "page 2 of 4" — when a transfer is missing
+                you want to know how far down the list you have already read. */}
+            <span className={p.pageCount}>
+              {firstShown}–{lastShown} of {history.length}
+            </span>
+            <button
+              type="button"
+              className={`${s.rowBtn} ${p.secondary}`}
+              disabled={safePage >= pageCount - 1}
+              onClick={() => setPage(safePage + 1)}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

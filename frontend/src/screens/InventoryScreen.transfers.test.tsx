@@ -255,4 +255,44 @@ describe("InventoryScreen — branch transfers", () => {
       expect(Object.keys(body)).not.toContain("from_restaurant_id");
     });
   });
+  it("pages past transfers five at a time", async () => {
+    // Seven finished transfers: five on the first page, two on the second.
+    const done = Array.from({ length: 7 }, (_, i) => ({
+      ...INCOMING,
+      id: 100 + i,
+      status: "completed",
+      lines: [
+        {
+          ingredient_name: `Item${i}`,
+          unit: "kg",
+          qty_requested: null,
+          quantity: "1.000",
+          qty_received: "1.000",
+        },
+      ],
+    }));
+    mockApi([{ id: 2, name: "Deira" }], done);
+    renderWithProviders(<InventoryScreen />);
+    fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
+
+    await screen.findByText(/1–5 of 7/);
+    expect(screen.getByText(/Item0/)).toBeTruthy();
+    expect(screen.queryByText(/Item5/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    await screen.findByText(/6–7 of 7/);
+    // The range, not "page 2 of 2" — when a transfer is missing you want to
+    // know how far down the list you have read.
+    expect(screen.getByText(/Item5/)).toBeTruthy();
+    expect(screen.queryByText(/Item0/)).toBeNull();
+  });
+
+  it("hides the pager when everything fits on one page", async () => {
+    mockApi([{ id: 2, name: "Deira" }], [{ ...INCOMING, id: 200, status: "completed" }]);
+    renderWithProviders(<InventoryScreen />);
+    fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
+
+    await screen.findByText(/past transfers/i);
+    expect(screen.queryByRole("button", { name: /^next$/i })).toBeNull();
+  });
 });
