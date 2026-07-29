@@ -11,51 +11,30 @@
   gap: 16px;
 }
 
-.skKpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+/* Grey placeholder BARS sitting inside the real cards, not card-sized slabs.
+   The old blocks shimmered to var(--bg-surface) at the midpoint, i.e. to white,
+   so each one looked like an empty white card rather than content loading. */
+.sk {
+  display: inline-block;
+  height: 14px;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-inset, #f3f4f6);
 }
 
-.skTile,
-.skCard,
-.skTable {
-  border-radius: 12px;
-  background: linear-gradient(
-    90deg,
-    var(--bg-surface-inset, #f3f4f6) 25%,
-    var(--bg-surface, #fff) 50%,
-    var(--bg-surface-inset, #f3f4f6) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.2s ease-in-out infinite;
-  border: 1px solid var(--border-subtle);
-}
-
-.skTile {
-  min-height: 88px;
-}
-
-.skCards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.skCard {
-  min-height: 160px;
-}
-
-.skTable {
-  min-height: 220px;
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(125, 125, 125, 0.12), transparent);
+  animation: shimmer 1.4s infinite;
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: 100% 0;
-  }
   100% {
-    background-position: -100% 0;
+    transform: translateX(100%);
   }
 }
 
@@ -311,7 +290,46 @@
 
 .branchFoot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* A closed location. Same pill shape as "Main branch" so the two read as the
+   same kind of fact about the branch, in the warning colour rather than the
+   accent because it means the store is not trading. */
+.closedPill {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 8px;
+  color: var(--accent-danger, #dc2626);
+  background: color-mix(in srgb, var(--accent-danger, #dc2626) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-danger, #dc2626) 25%, transparent);
+}
+
+.linkBtn,
+.linkBtnDanger {
+  border: none;
+  background: none;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.linkBtn {
+  color: var(--accent-primary, #2563eb);
+}
+.linkBtnDanger {
+  color: var(--accent-danger, #dc2626);
+}
+.linkBtn:hover,
+.linkBtnDanger:hover {
+  text-decoration: underline;
 }
 
 .emptyCard {
@@ -582,8 +600,9 @@
 }
 
 @media (max-width: 900px) {
-  .kpis,
-  .skKpis {
+  /* The skeleton now uses .kpis and .branchGrid themselves, so it reflows with
+     the real layout instead of needing its own copies of these rules. */
+  .kpis {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -595,8 +614,6 @@
 
 @media (max-width: 560px) {
   .kpis,
-  .skKpis,
-  .skCards,
   .coordRow {
     grid-template-columns: 1fr;
   }

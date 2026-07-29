@@ -220,6 +220,10 @@ async def get_branches(
             "currency": getattr(b, "currency", "AED"),
             "locale": getattr(b, "locale", "en"),
             "is_central_kitchen": bool(getattr(b, "is_central_kitchen", False)),
+            # Closed branches are still LISTED — the owner has to be able to see
+            # and reopen one. Callers that must not offer a closed store (the
+            # branch switcher) filter on this instead of it vanishing here.
+            "is_active": bool(getattr(b, "is_active", True)),
             "lat": b.lat,
             "lng": b.lng,
         }
@@ -247,6 +251,12 @@ async def open_branch_session(
     branch = await session.get(Restaurant, restaurant_id)
     if branch is None or branch.organization_id != org.id:
         raise HTTPException(status_code=404, detail="branch not found")
+    if not getattr(branch, "is_active", True):
+        # Without this, "closed" would be decoration: hiding the branch in the
+        # switcher stops nobody, since this endpoint takes an id from the path
+        # and would happily hand back a working token for a shut store.
+        # 409, not 404 — the branch exists and the owner may reopen it.
+        raise HTTPException(status_code=409, detail="branch is deactivated")
     return {
         "access_token": create_access_token(
             restaurant_id=branch.id, audience="manager"
@@ -272,7 +282,11 @@ async def patch_branch(
             **body.model_dump(exclude_none=True),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        # "cannot deactivate the main branch" is a refusal about a branch that
+        # very much exists, so it must not be flattened into the 404 used for
+        # "not yours" — the UI needs to tell those two apart.
+        status_code = 409 if "main branch" in str(exc) else 404
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     await session.commit()
     return {
         "id": branch.id,
@@ -281,6 +295,7 @@ async def patch_branch(
         "currency": branch.currency,
         "locale": branch.locale,
         "is_central_kitchen": branch.is_central_kitchen,
+        "is_active": branch.is_active,
     }
 
 

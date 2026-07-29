@@ -17,7 +17,7 @@ from app.staff.approvals import (
     list_suspicious_alerts,
     raise_suspicious,
 )
-from app.staff.deps import require_role
+from app.staff.deps import current_staff_id, require_role
 from app.organizations.models import Organization
 from app.staff.identity import (
     DuplicatePinError,
@@ -103,6 +103,11 @@ async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_se
     restaurant = await resolve_location(
         session, account=body.account, location=body.location or body.store or ""
     )
+    # A closed branch has no shifts. Treated exactly like an unknown store so it
+    # folds into the single indistinguishable failure below — telling an outsider
+    # "that branch is deactivated" would confirm the store exists.
+    if restaurant is not None and not getattr(restaurant, "is_active", True):
+        restaurant = None
     staff = (
         None
         if restaurant is None
@@ -130,6 +135,38 @@ async def staff_login(body: StaffLoginIn, session: AsyncSession = Depends(get_se
         "staff_id": staff.id,
         "staff_code": staff.staff_code,
         "name": staff.name,
+        "training_mode": bool(staff.training_mode),
+    }
+
+
+@router.get("/me")
+async def staff_me(
+    staff_id: int | None = Depends(current_staff_id),
+    session: AsyncSession = Depends(get_session),
+):
+    """The signed-in staff member's own LIVE flags.
+
+    Login returns these once, and the dashboard has been trusting that snapshot
+    ever since — so a manager switching someone into training mid-shift changed
+    what the SERVER stamped on their next order while the banner on their screen
+    still said the opposite. This is the endpoint that lets the screen catch up
+    without making them sign out.
+
+    Deliberately no ``current_restaurant``: that dependency 403s exactly the
+    cashier and waiter tokens this exists for. The staff id comes from the token,
+    so a caller can only ever read their own row.
+    """
+    if staff_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "staff session required")
+    staff = await session.get(StaffMember, staff_id)
+    if staff is None or not staff.is_active:
+        # Deactivated mid-shift: 401 so the terminal signs out rather than
+        # carrying on with a session for somebody who no longer works here.
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unknown staff member")
+    return {
+        "staff_id": staff.id,
+        "name": staff.name,
+        "role": staff.role,
         "training_mode": bool(staff.training_mode),
     }
 

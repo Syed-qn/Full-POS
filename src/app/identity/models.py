@@ -209,6 +209,15 @@ class Restaurant(Base, TimestampMixin):
     is_central_kitchen: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    # A closed location. Deactivate, never delete: last month's sales at this
+    # branch really happened, and deleting the row would rewrite that history
+    # (and orphan its orders, staff and stock). False stops new work — sign-in,
+    # branch switching, ordering — while every past record stays exactly as it
+    # was. Reactivating is just setting it back to True, which is what makes
+    # this usable for a renovation as well as a permanent closure.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
 
 
 class Rider(Base, TimestampMixin):

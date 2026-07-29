@@ -22,7 +22,7 @@ from app.organizations.models import (
     OrgPromotion,
     Organization,
 )
-from app.organizations.service import list_branches
+from app.organizations.service import list_branches, main_branch_id
 
 
 def _money(d: Decimal | float | int) -> Decimal:
@@ -42,10 +42,22 @@ async def update_branch_meta(
     locale: str | None = None,
     is_central_kitchen: bool | None = None,
     name: str | None = None,
+    is_active: bool | None = None,
 ) -> Restaurant:
     branch = await session.get(Restaurant, restaurant_id)
     if branch is None or branch.organization_id != organization_id:
         raise ValueError("branch not found in organization")
+    if is_active is False:
+        # The founding restaurant is the account HQ authority is derived from.
+        # Closing it would leave nowhere to sign in and reopen it, so the owner
+        # would lock themselves out of every branch at once. There is no column
+        # for "main" — main_branch_id derives it from org.owner_email — so ask
+        # that helper rather than inventing a second answer here.
+        org = await session.get(Organization, organization_id)
+        if org is not None:
+            siblings = await list_branches(session, organization_id=organization_id)
+            if main_branch_id(siblings, org) == branch.id:
+                raise ValueError("cannot deactivate the main branch")
     if region is not None:
         branch.region = region
     if currency is not None:
@@ -56,6 +68,8 @@ async def update_branch_meta(
         branch.is_central_kitchen = is_central_kitchen
     if name is not None:
         branch.name = name
+    if is_active is not None:
+        branch.is_active = is_active
     await session.flush()
     return branch
 

@@ -966,6 +966,9 @@ export interface OrganizationBranchOut {
   currency?: string;
   locale?: string;
   is_central_kitchen?: boolean;
+  /** False when the location is closed. Optional so a response from an older
+   *  server reads as open rather than silently closing every branch. */
+  is_active?: boolean;
   lat?: number;
   lng?: number;
 }

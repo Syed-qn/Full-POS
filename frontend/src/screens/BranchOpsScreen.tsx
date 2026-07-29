@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Button } from "../components/Button";
 import { LocationPickerModal } from "../components/LocationPickerModal";
 import { PageHeader } from "../components/PageHeader";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { toast } from "../components/Toaster";
 import { isAuthenticated } from "../lib/auth";
 import {
@@ -15,6 +16,7 @@ import {
   getRollupSales,
   listBranches,
   loginOrganization,
+  patchBranch,
   signupOrganization,
 } from "../lib/organizationsApi";
 import type {
@@ -65,6 +67,8 @@ export function BranchOpsScreen() {
 
   // Dialogs (header buttons only)
   const [addOpen, setAddOpen] = useState(false);
+  const [closing, setClosing] = useState<OrganizationBranchOut | null>(null);
+  const [togglingBranch, setTogglingBranch] = useState(false);
   const [branchName, setBranchName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -105,6 +109,23 @@ export function BranchOpsScreen() {
     setSummary(inventoryReport);
     setComparison(comparisonRows);
   }, [endDate, startDate, targetDate]);
+
+  async function toggleBranchActive(branch: OrganizationBranchOut) {
+    const reopening = branch.is_active === false;
+    setTogglingBranch(true);
+    try {
+      await patchBranch(branch.id, { is_active: reopening });
+      setClosing(null);
+      // Silent: a full reload would throw the page back to the skeleton for a
+      // change that only flips one pill.
+      await openHq({ silent: true });
+      toast(reopening ? `${branch.name} reopened.` : `${branch.name} deactivated.`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not update the branch.", "error");
+    } finally {
+      setTogglingBranch(false);
+    }
+  }
 
   const openHq = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setPhase("loading");
@@ -203,18 +224,29 @@ export function BranchOpsScreen() {
     return (
       <div className={s.screen}>
         <PageHeader title="Branches" subtitle="Loading multi-branch HQ…" />
+        {/* Built from the REAL layout classes (.kpis/.kpi, .branchGrid/.branchCard)
+            with grey bars inside, rather than its own set of sk* blocks. Those
+            were big shimmering slabs the width of a whole card, which read as
+            white cards themselves — and their fixed 2-column grid did not match
+            the auto-fill branch grid, so the page reflowed when the data landed. */}
         <div className={s.skeleton} aria-busy="true" aria-label="Loading branches">
-          <div className={s.skKpis}>
-            <div className={s.skTile} />
-            <div className={s.skTile} />
-            <div className={s.skTile} />
-            <div className={s.skTile} />
-          </div>
-          <div className={s.skCards}>
-            <div className={s.skCard} />
-            <div className={s.skCard} />
-          </div>
-          <div className={s.skTable} />
+          <section className={s.kpis}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div className={s.kpi} key={i}>
+                <span className={s.sk} style={{ width: "60%" }} />
+                <span className={s.sk} style={{ width: "40%", height: 24 }} />
+              </div>
+            ))}
+          </section>
+          <section className={s.branchGrid}>
+            {Array.from({ length: 2 }).map((_, i) => (
+              <article className={s.branchCard} key={i}>
+                <span className={s.sk} style={{ width: "45%", height: 18 }} />
+                <span className={s.sk} style={{ width: "70%" }} />
+                <span className={s.sk} style={{ width: "55%" }} />
+              </article>
+            ))}
+          </section>
         </div>
       </div>
     );
@@ -337,6 +369,9 @@ export function BranchOpsScreen() {
                   <h2 className={s.branchName}>
                     {branch.name}
                     {branch.is_main && <span className={s.mainPill}>Main branch</span>}
+                    {branch.is_active === false && (
+                      <span className={s.closedPill}>Closed</span>
+                    )}
                   </h2>
                   <p className={s.branchMeta}>
                     #{branch.id}
@@ -371,6 +406,20 @@ export function BranchOpsScreen() {
                     ? `${inv?.low_stock_count} low stock`
                     : "Stock OK"}
                 </span>
+                {/* No delete anywhere on this card, deliberately: the row is
+                    referenced by every order, shift and stock count the branch
+                    ever had. The main branch has no control at all — closing it
+                    would remove the account HQ authority comes from. */}
+                {!branch.is_main && (
+                  <button
+                    type="button"
+                    className={branch.is_active === false ? s.linkBtn : s.linkBtnDanger}
+                    onClick={() => setClosing(branch)}
+                    data-testid={`branch-toggle-${branch.id}`}
+                  >
+                    {branch.is_active === false ? "Reopen" : "Deactivate"}
+                  </button>
+                )}
               </div>
             </article>
           );
@@ -587,6 +636,27 @@ export function BranchOpsScreen() {
             toast("Location set from map.");
           }}
           onClose={() => setMapOpen(false)}
+        />
+      )}
+
+      {closing && (
+        <ConfirmDialog
+          title={
+            closing.is_active === false
+              ? `Reopen ${closing.name}?`
+              : `Deactivate ${closing.name}?`
+          }
+          message={
+            closing.is_active === false
+              ? "Staff can sign in again and the branch returns to the branch switcher."
+              : "Staff can no longer sign in and the branch leaves the branch switcher. Nothing is deleted: its orders, shifts and stock stay on the books, and you can reopen it here."
+          }
+          confirmLabel={closing.is_active === false ? "Reopen branch" : "Deactivate branch"}
+          danger={closing.is_active !== false}
+          size="md"
+          busy={togglingBranch}
+          onConfirm={() => void toggleBranchActive(closing)}
+          onCancel={() => !togglingBranch && setClosing(null)}
         />
       )}
     </div>

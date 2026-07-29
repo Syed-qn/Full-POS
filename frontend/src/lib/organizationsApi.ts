@@ -202,6 +202,8 @@ export function patchBranch(
     currency?: string;
     locale?: string;
     is_central_kitchen?: boolean;
+    /** False closes the location, true reopens it. There is no delete. */
+    is_active?: boolean;
   },
 ) {
   return request("PATCH", `/api/v1/organizations/branches/${restaurantId}`, body);

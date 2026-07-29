@@ -37,6 +37,9 @@ class BranchPatchIn(BaseModel):
     currency: str | None = None
     locale: str | None = None
     is_central_kitchen: bool | None = None
+    # False closes the branch, True reopens it. There is deliberately no delete:
+    # orders, staff and stock counts all reference the row.
+    is_active: bool | None = None
 
 
 class OrgSettingsIn(BaseModel):
