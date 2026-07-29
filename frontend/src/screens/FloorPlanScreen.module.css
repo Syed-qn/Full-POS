@@ -751,6 +751,13 @@
   color: var(--text-secondary);
 }
 
+.fieldHint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* Rotation controls — 15 degree steps line a table up with a diagonal wall,
    90 degrees flips it end-on, Reset returns it square to the room. */
 .rotateBlock {

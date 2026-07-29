@@ -16,11 +16,35 @@
   gap: 12px;
 }
 
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 .cardTitle {
   margin: 0;
   font-size: var(--font-size-title, 18px);
   font-weight: 700;
   color: var(--text-primary);
+}
+
+/* Roster filter. Matches the one on Manager Management — these screens list
+   four kinds of staff login and should not each look like a different product. */
+.search {
+  width: 240px;
+  min-height: 38px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.search:focus {
+  outline: none;
+  border-color: var(--accent-primary, #2563eb);
 }
 
 .form {

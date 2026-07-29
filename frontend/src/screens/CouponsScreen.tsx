@@ -132,7 +132,7 @@ export function CouponsScreen() {
             aria-label="search coupons by phone"
           />
         </form>
-        <Button type="button" onClick={() => setFormOpen(true)}>
+        <Button type="button" size="md" onClick={() => setFormOpen(true)}>
           + Add coupon
         </Button>
       </div>
@@ -216,7 +216,12 @@ export function CouponsScreen() {
                 <td>
                   {c.status === "active" && (
                     <div className={s.rowActions}>
-                      <Button type="button" variant="ghost" onClick={() => void onPause(c.code)}>
+                      <Button
+                        type="button"
+                        size="md"
+                        variant="ghost"
+                        onClick={() => void onPause(c.code)}
+                      >
                         Pause
                       </Button>
                     </div>
@@ -305,10 +310,21 @@ export function CouponsScreen() {
                 )}
               </div>
               <div className={s.modalFoot}>
-                <Button type="button" variant="ghost" onClick={() => setFormOpen(false)} disabled={submitting}>
+                <Button
+                  type="button"
+                  size="md"
+                  variant="ghost"
+                  onClick={() => setFormOpen(false)}
+                  disabled={submitting}
+                >
                   Cancel
                 </Button>
-                <Button type="button" disabled={submitting || !valueOk} onClick={() => void submit()}>
+                <Button
+                  type="button"
+                  size="md"
+                  disabled={submitting || !valueOk}
+                  onClick={() => void submit()}
+                >
                   {submitting ? "Creating…" : "Create coupon"}
                 </Button>
               </div>

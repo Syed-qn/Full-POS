@@ -74,8 +74,8 @@ export function AppInviteModal({ rider, restaurantPhone, onClose }: Props) {
 
         <div className={s.footer}>
           <div className={s.footerRight}>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={onConfirm} disabled={busy}>
+            <Button size="md" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button size="md" onClick={onConfirm} disabled={busy}>
               {busy ? "Sending…" : "Confirm & send link"}
             </Button>
           </div>

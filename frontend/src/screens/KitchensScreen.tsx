@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
+import { KitchenAddModal } from "../components/KitchenAddModal";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
@@ -32,7 +33,8 @@ export function KitchensScreen() {
   const { dishes } = useLiveMenu({ cache: true });
   const [stations, setStations] = useState<KdsStation[]>([]);
   const [defaults, setDefaults] = useState<CategoryDefault[]>([]);
-  const [newName, setNewName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -76,6 +78,16 @@ export function KitchensScreen() {
     const main = stations.find((x) => x.name === MAIN);
     return main ? [main, ...rest] : rest;
   }, [stations]);
+  // Plain name match, Main included. Pinning Main so it always showed was
+  // tempting — it is the fallback — but then a query matching nothing still
+  // returned one tile, so "no kitchen matches" could never be reached and a
+  // typo looked like a real result.
+  const shownStations = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return orderedStations;
+    return orderedStations.filter((x) => x.name.toLowerCase().includes(q));
+  }, [orderedStations, query]);
+
   const categoryToStation = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of defaults) m.set(d.category, d.station_id);
@@ -94,16 +106,10 @@ export function KitchensScreen() {
     }
   }
 
-  function addKitchen() {
-    const name = newName.trim();
-    if (!name) return;
-    if (stations.some((x) => x.name.toLowerCase() === name.toLowerCase())) {
-      toast("A kitchen with that name already exists.", "error");
-      return;
-    }
+  function addKitchen(name: string) {
+    setAdding(false);
     void run(async () => {
       await createStation({ name });
-      setNewName("");
       toast(`Kitchen "${name}" added.`);
     });
   }
@@ -140,6 +146,11 @@ export function KitchensScreen() {
       <PageHeader
         title="Kitchens"
         subtitle="Create kitchen boards and route dishes to them by category. Anything not wired goes to the Main kitchen."
+        right={
+          <Button size="md" disabled={busy} onClick={() => setAdding(true)} data-testid="kitchen-add-open">
+            + Add kitchen
+          </Button>
+        }
       />
 
       {/* ── Kitchens ─────────────────────────────────────────────────── */}
@@ -149,31 +160,42 @@ export function KitchensScreen() {
             <h3 className={s.cardTitle}>Kitchens</h3>
             <span className={s.cardSub}>Each kitchen has its own KDS board</span>
           </div>
-        </div>
-
-        <div className={s.addRow}>
-          <input
-            className={s.addInput}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="New kitchen name (e.g. Juice)"
-            aria-label="New kitchen name"
-            disabled={busy}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addKitchen();
-            }}
-            data-testid="kitchen-new-name"
-          />
-          <Button disabled={busy || newName.trim() === ""} onClick={addKitchen}>
-            Add kitchen
-          </Button>
+          {!loading && orderedStations.length > 0 && (
+            <input
+              className={s.search}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter kitchens"
+              aria-label="Filter kitchens"
+              data-testid="kitchen-filter"
+            />
+          )}
         </div>
 
         {loading ? (
-          <p className={s.muted}>Loading…</p>
+          /* The real grid's shape with shimmer tiles, so the page does not jump
+             when the kitchens land. */
+          <div className={s.kGrid} aria-busy="true" aria-label="Loading kitchens">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div className={s.kTile} key={i}>
+                <div className={s.kTileTop}>
+                  <span className={s.sk} style={{ width: 38, height: 38, borderRadius: 10 }} />
+                  <span className={s.sk} style={{ width: "45%" }} />
+                </div>
+                <span className={s.sk} style={{ width: "70%" }} />
+                <div className={s.kActions}>
+                  <span className={s.sk} style={{ width: 60 }} />
+                  <span className={s.sk} style={{ width: 80 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : shownStations.length === 0 ? (
+          <p className={s.muted}>No kitchen matches “{query.trim()}”.</p>
         ) : (
           <div className={s.kGrid}>
-            {orderedStations.map((st) => {
+            {shownStations.map((st) => {
               const isMain = st.name === MAIN;
               const wiredCount = defaults.filter((d) => d.station_id === st.id).length;
               const editing = editingId === st.id;
@@ -313,6 +335,15 @@ export function KitchensScreen() {
           </div>
         )}
       </section>
+
+      {adding && (
+        <KitchenAddModal
+          existingNames={stations.map((x) => x.name)}
+          busy={busy}
+          onClose={() => setAdding(false)}
+          onSubmit={addKitchen}
+        />
+      )}
     </div>
   );
 }

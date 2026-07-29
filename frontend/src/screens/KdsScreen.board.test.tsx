@@ -102,6 +102,7 @@ function board(entry: string) {
 describe("KDS board", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     localStorage.setItem("ops_token", "restaurant-token");
     mockFetch();
   });
@@ -122,9 +123,23 @@ describe("KDS board", () => {
     await screen.findByTestId("kds-ticket-10");
 
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
-    // ...and because there is no sidebar to sign out from, the board's own
-    // sign out must be there instead. Without it the screen is a dead end.
+    // ...and because there is no sidebar, the board must offer its own way out
+    // or the screen is a dead end. For a manager that way out is the dashboard
+    // — NOT sign out, which would make logging out of the whole dashboard the
+    // price of glancing at the pass.
+    expect(screen.getByTestId("kds-back-to-dashboard")).toBeInTheDocument();
+    expect(screen.queryByTestId("kitchen-signout")).toBeNull();
+  });
+
+  it("gives a kitchen login sign out, since it owns no other screen", async () => {
+    sessionStorage.setItem("ops_staff_session", JSON.stringify({ role: "kitchen" }));
+    board("/kds");
+    await screen.findByTestId("kds-ticket-10");
+
+    // A cook has no dashboard to go back to, so "leaving" can only mean signing
+    // out — and the dashboard link must not be offered to them.
     expect(screen.getByTestId("kitchen-signout")).toBeInTheDocument();
+    expect(screen.queryByTestId("kds-back-to-dashboard")).toBeNull();
   });
 
   it("shows only dine-in when the board is mounted on the dine-in URL", async () => {

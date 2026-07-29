@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
@@ -75,12 +76,17 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
+  const [active, setActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<StaffMember | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [query, setQuery] = useState("");
 
   function openAdd() {
     setName("");
     setPhone("");
     setPin("");
+    setActive(true);
     setEditTarget(null);
     setShowAdd(true);
   }
@@ -89,6 +95,9 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
     setName(m.name);
     setPhone(m.phone ?? "");
     setPin(""); // blank = keep current PIN
+    // undefined counts as active — the column renders it that way too, and the
+    // two must not disagree about what a missing flag means.
+    setActive(m.is_active !== false);
     setShowAdd(false);
     setEditTarget(m);
   }
@@ -101,12 +110,8 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
   const modalOpen = showAdd || editTarget !== null;
 
   async function removeMember(m: StaffMember) {
-    if (
-      !window.confirm(
-        `Remove ${copy.singular} "${m.name}"? They will no longer be able to sign in.`,
-      )
-    )
-      return;
+    setRemoveTarget(null);
+    setRemoving(true);
     try {
       await deleteStaff(m.id);
       setStaff((prev) => prev.filter((x) => x.id !== m.id));
@@ -115,11 +120,24 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
       );
     } catch (e) {
       toast(e instanceof Error ? e.message : `Could not remove ${copy.singular}.`, "error");
+    } finally {
+      setRemoving(false);
     }
   }
 
   // API returns every role — keep only the managed role for this screen.
   const members = staff.filter((m) => m.role === managedRole);
+
+  // Name, sign-in number and phone: the three things someone has in front of
+  // them when they come looking for one person in a long roster.
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? members.filter((m) =>
+        [m.name, m.staff_code == null ? "" : String(m.staff_code), m.phone ?? ""].some((f) =>
+          f.toLowerCase().includes(q),
+        ),
+      )
+    : members;
 
   async function loadClockStatuses(members: StaffMember[]) {
     const results = await Promise.all(
@@ -198,11 +216,19 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
     setSubmitting(true);
     try {
       if (editTarget) {
-        const body: { name?: string; phone?: string | null; pin?: string } = {
+        const body: {
+          name?: string;
+          phone?: string | null;
+          pin?: string;
+          is_active?: boolean;
+        } = {
           name: name.trim(),
           phone: phone.trim() || null,
         };
         if (pin.trim()) body.pin = pin.trim();
+        // Only when it actually changed, so saving a name edit cannot quietly
+        // reactivate someone a manager deactivated a moment earlier.
+        if (active !== (editTarget.is_active !== false)) body.is_active = active;
         const updated = await updateStaff(editTarget.id, body);
         setStaff((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
         closeModal();
@@ -257,10 +283,27 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
       />
 
       <section className={s.card}>
-        <h3 className={s.cardTitle}>
-          {copy.plural}
-          {loaded && members.length > 0 ? ` (${members.length})` : ""}
-        </h3>
+        <div className={s.cardHead}>
+          <h3 className={s.cardTitle}>
+            {copy.plural}
+            {loaded && members.length > 0
+              ? query.trim()
+                ? ` (${shown.length} of ${members.length})`
+                : ` (${members.length})`
+              : ""}
+          </h3>
+          {loaded && members.length > 0 && (
+            <input
+              className={s.search}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={isPerson ? "Filter by name, No. or phone" : "Filter by name or No."}
+              aria-label={`Filter ${copy.plural.toLowerCase()}`}
+              data-testid={`${managedRole}-filter`}
+            />
+          )}
+        </div>
 
         {!loaded && (
           <div
@@ -283,11 +326,19 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
               <tbody>
                 {Array.from({ length: 4 }).map((_, r) => (
                   <tr key={r}>
-                    {[12, 38, 30, 30, 22, 22, 18].map((w, c) => (
-                      <td key={c} className={c === 6 ? s.actionsCol : undefined}>
-                        <span className={s.sk} style={{ width: `${w}%` }} />
-                      </td>
-                    ))}
+                    {/* Driven by isPerson, exactly like the header above it. The
+                        widths were hardcoded to the 7-column person layout, so a
+                        kitchen table — which has only No., Name, Status and
+                        Actions — grew three cells past its own header. And the
+                        actions column was pinned to index 6, so even then the
+                        right-alignment landed on the wrong cell. */}
+                    {(isPerson ? [12, 38, 30, 30, 22, 22, 18] : [12, 38, 30, 18]).map(
+                      (w, c, cols) => (
+                        <td key={c} className={c === cols.length - 1 ? s.actionsCol : undefined}>
+                          <span className={s.sk} style={{ width: `${w}%` }} />
+                        </td>
+                      ),
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -312,7 +363,14 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
           />
         )}
 
-        {loaded && members.length > 0 && (
+        {loaded && members.length > 0 && shown.length === 0 && (
+          <EmptyState
+            title={`No ${copy.singular} matches “${query.trim()}”`}
+            description="Check the spelling, or clear the filter to see everyone."
+          />
+        )}
+
+        {loaded && shown.length > 0 && (
           <div className={s.tableWrap}>
             <table className={s.table}>
               <thead>
@@ -327,7 +385,7 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                 </tr>
               </thead>
               <tbody>
-                {members.map((m) => (
+                {shown.map((m) => (
                   <tr key={m.id}>
                     {/* The branch-local sign-in number. The internal id is
                         deliberately not shown — staff typing it was how sign-in
@@ -399,7 +457,7 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                         <button
                           type="button"
                           className={s.linkBtnDanger}
-                          onClick={() => void removeMember(m)}
+                          onClick={() => setRemoveTarget(m)}
                           data-testid={`${managedRole}-delete-${m.id}`}
                         >
                           Remove
@@ -469,12 +527,39 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                     }}
                   />
                 </label>
+                {/* Edit only. On add there is nothing to reactivate, and an
+                    "Inactive" choice there would just create a login that
+                    cannot be used. */}
+                {editTarget && (
+                  <label className={s.field}>
+                    <span>Status</span>
+                    <select
+                      aria-label="Status"
+                      value={active ? "active" : "inactive"}
+                      onChange={(e) => setActive(e.target.value === "active")}
+                    >
+                      <option value="active">Active — can sign in</option>
+                      <option value="inactive">Inactive — cannot sign in</option>
+                    </select>
+                  </label>
+                )}
               </div>
               <div className={s.modalFoot}>
-                <Button type="button" variant="ghost" disabled={submitting} onClick={closeModal}>
+                <Button
+                  type="button"
+                  size="md"
+                  variant="ghost"
+                  disabled={submitting}
+                  onClick={closeModal}
+                >
                   Cancel
                 </Button>
-                <Button type="button" disabled={submitting} onClick={() => void submit()}>
+                <Button
+                  type="button"
+                  size="md"
+                  disabled={submitting}
+                  onClick={() => void submit()}
+                >
                   {submitting
                     ? editTarget
                       ? "Saving…"
@@ -488,6 +573,19 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
           </div>,
           document.body,
         )}
+
+      {removeTarget && (
+        <ConfirmDialog
+          title={`Remove ${removeTarget.name}?`}
+          message={`They will no longer be able to sign in. Their past orders and shifts are kept.`}
+          confirmLabel={`Remove ${copy.singular}`}
+          danger
+          size="md"
+          busy={removing}
+          onConfirm={() => void removeMember(removeTarget)}
+          onCancel={() => setRemoveTarget(null)}
+        />
+      )}
     </div>
   );
 }

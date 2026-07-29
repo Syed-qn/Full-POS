@@ -5,7 +5,7 @@
  * STATIONS, so there was no way to add a cook — and therefore nobody who could
  * sign in to the board the cooks are meant to use.
  */
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "../test/render";
 import { StaffScreen } from "./StaffScreen";
@@ -40,6 +40,12 @@ function mockApi() {
       calls.push({ path, method, body });
       if (path.includes("/api/v1/staff") && method === "POST") {
         return Promise.resolve(json({ id: 3, name: "Cook Sam", role: "kitchen" }, 201));
+      }
+      if (path.includes("/api/v1/staff") && method === "PATCH") {
+        // A single member, not the list — updateStaff feeds the result straight
+        // back into state, so an array here would corrupt the roster.
+        const patched = { ...STAFF[1], ...(body as Record<string, unknown>) };
+        return Promise.resolve(json(patched));
       }
       if (path.includes("/api/v1/staff")) return Promise.resolve(json(STAFF));
       return Promise.resolve(json([]));
@@ -119,6 +125,121 @@ describe("StaffScreen — kitchen", () => {
     // nothing — the nowrap itself is only verifiable in the browser.
     expect(edit.parentElement).toBe(remove.parentElement);
     expect(edit.parentElement?.className).toMatch(/rowActions/);
+  });
+
+  it("confirms removal in a dialog, not a browser alert", async () => {
+    // window.confirm is a no-op in jsdom returning undefined, so had the screen
+    // still used it this delete would silently never fire — and in a browser it
+    // would be an unstyled OS box.
+    const confirmSpy = vi.spyOn(window, "confirm");
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    fireEvent.click(screen.getByTestId("kitchen-delete-2"));
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    const dialog = await screen.findByRole("alertdialog", { name: /remove lacafe kitchen/i });
+    // Nothing is deleted merely by asking.
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /remove kitchen login/i }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+  });
+
+  it("cancelling the removal dialog deletes nothing", async () => {
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    fireEvent.click(screen.getByTestId("kitchen-delete-2"));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("filters the roster by name and sign-in number", async () => {
+    renderWithProviders(<StaffScreen managedRole="waiter" />);
+    await screen.findByText("Asfer (Waiter)");
+
+    const filter = screen.getByTestId("waiter-filter");
+    fireEvent.change(filter, { target: { value: "zzzz" } });
+    // A distinct no-match state, not the "no waiters yet" empty state — there
+    // ARE waiters, just none matching.
+    expect(screen.getByText(/no waiter matches/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no waiters yet/i)).toBeNull();
+
+    // Clearing brings everyone back; the filter must not be one-way.
+    fireEvent.change(filter, { target: { value: "" } });
+    expect(screen.getByText("Asfer (Waiter)")).toBeInTheDocument();
+  });
+
+  it("can deactivate from the edit dialog", async () => {
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    fireEvent.click(screen.getByTestId("kitchen-edit-2"));
+    const status = (await screen.findByLabelText("Status")) as HTMLSelectElement;
+    // Reflects where the login actually is, rather than defaulting to Active.
+    expect(status.value).toBe("active");
+
+    fireEvent.change(status, { target: { value: "inactive" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      const patch = calls.find((c) => c.method === "PATCH");
+      expect((patch?.body as Record<string, unknown>)?.is_active).toBe(false);
+    });
+  });
+
+  it("does not touch is_active when only the name was edited", async () => {
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    fireEvent.click(screen.getByTestId("kitchen-edit-2"));
+    await screen.findByLabelText("Status");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Main Pass" } });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      const patch = calls.find((c) => c.method === "PATCH");
+      expect((patch?.body as Record<string, unknown>)?.name).toBe("Main Pass");
+      // Sending it unchanged would quietly reactivate someone a manager had
+      // deactivated a moment earlier.
+      expect(patch?.body as Record<string, unknown>).not.toHaveProperty("is_active");
+    });
+  });
+
+  it("has no status choice when adding — there is nothing to reactivate", async () => {
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    fireEvent.click(screen.getByRole("button", { name: /add kitchen login/i }));
+    await screen.findByLabelText(/name/i);
+    expect(screen.queryByLabelText("Status")).toBeNull();
+  });
+
+  it("loads a skeleton with the same column count as its own header", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    const { container } = renderWithProviders(<StaffScreen managedRole="kitchen" />);
+
+    const header = await screen.findByRole("columnheader", { name: /^no\.$/i });
+    const headerCells = header.closest("tr")!.querySelectorAll("th").length;
+    const bodyCells = container.querySelectorAll("tbody tr")[0].querySelectorAll("td").length;
+
+    // The widths were hardcoded to the 7-column person layout, so a kitchen
+    // table grew three cells past its own header while loading.
+    expect(bodyCells).toBe(headerCells);
+    expect(headerCells).toBe(4);
+  });
+
+  it("keeps the seven-column skeleton for a waiter", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    const { container } = renderWithProviders(<StaffScreen managedRole="waiter" />);
+
+    // Positive control: the skeleton was made role-aware, not just shortened.
+    await screen.findByRole("columnheader", { name: /^phone$/i });
+    expect(container.querySelectorAll("tbody tr")[0].querySelectorAll("td")).toHaveLength(7);
   });
 
   it("is an owner/manager screen — the kitchen cannot mint its own login", () => {

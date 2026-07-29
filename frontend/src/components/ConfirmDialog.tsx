@@ -18,6 +18,9 @@ interface Props {
   danger?: boolean;
   /** Disable the confirm button + show busy text while an action runs. */
   busy?: boolean;
+  /** Button size. Defaults to "lg" so every existing caller is unchanged; pass
+   *  "md" on admin screens where the lg buttons dwarf the dialog. */
+  size?: "md" | "lg";
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -34,14 +37,30 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   danger = false,
   busy = false,
+  size = "lg",
   onConfirm,
   onCancel,
 }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Focus the confirm button (last in the footer) so Enter confirms.
-    modalRef.current?.querySelector<HTMLButtonElement>(".confirmBtn")?.focus();
+    // A dialog carrying a form focuses its FIRST FIELD, not the confirm button.
+    // Otherwise a prefilled input (the suggested table label, say) looks
+    // read-only: you type and nothing happens because the button has focus.
+    // With no field, focus the confirm button (last in the footer) so Enter
+    // confirms, which is what a plain yes/no dialog wants.
+    const firstField = modalRef.current?.querySelector<HTMLElement>(
+      "input:not([type=hidden]), select, textarea",
+    );
+    if (firstField) {
+      firstField.focus();
+      if (firstField instanceof HTMLInputElement && firstField.type === "text") {
+        // Select it so the suggestion can be typed straight over.
+        firstField.select();
+      }
+    } else {
+      modalRef.current?.querySelector<HTMLButtonElement>(".confirmBtn")?.focus();
+    }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !busy) onCancel();
     }
@@ -63,11 +82,12 @@ export function ConfirmDialog({
         <p className={s.message}>{message}</p>
         {children}
         <div className={s.footer}>
-          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+          <Button size={size} variant="ghost" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </Button>
           <Button
             className="confirmBtn"
+            size={size}
             variant={danger ? "danger" : "primary"}
             onClick={onConfirm}
             disabled={busy}

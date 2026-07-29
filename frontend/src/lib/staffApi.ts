@@ -239,3 +239,20 @@ export async function fetchAlerts(unackedOnly = false) {
 export async function acknowledgeAlert(alertId: number) {
   return apiClient.post(`/api/v1/staff/alerts/${alertId}/acknowledge`, {});
 }
+
+/** The signed-in staff member's own LIVE flags.
+ *
+ * Login returns training_mode once and the session has been trusting that
+ * snapshot ever since, so a manager switching someone into training mid-shift
+ * changed what the server stamped on their next order while the banner on
+ * their screen still said the opposite. This is how the screen catches up
+ * without making them sign out.
+ */
+export async function getStaffMe(): Promise<{
+  staff_id: number;
+  name: string;
+  role: string;
+  training_mode: boolean;
+}> {
+  return apiClient.get("/api/v1/staff/me");
+}

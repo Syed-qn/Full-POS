@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { getRoleChrome, getSessionRole, isTrainingMode } from "../lib/navAccess";
+import { getRoleChrome, getSessionRole } from "../lib/navAccess";
+import { useLiveTrainingMode } from "../lib/useLiveTrainingMode";
 import { useOfflineStatus } from "../lib/useOfflineStatus";
 import { useTransferAlerts } from "../lib/useTransferAlerts";
 import { NavSidebar } from "./NavSidebar";
@@ -27,7 +28,7 @@ export function AppShell({
   // waiting whichever page you happen to have open. The hook alerts once per
   // transfer ever, so moving between screens does not replay it.
   const transferAlerts = useTransferAlerts();
-  const training = isTrainingMode();
+  const training = useLiveTrainingMode();
   const role = getSessionRole();
   const chrome = getRoleChrome(role);
 

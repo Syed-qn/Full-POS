@@ -82,8 +82,8 @@ export function RiderAddModal({ rider, onClose, onSaved }: Props) {
 
         <div className={s.footer}>
           <div className={s.footerRight}>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={onSave} disabled={!canSave}>
+            <Button size="md" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button size="md" onClick={onSave} disabled={!canSave}>
               {busy ? "Saving…" : isEdit ? "Save changes" : "Add rider"}
             </Button>
           </div>

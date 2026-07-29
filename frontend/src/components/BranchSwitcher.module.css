@@ -1,9 +1,49 @@
 /* Which branch the dashboard is scoped to. Sits in the top bar because it
-   governs every screen below it, not any one of them. */
+   governs every screen below it, not any one of them.
+
+   This is a custom listbox rather than a <select> because the option list is
+   the part that had to change: a native select's popup is drawn by the OS, so
+   its cramped rows and full-bleed blue highlight are not reachable from CSS at
+   all. The trigger keeps combobox semantics so it still reads as one field. */
+.root {
+  position: relative;
+  display: inline-block;
+}
+
+/* One control, not a caption sitting next to a box: the border wraps the label
+   AND the value so "BRANCH" reads as the field's name rather than as loose
+   text in the top bar. */
 .wrap {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.wrap:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-raised, var(--bg-surface));
+}
+
+/* Focus darkens the SAME border rather than adding a second coloured ring
+   inside the first — that double outline is what the native control was doing.
+   :focus-visible, so a mouse click does not leave the box looking stuck on. */
+.wrap:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  background: var(--bg-surface-raised, var(--bg-surface));
+}
+
+.wrap:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .label {
@@ -14,16 +54,88 @@
   color: var(--text-secondary);
 }
 
-.select {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
+.value {
   font-size: var(--font-size-caption);
-  max-width: 200px;
+  font-weight: 600;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.select:disabled {
-  opacity: 0.6;
+/* Drawn, not a glyph: a text chevron inherits the font's own metrics and sits
+   visibly off the baseline at this size. */
+.chev {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--text-secondary);
+  transition: transform 120ms ease;
+}
+
+.wrap[aria-expanded="true"] .chev {
+  transform: rotate(180deg);
+}
+
+.menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised, var(--bg-surface));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-caption);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* A tinted row, not the OS's edge-to-edge blue fill. */
+.item:hover,
+.item:focus-visible {
+  outline: none;
+  background: var(--accent-primary-dim);
+}
+
+.itemCurrent {
+  font-weight: 600;
+}
+
+.itemName {
+  flex: 1;
+}
+
+.tick {
+  width: 12px;
+  color: var(--accent-primary);
+}
+
+.mainTag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }

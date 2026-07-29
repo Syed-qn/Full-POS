@@ -907,6 +907,7 @@ export function FloorPlanScreen() {
               : "Rename the table or change how many guests it seats."
           }
           confirmLabel={draft.id == null ? "Add table" : "Save"}
+          size="md"
           busy={busy}
           onCancel={() => !busy && setDraft(null)}
           onConfirm={() => void saveDraft()}
@@ -920,8 +921,14 @@ export function FloorPlanScreen() {
             style={{ width: "100%" }}
             value={draft.label}
             maxLength={32}
+            placeholder="T01"
             onChange={(e) => setDraft({ ...draft, label: e.target.value })}
           />
+          {/* T01 is only the next free number, not a format. Saying so stops the
+              suggestion from reading as a fixed scheme you have to follow. */}
+          <span className={s.fieldHint}>
+            Suggested. Type any label you use, such as A03 or Patio 2.
+          </span>
           <label className={s.fieldLabel} htmlFor="table-seats">
             Seats
           </label>

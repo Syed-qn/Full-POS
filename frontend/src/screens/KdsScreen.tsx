@@ -23,7 +23,7 @@ import { formatCountdown, SLA_WINDOW_MS } from "../lib/sla";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { useRestaurantName } from "../lib/brand";
 import { logout } from "../lib/auth";
-import { isFullBleedPath } from "../lib/navAccess";
+import { getSessionRole, isFullBleedPath } from "../lib/navAccess";
 import s from "./KdsScreen.module.css";
 import { useLiveRefresh } from "../lib/useLiveRefresh";
 
@@ -183,6 +183,10 @@ export function KdsScreen() {
    *  full-bleed for everyone now, so asking the role would tell a manager it
    *  has a sidebar to sign out from when it does not. */
   const hasShell = !isFullBleedPath(location.pathname);
+  // An owner token carries no role claim, so null belongs with owner/manager
+  // here — these are the sessions that have a dashboard to go back to.
+  const kdsRole = getSessionRole();
+  const isDashboardUser = kdsRole === null || kdsRole === "owner" || kdsRole === "manager";
 
 
 
@@ -497,24 +501,39 @@ export function KdsScreen() {
           >
             Performance
           </button>
-          {/* A kitchen session runs chrome-free (no sidebar, no top bar), so
-              this is its ONLY way out. A manager opening the same board from
-              the dashboard already has Sign out in the sidebar — two of them
-              on one screen is just clutter. */}
-          {!hasShell && (
-            <button
-              type="button"
-              className={s.chromeBtn}
-              data-testid="kitchen-signout"
-              title="Sign out"
-              onClick={() => {
-                logout();
-                navigate("/login", { replace: true });
-              }}
-            >
-              🔒 Sign out
-            </button>
-          )}
+          {/* The board is full-bleed for EVERYONE, so nobody here has a sidebar
+              to leave by — but the right exit differs by who is looking.
+
+              A kitchen login owns this one screen: signing out is the only
+              thing "leaving" can mean. A manager or owner opened the board from
+              the dashboard and wants to go back to it; offering them Sign out
+              as the sole exit made logging out of the whole dashboard the price
+              of glancing at the pass. */}
+          {!hasShell &&
+            (isDashboardUser ? (
+              <button
+                type="button"
+                className={s.chromeBtn}
+                data-testid="kds-back-to-dashboard"
+                title="Back to dashboard"
+                onClick={() => navigate("/")}
+              >
+                ← Dashboard
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={s.chromeBtn}
+                data-testid="kitchen-signout"
+                title="Sign out"
+                onClick={() => {
+                  logout();
+                  navigate("/login", { replace: true });
+                }}
+              >
+                🔒 Sign out
+              </button>
+            ))}
         </div>
       </header>
 

@@ -51,28 +51,55 @@ describe("BranchSwitcher", () => {
     stubApi({ meId: 1 });
     render(<BranchSwitcher />);
 
-    const select = (await screen.findByRole("combobox", { name: /branch/i })) as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe("1"));
+    const trigger = await screen.findByRole("combobox", { name: /branch/i });
+    await waitFor(() => expect(trigger).toHaveTextContent("La Cafe"));
 
     // A "Switch branch…" prompt never tells you where you already are.
     expect(screen.queryByText(/switch branch/i)).not.toBeInTheDocument();
-    expect(select.querySelectorAll("option")).toHaveLength(2);
+
+    // The list is a popup now, so it exists only once opened — which is also
+    // what keeps the top bar from rendering every branch on every page.
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await userEvent.click(trigger);
+    expect(screen.getAllByRole("option")).toHaveLength(2);
   });
 
   it("marks the main branch in the list", async () => {
     stubApi({ meId: 1 });
     render(<BranchSwitcher />);
 
-    expect(await screen.findByRole("option", { name: "La Cafe (Main)" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("combobox", { name: /branch/i }));
+
+    // "Main" is a badge beside the name rather than "(Main)" inside it, so it
+    // reads as a property of the branch and not as part of what it is called.
+    expect(screen.getByRole("option", { name: "La Cafe Main" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "La Cafe 2" })).toBeInTheDocument();
+  });
+
+  it("marks which branch you are on, so the list is not a guess", async () => {
+    stubApi({ meId: 2 });
+    render(<BranchSwitcher />);
+
+    const trigger = await screen.findByRole("combobox", { name: /branch/i });
+    await waitFor(() => expect(trigger).toHaveTextContent("La Cafe 2"));
+    await userEvent.click(trigger);
+
+    expect(screen.getByRole("option", { name: "La Cafe 2" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("option", { name: "La Cafe Main" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
   });
 
   it("shows the current branch when the session is on a non-main store", async () => {
     stubApi({ meId: 2 });
     render(<BranchSwitcher />);
 
-    const select = (await screen.findByRole("combobox", { name: /branch/i })) as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe("2"));
+    const trigger = await screen.findByRole("combobox", { name: /branch/i });
+    await waitFor(() => expect(trigger).toHaveTextContent("La Cafe 2"));
   });
 
   it("swaps the token for the picked branch", async () => {
@@ -85,12 +112,51 @@ describe("BranchSwitcher", () => {
     });
 
     render(<BranchSwitcher />);
-    const select = await screen.findByRole("combobox", { name: /branch/i });
-    await userEvent.selectOptions(select, "2");
+    await userEvent.click(await screen.findByRole("combobox", { name: /branch/i }));
+    await userEvent.click(screen.getByRole("option", { name: "La Cafe 2" }));
 
     await waitFor(() => expect(localStorage.getItem("ops_token")).toBe("branch-jwt"));
     expect(calls).toContain("POST /api/v1/organizations/branches/2/session");
     expect(reload).toHaveBeenCalled();
+  });
+
+  it("picking the branch you are already on does not reload the dashboard", async () => {
+    const calls = stubApi({ meId: 1 });
+    const reload = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, reload },
+    });
+
+    render(<BranchSwitcher />);
+    const trigger = await screen.findByRole("combobox", { name: /branch/i });
+    await waitFor(() => expect(trigger).toHaveTextContent("La Cafe"));
+    await userEvent.click(trigger);
+    await userEvent.click(screen.getByRole("option", { name: "La Cafe Main" }));
+
+    // Closing the menu is the whole effect. A full page reload to land back
+    // where you already were is seconds of blank screen for nothing.
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(reload).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.includes("/session"))).toBe(false);
+  });
+
+  it("closes on Escape without switching", async () => {
+    stubApi({ meId: 1 });
+    const reload = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, reload },
+    });
+
+    render(<BranchSwitcher />);
+    await userEvent.click(await screen.findByRole("combobox", { name: /branch/i }));
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    // Opening the list to look at it must not be a way to change branch.
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it("is on screen immediately after the reload, not seconds later", async () => {
@@ -117,11 +183,11 @@ describe("BranchSwitcher", () => {
 
     // Rendered from cache while /branches is still in flight, already showing
     // the branch that was switched to.
-    const select = screen.getByRole("combobox", { name: /branch/i }) as HTMLSelectElement;
-    expect(select.value).toBe("2");
+    const trigger = screen.getByRole("combobox", { name: /branch/i });
+    expect(trigger).toHaveTextContent("La Cafe 2");
 
     resolveBranches(new Response(JSON.stringify(BRANCHES), { status: 200 }));
-    await waitFor(() => expect(select.value).toBe("2"));
+    await waitFor(() => expect(trigger).toHaveTextContent("La Cafe 2"));
   });
 
   it("keeps rendering when a refresh fails, instead of vanishing", async () => {
@@ -129,9 +195,9 @@ describe("BranchSwitcher", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 500 })));
 
     render(<BranchSwitcher />);
-    const select = screen.getByRole("combobox", { name: /branch/i });
+    const trigger = screen.getByRole("combobox", { name: /branch/i });
     // Give the failed fetches time to settle; the control must survive them.
-    await waitFor(() => expect(select).toBeInTheDocument());
+    await waitFor(() => expect(trigger).toBeInTheDocument());
   });
 
   it("ignores a corrupt cache rather than throwing during render", async () => {
@@ -159,6 +225,47 @@ describe("BranchSwitcher", () => {
     expect((branchCall?.[1] as RequestInit).headers).toMatchObject({
       Authorization: "Bearer owner-jwt",
     });
+  });
+
+  it("does not offer a closed branch", async () => {
+    // Three, so two remain open and the switcher still renders — with only one
+    // open branch left it hides entirely, which is the next test.
+    stubApi({
+      branches: [
+        BRANCHES[0],
+        { id: 3, name: "La Cafe 3", is_main: false, has_login: false, email: null },
+        { ...BRANCHES[1], is_active: false },
+      ],
+      meId: 1,
+    });
+    render(<BranchSwitcher />);
+
+    const trigger = await screen.findByRole("combobox", { name: /branch/i });
+    await waitFor(() => expect(trigger).toHaveTextContent("La Cafe"));
+    await userEvent.click(trigger);
+
+    // The server refuses to mint a token for a closed branch, so listing it
+    // would only produce an option that errors on click.
+    expect(screen.queryByRole("option", { name: "La Cafe 2" })).toBeNull();
+    expect(screen.getByRole("option", { name: "La Cafe Main" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "La Cafe 3" })).toBeInTheDocument();
+  });
+
+  it("keeps showing branches when the server omits is_active", async () => {
+    // An older server sends no such field. Treating that as closed would hide
+    // every branch and silently remove the switcher altogether.
+    stubApi({ meId: 1 });
+    render(<BranchSwitcher />);
+
+    await userEvent.click(await screen.findByRole("combobox", { name: /branch/i }));
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("renders nothing when only one branch is still open", async () => {
+    stubApi({ branches: [BRANCHES[0], { ...BRANCHES[1], is_active: false }], meId: 1 });
+    const { container } = render(<BranchSwitcher />);
+    // A picker with one usable entry is just a control that can go wrong.
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
   it("renders nothing for a single-branch account", async () => {

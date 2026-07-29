@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TouchButton } from "../components/Button";
+import { Button } from "../components/Button";
 import { EmptyState } from "../components/EmptyState";
 import { SectionBanner } from "../components/SectionBanner";
 import { StatusPill } from "../components/StatusPill";
@@ -295,9 +295,12 @@ export function LiveOpsScreen() {
             }`}
             description="New confirmations appear here by status. Start a walk-in or WhatsApp order."
             action={
-              <TouchButton type="button" onClick={() => nav("/new-order")}>
+              /* Button, not TouchButton: the touch size is ≥64px for a POS till
+                 being tapped with one hand, and it dwarfs an empty-state card on
+                 the manager dashboard. */
+              <Button type="button" size="md" onClick={() => nav("/new-order")}>
                 New Order
-              </TouchButton>
+              </Button>
             }
           />
         ) : (

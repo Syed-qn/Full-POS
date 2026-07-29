@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../lib/apiClient";
 import { setToken } from "../lib/auth";
 import type { OrganizationBranchOut } from "../lib/types";
@@ -52,6 +52,8 @@ export function BranchSwitcher() {
     return Number.isInteger(n) && n > 0 ? n : null;
   });
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     // apiClient, NOT organizationsApi.listBranches: that helper authenticates
@@ -118,33 +120,91 @@ export function BranchSwitcher() {
     }
   }
 
-  if (!branches || branches.length < 2) return null;
+  // Close on an outside click or Escape. A popup that only closes by picking
+  // something turns a glance at the list into an unwanted branch switch.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // A closed branch is not somewhere you can switch to — the server refuses to
+  // mint a token for it — so offering it here would only produce a dead option
+  // that errors on click. `!== false` so an older server, which omits the field
+  // entirely, keeps showing every branch instead of hiding all of them.
+  const openBranches = branches?.filter((b) => b.is_active !== false) ?? null;
+
+  if (!openBranches || openBranches.length < 2) return null;
 
   // Show the branch actually in use. Until /me answers, fall back to the main
   // branch rather than a blank prompt — a control that reads "Switch branch…"
   // never tells you where you already are.
-  const fallback = branches.find((b) => b.is_main)?.id ?? branches[0].id;
+  const fallback = openBranches.find((b) => b.is_main)?.id ?? openBranches[0].id;
   const selected = currentId ?? fallback;
 
+  // Look the current branch up in the FULL list: if the one you are signed into
+  // was just closed, the trigger should still name it rather than silently
+  // showing a different store while your token belongs to this one.
+  const current =
+    branches?.find((b) => b.id === selected) ?? openBranches[0];
+
   return (
-    <label className={s.wrap}>
-      <span className={s.label}>Branch</span>
-      <select
-        className={s.select}
+    <div className={s.root} ref={rootRef}>
+      <button
+        type="button"
+        className={s.wrap}
+        role="combobox"
         aria-label="Branch"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         disabled={busy}
-        value={String(selected)}
-        onChange={(e) => {
-          const id = Number(e.target.value);
-          if (Number.isInteger(id) && id > 0 && id !== selected) void switchTo(id);
-        }}
+        onClick={() => setOpen((v) => !v)}
       >
-        {branches.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.is_main ? `${b.name} (Main)` : b.name}
-          </option>
-        ))}
-      </select>
-    </label>
+        <span className={s.label}>Branch</span>
+        <span className={s.value}>{current.name}</span>
+        {current.is_main && <span className={s.mainTag}>Main</span>}
+        <span className={s.chev} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <ul className={s.menu} role="listbox" aria-label="Branch">
+          {openBranches.map((b) => {
+            const isCurrent = b.id === selected;
+            return (
+              <li key={b.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isCurrent}
+                  className={`${s.item} ${isCurrent ? s.itemCurrent : ""}`}
+                  onClick={() => {
+                    setOpen(false);
+                    if (!isCurrent) void switchTo(b.id);
+                  }}
+                >
+                  {/* Always rendered, hidden when not current, so the labels
+                      line up instead of shifting by a tick's width. */}
+                  <span className={s.tick} aria-hidden="true">
+                    {isCurrent ? "✓" : ""}
+                  </span>
+                  <span className={s.itemName}>{b.name}</span>
+                  {b.is_main && <span className={s.mainTag}>Main</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
