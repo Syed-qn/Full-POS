@@ -49,13 +49,16 @@ const ROLE_COPY: Record<
     addLabel: "+ Add cashier",
   },
   // "Kitchen Management" was already taken by /kitchens, which configures KDS
-  // STATIONS. This screen is the people — without it a kitchen login could not
-  // be created at all, so the board had no one who could sign in to it.
+  // STATIONS — that screen is now "Kitchen Setup". This one is the sign-ins.
+  //
+  // "kitchen login", not "cook": one kitchen shares one sign-in on the board
+  // that hangs over the pass. It is a terminal that a shift signs into, not a
+  // person, and naming it after a person invites one per cook.
   kitchen: {
-    title: "Kitchen Staff",
-    singular: "cook",
-    plural: "Kitchen staff",
-    addLabel: "+ Add cook",
+    title: "Kitchen Management",
+    singular: "kitchen login",
+    plural: "Kitchen logins",
+    addLabel: "+ Add kitchen login",
   },
 };
 

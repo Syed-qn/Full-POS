@@ -54,24 +54,24 @@ describe("StaffScreen — kitchen", () => {
     mockApi();
   });
 
-  it("lists cooks and not the waiters", async () => {
+  it("lists kitchen logins and not the waiters", async () => {
     renderWithProviders(<StaffScreen managedRole="kitchen" />);
 
     expect(await screen.findByText("Cook Rafi")).toBeInTheDocument();
     // Each management screen owns one role; mixing them is how a cashier ends
     // up deleted from the waiter page.
     expect(screen.queryByText("Asfer (Waiter)")).toBeNull();
-    expect(screen.getAllByRole("heading", { name: /kitchen staff/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("heading", { name: /kitchen management/i }).length).toBeGreaterThan(0);
   });
 
   it("creates the login with role kitchen, so it lands on the board", async () => {
     renderWithProviders(<StaffScreen managedRole="kitchen" />);
     await screen.findByText("Cook Rafi");
 
-    fireEvent.click(screen.getByRole("button", { name: /add cook/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add kitchen login/i }));
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Cook Sam" } });
     fireEvent.change(screen.getByLabelText(/pin/i), { target: { value: "3391" } });
-    fireEvent.click(screen.getByRole("button", { name: /^add cook$|^save$|^create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add kitchen login$|^save$|^create$/i }));
 
     await waitFor(() => {
       const post = calls.find((c) => c.method === "POST" && c.path.includes("/api/v1/staff"));
