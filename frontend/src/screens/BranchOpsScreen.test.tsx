@@ -130,31 +130,29 @@ describe("BranchOpsScreen", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Branches" })).toBeInTheDocument());
     expect(await screen.findByText("AED 4,200.00")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Downtown" })).toBeInTheDocument();
-    // Header order: Stock transfer then + Add branch
-    expect(screen.getByRole("button", { name: /^stock transfer$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^\+ add branch$/i })).toBeInTheDocument();
     // Not on the main page until dialog opens
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("opens stock transfer dialog from header before add branch", async () => {
+  it("no longer offers stock transfer here", async () => {
     renderWithProviders(<BranchOpsScreen />);
     await screen.findByRole("cell", { name: "Downtown" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^stock transfer$/i }));
-    expect(screen.getByRole("dialog", { name: /stock transfer/i })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("From branch"), { target: { value: "11" } });
-    fireEvent.change(screen.getByLabelText("To branch"), { target: { value: "12" } });
-    fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "Rice" } });
-    fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "5.000" } });
-    fireEvent.click(screen.getByRole("button", { name: /create transfer/i }));
-    await waitFor(() =>
-      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        expect.stringContaining("/api/v1/organizations/7/stock-transfers"),
-        expect.objectContaining({ method: "POST" }),
+    // Moved to Inventory -> Transfers, where the branch that HOLDS the stock
+    // dispatches and the branch receiving it confirms. The HQ version applied
+    // both ends in one click, so the same kilos were in both branches at once
+    // for the whole time the van was moving.
+    expect(screen.queryByRole("button", { name: /stock transfer/i })).toBeNull();
+    // Positive control: the header rendered, so this is a removed button and
+    // not a screen that failed to load.
+    expect(screen.getByRole("button", { name: /^\+ add branch$/i })).toBeInTheDocument();
+    // And nothing may still post to the one-step HQ endpoint.
+    expect(
+      vi.mocked(fetch).mock.calls.some(([url]) =>
+        String(url).includes("/stock-transfers"),
       ),
-    );
+    ).toBe(false);
   });
 
   it("opens add-branch dialog and creates a branch", async () => {

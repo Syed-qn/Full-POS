@@ -279,7 +279,7 @@ describe("InventoryScreen — branch transfers", () => {
     expect(screen.getByText(/Item0/)).toBeTruthy();
     expect(screen.queryByText(/Item5/)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /next page of past transfers/i }));
     await screen.findByText(/6–7 of 7/);
     // The range, not "page 2 of 2" — when a transfer is missing you want to
     // know how far down the list you have read.
@@ -293,6 +293,6 @@ describe("InventoryScreen — branch transfers", () => {
     fireEvent.click(await screen.findByRole("tab", { name: /transfers/i }));
 
     await screen.findByText(/past transfers/i);
-    expect(screen.queryByRole("button", { name: /^next$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /next page of past transfers/i })).toBeNull();
   });
 });

@@ -7,9 +7,7 @@ import { toast } from "../components/Toaster";
 import { isAuthenticated } from "../lib/auth";
 import {
   bootstrapOrganizationFromRestaurant,
-  completeStockTransfer,
   createBranch,
-  createStockTransfer,
   getBranchComparison,
   getOrgIdFromToken,
   getOrgToken,
@@ -24,7 +22,6 @@ import type {
   OrganizationBranchOut,
   OrganizationInventorySummaryOut,
   OrganizationRollupSalesOut,
-  StockTransferOut,
 } from "../lib/types";
 import s from "./BranchOpsScreen.module.css";
 
@@ -68,27 +65,16 @@ export function BranchOpsScreen() {
 
   // Dialogs (header buttons only)
   const [addOpen, setAddOpen] = useState(false);
-  const [stockOpen, setStockOpen] = useState(false);
   const [branchName, setBranchName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [branchRegion, setBranchRegion] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
 
-  // Stock transfer form (dialog)
-  const [fromBranch, setFromBranch] = useState("");
-  const [toBranch, setToBranch] = useState("");
-  const [ingredientName, setIngredientName] = useState("");
-  const [transferUnit, setTransferUnit] = useState("kg");
-  const [transferQty, setTransferQty] = useState("");
-  const [lastTransfer, setLastTransfer] = useState<StockTransferOut | null>(null);
-
   // Optional org login (denied state only)
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [signupName, setSignupName] = useState("");
-
-  const orgId = getOrgIdFromToken();
 
   const rollupByBranch = useMemo(
     () => new Map((rollup?.branches ?? []).map((row) => [row.restaurant_id, row])),
@@ -118,8 +104,6 @@ export function BranchOpsScreen() {
     setRollup(rollupReport);
     setSummary(inventoryReport);
     setComparison(comparisonRows);
-    setFromBranch((prev) => prev || String(branchRows[0]?.id ?? ""));
-    setToBranch((prev) => prev || String(branchRows[1]?.id ?? branchRows[0]?.id ?? ""));
   }, [endDate, startDate, targetDate]);
 
   const openHq = useCallback(async (opts?: { silent?: boolean }) => {
@@ -212,43 +196,6 @@ export function BranchOpsScreen() {
       toast(e instanceof Error ? e.message : "Could not add branch.", "error");
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function submitTransfer() {
-    if (!orgId) {
-      toast("Organization session missing. Refresh the page.", "error");
-      return;
-    }
-    if (!fromBranch || !toBranch || fromBranch === toBranch || !ingredientName.trim() || !transferQty.trim()) {
-      toast("Pick two different branches and enter ingredient + quantity.", "error");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const created = await createStockTransfer(orgId, {
-        from_restaurant_id: Number(fromBranch),
-        to_restaurant_id: Number(toBranch),
-        lines: [{ ingredient_name: ingredientName.trim(), unit: transferUnit, quantity: transferQty }],
-      });
-      setLastTransfer(created);
-      toast(`Transfer #${created.id} created`);
-      // Keep dialog open so user can complete the transfer if needed.
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not create transfer.", "error");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function completeTransfer() {
-    if (!lastTransfer) return;
-    try {
-      const completed = await completeStockTransfer(lastTransfer.id);
-      setLastTransfer(completed);
-      toast(`Transfer #${completed.id} completed.`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not complete transfer.", "error");
     }
   }
 
@@ -350,9 +297,6 @@ export function BranchOpsScreen() {
                 onChange={(e) => setTargetDate(e.target.value)}
               />
             </label>
-            <Button type="button" size="md" variant="ghost" onClick={() => setStockOpen(true)}>
-              Stock transfer
-            </Button>
             <Button type="button" size="md" onClick={() => setAddOpen(true)}>
               + Add branch
             </Button>
@@ -513,136 +457,6 @@ export function BranchOpsScreen() {
           </table>
         </div>
       </section>
-
-      {stockOpen &&
-        createPortal(
-          <div
-            className={s.dialogOverlay}
-            onClick={submitting ? undefined : () => setStockOpen(false)}
-          >
-            <div
-              className={s.dialog}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="stock-transfer-title"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className={s.dialogHead}>
-                <div>
-                  <h2 id="stock-transfer-title">Stock transfer</h2>
-                  <p>Move inventory between two branches with an audit trail.</p>
-                </div>
-                <button
-                  type="button"
-                  className={s.dialogClose}
-                  aria-label="Close"
-                  disabled={submitting}
-                  onClick={() => setStockOpen(false)}
-                >
-                  ×
-                </button>
-              </div>
-              <div className={s.dialogBody}>
-                <div className={s.formGridSingle}>
-                  <label>
-                    <span>From branch</span>
-                    <select
-                      aria-label="From branch"
-                      value={fromBranch}
-                      onChange={(e) => setFromBranch(e.target.value)}
-                    >
-                      <option value="">Select branch</option>
-                      {branches.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>To branch</span>
-                    <select
-                      aria-label="To branch"
-                      value={toBranch}
-                      onChange={(e) => setToBranch(e.target.value)}
-                    >
-                      <option value="">Select branch</option>
-                      {branches.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Ingredient</span>
-                    <input
-                      aria-label="Ingredient"
-                      value={ingredientName}
-                      onChange={(e) => setIngredientName(e.target.value)}
-                      placeholder="Rice"
-                    />
-                  </label>
-                  <div className={s.inlineFields}>
-                    <label>
-                      <span>Unit</span>
-                      <input
-                        aria-label="Transfer unit"
-                        value={transferUnit}
-                        onChange={(e) => setTransferUnit(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span>Quantity</span>
-                      <input
-                        aria-label="Quantity"
-                        value={transferQty}
-                        onChange={(e) => setTransferQty(e.target.value)}
-                        placeholder="5"
-                      />
-                    </label>
-                  </div>
-                  {lastTransfer && (
-                    <p className={s.hint}>
-                      Last transfer #{lastTransfer.id} · status{" "}
-                      <strong>{lastTransfer.status}</strong>
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className={s.dialogFoot}>
-                <Button
-                  type="button"
-                  size="md"
-                  variant="ghost"
-                  disabled={submitting}
-                  onClick={() => setStockOpen(false)}
-                >
-                  Cancel
-                </Button>
-                {lastTransfer && lastTransfer.status !== "completed" && (
-                  <Button
-                    type="button"
-                    size="md"
-                    variant="ghost"
-                    onClick={() => void completeTransfer()}
-                  >
-                    Complete #{lastTransfer.id}
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  size="md"
-                  disabled={submitting}
-                  onClick={() => void submitTransfer()}
-                >
-                  Create transfer
-                </Button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
 
       {addOpen &&
         createPortal(

@@ -5,6 +5,7 @@ import { IngredientAddModal } from "../components/IngredientAddModal";
 import { PurchaseOrderModal, VendorAddModal } from "../components/PurchaseOrderModal";
 import { StockMoveModal, type StockAction } from "../components/StockMoveModal";
 import { EmptyState } from "../components/EmptyState";
+import { ListPager, usePaged } from "../components/ListPager";
 import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
@@ -360,6 +361,20 @@ export function InventoryScreen() {
     return Number.isFinite(n) ? n : null;
   }, [avt]);
 
+  // Five a page on both count cards. A list that silently stops reads as
+  // "that is all there is", which is how a count from three days ago becomes
+  // invisible.
+  const pagedVariance = usePaged(variance);
+  const pagedClosings = usePaged(closings);
+  const pagedIngredients = usePaged(ingredients);
+  const pagedReorder = usePaged(reorder);
+  const pagedOrders = usePaged(purchaseOrders);
+  const pagedVendors = usePaged(vendors);
+  // Two lists in one card, so they page independently — a long spoilage
+  // log must not push the expiring batches off the bottom.
+  const pagedSpoilage = usePaged(spoilage);
+  const pagedExpiring = usePaged(expiring);
+
   const lowStockIds = useMemo(() => new Set(lowStock.map((item) => item.id)), [lowStock]);
   const ingredientName = useMemo(() => {
     const map = new Map(ingredients.map((i) => [i.id, i.name]));
@@ -607,7 +622,7 @@ export function InventoryScreen() {
                 </tr>
               </thead>
               <tbody>
-                {ingredients.map((item) => (
+                {pagedIngredients.rows.map((item) => (
                   <tr key={item.id} className={lowStockIds.has(item.id) ? s.rowLow : undefined}>
                     <td className={s.cellName}>{item.name}</td>
                     <td className={s.num}>
@@ -674,6 +689,7 @@ export function InventoryScreen() {
               </tbody>
             </table>
           </div>
+          <ListPager paged={pagedIngredients} label="stock on hand" />
         </div>
 
         <div className={s.sideStack}>
@@ -685,7 +701,7 @@ export function InventoryScreen() {
               </div>
             </div>
             <div className={s.list}>
-              {reorder.map((item) => (
+              {pagedReorder.rows.map((item) => (
                 <div key={item.ingredient_id} className={s.listItem}>
                   <strong>
                     {item.ingredient_name} needs {qty(item.suggested_order_qty, "kg")}
@@ -697,6 +713,7 @@ export function InventoryScreen() {
               ))}
               {loaded && reorder.length === 0 && <div className={s.empty}>No reorder suggestions.</div>}
             </div>
+            <ListPager paged={pagedReorder} label="reorder queue" />
           </div>
         </div>
       </section>
@@ -821,7 +838,7 @@ export function InventoryScreen() {
             </Button>
           </div>
           <div className={s.list}>
-            {variance.slice(0, 5).map((v) => {
+            {pagedVariance.rows.map((v) => {
               const value = Number(v.variance_value_aed ?? 0);
               // Percentage is what the tolerance is actually judged on, so a
               // row that says "4 kg" without it gives no sense of whether the
@@ -859,6 +876,7 @@ export function InventoryScreen() {
               <div className={s.empty}>No counts recorded yet.</div>
             )}
           </div>
+          <ListPager paged={pagedVariance} label="count variance" />
         </div>
 
         {/* What the End of day snapshot button produces. It was writing a row
@@ -872,10 +890,14 @@ export function InventoryScreen() {
             </div>
           </div>
           <div className={s.list}>
-            {closings.map((row, i) => {
+            {pagedClosings.rows.map((row, i) => {
               // Change against the NEXT row, because the list runs newest
               // first. The last row has nothing before it to compare against.
-              const previous = closings[i + 1];
+              //
+              // Looked up in the FULL list by absolute index, not within the
+              // page: the last row of every page would otherwise lose its
+              // comparison and read as "no change" when the stock did move.
+              const previous = closings[pagedClosings.first - 1 + i + 1];
               const change = previous
                 ? Number(row.total_value_aed) - Number(previous.total_value_aed)
                 : null;
@@ -910,6 +932,7 @@ export function InventoryScreen() {
               </div>
             )}
           </div>
+          <ListPager paged={pagedClosings} label="stock closing history" />
         </div>
       </section>
       )}
@@ -936,7 +959,7 @@ export function InventoryScreen() {
             separate events. A GRN only ever exists against a PO, so it belongs
             on that PO's row. */}
         <div className={s.list}>
-          {purchaseOrders.slice(0, 8).map((po) => {
+          {pagedOrders.rows.map((po) => {
             const received = grns.filter((g) => g.po_id === po.id);
             return (
               <div key={po.id} className={s.approval}>
@@ -970,6 +993,7 @@ export function InventoryScreen() {
           })}
           {loaded && purchaseOrders.length === 0 && <div className={s.empty}>No purchase orders yet.</div>}
         </div>
+        <ListPager paged={pagedOrders} label="purchase orders" />
         {/* Suppliers belong beside the orders raised against them, not on a
             shared "locations and suppliers" card as before. */}
         <div className={s.cardHead}>
@@ -979,7 +1003,7 @@ export function InventoryScreen() {
           </div>
         </div>
         <div className={s.list}>
-          {vendors.map((v) => (
+          {pagedVendors.rows.map((v) => (
             <div key={v.id} className={s.listItem}>
               <strong>{v.name}</strong>
               <span>{v.phone ?? v.email ?? "No contact details"}</span>
@@ -987,6 +1011,7 @@ export function InventoryScreen() {
           ))}
           {loaded && vendors.length === 0 && <div className={s.empty}>No vendors yet.</div>}
         </div>
+        <ListPager paged={pagedVendors} label="suppliers" />
       </section>
       )}
 
@@ -1003,7 +1028,7 @@ export function InventoryScreen() {
             </div>
           </div>
           <div className={s.list}>
-            {spoilage.slice(0, 5).map((row, i) => (
+            {pagedSpoilage.rows.map((row, i) => (
               <div key={`sp-${i}`} className={s.listItem}>
                 <strong>
                   {row.ingredient_name}: {qty(row.quantity, unitFor(row.ingredient_id))}
@@ -1018,7 +1043,13 @@ export function InventoryScreen() {
                 </span>
               </div>
             ))}
-            {expiring.slice(0, 5).map((b) => (
+            {loaded && spoilage.length === 0 && expiring.length === 0 && (
+              <div className={s.empty}>No spoilage or expiring batches.</div>
+            )}
+          </div>
+          <ListPager paged={pagedSpoilage} label="spoilage" />
+          <div className={s.list}>
+            {pagedExpiring.rows.map((b) => (
               <div key={b.id} className={s.listItem}>
                 <strong>
                   Batch #{b.id} · {ingredientName(b.ingredient_id)}
@@ -1028,10 +1059,8 @@ export function InventoryScreen() {
                 </span>
               </div>
             ))}
-            {loaded && spoilage.length === 0 && expiring.length === 0 && (
-              <div className={s.empty}>No spoilage or expiring batches.</div>
-            )}
           </div>
+          <ListPager paged={pagedExpiring} label="expiring batches" />
         </div>
       </section>
       )}
