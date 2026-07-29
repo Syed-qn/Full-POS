@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -33,6 +33,7 @@ from app.inventory.schemas import (
     VendorPriceComparisonOut,
 )
 from app.inventory.service import (
+    actual_vs_theoretical,
     add_batch,
     add_substitute,
     approve_stock_adjustment,
@@ -178,6 +179,28 @@ async def closing_history_endpoint(
     """Days already captured, newest first. Read only — no commit, so this is
     deliberately NOT wired to _commit_and_announce."""
     return await stock_closing_history(session, restaurant_id=restaurant.id, days=days)
+
+
+@router.get("/reports/actual-vs-theoretical")
+async def actual_vs_theoretical_endpoint(
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    restaurant=Depends(current_restaurant),
+    session: AsyncSession = Depends(get_session),
+):
+    """Food cost variance for a period, worst ingredient first.
+
+    Defaults to the last 7 days, which is the shortest window that smooths a
+    single heavy delivery day. Read only — no commit, so deliberately NOT
+    wired to _commit_and_announce.
+    """
+    end = end or date.today()
+    start = start or (end - timedelta(days=6))
+    if start > end:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "start must not be after end")
+    return await actual_vs_theoretical(
+        session, restaurant_id=restaurant.id, start=start, end=end
+    )
 
 
 @router.post("/reports/closing-snapshot")

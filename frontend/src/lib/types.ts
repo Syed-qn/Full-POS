@@ -1020,6 +1020,41 @@ export interface StockTransferOut {
   to_restaurant_id?: number;
 }
 
+export interface ActualVsTheoreticalRow {
+  ingredient_id: number;
+  ingredient_name: string;
+  unit: string;
+  opening_qty: DecimalString;
+  purchased_qty: DecimalString;
+  closing_qty: DecimalString;
+  /** What actually left the store: opening + purchases − closing. */
+  actual_qty: DecimalString;
+  /** What the recipes say should have left it. */
+  theoretical_qty: DecimalString;
+  variance_qty: DecimalString;
+  variance_value_aed: DecimalString;
+  theoretical_cost_aed: DecimalString;
+  actual_cost_aed: DecimalString;
+}
+
+export interface ActualVsTheoreticalOut {
+  start: string;
+  end: string;
+  /** Worst first, ranked by money — 2 kg of saffron beats 40 kg of onions. */
+  rows: ActualVsTheoreticalRow[];
+  /** Ingredients that moved but have no opening or closing count. They are
+   *  left OUT of the totals rather than guessed at. */
+  missing_counts: string[];
+  complete: boolean;
+  sales_aed?: DecimalString;
+  theoretical_cost_aed: DecimalString;
+  actual_cost_aed: DecimalString;
+  variance_value_aed: DecimalString;
+  /** The figure the trade quotes: variance as a share of sales. Null when
+   *  nothing was sold. Under 2% is healthy, over 5% is systematic. */
+  variance_pct_of_sales: DecimalString | null;
+}
+
 /** A branch this one may send stock to. From /branch-transfers/branches, which
  *  a manager PIN can read — /organizations/branches is HQ-only. */
 export interface SiblingBranchOut {

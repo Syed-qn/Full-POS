@@ -9,6 +9,7 @@ import { ErrorState } from "../components/ErrorState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
+  getActualVsTheoretical,
   getClosingHistory,
   getInventoryValuation,
   getReorderSuggestions,
@@ -27,6 +28,7 @@ import {
 import { listBranchTransfers, listSiblingBranches } from "../lib/branchTransfersApi";
 import { subscribeLive } from "../lib/liveEvents";
 import type {
+  ActualVsTheoreticalOut,
   BatchOut,
   BranchTransferOut,
   SiblingBranchOut,
@@ -67,6 +69,20 @@ function valueFor(valuation: InventoryValuationOut | null, ingredientId: number)
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+/** The food cost report, or null if it is not one.
+ *
+ * Every other call on this screen returns a list, so a stray array reaching the
+ * report state used to blow up on `.rows.slice`. The card is hidden when the
+ * shape is wrong rather than the screen dying, and null is also what a failed
+ * request gives — one path, one behaviour. */
+function asAvtReport(value: unknown): ActualVsTheoreticalOut | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const report = value as Partial<ActualVsTheoreticalOut>;
+  return Array.isArray(report.rows) && Array.isArray(report.missing_counts)
+    ? (value as ActualVsTheoreticalOut)
+    : null;
 }
 
 function isoDaysAgo(days: number): string {
@@ -199,6 +215,7 @@ export function InventoryScreen() {
   // purchase orders, spoilage history and stock areas — five different jobs
   // stacked on each other.
   const [tab, setTab] = useState<TabId>("stock");
+  const [avt, setAvt] = useState<ActualVsTheoreticalOut | null>(null);
   const [siblings, setSiblings] = useState<SiblingBranchOut[]>([]);
   const [transfers, setTransfers] = useState<BranchTransferOut[]>([]);
 
@@ -232,6 +249,7 @@ export function InventoryScreen() {
         expiringRows,
         spoilageRows,
         closingRows,
+        avtReport,
         siblingRows,
         transferRows,
       ] = await Promise.all([
@@ -246,6 +264,10 @@ export function InventoryScreen() {
         listExpiringSoon(7).catch(() => []),
         getSpoilageReport(start, end).catch(() => []),
         getClosingHistory(14).catch(() => []),
+        // Null rather than an empty shape: the card is hidden entirely when
+        // the report cannot be produced, instead of showing zeros that read
+        // as a perfect kitchen.
+        getActualVsTheoretical().catch(() => null),
         // Swallowed like the rest: a single-branch restaurant, or one whose
         // session cannot reach these, simply gets no Transfers tab rather than
         // an error across the whole screen.
@@ -260,6 +282,7 @@ export function InventoryScreen() {
       setExpiring(asArray(expiringRows));
       setSpoilage(asArray(spoilageRows));
       setClosings(asArray(closingRows));
+      setAvt(asAvtReport(avtReport));
       setSiblings(asArray(siblingRows));
       setTransfers(asArray(transferRows));
       setValuation(valuationReport);
@@ -327,6 +350,15 @@ export function InventoryScreen() {
   useEffect(() => {
     if (tab === "transfers" && siblings.length === 0) setTab("stock");
   }, [tab, siblings.length]);
+
+  // Null when nothing was sold in the window — a variance percentage with no
+  // sales underneath it is a division by zero dressed up as a KPI.
+  const avtPct = useMemo(() => {
+    const raw = avt?.variance_pct_of_sales;
+    if (raw === null || raw === undefined) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }, [avt]);
 
   const lowStockIds = useMemo(() => new Set(lowStock.map((item) => item.id)), [lowStock]);
   const ingredientName = useMemo(() => {
@@ -669,6 +701,96 @@ export function InventoryScreen() {
         </div>
       </section>
       </>
+      )}
+
+      {/* Above the two count cards, because it is the number the counts exist
+          to produce. Per-count variance says one ingredient moved; this says
+          what the whole kitchen cost against what it should have. */}
+      {tab === "counts" && avt && (
+        <section className={s.panels}>
+          <div className={s.card}>
+            <div className={s.cardHead}>
+              <div className={s.cardHeadText}>
+                <h2>Food cost variance</h2>
+                <span>
+                  What the food should have cost against what it did,{" "}
+                  {shortDate(avt.start)} to {shortDate(avt.end)}.
+                </span>
+              </div>
+            </div>
+            <div className={s.metrics}>
+              <div className={s.metric}>
+                <span className={s.metricLabel}>Should have cost</span>
+                <strong className={s.num}>{money(avt.theoretical_cost_aed)}</strong>
+              </div>
+              <div className={s.metric}>
+                <span className={s.metricLabel}>Actually cost</span>
+                <strong className={s.num}>{money(avt.actual_cost_aed)}</strong>
+              </div>
+              {/* The share of SALES is the figure the trade quotes, because it
+                  is what makes two branches of different sizes comparable. */}
+              <div
+                className={`${s.metric} ${
+                  avtPct !== null && avtPct > 5 ? s.metricAlert : ""
+                }`}
+              >
+                <span className={s.metricLabel}>Variance of sales</span>
+                <strong className={s.num}>
+                  {avtPct === null ? "—" : `${avtPct.toFixed(1)}%`}
+                </strong>
+              </div>
+            </div>
+            {avtPct !== null && (
+              <div className={s.blindNote}>
+                {avtPct <= 2
+                  ? "Under 2% — this is a tight kitchen."
+                  : avtPct <= 5
+                    ? "Between 2% and 5% — worth watching the items below."
+                    : "Over 5% — this is systematic, not bad luck. Start at the top of the list."}
+              </div>
+            )}
+            {!avt.complete && avt.missing_counts.length > 0 && (
+              /* Never guessed at. Assuming zero would report the whole closing
+                 stock as a variance and send someone hunting a theft that
+                 never happened. */
+              <div className={s.blindNote}>
+                Not counted, so left out: {avt.missing_counts.slice(0, 6).join(", ")}
+                {avt.missing_counts.length > 6
+                  ? ` and ${avt.missing_counts.length - 6} more`
+                  : ""}
+                . Take an end-of-day snapshot to include them.
+              </div>
+            )}
+            <div className={s.list}>
+              {avt.rows.slice(0, 8).map((row) => {
+                const value = Number(row.variance_value_aed);
+                return (
+                  <div key={row.ingredient_id} className={s.listItem}>
+                    <strong>
+                      {row.ingredient_name}: {qty(row.variance_qty, row.unit)}
+                      {value !== 0 && (
+                        <span className={value > 0 ? s.lossValue : s.gainValue}>
+                          {value > 0 ? "-" : "+"}
+                          {money(Math.abs(value))}
+                        </span>
+                      )}
+                    </strong>
+                    <span>
+                      used {qty(row.actual_qty, row.unit)}, recipes say{" "}
+                      {qty(row.theoretical_qty, row.unit)}
+                    </span>
+                  </div>
+                );
+              })}
+              {loaded && avt.rows.length === 0 && (
+                <div className={s.empty}>
+                  Nothing to compare yet. This needs an end-of-day snapshot on two
+                  different days.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       )}
 
       {tab === "counts" && (

@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.service import record_audit
 from app.inventory.models import (
     DishIngredient,
+    GoodsReceivedLine,
+    GoodsReceivedNote,
     Ingredient,
     IngredientBatch,
     IngredientSubstitute,
@@ -21,7 +23,7 @@ from app.inventory.models import (
     Vendor,
     WasteLog,
 )
-from app.ordering.models import OrderItem
+from app.ordering.models import Order, OrderItem
 
 MONEY = Decimal("0.01")
 
@@ -650,6 +652,221 @@ async def stock_variance_report(
         }
         for r in rows
     ]
+
+
+QTY = Decimal("0.001")
+
+
+async def actual_vs_theoretical(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    start: date,
+    end: date,
+) -> dict:
+    """Actual vs theoretical food cost for a period, ranked by money.
+
+    Theoretical is what the food SHOULD have cost if every portion matched the
+    recipe — the sales mix run back through the recipes. Actual is what left
+    the store: opening + purchases - closing. The gap is over-portioning,
+    unrecorded waste, bad receiving or theft, and it is the single number that
+    says where margin goes. Under 2% is healthy, over 5% is systematic.
+
+    Different question from ``stock_variance_report``, which is one ingredient
+    at one moment. This is a period, across everything.
+
+    Ingredients with no opening or closing count are NOT guessed at. Assuming
+    zero would report the whole closing stock as a variance and send somebody
+    hunting a theft that never happened, so they are listed in
+    ``missing_counts`` and left out of the totals.
+    """
+    ingredients = (
+        await session.scalars(
+            select(Ingredient).where(Ingredient.restaurant_id == restaurant_id)
+        )
+    ).all()
+    if not ingredients:
+        return {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "rows": [],
+            "missing_counts": [],
+            "complete": True,
+            "theoretical_cost_aed": "0.00",
+            "actual_cost_aed": "0.00",
+            "variance_value_aed": "0.00",
+            "variance_pct_of_sales": None,
+        }
+
+    # Opening is the CLOSING snapshot of the day before the period starts —
+    # the shelf at midnight is the same shelf either way round, and asking for
+    # a separate opening count would mean counting twice a day.
+    opening_rows = (
+        await session.scalars(
+            select(StockClosingSnapshot).where(
+                StockClosingSnapshot.restaurant_id == restaurant_id,
+                StockClosingSnapshot.closing_date == start - timedelta(days=1),
+            )
+        )
+    ).all()
+    closing_rows = (
+        await session.scalars(
+            select(StockClosingSnapshot).where(
+                StockClosingSnapshot.restaurant_id == restaurant_id,
+                StockClosingSnapshot.closing_date == end,
+            )
+        )
+    ).all()
+    opening = {r.ingredient_id: r for r in opening_rows}
+    closing = {r.ingredient_id: r for r in closing_rows}
+
+    period_start = datetime.combine(start, datetime.min.time())
+    period_end = datetime.combine(end + timedelta(days=1), datetime.min.time())
+
+    # What came IN. Without this, opening - closing reads a delivery as though
+    # the kitchen conjured food out of nothing.
+    purchased_qty: dict[int, Decimal] = defaultdict(lambda: Decimal("0.000"))
+    purchased_value: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    grn_rows = (
+        await session.execute(
+            select(GoodsReceivedLine)
+            .join(GoodsReceivedNote, GoodsReceivedNote.id == GoodsReceivedLine.grn_id)
+            .where(
+                GoodsReceivedNote.restaurant_id == restaurant_id,
+                GoodsReceivedLine.created_at >= period_start,
+                GoodsReceivedLine.created_at < period_end,
+            )
+        )
+    ).scalars().all()
+    for line in grn_rows:
+        purchased_qty[line.ingredient_id] += line.qty_received
+        purchased_value[line.ingredient_id] += line.qty_received * line.unit_cost_aed
+
+    # What SHOULD have been used: the sales mix back through the recipes.
+    # Cancelled lines were never cooked, and a cancelled order never happened.
+    sold = (
+        await session.execute(
+            select(OrderItem.dish_id, func.sum(OrderItem.qty))
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(
+                Order.restaurant_id == restaurant_id,
+                Order.status.notin_(("cancelled", "draft")),
+                Order.created_at >= period_start,
+                Order.created_at < period_end,
+                OrderItem.cancelled.is_(False),
+            )
+            .group_by(OrderItem.dish_id)
+        )
+    ).all()
+    qty_by_dish = {dish_id: int(qty or 0) for dish_id, qty in sold}
+
+    theoretical: dict[int, Decimal] = defaultdict(lambda: Decimal("0.000"))
+    if qty_by_dish:
+        recipes = (
+            await session.scalars(
+                select(DishIngredient).where(DishIngredient.dish_id.in_(qty_by_dish.keys()))
+            )
+        ).all()
+        for recipe in recipes:
+            # Same convention as deduct_for_order: yield below 100% means MORE
+            # raw ingredient is required. If this drifted from depletion the
+            # report would disagree with the stock it is auditing.
+            yield_pct = getattr(recipe, "yield_pct", None) or Decimal("100")
+            if yield_pct <= 0:
+                yield_pct = Decimal("100")
+            theoretical[recipe.ingredient_id] += (
+                recipe.quantity_per_dish
+                * qty_by_dish[recipe.dish_id]
+                * (Decimal("100") / yield_pct)
+            )
+
+    rows: list[dict] = []
+    missing: list[str] = []
+    total_theoretical = Decimal("0.00")
+    total_actual = Decimal("0.00")
+
+    for ingredient in ingredients:
+        open_row = opening.get(ingredient.id)
+        close_row = closing.get(ingredient.id)
+        bought = purchased_qty.get(ingredient.id, Decimal("0.000"))
+        want = theoretical.get(ingredient.id, Decimal("0.000"))
+        if open_row is None or close_row is None:
+            # Only worth complaining about for items that actually moved —
+            # every ingredient the restaurant has ever created would otherwise
+            # fill the list.
+            if want > 0 or bought > 0:
+                missing.append(ingredient.name)
+            continue
+
+        actual = open_row.closing_stock + bought - close_row.closing_stock
+        variance = actual - want
+        cost = ingredient.cost_per_unit_aed
+        theoretical_cost = (want * cost).quantize(MONEY)
+        # Money side from the snapshot VALUATIONS, which were priced when the
+        # count was taken, plus what the invoices actually said.
+        actual_cost = (
+            open_row.valuation_aed
+            + purchased_value.get(ingredient.id, Decimal("0.00"))
+            - close_row.valuation_aed
+        ).quantize(MONEY)
+        total_theoretical += theoretical_cost
+        total_actual += actual_cost
+
+        rows.append(
+            {
+                "ingredient_id": ingredient.id,
+                "ingredient_name": ingredient.name,
+                "unit": ingredient.unit,
+                "opening_qty": str(open_row.closing_stock.quantize(QTY)),
+                "purchased_qty": str(bought.quantize(QTY)),
+                "closing_qty": str(close_row.closing_stock.quantize(QTY)),
+                "actual_qty": str(actual.quantize(QTY)),
+                "theoretical_qty": str(want.quantize(QTY)),
+                "variance_qty": str(variance.quantize(QTY)),
+                "variance_value_aed": str((variance * cost).quantize(MONEY)),
+                "theoretical_cost_aed": str(theoretical_cost),
+                "actual_cost_aed": str(actual_cost),
+            }
+        )
+
+    # By MONEY, biggest first. 2 kg of saffron matters more than 40 kg of
+    # onions, and a report sorted by quantity buries it.
+    rows.sort(key=lambda r: abs(Decimal(r["variance_value_aed"])), reverse=True)
+
+    sales = (
+        await session.scalar(
+            select(func.coalesce(func.sum(Order.total), 0)).where(
+                Order.restaurant_id == restaurant_id,
+                Order.status.notin_(("cancelled", "draft")),
+                Order.created_at >= period_start,
+                Order.created_at < period_end,
+            )
+        )
+    ) or Decimal("0.00")
+    variance_value = sum(
+        (Decimal(r["variance_value_aed"]) for r in rows), Decimal("0.00")
+    )
+    # The headline the trade quotes is a share of SALES, not of cost: "we run
+    # 2% over" means two dirhams in every hundred taken, which is what makes it
+    # comparable between branches of different sizes.
+    variance_pct = (
+        str(((total_actual - total_theoretical) / sales * 100).quantize(MONEY))
+        if sales > 0
+        else None
+    )
+
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "rows": rows,
+        "missing_counts": missing,
+        "complete": not missing,
+        "sales_aed": str(Decimal(str(sales)).quantize(MONEY)),
+        "theoretical_cost_aed": str(total_theoretical),
+        "actual_cost_aed": str(total_actual),
+        "variance_value_aed": str(variance_value.quantize(MONEY)),
+        "variance_pct_of_sales": variance_pct,
+    }
 
 
 async def list_anomaly_alerts(

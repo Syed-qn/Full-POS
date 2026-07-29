@@ -1,5 +1,6 @@
 import { apiClient } from "./apiClient";
 import type {
+  ActualVsTheoreticalOut,
   BatchIn,
   BatchOut,
   CostIn,
@@ -220,6 +221,17 @@ export function getAnomalyAlerts(status = "open"): Promise<StockAnomalyAlertOut[
 export function getClosingHistory(days = 14): Promise<StockClosingHistoryRow[]> {
   return apiClient.get<StockClosingHistoryRow[]>(
     `/api/v1/ingredients/reports/closing-history${query({ days: String(days) })}`,
+  );
+}
+
+/** Food cost variance for a period, worst ingredient first. Defaults server
+ *  side to the last 7 days. */
+export function getActualVsTheoretical(
+  start?: string,
+  end?: string,
+): Promise<ActualVsTheoreticalOut> {
+  return apiClient.get<ActualVsTheoreticalOut>(
+    `/api/v1/ingredients/reports/actual-vs-theoretical${query({ start, end })}`,
   );
 }
 

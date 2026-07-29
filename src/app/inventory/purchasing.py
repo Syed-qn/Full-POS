@@ -1,5 +1,5 @@
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -217,8 +217,26 @@ async def create_grn(
 
         ingredient = await session.get(Ingredient, po_line.ingredient_id)
         if ingredient is not None:
+            # Weighted average, NOT the latest invoice price. Overwriting with
+            # the newest rate re-prices every kilo already on the shelf, so one
+            # expensive delivery inflates the valuation of stock bought cheap —
+            # and valuation, count variance in dirhams and actual-vs-theoretical
+            # all read this number.
+            on_hand = ingredient.current_stock
+            if on_hand > 0:
+                ingredient.cost_per_unit_aed = (
+                    (on_hand * ingredient.cost_per_unit_aed) + (qty * unit_cost)
+                ) / (on_hand + qty)
+            else:
+                # Nothing to blend with. Stock is deliberately allowed to go
+                # negative when a recipe outruns the shelf, and a negative
+                # quantity in a weighted average produces a nonsense cost, so
+                # the delivery price stands on its own.
+                ingredient.cost_per_unit_aed = unit_cost
+            ingredient.cost_per_unit_aed = ingredient.cost_per_unit_aed.quantize(
+                Decimal("0.0001"), rounding=ROUND_HALF_UP
+            )
             ingredient.current_stock += qty
-            ingredient.cost_per_unit_aed = unit_cost  # latest cost tracking
             if expiry:
                 await add_batch(
                     session,
