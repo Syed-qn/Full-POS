@@ -120,7 +120,9 @@
 .table td.actionsCol {
   text-align: right;
   white-space: nowrap;
-  width: 150px;
+  /* Wide enough for "Edit  Remove" on one line at 13px/700 plus the gap.
+     150px cut it fine enough that the pair wrapped. */
+  width: 168px;
 }
 
 /* Row "view" control: icon-only, no outer ring. */
@@ -205,12 +207,10 @@
   font-size: 0.85rem;
 }
 .cap { text-transform: capitalize; }
-.rowActions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
+/* NOTE: .rowActions is defined once, above. A second block here used to
+   redeclare it with flex-wrap: wrap, which quietly undid the nowrap above and
+   stacked Edit over Remove in a 150px column. Only the button sizing belongs
+   at this point in the file. */
 .rowActions :global(button) {
   min-height: 36px;
   padding: 0 12px;

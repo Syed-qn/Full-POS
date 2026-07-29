@@ -107,6 +107,20 @@ describe("StaffScreen — kitchen", () => {
     expect(screen.getByRole("columnheader", { name: /^phone$/i })).toBeInTheDocument();
   });
 
+  it("keeps edit and remove on one line", async () => {
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    const edit = screen.getByTestId("kitchen-edit-2");
+    const remove = screen.getByTestId("kitchen-delete-2");
+    // Both in the one flex row. Whether that row WRAPS is a stylesheet
+    // question and jsdom does not apply CSS modules, so asserting on
+    // getComputedStyle here would pass against an empty string and prove
+    // nothing — the nowrap itself is only verifiable in the browser.
+    expect(edit.parentElement).toBe(remove.parentElement);
+    expect(edit.parentElement?.className).toMatch(/rowActions/);
+  });
+
   it("is an owner/manager screen — the kitchen cannot mint its own login", () => {
     expect(canAccess("/kitchen-staff", "kitchen")).toBe(false);
     expect(canAccess("/kitchen-staff", "cashier")).toBe(false);
