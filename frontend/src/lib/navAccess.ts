@@ -254,6 +254,14 @@ export function isCashierRole(role?: StaffRole | string | null): boolean {
  * Paths are prefixes; longest match wins. Nested routes inherit.
  */
 export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
+  // Listed explicitly even though owner/manager bypass this map: with a
+  // default-deny below, a reader should see the intent for a route rather than
+  // work it out from an absence.
+  "/customers": ["owner", "manager"],
+  "/staff": ["owner", "manager"],
+  "/predictions": ["owner", "manager"],
+  "/riders": ["owner", "manager"],
+  "/rider-app": ["owner", "manager"],
   // Live Ops is the manager oversight dashboard (SLA map, KPIs) — cashiers work
   // from the POS terminal, not a dashboard, so they don't get it.
   "/": ["owner", "manager"],
@@ -352,7 +360,13 @@ export function canAccess(
   if ((FULL_ACCESS_ROLES as readonly string[]).includes(normalized)) return true;
 
   const allowed = ROUTE_ROLE_MAP[key];
-  if (!allowed) return true;
+  // DEFAULT DENY for a restricted role. Owner and manager have already
+  // returned true above, so anything reaching here is a waiter, cashier or
+  // kitchen session — and an unlisted route used to be OPEN to all three.
+  // /customers, /staff and /predictions were never in the map, so a kitchen
+  // login could type the path and read the customer book. A new screen must
+  // now be granted deliberately rather than arrive unlocked.
+  if (!allowed) return false;
   return (allowed as readonly string[]).includes(normalized);
 }
 

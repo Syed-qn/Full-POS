@@ -154,8 +154,23 @@ describe("canAccess — default / manager / owner", () => {
     expect(canAccess("/waiter-management", "legacy_admin")).toBe(true);
   });
 
-  it("allows unmapped routes for restricted roles (no invented locks)", () => {
-    expect(canAccess("/some-future-module", "kitchen")).toBe(true);
+  it("denies unmapped routes to a restricted role", () => {
+    // This REVERSES the earlier "no invented locks" default. That default meant
+    // a screen nobody remembered to map — /customers, /staff and /predictions
+    // all were — sat open to a kitchen or cashier session that could simply
+    // type the path. A new module now has to be granted deliberately.
+    expect(canAccess("/some-future-module", "kitchen")).toBe(false);
+    expect(canAccess("/customers", "kitchen")).toBe(false);
+    expect(canAccess("/staff", "cashier")).toBe(false);
+    expect(canAccess("/predictions", "waiter")).toBe(false);
+    // Owner and manager are unaffected — they never consult the map.
+    expect(canAccess("/some-future-module", "manager")).toBe(true);
+    expect(canAccess("/customers", null)).toBe(true);
+    // ...and the surfaces each role actually works on still open, so this is a
+    // closed default and not a blanket lock.
+    expect(canAccess("/kds", "kitchen")).toBe(true);
+    expect(canAccess("/cashier/floor", "cashier")).toBe(true);
+    expect(canAccess("/waiter/floor", "waiter")).toBe(true);
   });
 });
 
