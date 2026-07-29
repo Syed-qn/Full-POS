@@ -207,6 +207,7 @@ export default function App() {
       <Route path="/ai" element={<Guarded><AiInsightsScreen /></Guarded>} />
       <Route path="/waiter-management" element={<Guarded><StaffScreen managedRole="waiter" /></Guarded>} />
       <Route path="/cashier-management" element={<Guarded><StaffScreen managedRole="cashier" /></Guarded>} />
+      <Route path="/kitchen-staff" element={<Guarded><StaffScreen managedRole="kitchen" /></Guarded>} />
       <Route path="/manager-management" element={<Guarded><ManagerManagementScreen /></Guarded>} />
       {/* Old /staff path kept as a redirect for existing links/bookmarks. */}
       <Route path="/staff" element={<Navigate to="/waiter-management" replace />} />

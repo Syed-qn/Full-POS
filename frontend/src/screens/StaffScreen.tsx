@@ -30,7 +30,7 @@ function monthStartYMD() {
 }
 
 /** Operational roles managed from this screen (not managers — those are owner-only). */
-export type ManagedStaffRole = "waiter" | "cashier";
+export type ManagedStaffRole = "waiter" | "cashier" | "kitchen";
 
 const ROLE_COPY: Record<
   ManagedStaffRole,
@@ -47,6 +47,15 @@ const ROLE_COPY: Record<
     singular: "cashier",
     plural: "Cashiers",
     addLabel: "+ Add cashier",
+  },
+  // "Kitchen Management" was already taken by /kitchens, which configures KDS
+  // STATIONS. This screen is the people — without it a kitchen login could not
+  // be created at all, so the board had no one who could sign in to it.
+  kitchen: {
+    title: "Kitchen Staff",
+    singular: "cook",
+    plural: "Kitchen staff",
+    addLabel: "+ Add cook",
   },
 };
 

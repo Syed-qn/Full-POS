@@ -287,6 +287,9 @@ export const ROUTE_ROLE_MAP: Record<string, readonly StaffRole[]> = {
   "/customer-management": ["owner", "manager"],
   "/waiter-management": ["owner", "manager"],
   "/cashier-management": ["owner", "manager"],
+  // Who may CREATE a kitchen login. The cooks themselves must not — a role
+  // that can mint its own logins is not a restricted role.
+  "/kitchen-staff": ["owner", "manager"],
   // Manager management is OWNER ONLY — a manager must not be able to create or
   // remove other managers. Enforced specially below (managers are otherwise a
   // full-access role). Backend mirrors this with require_role("owner").

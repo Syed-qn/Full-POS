@@ -24,6 +24,7 @@ const LIVE_ROUTES = new Set<string>([
   "/floor", // Floor Plan
   "/orders", // Orders
   "/kds", // Kitchen
+  "/kitchen-staff",
   "/kitchens", // Kitchen setup
   "/conversations", // Chats
   "/marketing", // Promotion
@@ -82,7 +83,11 @@ const GROUPS: NavGroup[] = [
       { to: "/waiter-management", label: "Waiter Management", icon: "◎" },
       { to: "/cashier-management", label: "Cashier Management", icon: "▣" },
       { to: "/manager-management", label: "Manager Management", icon: "★" },
-      { to: "/kitchens", label: "Kitchen Management", icon: "◲" },
+      { to: "/kitchen-staff", label: "Kitchen Management", icon: "◲" },
+      // Renamed: this configures KDS STATIONS, not people, and sitting under
+      // the old "Kitchen Management" label it read as the place to add a cook —
+      // which is why there was no way to create a kitchen login.
+      { to: "/kitchens", label: "Kitchen Setup", icon: "▣" },
     ],
   },
   {
