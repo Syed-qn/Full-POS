@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAppTheme } from "../lib/appTheme";
 import {
   bumpItem,
@@ -23,7 +23,7 @@ import { formatCountdown, SLA_WINDOW_MS } from "../lib/sla";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { useRestaurantName } from "../lib/brand";
 import { logout } from "../lib/auth";
-import { getRoleChrome, getSessionRole } from "../lib/navAccess";
+import { isFullBleedPath } from "../lib/navAccess";
 import s from "./KdsScreen.module.css";
 import { useLiveRefresh } from "../lib/useLiveRefresh";
 
@@ -173,13 +173,18 @@ export function groupTicketsByOrder(items: KdsTicketItem[]): TicketCard[] {
 export function KdsScreen() {
   const { stationId: stationIdParam } = useParams<{ stationId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const stationId = stationIdParam ? Number(stationIdParam) : null;
   /** Expo / ready-pickup surface stub (full expo UX lands Phase 2). */
   const isExpoView = searchParams.get("view") === "expo";
-  /** True when this board is embedded in the manager dashboard (sidebar +
-   *  top bar already on screen), false on the chrome-free kitchen surface. */
-  const hasShell = getRoleChrome(getSessionRole()).showSidebar;
+  /** True when this board is embedded in app chrome (sidebar + top bar
+   *  already on screen). Derived from the ROUTE, not the role: /kds renders
+   *  full-bleed for everyone now, so asking the role would tell a manager it
+   *  has a sidebar to sign out from when it does not. */
+  const hasShell = !isFullBleedPath(location.pathname);
+
+
 
   const [stations, setStations] = useState<KdsStation[]>([]);
   const restaurantName = useRestaurantName();
@@ -198,7 +203,28 @@ export function KdsScreen() {
   // Ready tickets stay on the board until bumped; the "Show ready" toggle was
   // removed, so this is fixed off (ready items show via their own ✓ state).
   const includeReady = false;
-  const [boardFilter, setBoardFilter] = useState<BoardFilter>("all");
+  /**
+   * Which tickets this board shows, held in the URL rather than in state.
+   *
+   * A kitchen that plates dine-in on its own pass mounts /kds?filter=dine on
+   * that screen and never touches it again — as local state the choice died on
+   * every refresh, which on a wall-mounted screen nobody is standing at means
+   * it died for good. It is a filter in the code and a separate board on the
+   * wall.
+   */
+  const boardFilter = (searchParams.get("filter") as BoardFilter | null) ?? "all";
+  const setBoardFilter = useCallback(
+    (next: BoardFilter) => {
+      const params = new URLSearchParams(searchParams);
+      // "all" is the default, so it stays out of the URL — /kds and
+      // /kds?filter=all being two spellings of one board is how you end up
+      // with two bookmarks that drift.
+      if (next === "all") params.delete("filter");
+      else params.set("filter", next);
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
   const [error, setError] = useState<string | null>(null);
   const [, forceTick] = useState(0);
   /** Wall-clock at which `items` (and their age_seconds) were fetched. */

@@ -217,6 +217,20 @@ export function getRoleChrome(role: StaffRole | string | null | undefined): Role
   };
 }
 
+/**
+ * Routes that render with no sidebar and no top bar, whoever is logged in.
+ *
+ * Chrome is otherwise decided by ROLE — see getRoleChrome — but the kitchen
+ * board is a surface, not a person: it goes on a wall screen and is read from
+ * across a hot line, and a manager who opens it wants the same board the cooks
+ * are looking at, not a third of it lost to navigation they cannot use with
+ * their hands full. The screen supplies its own header strip, so nothing is
+ * lost by dropping the shell.
+ */
+export function isFullBleedPath(pathname: string): boolean {
+  return pathname === "/kds" || pathname.startsWith("/kds/");
+}
+
 /** True when role should not see payment / tender UI (waiter floor staff). */
 export function isWaiterRole(role?: StaffRole | string | null): boolean {
   const r = role === undefined ? getSessionRole() : typeof role === "string" ? normalizeRole(role) : role;

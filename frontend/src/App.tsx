@@ -10,6 +10,7 @@ import {
   getRoleHomePath,
   getSessionRole,
   isCashierRole,
+  isFullBleedPath,
   isWaiterRole,
 } from "./lib/navAccess";
 import {
@@ -130,6 +131,13 @@ function Guarded({ children }: { children: React.ReactNode }) {
       </AppShell>
     );
   }
+
+  // The kitchen board runs full-bleed for EVERYONE, not just a kitchen login.
+  // It is mounted on a wall screen and read across a hot line: sidebar and top
+  // bar cost a third of the width and offer nothing a cook can act on. It
+  // carries its own header strip — brand, kitchen picker, sign out — so
+  // dropping the shell leaves no dead end.
+  if (isFullBleedPath(loc.pathname)) return <>{children}</>;
 
   return <AppShell>{children}</AppShell>;
 }
