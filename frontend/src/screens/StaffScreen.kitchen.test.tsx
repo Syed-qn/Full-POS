@@ -17,7 +17,7 @@ function json(body: unknown, status = 200): Response {
 
 const STAFF = [
   { id: 1, name: "Asfer (Waiter)", role: "waiter", phone: null, is_active: true },
-  { id: 2, name: "Cook Rafi", role: "kitchen", phone: null, is_active: true },
+  { id: 2, name: "Lacafe Kitchen", role: "kitchen", phone: null, is_active: true },
 ];
 
 let calls: Array<{ path: string; method: string; body: unknown }>;
@@ -57,7 +57,7 @@ describe("StaffScreen — kitchen", () => {
   it("lists kitchen logins and not the waiters", async () => {
     renderWithProviders(<StaffScreen managedRole="kitchen" />);
 
-    expect(await screen.findByText("Cook Rafi")).toBeInTheDocument();
+    expect(await screen.findByText("Lacafe Kitchen")).toBeInTheDocument();
     // Each management screen owns one role; mixing them is how a cashier ends
     // up deleted from the waiter page.
     expect(screen.queryByText("Asfer (Waiter)")).toBeNull();
@@ -66,7 +66,7 @@ describe("StaffScreen — kitchen", () => {
 
   it("creates the login with role kitchen, so it lands on the board", async () => {
     renderWithProviders(<StaffScreen managedRole="kitchen" />);
-    await screen.findByText("Cook Rafi");
+    await screen.findByText("Lacafe Kitchen");
 
     fireEvent.click(screen.getByRole("button", { name: /add kitchen login/i }));
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Cook Sam" } });
@@ -83,7 +83,31 @@ describe("StaffScreen — kitchen", () => {
     });
   });
 
-  it("is an owner/manager screen — a cook cannot mint their own login", () => {
+  it("has no shift, training or phone — it is a terminal, not a person", async () => {
+    renderWithProviders(<StaffScreen managedRole="kitchen" />);
+    await screen.findByText("Lacafe Kitchen");
+
+    // Nobody clocks a screen in, a shared board has no trainee, and there is
+    // no number to ring a pass on.
+    expect(screen.queryByRole("switch", { name: /shift for/i })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /training mode for/i })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /^phone$/i })).toBeNull();
+    // Positive control: the row rendered and the columns that DO apply stayed.
+    expect(screen.getByRole("columnheader", { name: /^status$/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /^name$/i })).toBeInTheDocument();
+  });
+
+  it("keeps shift and training for a waiter, who is a person", async () => {
+    renderWithProviders(<StaffScreen managedRole="waiter" />);
+    await screen.findByText("Asfer (Waiter)");
+
+    // The columns were hidden for one role, not deleted for everyone.
+    expect(screen.getByRole("switch", { name: /shift for/i })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /training mode for/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /^phone$/i })).toBeInTheDocument();
+  });
+
+  it("is an owner/manager screen — the kitchen cannot mint its own login", () => {
     expect(canAccess("/kitchen-staff", "kitchen")).toBe(false);
     expect(canAccess("/kitchen-staff", "cashier")).toBe(false);
     // Positive control: the people who hire cooks still get in.

@@ -238,6 +238,10 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
     }
   }
 
+  // A kitchen login is a shared terminal, not a person: there is no shift to
+  // clock and no individual to put in training mode. Phone goes for the same
+  // reason — a board over the pass has no number to ring.
+  const isPerson = managedRole !== "kitchen";
   const roleCap = copy.singular[0].toUpperCase() + copy.singular.slice(1);
 
   return (
@@ -269,10 +273,10 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                 <tr>
                   <th>No.</th>
                   <th>Name</th>
-                  <th>Phone</th>
+                  {isPerson && <th>Phone</th>}
                   <th>Status</th>
-                  <th>Shift</th>
-                  <th>Training</th>
+                  {isPerson && <th>Shift</th>}
+                  {isPerson && <th>Training</th>}
                   <th className={s.actionsCol}>Actions</th>
                 </tr>
               </thead>
@@ -315,10 +319,10 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                 <tr>
                   <th>No.</th>
                   <th>Name</th>
-                  <th>Phone</th>
+                  {isPerson && <th>Phone</th>}
                   <th>Status</th>
-                  <th>Shift</th>
-                  <th>Training</th>
+                  {isPerson && <th>Shift</th>}
+                  {isPerson && <th>Training</th>}
                   <th className={s.actionsCol}>Actions</th>
                 </tr>
               </thead>
@@ -340,7 +344,7 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                         {m.name}
                       </button>
                     </td>
-                    <td className={s.mono}>{m.phone ?? "—"}</td>
+                    {isPerson && <td className={s.mono}>{m.phone ?? "—"}</td>}
                     <td>
                       <span
                         className={`${s.statusPill} ${m.is_active === false ? s.statusOff : s.statusOn}`}
@@ -348,36 +352,40 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                         {m.is_active === false ? "Inactive" : "Active"}
                       </span>
                     </td>
-                    <td>
-                      {(() => {
-                        const onShift =
-                          clockStatuses[m.id] === "clocked_in" || clockStatuses[m.id] === "on_break";
-                        return (
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={onShift}
-                            aria-label={`Shift for ${m.name}`}
-                            className={`${s.switch} ${onShift ? s.switchOn : ""}`}
-                            onClick={() => void toggleShift(m)}
-                          >
-                            <span className={s.switchKnob} />
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={!!m.training_mode}
-                        aria-label={`Training mode for ${m.name}`}
-                        className={`${s.switch} ${m.training_mode ? s.switchOn : ""}`}
-                        onClick={() => void toggleTraining(m)}
-                      >
-                        <span className={s.switchKnob} />
-                      </button>
-                    </td>
+                    {isPerson && (
+                      <td>
+                        {(() => {
+                          const onShift =
+                            clockStatuses[m.id] === "clocked_in" || clockStatuses[m.id] === "on_break";
+                          return (
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={onShift}
+                              aria-label={`Shift for ${m.name}`}
+                              className={`${s.switch} ${onShift ? s.switchOn : ""}`}
+                              onClick={() => void toggleShift(m)}
+                            >
+                              <span className={s.switchKnob} />
+                            </button>
+                          );
+                        })()}
+                      </td>
+                    )}
+                    {isPerson && (
+                      <td>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={!!m.training_mode}
+                          aria-label={`Training mode for ${m.name}`}
+                          className={`${s.switch} ${m.training_mode ? s.switchOn : ""}`}
+                          onClick={() => void toggleTraining(m)}
+                        >
+                          <span className={s.switchKnob} />
+                        </button>
+                      </td>
+                    )}
                     <td className={s.actionsCol}>
                       <div className={s.rowActions}>
                         <button
@@ -411,7 +419,7 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
         title={selected ? selected.name : roleCap}
         onClose={() => setSelected(null)}
       >
-        {selected && <StaffDetail member={selected} roleLabel={roleCap} />}
+        {selected && <StaffDetail member={selected} roleLabel={roleCap} isPerson={isPerson} />}
       </SideDrawer>
 
       {modalOpen &&
@@ -442,10 +450,12 @@ export function StaffScreen({ managedRole = "waiter" }: { managedRole?: ManagedS
                     onChange={(e) => setName(e.target.value)}
                   />
                 </label>
-                <label className={s.field}>
-                  <span>Phone</span>
-                  <input aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                </label>
+                {isPerson && (
+                  <label className={s.field}>
+                    <span>Phone</span>
+                    <input aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  </label>
+                )}
                 <label className={s.field}>
                   <span>{editTarget ? "New PIN (blank = keep)" : "PIN"}</span>
                   <input
@@ -496,9 +506,12 @@ type Mistake = { id: number; staff_id: number; mistake_type: string; amount_aed:
 function StaffDetail({
   member,
   roleLabel,
+  isPerson,
 }: {
   member: StaffMember;
   roleLabel: string;
+  /** False for a shared terminal: no phone to ring, no shift, no trainee. */
+  isPerson: boolean;
 }) {
   const [clock, setClock] = useState<string | null>(null);
   const [hoursToday, setHoursToday] = useState<number | null>(null);
@@ -532,28 +545,36 @@ function StaffDetail({
             <dt>Role</dt>
             <dd className={s.cap}>{roleLabel}</dd>
           </div>
-          <div className={s.detailRow}>
-            <dt>Phone</dt>
-            <dd className={s.mono}>{member.phone ?? "—"}</dd>
-          </div>
+          {isPerson && (
+            <div className={s.detailRow}>
+              <dt>Phone</dt>
+              <dd className={s.mono}>{member.phone ?? "—"}</dd>
+            </div>
+          )}
           <div className={s.detailRow}>
             <dt>Status</dt>
             <dd>{member.is_active === false ? "Inactive" : "Active"}</dd>
           </div>
-          <div className={s.detailRow}>
-            <dt>Training mode</dt>
-            <dd>{member.training_mode ? "On" : "Off"}</dd>
-          </div>
+          {isPerson && (
+            <div className={s.detailRow}>
+              <dt>Training mode</dt>
+              <dd>{member.training_mode ? "On" : "Off"}</dd>
+            </div>
+          )}
         </dl>
       </section>
 
       <section className={s.detailBlock}>
         <h4 className={s.detailHead}>Today</h4>
         <dl className={s.detailList}>
-          <div className={s.detailRow}>
-            <dt>Shift</dt>
-            <dd>{clock ? (CLOCK_LABEL[clock] ?? clock) : "—"}</dd>
-          </div>
+          {/* Hours, tips and sales stay for a terminal — they are the board's
+              throughput. A SHIFT is not: nobody clocks a screen in. */}
+          {isPerson && (
+            <div className={s.detailRow}>
+              <dt>Shift</dt>
+              <dd>{clock ? (CLOCK_LABEL[clock] ?? clock) : "—"}</dd>
+            </div>
+          )}
           <div className={s.detailRow}>
             <dt>Hours</dt>
             <dd className={s.mono}>{hoursToday != null ? hoursToday.toFixed(2) : "—"}</dd>
