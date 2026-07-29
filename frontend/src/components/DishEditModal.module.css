@@ -63,6 +63,25 @@
 .row {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Scoped to fields INSIDE a row on purpose. .body is a flex column, so putting
+   a flex-basis on .field itself would set its HEIGHT on every standalone field
+   in the form.
+
+   Price, Category and Kitchen were three equal thirds of a ~570px dialog — about
+   190px each — which clipped "Default (by category)" mid-word and left the
+   category dropdown too narrow to read. A 200px basis makes the third field wrap
+   onto its own line instead of all three being squeezed, and min-width: 0 lets a
+   select shrink to its box rather than overflowing it. */
+.row > .field {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.row > .field .input {
+  width: 100%;
+  min-width: 0;
 }
 .field {
   display: flex;

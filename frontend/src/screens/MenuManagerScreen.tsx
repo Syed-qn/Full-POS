@@ -343,19 +343,40 @@ export function MenuManagerScreen({ initialMenuId }: { initialMenuId?: number })
                 {approving ? "Approving…" : "Approve & Activate"}
               </Button>
             )}
+            {/* The single upload entry point. The empty state below used to
+                carry a second identical button firing the same file picker,
+                which read as two different things — one of which had to be the
+                wrong one. */}
             <Button size="md" onClick={() => fileRef.current?.click()}>
               {dishes.length > 0 ? "Upload new menu" : "Upload menu"}
             </Button>
           </>
         }
       />
-      <UnifiedMenuPanel refreshSignal={menuRev} onChanged={reloadDishes} onMenuLoaded={onMenuLoaded} />
+      {/* Nothing to say before there is a dish. Every line in this panel is
+          about how dishes publish to WhatsApp, and its one action — Pull from
+          Meta — is disabled until a catalog is connected, so on a fresh
+          restaurant it was a card explaining a feature you cannot use sitting
+          above the one thing you should actually do.
+
+          Safe to unmount: onMenuLoaded only feeds the per-dish WhatsApp badges,
+          which are meaningless with no dishes. activeMenuId is resolved
+          separately by fetchActiveMenu, so "+ Add dish" still finds the
+          existing menu rather than creating a second one. */}
+      {!loading && dishes.length > 0 && (
+        <UnifiedMenuPanel
+          refreshSignal={menuRev}
+          onChanged={reloadDishes}
+          onMenuLoaded={onMenuLoaded}
+        />
+      )}
       {loading ? (
         <MenuSkeleton />
       ) : dishes.length === 0 ? (
         <div className={s.empty} role="status">
-          <p>Upload your first menu (PDF, image, or text) to get started.</p>
-          <Button size="touch" onClick={() => fileRef.current?.click()}>Upload menu</Button>
+          {/* Points at the header button rather than repeating it — naming the
+              control is what keeps this a hint instead of a second CTA. */}
+          <p>Use “Upload menu” above to add your first menu (PDF, image, or text).</p>
         </div>
       ) : (
         <>

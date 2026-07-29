@@ -75,7 +75,12 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
   const [stations, setStations] = useState<KdsStation[]>([]);
   useEffect(() => {
     fetchStations()
-      .then(setStations)
+      // Guard the SHAPE, not just the rejection. A 200 carrying anything other
+      // than an array (an error envelope, an older endpoint) left `stations` a
+      // non-array, and the .map below then threw during render and took the
+      // whole dish editor down — a failed kitchen list should cost you the
+      // routing dropdown, not the ability to edit a dish.
+      .then((rows) => setStations(Array.isArray(rows) ? rows : []))
       .catch(() => setStations([]));
   }, []);
   const [description, setDescription] = useState(d?.description ?? "");
@@ -280,7 +285,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
           </label>
 
           <label className={s.field}>
-            <span className={s.label}>Allergens (comma-separated)</span>
+            <span className={s.label}>Allergens (separated by commas)</span>
             <input
               className={s.input}
               value={allergens}
@@ -342,7 +347,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                   checked={autoHide}
                   onChange={(e) => setAutoHide(e.target.checked)}
                 />{" "}
-                Auto-hide when out of stock
+                Hide automatically when out of stock
               </span>
             </label>
           </div>
@@ -388,6 +393,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                   onChange={(e) => onPickImage(e.target.files?.[0] ?? undefined)}
                 />
                 <Button
+                  size="md"
                   variant="ghost"
                   onClick={() => imageInputRef.current?.click()}
                   disabled={uploadingImage}
@@ -412,7 +418,9 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
           <div className={s.row}>
             <label className={s.field}>
-              <span className={s.label}>{isDrink ? "Base price (AED) *" : "Price (AED) — single serve *"}</span>
+              <span className={s.label}>
+                {isDrink ? "Base price (AED) *" : "Price (AED) for a single serve *"}
+              </span>
               <input
                 className={s.input}
                 type="number"
@@ -429,7 +437,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
-                <option value="">— Select category —</option>
+                <option value="">Select category</option>
                 {categoryOptions.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -461,7 +469,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               className={s.textarea}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Customer-facing description (max 3 lines, no price)"
+              placeholder="Description customers see (max 3 lines, no price)"
               rows={3}
             />
           </label>
@@ -474,7 +482,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               step="0.01"
               value={salePrice}
               onChange={(e) => setSalePrice(e.target.value)}
-              placeholder="Optional — discounted price shown on WhatsApp"
+              placeholder="Optional. Discounted price shown on WhatsApp"
               aria-label="Sale price"
             />
             {!saleOk && (
@@ -489,8 +497,8 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
               <span className={s.label}>{isDrink ? "Sizes" : "Serving sizes (2+ only)"}</span>
               <span className={s.hint}>
                 {isDrink
-                  ? "Optional — e.g. Large / Small, each with its own price. The bot asks the customer which size."
-                  : "Optional — bigger portions only, e.g. 2 serve / Family. The single serve is the price above."}
+                  ? "Optional. For example Large or Small, each with its own price. The bot asks the customer which size."
+                  : "Optional. Bigger portions only, for example 2 serve or Family. The single serve is the price above."}
               </span>
             </div>
             {variants.map((v, i) => (
@@ -523,7 +531,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
             ))}
             {!isDrink && variants.some((v) => servesTooSmall(v.name)) && (
               <span className={s.hint} style={{ color: "#b02a2a" }}>
-                A single serve is the base price above — serving sizes must be 2 or more.
+                A single serve is the base price above, so serving sizes must be 2 or more.
               </span>
             )}
             <button type="button" className={s.addVariant} onClick={addVariant}>
@@ -549,8 +557,8 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
             )
           )}
           <div className={s.footerRight}>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={onSave} disabled={!canSave}>
+            <Button size="md" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button size="md" onClick={onSave} disabled={!canSave}>
               {busy ? "Saving…" : isNew ? "Add dish" : "Save changes"}
             </Button>
           </div>

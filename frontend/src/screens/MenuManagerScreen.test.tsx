@@ -92,6 +92,32 @@ describe("MenuManagerScreen", () => {
     expect(screen.queryByText("Upload your first menu to get started.")).not.toBeInTheDocument();
   });
 
+  it("shows the WhatsApp panel once there is a dish to publish", async () => {
+    render(<MenuManagerScreen initialMenuId={5} />);
+    await waitFor(() => expect(screen.getAllByTestId("dish-card")).toHaveLength(2));
+
+    // It returns on the FIRST dish, not on WhatsApp being connected — the panel
+    // is where the catalog id is pasted, so it has to be reachable before you
+    // connect, just not before you have anything to publish.
+    expect(await screen.findByText(/WhatsApp menu/i)).toBeInTheDocument();
+  });
+
+  it("hides the WhatsApp panel when there is no menu at all", async () => {
+    const empty = { ...activeMenu, dishes: [] };
+    vi.mocked(menuApi.getMenu).mockResolvedValue(empty);
+    vi.mocked(menuApi.fetchActiveMenu).mockResolvedValue(empty);
+
+    render(<MenuManagerScreen initialMenuId={5} />);
+    // Wait for loading to finish, so this is not just asserting on a skeleton.
+    await screen.findByText(/use .*upload menu.* above/i);
+
+    // Every line of that panel is about how dishes publish, and its one action
+    // is disabled until a catalog is connected — with no dishes it is a card
+    // explaining a feature you cannot use, above the thing you should do.
+    expect(screen.queryByText(/WhatsApp menu/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pull from meta/i })).not.toBeInTheDocument();
+  });
+
   it("toggles availability via API on switch click", async () => {
     render(<MenuManagerScreen initialMenuId={5} />);
     await waitFor(() => expect(screen.getAllByTestId("dish-card")).toHaveLength(2));

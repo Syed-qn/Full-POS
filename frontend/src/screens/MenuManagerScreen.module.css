@@ -120,6 +120,15 @@
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
+/* The blanket `.filterBar :global(button) { min-height: 48px }` above is meant
+   for real touch targets, but it also caught these — 12px chips sitting inside a
+   2px-padded pill — so the Availability switch rendered taller than the search
+   box beside it. Two classes beats one class + one element, so this wins without
+   touching the rule that other buttons in the bar rely on. */
+.segment .segBtn {
+  min-height: 32px;
+  white-space: nowrap;
+}
 .segBtn:hover {
   color: var(--text-primary);
 }
