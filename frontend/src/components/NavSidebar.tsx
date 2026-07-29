@@ -153,7 +153,15 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
   const visibleGroups = useMemo(
     () =>
       GROUPS.map((g) => {
-        const items = filterNavItems(g.items, role);
+        let items = filterNavItems(g.items, role);
+        // Owner and manager take orders through the till surfaces, not from a
+        // sidebar link, so New Order is only clutter on their nav. Hidden HERE
+        // rather than in canAccess on purpose: canAccess also gates the ROUTE,
+        // and Live Ops has a New Order button that navigates to /new-order —
+        // denying the path would bounce them off their own button.
+        if (role == null || role === "owner" || role === "manager") {
+          items = items.filter((it) => it.to !== "/new-order");
+        }
         // R5: owner/manager see Manage as "Admin" for clarity.
         const label =
           g.id === "manage" && (role == null || role === "owner" || role === "manager")
