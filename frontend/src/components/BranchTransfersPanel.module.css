@@ -17,6 +17,23 @@
   filter: brightness(1.06);
 }
 
+/* The only button on its card. With nothing beside it to compare against,
+   the shared row-button style reads as disabled text rather than an action,
+   so it gets a border and full-strength label of its own. Outlined, not
+   filled: withdrawing a request or recalling a van is a step backwards, and
+   it should not compete with the blue action opposite it. */
+.secondary {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.secondary:hover,
+.secondary:focus-visible {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 /* Ask / Send. Two words apart in meaning — one moves stock now, one moves
    nothing — so they are a visible switch rather than a dropdown you can set
    without noticing. */

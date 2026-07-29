@@ -108,6 +108,16 @@ export function BranchTransfersPanel({
   // Direction is the direction the STOCK travels, so a request sits the same
   // way round as a delivery: out of the holder, into the asker. On a pending
   // row that means "out" is someone asking YOU.
+  // Which branch YOU are. Derived from the rows rather than plumbed in: the
+  // server scoped them by the token, and on any row "out" means the from side
+  // is us, so this can never disagree with the data it labels. The two screens
+  // are otherwise near-identical, and telling them apart mattered the moment
+  // somebody had one open per branch.
+  const myBranchName =
+    transfers.find((t) => t.direction === "out")?.from_branch_name ??
+    transfers.find((t) => t.direction === "in")?.to_branch_name ??
+    null;
+
   const askedOfMe = transfers.filter((t) => t.status === "pending" && t.direction === "out");
   const iAsked = transfers.filter((t) => t.status === "pending" && t.direction === "in");
   const incoming = transfers.filter((t) => t.status === "in_transit" && t.direction === "in");
@@ -235,7 +245,7 @@ export function BranchTransfersPanel({
       <div className={s.card}>
         <div className={s.cardHead}>
           <div className={s.cardHeadText}>
-            <h2>Waiting on you</h2>
+            <h2>Waiting on you{myBranchName ? ` · ${myBranchName}` : ""}</h2>
             <span>Requests to answer, then deliveries to confirm.</span>
           </div>
         </div>
@@ -353,7 +363,7 @@ export function BranchTransfersPanel({
                   <div className={s.rowActions}>
                     <button
                       type="button"
-                      className={s.rowBtn}
+                      className={`${s.rowBtn} ${p.secondary}`}
                       disabled={busy}
                       onClick={() =>
                         void run(() => withdrawBranchRequest(t.id), "Request withdrawn.")
@@ -375,7 +385,7 @@ export function BranchTransfersPanel({
                   <div className={s.rowActions}>
                     <button
                       type="button"
-                      className={s.rowBtn}
+                      className={`${s.rowBtn} ${p.secondary}`}
                       disabled={busy}
                       onClick={() =>
                         void run(
@@ -503,9 +513,16 @@ export function BranchTransfersPanel({
           </Button>
         </div>
 
+      </div>
+
+      {/* Its own column, not tacked under the form. Finished transfers are
+          what you check a discrepancy against, so they are read on their own —
+          buried below a form you have to scroll past, nobody looks. */}
+      <div className={s.card}>
         <div className={s.cardHead}>
           <div className={s.cardHeadText}>
             <h2>Past transfers</h2>
+            <span>Finished and cancelled, newest first.</span>
           </div>
         </div>
         <div className={s.list}>
