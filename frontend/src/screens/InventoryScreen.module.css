@@ -338,17 +338,34 @@
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
-  opacity: 0.65;
   transition: opacity 0.12s, color 0.12s, border-color 0.12s;
 }
 
+/* Dimmed ONLY inside the ingredients table, where a row button is a hover
+   affordance on a dense grid. Everywhere else — the transfer rows especially —
+   these are the primary action on the card, and 65% opacity on greyed text
+   reads as disabled. */
+.table tbody .rowBtn {
+  color: var(--text-secondary);
+  opacity: 0.65;
+}
+
 .table tbody tr:hover .rowBtn,
+.rowBtn:hover,
 .rowBtn:focus-visible {
   opacity: 1;
   color: var(--accent-primary);
   border-color: var(--accent-primary);
+}
+
+/* A real disabled button must not look like the enabled ones did. */
+.rowBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--text-secondary);
+  border-color: var(--border-default);
 }
 
 .rowLow td {

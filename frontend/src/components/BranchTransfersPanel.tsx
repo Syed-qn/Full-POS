@@ -255,7 +255,7 @@ export function BranchTransfersPanel({
                 <div className={s.rowActions}>
                   <button
                     type="button"
-                    className={s.rowBtn}
+                    className={`${s.rowBtn} ${p.primary}`}
                     disabled={busy}
                     onClick={() =>
                       void run(
@@ -307,7 +307,7 @@ export function BranchTransfersPanel({
                 <div className={s.rowActions}>
                   <button
                     type="button"
-                    className={s.rowBtn}
+                    className={`${s.rowBtn} ${p.primary}`}
                     disabled={busy}
                     onClick={() =>
                       void run(

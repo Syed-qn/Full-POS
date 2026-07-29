@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { getRoleChrome, getSessionRole, isTrainingMode } from "../lib/navAccess";
 import { useOfflineStatus } from "../lib/useOfflineStatus";
+import { useTransferAlerts } from "../lib/useTransferAlerts";
 import { NavSidebar } from "./NavSidebar";
 import { SectionBanner } from "./SectionBanner";
 import { SyncConflictBanner } from "./SyncConflictBanner";
@@ -22,6 +23,10 @@ export function AppShell({
 }) {
   const status = useOfflineStatus();
   const offline = connectionDown ?? status.offline;
+  // Mounted here, not on the Inventory screen: a branch waiting on you is
+  // waiting whichever page you happen to have open. The hook alerts once per
+  // transfer ever, so moving between screens does not replay it.
+  const transferAlerts = useTransferAlerts();
   const training = isTrainingMode();
   const role = getSessionRole();
   const chrome = getRoleChrome(role);
@@ -35,7 +40,7 @@ export function AppShell({
       {chrome.showSidebar && <NavSidebar unread={unread} />}
       <div className={s.content}>
         {chrome.showTopBar && (
-          <TopBar offline={offline} pendingCount={status.pendingCount} alerts={alerts} />
+          <TopBar offline={offline} pendingCount={status.pendingCount} alerts={[...alerts, ...transferAlerts]} />
         )}
         <main className={s.main}>
           <SyncConflictBanner />

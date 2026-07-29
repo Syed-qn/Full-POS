@@ -2,6 +2,21 @@
    InventoryScreen.module.css so a transfer row looks like every other row on
    the Inventory screen rather than a bolted-on second design. */
 
+/* The one button you are meant to press. Three equal-weight outlines make you
+   read all three before acting, and the common answer is nearly always the
+   first one. */
+.primary {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.primary:hover,
+.primary:focus-visible {
+  color: #fff;
+  filter: brightness(1.06);
+}
+
 /* Ask / Send. Two words apart in meaning — one moves stock now, one moves
    nothing — so they are a visible switch rather than a dropdown you can set
    without noticing. */
