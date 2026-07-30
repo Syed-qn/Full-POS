@@ -79,6 +79,12 @@ class TableOut(BaseModel):
     bills: list[TableBillOut] = []
     # len(bills) — so the floor can badge "2 bills" without walking the list.
     bill_count: int = 0
+    # JOINED TABLES — one party, one invoice, several tables.
+    # On a SECONDARY: the id/label of the table holding the invoice.
+    merged_into_table_id: int | None = None
+    merged_into_label: str | None = None
+    # On a PRIMARY: the labels of the tables joined to it (empty otherwise).
+    joined_labels: list[str] = []
     guests: int | None = None
     waiter: str | None = None
     # How many other tables' bills were merged into this table's order (>0 → can undo).
@@ -98,3 +104,13 @@ class StatusIn(BaseModel):
 
 class TransferIn(BaseModel):
     order_id: int
+
+
+class JoinTablesIn(BaseModel):
+    """Tables to join onto the one named in the path, which holds the invoice."""
+
+    table_ids: list[int] = Field(min_length=1)
+    # WHICH of the primary's bills the joined tables share. Required only when the
+    # primary carries more than one — with two parties at that table, guessing
+    # would put the arriving guests' food on a stranger's bill.
+    into_order_id: int | None = None

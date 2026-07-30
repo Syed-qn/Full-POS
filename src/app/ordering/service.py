@@ -2074,20 +2074,44 @@ async def settle_on_premise_if_paid(
             and table is not None
             and table.status in ("ordered", "needs_bill", "seated")
         ):
-            before = table.status
-            table.status = "available"
             from app.audit.service import record_audit
 
-            await record_audit(
-                session,
-                actor=actor,
-                restaurant_id=order.restaurant_id,
-                entity="table",
-                entity_id=str(table.id),
-                action="status_change",
-                before={"status": before},
-                after={"status": "available", "reason": "last_bill_settled"},
-            )
+            # Free the whole JOIN GROUP, not just the table holding the bill. A
+            # party of twelve across three tables pays one invoice, so paying it
+            # ends the sitting at every one of those tables — leaving the others
+            # occupied would strand them until somebody cleared them by hand.
+            group = [table]
+            for other in await session.scalars(
+                select(DiningTable).where(
+                    DiningTable.restaurant_id == order.restaurant_id,
+                    DiningTable.merged_into_table_id == table.id,
+                )
+            ):
+                group.append(other)
+            for row in group:
+                if row.status not in ("ordered", "needs_bill", "seated"):
+                    continue
+                before = row.status
+                row.status = "available"
+                # The join ends with the sitting: the next party at that table is
+                # not part of this group, and a stale link would put their food on
+                # a stranger's invoice.
+                row.merged_into_table_id = None
+                row.group_bill_order_id = None
+                await record_audit(
+                    session,
+                    actor=actor,
+                    restaurant_id=order.restaurant_id,
+                    entity="table",
+                    entity_id=str(row.id),
+                    action="status_change",
+                    before={"status": before},
+                    after={
+                        "status": "available",
+                        "reason": "last_bill_settled",
+                        "group_primary": table.id,
+                    },
+                )
         elif others_open:
             # Audited too: "why is T01 still occupied after I took payment" is a
             # question the floor will ask, and the answer is in the trail.

@@ -10,6 +10,7 @@ from app.tables.models import DiningTable
 from app.tables.schemas import (
     FloorLayoutIn,
     FloorLayoutOut,
+    JoinTablesIn,
     StatusIn,
     TableBillOut,
     TableIn,
@@ -22,10 +23,13 @@ from app.tables.service import (
     DuplicateTableLabelError,
     InvalidTableTransitionError,
     TableInUseError,
+    TableJoinError,
     TableNotFoundError,
     archive_table,
     assert_label_free,
+    join_tables,
     transfer_order,
+    unjoin_table,
     transition_status,
     update_table,
     update_table_position,
@@ -257,10 +261,39 @@ async def list_tables(
             seated_since=o.created_at.isoformat() if o.created_at else None,
         )
 
+    # Join groups: label lookups both ways, so a secondary can name the table
+    # holding the invoice and a primary can list what is joined to it.
+    by_id = {t.id: t for t in tables}
+    joined_labels: dict[int, list[str]] = {}
+    for t in tables:
+        if t.merged_into_table_id:
+            joined_labels.setdefault(t.merged_into_table_id, []).append(t.label)
+
     out: list[TableOut] = []
     for t in tables:
         order = open_by_table.get(t.id)
         table_bills = [_bill_out(o) for o in bills_by_table.get(t.id, [])]
+        primary = by_id.get(t.merged_into_table_id) if t.merged_into_table_id else None
+        group_fields = {
+            "merged_into_table_id": t.merged_into_table_id,
+            "merged_into_label": primary.label if primary else None,
+            "joined_labels": sorted(joined_labels.get(t.id, [])),
+        }
+        if primary is not None:
+            # A SECONDARY table holds no bill of its own — the invoice lives on the
+            # primary. It must still read OCCUPIED: guests are sitting there, and
+            # collapsing it to available (which the no-open-order branch below would
+            # do) would offer their table to the next party mid-meal.
+            base = TableOut.model_validate(t)
+            base.status = "ordered" if t.status in ("ordered", "needs_bill") else "seated"
+            base.bills = []
+            base.bill_count = 0
+            base.order_id = None
+            base.order_total_aed = None
+            for k, v in group_fields.items():
+                setattr(base, k, v)
+            out.append(base)
+            continue
         if order is not None:
             # Dine-in is two-state: a table is free or occupied with an open tab.
             # Any open order → "ordered" (shown as "Occupied") until it's paid/closed,
@@ -287,6 +320,7 @@ async def list_tables(
                     seated_since=(
                         order.created_at.isoformat() if order.created_at else None
                     ),
+                    **group_fields,
                 )
             )
         else:
@@ -298,6 +332,8 @@ async def list_tables(
                 base.status = "available"
             base.bills = []
             base.bill_count = 0
+            for k, v in group_fields.items():
+                setattr(base, k, v)
             out.append(base)
     return out
 
@@ -328,6 +364,52 @@ async def update_table_status(
     await session.commit()
     await session.refresh(table)
     return table
+
+
+@router.post("/{table_id}/join", response_model=list[TableOut])
+async def join_tables_endpoint(
+    table_id: int,
+    body: JoinTablesIn,
+    # Seating a large party across tables is floor work, not a manager-only edit.
+    restaurant=Depends(require_role("manager", "cashier", "waiter")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Seat one party across several tables on a SINGLE invoice.
+
+    ``table_id`` is the table that HOLDS the bill; ``body.table_ids`` join to it.
+    Every joined table stays occupied, and settling the one invoice frees them all.
+    """
+    try:
+        await join_tables(
+            session,
+            restaurant_id=restaurant.id,
+            primary_table_id=table_id,
+            table_ids=body.table_ids,
+            into_order_id=body.into_order_id,
+        )
+    except TableNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (TableJoinError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    return await list_tables(restaurant=restaurant, session=session)
+
+
+@router.post("/{table_id}/unjoin", response_model=list[TableOut])
+async def unjoin_table_endpoint(
+    table_id: int,
+    restaurant=Depends(require_role("manager", "cashier", "waiter")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Detach one table from its group. The invoice stays with the primary."""
+    try:
+        await unjoin_table(session, restaurant_id=restaurant.id, table_id=table_id)
+    except TableNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TableJoinError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await session.commit()
+    return await list_tables(restaurant=restaurant, session=session)
 
 
 @router.patch("/{table_id}/position", response_model=TableOut)

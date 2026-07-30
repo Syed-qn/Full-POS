@@ -191,6 +191,16 @@ async def create_pos_order(
         if table is None or table.restaurant_id != restaurant_id:
             raise ValueError("table not found")
 
+    # JOINED TABLES ARE ONE INVOICE. A round rung up while the waiter stands at a
+    # secondary table belongs on the primary's bill, so resolve to the table that
+    # HOLDS the bill before anything else keys off table_id — otherwise a party of
+    # twelve across three tables would end up with three separate bills, which is
+    # the opposite of what joining them was for.
+    if table_id is not None:
+        from app.tables.service import resolve_bill_table_id
+
+        table_id = await resolve_bill_table_id(session, table_id=table_id)
+
     if requires_address(order_type):
         if not (building and apt_room and receiver_name):
             raise ValueError(f"{order_type} orders require address (apt_room, building, receiver_name)")
@@ -241,15 +251,31 @@ async def create_pos_order(
     # and it is distinguishable from the race above precisely because somebody
     # asked. The guard therefore stays the DEFAULT and splitting is explicit.
     if requires_table(order_type) and table_id is not None and not force_new_bill:
-        existing = await session.scalar(
-            select(Order)
-            .where(
-                Order.restaurant_id == restaurant_id,
-                Order.table_id == table_id,
-                Order.status.in_(_ADDABLE_STATUSES),
+        # A JOIN GROUP names its own invoice, and that wins over "newest tab on the
+        # table": the table may carry a second party's bill, and the newest-tab rule
+        # would put this party's food on it.
+        from app.tables.service import group_bill_order_id_for
+
+        group_bill_id = await group_bill_order_id_for(session, table_id=table_id)
+        existing = None
+        if group_bill_id is not None:
+            existing = await session.scalar(
+                select(Order).where(
+                    Order.id == group_bill_id,
+                    Order.restaurant_id == restaurant_id,
+                    Order.status.in_(_ADDABLE_STATUSES),
+                )
             )
-            .order_by(Order.created_at.desc())
-        )
+        if existing is None:
+            existing = await session.scalar(
+                select(Order)
+                .where(
+                    Order.restaurant_id == restaurant_id,
+                    Order.table_id == table_id,
+                    Order.status.in_(_ADDABLE_STATUSES),
+                )
+                .order_by(Order.created_at.desc())
+            )
         if existing is not None:
             return await _merge_round_into_tab(
                 session,
