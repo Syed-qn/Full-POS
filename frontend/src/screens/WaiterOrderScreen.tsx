@@ -231,7 +231,9 @@ export function WaiterOrderScreen() {
   const [quoting, setQuoting] = useState(false);
   const [quoteKm, setQuoteKm] = useState<number | null>(null);
   const [outOfRadius, setOutOfRadius] = useState(false);
-  const [lookupState, setLookupState] = useState<"idle" | "found" | "new" | "error">("idle");
+  const [lookupState, setLookupState] = useState<
+    "idle" | "found" | "found_name_only" | "new" | "error"
+  >("idle");
   /**
    * Dish ids the guest wants PARCELLED even though they are dining in — same
    * tab, same bill, but the kitchen boxes them (order_items.is_takeaway).
@@ -389,7 +391,12 @@ export function WaiterOrderScreen() {
     try {
       const result = await lookupCustomer(custPhone.trim());
       if (result) {
-        setLookupState("found");
+        // "found" vs "found_name_only": a customer known to THIS branch may still
+        // have no saved address here, because addresses are per branch (the same
+        // phone can be a regular at another branch and a first delivery at this
+        // one). Claiming "details filled in" when only the name came back sent
+        // the cashier looking for fields that were never populated.
+        setLookupState(result.last_address ? "found" : "found_name_only");
         if (result.name) setCustName(result.name);
         if (result.last_address) {
           setAptRoom(result.last_address.apt_room);
@@ -571,6 +578,25 @@ export function WaiterOrderScreen() {
       receiverName.trim() !== "" &&
       fee !== "" &&
       pin !== null);
+
+  /**
+   * What is still missing before this delivery can be saved, in words.
+   *
+   * "Save details" is disabled by deliverySaved above, and a dead green button
+   * beside a form that LOOKS complete reads as a broken screen — the usual
+   * culprit is the map pin, which is a field you set by dragging rather than
+   * typing, so it is the one thing a cashier does not notice leaving blank. The
+   * pin cannot be waived: the fee tier and the 10 km radius are computed from it.
+   */
+  const deliveryMissing: string[] = isDelivery
+    ? [
+        custPhone.trim().length >= 7 ? null : "phone",
+        aptRoom.trim() !== "" ? null : "apt / room",
+        building.trim() !== "" ? null : "building",
+        receiverName.trim() !== "" ? null : "receiver name",
+        pin !== null ? null : "drop-off pin on the map",
+      ].filter((x): x is string => x !== null)
+    : [];
 
   // ── cart ops ────────────────────────────────────────────────────────────
   const setDishQty = useCallback((dishId: number, n: number) => {
@@ -1366,7 +1392,13 @@ export function WaiterOrderScreen() {
             )}
 
             {lines.length === 0 ? (
-              <p className={s.cartEmpty}>Select items from the menu →</p>
+              // Nothing on a SETTLED bill: the cart is empty because this is a
+              // reprint, not because the cashier has yet to ring anything up, and
+              // pointing them at a menu they cannot add from contradicts the
+              // locked tiles beside it. The panel above already says what to do.
+              tabSettled ? null : (
+                <p className={s.cartEmpty}>Select items from the menu →</p>
+              )
             ) : (
               lines.map((l) => (
                 <div
@@ -2089,7 +2121,13 @@ export function WaiterOrderScreen() {
                     data-testid="delivery-phone"
                   />
                   {lookupState === "found" && (
-                    <em className={s.delHint}>Returning customer — details filled in.</em>
+                    <em className={s.delHint}>Returning customer. Details filled in.</em>
+                  )}
+                  {lookupState === "found_name_only" && (
+                    <em className={s.delHint}>
+                      Returning customer, but no saved address at this branch. Enter it and pin the
+                      drop-off.
+                    </em>
                   )}
                   {lookupState === "new" && (
                     <em className={s.delHint}>New customer.</em>
@@ -2190,6 +2228,14 @@ export function WaiterOrderScreen() {
               </div>
             </div>
 
+            {/* Visible, not just a tooltip: on a touch till there is no hover, so
+                a title alone would never be read. */}
+            {!tabSettled && deliveryMissing.length > 0 && (
+              <p className={s.delMissing} data-testid="delivery-missing">
+                Still needed to save: {deliveryMissing.join(", ")}.
+              </p>
+            )}
+
             <div className={s.codActions}>
               <button
                 type="button"
@@ -2205,6 +2251,13 @@ export function WaiterOrderScreen() {
                   type="button"
                   className={s.codCollect}
                   disabled={!deliverySaved}
+                  // Say WHY it is disabled. Without this the cashier sees a green
+                  // button that ignores them and assumes the form is read-only.
+                  title={
+                    deliveryMissing.length > 0
+                      ? `Still needed: ${deliveryMissing.join(", ")}`
+                      : "Save these delivery details"
+                  }
                   onClick={() => setDeliveryOpen(false)}
                   data-testid="delivery-save"
                 >

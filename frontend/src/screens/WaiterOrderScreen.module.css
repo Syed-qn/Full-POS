@@ -669,6 +669,16 @@
   cursor: not-allowed;
 }
 
+/* What is still missing before a delivery can be saved. Amber, not red: nothing
+   is wrong yet, the form is simply not finished. */
+.delMissing {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: var(--amber);
+}
+
 /* Why the delivery dialog's fields are locked, said once at the top of it. */
 .delReadOnly {
   margin: 0 0 10px;

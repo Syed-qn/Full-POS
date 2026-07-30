@@ -372,8 +372,15 @@ export function CashierTakeawayScreen() {
                 <strong>AED {selected.total_aed}</strong>
               </div>
 
-              {/* Read-only list view: payment + edit happen in the till.
-                  Only Print Bill is exposed here. */}
+              {/* Collect from HERE, not just from the till. A take-away customer
+                  comes back to the counter for the order they are looking at in
+                  this list, and sending the cashier to the till to charge it was
+                  a detour for the most common thing they do. collectCod and its
+                  dialog already existed on this screen with nothing to open them.
+
+                  Only on an ACTIVE order: a completed or cancelled one keeps
+                  Print Bill alone, because charging it again would take a second
+                  payment for the same food. */}
               <div className={s.detailActions}>
                 <button
                   type="button"
@@ -383,6 +390,28 @@ export function CashierTakeawayScreen() {
                 >
                   🧾 Print Bill
                 </button>
+                {filterOf(selected) === "active" && (
+                  <>
+                    <button
+                      type="button"
+                      className={s.act}
+                      onClick={() => navigate(`/orders/${selected.id}/pay`)}
+                      title="Card, wallet, online and other payment modes"
+                      data-testid="takeaway-other-pay"
+                    >
+                      💳 Other Pay
+                    </button>
+                    <button
+                      type="button"
+                      className={`${s.act} ${s.actPay}`}
+                      onClick={() => setCodOpen(true)}
+                      title="Open the cash drawer and collect at the counter"
+                      data-testid="takeaway-open-drawer"
+                    >
+                      💵 Open Drawer
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
