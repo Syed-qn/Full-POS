@@ -169,7 +169,12 @@ class Order(Base, TimestampMixin):
     # against a physical table (see app.tables).
     table_id: Mapped[int | None] = mapped_column(ForeignKey("tables.id"))
     # Dine-in party size (number of guests seated). Null for non-dine-in.
+    # NOTE: covers is PER BILL, so a split table reports its guests once per bill.
     covers: Mapped[int | None] = mapped_column(Integer)
+    # Names one of several bills sharing a table ("Guest 2", "Ahmed"), so a
+    # cashier can tell two open bills on T01 apart. Null = the table's only bill,
+    # or a bill nobody bothered to label — the UI falls back to a position.
+    guest_label: Mapped[str | None] = mapped_column(String(32))
     # Sales-per-server attribution — null when no staff member is tracked (e.g. self-service).
     staff_id: Mapped[int | None] = mapped_column(ForeignKey("staff_members.id"))
     # Tip attributed to a specific staff member (Category 9); null = pool only.

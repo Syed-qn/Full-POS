@@ -2046,16 +2046,34 @@ async def settle_on_premise_if_paid(
     await fsm_transition(session, order, OrderStatus.DELIVERED, actor=actor)
     order.delivered_at = datetime.now(timezone.utc)
 
-    # Release the table. Only the order-driven states are touched: "reserved" and
-    # "cleaning" are things a human set on purpose and a payment does not undo
-    # them. "available" and not "cleaning" because that is what the floor has
-    # always SHOWN after payment — writing "cleaning" here would invent a bussing
-    # step staff have never had to clear.
+    # Release the table — but ONLY once this was the last open bill on it. A table
+    # can carry several bills at the same time (two parties sharing it, each paying
+    # for their own food), and freeing it on the first payment would drop the other
+    # party's open bill off the floor entirely: the cashier collects once and the
+    # table reads available while somebody is still eating.
+    #
+    # Only the order-driven states are touched: "reserved" and "cleaning" are things
+    # a human set on purpose and a payment does not undo them. "available" and not
+    # "cleaning" because that is what the floor has always SHOWN after payment —
+    # writing "cleaning" here would invent a bussing step staff never had to clear.
     if order.table_id is not None:
+        from app.ordering.order_types import OPEN_ORDER_STATUSES
         from app.tables.models import DiningTable
 
+        others_open = await session.scalar(
+            select(func.count(Order.id)).where(
+                Order.restaurant_id == order.restaurant_id,
+                Order.table_id == order.table_id,
+                Order.id != order.id,
+                Order.status.in_(sorted(OPEN_ORDER_STATUSES)),
+            )
+        )
         table = await session.get(DiningTable, order.table_id)
-        if table is not None and table.status in ("ordered", "needs_bill", "seated"):
+        if (
+            not others_open
+            and table is not None
+            and table.status in ("ordered", "needs_bill", "seated")
+        ):
             before = table.status
             table.status = "available"
             from app.audit.service import record_audit
@@ -2068,7 +2086,21 @@ async def settle_on_premise_if_paid(
                 entity_id=str(table.id),
                 action="status_change",
                 before={"status": before},
-                after={"status": "available", "reason": "order_settled"},
+                after={"status": "available", "reason": "last_bill_settled"},
+            )
+        elif others_open:
+            # Audited too: "why is T01 still occupied after I took payment" is a
+            # question the floor will ask, and the answer is in the trail.
+            from app.audit.service import record_audit
+
+            await record_audit(
+                session,
+                actor=actor,
+                restaurant_id=order.restaurant_id,
+                entity="table",
+                entity_id=str(order.table_id),
+                action="table_held_open",
+                after={"reason": "other_bills_open", "open_bills": int(others_open)},
             )
     return order
 

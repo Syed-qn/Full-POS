@@ -36,6 +36,26 @@ class FloorLayoutOut(BaseModel):
     entrance_rot: float = 0.0
 
 
+class TableBillOut(BaseModel):
+    """One open bill sitting on a table.
+
+    A table can hold several at once — two parties sharing it, each paying for
+    their own food — so the floor lists them rather than showing one and hiding
+    the rest.
+    """
+
+    order_id: int
+    order_number: str | None = None
+    daily_token: int | None = None
+    total_aed: str
+    # Names this bill among the table's others ("Guest 2", "Ahmed"); null when
+    # nobody labelled it and the UI falls back to a position.
+    guest_label: str | None = None
+    guests: int | None = None
+    waiter: str | None = None
+    seated_since: str | None = None
+
+
 class TableOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -48,9 +68,15 @@ class TableOut(BaseModel):
     # (ordered / needs_bill), else the table's own base status.
     status: str
     qr_token: str | None = None
-    # Live dine-in enrichment: the open order sitting on this table, if any.
+    # Live dine-in enrichment: the NEWEST open order sitting on this table, if
+    # any. Kept single-valued for every existing reader (KDS, Live Ops, the e2e
+    # specs); a split table's full set is in `bills`.
     order_id: int | None = None
     order_total_aed: str | None = None
+    # Every open bill on this table, newest first. Empty when the table is free.
+    bills: list[TableBillOut] = []
+    # len(bills) — so the floor can badge "2 bills" without walking the list.
+    bill_count: int = 0
     guests: int | None = None
     waiter: str | None = None
     # How many other tables' bills were merged into this table's order (>0 → can undo).

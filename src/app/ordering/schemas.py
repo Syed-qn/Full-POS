@@ -174,6 +174,12 @@ class PosOrderIn(BaseModel):
     priority: str = "normal"
     customer_allergy_notes: str | None = None
     auto_confirm: bool = True
+    # Split bill: open a SECOND bill on a table that already has an open tab,
+    # instead of folding this round into it. Default False keeps the guard that
+    # stops a stale POS screen opening an accidental duplicate order.
+    force_new_bill: bool = False
+    # Names this bill when a table holds more than one ("Guest 2", "Ahmed").
+    guest_label: str | None = Field(default=None, max_length=32)
 
 
 class AddOrderItemsIn(BaseModel):

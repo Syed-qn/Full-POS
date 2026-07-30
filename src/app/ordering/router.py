@@ -487,6 +487,8 @@ async def create_pos_order_endpoint(
             priority=body.priority,
             customer_allergy_notes=body.customer_allergy_notes,
             auto_confirm=body.auto_confirm,
+            force_new_bill=body.force_new_bill,
+            guest_label=body.guest_label,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

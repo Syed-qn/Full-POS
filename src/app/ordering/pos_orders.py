@@ -141,6 +141,8 @@ async def create_pos_order(
     priority: str = "normal",
     customer_allergy_notes: str | None = None,
     auto_confirm: bool = True,
+    force_new_bill: bool = False,
+    guest_label: str | None = None,
 ) -> Order:
     """Create a POS order of any supported ``order_type``.
 
@@ -149,6 +151,11 @@ async def create_pos_order(
     Table is required for dine_in/qr/tableside.
     Future ``scheduled_for`` without auto-release leaves the order draft until
     ``release_scheduled_orders`` (or explicit confirm).
+
+    ``force_new_bill`` opens a SECOND bill on a table that already has an open
+    tab (split bill: two parties sharing a table, paying separately) instead of
+    folding the round into it. Opt-in because the merge is a guard against an
+    accidental duplicate, not a limitation — see the comment at the merge branch.
     """
     from app.menu.models import Dish, Menu
     from app.menu.service import is_dish_currently_available
@@ -228,7 +235,12 @@ async def create_pos_order(
     # the stale screen would create a duplicate order — and the floor can only
     # surface one per table, silently hiding the other's bill. Merging keeps a
     # single bill and PRESERVES the original creator's staff_id (never rewritten).
-    if requires_table(order_type) and table_id is not None:
+    #
+    # force_new_bill is the deliberate exception: a SPLIT. Two parties sharing a
+    # table, each paying for their own food, is a real thing a cashier asks for —
+    # and it is distinguishable from the race above precisely because somebody
+    # asked. The guard therefore stays the DEFAULT and splitting is explicit.
+    if requires_table(order_type) and table_id is not None and not force_new_bill:
         existing = await session.scalar(
             select(Order)
             .where(
@@ -266,6 +278,7 @@ async def create_pos_order(
     order.priority = priority
     order.table_id = table_id
     order.covers = covers
+    order.guest_label = (guest_label or "").strip()[:32] or None
     order.staff_id = staff_id
     order.customer_allergy_notes = allergy
     order.scheduled_for = scheduled_for
@@ -346,7 +359,13 @@ async def create_pos_order(
         # stale needs_bill survived and the cashier floor showed a purple BILL
         # badge on a tab that had just been opened. Reserved/cleaning are NOT
         # included: those are deliberate manual states a human still has to clear.
-        if table is not None and table.status in ("available", "needs_bill"):
+        #
+        # A SPLIT is excluded from the needs_bill clear: the party already at the
+        # table may have asked for their bill, and a second party sitting down
+        # must not cancel that request out from under the cashier. "new order =
+        # new guests" is exactly the assumption a split breaks.
+        allowed = ("available",) if force_new_bill else ("available", "needs_bill")
+        if table is not None and table.status in allowed:
             table.status = "ordered" if order.status != OrderStatus.DRAFT else "seated"
 
     await record_audit(

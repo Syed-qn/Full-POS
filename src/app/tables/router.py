@@ -11,6 +11,7 @@ from app.tables.schemas import (
     FloorLayoutIn,
     FloorLayoutOut,
     StatusIn,
+    TableBillOut,
     TableIn,
     TableOut,
     TablePositionIn,
@@ -180,7 +181,13 @@ async def list_tables(
     )
     table_ids = [t.id for t in tables]
 
-    # Most-recent open order per table (created_at desc -> setdefault keeps newest).
+    # EVERY open order per table, newest first. A table can hold more than one at
+    # a time (two parties sharing it, paying separately), and this listing used to
+    # keep only the newest — so on a split table the floor showed one bill and
+    # silently hid the other, and a cashier who collected once thought the table
+    # was done. open_by_table still names the newest for the single-valued fields
+    # every existing reader depends on.
+    bills_by_table: dict[int, list[Order]] = {}
     open_by_table: dict[int, Order] = {}
     if table_ids:
         orders = await session.scalars(
@@ -194,9 +201,12 @@ async def list_tables(
         )
         for o in orders:
             if o.table_id is not None:
+                bills_by_table.setdefault(o.table_id, []).append(o)
                 open_by_table.setdefault(o.table_id, o)
 
-    staff_ids = {o.staff_id for o in open_by_table.values() if o.staff_id}
+    staff_ids = {
+        o.staff_id for bills in bills_by_table.values() for o in bills if o.staff_id
+    }
     staff_names: dict[int, str] = {}
     if staff_ids:
         for sm in await session.scalars(
@@ -224,9 +234,22 @@ async def list_tables(
         for oid, cnt in rows.all():
             merged_counts[oid] = cnt
 
+    def _bill_out(o: Order) -> TableBillOut:
+        return TableBillOut(
+            order_id=o.id,
+            order_number=o.order_number,
+            daily_token=o.daily_token,
+            total_aed=str(o.total or 0),
+            guest_label=o.guest_label,
+            guests=o.covers,
+            waiter=staff_names.get(o.staff_id) if o.staff_id else None,
+            seated_since=o.created_at.isoformat() if o.created_at else None,
+        )
+
     out: list[TableOut] = []
     for t in tables:
         order = open_by_table.get(t.id)
+        table_bills = [_bill_out(o) for o in bills_by_table.get(t.id, [])]
         if order is not None:
             # Dine-in is two-state: a table is free or occupied with an open tab.
             # Any open order → "ordered" (shown as "Occupied") until it's paid/closed,
@@ -245,6 +268,8 @@ async def list_tables(
                     qr_token=t.qr_token,
                     order_id=order.id,
                     order_total_aed=str(order.total),
+                    bills=table_bills,
+                    bill_count=len(table_bills),
                     waiter=staff_names.get(order.staff_id) if order.staff_id else None,
                     guests=order.covers,
                     merged_count=merged_counts.get(order.id, 0),
@@ -260,6 +285,8 @@ async def list_tables(
             base = TableOut.model_validate(t)
             if base.status in ("ordered", "needs_bill"):
                 base.status = "available"
+            base.bills = []
+            base.bill_count = 0
             out.append(base)
     return out
 
