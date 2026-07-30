@@ -16,7 +16,8 @@ export type ApiTable = {
   /** The NEWEST open bill — single-valued for every reader that predates splits. */
   order_id?: number | null;
   order_total_aed?: string | null;
-  /** EVERY open bill on this table, newest first. Empty when the table is free. */
+  /** EVERY open bill on this table, OLDEST FIRST — so index 0 is "Bill 1", the
+   *  party that sat down first. Empty when the table is free. */
   bills?: TableBill[];
   bill_count?: number;
   guests?: number | null;
@@ -32,12 +33,29 @@ export type TableBill = {
   order_number?: string | null;
   daily_token?: number | null;
   total_aed: string;
-  /** "Guest 2", "Ahmed" — null when nobody labelled it. */
+  /** A name a HUMAN gave this bill ("Ahmed"). Normally null — the "Bill N" a
+   *  cashier reads is a POSITION in this list, never a stored value. */
   guest_label?: string | null;
   guests?: number | null;
   waiter?: string | null;
   seated_since?: string | null;
 };
+
+/** A stored label that is really a machine guess at a position: an earlier build
+ *  STAMPED "Bill 2" onto the order at create time from a stale bill count, which
+ *  produced duplicates ("Bill 3 · Bill 2 · Bill 3" on one table) and stayed wrong
+ *  the moment an earlier bill was paid. Those rows are still in the database, so
+ *  they are ignored rather than migrated — they were never human names. */
+const AUTO_LABEL = /^bill\s*\d+$/i;
+
+/** What to call a bill on screen: the name a human gave it, else its POSITION in
+ *  the table's oldest-first list. Shared so the floor dialog and the till's
+ *  switcher can never disagree about which bill is "Bill 2". */
+export function billName(bill: TableBill, index: number): string {
+  const given = bill.guest_label?.trim();
+  if (given && !AUTO_LABEL.test(given)) return given;
+  return `Bill ${index + 1}`;
+}
 
 /** Restaurant-wide floor layout. Today: where the entrance marker sits.
  *  Null coordinates mean "never placed" — surfaces fall back to bottom-centre. */

@@ -1,4 +1,4 @@
-import type { TableBill } from "../lib/floorApi";
+import { billName, type TableBill } from "../lib/floorApi";
 import s from "./TableBillsDialog.module.css";
 
 /**
@@ -47,11 +47,10 @@ export function TableBillsDialog({
                 onClick={() => onPick(b)}
                 data-testid={`table-bill-${b.order_id}`}
               >
-                <span className={s.who}>
-                  {/* Fall back to a POSITION rather than the row id: "Bill 2" is
-                      something a cashier can say out loud to a guest. */}
-                  {b.guest_label?.trim() || `Bill ${i + 1}`}
-                </span>
+                {/* A POSITION, computed rather than stored. The server sends bills
+                    oldest-first, so Bill 1 is the party that sat down first and the
+                    numbering stays right when one is paid. */}
+                <span className={s.who}>{billName(b, i)}</span>
                 <span className={s.ref}>
                   {b.order_number ?? `#${b.order_id}`}
                   {b.daily_token != null ? ` · Token ${b.daily_token}` : ""}

@@ -197,7 +197,11 @@ async def list_tables(
                 Order.table_id.in_(table_ids),
                 Order.status.in_(OPEN_ORDER_STATUSES),
             )
-            .order_by(Order.created_at.desc())
+            # id desc is the TIEBREAK, not decoration: two bills opened on one
+            # table within the same instant share a created_at, and without it the
+            # sort is non-deterministic — "Bill 1" would swap places between two
+            # refreshes of the same floor.
+            .order_by(Order.created_at.desc(), Order.id.desc())
         )
         for o in orders:
             if o.table_id is not None:
@@ -233,6 +237,13 @@ async def list_tables(
         )
         for oid, cnt in rows.all():
             merged_counts[oid] = cnt
+
+    # Flip each table's list to OLDEST FIRST for output. The scan above has to run
+    # newest-first so open_by_table names the newest bill, but the floor numbers
+    # bills by position — "Bill 1", "Bill 2" — and the party that sat down FIRST is
+    # Bill 1. Left newest-first, the numbering would run backwards.
+    for _bills in bills_by_table.values():
+        _bills.reverse()
 
     def _bill_out(o: Order) -> TableBillOut:
         return TableBillOut(

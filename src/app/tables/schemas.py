@@ -48,8 +48,9 @@ class TableBillOut(BaseModel):
     order_number: str | None = None
     daily_token: int | None = None
     total_aed: str
-    # Names this bill among the table's others ("Guest 2", "Ahmed"); null when
-    # nobody labelled it and the UI falls back to a position.
+    # A name a HUMAN gave this bill ("Ahmed"). Normally null: the number a cashier
+    # reads is a position derived from this list, never a stored guess — a stamped
+    # "Bill 2" collides between two splits and stays wrong once Bill 1 is paid.
     guest_label: str | None = None
     guests: int | None = None
     waiter: str | None = None
@@ -73,7 +74,8 @@ class TableOut(BaseModel):
     # specs); a split table's full set is in `bills`.
     order_id: int | None = None
     order_total_aed: str | None = None
-    # Every open bill on this table, newest first. Empty when the table is free.
+    # Every open bill on this table, OLDEST FIRST — so the floor can number them
+    # by position and "Bill 1" is the party that sat down first. Empty when free.
     bills: list[TableBillOut] = []
     # len(bills) — so the floor can badge "2 bills" without walking the list.
     bill_count: int = 0

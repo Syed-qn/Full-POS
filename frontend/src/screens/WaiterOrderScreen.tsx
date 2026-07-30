@@ -14,6 +14,7 @@ import {
   setOrderCovers,
   setTableStatus,
 } from "../lib/manualOrderApi";
+import { billName, type TableBill } from "../lib/floorApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
 import { advanceOrder, applyDiscount, quoteDeliveryFee, setOrderPriority } from "../lib/ordersApi";
 import { chargePayment } from "../lib/paymentsApi";
@@ -45,14 +46,6 @@ const CAT_COLORS = [
   "#0d7a70",
 ];
 
-type TableBill = {
-  order_id: number;
-  order_number?: string | null;
-  daily_token?: number | null;
-  total_aed: string;
-  guest_label?: string | null;
-};
-
 type ApiTable = {
   id: number;
   label: string;
@@ -64,6 +57,10 @@ type ApiTable = {
   bill_count?: number;
   guests?: number | null;
 };
+
+/** Bills up to this many stay segmented chips in the ticket strip; beyond it the
+ *  switcher becomes a select, because five chips push the strip off-screen. */
+const SWITCH_AS_CHIPS = 3;
 
 type OrderTypeKey = "dine_in" | "takeaway" | "delivery" | "online";
 
@@ -291,13 +288,17 @@ export function WaiterOrderScreen() {
   // key changes and the till remounts clean, which is what lets a table take a
   // third, fourth, fifth bill rather than stopping at two.
   const splitMode = params.get("split") != null;
-  /**
-   * Names the bill being opened. A POSITION and not the row id, because "Bill 2"
-   * is something a cashier can say out loud to a guest. The cashier can rename it
-   * later; guessing the guest's name here would be worse than numbering it.
-   */
-  function splitLabel() {
-    return `Bill ${(selectedTable?.bill_count ?? 0) + 1}`;
+  /** Point the till at another of this table's bills. */
+  function switchToBill(orderId: number) {
+    if (!orderId || orderId === openTabOrderId) return;
+    const p = new URLSearchParams();
+    p.set("type", "dine_in");
+    p.set("order", String(orderId));
+    if (selectedTable) {
+      p.set("table", String(selectedTable.id));
+      p.set("label", selectedTable.label);
+    }
+    navigate(`${orderPath}?${p.toString()}`);
   }
   const openTabOrderId =
     orderType === "dine_in"
@@ -833,10 +834,13 @@ export function WaiterOrderScreen() {
           // server merges into the party already at the table — which is the right
           // default everywhere else (it stops a stale till duplicating an order).
           force_new_bill: splitMode && orderType === "dine_in" && openTabOrderId == null,
-          guest_label:
-            splitMode && orderType === "dine_in" && openTabOrderId == null
-              ? splitLabel()
-              : null,
+          // Deliberately NOT auto-labelled. A stamped "Bill 2" is a guess that is
+          // wrong twice over: it collides when two splits are opened from the same
+          // stale bill count, and it stays "Bill 2" forever once Bill 1 is paid.
+          // The number a cashier reads is a POSITION, derived from the table's
+          // current bills at display time. guest_label is reserved for a name a
+          // human actually gave the bill.
+          guest_label: null,
         });
         orderId = created?.id ?? null;
         orderNumber = created?.order_number ?? "";
@@ -1833,36 +1837,47 @@ export function WaiterOrderScreen() {
             {/* Split bills on this table. Shown only when there IS more than one,
                 so an ordinary tab keeps the strip uncluttered. Switching is a
                 route change to ?order=<id> — the same door the floor's picker and
-                the bill lookup use, so there is one loading path, not three. */}
+                the bill lookup use, so there is one loading path, not three.
+                Up to SWITCH_AS_CHIPS bills stay segmented (every option visible,
+                one tap); beyond that they would push the strip wider than the
+                screen, so it collapses to a select. */}
             {orderType === "dine_in" && (selectedTable?.bill_count ?? 0) > 1 && (
-              <span className={s.billSwitch} data-testid="bill-switch">
-                {(selectedTable?.bills ?? []).map((b, i) => {
-                  const active = b.order_id === openTabOrderId;
-                  return (
-                    <button
-                      key={b.order_id}
-                      type="button"
-                      className={`${s.billTab} ${active ? s.billTabOn : ""}`}
-                      aria-current={active}
-                      onClick={() => {
-                        if (active) return;
-                        const p = new URLSearchParams();
-                        p.set("type", "dine_in");
-                        p.set("order", String(b.order_id));
-                        if (selectedTable) {
-                          p.set("table", String(selectedTable.id));
-                          p.set("label", selectedTable.label);
-                        }
-                        navigate(`${orderPath}?${p.toString()}`);
-                      }}
-                      data-testid={`bill-tab-${b.order_id}`}
-                      title={`${b.order_number ?? `#${b.order_id}`} · AED ${b.total_aed}`}
-                    >
-                      {b.guest_label?.trim() || `Bill ${i + 1}`}
-                    </button>
-                  );
-                })}
-              </span>
+              <>
+                {(selectedTable?.bills ?? []).length <= SWITCH_AS_CHIPS ? (
+                  <span className={s.billSwitch} data-testid="bill-switch">
+                    {(selectedTable?.bills ?? []).map((b, i) => {
+                      const active = b.order_id === openTabOrderId;
+                      return (
+                        <button
+                          key={b.order_id}
+                          type="button"
+                          className={`${s.billTab} ${active ? s.billTabOn : ""}`}
+                          aria-current={active}
+                          onClick={() => switchToBill(b.order_id)}
+                          data-testid={`bill-tab-${b.order_id}`}
+                          title={`${b.order_number ?? `#${b.order_id}`} · AED ${b.total_aed}`}
+                        >
+                          {billName(b, i)}
+                        </button>
+                      );
+                    })}
+                  </span>
+                ) : (
+                  <select
+                    className={s.billSelect}
+                    aria-label="Which bill"
+                    value={openTabOrderId ?? ""}
+                    onChange={(e) => switchToBill(Number(e.target.value))}
+                    data-testid="bill-select"
+                  >
+                    {(selectedTable?.bills ?? []).map((b, i) => (
+                      <option key={b.order_id} value={b.order_id}>
+                        {billName(b, i)} · AED {b.total_aed}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
             )}
 
             {/* Open ANOTHER bill on this table: a second party has sat down and

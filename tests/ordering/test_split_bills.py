@@ -171,6 +171,11 @@ async def test_floor_lists_every_open_bill_on_the_table(
     assert row["bill_count"] == 2
     ids = {b["order_id"] for b in row["bills"]}
     assert ids == {first["id"], second["id"]}
+    # OLDEST FIRST. The floor numbers bills by position, so index 0 has to be the
+    # party that sat down first or "Bill 1" names the newest arrival. The scan that
+    # builds this runs newest-first (order_id needs the newest), so the order here
+    # is a deliberate flip and worth pinning.
+    assert [b["order_id"] for b in row["bills"]] == [first["id"], second["id"]]
     # order_id stays the newest single bill so every existing reader (KDS, Live
     # Ops, the e2e specs) keeps working unchanged.
     assert row["order_id"] in ids

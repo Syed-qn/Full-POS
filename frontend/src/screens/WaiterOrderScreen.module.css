@@ -221,6 +221,24 @@
   cursor: default;
 }
 
+/* min-height FIRST and explicitly 0: base.css sets min-height 44px on every
+   select, and min-height beats height — without this the switcher stands 44px
+   tall in a strip of 34px controls. */
+.billSelect {
+  min-height: 0;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  max-width: 190px;
+}
+
 .splitBtn {
   min-height: 0;
   height: 34px;
