@@ -2021,6 +2021,13 @@ async def settle_on_premise_if_paid(
     and let the table free itself (the floor only counts open orders). No-op for
     delivery/online orders (they close when the rider marks delivered) and for
     partial payments.
+
+    It also RELEASES the table, which this used to leave to the floor listing.
+    That listing only *displays* an order-driven status ("ordered"/"needs_bill")
+    as available while no order is open — it never wrote the row back. So a table
+    that had asked for the bill stayed "needs_bill" in the database for good,
+    invisibly, and the purple BILL badge came back the moment the next tab opened
+    on it. Clearing it here means the row and the screen agree.
     """
     from app.payments.service import total_paid
 
@@ -2038,6 +2045,31 @@ async def settle_on_premise_if_paid(
         return order
     await fsm_transition(session, order, OrderStatus.DELIVERED, actor=actor)
     order.delivered_at = datetime.now(timezone.utc)
+
+    # Release the table. Only the order-driven states are touched: "reserved" and
+    # "cleaning" are things a human set on purpose and a payment does not undo
+    # them. "available" and not "cleaning" because that is what the floor has
+    # always SHOWN after payment — writing "cleaning" here would invent a bussing
+    # step staff have never had to clear.
+    if order.table_id is not None:
+        from app.tables.models import DiningTable
+
+        table = await session.get(DiningTable, order.table_id)
+        if table is not None and table.status in ("ordered", "needs_bill", "seated"):
+            before = table.status
+            table.status = "available"
+            from app.audit.service import record_audit
+
+            await record_audit(
+                session,
+                actor=actor,
+                restaurant_id=order.restaurant_id,
+                entity="table",
+                entity_id=str(table.id),
+                action="status_change",
+                before={"status": before},
+                after={"status": "available", "reason": "order_settled"},
+            )
     return order
 
 

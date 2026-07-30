@@ -255,8 +255,22 @@ export function WaiterOrderScreen() {
     () => tables.find((t) => String(t.id) === tableParam) ?? null,
     [tables, tableParam],
   );
+  /**
+   * The order this till is pointed at.
+   *
+   * An explicit ?order= WINS, even on dine-in, which is what makes recalling a
+   * bill work: a settled dine-in bill's table has no open order any more, so
+   * resolving dine-in through `selectedTable.order_id` alone found nothing and
+   * the till came up empty. The table is still passed alongside it so the strip
+   * can name the table the bill was served on.
+   *
+   * Nothing but ?order= sets takeawayOrderId on dine-in (both writers are
+   * takeaway/delivery paths), so this cannot hijack an ordinary dine-in tab.
+   */
   const openTabOrderId =
-    orderType === "dine_in" ? (selectedTable?.order_id ?? null) : takeawayOrderId;
+    orderType === "dine_in"
+      ? (takeawayOrderId ?? selectedTable?.order_id ?? null)
+      : takeawayOrderId;
   /** A saved-but-not-fired tab still has KOT work, even with an empty cart. */
   const tabUnfired =
     openTabOrderId != null &&
@@ -434,6 +448,18 @@ export function WaiterOrderScreen() {
         // Reopening a delivery order ("Add Item") must pull its saved customer +
         // address back in, so the ticket-bar chip shows who/where instead of an
         // empty "Add delivery details" — the address was captured on create.
+        // Take Away carries an optional walk-in name and phone. Recalling a bill
+        // left both boxes EMPTY over a bill that had them, so the till showed
+        // less about the customer than the receipt did. The placeholders this
+        // screen writes when the cashier types nothing ("0000000000" / "Take
+        // away" / "Walk-in", see the submit path) are skipped — echoing them back
+        // would put fake-looking data in a field the cashier never filled.
+        if (orderType === "takeaway" && d.customer) {
+          const phone = (d.customer.phone ?? "").trim();
+          const name = (d.customer.name ?? "").trim();
+          setTakeawayPhone(phone === "0000000000" ? "" : phone);
+          setTakeawayName(name === "Take away" || name === "Walk-in" ? "" : name);
+        }
         if (orderType === "delivery") {
           if (d.customer) {
             setCustPhone(d.customer.phone ?? "");

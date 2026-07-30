@@ -82,7 +82,7 @@ describe("BillLookup", () => {
     expect(fetchOrders).toHaveBeenCalledWith(expect.objectContaining({ token: 8 }));
   });
 
-  it("sends a dine-in bill back through its table", async () => {
+  it("opens a dine-in bill by order id, with its table alongside", async () => {
     // order_number must MATCH what is typed below: a dashed term is filtered
     // client-side against order_number, so a fixture numbered R3-0009 would be
     // discarded by a search for R3-0008 and the test would fail for that reason
@@ -95,10 +95,11 @@ describe("BillLookup", () => {
     await userEvent.type(screen.getByTestId("view-bill-input"), "R3-0008");
     await userEvent.click(screen.getByTestId("view-bill-search"));
 
-    // A dine-in tab hangs off the TABLE — ?order= drives only the takeaway till,
-    // so reopening a dine-in bill by order id would land on an empty screen.
+    // ?order= names the bill on every channel; the table rides along so the
+    // ticket strip can label it. Routing dine-in by table ALONE opened an empty
+    // till, because a settled bill's table no longer has an open order.
     expect(screen.getByTestId("where")).toHaveTextContent(
-      "/cashier/new-order?type=dine_in&table=4&bill=R3-0008",
+      "/cashier/new-order?type=dine_in&order=9&table=4&bill=R3-0008",
     );
   });
 
@@ -135,14 +136,20 @@ describe("BillLookup", () => {
     );
   });
 
-  it("refuses a dine-in bill with no table rather than opening an empty till", async () => {
-    fetchOrders.mockResolvedValue([order({ order_type: "dine_in", table_id: null })]);
+  it("opens a dine-in bill that has no table, by order id", async () => {
+    // Legacy rows and tables since deleted leave table_id null. This used to be
+    // refused outright ("find it under Orders"), which was a dead end for a bill
+    // the till can perfectly well open by id.
+    fetchOrders.mockResolvedValue([
+      order({ order_number: "R3-0007", order_type: "dine_in", table_id: null }),
+    ]);
     renderLookup();
 
     await userEvent.type(screen.getByTestId("view-bill-input"), "R3-0007");
     await userEvent.click(screen.getByTestId("view-bill-search"));
 
-    expect(await screen.findByTestId("view-bill-message")).toBeInTheDocument();
-    expect(screen.getByTestId("where")).toHaveTextContent("/cashier/new-order?type=takeaway");
+    expect(screen.getByTestId("where")).toHaveTextContent(
+      "/cashier/new-order?type=dine_in&order=9&bill=R3-0007",
+    );
   });
 });

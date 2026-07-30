@@ -340,7 +340,13 @@ async def create_pos_order(
 
     if requires_table(order_type) and table_id is not None:
         table = await session.get(DiningTable, table_id)
-        if table is not None and table.status == "available":
+        # "needs_bill" counts as free here. It is an ORDER-DRIVEN state that only
+        # described the previous sitting, and a NEW order on the table means new
+        # guests are dining — but the check used to be `== "available"` only, so a
+        # stale needs_bill survived and the cashier floor showed a purple BILL
+        # badge on a tab that had just been opened. Reserved/cleaning are NOT
+        # included: those are deliberate manual states a human still has to clear.
+        if table is not None and table.status in ("available", "needs_bill"):
             table.status = "ordered" if order.status != OrderStatus.DRAFT else "seated"
 
     await record_audit(

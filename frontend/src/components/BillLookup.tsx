@@ -56,27 +56,23 @@ export function BillLookup() {
 
   /**
    * Hand the bill to the till. ?order= is the same door the order list's "Add
-   * Item" uses, so no new loading path had to be invented.
+   * Item" uses, so no new loading path had to be invented, and it now names the
+   * bill on EVERY channel including dine-in.
    *
-   * A dine-in bill goes back through its TABLE, because that is where a dine-in
-   * tab hangs — ?order= only drives the take-away / delivery till. A dine-in row
-   * with no table_id (legacy, or a table since deleted) would otherwise open an
-   * empty till, so it is refused with a message instead.
+   * Dine-in was first routed by TABLE, on the reasoning that a dine-in tab hangs
+   * off its table. That failed on the common case: a recalled bill is usually
+   * settled, so its table has no open order left and the till opened empty. The
+   * table is still passed when known, purely so the ticket strip can name it.
    */
   function openBill(o: OrderOut) {
     const type = o.order_type ?? "takeaway";
     const qs = new URLSearchParams({ type });
-    if (type === "dine_in") {
-      if (o.table_id == null) {
-        setMessage(
-          `${o.order_number ?? "That bill"} has no table on it, so the till cannot reopen it. Find it under Orders.`,
-        );
-        return;
-      }
-      qs.set("table", String(o.table_id));
-    } else {
-      qs.set("order", String(o.id));
-    }
+    // ?order= names the bill for EVERY type, including dine-in. Routing dine-in
+    // by table alone did not work: a recalled bill is usually settled, its table
+    // has no open order any more, and the till opened empty. The table rides
+    // along when known so the ticket strip can still name it.
+    qs.set("order", String(o.id));
+    if (type === "dine_in" && o.table_id != null) qs.set("table", String(o.table_id));
     // Display only — the till ignores it. It keeps the box filled with WHAT THE
     // CASHIER TYPED, so the control still reads as the search they ran: type a
     // token and it says the token; type a bill number and it says that. It used
