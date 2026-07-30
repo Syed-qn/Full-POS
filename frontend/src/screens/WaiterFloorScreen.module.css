@@ -312,6 +312,25 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
+/* "2 BILLS" — a table shared by two parties paying separately. Sits at the
+   OPPOSITE corner from .billBadge so a table that is both split and awaiting a
+   bill shows both, rather than one hiding the other. Blue, not the bill purple:
+   it reports a fact about the table, it is not a call to collect. */
+.splitBadge {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  z-index: 3;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--blue, #2e90fa);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
 .dotBilling { background: #6941c6; }
 
 /* Entrance placed by the manager: absolute at its own grid coordinate,

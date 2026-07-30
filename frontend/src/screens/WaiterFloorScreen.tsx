@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { WaiterTopBar } from "../components/WaiterTopBar";
+import { TableBillsDialog } from "../components/TableBillsDialog";
 import { apiClient } from "../lib/apiClient";
-import { fetchFloorLayout } from "../lib/floorApi";
+import { fetchFloorLayout, type TableBill } from "../lib/floorApi";
 import { usePosTheme } from "../lib/posTheme";
 import s from "./WaiterFloorScreen.module.css";
 import { useLiveRefresh } from "../lib/useLiveRefresh";
@@ -17,6 +18,8 @@ type ApiTable = {
   rotation?: number;
   order_id?: number | null;
   order_total_aed?: string | null;
+  bills?: TableBill[];
+  bill_count?: number;
   guests?: number | null;
   waiter?: string | null;
   seated_since?: string | null;
@@ -75,6 +78,8 @@ export function WaiterFloorScreen() {
   // Entrance placed by the manager in Floor Plan. Null until placed → the
   // marker falls back to the bottom of the room.
   const [entrance, setEntrance] = useState<{ x: number; y: number; rot: number } | null>(null);
+  // Table whose several bills the waiter is choosing between (null = no dialog).
+  const [billsFor, setBillsFor] = useState<ApiTable | null>(null);
 
   const load = useCallback(async () => {
     // Layout rides the same poll as the tables: a manager who moves or rotates
@@ -170,8 +175,19 @@ export function WaiterFloorScreen() {
 
   const floorHeight = (span.y + 2.2) * unit;
 
+  function tillPath(t: ApiTable, extra = "") {
+    return `${orderBase}?table=${t.id}&label=${encodeURIComponent(t.label)}${extra}`;
+  }
+
   function openTable(t: ApiTable) {
-    navigate(`${orderBase}?table=${t.id}&label=${encodeURIComponent(t.label)}`);
+    // Several bills on one table is ambiguous — ask which, rather than guessing
+    // and serving the next round onto the wrong party's bill. One or none opens
+    // straight through, as it always has.
+    if ((t.bill_count ?? 0) > 1) {
+      setBillsFor(t);
+      return;
+    }
+    navigate(tillPath(t));
   }
 
   return (
@@ -259,6 +275,11 @@ export function WaiterFloorScreen() {
                     }}
                   >
                     {bucket === "billing" && <span className={s.billBadge}>BILL</span>}
+                    {(t.bill_count ?? 0) > 1 && (
+                      <span className={s.splitBadge} data-testid={`waiter-table-bills-${t.id}`}>
+                        {t.bill_count} BILLS
+                      </span>
+                    )}
                     <span className={s.tableLabel}>{t.label}</span>
                     <span className={s.tableSeats}>👥 {t.seats}</span>
                     {hasOrder && t.guests != null && (
@@ -293,6 +314,16 @@ export function WaiterFloorScreen() {
           </div>
         )}
       </div>
+
+      {billsFor && (
+        <TableBillsDialog
+          tableLabel={billsFor.label}
+          bills={billsFor.bills ?? []}
+          onPick={(b) => navigate(tillPath(billsFor, `&order=${b.order_id}`))}
+          onSplit={() => navigate(tillPath(billsFor, `&split=${Date.now()}`))}
+          onClose={() => setBillsFor(null)}
+        />
+      )}
     </div>
   );
 }

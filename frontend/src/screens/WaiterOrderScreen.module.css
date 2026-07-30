@@ -185,6 +185,60 @@
   font-size: 13px;
   color: var(--ink-dim);
 }
+
+/* Which of this table's bills the till is pointed at. Segmented rather than a
+   dropdown: with two or three bills every option is visible and one tap away,
+   and a cashier holding a card reader does not want to open a menu first. */
+.billSwitch {
+  display: inline-flex;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.billTab {
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.billTab:last-child {
+  border-right: 0;
+}
+.billTabOn {
+  background: var(--blue, #2e90fa);
+  color: #fff;
+  cursor: default;
+}
+
+.splitBtn {
+  min-height: 0;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.splitBtn:hover {
+  color: var(--ink);
+  border-color: var(--ink-dim);
+}
 /* line-height 1: at 20px the digits' leading pushed the chip past 34px. */
 .tableChipNum {
   font-family: var(--font-mono, ui-monospace, monospace);

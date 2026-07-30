@@ -45,12 +45,23 @@ const CAT_COLORS = [
   "#0d7a70",
 ];
 
+type TableBill = {
+  order_id: number;
+  order_number?: string | null;
+  daily_token?: number | null;
+  total_aed: string;
+  guest_label?: string | null;
+};
+
 type ApiTable = {
   id: number;
   label: string;
   seats: number;
   status: string;
   order_id?: number | null;
+  /** Every open bill on this table — more than one when the table is split. */
+  bills?: TableBill[];
+  bill_count?: number;
   guests?: number | null;
 };
 
@@ -269,9 +280,28 @@ export function WaiterOrderScreen() {
    * Nothing but ?order= sets takeawayOrderId on dine-in (both writers are
    * takeaway/delivery paths), so this cannot hijack an ordinary dine-in tab.
    */
+  /**
+   * ?split=1 — the cashier asked for a SECOND bill on this table. The table's
+   * existing tab must NOT be adopted, or the round would append to the party
+   * already eating. Once the split bill exists, its id lands in takeawayOrderId
+   * (set on create) and takes over from there, so a third round appends to the
+   * new bill rather than opening a third.
+   */
+  // Presence, not a fixed "1": each press carries a unique token so the route
+  // key changes and the till remounts clean, which is what lets a table take a
+  // third, fourth, fifth bill rather than stopping at two.
+  const splitMode = params.get("split") != null;
+  /**
+   * Names the bill being opened. A POSITION and not the row id, because "Bill 2"
+   * is something a cashier can say out loud to a guest. The cashier can rename it
+   * later; guessing the guest's name here would be worse than numbering it.
+   */
+  function splitLabel() {
+    return `Bill ${(selectedTable?.bill_count ?? 0) + 1}`;
+  }
   const openTabOrderId =
     orderType === "dine_in"
-      ? (takeawayOrderId ?? selectedTable?.order_id ?? null)
+      ? (takeawayOrderId ?? (splitMode ? null : selectedTable?.order_id ?? null))
       : takeawayOrderId;
   /** A saved-but-not-fired tab still has KOT work, even with an empty cart. */
   const tabUnfired =
@@ -798,12 +828,23 @@ export function WaiterOrderScreen() {
           address: null,
           delivery_fee_aed: "0.00",
           auto_confirm: fire,
+          // Only on a split, and only for the FIRST save: after that the till is
+          // pointed at the new bill and the round appends to it. Without this the
+          // server merges into the party already at the table — which is the right
+          // default everywhere else (it stops a stale till duplicating an order).
+          force_new_bill: splitMode && orderType === "dine_in" && openTabOrderId == null,
+          guest_label:
+            splitMode && orderType === "dine_in" && openTabOrderId == null
+              ? splitLabel()
+              : null,
         });
         orderId = created?.id ?? null;
         orderNumber = created?.order_number ?? "";
         // Take Away: keep the till pointed at what we just opened so the next
         // round appends to it and the payment buttons have something to charge.
-        if (orderType !== "dine_in" && orderId) setTakeawayOrderId(orderId);
+        // A SPLIT dine-in bill needs the same, or the next round would fall back
+        // to the table's other tab and bill the wrong party.
+        if ((orderType !== "dine_in" || splitMode) && orderId) setTakeawayOrderId(orderId);
       }
 
       if (fire && orderId && !firedOnCreate) {
@@ -1787,6 +1828,64 @@ export function WaiterOrderScreen() {
                   {tableLabel}
                 </strong>
               </span>
+            )}
+
+            {/* Split bills on this table. Shown only when there IS more than one,
+                so an ordinary tab keeps the strip uncluttered. Switching is a
+                route change to ?order=<id> — the same door the floor's picker and
+                the bill lookup use, so there is one loading path, not three. */}
+            {orderType === "dine_in" && (selectedTable?.bill_count ?? 0) > 1 && (
+              <span className={s.billSwitch} data-testid="bill-switch">
+                {(selectedTable?.bills ?? []).map((b, i) => {
+                  const active = b.order_id === openTabOrderId;
+                  return (
+                    <button
+                      key={b.order_id}
+                      type="button"
+                      className={`${s.billTab} ${active ? s.billTabOn : ""}`}
+                      aria-current={active}
+                      onClick={() => {
+                        if (active) return;
+                        const p = new URLSearchParams();
+                        p.set("type", "dine_in");
+                        p.set("order", String(b.order_id));
+                        if (selectedTable) {
+                          p.set("table", String(selectedTable.id));
+                          p.set("label", selectedTable.label);
+                        }
+                        navigate(`${orderPath}?${p.toString()}`);
+                      }}
+                      data-testid={`bill-tab-${b.order_id}`}
+                      title={`${b.order_number ?? `#${b.order_id}`} · AED ${b.total_aed}`}
+                    >
+                      {b.guest_label?.trim() || `Bill ${i + 1}`}
+                    </button>
+                  );
+                })}
+              </span>
+            )}
+
+            {/* Open ANOTHER bill on this table: a second party has sat down and
+                will pay for their own food. Hidden once the current bill is
+                settled — that till is a reprint window, not a place to sell. */}
+            {orderType === "dine_in" && selectedTable && !tabSettled && (
+              <button
+                type="button"
+                className={s.splitBtn}
+                onClick={() => {
+                  const p = new URLSearchParams();
+                  p.set("type", "dine_in");
+                  p.set("table", String(selectedTable.id));
+                  p.set("label", selectedTable.label);
+                  // Unique per press — see the route key in App.tsx.
+                  p.set("split", String(Date.now()));
+                  navigate(`${orderPath}?${p.toString()}`);
+                }}
+                data-testid="split-bill-btn"
+                title={`Start a separate bill on ${selectedTable.label}`}
+              >
+                ◧ Split bill
+              </button>
             )}
 
             {/* Waiter attribution is a dine-in concern; Take Away is a cashier till. */}

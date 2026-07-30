@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { WaiterTopBar } from "../components/WaiterTopBar";
+import { TableBillsDialog } from "../components/TableBillsDialog";
 import { apiClient } from "../lib/apiClient";
-import { fetchFloorLayout } from "../lib/floorApi";
+import { fetchFloorLayout, type TableBill } from "../lib/floorApi";
 import { usePosTheme } from "../lib/posTheme";
 import s from "./WaiterFloorScreen.module.css";
 import { useLiveRefresh } from "../lib/useLiveRefresh";
@@ -17,6 +18,8 @@ type ApiTable = {
   rotation?: number;
   order_id?: number | null;
   order_total_aed?: string | null;
+  bills?: TableBill[];
+  bill_count?: number;
   guests?: number | null;
   waiter?: string | null;
   seated_since?: string | null;
@@ -69,6 +72,8 @@ export function CashierFloorScreen() {
   const [loading, setLoading] = useState(tableCache === null);
   // Entrance placed by the manager in Floor Plan (null until placed).
   const [entrance, setEntrance] = useState<{ x: number; y: number; rot: number } | null>(null);
+  // Table whose several bills the cashier is choosing between (null = no dialog).
+  const [billsFor, setBillsFor] = useState<ApiTable | null>(null);
 
   const load = useCallback(async () => {
     // Layout rides the same poll as the tables: a manager who moves or rotates
@@ -162,10 +167,22 @@ export function CashierFloorScreen() {
 
   const floorHeight = (span.y + 2.2) * unit;
 
+  function tillPath(t: ApiTable, extra = "") {
+    return `/cashier/new-order?table=${t.id}&label=${encodeURIComponent(t.label)}${extra}`;
+  }
+
   function openTable(t: ApiTable) {
+    // A table carrying SEVERAL bills has to be asked about — opening "the table"
+    // is ambiguous once two parties share it, and guessing would put the cashier
+    // in front of the wrong bill with money already on the counter. One bill (or
+    // none) opens directly, exactly as it always has.
+    if ((t.bill_count ?? 0) > 1) {
+      setBillsFor(t);
+      return;
+    }
     // Same dark order terminal as the waiter, under the cashier namespace.
     // The cashier reviews / adds to the tab there, then collects payment.
-    navigate(`/cashier/new-order?table=${t.id}&label=${encodeURIComponent(t.label)}`);
+    navigate(tillPath(t));
   }
 
   return (
@@ -256,6 +273,13 @@ export function CashierFloorScreen() {
                   >
                     {bucket === "billing" && <span className={s.billBadge}>BILL</span>}
                     <span className={s.tableLabel}>{t.label}</span>
+                    {(t.bill_count ?? 0) > 1 && (
+                      // Two parties on one table: say so on the floor, or the
+                      // cashier collects one bill and thinks the table is done.
+                      <span className={s.splitBadge} data-testid={`cashier-table-bills-${t.id}`}>
+                        {t.bill_count} BILLS
+                      </span>
+                    )}
                     {hasOrder && t.order_total_aed != null ? (
                       <span className={s.tableSeats}>AED {t.order_total_aed}</span>
                     ) : (
@@ -293,6 +317,22 @@ export function CashierFloorScreen() {
           </div>
         )}
       </div>
+
+      {billsFor && (
+        <TableBillsDialog
+          tableLabel={billsFor.label}
+          bills={billsFor.bills ?? []}
+          onPick={(b) =>
+            // ?order= names the exact bill and WINS over the table lookup in the
+            // till; the table rides along so the ticket strip can label it.
+            navigate(tillPath(billsFor, `&order=${b.order_id}`))
+          }
+          // Unique per press so the till remounts clean — a table may take any
+          // number of bills, not two. See the route key in App.tsx.
+          onSplit={() => navigate(tillPath(billsFor, `&split=${Date.now()}`))}
+          onClose={() => setBillsFor(null)}
+        />
+      )}
     </div>
   );
 }

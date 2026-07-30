@@ -1,0 +1,116 @@
+/* Rendered INSIDE the floor screen's themed root, so the till's colour custom
+   properties (--panel, --line, --ink…) cascade down to it. Fallbacks keep it
+   legible if it is ever mounted outside one. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 24px;
+}
+
+.modal {
+  width: min(420px, 94vw);
+  background: var(--panel, #1e1e1c);
+  color: var(--ink, #e8e6e1);
+  border: 1px solid var(--line, #2b2b28);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.sub {
+  margin: 4px 0 14px;
+  font-size: 12px;
+  color: var(--ink-dim, #8b8880);
+}
+
+.list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* One row per bill. Generous height because this is a touch till and the rows
+   are the whole point of the dialog. */
+.bill {
+  width: 100%;
+  min-height: 56px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "who amount"
+    "ref amount";
+  align-items: center;
+  gap: 2px 12px;
+  padding: 8px 12px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel-2, #232320);
+  color: inherit;
+  border: 1px solid var(--line, #2b2b28);
+  border-radius: 10px;
+}
+.bill:hover {
+  border-color: var(--line-2, #3a3a35);
+}
+
+.who {
+  grid-area: who;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ref {
+  grid-area: ref;
+  font-size: 11px;
+  color: var(--ink-dim, #8b8880);
+}
+
+.amount {
+  grid-area: amount;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.split,
+.cancel {
+  flex: 1 1 auto;
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.split {
+  background: var(--green, #12b76a);
+  color: #fff;
+  border: 1px solid transparent;
+}
+
+.cancel {
+  background: transparent;
+  color: var(--ink, #e8e6e1);
+  border: 1px solid var(--line-2, #3a3a35);
+}

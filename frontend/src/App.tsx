@@ -75,7 +75,12 @@ function FloorRoute() {
  * force a fresh till per channel — while still remounting to load an existing tab. */
 function NewOrderRoute() {
   const [params] = useSearchParams();
-  const key = `${params.get("type") ?? "dine_in"}:${params.get("order") ?? params.get("table") ?? "new"}`;
+  // ?split carries a unique token per press, and it MUST be part of the key: a
+  // split targets the same table as the tab already on screen, so without it the
+  // key is unchanged, the screen never remounts, and the till stays pointed at the
+  // bill it just created — every further "Split bill" would append to bill 2
+  // instead of opening bill 3. Splits have to be unlimited.
+  const key = `${params.get("type") ?? "dine_in"}:${params.get("order") ?? params.get("table") ?? "new"}:${params.get("split") ?? ""}`;
   return isWaiterRole() || isCashierRole() ? (
     <WaiterOrderScreen key={key} />
   ) : (

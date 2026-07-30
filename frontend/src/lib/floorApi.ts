@@ -13,11 +13,29 @@ export type ApiTable = {
   /** Degrees clockwise — how the table is turned in the room. */
   rotation?: number;
   qr_token?: string | null;
+  /** The NEWEST open bill — single-valued for every reader that predates splits. */
   order_id?: number | null;
   order_total_aed?: string | null;
+  /** EVERY open bill on this table, newest first. Empty when the table is free. */
+  bills?: TableBill[];
+  bill_count?: number;
   guests?: number | null;
   waiter?: string | null;
   merged_count?: number;
+  seated_since?: string | null;
+};
+
+/** One open bill on a table. A table can hold several at once — two parties
+ *  sharing it, each paying for their own food. */
+export type TableBill = {
+  order_id: number;
+  order_number?: string | null;
+  daily_token?: number | null;
+  total_aed: string;
+  /** "Guest 2", "Ahmed" — null when nobody labelled it. */
+  guest_label?: string | null;
+  guests?: number | null;
+  waiter?: string | null;
   seated_since?: string | null;
 };
 

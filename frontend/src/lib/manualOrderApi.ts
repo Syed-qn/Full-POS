@@ -65,6 +65,13 @@ export interface PosOrderIn {
   /** false parks the order as a DRAFT the kitchen cannot see yet — the waiter's
    *  "Save to Table". Fire it later with confirmOrder(). Defaults true. */
   auto_confirm?: boolean;
+  /** Open a SECOND bill on a table that already has an open tab, instead of
+   *  folding this round into it — two parties sharing a table, paying
+   *  separately. Without it the server merges, which is the guard against a
+   *  stale till opening an accidental duplicate. */
+  force_new_bill?: boolean;
+  /** Names this bill when the table holds more than one ("Guest 2", "Ahmed"). */
+  guest_label?: string | null;
 }
 
 export async function lookupCustomer(
