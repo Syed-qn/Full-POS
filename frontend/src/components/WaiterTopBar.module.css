@@ -137,6 +137,13 @@
   border-color: var(--amber);
   color: var(--amber);
 }
+/* Held state for View Bill while its dialog is open, so the control that opened
+   the dialog still looks pressed behind it. */
+.themeBtnOn {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(247, 144, 9, 0.12);
+}
 
 .online {
   font-size: 11px;

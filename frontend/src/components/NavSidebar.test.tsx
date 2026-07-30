@@ -65,9 +65,11 @@ describe("NavSidebar logout", () => {
     renderNav("/");
     expect(screen.getByRole("link", { name: /live ops/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /floor plan/i })).toHaveAttribute("href", "/floor");
-    // New Order isn't shipped yet: shown as an inert "coming soon" row, not a link.
+    // New Order is hidden for the owner/manager nav (null role here) — they take
+    // orders through the till surfaces. It used to render as an inert "coming
+    // soon" row, which this asserted; now it is not in the sidebar at all.
     expect(screen.queryByRole("link", { name: /new order/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/new order, coming soon/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/new order/i)).not.toBeInTheDocument();
     // Owner/manager (null role) see Manage as Admin
     expect(screen.getByRole("button", { name: /admin/i })).toBeInTheDocument();
   });

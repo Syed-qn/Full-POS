@@ -531,7 +531,8 @@ export function KdsScreen() {
                   navigate("/login", { replace: true });
                 }}
               >
-                🔒 Sign out
+                {/* Text only, like every other staff-surface sign-out. */}
+                Sign out
               </button>
             ))}
         </div>

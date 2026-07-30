@@ -14,6 +14,10 @@
   --red: #f04438;
   /* Text ON a filled amber chip — white where the theme amber is dark. */
   --on-amber: #1a1a18;
+  /* Height of the two facing header strips: the ticket strip over the menu
+     column and the cart's column headings. Declared once so they cannot drift
+     apart — 34px chip + 8px padding top and bottom. */
+  --strip-h: 50px;
 
   display: flex;
   flex-direction: column;
@@ -72,11 +76,18 @@
 }
 
 /* ── ticket strip ─────────────────────────────────────────────────────── */
+/* Sits at the top of the MENU column, not across the whole screen — see the
+   comment on the right-hand section. It wraps rather than clipping: dine-in puts
+   a back button, token, table chip, waiter picker, covers and Kitchen Screen in
+   here, and in one column's width that is more than fits on a narrow till. */
 .ticketBar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   flex: none;
+  min-height: var(--strip-h);
+  box-sizing: border-box;
   padding: 8px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
@@ -94,11 +105,18 @@
 }
 .backBtn:hover { color: var(--amber); background: rgba(247, 144, 9, 0.08); }
 
+/* 34px, the same as the waiter picker, the covers stepper and the take-away
+   inputs beside it — that makes 34px the tallest thing in the strip, so the
+   strip is exactly --strip-h and lines up with the cart's column headings across
+   the gutter. This chip had no height at all, so the 20px token number set its
+   size and the whole strip came out ~6px taller than the left side. */
 .tokenChip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-2);
@@ -110,8 +128,16 @@
   align-items: center;
   gap: 6px;
 }
+/* min-height: 0 FIRST — base.css gives every input `min-height: 44px` for touch,
+   and min-height beats height, so these two were 44px tall while every chip
+   beside them was 34px. That alone made the strip 60px and knocked it out of
+   line with the cart's headings opposite. 34px is safe here specifically: this
+   is a name and a phone a cashier types with a keyboard, not a tap target on a
+   handheld, and every control around it is already 34px. */
 .taInput {
+  min-height: 0;
   height: 34px;
+  box-sizing: border-box;
   width: 140px;
   padding: 0 10px;
   border: 1px solid var(--line);
@@ -127,9 +153,11 @@
 }
 
 .tokenHash { color: var(--amber); font-weight: 800; }
+/* line-height 1: at 20px the digits' leading pushed the chip past 34px. */
 .tokenNum {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 20px;
+  font-size: 18px;
+  line-height: 1;
   font-weight: 800;
   color: var(--amber);
 }
@@ -143,20 +171,25 @@
 }
 
 /* Table pill — same chip treatment as the Token chip, with a labelled value. */
+/* 34px for the same reason as .tokenChip above. */
 .tableChip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-2);
   font-size: 13px;
   color: var(--ink-dim);
 }
+/* line-height 1: at 20px the digits' leading pushed the chip past 34px. */
 .tableChipNum {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 20px;
+  font-size: 18px;
+  line-height: 1;
   font-weight: 800;
   color: var(--amber);
 }
@@ -215,7 +248,13 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(380px, 33%) 1fr;
+  /* 440px, not 380px: at 380 a long dish name ellipsised, and two dishes sharing
+     a prefix ("Chicken Club Sandwich" / "Chicken Caesar Wrap") could truncate to
+     the same string — the cashier reads the wrong dish back to the customer, the
+     KOT prints it, and it surfaces when the food lands. The menu side is
+     fractional and gives up ~60px, which at 220px dish tiles usually costs no
+     column at all. */
+  grid-template-columns: minmax(440px, 36%) 1fr;
   gap: 1px;
   background: var(--line);
 }
@@ -232,16 +271,28 @@
 .cartHead,
 .cartRow {
   display: grid;
-  /* last track fits the 34px delete button plus its 10px gutter */
-  grid-template-columns: 26px 46px 1fr 58px 96px 70px 44px;
+  /* …then the note pencil in a 34px track (26px button, centred, so it is not
+     glued to the amount), then delete plus its 10px gutter. The header has no
+     cells for those two — they are actions, not columns.
+     PRICE 58→54, QTY 96→84 and AMOUNT 70→66 to pay for the note track out of
+     slack rather than out of PARTICULARS: the stepper needs ~80px and the money
+     columns were wider than "1234.00" ever needs, whereas a dish name is the one
+     thing here that genuinely wants every pixel. */
+  grid-template-columns: 26px 46px 1fr 54px 84px 66px 34px 44px;
   align-items: center;
   gap: 4px;
   padding: 2px 10px;
   text-align: left;
 }
 
+/* Same height as the ticket strip opposite it (--strip-h), so the two columns
+   start their content on one line and the divider between them reads as a single
+   rule. The column headings only need ~16px of their own, so without this the
+   cart rows began well above the search field across the gutter. */
 .cartHead {
   flex: none;
+  min-height: var(--strip-h);
+  box-sizing: border-box;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -335,6 +386,24 @@
    without the left margin the icon crowds the total and reads as part of it.
    Red at rest, not just on hover: a destructive control the cashier cannot
    find is worse than one that is visibly destructive. */
+/* Pencil beside the bin, same 26px target. Dim until the line HAS a note, so a
+   glance down the cart shows which lines carry one without reading the flags. */
+.rowNote {
+  width: 26px;
+  height: 26px;
+  justify-self: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rowNote:hover { color: var(--amber); background: rgba(247, 144, 9, 0.1); }
+.rowNoteOn { color: var(--amber); border-color: var(--amber); }
+
 .rowDel {
   margin-left: 10px;
   width: 26px;
@@ -420,6 +489,14 @@
 }
 .tabPending {
   color: var(--red);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* Green, not red: a settled bill is the good outcome. Red is reserved for
+   "NOT SENT TO KITCHEN", which is something the cashier has to act on. */
+.tabPaid {
+  color: var(--green);
   font-weight: 800;
   letter-spacing: 0.04em;
 }
@@ -579,38 +656,92 @@
 }
 .sideKey:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
 .sideKey:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* The keypad and the take-away name/phone go inert on a recalled PAID bill, and
+   they have to LOOK it — a control that is dim reads as "not now", while one that
+   looks live and swallows the tap reads as a broken till. Matches .sideKey above
+   rather than inventing a second disabled treatment. */
+.key:disabled,
+.keyClear:disabled,
+.keyEnter:disabled,
+.taInput:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Why the delivery dialog's fields are locked, said once at the top of it. */
+.delReadOnly {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+/* Locked delivery fields: greyed but still READABLE — the point of opening a
+   paid bill is to read the address back, so this dims less than a dead button. */
+.delField input:disabled,
+.delField select:disabled {
+  opacity: 0.75;
+  color: var(--ink-dim);
+  cursor: default;
+}
 .sideDanger:hover:not(:disabled) { border-color: #f04438; color: #f04438; }
-.sideKeyOn { border-color: var(--amber); color: var(--amber); background: rgba(247, 144, 9, 0.12); }
 
 /* Kitchen note for the selected cart line. */
-.noteBar {
-  flex: none;
+/* ── kitchen note dialog ──────────────────────────────────────────────── */
+/* Replaces the inline note bar that used to sit under the keypad. That bar was
+   attached to whichever row happened to be selected and wrote every keystroke
+   straight into the line, so there was no way to back out of an edit. */
+.noteModal {
+  width: min(460px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.noteInput {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.noteInput::placeholder { color: var(--ink-dim); }
+.noteInput:focus { border-color: var(--amber); }
+
+.noteActions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 8px 8px;
-  padding: 0 10px;
-  height: 38px;
-  border: 1px solid var(--amber);
-  border-radius: 6px;
-  background: var(--panel-2);
+  gap: 8px;
 }
-.noteBar input {
-  flex: 1;
-  border: none;
+.noteClear {
+  min-height: 40px;
+  padding: 0 14px;
+  margin-right: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
   background: transparent;
-  color: var(--ink);
-  font-size: 13px;
-  outline: none;
-}
-.noteBar input::placeholder { color: var(--ink-dim); }
-.noteBar button {
-  border: none;
-  background: transparent;
-  color: var(--amber);
+  color: var(--red);
   font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  padding: 4px 6px;
+}
+.noteClear:hover { border-color: var(--red); }
+.noteSave {
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: 1px solid var(--amber);
+  background: var(--amber);
+  color: var(--on-amber);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 /* Parcel line on a dine-in bill — same bill, but the kitchen boxes it. */
@@ -667,33 +798,58 @@
 }
 .searchWrap input::placeholder { color: var(--ink-dim); }
 
-/* Fixed-width chips that wrap, NOT a stretching grid.
-   This was repeat(auto-fit, minmax(180px, 1fr)): auto-fit collapses the empty
-   tracks and hands their space to the ones left, so a menu with two categories
-   rendered two buttons half the screen wide each. A category button should be
-   the same size whether the restaurant has two of them or twenty. */
-.catGrid {
-  flex: none;
+/* Categories and dishes sit SIDE BY SIDE, each scrolling on its own.
+   They used to stack: a wrapping strip of category chips above the dish grid,
+   which pushed the dishes further down every time the menu gained a category —
+   on a real menu of twenty the strip ate half the screen before a single dish
+   was visible. A till is read standing up, one hand busy, so the category list
+   has to stay in one place while the dish area moves. */
+.pickArea {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+/* THREE tiles per row, filling down the column. Three rather than two so a
+   bigger tile does not cost a longer column: 20 categories are 7 rows here
+   against 10 at two-up, so the grid grew sideways instead of downwards. Fixed
+   track width, never 1fr, so
+   a category tile is the same size whether the restaurant has two of them or
+   twenty — this was auto-fit once, and a two-category menu rendered two
+   half-screen buttons. */
+.catGrid {
+  flex: 0 0 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 92px);
+  align-content: start;
   gap: 6px;
   padding: 0 8px 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
 }
 
-.catGrid > .cat {
-  flex: 0 0 180px;
-  /* Below ~196px of usable width a fixed 180px would overflow the row. */
-  max-width: 100%;
-}
-
+/* 92x58 — a till is tapped with a thumb, so the tile is sized for a finger
+   rather than a cursor. The label WRAPS rather than being clipped ("BURGER
+   SANDWICH" reads as two lines, not "BURGER SANDWI…") and is centred in both
+   axes so a one-line and a three-line label look like the same control. */
 .cat {
-  min-height: 38px;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
   border-radius: 6px;
   border: 2px solid transparent;
   color: #fff;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 .cat:hover { filter: brightness(1.15); }
@@ -701,6 +857,7 @@
 
 .dishScroll {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 0 8px 8px;
@@ -728,6 +885,13 @@
   cursor: pointer;
 }
 .dish:hover { border-color: var(--amber); }
+
+/* Recalled paid bill: the tiles LOOK inert so the state is visible before a tap,
+   but stay clickable so the tap gets an explanation instead of silence. */
+.dishLocked {
+  opacity: 0.45;
+}
+.dishLocked:hover { border-color: var(--line); }
 .dishActive { border-color: var(--amber); background: rgba(247, 144, 9, 0.1); }
 
 .dishCode {
@@ -1012,7 +1176,9 @@
 .delChipAdd {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
+  /* 34px like every other control in the ticket strip — see .tokenChip. */
+  height: 34px;
+  box-sizing: border-box;
   padding: 0 16px;
   border: 1px dashed var(--amber);
   border-radius: 999px;
@@ -1030,7 +1196,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
+  /* 34px like every other control in the ticket strip — see .tokenChip. */
+  height: 34px;
+  box-sizing: border-box;
   max-width: 420px;
   padding: 0 6px 0 12px;
   border: 1px solid var(--line);

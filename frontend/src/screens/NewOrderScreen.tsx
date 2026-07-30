@@ -1141,7 +1141,8 @@ export function NewOrderScreen() {
               navigate("/login", { replace: true });
             }}
           >
-            🔒 Sign-Out
+            {/* Text only, like every other staff-surface sign-out. */}
+            Sign-Out
           </button>
           <button type="button" className={s.tStatusItem} onClick={() => navigate("/customer-management")}>
             Customers

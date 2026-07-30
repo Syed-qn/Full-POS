@@ -1,0 +1,111 @@
+/* Bill lookup in the till's top bar. Inherits the bar's theme variables — this
+   strip is themed dark/light/blue by WaiterOrderScreen's .root, so nothing here
+   hardcodes a colour. */
+
+.wrap {
+  position: relative;
+  flex: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* min-height: 0 FIRST — base.css gives every input `min-height: 44px` and
+   min-height beats height, so without this the box would stand 44px tall in a
+   bar of 30px controls. */
+.input {
+  min-height: 0;
+  height: 30px;
+  box-sizing: border-box;
+  width: 130px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+}
+.input::placeholder { color: var(--ink-dim); }
+.input:focus { border-color: var(--amber); }
+
+.btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Anchored under the box, NOT a modal: the cashier keeps seeing the till they
+   are about to load the bill into. */
+.pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(420px, 80vw);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.msg {
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+
+.matchHead {
+  margin: 0 0 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.matchRow {
+  display: grid;
+  grid-template-columns: 90px 92px 76px 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.matchRow:hover { background: var(--panel-2); }
+
+.matchRef {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 800;
+  color: var(--amber);
+}
+.matchDate { color: var(--ink-dim); }
+.matchMeta { color: var(--ink-dim); }
+.matchName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

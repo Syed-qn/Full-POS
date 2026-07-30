@@ -5,7 +5,7 @@ import { useRestaurantName } from "../lib/brand";
 import { getSessionRole, getStaffSession, isCashierRole } from "../lib/navAccess";
 import { cyclePosTheme, usePosTheme } from "../lib/posTheme";
 import { ReadyAlertsBell } from "./ReadyAlertsBell";
-import { ViewBillDialog } from "./ViewBillDialog";
+import { BillLookup } from "./BillLookup";
 import s from "./WaiterTopBar.module.css";
 
 const THEME_LABEL: Record<string, string> = {
@@ -53,8 +53,6 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
       : "/floor";
   // Take Away is a cashier till (no table); waiters work dine-in only.
   const showTakeaway = isCashierRole();
-  // View Bill opens a lookup dialog in place — it doesn't navigate anywhere.
-  const [billOpen, setBillOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const brand = useRestaurantName();
   const staff = getStaffSession();
@@ -123,23 +121,16 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             WhatsApp
           </button>
         )}
-        {showTakeaway && (
-          <button
-            type="button"
-            className={`${s.tab} ${billOpen ? s.tabActive : ""}`}
-            aria-haspopup="dialog"
-            aria-expanded={billOpen}
-            data-testid="cashier-viewbill-tab"
-            onClick={() => setBillOpen(true)}
-          >
-            View Bill
-          </button>
-        )}
       </nav>
 
-      {billOpen && <ViewBillDialog onClose={() => setBillOpen(false)} />}
-
       <div className={s.topRight}>
+        {/* Bill lookup sits with the chrome, not with the channel tabs. Those
+            tabs are WHERE you are — Dining, Take Away, Home Delivery each hold a
+            different till and one of them is always current. Looking a bill up
+            changes nothing about where you are, and sitting among them it read as
+            a fifth channel that never highlighted. It is a box and a button in
+            the bar itself: no dialog to open first, and the till stays visible. */}
+        {showTakeaway && <BillLookup />}
         <button
           type="button"
           className={s.themeBtn}
@@ -161,7 +152,12 @@ export function WaiterTopBar({ active }: { active: WaiterSection }) {
             navigate("/login", { replace: true });
           }}
         >
-          ⏻ Sign out
+          {/* Text only. The staff surfaces each had their own sign-out glyph
+              (⏻ here, 🔒 on the kitchen board and the till status bar), so the
+              same action looked like three different ones. Only the dashboard
+              sidebar keeps an icon, because there the icon IS the control when
+              the nav is collapsed to a rail. */}
+          Sign out
         </button>
       </div>
     </header>

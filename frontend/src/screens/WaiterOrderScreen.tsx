@@ -142,7 +142,17 @@ export function WaiterOrderScreen() {
   const [submitting, setSubmitting] = useState(false);
   /** Per-line kitchen notes, keyed by dish id — the only note the API carries. */
   const [notes, setNotes] = useState<Record<number, string>>({});
-  const [noteOpen, setNoteOpen] = useState(false);
+  /**
+   * Which cart line's note dialog is open, and the text being typed into it.
+   *
+   * Keyed by LINE rather than reusing focusedId: the note belongs to the line
+   * whose pencil you tapped, and a stray tap elsewhere in the cart must not
+   * redirect a half-typed note onto a different dish. The draft is separate from
+   * `notes` so Cancel really cancels — the old inline note bar wrote every
+   * keystroke straight through and had no way back.
+   */
+  const [noteFor, setNoteFor] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
   /** Bumped after a send so the open-tab banner re-reads the order. */
   const [tabRefresh, setTabRefresh] = useState(0);
   const [tabItems, setTabItems] = useState<
@@ -153,10 +163,32 @@ export function WaiterOrderScreen() {
       line_total: string;
       course_held?: boolean;
       is_takeaway?: boolean;
+      /** The kitchen note that was sent WITH this line ("no onion"). Carried so a
+       *  saved or recalled bill shows what the kitchen was told — the note is
+       *  half the instruction and the panel used to drop it. */
+      notes?: string | null;
     }[]
   >([]);
   /** Status of the table's open order — decides whether KOT still has work. */
   const [tabStatus, setTabStatus] = useState<string | null>(null);
+  /**
+   * The recalled bill is already PAID, so this till is a reprint window and
+   * nothing more: the dish grid and Kot & Bill are locked, because appending to
+   * a settled ticket fires food nobody has been charged for. Print Bill and
+   * New Bill stay live — reprinting is the reason the bill was looked up, and
+   * New Bill is how the cashier gets back to selling.
+   */
+  const [tabSettled, setTabSettled] = useState(false);
+  /**
+   * The loaded tab's own identity: bill number ("R3-0009") and queue token (8).
+   *
+   * The banner used to print `#${openTabOrderId}`, which is the DATABASE id — a
+   * number nobody at the counter can act on, and one that does not match either
+   * the bill or the token. Order id 9 was showing as "#9" on a bill the cashier
+   * knows as R3-0009 / token 8.
+   */
+  const [tabOrderNumber, setTabOrderNumber] = useState<string | null>(null);
+  const [tabToken, setTabToken] = useState<number | null>(null);
   /** Running total already on the tab, so the bill is not shown as 0.00. */
   const [tabTotal, setTabTotal] = useState(0);
   /**
@@ -376,6 +408,9 @@ export function WaiterOrderScreen() {
       setTabItems([]);
       setTabStatus(null);
       setTabTotal(0);
+      setTabSettled(false);
+      setTabOrderNumber(null);
+      setTabToken(null);
       setDiscountAed(0); // no open order → no discount context
       setRush(false);
       return;
@@ -387,6 +422,14 @@ export function WaiterOrderScreen() {
         setTabItems(Array.isArray(d.items) ? d.items : []);
         setTabStatus(d.status ?? null);
         setTabTotal(Number(d.total ?? 0) || 0);
+        setTabOrderNumber(d.order_number ?? null);
+        setTabToken(d.daily_token ?? null);
+        // Settled = the money is in. There is no "paid" ORDER status — payment
+        // lives in paid_total_aed — so this is the only honest test, and it is
+        // what locks a recalled bill down to a reprint below.
+        const total = Number(d.total ?? 0) || 0;
+        const paid = Number(d.paid_total_aed ?? 0) || 0;
+        setTabSettled(total > 0 && paid >= total - 0.005);
         setRush(String((d as { priority?: string }).priority ?? "") === "rush");
         // Reopening a delivery order ("Add Item") must pull its saved customer +
         // address back in, so the ticket-bar chip shows who/where instead of an
@@ -427,6 +470,17 @@ export function WaiterOrderScreen() {
     for (const d of dishes) set.add(d.category ?? "Other");
     return [...set];
   }, [dishes]);
+
+  /**
+   * How to NAME the loaded tab to a human: the bill number, with the queue token
+   * beside it because that is what the customer is holding. Falls back to the
+   * order id only when the server sent neither — better a wrong-looking number
+   * than an empty label.
+   */
+  const tabRef =
+    [tabOrderNumber, tabToken != null ? `Token ${tabToken}` : null]
+      .filter(Boolean)
+      .join(" · ") || `#${openTabOrderId}`;
 
   const visibleDishes = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -530,7 +584,7 @@ export function WaiterOrderScreen() {
     setFocusedId(null);
     setKeyBuf("");
     setNotes({});
-    setNoteOpen(false);
+    setNoteFor(null);
     setHeldIds(new Set());
     setParcelIds(new Set());
   }
@@ -1033,13 +1087,15 @@ export function WaiterOrderScreen() {
       <button
         type="button"
         className={`${s.act} ${s.actKot}`}
-        disabled={submitting || (lines.length === 0 && !tabUnfired)}
+        disabled={submitting || tabSettled || (lines.length === 0 && !tabUnfired)}
         onClick={() => void kotThenBill()}
         data-testid="waiter-kot"
         title={
-          lines.length === 0 && tabUnfired
-            ? "Fire the saved (not yet sent) items to the kitchen"
-            : "Save and fire the ticket to the kitchen / bar stations"
+          tabSettled
+            ? "This bill is already paid. Start a New Bill to sell"
+            : lines.length === 0 && tabUnfired
+              ? "Fire the saved (not yet sent) items to the kitchen"
+              : "Save and fire the ticket to the kitchen / bar stations"
         }
       >
         🖨 {submitting
@@ -1078,7 +1134,7 @@ export function WaiterOrderScreen() {
         <button
           type="button"
           className={`${s.act} ${parcelCount > 0 ? s.actParcelOn : ""}`}
-          disabled={focusedId == null}
+          disabled={tabSettled || focusedId == null}
           onClick={() => focusedId != null && toggleParcel(focusedId)}
           data-testid="waiter-parcel"
           title={
@@ -1093,7 +1149,7 @@ export function WaiterOrderScreen() {
       <button
         type="button"
         className={`${s.act} ${rush ? s.actParcelOn : ""}`}
-        disabled={submitting || (lines.length === 0 && !openTabOrderId)}
+        disabled={submitting || tabSettled || (lines.length === 0 && !openTabOrderId)}
         onClick={() => void toggleRush()}
         aria-pressed={rush}
         data-testid="waiter-rush"
@@ -1106,7 +1162,7 @@ export function WaiterOrderScreen() {
         <button
           type="button"
           className={s.act}
-          disabled={submitting || (lines.length === 0 && !openTabOrderId)}
+          disabled={submitting || tabSettled || (lines.length === 0 && !openTabOrderId)}
           onClick={() => {
             setDiscountMode("pct");
             setDiscountInput("");
@@ -1124,7 +1180,7 @@ export function WaiterOrderScreen() {
         <button
           type="button"
           className={s.act}
-          disabled={submitting || !openTabOrderId || !selectedTable}
+          disabled={submitting || tabSettled || !openTabOrderId || !selectedTable}
           onClick={() => void requestBill()}
           data-testid="waiter-request-bill"
           title={
@@ -1141,7 +1197,7 @@ export function WaiterOrderScreen() {
         <button
           type="button"
           className={s.act}
-          disabled={submitting || !openTabOrderId || transferTargets.length === 0}
+          disabled={submitting || tabSettled || !openTabOrderId || transferTargets.length === 0}
           onClick={() => setTransferOpen(true)}
           data-testid="waiter-transfer"
           title={
@@ -1158,6 +1214,14 @@ export function WaiterOrderScreen() {
       {/* Deletion happens via the per-line 🗑 in the cart, so there is no bar
           Void on any channel — lines are cleared from the cart. */}
 
+      {/* A SETTLED bill leaves exactly two live controls in this bar: Print Bill,
+          because reprinting is why the bill was looked up, and New Bill, because
+          that is how the cashier gets back to selling. Everything else above is
+          gated on tabSettled — Kot & Bill would fire food against money already
+          taken, Other Pay and Open Drawer would charge a second time, Discount
+          would rewrite a total that has been paid, and Rush/Parcel/Transfer are
+          instructions to a kitchen that finished this order. */}
+
       <span className={s.spacer} />
 
       {/* Payment is a cashier-only cluster; waiters send to the kitchen and the
@@ -1167,7 +1231,7 @@ export function WaiterOrderScreen() {
           <button
             type="button"
             className={s.act}
-            disabled={submitting || !openTabOrderId}
+            disabled={submitting || tabSettled || !openTabOrderId}
             onClick={() => void goPay("card")}
             title="Card, wallet, online & other payment modes"
             data-testid="cashier-other-pay"
@@ -1179,7 +1243,7 @@ export function WaiterOrderScreen() {
           <button
             type="button"
             className={`${s.act} ${s.payBtn}`}
-            disabled={submitting || !openTabOrderId}
+            disabled={submitting || tabSettled || !openTabOrderId}
             onClick={() => setCodOpen(true)}
             title="Open the cash drawer and collect at the counter"
             data-testid="cashier-cod"
@@ -1194,163 +1258,6 @@ export function WaiterOrderScreen() {
   return (
     <div className={s.root} data-theme={theme} data-testid="waiter-order-screen">
       <WaiterTopBar active={SECTION_BY_TYPE[orderType]} />
-
-      {/* ── ticket strip ─────────────────────────────────────────────── */}
-      <div className={s.ticketBar}>
-        {/* Dine-in goes back to the floor. Take Away and Home Delivery have no
-            "‹ Orders" back button — they reach their list via the "Order List ›"
-            control after the token, and open straight from their tab. */}
-        {orderType === "dine_in" ? (
-          <button type="button" className={s.backBtn} onClick={() => navigate(floorPath)}>
-            ‹ Floor
-          </button>
-        ) : null}
-
-        <span className={s.tokenChip}>
-          <span className={s.tokenHash}>#</span> Token{" "}
-          <strong className={s.tokenNum} data-testid="waiter-token">
-            {nextToken ?? "—"}
-          </strong>
-        </span>
-
-        {/* Take Away: optional walk-in phone + name. Blank is fine — the order
-            saves as "Take away" with a placeholder phone; anything typed is kept. */}
-        {orderType === "takeaway" && (
-          <span className={s.taFields}>
-            <input
-              type="text"
-              value={takeawayName}
-              onChange={(e) => setTakeawayName(e.target.value)}
-              placeholder="Name (optional)"
-              aria-label="Customer name (optional)"
-              data-testid="takeaway-name"
-              className={s.taInput}
-            />
-            <input
-              type="tel"
-              inputMode="tel"
-              value={takeawayPhone}
-              onChange={(e) => setTakeawayPhone(e.target.value)}
-              placeholder="Phone (optional)"
-              aria-label="Customer phone (optional)"
-              data-testid="takeaway-phone"
-              className={s.taInput}
-            />
-            <button
-              type="button"
-              className={s.backBtn}
-              onClick={() => navigate("/cashier/takeaway?from=till")}
-              data-testid="takeaway-order-list"
-            >
-              Order List ›
-            </button>
-          </span>
-        )}
-
-        {/* Home Delivery: the customer + address control sits right after the
-            token. Empty = a call to capture it; filled = a compact chip. */}
-        {isDelivery &&
-          (deliverySaved ? (
-            <button
-              type="button"
-              className={s.delChip}
-              onClick={() => setDeliveryOpen(true)}
-              data-testid="delivery-summary"
-              title="Edit delivery details"
-            >
-              <span aria-hidden>🛵</span>
-              <strong>{custName.trim() || receiverName.trim() || "Customer"}</strong>
-              <span className={s.delChipMeta}>
-                {[custPhone.trim(), building.trim()].filter(Boolean).join(" · ")}
-              </span>
-              <span className={s.delChipEdit}>Edit</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={s.delChipAdd}
-              onClick={() => setDeliveryOpen(true)}
-              data-testid="delivery-add-details"
-            >
-              ＋ Add delivery details
-            </button>
-          ))}
-
-        {/* Home Delivery: jump to the delivery order list, same as Take Away. */}
-        {isDelivery && (
-          <button
-            type="button"
-            className={s.backBtn}
-            onClick={() => navigate("/cashier/delivery?from=till")}
-            data-testid="delivery-order-list"
-          >
-            Order List ›
-          </button>
-        )}
-
-        {orderType === "dine_in" && (
-          <span className={s.tableChip}>
-            Table{" "}
-            <strong className={s.tableChipNum} data-testid="waiter-table">
-              {tableLabel}
-            </strong>
-          </span>
-        )}
-
-        {/* Waiter attribution is a dine-in concern; Take Away is a cashier till. */}
-        {orderType === "dine_in" && (
-          <label className={s.waiterPick}>
-            <span aria-hidden>👤</span>
-            <select
-              value={waiterId}
-              onChange={(e) => setWaiterId(e.target.value === "" ? "" : Number(e.target.value))}
-              aria-label="Waiter"
-              disabled={waiterOptions.length === 0}
-            >
-              {waiterOptions.length === 0 ? (
-                <option value={staff?.staff_id ?? ""}>{staff?.name ?? "— Select Waiter —"}</option>
-              ) : (
-                <>
-                  <option value="">— Select Waiter —</option>
-                  {waiterOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </>
-              )}
-            </select>
-          </label>
-        )}
-
-        {orderType === "dine_in" && (
-          <span className={s.covers} aria-label="Covers">
-            <span aria-hidden>👥</span>
-            <button type="button" onClick={() => void changeCovers(Math.max(1, covers - 1))}>
-              −
-            </button>
-            <strong data-testid="waiter-covers">{covers}</strong>
-            <button type="button" onClick={() => void changeCovers(Math.min(30, covers + 1))}>
-              +
-            </button>
-          </span>
-        )}
-
-        <span className={s.spacer} />
-
-        {/* Open the kitchen display in a NEW TAB so the till stays put — the KDS
-            board is a chrome-free surface with no "back to till", so navigating
-            there in-place would strand the cashier/waiter. Both roles get it. */}
-        <button
-          type="button"
-          className={s.backBtn}
-          onClick={() => window.open("/kds", "_blank", "noopener,noreferrer")}
-          data-testid="open-kitchen-screen"
-          title="Open the kitchen screen in a new tab"
-        >
-          Kitchen Screen ↗
-        </button>
-      </div>
 
       {/* ── body ─────────────────────────────────────────────────────── */}
       <div className={s.body}>
@@ -1391,8 +1298,11 @@ export function WaiterOrderScreen() {
             {openTabOrderId && tabItems.length > 0 && (
               <div className={s.tabBanner} data-testid="waiter-open-tab">
                 <div className={s.tabBannerHead}>
-                  Already on {selectedTable?.label ?? "this tab"} · #{openTabOrderId}
-                  {tabUnfired && (
+                  {tabSettled
+                    ? `Paid bill · ${tabRef}`
+                    : `Already on ${selectedTable?.label ?? "this tab"} · ${tabRef}`}
+                  {tabSettled && <span className={s.tabPaid}> · SETTLED</span>}
+                  {!tabSettled && tabUnfired && (
                     <span className={s.tabPending}> · NOT SENT TO KITCHEN</span>
                   )}
                 </div>
@@ -1401,6 +1311,9 @@ export function WaiterOrderScreen() {
                     <span>
                       {it.qty}× {it.dish_name}
                       {it.is_takeaway && <em className={s.tabParcel}>📦 PARCEL</em>}
+                      {/* The note the kitchen was given. On a reprint this is
+                          what settles "but I asked for no onion". */}
+                      {it.notes && <em className={s.lineNote}>📝 {it.notes}</em>}
                     </span>
                     <span>{it.line_total}</span>
                   </div>
@@ -1417,9 +1330,11 @@ export function WaiterOrderScreen() {
                   </button>
                 )}
                 <div className={s.tabHint}>
-                  {tabUnfired
-                    ? "Saved but not sent — hit KOT to fire it."
-                    : "The kitchen is already on this ticket, so anything you add goes straight through."}
+                  {tabSettled
+                    ? "This bill is paid. Reprint it if you need to, or hit New Bill for the next customer."
+                    : tabUnfired
+                      ? "Saved but not sent — hit KOT to fire it."
+                      : "The kitchen is already on this ticket, so anything you add goes straight through."}
                 </div>
               </div>
             )}
@@ -1509,6 +1424,41 @@ export function WaiterOrderScreen() {
                     </span>
                   </span>
                   <span className={s.cAmt}>{money(l.amount)}</span>
+                  {/* Note sits on the LINE, next to its delete, because that is
+                      the line it applies to — it used to be a NOTE key on the
+                      keypad that acted on whichever row happened to be selected. */}
+                  <button
+                    type="button"
+                    className={`${s.rowNote} ${notes[l.id] ? s.rowNoteOn : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFocusedId(l.id);
+                      setNoteFor(l.id);
+                      setNoteDraft(notes[l.id] ?? "");
+                    }}
+                    aria-label={`${notes[l.id] ? "Edit" : "Add"} kitchen note for ${
+                      l.dish?.name ?? "item"
+                    }`}
+                    title={notes[l.id] ? `Note: ${notes[l.id]}` : "Add a kitchen note"}
+                    data-testid={`row-note-${l.id}`}
+                  >
+                    {/* SVG for the same reason as the bin below: an emoji paints
+                        its own colour and would never pick up the amber. */}
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="18"
+                      height="18"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M4 4h11l5 5v11H4z" />
+                      <path d="M8 10h6M8 14h4" />
+                    </svg>
+                  </button>
                   <button
                     type="button"
                     className={s.rowDel}
@@ -1591,8 +1541,16 @@ export function WaiterOrderScreen() {
                 <strong data-testid="waiter-keybuf">{keyBuf || "—"}</strong>
               </div>
               <div className={s.padKeys}>
+                {/* Dead on a settled bill: these type a quantity for a focused
+                    cart line, and a reprint has no cart. */}
                 {["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"].map((k) => (
-                  <button key={k} type="button" className={s.key} onClick={() => pressKey(k)}>
+                  <button
+                    key={k}
+                    type="button"
+                    className={s.key}
+                    disabled={tabSettled}
+                    onClick={() => pressKey(k)}
+                  >
                     {k}
                   </button>
                 ))}
@@ -1605,12 +1563,18 @@ export function WaiterOrderScreen() {
                 <button
                   type="button"
                   className={s.keyClear}
+                  disabled={tabSettled}
                   onClick={() => setKeyBuf("")}
                   title="Clear the typed number"
                 >
                   CLEAR
                 </button>
-                <button type="button" className={s.keyEnter} onClick={applyQty}>
+                <button
+                  type="button"
+                  className={s.keyEnter}
+                  disabled={tabSettled}
+                  onClick={applyQty}
+                >
                   ENTER
                 </button>
               </div>
@@ -1644,47 +1608,184 @@ export function WaiterOrderScreen() {
               >
                 ✕
               </button>
-              <button
-                type="button"
-                className={`${s.sideKey} ${noteOpen ? s.sideKeyOn : ""}`}
-                disabled={focusedId == null}
-                title={
-                  focusedId == null
-                    ? "Select a cart line first"
-                    : "Add a kitchen note to the selected line"
-                }
-                onClick={() => setNoteOpen((v) => !v)}
-                data-testid="waiter-note-toggle"
-              >
-                NOTE
-              </button>
             </div>
           </div>
-
-          {noteOpen && focusedId != null && (
-            <div className={s.noteBar} data-testid="waiter-note-bar">
-              <input
-                type="text"
-                autoFocus
-                value={notes[focusedId] ?? ""}
-                onChange={(e) => setLineNote(focusedId, e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === "Escape") setNoteOpen(false);
-                }}
-                placeholder={`Kitchen note for ${
-                  dishes.find((d) => d.id === focusedId)?.name ?? "this item"
-                }…`}
-                aria-label="Kitchen note for the selected item"
-              />
-              <button type="button" onClick={() => setNoteOpen(false)} aria-label="Close note">
-                ✕
-              </button>
-            </div>
-          )}
         </section>
 
-        {/* RIGHT: search + categories + dishes */}
+        {/* RIGHT: ticket strip + search + categories + dishes.
+            The ticket strip used to run the full width above BOTH columns, which
+            spent a whole row of a till screen on a token and two optional fields
+            and pushed the cart down with it. It belongs over the menu side: the
+            cart column now starts at the top and gets that row back for lines. */}
         <section className={s.right}>
+          {/* ── ticket strip ─────────────────────────────────────────────── */}
+          <div className={s.ticketBar}>
+            {/* Dine-in goes back to the floor. Take Away and Home Delivery have no
+                "‹ Orders" back button — they reach their list via the "Order List ›"
+                control after the token, and open straight from their tab. */}
+            {orderType === "dine_in" ? (
+              <button type="button" className={s.backBtn} onClick={() => navigate(floorPath)}>
+                ‹ Floor
+              </button>
+            ) : null}
+
+            {/* The token of the bill ON SCREEN. nextToken means "what the next
+                order will be called", so it is only ever right on an EMPTY till:
+                on a recalled bill it printed 9 beside a ticket the cashier knows
+                as token 8. And a loaded bill with NO token of its own (delivery
+                orders need not have one) shows a dash rather than borrowing the
+                next one — a wrong number here is worse than no number. */}
+            <span className={s.tokenChip}>
+              <span className={s.tokenHash}>#</span> Token{" "}
+              <strong className={s.tokenNum} data-testid="waiter-token">
+                {openTabOrderId != null ? (tabToken ?? "—") : (nextToken ?? "—")}
+              </strong>
+            </span>
+
+            {/* Take Away: optional walk-in phone + name. Blank is fine — the order
+                saves as "Take away" with a placeholder phone; anything typed is kept. */}
+            {orderType === "takeaway" && (
+              <span className={s.taFields}>
+                <input
+                  type="text"
+                  value={takeawayName}
+                  onChange={(e) => setTakeawayName(e.target.value)}
+                  placeholder="Name (optional)"
+                  aria-label="Customer name (optional)"
+                  data-testid="takeaway-name"
+                  className={s.taInput}
+                  /* A recalled paid bill is not editable, and these two are only
+                     read when a NEW order is submitted — leaving them typeable
+                     promised an edit to the bill on screen that never happens. */
+                  disabled={tabSettled}
+                />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={takeawayPhone}
+                  onChange={(e) => setTakeawayPhone(e.target.value)}
+                  placeholder="Phone (optional)"
+                  aria-label="Customer phone (optional)"
+                  data-testid="takeaway-phone"
+                  className={s.taInput}
+                  disabled={tabSettled}
+                />
+                <button
+                  type="button"
+                  className={s.backBtn}
+                  onClick={() => navigate("/cashier/takeaway?from=till")}
+                  data-testid="takeaway-order-list"
+                >
+                  Order List ›
+                </button>
+              </span>
+            )}
+
+            {/* Home Delivery: the customer + address control sits right after the
+                token. Empty = a call to capture it; filled = a compact chip. */}
+            {isDelivery &&
+              (deliverySaved ? (
+                <button
+                  type="button"
+                  className={s.delChip}
+                  onClick={() => setDeliveryOpen(true)}
+                  data-testid="delivery-summary"
+                  title={tabSettled ? "View delivery details" : "Edit delivery details"}
+                >
+                  <span aria-hidden>🛵</span>
+                  <strong>{custName.trim() || receiverName.trim() || "Customer"}</strong>
+                  <span className={s.delChipMeta}>
+                    {[custPhone.trim(), building.trim()].filter(Boolean).join(" · ")}
+                  </span>
+                  <span className={s.delChipEdit}>{tabSettled ? "View" : "Edit"}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={s.delChipAdd}
+                  onClick={() => setDeliveryOpen(true)}
+                  data-testid="delivery-add-details"
+                >
+                  ＋ Add delivery details
+                </button>
+              ))}
+
+            {/* Home Delivery: jump to the delivery order list, same as Take Away. */}
+            {isDelivery && (
+              <button
+                type="button"
+                className={s.backBtn}
+                onClick={() => navigate("/cashier/delivery?from=till")}
+                data-testid="delivery-order-list"
+              >
+                Order List ›
+              </button>
+            )}
+
+            {orderType === "dine_in" && (
+              <span className={s.tableChip}>
+                Table{" "}
+                <strong className={s.tableChipNum} data-testid="waiter-table">
+                  {tableLabel}
+                </strong>
+              </span>
+            )}
+
+            {/* Waiter attribution is a dine-in concern; Take Away is a cashier till. */}
+            {orderType === "dine_in" && (
+              <label className={s.waiterPick}>
+                <span aria-hidden>👤</span>
+                <select
+                  value={waiterId}
+                  onChange={(e) => setWaiterId(e.target.value === "" ? "" : Number(e.target.value))}
+                  aria-label="Waiter"
+                  disabled={waiterOptions.length === 0}
+                >
+                  {waiterOptions.length === 0 ? (
+                    <option value={staff?.staff_id ?? ""}>{staff?.name ?? "— Select Waiter —"}</option>
+                  ) : (
+                    <>
+                      <option value="">— Select Waiter —</option>
+                      {waiterOptions.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+              </label>
+            )}
+
+            {orderType === "dine_in" && (
+              <span className={s.covers} aria-label="Covers">
+                <span aria-hidden>👥</span>
+                <button type="button" onClick={() => void changeCovers(Math.max(1, covers - 1))}>
+                  −
+                </button>
+                <strong data-testid="waiter-covers">{covers}</strong>
+                <button type="button" onClick={() => void changeCovers(Math.min(30, covers + 1))}>
+                  +
+                </button>
+              </span>
+            )}
+
+            <span className={s.spacer} />
+
+            {/* Open the kitchen display in a NEW TAB so the till stays put — the KDS
+                board is a chrome-free surface with no "back to till", so navigating
+                there in-place would strand the cashier/waiter. Both roles get it. */}
+            <button
+              type="button"
+              className={s.backBtn}
+              onClick={() => window.open("/kds", "_blank", "noopener,noreferrer")}
+              data-testid="open-kitchen-screen"
+              title="Open the kitchen screen in a new tab"
+            >
+              Kitchen Screen ↗
+            </button>
+          </div>
+
           <div className={s.searchWrap}>
             <span aria-hidden>🔍</span>
             <input
@@ -1697,69 +1798,164 @@ export function WaiterOrderScreen() {
             />
           </div>
 
-          {/* Category strip is hidden until the menu loads — otherwise a lone
-              "ALL" button sits above an empty area while dishes are fetched. */}
-          {!menuLoading && (
-            <div className={s.catGrid}>
-              <button
-                type="button"
-                className={`${s.cat} ${activeCat === "all" ? s.catActive : ""}`}
-                style={{ background: "#3a3a35" }}
-                onClick={() => setActiveCat("all")}
-              >
-                ALL
-              </button>
-              {categories.map((c, i) => (
+          {/* Two columns: categories on the left, dishes on the right, each
+              scrolling on its own. */}
+          <div className={s.pickArea}>
+            {/* Category column is hidden until the menu loads — otherwise a lone
+                "ALL" button sits beside an empty area while dishes are fetched,
+                and the dish area gets the full width in the meantime. */}
+            {!menuLoading && (
+              <div className={s.catGrid}>
                 <button
-                  key={c}
                   type="button"
-                  className={`${s.cat} ${activeCat === c ? s.catActive : ""}`}
-                  style={{ background: CAT_COLORS[i % CAT_COLORS.length] }}
-                  onClick={() => setActiveCat(c)}
+                  className={`${s.cat} ${activeCat === "all" ? s.catActive : ""}`}
+                  style={{ background: "#3a3a35" }}
+                  onClick={() => setActiveCat("all")}
                 >
-                  {c.toUpperCase()}
+                  ALL
                 </button>
-              ))}
-            </div>
-          )}
-
-          <div className={s.dishScroll}>
-            {menuLoading ? (
-              <div className={s.loadingWrap}>Loading menu…</div>
-            ) : menuError ? (
-              <p className={s.msg}>{menuError}</p>
-            ) : visibleDishes.length === 0 ? (
-              <p className={s.msg}>No dishes match.</p>
-            ) : (
-              <div className={s.dishGrid}>
-                {visibleDishes.map((d) => {
-                  const n = qty[d.id] ?? 0;
-                  return (
-                    <button
-                      key={d.id}
-                      type="button"
-                      className={`${s.dish} ${n > 0 ? s.dishActive : ""}`}
-                      onClick={() => addDish(d.id)}
-                    >
-                      <span className={s.dishCode}>
-                        {d.dish_number != null ? `#${d.dish_number}` : ""}
-                      </span>
-                      <span className={s.dishName}>{d.name}</span>
-                      <span className={s.dishFoot}>
-                        <span className={s.dishPrice}>{d.price_aed ?? "—"}</span>
-                      </span>
-                      {n > 0 && <span className={s.dishQty}>{n}</span>}
-                    </button>
-                  );
-                })}
+                {categories.map((c, i) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`${s.cat} ${activeCat === c ? s.catActive : ""}`}
+                    style={{ background: CAT_COLORS[i % CAT_COLORS.length] }}
+                    onClick={() => setActiveCat(c)}
+                  >
+                    {c.toUpperCase()}
+                  </button>
+                ))}
               </div>
             )}
+
+            <div className={s.dishScroll}>
+              {menuLoading ? (
+                <div className={s.loadingWrap}>Loading menu…</div>
+              ) : menuError ? (
+                <p className={s.msg}>{menuError}</p>
+              ) : visibleDishes.length === 0 ? (
+                <p className={s.msg}>No dishes match.</p>
+              ) : (
+                <div className={s.dishGrid}>
+                  {visibleDishes.map((d) => {
+                    const n = qty[d.id] ?? 0;
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        className={`${s.dish} ${n > 0 ? s.dishActive : ""} ${
+                          tabSettled ? s.dishLocked : ""
+                        }`}
+                        // NOT disabled, on purpose. A settled bill is a reprint
+                        // window and the dish must not go on it — but a dead tile
+                        // that swallows the tap is indistinguishable from a frozen
+                        // till, and a cashier with a queue will tap it again,
+                        // harder, before doubting the bill. So it stays tappable
+                        // and ANSWERS: what is wrong, and the one way out.
+                        title={tabSettled ? "This bill is paid. Start a New Bill" : undefined}
+                        onClick={() => {
+                          if (tabSettled) {
+                            toast(
+                              `${tabRef} is already paid. Hit New Bill to start selling.`,
+                              "error",
+                            );
+                            return;
+                          }
+                          addDish(d.id);
+                        }}
+                      >
+                        <span className={s.dishCode}>
+                          {d.dish_number != null ? `#${d.dish_number}` : ""}
+                        </span>
+                        <span className={s.dishName}>{d.name}</span>
+                        <span className={s.dishFoot}>
+                          <span className={s.dishPrice}>{d.price_aed ?? "—"}</span>
+                        </span>
+                        {n > 0 && <span className={s.dishQty}>{n}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
           {/* Action row under the dish list so the left ticket column runs full
               height — same layout for dine-in, take away and delivery. */}
           {actionBar}
         </section>
       </div>
+
+      {noteFor != null && (
+        <div
+          className={s.modalBack}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Kitchen note"
+          onClick={() => setNoteFor(null)}
+        >
+          <div
+            className={`${s.modal} ${s.noteModal}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={s.modalHead}>
+              📝 Kitchen note · {lines.find((l) => l.id === noteFor)?.dish?.name ?? "Item"}
+            </div>
+            <textarea
+              className={s.noteInput}
+              autoFocus
+              rows={3}
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setNoteFor(null);
+                // Enter saves; Shift+Enter is a newline, because a note like
+                // "no onion / extra spicy" reads better on two lines.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  setLineNote(noteFor, noteDraft);
+                  setNoteFor(null);
+                }
+              }}
+              placeholder="No onion, extra spicy, well done…"
+              aria-label="Kitchen note for this item"
+              data-testid="note-input"
+            />
+            <div className={s.noteActions}>
+              {/* Clear is only offered once there IS a note to clear, so the
+                  dialog does not present an action that does nothing. */}
+              {notes[noteFor] ? (
+                <button
+                  type="button"
+                  className={s.noteClear}
+                  onClick={() => {
+                    setLineNote(noteFor, "");
+                    setNoteFor(null);
+                  }}
+                  data-testid="note-clear"
+                >
+                  Clear note
+                </button>
+              ) : (
+                <span className={s.spacer} />
+              )}
+              <button type="button" className={s.codCancel} onClick={() => setNoteFor(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={s.noteSave}
+                onClick={() => {
+                  setLineNote(noteFor, noteDraft);
+                  setNoteFor(null);
+                }}
+                data-testid="note-save"
+              >
+                Save note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {codOpen && (
         <div
@@ -1836,7 +2032,19 @@ export function WaiterOrderScreen() {
             className={`${s.modal} ${s.delModal}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className={s.modalHead}>🛵 Delivery details</div>
+            <div className={s.modalHead}>
+              🛵 Delivery details
+              {tabSettled && <span className={s.tabPaid}> · VIEW ONLY</span>}
+            </div>
+            {/* A recalled PAID delivery bill opens here to answer "where did it
+                go and who took it", not to be rewritten: the run is done and the
+                money is in, so every field is read-only and Save is gone. The map
+                stays because seeing the pin is the reason to open it at all. */}
+            {tabSettled && (
+              <p className={s.delReadOnly}>
+                This bill is paid. Details are shown as they were delivered and cannot be changed.
+              </p>
+            )}
 
             <div className={s.delBody}>
               <div className={s.delFields}>
@@ -1851,6 +2059,7 @@ export function WaiterOrderScreen() {
                     }}
                     onBlur={() => void onLookupCustomer()}
                     placeholder="05x xxx xxxx"
+                    disabled={tabSettled}
                     data-testid="delivery-phone"
                   />
                   {lookupState === "found" && (
@@ -1867,6 +2076,7 @@ export function WaiterOrderScreen() {
                     value={custName}
                     onChange={(e) => setCustName(e.target.value)}
                     placeholder="Name"
+                    disabled={tabSettled}
                   />
                 </label>
                 <div className={s.delTwoUp}>
@@ -1877,6 +2087,7 @@ export function WaiterOrderScreen() {
                       value={aptRoom}
                       onChange={(e) => setAptRoom(e.target.value)}
                       placeholder="Apt 12"
+                      disabled={tabSettled}
                     />
                   </label>
                   <label className={s.delField}>
@@ -1886,6 +2097,7 @@ export function WaiterOrderScreen() {
                       value={building}
                       onChange={(e) => setBuilding(e.target.value)}
                       placeholder="Marina Tower"
+                      disabled={tabSettled}
                     />
                   </label>
                 </div>
@@ -1896,6 +2108,7 @@ export function WaiterOrderScreen() {
                     value={receiverName}
                     onChange={(e) => setReceiverName(e.target.value)}
                     placeholder="Who receives the order"
+                    disabled={tabSettled}
                   />
                 </label>
                 <label className={s.delField}>
@@ -1905,11 +2118,17 @@ export function WaiterOrderScreen() {
                     value={addressNotes}
                     onChange={(e) => setAddressNotes(e.target.value)}
                     placeholder="Landmark, gate code…"
+                    disabled={tabSettled}
                   />
                 </label>
                 <label className={s.delField}>
                   <span>Delivery fee</span>
-                  <select value={fee} onChange={(e) => setFee(e.target.value)} data-testid="delivery-fee-select">
+                  <select
+                    value={fee}
+                    onChange={(e) => setFee(e.target.value)}
+                    disabled={tabSettled}
+                    data-testid="delivery-fee-select"
+                  >
                     {feeOptions.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
@@ -1951,17 +2170,21 @@ export function WaiterOrderScreen() {
                 className={s.codCancel}
                 onClick={() => setDeliveryOpen(false)}
               >
-                Cancel
+                {/* "Cancel" implies discarding an edit. On a paid bill there is
+                    no edit to discard, so the only button says what it does. */}
+                {tabSettled ? "Close" : "Cancel"}
               </button>
-              <button
-                type="button"
-                className={s.codCollect}
-                disabled={!deliverySaved}
-                onClick={() => setDeliveryOpen(false)}
-                data-testid="delivery-save"
-              >
-                Save details
-              </button>
+              {!tabSettled && (
+                <button
+                  type="button"
+                  className={s.codCollect}
+                  disabled={!deliverySaved}
+                  onClick={() => setDeliveryOpen(false)}
+                  data-testid="delivery-save"
+                >
+                  Save details
+                </button>
+              )}
             </div>
           </div>
         </div>
