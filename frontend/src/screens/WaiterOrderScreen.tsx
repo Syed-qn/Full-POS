@@ -1289,6 +1289,55 @@ export function WaiterOrderScreen() {
           🧾 Request Bill
         </button>
       )}
+      {/* Split opens ANOTHER bill on this table — a second party sat down and will
+          pay for their own food. Sits with the other tab actions rather than up in
+          the ticket strip, next to Transfer, because all three are things you do TO
+          this tab. */}
+      {orderType === "dine_in" && selectedTable && (
+        <button
+          type="button"
+          className={s.act}
+          disabled={submitting || tabSettled}
+          onClick={() => {
+            const p = new URLSearchParams();
+            p.set("type", "dine_in");
+            p.set("table", String(selectedTable.id));
+            p.set("label", selectedTable.label);
+            // Unique per press — see the route key in App.tsx.
+            p.set("split", String(Date.now()));
+            navigate(`${orderPath}?${p.toString()}`);
+          }}
+          data-testid="split-bill-btn"
+          title={
+            tabSettled
+              ? "This bill is paid — start a new one instead"
+              : `Start a separate bill on ${selectedTable.label}`
+          }
+        >
+          ◧ Split
+        </button>
+      )}
+
+      {/* Merge JOINS tables onto one invoice — a party too big for this table. The
+          tables to join are picked on the floor, so this hands off there with this
+          table already set as the one that keeps the bill. */}
+      {orderType === "dine_in" && selectedTable && (
+        <button
+          type="button"
+          className={s.act}
+          disabled={submitting || tabSettled}
+          onClick={() => navigate(`/cashier/floor?join=${selectedTable.id}`)}
+          data-testid="merge-tables-btn"
+          title={
+            tabSettled
+              ? "This bill is paid — nothing left to join"
+              : `Join other tables onto ${selectedTable.label}'s bill`
+          }
+        >
+          🔗 Merge
+        </button>
+      )}
+
       {/* Transfer moves a tab between tables — dine-in only. */}
       {orderType === "dine_in" && (
         <button
@@ -1880,28 +1929,9 @@ export function WaiterOrderScreen() {
               </>
             )}
 
-            {/* Open ANOTHER bill on this table: a second party has sat down and
-                will pay for their own food. Hidden once the current bill is
-                settled — that till is a reprint window, not a place to sell. */}
-            {orderType === "dine_in" && selectedTable && !tabSettled && (
-              <button
-                type="button"
-                className={s.splitBtn}
-                onClick={() => {
-                  const p = new URLSearchParams();
-                  p.set("type", "dine_in");
-                  p.set("table", String(selectedTable.id));
-                  p.set("label", selectedTable.label);
-                  // Unique per press — see the route key in App.tsx.
-                  p.set("split", String(Date.now()));
-                  navigate(`${orderPath}?${p.toString()}`);
-                }}
-                data-testid="split-bill-btn"
-                title={`Start a separate bill on ${selectedTable.label}`}
-              >
-                ◧ Split bill
-              </button>
-            )}
+            {/* Split and Merge live in the bottom action bar beside Transfer —
+                they act on the TAB, not on where you are. The strip keeps only the
+                bill switcher, which says which bill you are looking at. */}
 
             {/* Waiter attribution is a dine-in concern; Take Away is a cashier till. */}
             {orderType === "dine_in" && (

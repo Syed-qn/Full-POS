@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { WaiterTopBar } from "../components/WaiterTopBar";
 import { TableBillsDialog } from "../components/TableBillsDialog";
+import { toast } from "../components/Toaster";
 import { apiClient } from "../lib/apiClient";
-import { fetchFloorLayout, type TableBill } from "../lib/floorApi";
+import {
+  fetchFloorLayout,
+  joinTables,
+  unjoinTable,
+  type TableBill,
+} from "../lib/floorApi";
 import { usePosTheme } from "../lib/posTheme";
 import s from "./WaiterFloorScreen.module.css";
 import { useLiveRefresh } from "../lib/useLiveRefresh";
@@ -20,6 +26,11 @@ type ApiTable = {
   order_total_aed?: string | null;
   bills?: TableBill[];
   bill_count?: number;
+  /** Set on a SECONDARY: the table holding this group's single invoice. */
+  merged_into_table_id?: number | null;
+  merged_into_label?: string | null;
+  /** Set on a PRIMARY: labels of the tables joined to it. */
+  joined_labels?: string[];
   guests?: number | null;
   waiter?: string | null;
   seated_since?: string | null;
@@ -67,6 +78,7 @@ let tableCache: ApiTable[] | null = null;
  */
 export function CashierFloorScreen() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const theme = usePosTheme();
   const [tables, setTables] = useState<ApiTable[]>(() => tableCache ?? []);
   const [loading, setLoading] = useState(tableCache === null);
@@ -74,6 +86,25 @@ export function CashierFloorScreen() {
   const [entrance, setEntrance] = useState<{ x: number; y: number; rot: number } | null>(null);
   // Table whose several bills the cashier is choosing between (null = no dialog).
   const [billsFor, setBillsFor] = useState<ApiTable | null>(null);
+  /**
+   * JOIN MODE. One party too big for a table takes several, on ONE invoice. While
+   * it is on, tapping a table SELECTS it instead of opening the till: the FIRST
+   * table tapped keeps the bill (everything folds onto it) and the rest join to it.
+   * A mode rather than a drag-together gesture, because a mis-drag on a busy floor
+   * would silently move somebody's food onto a stranger's bill.
+   */
+  // ?join=<tableId> — the till's Merge button hands off here with that table
+  // already set as the one keeping the bill, so the cashier only taps the tables
+  // joining it.
+  const joinFromTill = Number(params.get("join"));
+  const [joinMode, setJoinMode] = useState(joinFromTill > 0);
+  const [joinPick, setJoinPick] = useState<number[]>(
+    joinFromTill > 0 ? [joinFromTill] : [],
+  );
+  const [joining, setJoining] = useState(false);
+  // Set when the bill-holding table carries several bills and the server needs to
+  // be told which one the joined guests share.
+  const [joinBillFor, setJoinBillFor] = useState<ApiTable | null>(null);
 
   const load = useCallback(async () => {
     // Layout rides the same poll as the tables: a manager who moves or rotates
@@ -171,7 +202,68 @@ export function CashierFloorScreen() {
     return `/cashier/new-order?table=${t.id}&label=${encodeURIComponent(t.label)}${extra}`;
   }
 
+  /** Run the join. `intoOrderId` names the invoice when the primary has several. */
+  async function runJoin(intoOrderId?: number | null) {
+    const [primaryId, ...rest] = joinPick;
+    if (!primaryId || rest.length === 0) return;
+    setJoining(true);
+    try {
+      const rows = await joinTables(primaryId, rest, intoOrderId);
+      if (Array.isArray(rows)) {
+        tableCache = rows;
+        setTables(rows);
+      }
+      const primary = tables.find((t) => t.id === primaryId);
+      toast(`Joined ${rest.length + 1} tables onto ${primary?.label ?? "one"} bill.`);
+      setJoinPick([]);
+      setJoinMode(false);
+      setJoinBillFor(null);
+    } catch (e) {
+      // The server refuses to guess which bill when the primary has more than
+      // one — surface that as the bill picker rather than as an error the cashier
+      // can do nothing about.
+      const msg = e instanceof Error ? e.message : "Could not join the tables";
+      const primary = tables.find((t) => t.id === primaryId);
+      if (/which one/i.test(msg) && primary && (primary.bill_count ?? 0) > 1) {
+        setJoinBillFor(primary);
+      } else {
+        toast(msg, "error");
+      }
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  async function runUnjoin(t: ApiTable) {
+    try {
+      const rows = await unjoinTable(t.id);
+      if (Array.isArray(rows)) {
+        tableCache = rows;
+        setTables(rows);
+      }
+      toast(`${t.label} is back on its own.`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not un-join", "error");
+    }
+  }
+
   function openTable(t: ApiTable) {
+    if (joinMode) {
+      // Already picked → un-pick, so a wrong tap costs one tap to undo.
+      setJoinPick((prev) =>
+        prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+      );
+      return;
+    }
+    // A JOINED table holds no bill of its own, so open the one that does. Without
+    // this the till would come up empty on a table with guests sitting at it.
+    if (t.merged_into_table_id) {
+      const primary = tables.find((x) => x.id === t.merged_into_table_id);
+      if (primary) {
+        openTable(primary);
+        return;
+      }
+    }
     // A table carrying SEVERAL bills has to be asked about — opening "the table"
     // is ambiguous once two parties share it, and guessing would put the cashier
     // in front of the wrong bill with money already on the counter. One bill (or
@@ -210,6 +302,18 @@ export function CashierFloorScreen() {
         </div>
 
         <div className={s.legend}>
+          <button
+            type="button"
+            className={`${s.joinToggle} ${joinMode ? s.joinToggleOn : ""}`}
+            onClick={() => {
+              setJoinMode((v) => !v);
+              setJoinPick([]);
+            }}
+            data-testid="join-mode-toggle"
+            title="Seat one party across several tables on a single invoice"
+          >
+            {joinMode ? "✕ Cancel join" : "🔗 Join tables"}
+          </button>
           <span className={s.legendItem}>
             <i className={`${s.dot} ${s.dotBilling}`} />
             Bill requested
@@ -224,6 +328,50 @@ export function CashierFloorScreen() {
           </span>
         </div>
       </div>
+
+      {joinMode && (
+        <div className={s.joinBar} data-testid="join-bar">
+          <span className={s.joinHint}>
+            {joinPick.length === 0
+              ? "Tap the table that KEEPS THE BILL first."
+              : joinPick.length === 1
+                ? `${tables.find((t) => t.id === joinPick[0])?.label ?? "?"} keeps the bill — now tap the tables joining it.`
+                : `${tables.find((t) => t.id === joinPick[0])?.label ?? "?"} keeps the bill · joining ${joinPick
+                    .slice(1)
+                    .map((id) => tables.find((t) => t.id === id)?.label ?? "?")
+                    .join(", ")}`}
+          </span>
+          {/* Exactly one picked table, already in a group → the only sensible
+              action is to take it back OUT, so offer that instead of a Join that
+              cannot run. */}
+          {joinPick.length === 1 &&
+          tables.find((t) => t.id === joinPick[0])?.merged_into_table_id ? (
+            <button
+              type="button"
+              className={s.joinGo}
+              onClick={() => {
+                const t = tables.find((x) => x.id === joinPick[0]);
+                if (t) void runUnjoin(t);
+                setJoinPick([]);
+                setJoinMode(false);
+              }}
+              data-testid="unjoin-confirm"
+            >
+              ↩ Un-join {tables.find((t) => t.id === joinPick[0])?.label}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={s.joinGo}
+              disabled={joinPick.length < 2 || joining}
+              onClick={() => void runJoin()}
+              data-testid="join-confirm"
+            >
+              {joining ? "Joining…" : `Join ${joinPick.length} tables`}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Floor canvas ────────────────────────────────────────────────── */}
       <div className={s.canvas} ref={canvasRef} style={{ backgroundSize: `${unit}px ${unit}px` }}>
@@ -280,6 +428,23 @@ export function CashierFloorScreen() {
                         {t.bill_count} BILLS
                       </span>
                     )}
+                    {t.merged_into_label && (
+                      // A joined table has no bill of its own — say where it went,
+                      // or a cashier hunts for a bill that was never there.
+                      <span className={s.joinedTag} data-testid={`cashier-table-joined-${t.id}`}>
+                        → {t.merged_into_label}
+                      </span>
+                    )}
+                    {(t.joined_labels?.length ?? 0) > 0 && (
+                      <span className={s.groupTag} data-testid={`cashier-table-group-${t.id}`}>
+                        +{t.joined_labels?.length}
+                      </span>
+                    )}
+                    {joinMode && joinPick.includes(t.id) && (
+                      <span className={s.pickTag}>
+                        {joinPick[0] === t.id ? "BILL" : `#${joinPick.indexOf(t.id) + 1}`}
+                      </span>
+                    )}
                     {hasOrder && t.order_total_aed != null ? (
                       <span className={s.tableSeats}>AED {t.order_total_aed}</span>
                     ) : (
@@ -317,6 +482,17 @@ export function CashierFloorScreen() {
           </div>
         )}
       </div>
+
+      {/* The bill-keeping table carries several bills, so the server refused to
+          guess which party the joined guests belong to. Ask, then retry. */}
+      {joinBillFor && (
+        <TableBillsDialog
+          tableLabel={joinBillFor.label}
+          bills={joinBillFor.bills ?? []}
+          onPick={(b) => void runJoin(b.order_id)}
+          onClose={() => setJoinBillFor(null)}
+        />
+      )}
 
       {billsFor && (
         <TableBillsDialog

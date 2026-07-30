@@ -331,6 +331,108 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
+/* ── Join tables: one party, several tables, one invoice ─────────────────── */
+.joinToggle {
+  min-height: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.joinToggleOn {
+  background: var(--blue, #2e90fa);
+  border-style: solid;
+  border-color: transparent;
+  color: #fff;
+}
+
+.joinBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+.joinHint {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.joinGo {
+  min-height: 0;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--green, #12b76a);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.joinGo:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* "→ AO2" on a joined table: its bill lives elsewhere, and a cashier who does not
+   know that hunts for a bill that was never there. Bottom edge, so it cannot
+   collide with the two corner badges. */
+.joinedTag {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--grey, #667085);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+/* "+2" on the table holding a group's invoice. */
+.groupTag {
+  position: absolute;
+  bottom: -8px;
+  right: -6px;
+  z-index: 3;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--blue, #2e90fa);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+/* Which tables are picked while joining, and which one keeps the bill. */
+.pickTag {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #101828;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 0 2px var(--blue, #2e90fa);
+}
+
 .dotBilling { background: #6941c6; }
 
 /* Entrance placed by the manager: absolute at its own grid coordinate,

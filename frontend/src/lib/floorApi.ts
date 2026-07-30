@@ -70,6 +70,27 @@ export function listTables(): Promise<ApiTable[]> {
   return apiClient.get<ApiTable[]>("/api/v1/tables");
 }
 
+/** Seat ONE party across several tables on a single invoice.
+ *  `primaryId` is the table that keeps the bill; every id in `tableIds` joins to
+ *  it and stays occupied. `intoOrderId` is required when the primary carries more
+ *  than one open bill — the server refuses to guess which party the joined guests
+ *  belong to. Returns the whole refreshed floor. */
+export function joinTables(
+  primaryId: number,
+  tableIds: number[],
+  intoOrderId?: number | null,
+): Promise<ApiTable[]> {
+  return apiClient.post<ApiTable[]>(`/api/v1/tables/${primaryId}/join`, {
+    table_ids: tableIds,
+    ...(intoOrderId ? { into_order_id: intoOrderId } : {}),
+  });
+}
+
+/** Detach one table from its group. The invoice stays with the primary. */
+export function unjoinTable(tableId: number): Promise<ApiTable[]> {
+  return apiClient.post<ApiTable[]>(`/api/v1/tables/${tableId}/unjoin`, {});
+}
+
 export function fetchFloorLayout(): Promise<FloorLayout> {
   return apiClient.get<FloorLayout>("/api/v1/tables/layout");
 }
