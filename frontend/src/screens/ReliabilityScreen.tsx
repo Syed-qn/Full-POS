@@ -4,16 +4,20 @@ import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
+  type BackupTarget,
   ackError,
   createBackup,
+  downloadBackup,
   exportDataPack,
   getBackupReadiness,
+  getBackupTarget,
   getNetworkStatus,
   listAuditLog,
   listBackups,
   listErrors,
   promoteFailover,
   registerDevice,
+  restoreBackup,
   restorePreview,
   runDailyBackup,
   verifyBackup,
@@ -33,6 +37,26 @@ function posBridge(): Bridge | undefined {
   return (window as unknown as { posBridge?: Bridge }).posBridge;
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** The three biggest tables in the snapshot — enough to see at a glance whether
+ *  a backup actually caught the day's trading. */
+function summarise(meta: { counts?: Record<string, number> } | null): string {
+  const counts = meta?.counts;
+  if (!counts) return "—";
+  const top = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k, v]) => `${v} ${k}`);
+  const rest = Object.keys(counts).length - top.length;
+  // "+N more", not "+N tables" — `tables` is itself one of the table names here.
+  return rest > 0 ? `${top.join(" · ")} +${rest} more` : top.join(" · ");
+}
+
 export function ReliabilityScreen() {
   const [network, setNetwork] = useState<{
     devices_online: number;
@@ -48,8 +72,17 @@ export function ReliabilityScreen() {
     }>;
   } | null>(null);
   const [backups, setBackups] = useState<
-    Array<{ id: number; kind: string; status: string; size_bytes: number; completed_at: string | null }>
+    Array<{
+      id: number;
+      kind: string;
+      status: string;
+      size_bytes: number;
+      completed_at: string | null;
+      file_present: boolean;
+      meta: { backend?: string; counts?: Record<string, number> } | null;
+    }>
   >([]);
+  const [target, setTarget] = useState<BackupTarget | null>(null);
   const [errors, setErrors] = useState<
     Array<{ id: number; message: string; level: string; acknowledged: boolean }>
   >([]);
@@ -66,21 +99,25 @@ export function ReliabilityScreen() {
   const [deviceName, setDeviceName] = useState("Dashboard browser");
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<RelTab>("backups");
+  const [restoreFor, setRestoreFor] = useState<number | null>(null);
+  const [restoreConfirm, setRestoreConfirm] = useState("");
 
   const reload = useCallback(async () => {
     try {
-      const [net, bak, err, aud, ready] = await Promise.all([
+      const [net, bak, err, aud, ready, tgt] = await Promise.all([
         getNetworkStatus(),
         listBackups(),
         listErrors(false),
         listAuditLog({ limit: 30 }),
         getBackupReadiness(),
+        getBackupTarget(),
       ]);
       setNetwork(net);
       setBackups(bak);
       setErrors(err);
       setAudit(aud.rows ?? []);
       setReadiness(ready);
+      setTarget(tgt);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Load failed", "error");
     }
@@ -177,12 +214,24 @@ export function ReliabilityScreen() {
       {tab === "backups" && (
         <div className={s.card}>
           <div className={s.cardHead}>
-            <h2>Cloud / daily backup</h2>
+            <h2>Backups</h2>
             <span>
-              Snapshots under APP_BACKUP_DIR · last:{" "}
+              {target
+                ? `${target.backend === "s3" ? "Object storage" : "Local disk"} · ${target.location}`
+                : "Loading destination…"}
+              {" · last: "}
               {readiness?.last_backup_at ?? network?.last_backup_at ?? "never"}
             </span>
           </div>
+          {/* The single most important fact on this screen: a backup you cannot
+              retrieve is not a backup. Stated up front rather than discovered
+              later when Verify starts failing. */}
+          {target && (
+            <p className={target.durable ? s.noteOk : s.noteWarn}>
+              {target.durable ? "✓ Durable — " : "⚠ Not durable — "}
+              {target.note}
+            </p>
+          )}
           <div className={s.actions}>
             <Button size="md" type="button" disabled={busy} onClick={() => void doBackup()}>
               Run cloud backup
@@ -209,16 +258,22 @@ export function ReliabilityScreen() {
               type="button"
               variant="ghost"
               onClick={async () => {
+                setBusy(true);
                 try {
+                  // Take the snapshot, then actually put the file on the
+                  // manager's machine — the old version only toasted a job id.
                   const pack = await exportDataPack();
-                  toast(`Export pack job #${pack.backup_job_id}`);
+                  const name = await downloadBackup(pack.backup_job_id);
+                  toast(`Downloaded ${name} (${pack.size_bytes} bytes)`);
                   await reload();
                 } catch (e) {
                   toast(e instanceof Error ? e.message : "Export failed", "error");
+                } finally {
+                  setBusy(false);
                 }
               }}
             >
-              Full data export
+              Export &amp; download
             </Button>
           </div>
           {readiness && (
@@ -237,6 +292,7 @@ export function ReliabilityScreen() {
                     <th>Kind</th>
                     <th>Status</th>
                     <th>Size</th>
+                    <th>Contents</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -245,17 +301,27 @@ export function ReliabilityScreen() {
                   <tr key={b.id}>
                     <td>#{b.id}</td>
                     <td>{b.kind}</td>
-                    <td>{b.status}</td>
-                    <td>{b.size_bytes}</td>
+                    <td>
+                      {b.status}
+                      {/* "completed" alone is misleading once the file is gone. */}
+                      {!b.file_present && <span className={s.gone}> · FILE MISSING</span>}
+                    </td>
+                    <td>{formatBytes(b.size_bytes)}</td>
+                    <td className={s.muted}>{summarise(b.meta)}</td>
                     <td>
                       <div className={s.rowActions}>
                         <Button
                           size="md"
                           type="button"
                           variant="ghost"
+                          disabled={!b.file_present}
                           onClick={async () => {
-                            const v = await verifyBackup(b.id);
-                            toast(v.ok ? "Checksum OK" : "Checksum FAIL");
+                            try {
+                              const v = await verifyBackup(b.id);
+                              toast(v.ok ? "Checksum OK" : "Checksum FAIL", v.ok ? "success" : "error");
+                            } catch (e) {
+                              toast(e instanceof Error ? e.message : "Verify failed", "error");
+                            }
                           }}
                         >
                           Verify
@@ -264,12 +330,42 @@ export function ReliabilityScreen() {
                           size="md"
                           type="button"
                           variant="ghost"
+                          disabled={!b.file_present}
                           onClick={async () => {
-                            const p = await restorePreview(b.id);
-                            toast(p.message);
+                            try {
+                              const name = await downloadBackup(b.id);
+                              toast(`Downloaded ${name}`);
+                            } catch (e) {
+                              toast(e instanceof Error ? e.message : "Download failed", "error");
+                            }
+                          }}
+                        >
+                          Download
+                        </Button>
+                        <Button
+                          size="md"
+                          type="button"
+                          variant="ghost"
+                          disabled={!b.file_present}
+                          onClick={async () => {
+                            try {
+                              const p = await restorePreview(b.id);
+                              toast(p.message);
+                            } catch (e) {
+                              toast(e instanceof Error ? e.message : "Preview failed", "error");
+                            }
                           }}
                         >
                           DR preview
+                        </Button>
+                        <Button
+                          size="md"
+                          type="button"
+                          variant="danger"
+                          disabled={!b.file_present || busy}
+                          onClick={() => setRestoreFor(b.id)}
+                        >
+                          Restore
                         </Button>
                       </div>
                     </td>
@@ -277,6 +373,72 @@ export function ReliabilityScreen() {
                 ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {restoreFor !== null && target && (
+            <div className={s.restoreBox} data-testid="restore-confirm">
+              <h3>Restore backup #{restoreFor}</h3>
+              <p>
+                This <strong>deletes this restaurant's current data</strong> and replaces it
+                with the snapshot. Orders, tables, staff, payments and settings all revert.
+                A <code>pre_restore</code> backup is taken first, so this can be undone.
+              </p>
+              {!target.restore_enabled && (
+                <p className={s.noteWarn}>
+                  ⚠ Restore is switched off on this server. Set
+                  {" "}<code>APP_BACKUP_RESTORE_ENABLED=true</code> to allow it.
+                </p>
+              )}
+              <label>
+                <span>
+                  Type <code>{target.restore_confirm_phrase}</code> to confirm
+                </span>
+                <input
+                  value={restoreConfirm}
+                  onChange={(e) => setRestoreConfirm(e.target.value)}
+                  placeholder={target.restore_confirm_phrase}
+                  autoFocus
+                />
+              </label>
+              <div className={s.rowActions}>
+                <Button
+                  size="md"
+                  type="button"
+                  variant="danger"
+                  disabled={busy || restoreConfirm !== target.restore_confirm_phrase}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const r = await restoreBackup(restoreFor, restoreConfirm);
+                      const rows = Object.values(r.inserted).reduce((a, b) => a + b, 0);
+                      toast(
+                        `Restored ${rows} rows · undo with backup #${r.pre_restore_backup_id}`,
+                      );
+                      setRestoreFor(null);
+                      setRestoreConfirm("");
+                      await reload();
+                    } catch (e) {
+                      toast(e instanceof Error ? e.message : "Restore failed", "error");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Overwrite everything
+                </Button>
+                <Button
+                  size="md"
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setRestoreFor(null);
+                    setRestoreConfirm("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -288,6 +450,7 @@ export function ReliabilityScreen() {
             <h2>Devices & failover</h2>
             <span>Register terminals; promote standby when primary fails</span>
           </div>
+          <div className={s.registerRow}>
           <div className={s.formGridSingle}>
             <label>
               <span>Device name</span>
@@ -314,6 +477,7 @@ export function ReliabilityScreen() {
           >
             Register this browser
           </Button>
+          </div>
           <ul className={s.list}>
             {(network?.devices ?? []).map((d) => (
               <li key={d.device_id} className={s.listItem}>

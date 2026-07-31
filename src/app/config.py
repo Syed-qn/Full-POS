@@ -234,6 +234,30 @@ class Settings(BaseSettings):
     default_partner: str = "cratis"
     partners_json: str = ""
 
+    # Backups (Cat 12 reliability). Empty backup_dir means "./var/backups", which
+    # on a container platform is the container's OWN disk — wiped on every deploy.
+    # Point APP_BACKUP_DIR at a mounted volume, or set the S3 block below.
+    backup_dir: str = ""
+    # There is no portable way to ask the OS "is this a mounted volume?", so the
+    # operator asserts it. Drives the honest/durable badge on the dashboard.
+    backup_dir_is_volume: bool = False
+    # Any S3-compatible target: AWS S3, Cloudflare R2, MinIO, Backblaze B2.
+    # Setting a bucket switches the backend from local disk to object storage.
+    backup_s3_bucket: str = ""
+    backup_s3_prefix: str = "backups"
+    backup_s3_region: str = ""
+    backup_s3_endpoint_url: str = ""  # e.g. https://<account>.r2.cloudflarestorage.com
+    backup_s3_access_key_id: SecretStr = SecretStr("")
+    backup_s3_secret_access_key: SecretStr = SecretStr("")
+    # Overwrite-restore is destructive and irreversible for the tenant. It stays
+    # off until an operator turns it on, so a stolen manager token cannot wipe a
+    # restaurant by calling one endpoint.
+    backup_restore_enabled: bool = False
+    # Hard ceiling on rows dumped per table, so one runaway table (conversation
+    # messages) cannot turn a snapshot into an OOM. Truncation is recorded in the
+    # snapshot manifest rather than hidden.
+    backup_max_rows_per_table: int = 200_000
+
     # CORS / security headers (P7-T13)
     cors_allow_origins: list[str] = []
     hsts_enabled: bool = False

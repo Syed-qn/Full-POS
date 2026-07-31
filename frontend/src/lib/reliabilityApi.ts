@@ -1,4 +1,4 @@
-import { apiClient } from "./apiClient";
+import { API_BASE, TOKEN_KEY, apiClient } from "./apiClient";
 
 export function getNetworkStatus() {
   return apiClient.get<{
@@ -41,8 +41,64 @@ export function listBackups() {
       checksum: string | null;
       completed_at: string | null;
       storage_path: string | null;
+      /** False when the job row outlived its file — e.g. after a redeploy. */
+      file_present: boolean;
+      meta: { backend?: string; truncated?: string[]; counts?: Record<string, number> } | null;
     }>
   >("/api/v1/reliability/backups");
+}
+
+export type BackupTarget = {
+  backend: "local" | "s3";
+  location: string;
+  endpoint: string | null;
+  /** Whether the files survive a redeploy. Drives the warning banner. */
+  durable: boolean;
+  note: string;
+  restore_enabled: boolean;
+  /** Exact text the restore endpoint accepts, e.g. "RESTORE 1". */
+  restore_confirm_phrase: string;
+};
+
+export function getBackupTarget() {
+  return apiClient.get<BackupTarget>("/api/v1/reliability/backup-target");
+}
+
+export function restoreBackup(id: number, confirm: string) {
+  return apiClient.post<{
+    restore_mode: string;
+    pre_restore_backup_id: number;
+    deleted: Record<string, number>;
+    inserted: Record<string, number>;
+  }>(`/api/v1/reliability/backups/${id}/restore`, { confirm });
+}
+
+/**
+ * Download a snapshot to the user's machine.
+ *
+ * A plain <a href> cannot be used: the endpoint is bearer-authenticated and an
+ * anchor sends no Authorization header. Fetch the bytes, then hand the browser
+ * a blob URL — which is also why "Full data export" previously downloaded
+ * nothing at all.
+ */
+export async function downloadBackup(id: number): Promise<string> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const resp = await fetch(`${API_BASE}/api/v1/reliability/backups/${id}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resp.ok) throw new Error(`download failed (${resp.status})`);
+  const disposition = resp.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `backup-${id}.json`;
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return filename;
 }
 
 export function verifyBackup(id: number) {
@@ -61,10 +117,12 @@ export function restorePreview(id: number) {
 }
 
 export function exportDataPack() {
-  return apiClient.post<{ backup_job_id: number; checksum: string; size_bytes: number }>(
-    "/api/v1/reliability/export",
-    {},
-  );
+  return apiClient.post<{
+    backup_job_id: number;
+    checksum: string;
+    size_bytes: number;
+    download_url: string;
+  }>("/api/v1/reliability/export", {});
 }
 
 export function listDevices() {

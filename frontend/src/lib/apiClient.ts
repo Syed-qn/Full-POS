@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+export const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 export const TOKEN_KEY = "ops_token";
 
 export class ApiError extends Error {

@@ -1,14 +1,20 @@
 """Category 12 — offline, backup, reliability full wiring tests."""
 
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
 
 @pytest.mark.anyio
 async def test_backup_create_verify_export(client, auth_headers, tmp_path, monkeypatch):
+    from app.config import get_settings
+    from app.reliability import storage
+
     monkeypatch.setenv("APP_BACKUP_DIR", str(tmp_path))
+    # Settings are cached, and earlier requests in this test session have already
+    # built them — without this the backup lands in the repo's ./var/backups
+    # instead of tmp_path, and the assertions below silently test the wrong file.
+    get_settings.cache_clear()
 
     create = await client.post(
         "/api/v1/reliability/backups?kind=manual",
@@ -18,7 +24,9 @@ async def test_backup_create_verify_export(client, auth_headers, tmp_path, monke
     body = create.json()
     assert body["status"] == "completed"
     assert body["checksum"]
-    assert Path(body["storage_path"]).exists()
+    # storage_path is a URI now (file://... or s3://...), so that the row records
+    # which backend wrote it rather than assuming a local disk.
+    assert await storage.backup_exists(body["storage_path"])
 
     listing = await client.get("/api/v1/reliability/backups", headers=auth_headers)
     assert listing.status_code == 200

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.identity.deps import current_restaurant
+from app.reliability import storage
 from app.reliability.service import (
+    RestoreError,
     acknowledge_error,
     apply_offline_payment,
     create_backup_snapshot,
@@ -23,7 +25,9 @@ from app.reliability.service import (
     log_error,
     network_status_dashboard,
     promote_failover_device,
+    read_backup_bytes,
     register_device,
+    restore_backup,
     restore_preview,
     run_daily_backup_if_due,
     verify_backup,
@@ -47,6 +51,13 @@ class OfflinePaymentIn(BaseModel):
     order_id: int | None = None
     device_id: str | None = None
     payload: dict | None = None
+
+
+class RestoreIn(BaseModel):
+    """Typed confirmation. Deliberately not a checkbox — a misclick must not be
+    enough to overwrite a live restaurant's entire history."""
+
+    confirm: str = Field(min_length=1, max_length=64)
 
 
 class ErrorIn(BaseModel):
@@ -130,9 +141,74 @@ async def get_backups(
             "completed_at": r.completed_at.isoformat() if r.completed_at else None,
             "meta": r.meta,
             "error": r.error,
+            # The row outliving its file is the failure this whole screen used to
+            # hide, so it is reported per row rather than left for Verify to find.
+            "file_present": await storage.backup_exists(r.storage_path),
         }
         for r in rows
     ]
+
+
+@router.get("/backup-target")
+async def backup_target(restaurant=Depends(require_role("manager"))):
+    """Where backups are written and whether that survives a redeploy."""
+    from app.config import get_settings  # noqa: PLC0415
+
+    return {
+        **storage.describe_target(),
+        "restore_enabled": get_settings().backup_restore_enabled,
+        # The server owns the phrase so the UI can display exactly what the
+        # endpoint will accept, instead of two places agreeing by coincidence.
+        "restore_confirm_phrase": f"RESTORE {restaurant.id}",
+    }
+
+
+@router.get("/backups/{backup_id}/download")
+async def download_backup(
+    backup_id: int,
+    restaurant=Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        raw, filename = await read_backup_bytes(
+            session, restaurant_id=restaurant.id, backup_job_id=backup_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=raw,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/backups/{backup_id}/restore")
+async def restore_backup_endpoint(
+    backup_id: int,
+    body: RestoreIn,
+    restaurant=Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        result = await restore_backup(
+            session,
+            restaurant_id=restaurant.id,
+            backup_job_id=backup_id,
+            confirm=body.confirm,
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RestoreError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        # A part-applied restore is worse than none, so anything unexpected
+        # discards the whole transaction.
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"restore failed: {exc}") from exc
+    await session.commit()
+    return result
 
 
 @router.post("/backups/{backup_id}/verify")

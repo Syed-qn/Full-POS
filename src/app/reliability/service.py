@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import importlib
 import json
-import os
-from datetime import datetime, timezone
+import pkgutil
+import uuid
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
-from pathlib import Path
-from sqlalchemy import func, select
+
+from sqlalchemy import Table, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
+from app.config import get_settings
+from app.db import Base
+from app.reliability import storage
 from app.reliability.models import (
     AppErrorLog,
     BackupJob,
@@ -20,14 +26,99 @@ from app.reliability.models import (
     OfflinePaymentLedger,
 )
 
+SNAPSHOT_FORMAT = 2
 
-def _backup_root() -> Path:
-    root = os.getenv("APP_BACKUP_DIR") or os.path.join(
-        os.getcwd(), "var", "backups"
-    )
-    path = Path(root)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+# Tables that describe THIS deployment's plumbing rather than the restaurant's
+# business data. Restoring them would resurrect dead terminals, replay queued
+# outbound messages to customers, and overwrite the very backup ledger being
+# restored from — so they are captured for forensics but never written back.
+_NEVER_RESTORE = frozenset(
+    {
+        "backup_jobs",
+        "dr_drill_logs",
+        "app_error_logs",
+        "device_registrations",
+        "outbox_messages",
+        "idempotency_keys",
+        "webhook_events",
+    }
+)
+
+_models_imported = False
+
+
+def _ensure_models_imported() -> None:
+    """Populate Base.metadata with every tenant table.
+
+    The snapshot is driven by metadata, not by a hand-written column list — that
+    list is exactly what made the old snapshot silently partial (no tables, no
+    payments, no shifts). Walking the packages means a module added next month is
+    backed up without anyone remembering to edit this file.
+    """
+    global _models_imported
+    if _models_imported:
+        return
+    import app  # noqa: PLC0415
+
+    for mod in pkgutil.iter_modules(app.__path__):
+        if not mod.ispkg:
+            continue
+        for leaf in ("models", "modifiers", "combos", "pricing", "scheduling", "printer_status"):
+            try:
+                importlib.import_module(f"app.{mod.name}.{leaf}")
+            except ModuleNotFoundError:
+                continue
+    _models_imported = True
+
+
+def _tenant_tables() -> list[Table]:
+    """Every table carrying restaurant_id, in FK-safe (parent-first) order."""
+    _ensure_models_imported()
+    return [t for t in Base.metadata.sorted_tables if "restaurant_id" in t.c]
+
+
+def _jsonable(value):
+    """Lossless-enough JSON encoding: what goes out must come back identical."""
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {"__bytes__": base64.b64encode(bytes(value)).decode("ascii")}
+    if isinstance(value, (set, frozenset)):
+        return sorted(value)
+    raise TypeError(f"cannot serialize {type(value).__name__}")
+
+
+def _decode(col, value):
+    """Turn a JSON scalar back into what the driver expects for this column.
+
+    JSON has no datetime, no Decimal and no UUID, so the snapshot stores them as
+    strings. asyncpg is strict — handing it '2026-07-31T10:28:32' for a TIMESTAMP
+    column raises DataError — so the column's own Python type decides how each
+    value is read back.
+    """
+    if isinstance(value, dict) and set(value) == {"__bytes__"}:
+        return base64.b64decode(value["__bytes__"])
+    if value is None or not isinstance(value, str):
+        return value
+    try:
+        target = col.type.python_type
+    except NotImplementedError:
+        return value
+    if target is datetime:
+        return datetime.fromisoformat(value)
+    if target is date:
+        return date.fromisoformat(value)
+    if target is time:
+        return time.fromisoformat(value)
+    if target is Decimal:
+        return Decimal(value)
+    if target is uuid.UUID:
+        return uuid.UUID(value)
+    return value
 
 
 async def create_backup_snapshot(
@@ -36,11 +127,14 @@ async def create_backup_snapshot(
     restaurant_id: int,
     kind: str = "manual",
 ) -> BackupJob:
-    """Serialize core tenant tables to a JSON snapshot on local/cloud path."""
-    from app.menu.models import Dish, Menu
-    from app.ordering.models import Customer, Order, OrderItem
-    from app.staff.models import StaffMember
+    """Serialize EVERY tenant-owned table to a JSON snapshot in durable storage.
 
+    Previously this dumped six hand-picked tables with a handful of columns each
+    and capped orders at 5000 — a snapshot you could not rebuild a business from,
+    presented in the UI as a backup. It now walks the mapped metadata, so a table
+    is included by virtue of carrying ``restaurant_id``, and every column comes
+    with it.
+    """
     job = BackupJob(
         restaurant_id=restaurant_id,
         kind=kind,
@@ -50,125 +144,69 @@ async def create_backup_snapshot(
     await session.flush()
 
     try:
-        menus = list(
-            (
-                await session.scalars(
-                    select(Menu).where(Menu.restaurant_id == restaurant_id)
-                )
-            ).all()
-        )
-        dishes = list(
-            (
-                await session.scalars(
-                    select(Dish).where(Dish.restaurant_id == restaurant_id)
-                )
-            ).all()
-        )
-        customers = list(
-            (
-                await session.scalars(
-                    select(Customer).where(Customer.restaurant_id == restaurant_id)
-                )
-            ).all()
-        )
-        orders = list(
-            (
-                await session.scalars(
-                    select(Order)
-                    .where(Order.restaurant_id == restaurant_id)
-                    .order_by(Order.id.desc())
-                    .limit(5000)
-                )
-            ).all()
-        )
-        order_ids = [o.id for o in orders]
-        items: list[OrderItem] = []
-        if order_ids:
-            items = list(
-                (
-                    await session.scalars(
-                        select(OrderItem).where(OrderItem.order_id.in_(order_ids))
-                    )
-                ).all()
+        cap = get_settings().backup_max_rows_per_table
+        tables = _tenant_tables()
+        dumped: dict[str, list[dict]] = {}
+        counts: dict[str, int] = {}
+        truncated: list[str] = []
+
+        for table in tables:
+            # Ordered by primary key so a self-referencing row (a table joined
+            # onto another table) is written after the row it points at, which
+            # is what lets a restore insert them back in file order.
+            stmt = select(table).where(table.c.restaurant_id == restaurant_id)
+            pks = list(table.primary_key.columns)
+            if pks:
+                stmt = stmt.order_by(*pks)
+            rows = (await session.execute(stmt.limit(cap + 1))).mappings().all()
+            if len(rows) > cap:
+                rows = rows[:cap]
+                truncated.append(table.name)
+            dumped[table.name] = [dict(r) for r in rows]
+            counts[table.name] = len(rows)
+
+        # The restaurant row itself keys on `id`, not `restaurant_id`, so the
+        # metadata sweep above misses it — and without it a restore has no tenant
+        # to hang anything off.
+        from app.identity.models import Restaurant  # noqa: PLC0415
+
+        rest = (
+            await session.execute(
+                select(Restaurant.__table__).where(Restaurant.__table__.c.id == restaurant_id)
             )
-        staff = list(
-            (
-                await session.scalars(
-                    select(StaffMember).where(StaffMember.restaurant_id == restaurant_id)
-                )
-            ).all()
-        )
+        ).mappings().all()
+        dumped["restaurants"] = [dict(r) for r in rest]
+        counts["restaurants"] = len(rest)
 
         payload = {
+            "format": SNAPSHOT_FORMAT,
             "restaurant_id": restaurant_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "kind": kind,
-            "menus": [
-                {"id": m.id, "version": m.version, "status": m.status} for m in menus
-            ],
-            "dishes": [
-                {
-                    "id": d.id,
-                    "name": d.name,
-                    "price_aed": str(d.price_aed or 0),
-                    "dish_number": d.dish_number,
-                    "is_available": d.is_available,
-                    "category": d.category,
-                }
-                for d in dishes
-            ],
-            "customers": [
-                {
-                    "id": c.id,
-                    "phone": c.phone,
-                    "name": c.name,
-                    "total_orders": c.total_orders,
-                }
-                for c in customers
-            ],
-            "orders": [
-                {
-                    "id": o.id,
-                    "order_number": o.order_number,
-                    "status": o.status,
-                    "total": str(o.total or 0),
-                    "customer_id": o.customer_id,
-                }
-                for o in orders
-            ],
-            "order_items": [
-                {
-                    "order_id": i.order_id,
-                    "dish_name": i.dish_name,
-                    "qty": i.qty,
-                    "price_aed": str(i.price_aed),
-                }
-                for i in items
-            ],
-            "staff": [
-                {"id": s.id, "name": s.name, "role": s.role} for s in staff
-            ],
-            "counts": {
-                "menus": len(menus),
-                "dishes": len(dishes),
-                "customers": len(customers),
-                "orders": len(orders),
-                "order_items": len(items),
-                "staff": len(staff),
-            },
+            # Insert order for a restore. Reverse it to delete.
+            "table_order": ["restaurants", *[t.name for t in tables]],
+            "tables": dumped,
+            "counts": counts,
+            "truncated": truncated,
+            "row_cap": cap,
         }
-        raw = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
+        raw = json.dumps(payload, separators=(",", ":"), default=_jsonable).encode("utf-8")
         checksum = hashlib.sha256(raw).hexdigest()
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         filename = f"r{restaurant_id}_{kind}_{ts}_{checksum[:8]}.json"
-        path = _backup_root() / filename
-        path.write_bytes(raw)
+        uri = await storage.put_backup(filename, raw)
 
         job.status = "completed"
-        job.storage_path = str(path)
+        job.storage_path = uri
         job.size_bytes = len(raw)
         job.checksum = checksum
-        job.meta = payload["counts"]
+        # Only non-empty tables, so the UI summary stays readable next to ~120
+        # mapped tables of which a small restaurant fills a dozen.
+        job.meta = {
+            "backend": storage.active_backend(),
+            "truncated": truncated,
+            "counts": {k: v for k, v in counts.items() if v},
+        }
         job.completed_at = datetime.now(timezone.utc)
         await session.flush()
         await record_audit(
@@ -178,7 +216,7 @@ async def create_backup_snapshot(
             entity="backup_job",
             entity_id=str(job.id),
             action="backup_completed",
-            after={"path": str(path), "size": len(raw), "checksum": checksum},
+            after={"path": uri, "size": len(raw), "checksum": checksum},
         )
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
@@ -230,9 +268,9 @@ async def verify_backup(
     job = await session.get(BackupJob, backup_job_id)
     if job is None or job.restaurant_id != restaurant_id:
         raise ValueError("backup not found")
-    if not job.storage_path or not Path(job.storage_path).exists():
+    if not await storage.backup_exists(job.storage_path):
         raise ValueError("backup file missing")
-    raw = Path(job.storage_path).read_bytes()
+    raw = await storage.get_backup(job.storage_path)
     checksum = hashlib.sha256(raw).hexdigest()
     ok = checksum == job.checksum
     drill = DrDrillLog(
@@ -265,9 +303,9 @@ async def restore_preview(
     job = await session.get(BackupJob, backup_job_id)
     if job is None or job.restaurant_id != restaurant_id:
         raise ValueError("backup not found")
-    if not job.storage_path or not Path(job.storage_path).exists():
+    if not await storage.backup_exists(job.storage_path):
         raise ValueError("backup file missing")
-    data = json.loads(Path(job.storage_path).read_text(encoding="utf-8"))
+    data = json.loads((await storage.get_backup(job.storage_path)).decode("utf-8"))
     drill = DrDrillLog(
         restaurant_id=restaurant_id,
         backup_job_id=job.id,
@@ -284,25 +322,200 @@ async def restore_preview(
         "generated_at": data.get("generated_at"),
         "counts": data.get("counts"),
         "restore_mode": "preview_only",
-        "message": "Snapshot verified. Full overwrite restore requires ops runbook approval.",
+        "restore_enabled": get_settings().backup_restore_enabled,
+        "message": (
+            "Snapshot readable. Use Restore to overwrite this restaurant's data with it."
+            if get_settings().backup_restore_enabled
+            else "Snapshot readable. Overwrite restore is disabled "
+            "(set APP_BACKUP_RESTORE_ENABLED=true to allow it)."
+        ),
+    }
+
+
+class RestoreError(RuntimeError):
+    """Restore refused — bad confirmation, disabled, or an unusable snapshot."""
+
+
+async def restore_backup(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    backup_job_id: int,
+    confirm: str,
+    actor: str = "manager",
+) -> dict:
+    """Overwrite this restaurant's data with a snapshot. Destructive.
+
+    Three gates, because this deletes a live restaurant's history: the feature
+    flag must be on, the caller must type the exact phrase, and a ``pre_restore``
+    snapshot is taken first so the operation itself is undoable. Everything runs
+    in the caller's transaction — a foreign-key failure part-way rolls the whole
+    thing back rather than leaving a half-restored tenant.
+    """
+    settings = get_settings()
+    if not settings.backup_restore_enabled:
+        raise RestoreError(
+            "Overwrite restore is disabled. Set APP_BACKUP_RESTORE_ENABLED=true to allow it."
+        )
+    expected = f"RESTORE {restaurant_id}"
+    if (confirm or "").strip() != expected:
+        raise RestoreError(f"confirmation must be exactly '{expected}'")
+
+    job = await session.get(BackupJob, backup_job_id)
+    if job is None or job.restaurant_id != restaurant_id:
+        raise ValueError("backup not found")
+    if not await storage.backup_exists(job.storage_path):
+        raise ValueError("backup file missing")
+
+    raw = await storage.get_backup(job.storage_path)
+    if hashlib.sha256(raw).hexdigest() != job.checksum:
+        raise RestoreError("checksum mismatch — snapshot is corrupt, refusing to restore")
+    data = json.loads(raw.decode("utf-8"))
+    if data.get("format") != SNAPSHOT_FORMAT:
+        raise RestoreError(
+            f"snapshot format {data.get('format')} predates full-table backups "
+            "and cannot be restored; take a fresh backup first"
+        )
+    if data.get("restaurant_id") != restaurant_id:
+        raise RestoreError("snapshot belongs to a different restaurant")
+
+    # Safety net first: if the restore is wrong, this is what undoes it.
+    safety = await create_backup_snapshot(
+        session, restaurant_id=restaurant_id, kind="pre_restore"
+    )
+
+    by_name = {t.name: t for t in Base.metadata.sorted_tables}
+    order = [
+        n
+        for n in data.get("table_order", [])
+        if n in by_name and n not in _NEVER_RESTORE and n != "restaurants"
+    ]
+    payload = data.get("tables", {})
+
+    deleted: dict[str, int] = {}
+    inserted: dict[str, int] = {}
+
+    # Children before parents.
+    for name in reversed(order):
+        table = by_name[name]
+        res = await session.execute(
+            delete(table).where(table.c.restaurant_id == restaurant_id)
+        )
+        if res.rowcount:
+            deleted[name] = res.rowcount
+
+    # Parents before children, rows in primary-key order (see the snapshot side).
+    for name in order:
+        rows = payload.get(name) or []
+        if not rows:
+            continue
+        table = by_name[name]
+        cols = table.c
+        clean = [
+            {k: _decode(cols[k], v) for k, v in row.items() if k in cols}
+            for row in rows
+        ]
+        await session.execute(table.insert(), clean)
+        inserted[name] = len(clean)
+
+    # Explicit ids were inserted, so every sequence still points at 1 and the
+    # next real order would collide on the primary key. Fast-forward them.
+    resequenced = []
+    for name in order:
+        table = by_name[name]
+        for col in table.primary_key.columns:
+            try:
+                if col.type.python_type is not int:
+                    continue
+            except NotImplementedError:  # types with no Python equivalent
+                continue
+            # Identifiers come from mapped metadata, never from a request. The
+            # sequence lookup is wrapped in a subquery so setval() is only reached
+            # for columns that actually own one.
+            await session.execute(
+                text(
+                    "SELECT setval(x.seq, GREATEST(COALESCE(x.hi, 1), 1), true) FROM ("
+                    f'  SELECT pg_get_serial_sequence(:t, :c) AS seq,'
+                    f'         (SELECT MAX("{col.name}") FROM "{name}") AS hi'
+                    ") x WHERE x.seq IS NOT NULL"
+                ),
+                {"t": name, "c": col.name},
+            )
+            resequenced.append(f"{name}.{col.name}")
+
+    drill = DrDrillLog(
+        restaurant_id=restaurant_id,
+        backup_job_id=job.id,
+        kind="restore",
+        status="ok",
+        notes=f"overwrite restore from backup #{job.id}",
+        detail={
+            "deleted": deleted,
+            "inserted": inserted,
+            "pre_restore_backup_id": safety.id,
+        },
+    )
+    session.add(drill)
+    await session.flush()
+    await record_audit(
+        session,
+        restaurant_id=restaurant_id,
+        actor=actor,
+        entity="backup_job",
+        entity_id=str(job.id),
+        action="backup_restored",
+        after={
+            "deleted_rows": sum(deleted.values()),
+            "inserted_rows": sum(inserted.values()),
+            "pre_restore_backup_id": safety.id,
+        },
+    )
+    return {
+        "backup_job_id": job.id,
+        "drill_id": drill.id,
+        "pre_restore_backup_id": safety.id,
+        "deleted": deleted,
+        "inserted": inserted,
+        "resequenced": len(resequenced),
+        "restore_mode": "overwrite",
     }
 
 
 async def export_full_data_pack(
     session: AsyncSession, *, restaurant_id: int
 ) -> dict:
-    """In-memory export pack (JSON) for manager download — uses same snapshot shape."""
+    """Export pack for manager download — same snapshot, plus a real download URL.
+
+    This used to hand back ``download_path``: a path on the server's filesystem,
+    which a browser cannot open. The manager pressed the button, got a toast, and
+    received no file. The URL below is an authenticated endpoint that streams the
+    bytes.
+    """
     job = await create_backup_snapshot(
-        session, restaurant_id=restaurant_id, kind="manual"
+        session, restaurant_id=restaurant_id, kind="export"
     )
-    raw = Path(job.storage_path).read_text(encoding="utf-8") if job.storage_path else "{}"
     return {
         "backup_job_id": job.id,
         "checksum": job.checksum,
         "size_bytes": job.size_bytes,
-        "download_path": job.storage_path,
-        "preview": json.loads(raw).get("counts"),
+        "download_url": f"/api/v1/reliability/backups/{job.id}/download",
+        "storage_uri": job.storage_path,
+        "preview": (job.meta or {}).get("counts"),
     }
+
+
+async def read_backup_bytes(
+    session: AsyncSession, *, restaurant_id: int, backup_job_id: int
+) -> tuple[bytes, str]:
+    """Fetch a snapshot's bytes plus a filename, for the download endpoint."""
+    job = await session.get(BackupJob, backup_job_id)
+    if job is None or job.restaurant_id != restaurant_id:
+        raise ValueError("backup not found")
+    if not await storage.backup_exists(job.storage_path):
+        raise ValueError("backup file missing")
+    raw = await storage.get_backup(job.storage_path)
+    name = (job.storage_path or "").rsplit("/", 1)[-1] or f"backup-{job.id}.json"
+    return raw, name
 
 
 # ── Devices / failover ───────────────────────────────────────────────────────
@@ -597,10 +810,21 @@ async def extended_health(session: AsyncSession) -> dict:
         await session.execute(text("SELECT 1"))
     except Exception:  # noqa: BLE001
         db_status = "error"
-    backup_dir_ok = _backup_root().exists() and os.access(_backup_root(), os.W_OK)
+    # Round-trip a probe object rather than stat()-ing a directory: on S3 there is
+    # no directory to stat, and a local directory that exists but is read-only
+    # used to report "ok" right up until the first backup failed.
+    target = storage.describe_target()
+    try:
+        probe = await storage.put_backup(
+            ".healthcheck", b'{"probe":true}'
+        )
+        storage_ok = await storage.backup_exists(probe)
+    except Exception:  # noqa: BLE001
+        storage_ok = False
     return {
         "status": "ok" if db_status == "ok" else "degraded",
         "db": db_status,
-        "backup_storage": "ok" if backup_dir_ok else "error",
+        "backup_storage": "ok" if storage_ok else "error",
+        "backup_target": target,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

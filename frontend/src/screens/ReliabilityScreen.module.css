@@ -132,6 +132,25 @@
 
 /* base.css floors every input at 44px, so this only ever added height on top of
    that. 44px sits beside the 40px controls without a jump. */
+/* The card is a column flexbox, so anything inside it stretches edge to edge by
+   default. A device name is a dozen characters and a button label is three words —
+   neither wants 1400px. This row keeps them side by side at their own width. */
+.registerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.registerRow .formGridSingle {
+  flex: 0 1 320px;
+  min-width: 200px;
+}
+
+.registerRow > button {
+  flex: 0 0 auto;
+}
+
 .formGridSingle input {
   min-height: 44px;
   border: 1px solid var(--border-default);
@@ -206,6 +225,86 @@
 .muted {
   color: var(--text-muted);
   font-size: 14px;
+}
+
+/* Durability of the backup destination is the one thing on this screen that can
+   quietly be false, so it gets colour rather than being buried in body text. */
+.noteOk,
+.noteWarn {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.noteOk {
+  border: 1px solid color-mix(in srgb, var(--sla-ok, #16a34a) 40%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-ok, #16a34a) 8%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+.noteWarn {
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--sla-critical) 8%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+.gone {
+  color: var(--sla-critical);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.restoreBox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--sla-critical) 55%, var(--border-subtle));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sla-critical) 6%, var(--bg-surface));
+}
+
+.restoreBox h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.restoreBox p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.restoreBox label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 420px;
+}
+
+.restoreBox input {
+  min-height: 44px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.restoreBox code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--bg-surface-inset);
 }
 
 @media (max-width: 1100px) {
