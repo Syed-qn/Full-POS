@@ -18,6 +18,9 @@ interface Props {
   danger?: boolean;
   /** Disable the confirm button + show busy text while an action runs. */
   busy?: boolean;
+  /** Disable confirm WITHOUT the busy label — for dialogs gated on a typed
+   *  confirmation phrase, where "Working…" would be a lie. */
+  confirmDisabled?: boolean;
   /** Button size. Defaults to "lg" so every existing caller is unchanged; pass
    *  "md" on admin screens where the lg buttons dwarf the dialog. */
   size?: "md" | "lg";
@@ -37,12 +40,17 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   danger = false,
   busy = false,
+  confirmDisabled = false,
   size = "lg",
   onConfirm,
   onCancel,
 }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
 
+  // ON MOUNT ONLY. Callers pass inline arrows for onCancel, so a dependency on
+  // it makes this re-run after every render — including the render caused by
+  // typing. It would then re-select the field, and the next character would
+  // replace everything typed so far, leaving the input stuck on one letter.
   useEffect(() => {
     // A dialog carrying a form focuses its FIRST FIELD, not the confirm button.
     // Otherwise a prefilled input (the suggested table label, say) looks
@@ -61,6 +69,11 @@ export function ConfirmDialog({
     } else {
       modalRef.current?.querySelector<HTMLButtonElement>(".confirmBtn")?.focus();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Escape needs the CURRENT busy/onCancel, so it stays its own effect.
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !busy) onCancel();
     }
@@ -90,7 +103,7 @@ export function ConfirmDialog({
             size={size}
             variant={danger ? "danger" : "primary"}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
           >
             {busy ? "Working…" : confirmLabel}
           </Button>

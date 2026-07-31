@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
@@ -279,7 +280,7 @@ export function ReliabilityScreen() {
                 }
               }}
             >
-              Export &amp; download
+              Download backup file
             </Button>
           </div>
           {readiness && (
@@ -287,6 +288,97 @@ export function ReliabilityScreen() {
               Readiness: {readiness.orders_count} orders · {readiness.dishes_count} dishes
             </p>
           )}
+          {/* The file is exact data for the Restore button to read back, not a
+              report. Saying so stops a manager opening it, finding raw JSON, and
+              concluding the export is broken. */}
+          <p className={s.muted}>
+            A backup file is a complete copy of this restaurant's data. Keep it somewhere
+            safe (USB or cloud drive) — it is what Restore reads back. It is not a
+            readable report; use Inspect to see what a backup contains.
+          </p>
+          {preview && (
+            <div className={s.previewBox} data-testid="backup-preview">
+              <div className={s.previewHead}>
+                <h3>Inside backup #{preview.id}</h3>
+                <Button size="md" type="button" variant="ghost" onClick={() => setPreview(null)}>
+                  Close
+                </Button>
+              </div>
+              <p className={s.muted}>Taken {preview.generated_at ?? "—"}</p>
+              {/* Only tables that hold something. Listing ~120 empty ones would
+                  bury the handful that matter. */}
+              <div className={s.previewGrid}>
+                {Object.entries(preview.counts ?? {})
+                  .filter(([, v]) => v > 0)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, n]) => (
+                    <div key={name} className={s.previewCell}>
+                      <strong>{n}</strong>
+                      <span>{name.replace(/_/g, " ")}</span>
+                    </div>
+                  ))}
+              </div>
+              {preview.message && <p className={s.muted}>{preview.message}</p>}
+            </div>
+          )}
+
+          {restoreFor !== null && target && (
+            <ConfirmDialog
+              title={`Restore backup #${restoreFor}`}
+              message={
+                `This DELETES this restaurant's current data and replaces it with the ` +
+                `snapshot. Orders, tables, staff, payments and settings all revert. A ` +
+                `pre-restore backup is taken first, so this can be undone.`
+              }
+              confirmLabel="Overwrite everything"
+              danger
+              size="md"
+              busy={busy}
+              confirmDisabled={restoreConfirm !== target.restore_confirm_phrase}
+              onCancel={() => {
+                setRestoreFor(null);
+                setRestoreConfirm("");
+              }}
+              onConfirm={async () => {
+                // Belt and braces: the button is disabled without the phrase, but
+                // the dialog also confirms on Enter, so re-check before wiping.
+                if (restoreConfirm !== target.restore_confirm_phrase) return;
+                setBusy(true);
+                try {
+                  const r = await restoreBackup(restoreFor, restoreConfirm);
+                  const rows = Object.values(r.inserted).reduce((a, b) => a + b, 0);
+                  toast(`Restored ${rows} rows · undo with backup #${r.pre_restore_backup_id}`);
+                  setRestoreFor(null);
+                  setRestoreConfirm("");
+                  await reload();
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Restore failed", "error");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <div className={s.restoreBox} data-testid="restore-confirm">
+                {!target.restore_enabled && (
+                  <p className={s.noteWarn}>
+                    &#9888; Restore is switched off on this server. Set{" "}
+                    <code>APP_BACKUP_RESTORE_ENABLED=true</code> to allow it.
+                  </p>
+                )}
+                <label>
+                  <span>
+                    Type <code>{target.restore_confirm_phrase}</code> to confirm
+                  </span>
+                  <input
+                    value={restoreConfirm}
+                    onChange={(e) => setRestoreConfirm(e.target.value)}
+                    placeholder={target.restore_confirm_phrase}
+                  />
+                </label>
+              </div>
+            </ConfirmDialog>
+          )}
+
           {backups.length === 0 ? (
             <EmptyState title="No backups yet" description="Run a cloud backup to create the first snapshot." />
           ) : (
@@ -385,97 +477,7 @@ export function ReliabilityScreen() {
             </div>
           )}
 
-          {preview && (
-            <div className={s.previewBox} data-testid="backup-preview">
-              <div className={s.previewHead}>
-                <h3>Inside backup #{preview.id}</h3>
-                <Button size="md" type="button" variant="ghost" onClick={() => setPreview(null)}>
-                  Close
-                </Button>
-              </div>
-              <p className={s.muted}>Taken {preview.generated_at ?? "—"}</p>
-              {/* Only tables that hold something. Listing ~120 empty ones would
-                  bury the handful that matter. */}
-              <div className={s.previewGrid}>
-                {Object.entries(preview.counts ?? {})
-                  .filter(([, v]) => v > 0)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([name, n]) => (
-                    <div key={name} className={s.previewCell}>
-                      <strong>{n}</strong>
-                      <span>{name.replace(/_/g, " ")}</span>
-                    </div>
-                  ))}
-              </div>
-              {preview.message && <p className={s.muted}>{preview.message}</p>}
-            </div>
-          )}
 
-          {restoreFor !== null && target && (
-            <div className={s.restoreBox} data-testid="restore-confirm">
-              <h3>Restore backup #{restoreFor}</h3>
-              <p>
-                This <strong>deletes this restaurant's current data</strong> and replaces it
-                with the snapshot. Orders, tables, staff, payments and settings all revert.
-                A <code>pre_restore</code> backup is taken first, so this can be undone.
-              </p>
-              {!target.restore_enabled && (
-                <p className={s.noteWarn}>
-                  ⚠ Restore is switched off on this server. Set
-                  {" "}<code>APP_BACKUP_RESTORE_ENABLED=true</code> to allow it.
-                </p>
-              )}
-              <label>
-                <span>
-                  Type <code>{target.restore_confirm_phrase}</code> to confirm
-                </span>
-                <input
-                  value={restoreConfirm}
-                  onChange={(e) => setRestoreConfirm(e.target.value)}
-                  placeholder={target.restore_confirm_phrase}
-                  autoFocus
-                />
-              </label>
-              <div className={s.rowActions}>
-                <Button
-                  size="md"
-                  type="button"
-                  variant="danger"
-                  disabled={busy || restoreConfirm !== target.restore_confirm_phrase}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      const r = await restoreBackup(restoreFor, restoreConfirm);
-                      const rows = Object.values(r.inserted).reduce((a, b) => a + b, 0);
-                      toast(
-                        `Restored ${rows} rows · undo with backup #${r.pre_restore_backup_id}`,
-                      );
-                      setRestoreFor(null);
-                      setRestoreConfirm("");
-                      await reload();
-                    } catch (e) {
-                      toast(e instanceof Error ? e.message : "Restore failed", "error");
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Overwrite everything
-                </Button>
-                <Button
-                  size="md"
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setRestoreFor(null);
-                    setRestoreConfirm("");
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

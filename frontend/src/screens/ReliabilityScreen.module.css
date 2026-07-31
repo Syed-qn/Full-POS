@@ -306,14 +306,12 @@
   color: var(--text-secondary);
 }
 
+/* Lives inside ConfirmDialog now, which supplies the frame — a second border
+   and tinted panel inside the modal just boxed the field in twice. */
 .restoreBox {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--sla-critical) 55%, var(--border-subtle));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--sla-critical) 6%, var(--bg-surface));
 }
 
 .restoreBox h3 {
