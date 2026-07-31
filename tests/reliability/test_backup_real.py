@@ -160,6 +160,29 @@ async def test_claiming_a_volume_does_not_make_the_badge_green(
 
 
 @pytest.mark.anyio
+async def test_unwritable_backup_dir_reports_instead_of_500ing(
+    client, auth_headers, backup_dir, monkeypatch
+):
+    # Railway mounts a volume owned by root while the container runs as an
+    # unprivileged user, so mkdir raises PermissionError. The endpoint whose job
+    # is to report on storage health must not be the thing that crashes — it has
+    # to say what went wrong and how to fix it.
+    from pathlib import Path as _P
+
+    def boom(self, *a, **k):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(_P, "mkdir", boom)
+
+    resp = await client.get("/api/v1/reliability/backup-target", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["durable"] is False
+    assert "CANNOT WRITE" in body["note"]
+    assert "RAILWAY_RUN_UID=0" in body["note"]
+
+
+@pytest.mark.anyio
 async def test_restore_is_refused_unless_explicitly_enabled(
     client, auth_headers, backup_dir
 ):

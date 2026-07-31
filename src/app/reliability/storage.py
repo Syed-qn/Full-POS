@@ -64,11 +64,20 @@ def _parse(uri: str) -> _Ref:
     return _Ref(backend="local", path=Path(uri))
 
 
-def _local_dir() -> Path:
+def _local_dir(create: bool = True) -> Path:
+    """Resolve the backup directory, creating it when asked.
+
+    ``create=False`` exists for describe_target(): a container platform mounts
+    volumes owned by root while the app runs as an unprivileged user, so the
+    mkdir raises PermissionError. That must surface as a red banner explaining
+    the problem, never as a 500 from the endpoint whose whole job is to report
+    on storage health.
+    """
     settings = get_settings()
     root = settings.backup_dir or os.path.join(os.getcwd(), "var", "backups")
     path = Path(root)
-    path.mkdir(parents=True, exist_ok=True)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -138,8 +147,35 @@ def describe_target() -> dict:
             "durable": True,
             "note": "Off-box object storage. Survives redeploys and host loss.",
         }
-    path = _local_dir()
+    path = _local_dir(create=False)
+    writable: bool | None = None
+    write_error: str | None = None
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        writable = os.access(path, os.W_OK)
+    except OSError as exc:
+        writable = False
+        write_error = exc.strerror or str(exc)
+
     mounted = _is_separate_mount(path)
+
+    if not writable:
+        # A directory the app cannot write to produces zero backups, so this
+        # outranks the durability question entirely.
+        return {
+            "backend": "local",
+            "location": str(path),
+            "endpoint": None,
+            "durable": False,
+            "mount_verified": mounted,
+            "note": (
+                f"CANNOT WRITE to {path}"
+                + (f" ({write_error})" if write_error else "")
+                + ". Backups will fail. A mounted volume is owned by root while "
+                "this app runs as an unprivileged user — set RAILWAY_RUN_UID=0 on "
+                "the service, or point APP_BACKUP_DIR at a writable path."
+            ),
+        }
 
     if mounted is True:
         durable, note = True, f"Mounted volume ({path}) — survives redeploys."
