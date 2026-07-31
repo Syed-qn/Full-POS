@@ -27,8 +27,7 @@ vi.mock("../lib/reliabilityApi", () => ({
   restoreBackup: (...a: unknown[]) => restoreBackup(...a),
   downloadBackup: (...a: unknown[]) => downloadBackup(...a),
   exportDataPack: (...a: unknown[]) => exportDataPack(...a),
-  listErrors: () => Promise.resolve([]),
-  listAuditLog: () => Promise.resolve({ rows: [] }),
+  listAuditLog: () => Promise.resolve({ rows: AUDIT_ROWS }),
   getBackupReadiness: () => Promise.resolve({ orders_count: 18, dishes_count: 51 }),
   getBackupHealth: (...a: unknown[]) => getBackupHealth(...a),
   createBackup: vi.fn(),
@@ -37,9 +36,25 @@ vi.mock("../lib/reliabilityApi", () => ({
   restorePreview: (...a: unknown[]) => restorePreview(...a),
   registerDevice: vi.fn(),
   promoteFailover: vi.fn(),
-  ackError: vi.fn(),
 }));
 vi.mock("../components/Toaster", () => ({ toast: vi.fn() }));
+
+const AUDIT_ROWS = [
+  {
+    id: 252,
+    actor: "restaurant:1",
+    entity: "staff_member",
+    action: "staff_created",
+    created_at: "2026-07-31T13:11:59",
+  },
+  {
+    id: 251,
+    actor: "cashier",
+    entity: "order",
+    action: "order_status_transition",
+    created_at: "2026-07-31T12:58:23",
+  },
+];
 
 const EPHEMERAL = {
   backend: "local" as const,
@@ -270,8 +285,47 @@ describe("ReliabilityScreen — tabs", () => {
     render(<ReliabilityScreen />);
     expect(await screen.findByRole("tab", { name: "Backups" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Devices" })).not.toBeInTheDocument();
-    for (const label of ["Errors & audit", "Conflicts"]) {
+    for (const label of ["Audit", "Conflicts"]) {
       expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
     }
+  });
+});
+
+describe("ReliabilityScreen — audit trail", () => {
+  beforeEach(() => {
+    listBackups.mockReset();
+    getBackupTarget.mockReset();
+    getBackupHealth.mockReset();
+    listBackups.mockResolvedValue([PRESENT]);
+    getBackupTarget.mockResolvedValue({ ...EPHEMERAL, durable: true });
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: true,
+      backed_up_today: true,
+      summary: "ok",
+    });
+  });
+
+  it("renders raw database values as English", async () => {
+    // It used to print "2026-07-31T13:11:59 · restaurant:1 ·
+    // staff_member/staff_created", which is readable by whoever wrote the schema
+    // and by nobody else.
+    render(<ReliabilityScreen />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Audit" }));
+
+    expect(await screen.findByText("Staff created")).toBeInTheDocument();
+    expect(screen.getByText("Order status transition")).toBeInTheDocument();
+    // "restaurant:1" is an internal caller id, not a person.
+    expect(screen.getByText("system")).toBeInTheDocument();
+    expect(screen.getByText("Cashier")).toBeInTheDocument();
+    expect(screen.queryByText(/restaurant:1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/staff_created/)).not.toBeInTheDocument();
+  });
+
+  it("drops the Error logs panel, which nothing ever wrote to", async () => {
+    render(<ReliabilityScreen />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Audit" }));
+    expect(screen.queryByText("Error logs")).not.toBeInTheDocument();
+    expect(screen.queryByText("No errors")).not.toBeInTheDocument();
   });
 });

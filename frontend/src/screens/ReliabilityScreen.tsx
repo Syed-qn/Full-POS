@@ -7,7 +7,6 @@ import { toast } from "../components/Toaster";
 import {
   type BackupHealth,
   type BackupTarget,
-  ackError,
   createBackup,
   downloadBackup,
   exportDataPack,
@@ -17,7 +16,6 @@ import {
   getNetworkStatus,
   listAuditLog,
   listBackups,
-  listErrors,
   promoteFailover,
   registerDevice,
   restoreBackup,
@@ -48,7 +46,7 @@ const TABS = (
   [
     ["backups", "Backups"],
     ["devices", "Devices"],
-    ["errors", "Errors & audit"],
+    ["errors", "Audit"],
     ["conflicts", "Conflicts"],
   ] as const
 ).filter(([key]) => key !== "devices" || SHOW_DEVICES_TAB);
@@ -62,6 +60,44 @@ type Bridge = {
 
 function posBridge(): Bridge | undefined {
   return (window as unknown as { posBridge?: Bridge }).posBridge;
+}
+
+/**
+ * The audit trail is the most useful thing on this screen and it was rendered as
+ * raw database values: "2026-07-31T13:11:59 · system · backup_job/backup_completed".
+ * That is readable by whoever wrote the schema, not by the manager trying to find
+ * out who voided an order. These turn each column into English.
+ */
+function whenText(iso?: string | null): string {
+  if (!iso) return "unknown";
+  // Timestamps arrive naive-UTC from the API; treat them as UTC so the time shown
+  // is the restaurant's own, not four hours out.
+  const d = new Date(/[Z+]/.test(iso) ? iso : `${iso}Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function actorText(actor?: string | null): string {
+  if (!actor) return "unknown";
+  // "restaurant:1" is an internal caller id, not a person.
+  if (actor.startsWith("restaurant:")) return "system";
+  return actor.charAt(0).toUpperCase() + actor.slice(1);
+}
+
+function actionText(action?: string | null): string {
+  if (!action) return "changed";
+  const words = action.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function entityText(entity?: string | null): string {
+  if (!entity) return "";
+  return `(${entity.replace(/_/g, " ")})`;
 }
 
 function formatBytes(n: number): string {
@@ -113,9 +149,6 @@ export function ReliabilityScreen() {
   const [health, setHealth] = useState<BackupHealth | null>(null);
   // Per-row verdicts, so pressing Check leaves something on screen.
   const [rowChecks, setRowChecks] = useState<Record<number, { ok: boolean; summary: string }>>({});
-  const [errors, setErrors] = useState<
-    Array<{ id: number; message: string; level: string; acknowledged: boolean }>
-  >([]);
   const [audit, setAudit] = useState<
     Array<{ id: number; actor: string; entity: string; action: string; created_at: string }>
   >([]);
@@ -124,7 +157,6 @@ export function ReliabilityScreen() {
     dishes_count: number;
     last_backup_at?: string | null;
   } | null>(null);
-  const [desktopOnline, setDesktopOnline] = useState<boolean | null>(null);
   const [conflicts, setConflicts] = useState<Array<{ id: string; entity: string; path: string }>>([]);
   const [deviceName, setDeviceName] = useState("Dashboard browser");
   const [busy, setBusy] = useState(false);
@@ -140,10 +172,9 @@ export function ReliabilityScreen() {
 
   const reload = useCallback(async () => {
     try {
-      const [net, bak, err, aud, ready, tgt, hlth] = await Promise.all([
+      const [net, bak, aud, ready, tgt, hlth] = await Promise.all([
         getNetworkStatus(),
         listBackups(),
-        listErrors(false),
         listAuditLog({ limit: 30 }),
         getBackupReadiness(),
         getBackupTarget(),
@@ -151,7 +182,6 @@ export function ReliabilityScreen() {
       ]);
       setNetwork(net);
       setBackups(bak);
-      setErrors(err);
       setAudit(aud.rows ?? []);
       setReadiness(ready);
       setTarget(tgt);
@@ -160,14 +190,6 @@ export function ReliabilityScreen() {
       toast(e instanceof Error ? e.message : "Load failed", "error");
     }
     const bridge = posBridge();
-    if (bridge?.networkStatus) {
-      try {
-        const st = await bridge.networkStatus();
-        setDesktopOnline(st.online);
-      } catch {
-        setDesktopOnline(null);
-      }
-    }
     if (bridge?.listConflicts) {
       try {
         setConflicts(await bridge.listConflicts());
@@ -218,26 +240,12 @@ export function ReliabilityScreen() {
         }
       />
 
-      <section className={s.metrics}>
-        <div className={s.metric}>
-          <span>Devices online</span>
-          <strong>{network?.devices_online ?? "0"}</strong>
-        </div>
-        <div className={s.metric}>
-          <span>Devices offline</span>
-          <strong>{network?.devices_offline ?? "0"}</strong>
-        </div>
-        <div className={`${s.metric} ${(network?.unacked_errors ?? 0) > 0 ? s.metricAlert : ""}`}>
-          <span>Unacked errors</span>
-          <strong>{network?.unacked_errors ?? "0"}</strong>
-        </div>
-        <div className={`${s.metric} ${desktopOnline === false ? s.metricAlert : ""}`}>
-          <span>Desktop link</span>
-          <strong>
-            {desktopOnline === null ? "n/a" : desktopOnline ? "online" : "OFFLINE"}
-          </strong>
-        </div>
-      </section>
+      {/* The four metric tiles are gone. Two counted devices from a registry
+          nothing writes to, one counted errors from a log nothing writes to, and
+          the fourth read "n/a" in a browser. Four numbers that are always the
+          same teach people that this screen has nothing to say. Backup status
+          now lives in the Backups card, where it is real. */}
+
 
       <div className={s.tabs} role="tablist" aria-label="Reliability sections">
         {TABS.map(([key, label]) => (
@@ -635,61 +643,44 @@ export function ReliabilityScreen() {
       )}
 
       {tab === "errors" && (
-        <section className={s.grid}>
-          <div className={s.card}>
-            <div className={s.cardHead}>
-              <h2>Error logs</h2>
-              <span>In-app viewer (Sentry optional)</span>
-            </div>
-            {errors.length === 0 ? (
-              <EmptyState title="No errors" description="Unacked application errors will show here." />
-            ) : (
-              <ul className={s.list}>
-                {errors.map((e) => (
-                  <li key={e.id} className={s.listItem}>
-                    <span>
-                      [{e.level}] {e.message}
-                    </span>
-                    {!e.acknowledged && (
-                      <div className={s.listActions}>
-                        <Button
-                          size="md"
-                          type="button"
-                          variant="ghost"
-                          onClick={async () => {
-                            await ackError(e.id);
-                            setErrors(await listErrors());
-                          }}
-                        >
-                          Ack
-                        </Button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+        <section className={s.card}>
+          <div className={s.cardHead}>
+            <h2>Audit trail</h2>
+            <span>
+              Every change anyone makes, in order. Append only, so entries cannot be
+              edited or deleted.
+            </span>
           </div>
-
-          <div className={s.card}>
-            <div className={s.cardHead}>
-              <h2>Admin activity (audit)</h2>
-              <span>Append-only trail explorer</span>
+          {/* The Error logs panel that used to sit beside this is gone. Nothing in
+              the codebase writes application errors, so it could only ever say
+              "No errors" while telling you nothing about whether anything failed. */}
+          {audit.length === 0 ? (
+            <EmptyState title="Nothing recorded yet" description="Staff actions appear here as they happen." />
+          ) : (
+            <div className={s.tableWrap}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Who</th>
+                    <th>What</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.map((a) => (
+                    <tr key={a.id}>
+                      <td className={s.muted}>{whenText(a.created_at)}</td>
+                      <td>{actorText(a.actor)}</td>
+                      <td>
+                        {actionText(a.action)}
+                        <span className={s.muted}> {entityText(a.entity)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {audit.length === 0 ? (
-              <EmptyState title="No audit rows" description="Manager actions appear in this trail." />
-            ) : (
-              <ul className={s.list}>
-                {audit.map((a) => (
-                  <li key={a.id} className={s.listItem}>
-                    <span>
-                      {a.created_at?.slice(0, 19)} {a.actor} {a.entity}/{a.action}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          )}
         </section>
       )}
 
