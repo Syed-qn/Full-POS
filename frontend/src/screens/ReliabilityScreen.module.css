@@ -23,10 +23,12 @@
   backdrop-filter: blur(6px);
 }
 
+/* 40px to match the md buttons — a tab strip taller than the controls beneath it
+   reads as the heaviest thing on an admin page, which it is not. */
 .tab {
-  min-height: 48px;
-  padding: 10px 16px;
-  border-radius: 12px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 10px;
   border: 1px solid var(--border-default);
   background: var(--bg-surface);
   color: var(--text-secondary);
@@ -128,8 +130,10 @@
   color: var(--text-secondary);
 }
 
+/* base.css floors every input at 44px, so this only ever added height on top of
+   that. 44px sits beside the 40px controls without a jump. */
 .formGridSingle input {
-  min-height: 48px;
+  min-height: 44px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
   padding: 10px 12px;
@@ -170,11 +174,11 @@
   gap: 8px;
 }
 
-.rowActions :global(button),
-.actions :global(button),
-.listActions :global(button) {
-  min-height: var(--touch-min, 56px);
-}
+/* No min-height override here. This screen used to force every button in these
+   rows to the 56px touch minimum, which silently beat the Button component's own
+   size token — setting size="md" changed nothing on screen. Reliability is an
+   admin surface read on a desktop, not a till operated at arm's length, so the
+   button decides its own height and "md" (40px) is the size that applies. */
 
 .list {
   margin: 0;
