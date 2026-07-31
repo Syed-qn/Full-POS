@@ -79,10 +79,15 @@ export function joinTables(
   primaryId: number,
   tableIds: number[],
   intoOrderId?: number | null,
+  /** Which bill on a JOINING table comes along, when that table seats more than
+   *  one party. Only the named bill moves; that table keeps its independence
+   *  because the other party is still sitting on it. */
+  fromOrderIds?: number[] | null,
 ): Promise<ApiTable[]> {
   return apiClient.post<ApiTable[]>(`/api/v1/tables/${primaryId}/join`, {
     table_ids: tableIds,
     ...(intoOrderId ? { into_order_id: intoOrderId } : {}),
+    ...(fromOrderIds?.length ? { from_order_ids: fromOrderIds } : {}),
   });
 }
 

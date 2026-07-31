@@ -386,6 +386,7 @@ async def join_tables_endpoint(
             primary_table_id=table_id,
             table_ids=body.table_ids,
             into_order_id=body.into_order_id,
+            from_order_ids=body.from_order_ids,
         )
     except TableNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

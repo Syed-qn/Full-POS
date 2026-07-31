@@ -401,6 +401,99 @@ async def test_join_rejects_a_bill_that_is_not_on_the_table(
     assert "not an open bill" in resp.json()["detail"]
 
 
+async def _split_bill(client, headers, *, table_id, dish_id, phone):
+    resp = await client.post(
+        "/api/v1/orders/pos",
+        json={
+            "order_type": "dine_in",
+            "table_id": table_id,
+            "customer_phone": phone,
+            "items": [{"dish_id": dish_id, "qty": 1}],
+            "force_new_bill": True,
+        },
+        headers=headers,
+    )
+    assert resp.status_code in (200, 201), resp.text
+    return resp.json()
+
+
+@pytest.mark.anyio
+async def test_joining_a_table_with_two_parties_refuses_to_take_both(
+    client, auth_headers, db_session
+):
+    """The user's case: the JOINING table has 2 bills.
+
+    Two bills means two PARTIES sitting at that table, so "join the table" is the
+    wrong unit — only one of them is moving in with the group. Folding both in
+    would merge strangers' money onto a single invoice, silently.
+    """
+    _r, tables, dish = await _floor(
+        db_session, labels=["JM", "JN"], dish_number=921, dish_name="TwoPartyKebab"
+    )
+    primary, secondary = tables
+
+    await _ring(
+        client, auth_headers, table_id=primary.id, dish_id=dish.id, phone="+971500000914"
+    )
+    await _ring(
+        client, auth_headers, table_id=secondary.id, dish_id=dish.id, phone="+971500000915"
+    )
+    await _split_bill(
+        client, auth_headers, table_id=secondary.id, dish_id=dish.id, phone="+971500000916"
+    )
+
+    resp = await client.post(
+        f"/api/v1/tables/{primary.id}/join",
+        json={"table_ids": [secondary.id]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert "which one is joining" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_only_the_named_party_joins_and_the_table_stays_its_own(
+    client, auth_headers, db_session
+):
+    """Name the bill and ONLY that party moves onto the group invoice.
+
+    The table is deliberately NOT linked: the other party is still sitting on it,
+    so it keeps its own bill and its own identity on the floor.
+    """
+    _r, tables, dish = await _floor(
+        db_session, labels=["JO", "JP"], dish_number=922, dish_name="NamedPartyKebab"
+    )
+    primary, secondary = tables
+
+    group_bill = await _ring(
+        client, auth_headers, table_id=primary.id, dish_id=dish.id, phone="+971500000917"
+    )
+    joining = await _ring(
+        client, auth_headers, table_id=secondary.id, dish_id=dish.id, phone="+971500000918"
+    )
+    staying = await _split_bill(
+        client, auth_headers, table_id=secondary.id, dish_id=dish.id, phone="+971500000919"
+    )
+
+    resp = await client.post(
+        f"/api/v1/tables/{primary.id}/join",
+        json={"table_ids": [secondary.id], "from_order_ids": [joining["id"]]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    rows = await _rows(client, auth_headers)
+    # The joining party's food is on the group invoice.
+    assert rows["JO"]["bill_count"] == 1
+    assert Decimal(rows["JO"]["order_total_aed"]) == Decimal("40.00")
+    assert rows["JO"]["bills"][0]["order_id"] == group_bill["id"]
+    # The table is NOT swallowed: the other party keeps its bill there.
+    assert rows["JP"]["merged_into_table_id"] is None
+    assert rows["JP"]["bill_count"] == 1
+    assert rows["JP"]["bills"][0]["order_id"] == staying["id"]
+    assert Decimal(rows["JP"]["bills"][0]["total_aed"]) == Decimal("20.00")
+
+
 @pytest.mark.anyio
 async def test_join_needs_a_second_table(client, auth_headers, db_session):
     _r, tables, _dish = await _floor(

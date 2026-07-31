@@ -416,12 +416,16 @@
   font-size: 9px;
   font-weight: 800;
 }
-/* Which tables are picked while joining, and which one keeps the bill. */
+/* Which tables are picked while joining, and which one keeps the bill.
+   OUTSIDE the top edge, centred: sitting in the middle of the table covered the
+   running total and the covers count, so a cashier picking tables could no longer
+   read the bill they were about to merge. The two corner badges live at the top
+   corners, so top-centre is the one free spot. */
 .pickTag {
   position: absolute;
-  top: 50%;
+  top: -10px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   z-index: 4;
   padding: 2px 8px;
   border-radius: 999px;

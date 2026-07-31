@@ -14,6 +14,9 @@ import {
   setOrderCovers,
   setTableStatus,
 } from "../lib/manualOrderApi";
+// money() is declared locally further down this file — importing the identical
+// helper from dishPricing as well is a duplicate declaration.
+import { effectiveDishPrice, isOnSale } from "../lib/dishPricing";
 import { billName, type TableBill } from "../lib/floorApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
 import { advanceOrder, applyDiscount, quoteDeliveryFee, setOrderPriority } from "../lib/ordersApi";
@@ -567,7 +570,9 @@ export function WaiterOrderScreen() {
         .filter(([, n]) => n > 0)
         .map(([id, n]) => {
           const dish = dishes.find((d) => d.id === Number(id));
-          const price = Number(dish?.price_aed ?? 0);
+          // The SALE price when one is in force — the server bills that, so a cart
+          // priced off price_aed would quote the customer a total they never pay.
+          const price = dish ? effectiveDishPrice(dish) : 0;
           return { dish, id: Number(id), qty: n, price, amount: price * n };
         })
         .filter((l) => l.dish),
@@ -2071,7 +2076,20 @@ export function WaiterOrderScreen() {
                         </span>
                         <span className={s.dishName}>{d.name}</span>
                         <span className={s.dishFoot}>
-                          <span className={s.dishPrice}>{d.price_aed ?? "—"}</span>
+                          {/* On sale: the sale price is what gets charged, so it is
+                              what the tile leads with, and the base price is struck
+                              through beside it so the cashier can still answer "wasn't
+                              this 20?" without opening the menu manager. */}
+                          {isOnSale(d) ? (
+                            <>
+                              <span className={s.dishWas}>{d.price_aed}</span>
+                              <span className={`${s.dishPrice} ${s.dishPriceSale}`}>
+                                {money(effectiveDishPrice(d))}
+                              </span>
+                            </>
+                          ) : (
+                            <span className={s.dishPrice}>{d.price_aed ?? "—"}</span>
+                          )}
                         </span>
                         {n > 0 && <span className={s.dishQty}>{n}</span>}
                       </button>

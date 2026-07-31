@@ -105,6 +105,11 @@ export function CashierFloorScreen() {
   // Set when the bill-holding table carries several bills and the server needs to
   // be told which one the joined guests share.
   const [joinBillFor, setJoinBillFor] = useState<ApiTable | null>(null);
+  // A JOINING table that seats two parties: which of its bills is coming along.
+  // Asked per table, and the answers accumulate so a join can pull one party from
+  // each of several shared tables.
+  const [fromOrderIds, setFromOrderIds] = useState<number[]>([]);
+  const [askFromFor, setAskFromFor] = useState<ApiTable | null>(null);
 
   const load = useCallback(async () => {
     // Layout rides the same poll as the tables: a manager who moves or rotates
@@ -203,12 +208,31 @@ export function CashierFloorScreen() {
   }
 
   /** Run the join. `intoOrderId` names the invoice when the primary has several. */
-  async function runJoin(intoOrderId?: number | null) {
+  async function runJoin(intoOrderId?: number | null, picked?: number[]) {
     const [primaryId, ...rest] = joinPick;
     if (!primaryId || rest.length === 0) return;
+    const from = picked ?? fromOrderIds;
+
+    // A JOINING table with two bills is seating two PARTIES, and only one of them
+    // is moving in with the group. Ask before sending, rather than letting the
+    // server refuse — the cashier can answer this, and merging both would put
+    // strangers' money on one invoice.
+    const needsAsking = rest
+      .map((id) => tables.find((t) => t.id === id))
+      .find(
+        (t) =>
+          t &&
+          (t.bill_count ?? 0) > 1 &&
+          !(t.bills ?? []).some((b) => from.includes(b.order_id)),
+      );
+    if (needsAsking) {
+      setAskFromFor(needsAsking);
+      return;
+    }
+
     setJoining(true);
     try {
-      const rows = await joinTables(primaryId, rest, intoOrderId);
+      const rows = await joinTables(primaryId, rest, intoOrderId, from);
       if (Array.isArray(rows)) {
         tableCache = rows;
         setTables(rows);
@@ -218,6 +242,8 @@ export function CashierFloorScreen() {
       setJoinPick([]);
       setJoinMode(false);
       setJoinBillFor(null);
+      setAskFromFor(null);
+      setFromOrderIds([]);
     } catch (e) {
       // The server refuses to guess which bill when the primary has more than
       // one — surface that as the bill picker rather than as an error the cashier
@@ -482,6 +508,22 @@ export function CashierFloorScreen() {
           </div>
         )}
       </div>
+
+      {/* A JOINING table seats two parties — which one is moving in with the group?
+          Only that bill travels; the table keeps the other party and its own bill. */}
+      {askFromFor && (
+        <TableBillsDialog
+          tableLabel={askFromFor.label}
+          bills={askFromFor.bills ?? []}
+          onPick={(b) => {
+            const next = [...fromOrderIds, b.order_id];
+            setFromOrderIds(next);
+            setAskFromFor(null);
+            void runJoin(null, next);
+          }}
+          onClose={() => setAskFromFor(null)}
+        />
+      )}
 
       {/* The bill-keeping table carries several bills, so the server refused to
           guess which party the joined guests belong to. Ask, then retry. */}

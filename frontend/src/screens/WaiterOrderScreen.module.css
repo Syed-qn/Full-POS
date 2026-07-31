@@ -989,6 +989,21 @@
   font-weight: 800;
   color: var(--amber);
 }
+/* The base price of a dish that is on sale. Struck through and quiet: it is
+   context for "wasn't this 20?", not the number being charged. */
+.dishWas {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+/* Green, so a sale price is visibly NOT the usual amber price — a cashier
+   glancing at the grid should notice this dish is discounted. */
+.dishPriceSale {
+  color: var(--green);
+}
 .dishQty {
   position: absolute;
   top: 6px;

@@ -224,6 +224,7 @@ async def join_tables(
     primary_table_id: int,
     table_ids: list[int],
     into_order_id: int | None = None,
+    from_order_ids: list[int] | None = None,
     actor: str = "manager",
 ) -> DiningTable:
     """Seat one party across several tables on a SINGLE invoice.
@@ -314,6 +315,34 @@ async def join_tables(
             raise TableJoinError(
                 f"table {secondary.label} already has tables joined to it"
             )
+
+        # A table with SEVERAL open bills is seating SEVERAL parties, so joining
+        # "the table" is the wrong unit — only one of those parties is moving in
+        # with the group. Folding them all in would merge strangers' money onto one
+        # invoice. Name the bill that is joining, and only that bill moves; the
+        # table itself stays independent because the other party is still on it.
+        sec_bills = await _open_bills(secondary.id)
+        if len(sec_bills) > 1:
+            named = [b for b in sec_bills if b.id in set(from_order_ids or [])]
+            if not named:
+                raise TableJoinError(
+                    f"table {secondary.label} has {len(sec_bills)} open bills — say "
+                    f"which one is joining"
+                )
+            for bill in named:
+                target_id = _target_bill_id()
+                if target_id is not None and target_id != bill.id:
+                    await merge_orders(
+                        session,
+                        restaurant_id=restaurant_id,
+                        primary_order_id=target_id,
+                        secondary_order_id=bill.id,
+                    )
+                else:
+                    bill.table_id = primary.id
+                    primary.group_bill_order_id = bill.id
+                    await session.flush()
+            continue
 
         secondary.merged_into_table_id = primary.id
         # Occupied, not free: guests are sitting there. "seated" when there is no

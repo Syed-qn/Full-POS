@@ -114,3 +114,7 @@ class JoinTablesIn(BaseModel):
     # primary carries more than one — with two parties at that table, guessing
     # would put the arriving guests' food on a stranger's bill.
     into_order_id: int | None = None
+    # WHICH bill on a joining table comes along, when that table seats more than
+    # one party. Only the named bill moves; the table keeps its independence
+    # because the other party is still sitting on it.
+    from_order_ids: list[int] | None = None
