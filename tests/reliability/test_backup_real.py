@@ -134,6 +134,32 @@ async def test_backup_target_admits_when_storage_is_not_durable(
 
 
 @pytest.mark.anyio
+async def test_claiming_a_volume_does_not_make_the_badge_green(
+    client, auth_headers, backup_dir, monkeypatch
+):
+    # APP_BACKUP_DIR_IS_VOLUME is an operator assertion. If the volume never
+    # mounted, tmp_path sits on the same filesystem as / and the badge must stay
+    # red — a green badge over disposable disk is the exact failure this screen
+    # was built to stop. Skipped where st_dev cannot answer (Windows dev boxes).
+    import os
+
+    from app.config import get_settings
+
+    if os.name != "posix":
+        pytest.skip("mount detection is POSIX-only")
+
+    monkeypatch.setenv("APP_BACKUP_DIR_IS_VOLUME", "true")
+    get_settings.cache_clear()
+
+    target = (
+        await client.get("/api/v1/reliability/backup-target", headers=auth_headers)
+    ).json()
+    assert target["mount_verified"] is False
+    assert target["durable"] is False
+    assert "filesystem says" in target["note"]
+
+
+@pytest.mark.anyio
 async def test_restore_is_refused_unless_explicitly_enabled(
     client, auth_headers, backup_dir
 ):

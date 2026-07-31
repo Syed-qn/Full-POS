@@ -99,6 +99,28 @@ def active_backend() -> str:
     return "s3" if _s3_configured() else "local"
 
 
+def _is_separate_mount(path: Path) -> bool | None:
+    """Is `path` on a different filesystem from the container's root?
+
+    A mounted volume is a different device from ``/``; a plain directory inside
+    the image is the same device. Comparing st_dev is a real check, which matters
+    because the alternative — trusting APP_BACKUP_DIR_IS_VOLUME — turns the
+    dashboard's durability badge green whenever the operator *says* a volume is
+    mounted, including when the mount silently failed and the files are still
+    being written to disposable disk.
+
+    Returns None when the question cannot be answered (Windows, or an unreadable
+    root), so the caller falls back to the operator's assertion instead of
+    reporting a confident wrong answer.
+    """
+    if os.name != "posix":
+        return None
+    try:
+        return path.stat().st_dev != Path("/").stat().st_dev
+    except OSError:
+        return None
+
+
 def describe_target() -> dict:
     """What the dashboard shows in place of the old literal 'APP_BACKUP_DIR'.
 
@@ -116,26 +138,43 @@ def describe_target() -> dict:
             "durable": True,
             "note": "Off-box object storage. Survives redeploys and host loss.",
         }
-    configured = bool(s.backup_dir)
-    return {
-        "backend": "local",
-        "location": str(_local_dir()),
-        "endpoint": None,
-        "durable": bool(s.backup_dir_is_volume),
-        "note": (
-            "Mounted volume — survives redeploys."
-            if s.backup_dir_is_volume
-            else (
-                "Container-local disk. Files are LOST on redeploy or restart. "
-                "Set APP_BACKUP_DIR to a mounted volume (and APP_BACKUP_DIR_IS_VOLUME=true), "
+    path = _local_dir()
+    mounted = _is_separate_mount(path)
+
+    if mounted is True:
+        durable, note = True, f"Mounted volume ({path}) — survives redeploys."
+    elif mounted is False:
+        # The decisive case: the operator may have set the flag, but the
+        # directory demonstrably lives inside the image.
+        durable = False
+        note = (
+            f"{path} is NOT a mounted volume — it is inside the container image, "
+            "so files are LOST on redeploy or restart."
+            + (
+                " APP_BACKUP_DIR_IS_VOLUME is set to true, but the filesystem says "
+                "otherwise: check the volume is attached and its mount path matches."
+                if s.backup_dir_is_volume
+                else " Attach a volume and point APP_BACKUP_DIR at its mount path, "
                 "or set APP_BACKUP_S3_BUCKET for off-box storage."
             )
-            if not configured
-            else (
-                "APP_BACKUP_DIR is set but not confirmed as a mounted volume. "
-                "Set APP_BACKUP_DIR_IS_VOLUME=true once it is."
-            )
-        ),
+        )
+    else:  # cannot tell (e.g. local Windows dev)
+        durable = bool(s.backup_dir_is_volume)
+        note = (
+            "Declared durable by APP_BACKUP_DIR_IS_VOLUME — this platform cannot "
+            "verify whether it is really a mounted volume."
+            if durable
+            else "Local directory, not confirmed as a mounted volume. Point "
+            "APP_BACKUP_DIR at a volume, or set APP_BACKUP_S3_BUCKET for off-box storage."
+        )
+
+    return {
+        "backend": "local",
+        "location": str(path),
+        "endpoint": None,
+        "durable": durable,
+        "mount_verified": mounted,
+        "note": note,
     }
 
 
