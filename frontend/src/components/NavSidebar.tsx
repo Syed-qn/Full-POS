@@ -43,6 +43,11 @@ const LIVE_ROUTES = new Set<string>([
   "/reports", // Reports (owner only)
   "/branches", // Multi-branch HQ (owner only)
   "/inventory", // Stock, vendors, purchase orders (owner/manager)
+  // Backups, device health and the offline queue (owner/manager). The screen and
+  // its endpoints were already live — /reliability/network-status, /backups and
+  // /devices all answer — and two banners already link here, so leaving it off
+  // this list made those links land on a page the nav called "coming soon".
+  "/reliability",
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,

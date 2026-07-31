@@ -125,7 +125,7 @@ export function ReliabilityScreen() {
         title="Reliability"
         subtitle="Offline sync, cloud backups, device failover, errors & audit"
         right={
-          <Button type="button" variant="ghost" onClick={() => void reload()}>
+          <Button size="md" type="button" variant="ghost" onClick={() => void reload()}>
             Refresh
           </Button>
         }
@@ -184,10 +184,11 @@ export function ReliabilityScreen() {
             </span>
           </div>
           <div className={s.actions}>
-            <Button type="button" disabled={busy} onClick={() => void doBackup()}>
+            <Button size="md" type="button" disabled={busy} onClick={() => void doBackup()}>
               Run cloud backup
             </Button>
             <Button
+              size="md"
               type="button"
               variant="ghost"
               disabled={busy}
@@ -204,6 +205,7 @@ export function ReliabilityScreen() {
               Ensure daily backup
             </Button>
             <Button
+              size="md"
               type="button"
               variant="ghost"
               onClick={async () => {
@@ -227,16 +229,17 @@ export function ReliabilityScreen() {
           {backups.length === 0 ? (
             <EmptyState title="No backups yet" description="Run a cloud backup to create the first snapshot." />
           ) : (
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Kind</th>
-                  <th>Status</th>
-                  <th>Size</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+            <div className={s.tableWrap}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Kind</th>
+                    <th>Status</th>
+                    <th>Size</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
               <tbody>
                 {backups.map((b) => (
                   <tr key={b.id}>
@@ -247,6 +250,7 @@ export function ReliabilityScreen() {
                     <td>
                       <div className={s.rowActions}>
                         <Button
+                          size="md"
                           type="button"
                           variant="ghost"
                           onClick={async () => {
@@ -257,6 +261,7 @@ export function ReliabilityScreen() {
                           Verify
                         </Button>
                         <Button
+                          size="md"
                           type="button"
                           variant="ghost"
                           onClick={async () => {
@@ -270,8 +275,9 @@ export function ReliabilityScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -289,6 +295,7 @@ export function ReliabilityScreen() {
             </label>
           </div>
           <Button
+            size="md"
             type="button"
             onClick={async () => {
               const deviceId =
@@ -317,6 +324,7 @@ export function ReliabilityScreen() {
                 {d.role !== "primary" && (
                   <div className={s.listActions}>
                     <Button
+                      size="md"
                       type="button"
                       variant="ghost"
                       onClick={async () => {
@@ -359,6 +367,7 @@ export function ReliabilityScreen() {
                     {!e.acknowledged && (
                       <div className={s.listActions}>
                         <Button
+                          size="md"
                           type="button"
                           variant="ghost"
                           onClick={async () => {
@@ -418,6 +427,7 @@ export function ReliabilityScreen() {
                   </span>
                   <div className={s.listActions}>
                     <Button
+                      size="md"
                       type="button"
                       variant="ghost"
                       onClick={async () => {
@@ -429,6 +439,7 @@ export function ReliabilityScreen() {
                       Retry
                     </Button>
                     <Button
+                      size="md"
                       type="button"
                       variant="ghost"
                       onClick={async () => {
