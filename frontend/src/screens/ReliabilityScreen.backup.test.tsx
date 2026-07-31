@@ -186,10 +186,16 @@ describe("ReliabilityScreen — is my backup actually good?", () => {
       backup_job_id: 11,
       taken_at: "2026-07-31T12:52:41Z",
       summary: "This backup is complete and can be restored.",
+      backed_up_today: true,
     });
     render(<ReliabilityScreen />);
+    // Healthy state is ONE quiet line, not a green panel. Two full-width green
+    // banners shouted good news louder than the page shouts bad news.
     const line = await screen.findByTestId("backup-health");
-    expect(line).toHaveTextContent("complete and can be restored");
+    expect(line).toHaveTextContent("durable");
+    expect(line).toHaveTextContent("restorable");
+    expect(line).toHaveTextContent("backed up today");
+    expect(screen.queryByTestId("backup-health-problem")).not.toBeInTheDocument();
   });
 
   it("says plainly when the newest backup would NOT restore", async () => {
@@ -198,17 +204,35 @@ describe("ReliabilityScreen — is my backup actually good?", () => {
       ok: false,
       backup_job_id: 11,
       taken_at: null,
+      backed_up_today: true,
       summary:
         "This backup CANNOT be restored: the file has changed since it was written (corrupted).",
     });
     render(<ReliabilityScreen />);
-    expect(await screen.findByTestId("backup-health")).toHaveTextContent(
+    // Problems still get a panel — that is what the colour is for.
+    expect(await screen.findByTestId("backup-health-problem")).toHaveTextContent(
       "CANNOT be restored",
     );
   });
 
+  it("warns when nothing has been backed up today", async () => {
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: true,
+      backed_up_today: false,
+      summary: "This backup is complete and can be restored.",
+    });
+    render(<ReliabilityScreen />);
+    expect(await screen.findByText(/No backup taken today yet/)).toBeInTheDocument();
+  });
+
   it("leaves the Check verdict on the row instead of a toast", async () => {
-    getBackupHealth.mockResolvedValue({ has_backup: true, ok: true, summary: "ok" });
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: true,
+      backed_up_today: true,
+      summary: "ok",
+    });
     verifyBackup.mockResolvedValue({
       ok: false,
       restorable: false,

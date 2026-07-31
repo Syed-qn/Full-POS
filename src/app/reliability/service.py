@@ -10,6 +10,7 @@ import pkgutil
 import uuid
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Table, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -244,21 +245,41 @@ async def list_backups(
 async def run_daily_backup_if_due(
     session: AsyncSession, *, restaurant_id: int
 ) -> BackupJob | None:
-    """Create a daily backup if none completed today (UTC)."""
-    today = datetime.now(timezone.utc).date()
-    start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
-    existing = await session.scalar(
-        select(BackupJob).where(
-            BackupJob.restaurant_id == restaurant_id,
-            BackupJob.kind == "daily",
-            BackupJob.status == "completed",
-            BackupJob.completed_at >= start,
-        )
-    )
+    """Create a daily backup if none completed today, in the restaurant's own day."""
+    existing = await _todays_backup(session, restaurant_id=restaurant_id)
     if existing:
         return existing
     return await create_backup_snapshot(
         session, restaurant_id=restaurant_id, kind="daily"
+    )
+
+
+def _business_day_start_utc() -> datetime:
+    """Midnight tonight in Asia/Dubai, expressed in UTC.
+
+    "Today" used to mean the UTC day. Dubai is UTC+4, so a restaurant closing at
+    2am and pressing Ensure daily backup would be told one already exists — the
+    previous evening's, which UTC still counts as the same day. The server's day
+    has to be the restaurant's day or the answer is wrong exactly when someone is
+    standing there at closing time.
+    """
+    local = datetime.now(ZoneInfo("Asia/Dubai"))
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return midnight.astimezone(timezone.utc)
+
+
+async def _todays_backup(
+    session: AsyncSession, *, restaurant_id: int
+) -> BackupJob | None:
+    return await session.scalar(
+        select(BackupJob)
+        .where(
+            BackupJob.restaurant_id == restaurant_id,
+            BackupJob.status == "completed",
+            BackupJob.completed_at >= _business_day_start_utc(),
+        )
+        .order_by(BackupJob.id.desc())
+        .limit(1)
     )
 
 
@@ -368,11 +389,17 @@ async def latest_backup_health(
         .order_by(BackupJob.id.desc())
         .limit(1)
     )
+    today = await _todays_backup(session, restaurant_id=restaurant_id)
+    today_info = {
+        "backed_up_today": today is not None,
+        "today_backup_id": today.id if today else None,
+    }
     if job is None:
         return {
             "has_backup": False,
             "ok": False,
             "summary": "No backup has been taken yet.",
+            **today_info,
         }
     try:
         result = await verify_backup(
@@ -386,6 +413,7 @@ async def latest_backup_health(
             "taken_at": job.completed_at.isoformat() if job.completed_at else None,
             "size_bytes": job.size_bytes,
             "summary": f"The newest backup cannot be read: {exc}.",
+            **today_info,
         }
     return {
         "has_backup": True,
@@ -395,6 +423,7 @@ async def latest_backup_health(
         "taken_at": job.completed_at.isoformat() if job.completed_at else None,
         "size_bytes": job.size_bytes,
         "summary": result["summary"],
+        **today_info,
     }
 
 

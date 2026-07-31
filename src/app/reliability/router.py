@@ -112,16 +112,24 @@ async def daily_backup(
     restaurant=Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
+    # "Was one already taken today?" has to be answered BEFORE the call, because
+    # afterwards there is always a backup and the two outcomes look identical.
+    # The old response said nothing about it and the UI toasted "ensured" either
+    # way, so pressing the button taught you nothing.
+    from app.reliability.service import _todays_backup  # noqa: PLC0415
+
+    already = await _todays_backup(session, restaurant_id=restaurant.id)
     job = await run_daily_backup_if_due(session, restaurant_id=restaurant.id)
     await session.commit()
     if job is None:
-        return {"status": "skipped"}
+        return {"status": "skipped", "created": False}
     return {
         "id": job.id,
         "status": job.status,
         "kind": job.kind,
         "storage_path": job.storage_path,
         "size_bytes": job.size_bytes,
+        "created": already is None,
     }
 
 

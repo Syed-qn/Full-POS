@@ -241,36 +241,34 @@ export function ReliabilityScreen() {
         <div className={s.card}>
           <div className={s.cardHead}>
             <h2>Backups</h2>
-            <span>
+            {/* When everything is fine, this is the whole status: one quiet line.
+                Two full-width green panels shouted good news louder than the
+                page shouts bad news, which trains people to ignore the colour. */}
+            <span data-testid="backup-health">
               {target
                 ? `${target.backend === "s3" ? "Object storage" : "Local disk"} · ${target.location}`
                 : "Loading destination…"}
+              {target?.durable ? " · durable" : ""}
+              {health?.ok ? " · restorable" : ""}
+              {health?.backed_up_today ? " · backed up today" : ""}
               {" · last: "}
               {readiness?.last_backup_at ?? network?.last_backup_at ?? "never"}
             </span>
           </div>
-          {/* The single most important fact on this screen: a backup you cannot
-              retrieve is not a backup. Stated up front rather than discovered
-              later when Verify starts failing. */}
-          {target && (
-            <p className={target.durable ? s.noteOk : s.noteWarn}>
-              {target.durable ? "✓ Durable — " : "⚠ Not durable — "}
-              {target.note}
+          {/* Panels are reserved for problems. A backup you cannot retrieve, or
+              one that will not restore, is worth the interruption; "all good" is
+              not. */}
+          {target && !target.durable && (
+            <p className={s.noteWarn}>⚠ Not durable — {target.note}</p>
+          )}
+          {health && !health.ok && (
+            <p className={s.noteWarn} data-testid="backup-health-problem">
+              ⚠ {health.summary}
             </p>
           )}
-          {/* The verdict a restaurant actually wants, stated without being asked.
-              Verify used to answer this in a toast that vanished, which is no
-              answer at all to "is my data safe?". */}
-          {health && (
-            <p
-              className={health.ok ? s.noteOk : s.noteWarn}
-              data-testid="backup-health"
-            >
-              {health.ok ? "✓ " : "⚠ "}
-              {health.summary}
-              {health.has_backup && health.taken_at
-                ? ` Taken ${new Date(health.taken_at).toLocaleString()}.`
-                : ""}
+          {health?.ok && !health.backed_up_today && (
+            <p className={s.noteWarn}>
+              ⚠ No backup taken today yet. Press “Ensure daily backup”.
             </p>
           )}
           <div className={s.actions}>
@@ -284,8 +282,14 @@ export function ReliabilityScreen() {
               disabled={busy}
               onClick={async () => {
                 try {
-                  await runDailyBackup();
-                  toast("Daily backup ensured");
+                  const r = await runDailyBackup();
+                  // "Ensured" was printed whether it made one or skipped, so the
+                  // button gave the same feedback for two different outcomes.
+                  toast(
+                    r.created
+                      ? `Today's backup created (#${r.id})`
+                      : "Today already has a backup — nothing to do",
+                  );
                   await reload();
                 } catch (e) {
                   toast(e instanceof Error ? e.message : "Failed", "error");

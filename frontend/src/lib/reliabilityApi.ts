@@ -28,7 +28,13 @@ export function createBackup(kind = "manual") {
 }
 
 export function runDailyBackup() {
-  return apiClient.post<{ id?: number; status: string }>("/api/v1/reliability/backups/daily", {});
+  return apiClient.post<{
+    id?: number;
+    status: string;
+    size_bytes?: number;
+    /** False when today already had one — the two outcomes must be tellable apart. */
+    created: boolean;
+  }>("/api/v1/reliability/backups/daily", {});
 }
 
 export function listBackups() {
@@ -119,6 +125,9 @@ export type BackupHealth = {
   backup_job_id?: number;
   taken_at?: string | null;
   size_bytes?: number;
+  /** Whether TODAY (Asia/Dubai) has a completed backup yet. */
+  backed_up_today: boolean;
+  today_backup_id?: number | null;
 };
 
 /** Health of the NEWEST backup — the one a restore would actually use. */
