@@ -256,14 +256,33 @@
   font-size: 12px;
 }
 
+/* Matches ConfirmDialog's overlay so Inspect and Restore feel like the same
+   surface. z-index clears the sticky tab strip, which is 4. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
 .previewBox {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
+  padding: 20px;
   border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: var(--bg-surface-inset);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.25));
+  width: min(720px, 100%);
+  /* A snapshot can hold 40+ non-empty tables — the panel scrolls rather than
+     growing past the bottom of the viewport where Close is unreachable. */
+  max-height: min(80vh, 720px);
+  overflow-y: auto;
 }
 
 .previewHead {

@@ -150,6 +150,18 @@ export function ReliabilityScreen() {
     void reload();
   }, [reload]);
 
+  // Escape closes the Inspect panel. ConfirmDialog brings its own; this one is a
+  // plain read-only modal, and a modal you can only dismiss with the mouse is a
+  // modal that traps keyboard users.
+  useEffect(() => {
+    if (!preview) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPreview(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
+
   async function doBackup() {
     setBusy(true);
     try {
@@ -297,7 +309,17 @@ export function ReliabilityScreen() {
             readable report; use Inspect to see what a backup contains.
           </p>
           {preview && (
-            <div className={s.previewBox} data-testid="backup-preview">
+            <div className={s.overlay} onClick={() => setPreview(null)}>
+            <div
+              className={s.previewBox}
+              data-testid="backup-preview"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Inside backup #${preview.id}`}
+              // Clicks inside the panel must not reach the overlay, or choosing
+              // text would close the thing you are reading.
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className={s.previewHead}>
                 <h3>Inside backup #{preview.id}</h3>
                 <Button size="md" type="button" variant="ghost" onClick={() => setPreview(null)}>
@@ -319,6 +341,7 @@ export function ReliabilityScreen() {
                   ))}
               </div>
               {preview.message && <p className={s.muted}>{preview.message}</p>}
+            </div>
             </div>
           )}
 

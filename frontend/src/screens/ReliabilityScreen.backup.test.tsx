@@ -8,6 +8,7 @@ const getBackupTarget = vi.fn();
 const restoreBackup = vi.fn();
 const downloadBackup = vi.fn();
 const exportDataPack = vi.fn();
+const restorePreview = vi.fn();
 
 vi.mock("../lib/reliabilityApi", () => ({
   getNetworkStatus: () =>
@@ -30,7 +31,7 @@ vi.mock("../lib/reliabilityApi", () => ({
   createBackup: vi.fn(),
   runDailyBackup: vi.fn(),
   verifyBackup: vi.fn(),
-  restorePreview: vi.fn(),
+  restorePreview: (...a: unknown[]) => restorePreview(...a),
   registerDevice: vi.fn(),
   promoteFailover: vi.fn(),
   ackError: vi.fn(),
@@ -121,6 +122,30 @@ describe("ReliabilityScreen — backups tell the truth", () => {
 
     await userEvent.click(go);
     await waitFor(() => expect(restoreBackup).toHaveBeenCalledWith(2, "RESTORE 1"));
+  });
+
+  it("opens Inspect as a dialog that Escape closes", async () => {
+    // It used to render below the table, which with a dozen backups put it off
+    // the bottom of the screen — pressing Inspect looked like nothing happened.
+    restorePreview.mockResolvedValue({
+      restore_mode: "preview_only",
+      generated_at: "2026-07-31T12:52:41Z",
+      counts: { audit_log: 142, dishes: 51, orders: 0 },
+      message: "Snapshot readable.",
+    });
+    render(<ReliabilityScreen />);
+    await userEvent.click(await screen.findByRole("button", { name: "Inspect" }));
+
+    const panel = await screen.findByTestId("backup-preview");
+    expect(panel).toHaveAttribute("aria-modal", "true");
+    expect(within(panel).getByText("142")).toBeInTheDocument();
+    // Empty tables are noise next to the handful that carry the business.
+    expect(within(panel).queryByText("orders")).not.toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByTestId("backup-preview")).not.toBeInTheDocument(),
+    );
   });
 
   it("downloads a real file instead of only toasting a job id", async () => {
