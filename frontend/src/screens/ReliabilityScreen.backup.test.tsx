@@ -89,7 +89,7 @@ describe("ReliabilityScreen — backups tell the truth", () => {
 
     expect(await screen.findByText(/FILE MISSING/)).toBeInTheDocument();
     // Offering Verify/Restore on a row with no file invites a confusing failure.
-    for (const label of ["Verify", "Download", "DR preview", "Restore"]) {
+    for (const label of ["Verify", "Download", "Inspect", "Restore"]) {
       expect(screen.getByRole("button", { name: label })).toBeDisabled();
     }
   });

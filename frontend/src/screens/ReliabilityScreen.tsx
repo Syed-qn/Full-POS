@@ -99,6 +99,12 @@ export function ReliabilityScreen() {
   const [deviceName, setDeviceName] = useState("Dashboard browser");
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<RelTab>("backups");
+  const [preview, setPreview] = useState<{
+    id: number;
+    generated_at?: string;
+    counts?: Record<string, number>;
+    message?: string;
+  } | null>(null);
   const [restoreFor, setRestoreFor] = useState<number | null>(null);
   const [restoreConfirm, setRestoreConfirm] = useState("");
 
@@ -349,14 +355,17 @@ export function ReliabilityScreen() {
                           disabled={!b.file_present}
                           onClick={async () => {
                             try {
+                              // A toast could not show what is actually in the
+                              // snapshot, which is the only question this button
+                              // exists to answer.
                               const p = await restorePreview(b.id);
-                              toast(p.message);
+                              setPreview({ id: b.id, ...p });
                             } catch (e) {
                               toast(e instanceof Error ? e.message : "Preview failed", "error");
                             }
                           }}
                         >
-                          DR preview
+                          Inspect
                         </Button>
                         <Button
                           size="md"
@@ -373,6 +382,32 @@ export function ReliabilityScreen() {
                 ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {preview && (
+            <div className={s.previewBox} data-testid="backup-preview">
+              <div className={s.previewHead}>
+                <h3>Inside backup #{preview.id}</h3>
+                <Button size="md" type="button" variant="ghost" onClick={() => setPreview(null)}>
+                  Close
+                </Button>
+              </div>
+              <p className={s.muted}>Taken {preview.generated_at ?? "—"}</p>
+              {/* Only tables that hold something. Listing ~120 empty ones would
+                  bury the handful that matter. */}
+              <div className={s.previewGrid}>
+                {Object.entries(preview.counts ?? {})
+                  .filter(([, v]) => v > 0)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, n]) => (
+                    <div key={name} className={s.previewCell}>
+                      <strong>{n}</strong>
+                      <span>{name.replace(/_/g, " ")}</span>
+                    </div>
+                  ))}
+              </div>
+              {preview.message && <p className={s.muted}>{preview.message}</p>}
             </div>
           )}
 
