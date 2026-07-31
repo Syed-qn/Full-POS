@@ -29,6 +29,30 @@ import s from "./ReliabilityScreen.module.css";
 
 type RelTab = "backups" | "devices" | "errors" | "conflicts";
 
+/**
+ * Devices is hidden until it does something.
+ *
+ * Nothing outside this screen reads a device's role or `is_failover_active`, so
+ * "Promote" relabels a row rather than moving any traffic — and no till or
+ * kitchen screen registers itself, so the online/offline counters only ever
+ * describe whoever pressed the button on this page. A tab that reports numbers
+ * which look meaningful and are not is worse than no tab: it invites someone to
+ * act on it during an outage.
+ *
+ * The panel below is left intact. Flip this to true once terminals register
+ * themselves on startup and something actually consumes the failover flag.
+ */
+const SHOW_DEVICES_TAB = false;
+
+const TABS = (
+  [
+    ["backups", "Backups"],
+    ["devices", "Devices"],
+    ["errors", "Errors & audit"],
+    ["conflicts", "Conflicts"],
+  ] as const
+).filter(([key]) => key !== "devices" || SHOW_DEVICES_TAB);
+
 type Bridge = {
   networkStatus?: () => Promise<{ online: boolean; last_error: string | null }>;
   listConflicts?: () => Promise<Array<{ id: string; entity: string; path: string }>>;
@@ -50,14 +74,14 @@ function formatBytes(n: number): string {
  *  a backup actually caught the day's trading. */
 function summarise(meta: { counts?: Record<string, number> } | null): string {
   const counts = meta?.counts;
-  if (!counts) return "—";
+  if (!counts) return "none";
   const top = Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([k, v]) => `${v} ${k}`);
   const rest = Object.keys(counts).length - top.length;
   // "+N more", not "+N tables" — `tables` is itself one of the table names here.
-  return rest > 0 ? `${top.join(" · ")} +${rest} more` : top.join(" · ");
+  return rest > 0 ? `${top.join(", ")} and ${rest} more` : top.join(", ");
 }
 
 export function ReliabilityScreen() {
@@ -186,7 +210,7 @@ export function ReliabilityScreen() {
     <div className={s.screen}>
       <PageHeader
         title="Reliability"
-        subtitle="Offline sync, cloud backups, device failover, errors & audit"
+        subtitle="Backups, error log and audit trail"
         right={
           <Button size="md" type="button" variant="ghost" onClick={() => void reload()}>
             Refresh
@@ -197,15 +221,15 @@ export function ReliabilityScreen() {
       <section className={s.metrics}>
         <div className={s.metric}>
           <span>Devices online</span>
-          <strong>{network?.devices_online ?? "—"}</strong>
+          <strong>{network?.devices_online ?? "0"}</strong>
         </div>
         <div className={s.metric}>
           <span>Devices offline</span>
-          <strong>{network?.devices_offline ?? "—"}</strong>
+          <strong>{network?.devices_offline ?? "0"}</strong>
         </div>
         <div className={`${s.metric} ${(network?.unacked_errors ?? 0) > 0 ? s.metricAlert : ""}`}>
           <span>Unacked errors</span>
-          <strong>{network?.unacked_errors ?? "—"}</strong>
+          <strong>{network?.unacked_errors ?? "0"}</strong>
         </div>
         <div className={`${s.metric} ${desktopOnline === false ? s.metricAlert : ""}`}>
           <span>Desktop link</span>
@@ -216,14 +240,7 @@ export function ReliabilityScreen() {
       </section>
 
       <div className={s.tabs} role="tablist" aria-label="Reliability sections">
-        {(
-          [
-            ["backups", "Backups"],
-            ["devices", "Devices"],
-            ["errors", "Errors & audit"],
-            ["conflicts", "Conflicts"],
-          ] as const
-        ).map(([key, label]) => (
+        {TABS.map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -246,12 +263,12 @@ export function ReliabilityScreen() {
                 page shouts bad news, which trains people to ignore the colour. */}
             <span data-testid="backup-health">
               {target
-                ? `${target.backend === "s3" ? "Object storage" : "Local disk"} · ${target.location}`
+                ? `${target.backend === "s3" ? "Object storage" : "Local disk"} at ${target.location}`
                 : "Loading destination…"}
-              {target?.durable ? " · durable" : ""}
-              {health?.ok ? " · restorable" : ""}
-              {health?.backed_up_today ? " · backed up today" : ""}
-              {" · last: "}
+              {target?.durable ? ", durable" : ""}
+              {health?.ok ? ", restorable" : ""}
+              {health?.backed_up_today ? ", backed up today" : ""}
+              {". Last backup "}
               {readiness?.last_backup_at ?? network?.last_backup_at ?? "never"}
             </span>
           </div>
@@ -259,16 +276,16 @@ export function ReliabilityScreen() {
               one that will not restore, is worth the interruption; "all good" is
               not. */}
           {target && !target.durable && (
-            <p className={s.noteWarn}>⚠ Not durable — {target.note}</p>
+            <p className={s.noteWarn}>Not durable. {target.note}</p>
           )}
           {health && !health.ok && (
             <p className={s.noteWarn} data-testid="backup-health-problem">
-              ⚠ {health.summary}
+              {health.summary}
             </p>
           )}
           {health?.ok && !health.backed_up_today && (
             <p className={s.noteWarn}>
-              ⚠ No backup taken today yet. Press “Ensure daily backup”.
+              No backup taken today yet. Press "Ensure daily backup".
             </p>
           )}
           <div className={s.actions}>
@@ -288,7 +305,7 @@ export function ReliabilityScreen() {
                   toast(
                     r.created
                       ? `Today's backup created (#${r.id})`
-                      : "Today already has a backup — nothing to do",
+                      : "Today already has a backup, nothing to do",
                   );
                   await reload();
                 } catch (e) {
@@ -323,7 +340,7 @@ export function ReliabilityScreen() {
           </div>
           {readiness && (
             <p className={s.muted}>
-              Readiness: {readiness.orders_count} orders · {readiness.dishes_count} dishes
+              Readiness: {readiness.orders_count} orders, {readiness.dishes_count} dishes
             </p>
           )}
           {/* The file is exact data for the Restore button to read back, not a
@@ -331,8 +348,8 @@ export function ReliabilityScreen() {
               concluding the export is broken. */}
           <p className={s.muted}>
             A backup file is a complete copy of this restaurant's data. Keep it somewhere
-            safe (USB or cloud drive) — it is what Restore reads back. It is not a
-            readable report; use Inspect to see what a backup contains.
+            safe (USB or cloud drive). It is what Restore reads back. It is not a
+            readable report. Use Inspect to see what a backup contains.
           </p>
           {preview && (
             <div className={s.overlay} onClick={() => setPreview(null)}>
@@ -352,7 +369,7 @@ export function ReliabilityScreen() {
                   Close
                 </Button>
               </div>
-              <p className={s.muted}>Taken {preview.generated_at ?? "—"}</p>
+              <p className={s.muted}>Taken {preview.generated_at ?? "unknown"}</p>
               {/* Only tables that hold something. Listing ~120 empty ones would
                   bury the handful that matter. */}
               <div className={s.previewGrid}>
@@ -377,7 +394,7 @@ export function ReliabilityScreen() {
               message={
                 `This DELETES this restaurant's current data and replaces it with the ` +
                 `snapshot. Orders, tables, staff, payments and settings all revert. A ` +
-                `pre-restore backup is taken first, so this can be undone.`
+                `safety backup is taken first, so this can be undone.`
               }
               confirmLabel="Overwrite everything"
               danger
@@ -396,7 +413,7 @@ export function ReliabilityScreen() {
                 try {
                   const r = await restoreBackup(restoreFor, restoreConfirm);
                   const rows = Object.values(r.inserted).reduce((a, b) => a + b, 0);
-                  toast(`Restored ${rows} rows · undo with backup #${r.pre_restore_backup_id}`);
+                  toast(`Restored ${rows} rows. Undo with backup #${r.pre_restore_backup_id}.`);
                   setRestoreFor(null);
                   setRestoreConfirm("");
                   await reload();
@@ -410,7 +427,7 @@ export function ReliabilityScreen() {
               <div className={s.restoreBox} data-testid="restore-confirm">
                 {!target.restore_enabled && (
                   <p className={s.noteWarn}>
-                    &#9888; Restore is switched off on this server. Set{" "}
+                    Restore is switched off on this server. Set{" "}
                     <code>APP_BACKUP_RESTORE_ENABLED=true</code> to allow it.
                   </p>
                 )}
@@ -451,7 +468,7 @@ export function ReliabilityScreen() {
                     <td>
                       {b.status}
                       {/* "completed" alone is misleading once the file is gone. */}
-                      {!b.file_present && <span className={s.gone}> · FILE MISSING</span>}
+                      {!b.file_present && <span className={s.gone}> FILE MISSING</span>}
                       {rowChecks[b.id] && (
                         <div
                           className={rowChecks[b.id].ok ? s.checkOk : s.gone}
@@ -587,8 +604,8 @@ export function ReliabilityScreen() {
             {(network?.devices ?? []).map((d) => (
               <li key={d.device_id} className={s.listItem}>
                 <span>
-                  {d.name} · {d.role} · {d.status}
-                  {d.is_failover_active ? " · FAILOVER" : ""}
+                  {d.name}, {d.role}, {d.status}
+                  {d.is_failover_active ? ", FAILOVER" : ""}
                 </span>
                 {d.role !== "primary" && (
                   <div className={s.listActions}>
@@ -666,7 +683,7 @@ export function ReliabilityScreen() {
                 {audit.map((a) => (
                   <li key={a.id} className={s.listItem}>
                     <span>
-                      {a.created_at?.slice(0, 19)} · {a.actor} · {a.entity}/{a.action}
+                      {a.created_at?.slice(0, 19)} {a.actor} {a.entity}/{a.action}
                     </span>
                   </li>
                 ))}
@@ -680,7 +697,7 @@ export function ReliabilityScreen() {
         <section className={s.card}>
           <div className={s.cardHead}>
             <h2>Offline conflict resolution</h2>
-            <span>Desktop shell only — retry or discard 409 conflicts after reconnect</span>
+            <span>Desktop shell only. Retry or discard 409 conflicts after reconnect.</span>
           </div>
           {!posBridge()?.listConflicts && (
             <p className={s.muted}>Open the Electron desktop shell to manage offline queue conflicts.</p>

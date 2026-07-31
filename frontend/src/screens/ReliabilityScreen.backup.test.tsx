@@ -113,7 +113,7 @@ describe("ReliabilityScreen — backups tell the truth", () => {
     // caught the day's trading. Scoped to the row: the "Readiness" line above
     // mentions the same numbers, so an unscoped query matches two elements.
     const row = (await screen.findByText("9.4 KB")).closest("tr") as HTMLElement;
-    expect(within(row).getByText("51 dishes · 18 orders · 7 tables +1 more")).toBeInTheDocument();
+    expect(within(row).getByText("51 dishes, 18 orders, 7 tables and 1 more")).toBeInTheDocument();
   });
 
   it("requires the exact typed phrase before restoring", async () => {
@@ -245,5 +245,33 @@ describe("ReliabilityScreen — is my backup actually good?", () => {
 
     const verdict = await screen.findByTestId("row-check-2");
     expect(verdict).toHaveTextContent("not restorable");
+  });
+});
+
+describe("ReliabilityScreen — tabs", () => {
+  beforeEach(() => {
+    listBackups.mockReset();
+    getBackupTarget.mockReset();
+    getBackupHealth.mockReset();
+    listBackups.mockResolvedValue([PRESENT]);
+    getBackupTarget.mockResolvedValue({ ...EPHEMERAL, durable: true });
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: true,
+      backed_up_today: true,
+      summary: "ok",
+    });
+  });
+
+  it("hides Devices, which reports numbers that look meaningful and are not", async () => {
+    // Promote relabels a row; nothing outside this screen reads the failover
+    // flag, and no till registers itself — so the counters describe whoever
+    // pressed the button here, not what is running.
+    render(<ReliabilityScreen />);
+    expect(await screen.findByRole("tab", { name: "Backups" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Devices" })).not.toBeInTheDocument();
+    for (const label of ["Errors & audit", "Conflicts"]) {
+      expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
+    }
   });
 });

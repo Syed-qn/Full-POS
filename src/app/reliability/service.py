@@ -324,8 +324,8 @@ async def verify_backup(
     checks["format_supported"] = data.get("format") == SNAPSHOT_FORMAT
     if not checks["format_supported"]:
         problems.append(
-            "it was written by an older version and Restore cannot read it — "
-            "take a fresh backup"
+            "it was written by an older version and Restore cannot read it. "
+            "Take a fresh backup"
         )
 
     checks["right_restaurant"] = data.get("restaurant_id") == restaurant_id
@@ -504,7 +504,7 @@ async def restore_backup(
 
     raw = await storage.get_backup(job.storage_path)
     if hashlib.sha256(raw).hexdigest() != job.checksum:
-        raise RestoreError("checksum mismatch — snapshot is corrupt, refusing to restore")
+        raise RestoreError("Checksum mismatch. This snapshot is corrupt, so it will not be restored.")
     data = json.loads(raw.decode("utf-8"))
     if data.get("format") != SNAPSHOT_FORMAT:
         raise RestoreError(

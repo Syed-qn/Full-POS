@@ -145,7 +145,7 @@ def describe_target() -> dict:
             "location": f"s3://{s.backup_s3_bucket}/{s.backup_s3_prefix}".rstrip("/"),
             "endpoint": s.backup_s3_endpoint_url or "aws",
             "durable": True,
-            "note": "Off-box object storage. Survives redeploys and host loss.",
+            "note": "Offsite object storage. Survives redeploys and host loss.",
         }
     path = _local_dir(create=False)
     writable: bool | None = None
@@ -172,36 +172,36 @@ def describe_target() -> dict:
                 f"CANNOT WRITE to {path}"
                 + (f" ({write_error})" if write_error else "")
                 + ". Backups will fail. A mounted volume is owned by root while "
-                "this app runs as an unprivileged user — set RAILWAY_RUN_UID=0 on "
+                "this app runs as an unprivileged user. Set RAILWAY_RUN_UID=0 on "
                 "the service, or point APP_BACKUP_DIR at a writable path."
             ),
         }
 
     if mounted is True:
-        durable, note = True, f"Mounted volume ({path}) — survives redeploys."
+        durable, note = True, f"Mounted volume at {path}. Files survive redeploys."
     elif mounted is False:
         # The decisive case: the operator may have set the flag, but the
         # directory demonstrably lives inside the image.
         durable = False
         note = (
-            f"{path} is NOT a mounted volume — it is inside the container image, "
+            f"{path} is NOT a mounted volume. It sits inside the container image, "
             "so files are LOST on redeploy or restart."
             + (
                 " APP_BACKUP_DIR_IS_VOLUME is set to true, but the filesystem says "
-                "otherwise: check the volume is attached and its mount path matches."
+                "otherwise. Check the volume is attached and its mount path matches."
                 if s.backup_dir_is_volume
                 else " Attach a volume and point APP_BACKUP_DIR at its mount path, "
-                "or set APP_BACKUP_S3_BUCKET for off-box storage."
+                "or set APP_BACKUP_S3_BUCKET for offsite storage."
             )
         )
     else:  # cannot tell (e.g. local Windows dev)
         durable = bool(s.backup_dir_is_volume)
         note = (
-            "Declared durable by APP_BACKUP_DIR_IS_VOLUME — this platform cannot "
+            "Declared durable by APP_BACKUP_DIR_IS_VOLUME. This platform cannot "
             "verify whether it is really a mounted volume."
             if durable
             else "Local directory, not confirmed as a mounted volume. Point "
-            "APP_BACKUP_DIR at a volume, or set APP_BACKUP_S3_BUCKET for off-box storage."
+            "APP_BACKUP_DIR at a volume, or set APP_BACKUP_S3_BUCKET for offsite storage."
         )
 
     return {
