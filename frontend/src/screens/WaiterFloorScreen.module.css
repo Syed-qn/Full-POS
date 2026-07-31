@@ -353,16 +353,33 @@
   color: #fff;
 }
 
+/* The floor canvas can be wider than the window, which scrolls the whole page
+   sideways — and with space-between the confirm button rode that overflow off
+   the right edge, so the one control that completes the join was unreachable.
+   Sticky to the left keeps the bar in the viewport while the floor scrolls, and
+   wrapping drops the button onto its own line rather than off the screen. */
 .joinBar {
+  position: sticky;
+  left: 0;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 8px 16px;
   background: var(--panel-2);
   border-bottom: 1px solid var(--line);
+  z-index: 5;
+}
+.joinBar .joinGo {
+  flex: 0 0 auto;
 }
 .joinHint {
+  flex: 1 1 240px;
+  min-width: 0;
   font-size: 12px;
   font-weight: 700;
   color: var(--ink);

@@ -106,10 +106,21 @@ export function CashierFloorScreen() {
   // be told which one the joined guests share.
   const [joinBillFor, setJoinBillFor] = useState<ApiTable | null>(null);
   // A JOINING table that seats two parties: which of its bills is coming along.
-  // Asked per table, and the answers accumulate so a join can pull one party from
-  // each of several shared tables.
+  // Answers accumulate so a join can pull one party from each of several shared
+  // tables.
   const [fromOrderIds, setFromOrderIds] = useState<number[]>([]);
-  const [askFromFor, setAskFromFor] = useState<ApiTable | null>(null);
+  /**
+   * The table whose bill we are asking about RIGHT NOW, as it is tapped.
+   *
+   * Asked at SELECTION, not at confirm: tapping a table that seats two parties is
+   * exactly the moment the question arises, and answering it there lets the
+   * cashier carry straight on to the next table. Holding it until the Join button
+   * meant a cashier picked their tables, pressed Join, and only then got a
+   * question about a table they had already moved on from.
+   */
+  const [askBillFor, setAskBillFor] = useState<ApiTable | null>(null);
+  // Which of the BILL-KEEPING table's bills is the group invoice.
+  const [intoOrderId, setIntoOrderId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     // Layout rides the same poll as the tables: a manager who moves or rotates
@@ -207,32 +218,21 @@ export function CashierFloorScreen() {
     return `/cashier/new-order?table=${t.id}&label=${encodeURIComponent(t.label)}${extra}`;
   }
 
-  /** Run the join. `intoOrderId` names the invoice when the primary has several. */
-  async function runJoin(intoOrderId?: number | null, picked?: number[]) {
+  /**
+   * Send the join. Every "which bill?" was already answered as each table was
+   * tapped, so this only submits — no question can appear at the last moment.
+   */
+  async function runJoin(overrideInto?: number | null) {
     const [primaryId, ...rest] = joinPick;
     if (!primaryId || rest.length === 0) return;
-    const from = picked ?? fromOrderIds;
-
-    // A JOINING table with two bills is seating two PARTIES, and only one of them
-    // is moving in with the group. Ask before sending, rather than letting the
-    // server refuse — the cashier can answer this, and merging both would put
-    // strangers' money on one invoice.
-    const needsAsking = rest
-      .map((id) => tables.find((t) => t.id === id))
-      .find(
-        (t) =>
-          t &&
-          (t.bill_count ?? 0) > 1 &&
-          !(t.bills ?? []).some((b) => from.includes(b.order_id)),
-      );
-    if (needsAsking) {
-      setAskFromFor(needsAsking);
-      return;
-    }
+    const from = fromOrderIds;
+    // Passed explicitly by the retry path: a setState in the same tick has not
+    // landed yet, so reading intoOrderId here would send the stale value.
+    const into = overrideInto ?? intoOrderId;
 
     setJoining(true);
     try {
-      const rows = await joinTables(primaryId, rest, intoOrderId, from);
+      const rows = await joinTables(primaryId, rest, into, from);
       if (Array.isArray(rows)) {
         tableCache = rows;
         setTables(rows);
@@ -242,19 +242,32 @@ export function CashierFloorScreen() {
       setJoinPick([]);
       setJoinMode(false);
       setJoinBillFor(null);
-      setAskFromFor(null);
+      setAskBillFor(null);
       setFromOrderIds([]);
+      setIntoOrderId(null);
     } catch (e) {
-      // The server refuses to guess which bill when the primary has more than
-      // one — surface that as the bill picker rather than as an error the cashier
-      // can do nothing about.
+      // The server refuses to guess which bill, in two different situations, and
+      // BOTH must become a question rather than an error the cashier can do
+      // nothing about. This is a backstop for the pre-check above: if the floor's
+      // cached table data is stale — an old tab, a bill opened on another till —
+      // the pre-check can miss and the server is the one that catches it.
       const msg = e instanceof Error ? e.message : "Could not join the tables";
+      if (/which one is joining/i.test(msg)) {
+        // A JOINING table seats two parties. The message names it, so find it.
+        const named = rest
+          .map((id) => tables.find((t) => t.id === id))
+          .find((t) => t && msg.includes(t.label));
+        if (named) {
+          setAskBillFor(named);
+          return;
+        }
+      }
       const primary = tables.find((t) => t.id === primaryId);
       if (/which one/i.test(msg) && primary && (primary.bill_count ?? 0) > 1) {
         setJoinBillFor(primary);
-      } else {
-        toast(msg, "error");
+        return;
       }
+      toast(msg, "error");
     } finally {
       setJoining(false);
     }
@@ -275,10 +288,24 @@ export function CashierFloorScreen() {
 
   function openTable(t: ApiTable) {
     if (joinMode) {
-      // Already picked → un-pick, so a wrong tap costs one tap to undo.
-      setJoinPick((prev) =>
-        prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
-      );
+      // Already picked → un-pick, so a wrong tap costs one tap to undo. Any bill
+      // chosen for that table is dropped with it, or a table no longer in the join
+      // would still be sending one of its parties along.
+      if (joinPick.includes(t.id)) {
+        const ownIds = new Set((t.bills ?? []).map((b) => b.order_id));
+        setJoinPick((prev) => prev.filter((x) => x !== t.id));
+        setFromOrderIds((prev) => prev.filter((id) => !ownIds.has(id)));
+        setIntoOrderId((prev) => (prev != null && ownIds.has(prev) ? null : prev));
+        return;
+      }
+      // A table seating TWO PARTIES: ask which bill AS IT IS TAPPED. This is the
+      // moment the question arises, and answering it here lets the cashier carry
+      // straight on to the next table instead of being interrupted at the end.
+      if ((t.bill_count ?? 0) > 1) {
+        setAskBillFor(t);
+        return;
+      }
+      setJoinPick((prev) => [...prev, t.id]);
       return;
     }
     // A JOINED table holds no bill of its own, so open the one that does. Without
@@ -509,29 +536,38 @@ export function CashierFloorScreen() {
         )}
       </div>
 
-      {/* A JOINING table seats two parties — which one is moving in with the group?
-          Only that bill travels; the table keeps the other party and its own bill. */}
-      {askFromFor && (
+      {/* Tapped a table that seats two parties. Which bill is in the join? Asked
+          here, at selection, so the answer is given while that table is still the
+          one in hand — then the cashier carries on picking. */}
+      {askBillFor && (
         <TableBillsDialog
-          tableLabel={askFromFor.label}
-          bills={askFromFor.bills ?? []}
+          tableLabel={askBillFor.label}
+          bills={askBillFor.bills ?? []}
           onPick={(b) => {
-            const next = [...fromOrderIds, b.order_id];
-            setFromOrderIds(next);
-            setAskFromFor(null);
-            void runJoin(null, next);
+            const t = askBillFor;
+            // The FIRST table picked keeps the bill, so its chosen bill IS the
+            // group invoice; any later one is a party travelling onto it.
+            if (joinPick.length === 0) setIntoOrderId(b.order_id);
+            else setFromOrderIds((prev) => [...prev, b.order_id]);
+            setJoinPick((prev) => (prev.includes(t.id) ? prev : [...prev, t.id]));
+            setAskBillFor(null);
           }}
-          onClose={() => setAskFromFor(null)}
+          onClose={() => setAskBillFor(null)}
         />
       )}
 
-      {/* The bill-keeping table carries several bills, so the server refused to
-          guess which party the joined guests belong to. Ask, then retry. */}
+      {/* Backstop only: the server refused because the bill-keeping table has
+          several bills and the floor's cached copy did not show that — a bill
+          opened on another till since this screen last refreshed. Ask, then retry. */}
       {joinBillFor && (
         <TableBillsDialog
           tableLabel={joinBillFor.label}
           bills={joinBillFor.bills ?? []}
-          onPick={(b) => void runJoin(b.order_id)}
+          onPick={(b) => {
+            setIntoOrderId(b.order_id);
+            setJoinBillFor(null);
+            void runJoin(b.order_id);
+          }}
           onClose={() => setJoinBillFor(null)}
         />
       )}

@@ -68,6 +68,18 @@ const FLOOR = [
     ],
     guests: 2,
   },
+  // A free table — nothing to ask about when it is pulled into a group.
+  {
+    id: 4,
+    label: "T01",
+    seats: 4,
+    status: "available",
+    pos_x: 2.5,
+    pos_y: 3,
+    order_id: null,
+    bill_count: 0,
+    bills: [],
+  },
 ];
 
 function renderFloor(path = "/cashier/floor") {
@@ -86,36 +98,39 @@ describe("CashierFloorScreen — joining a table that seats two parties", () => 
     joinTables.mockResolvedValue(FLOOR);
   });
 
-  it("asks WHICH BILL before joining AO1 into AO2, and does not merge both", async () => {
-    // The user's report: AO1 shows "2 BILLS", they pick AO2 to keep the bill and
-    // AO1 to join, hit Join — and nothing asks which of AO1's two parties is
-    // moving. Merging both would put strangers' money on one invoice.
+  it("asks WHICH BILL the moment a two-party table is tapped", async () => {
+    // The question belongs at SELECTION. Held until the Join button, the cashier
+    // picks their tables, presses Join, and only then gets asked about a table
+    // they had already moved on from — which is what they reported as "not
+    // asking", because nothing happens at the moment they expect it to.
     renderFloor();
     await screen.findByTestId("cashier-table-2");
 
     await userEvent.click(screen.getByTestId("join-mode-toggle"));
     await userEvent.click(screen.getByTestId("cashier-table-3")); // AO2 keeps the bill
-    await userEvent.click(screen.getByTestId("cashier-table-2")); // AO1 joins
-    await userEvent.click(screen.getByTestId("join-confirm"));
+    await userEvent.click(screen.getByTestId("cashier-table-2")); // AO1 — two parties
 
-    // The picker must appear, listing AO1's two bills...
+    // Asked immediately, with no Join press in between.
     const dialog = await screen.findByTestId("table-bills-dialog");
     expect(dialog).toHaveTextContent("AO1");
     expect(screen.getByTestId("table-bill-24")).toBeInTheDocument();
     expect(screen.getByTestId("table-bill-25")).toBeInTheDocument();
-    // ...and nothing may be merged until the question is answered.
     expect(joinTables).not.toHaveBeenCalled();
   });
 
-  it("sends only the chosen party once the cashier answers", async () => {
+  it("selects the table once its bill is chosen, then joins on confirm", async () => {
     renderFloor();
     await screen.findByTestId("cashier-table-2");
 
     await userEvent.click(screen.getByTestId("join-mode-toggle"));
     await userEvent.click(screen.getByTestId("cashier-table-3"));
     await userEvent.click(screen.getByTestId("cashier-table-2"));
-    await userEvent.click(screen.getByTestId("join-confirm"));
     await userEvent.click(await screen.findByTestId("table-bill-24"));
+
+    // Answering adds the table to the selection — the cashier can carry on
+    // picking, and Join is a plain submit with no question left in it.
+    expect(screen.queryByTestId("table-bills-dialog")).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByTestId("join-confirm"));
 
     await waitFor(() => expect(joinTables).toHaveBeenCalled());
     const [primaryId, tableIds, , fromOrderIds] = joinTables.mock.calls[0];
@@ -124,18 +139,44 @@ describe("CashierFloorScreen — joining a table that seats two parties", () => 
     expect(fromOrderIds).toEqual([24]); // only the party that was chosen
   });
 
-  it("joins straight through when the joining table has a single bill", async () => {
-    // AO2 has one bill, so there is nothing to ask — an extra tap here would be a
-    // tax paid on the common case.
+  it("asks about the BILL-KEEPING table too when it is the split one", async () => {
+    // Tapped first, AO1 keeps the bill — so the question is which of its bills IS
+    // the group invoice, and that goes to the server as into_order_id, not as a
+    // party travelling in.
     renderFloor();
     await screen.findByTestId("cashier-table-2");
 
     await userEvent.click(screen.getByTestId("join-mode-toggle"));
-    await userEvent.click(screen.getByTestId("cashier-table-2")); // AO1 keeps the bill
+    await userEvent.click(screen.getByTestId("cashier-table-2")); // AO1 first
+    await userEvent.click(await screen.findByTestId("table-bill-25"));
     await userEvent.click(screen.getByTestId("cashier-table-3")); // AO2 joins
     await userEvent.click(screen.getByTestId("join-confirm"));
 
     await waitFor(() => expect(joinTables).toHaveBeenCalled());
+    const [primaryId, tableIds, intoOrderId, fromOrderIds] = joinTables.mock.calls[0];
+    expect(primaryId).toBe(2);
+    expect(tableIds).toEqual([3]);
+    expect(intoOrderId).toBe(25);
+    expect(fromOrderIds).toEqual([]);
+  });
+
+  it("never asks when no picked table seats more than one party", async () => {
+    // AO2 has one bill and T01 has none, so there is nothing to ask — an extra tap
+    // here would be a tax paid on the common case to serve the rare one.
+    renderFloor();
+    await screen.findByTestId("cashier-table-3");
+
+    await userEvent.click(screen.getByTestId("join-mode-toggle"));
+    await userEvent.click(screen.getByTestId("cashier-table-3")); // AO2 keeps the bill
+    await userEvent.click(screen.getByTestId("cashier-table-4")); // T01 joins
     expect(screen.queryByTestId("table-bills-dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("join-confirm"));
+    await waitFor(() => expect(joinTables).toHaveBeenCalled());
+    const [primaryId, tableIds, intoOrderId, fromOrderIds] = joinTables.mock.calls[0];
+    expect(primaryId).toBe(3);
+    expect(tableIds).toEqual([4]);
+    expect(intoOrderId).toBeNull();
+    expect(fromOrderIds).toEqual([]);
   });
 });
