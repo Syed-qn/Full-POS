@@ -5,11 +5,13 @@ import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
+  type BackupHealth,
   type BackupTarget,
   ackError,
   createBackup,
   downloadBackup,
   exportDataPack,
+  getBackupHealth,
   getBackupReadiness,
   getBackupTarget,
   getNetworkStatus,
@@ -84,6 +86,9 @@ export function ReliabilityScreen() {
     }>
   >([]);
   const [target, setTarget] = useState<BackupTarget | null>(null);
+  const [health, setHealth] = useState<BackupHealth | null>(null);
+  // Per-row verdicts, so pressing Check leaves something on screen.
+  const [rowChecks, setRowChecks] = useState<Record<number, { ok: boolean; summary: string }>>({});
   const [errors, setErrors] = useState<
     Array<{ id: number; message: string; level: string; acknowledged: boolean }>
   >([]);
@@ -111,13 +116,14 @@ export function ReliabilityScreen() {
 
   const reload = useCallback(async () => {
     try {
-      const [net, bak, err, aud, ready, tgt] = await Promise.all([
+      const [net, bak, err, aud, ready, tgt, hlth] = await Promise.all([
         getNetworkStatus(),
         listBackups(),
         listErrors(false),
         listAuditLog({ limit: 30 }),
         getBackupReadiness(),
         getBackupTarget(),
+        getBackupHealth(),
       ]);
       setNetwork(net);
       setBackups(bak);
@@ -125,6 +131,7 @@ export function ReliabilityScreen() {
       setAudit(aud.rows ?? []);
       setReadiness(ready);
       setTarget(tgt);
+      setHealth(hlth);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Load failed", "error");
     }
@@ -249,6 +256,21 @@ export function ReliabilityScreen() {
             <p className={target.durable ? s.noteOk : s.noteWarn}>
               {target.durable ? "✓ Durable — " : "⚠ Not durable — "}
               {target.note}
+            </p>
+          )}
+          {/* The verdict a restaurant actually wants, stated without being asked.
+              Verify used to answer this in a toast that vanished, which is no
+              answer at all to "is my data safe?". */}
+          {health && (
+            <p
+              className={health.ok ? s.noteOk : s.noteWarn}
+              data-testid="backup-health"
+            >
+              {health.ok ? "✓ " : "⚠ "}
+              {health.summary}
+              {health.has_backup && health.taken_at
+                ? ` Taken ${new Date(health.taken_at).toLocaleString()}.`
+                : ""}
             </p>
           )}
           <div className={s.actions}>
@@ -426,6 +448,14 @@ export function ReliabilityScreen() {
                       {b.status}
                       {/* "completed" alone is misleading once the file is gone. */}
                       {!b.file_present && <span className={s.gone}> · FILE MISSING</span>}
+                      {rowChecks[b.id] && (
+                        <div
+                          className={rowChecks[b.id].ok ? s.checkOk : s.gone}
+                          data-testid={`row-check-${b.id}`}
+                        >
+                          {rowChecks[b.id].ok ? "✓ restorable" : "✗ not restorable"}
+                        </div>
+                      )}
                     </td>
                     <td>{formatBytes(b.size_bytes)}</td>
                     <td className={s.muted}>{summarise(b.meta)}</td>
@@ -439,13 +469,24 @@ export function ReliabilityScreen() {
                           onClick={async () => {
                             try {
                               const v = await verifyBackup(b.id);
-                              toast(v.ok ? "Checksum OK" : "Checksum FAIL", v.ok ? "success" : "error");
+                              // Recorded against the row, not shouted in a toast
+                              // that is gone before it has been read.
+                              setRowChecks((prev) => ({
+                                ...prev,
+                                [b.id]: { ok: v.ok, summary: v.summary },
+                              }));
                             } catch (e) {
-                              toast(e instanceof Error ? e.message : "Verify failed", "error");
+                              setRowChecks((prev) => ({
+                                ...prev,
+                                [b.id]: {
+                                  ok: false,
+                                  summary: e instanceof Error ? e.message : "Check failed",
+                                },
+                              }));
                             }
                           }}
                         >
-                          Verify
+                          Check
                         </Button>
                         <Button
                           size="md"

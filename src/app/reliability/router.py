@@ -19,6 +19,7 @@ from app.reliability.service import (
     device_heartbeat,
     export_full_data_pack,
     extended_health,
+    latest_backup_health,
     list_backups,
     list_devices,
     list_errors,
@@ -147,6 +148,17 @@ async def get_backups(
         }
         for r in rows
     ]
+
+
+@router.get("/backups/health")
+async def backups_health(
+    restaurant=Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Is the newest backup actually restorable? Answered without being asked."""
+    result = await latest_backup_health(session, restaurant_id=restaurant.id)
+    await session.commit()
+    return result
 
 
 @router.get("/backup-target")

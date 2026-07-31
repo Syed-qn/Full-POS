@@ -265,30 +265,136 @@ async def run_daily_backup_if_due(
 async def verify_backup(
     session: AsyncSession, *, restaurant_id: int, backup_job_id: int
 ) -> dict:
+    """Answer the only question worth asking: WILL THIS RESTORE?
+
+    A checksum alone proves the bytes are unchanged, which is not the same
+    thing. A snapshot can match its checksum perfectly and still be unusable —
+    truncated JSON, an older format Restore cannot read, or another tenant's
+    data. Finding that out during an actual incident is the worst possible time,
+    so every gate the restore path applies is applied here too.
+    """
     job = await session.get(BackupJob, backup_job_id)
     if job is None or job.restaurant_id != restaurant_id:
         raise ValueError("backup not found")
-    if not await storage.backup_exists(job.storage_path):
+
+    checks: dict[str, bool] = {}
+    problems: list[str] = []
+
+    checks["file_present"] = await storage.backup_exists(job.storage_path)
+    if not checks["file_present"]:
         raise ValueError("backup file missing")
+
     raw = await storage.get_backup(job.storage_path)
     checksum = hashlib.sha256(raw).hexdigest()
-    ok = checksum == job.checksum
+    checks["checksum_matches"] = checksum == job.checksum
+    if not checks["checksum_matches"]:
+        problems.append("the file has changed since it was written (corrupted)")
+
+    data: dict = {}
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+        checks["readable"] = isinstance(parsed, dict)
+        data = parsed if isinstance(parsed, dict) else {}
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        checks["readable"] = False
+    if not checks["readable"]:
+        problems.append("the file is damaged and cannot be opened")
+
+    checks["format_supported"] = data.get("format") == SNAPSHOT_FORMAT
+    if not checks["format_supported"]:
+        problems.append(
+            "it was written by an older version and Restore cannot read it — "
+            "take a fresh backup"
+        )
+
+    checks["right_restaurant"] = data.get("restaurant_id") == restaurant_id
+    if not checks["right_restaurant"]:
+        problems.append("it belongs to a different restaurant")
+
+    counts = data.get("counts") or {}
+    checks["has_data"] = bool(counts.get("restaurants"))
+    if not checks["has_data"]:
+        problems.append("the restaurant's own record is missing from it")
+
+    ok = all(checks.values())
     drill = DrDrillLog(
         restaurant_id=restaurant_id,
         backup_job_id=job.id,
         kind="verify",
         status="ok" if ok else "failed",
-        notes="checksum verify",
-        detail={"expected": job.checksum, "actual": checksum, "size": len(raw)},
+        notes="restorability check",
+        detail={
+            "expected": job.checksum,
+            "actual": checksum,
+            "size": len(raw),
+            "checks": checks,
+        },
     )
     session.add(drill)
     await session.flush()
     return {
         "backup_job_id": job.id,
         "ok": ok,
+        "restorable": ok,
+        "checks": checks,
+        # Plain language, because the person pressing this runs a restaurant.
+        "summary": (
+            "This backup is complete and can be restored."
+            if ok
+            else "This backup CANNOT be restored: " + "; ".join(problems) + "."
+        ),
         "checksum": checksum,
         "size_bytes": len(raw),
         "drill_id": drill.id,
+    }
+
+
+async def latest_backup_health(
+    session: AsyncSession, *, restaurant_id: int
+) -> dict:
+    """Verify the newest backup so the dashboard can state its health up front.
+
+    Pressing a button and reading a toast that disappears is not an answer to
+    "is my data safe?" — the answer has to be on the screen before anyone asks.
+    Only the newest is checked: it is the one a restore would use, and reading
+    every snapshot on every page load would cost far more than it tells you.
+    """
+    job = await session.scalar(
+        select(BackupJob)
+        .where(
+            BackupJob.restaurant_id == restaurant_id,
+            BackupJob.status == "completed",
+        )
+        .order_by(BackupJob.id.desc())
+        .limit(1)
+    )
+    if job is None:
+        return {
+            "has_backup": False,
+            "ok": False,
+            "summary": "No backup has been taken yet.",
+        }
+    try:
+        result = await verify_backup(
+            session, restaurant_id=restaurant_id, backup_job_id=job.id
+        )
+    except ValueError as exc:
+        return {
+            "has_backup": True,
+            "backup_job_id": job.id,
+            "ok": False,
+            "taken_at": job.completed_at.isoformat() if job.completed_at else None,
+            "size_bytes": job.size_bytes,
+            "summary": f"The newest backup cannot be read: {exc}.",
+        }
+    return {
+        "has_backup": True,
+        "backup_job_id": job.id,
+        "ok": result["ok"],
+        "checks": result["checks"],
+        "taken_at": job.completed_at.isoformat() if job.completed_at else None,
+        "size_bytes": job.size_bytes,
+        "summary": result["summary"],
     }
 
 

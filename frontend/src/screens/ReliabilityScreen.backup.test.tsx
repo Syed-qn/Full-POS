@@ -9,6 +9,8 @@ const restoreBackup = vi.fn();
 const downloadBackup = vi.fn();
 const exportDataPack = vi.fn();
 const restorePreview = vi.fn();
+const getBackupHealth = vi.fn();
+const verifyBackup = vi.fn();
 
 vi.mock("../lib/reliabilityApi", () => ({
   getNetworkStatus: () =>
@@ -28,9 +30,10 @@ vi.mock("../lib/reliabilityApi", () => ({
   listErrors: () => Promise.resolve([]),
   listAuditLog: () => Promise.resolve({ rows: [] }),
   getBackupReadiness: () => Promise.resolve({ orders_count: 18, dishes_count: 51 }),
+  getBackupHealth: (...a: unknown[]) => getBackupHealth(...a),
   createBackup: vi.fn(),
   runDailyBackup: vi.fn(),
-  verifyBackup: vi.fn(),
+  verifyBackup: (...a: unknown[]) => verifyBackup(...a),
   restorePreview: (...a: unknown[]) => restorePreview(...a),
   registerDevice: vi.fn(),
   promoteFailover: vi.fn(),
@@ -64,6 +67,15 @@ describe("ReliabilityScreen — backups tell the truth", () => {
     getBackupTarget.mockReset();
     restoreBackup.mockReset();
     downloadBackup.mockReset();
+    getBackupHealth.mockReset();
+    verifyBackup.mockReset();
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: true,
+      backup_job_id: 2,
+      taken_at: "2026-07-31T12:52:41Z",
+      summary: "This backup is complete and can be restored.",
+    });
     listBackups.mockResolvedValue([PRESENT]);
     getBackupTarget.mockResolvedValue(EPHEMERAL);
     downloadBackup.mockResolvedValue("r1_manual.json");
@@ -90,7 +102,7 @@ describe("ReliabilityScreen — backups tell the truth", () => {
 
     expect(await screen.findByText(/FILE MISSING/)).toBeInTheDocument();
     // Offering Verify/Restore on a row with no file invites a confusing failure.
-    for (const label of ["Verify", "Download", "Inspect", "Restore"]) {
+    for (const label of ["Check", "Download", "Inspect", "Restore"]) {
       expect(screen.getByRole("button", { name: label })).toBeDisabled();
     }
   });
@@ -152,5 +164,62 @@ describe("ReliabilityScreen — backups tell the truth", () => {
     render(<ReliabilityScreen />);
     await userEvent.click(await screen.findByRole("button", { name: "Download" }));
     await waitFor(() => expect(downloadBackup).toHaveBeenCalledWith(2));
+  });
+});
+
+describe("ReliabilityScreen — is my backup actually good?", () => {
+  beforeEach(() => {
+    listBackups.mockReset();
+    getBackupTarget.mockReset();
+    getBackupHealth.mockReset();
+    verifyBackup.mockReset();
+    listBackups.mockResolvedValue([PRESENT]);
+    getBackupTarget.mockResolvedValue({ ...EPHEMERAL, durable: true });
+  });
+
+  it("states up front whether the newest backup can be restored", async () => {
+    // Nobody should have to press a button to learn their data is safe, and a
+    // toast that vanishes is not an answer to that question.
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: true,
+      backup_job_id: 11,
+      taken_at: "2026-07-31T12:52:41Z",
+      summary: "This backup is complete and can be restored.",
+    });
+    render(<ReliabilityScreen />);
+    const line = await screen.findByTestId("backup-health");
+    expect(line).toHaveTextContent("complete and can be restored");
+  });
+
+  it("says plainly when the newest backup would NOT restore", async () => {
+    getBackupHealth.mockResolvedValue({
+      has_backup: true,
+      ok: false,
+      backup_job_id: 11,
+      taken_at: null,
+      summary:
+        "This backup CANNOT be restored: the file has changed since it was written (corrupted).",
+    });
+    render(<ReliabilityScreen />);
+    expect(await screen.findByTestId("backup-health")).toHaveTextContent(
+      "CANNOT be restored",
+    );
+  });
+
+  it("leaves the Check verdict on the row instead of a toast", async () => {
+    getBackupHealth.mockResolvedValue({ has_backup: true, ok: true, summary: "ok" });
+    verifyBackup.mockResolvedValue({
+      ok: false,
+      restorable: false,
+      checks: { checksum_matches: false },
+      summary: "This backup CANNOT be restored: the file has changed.",
+      checksum: "abc",
+    });
+    render(<ReliabilityScreen />);
+    await userEvent.click(await screen.findByRole("button", { name: "Check" }));
+
+    const verdict = await screen.findByTestId("row-check-2");
+    expect(verdict).toHaveTextContent("not restorable");
   });
 });

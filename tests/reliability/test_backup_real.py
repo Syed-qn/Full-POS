@@ -298,3 +298,65 @@ async def test_restore_refuses_a_corrupted_snapshot(
     )
     assert resp.status_code == 409
     assert "corrupt" in resp.json()["detail"].lower()
+
+
+@pytest.mark.anyio
+async def test_verify_rejects_a_snapshot_that_would_fail_to_restore(
+    client, auth_headers, backup_dir, db_session
+):
+    # A checksum alone only proves the bytes are unchanged. Rewriting the file
+    # AND its recorded checksum leaves a snapshot that passes a byte comparison
+    # while being unrestorable — exactly the case that must not read as healthy.
+    import hashlib
+
+    from sqlalchemy import update
+
+    from app.reliability.models import BackupJob
+
+    created = (
+        await client.post(
+            "/api/v1/reliability/backups?kind=manual", headers=auth_headers
+        )
+    ).json()
+    path = _local_path(created["storage_path"])
+    payload = json.loads(path.read_bytes())
+    payload["format"] = 1  # as written by the pre-full-table implementation
+    raw = json.dumps(payload).encode()
+    path.write_bytes(raw)
+
+    # The app and the test share one session in this harness, so updating here
+    # is what the endpoint will read.
+    await db_session.execute(
+        update(BackupJob)
+        .where(BackupJob.id == created["id"])
+        .values(checksum=hashlib.sha256(raw).hexdigest())
+    )
+    await db_session.flush()
+
+    resp = await client.post(
+        f"/api/v1/reliability/backups/{created['id']}/verify", headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["checks"]["checksum_matches"] is True  # bytes are fine...
+    assert body["checks"]["format_supported"] is False  # ...but it cannot restore
+    assert body["ok"] is False
+    assert "CANNOT be restored" in body["summary"]
+
+
+@pytest.mark.anyio
+async def test_health_answers_without_being_asked(client, auth_headers, backup_dir):
+    empty = (
+        await client.get("/api/v1/reliability/backups/health", headers=auth_headers)
+    ).json()
+    assert empty["has_backup"] is False
+    assert empty["ok"] is False
+    assert "No backup" in empty["summary"]
+
+    await client.post("/api/v1/reliability/backups?kind=manual", headers=auth_headers)
+    good = (
+        await client.get("/api/v1/reliability/backups/health", headers=auth_headers)
+    ).json()
+    assert good["has_backup"] is True
+    assert good["ok"] is True
+    assert "can be restored" in good["summary"]

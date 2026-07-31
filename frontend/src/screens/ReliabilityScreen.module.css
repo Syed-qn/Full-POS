@@ -256,6 +256,12 @@
   font-size: 12px;
 }
 
+.checkOk {
+  color: var(--sla-ok, #16a34a);
+  font-weight: 700;
+  font-size: 12px;
+}
+
 /* Matches ConfirmDialog's overlay so Inspect and Restore feel like the same
    surface. z-index clears the sticky tab strip, which is 4. */
 .overlay {

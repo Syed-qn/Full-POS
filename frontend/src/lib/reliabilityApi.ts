@@ -102,10 +102,28 @@ export async function downloadBackup(id: number): Promise<string> {
 }
 
 export function verifyBackup(id: number) {
-  return apiClient.post<{ ok: boolean; checksum: string }>(
-    `/api/v1/reliability/backups/${id}/verify`,
-    {},
-  );
+  return apiClient.post<{
+    ok: boolean;
+    restorable: boolean;
+    checks: Record<string, boolean>;
+    /** Plain-language verdict for a restaurant manager, not a checksum. */
+    summary: string;
+    checksum: string;
+  }>(`/api/v1/reliability/backups/${id}/verify`, {});
+}
+
+export type BackupHealth = {
+  has_backup: boolean;
+  ok: boolean;
+  summary: string;
+  backup_job_id?: number;
+  taken_at?: string | null;
+  size_bytes?: number;
+};
+
+/** Health of the NEWEST backup — the one a restore would actually use. */
+export function getBackupHealth() {
+  return apiClient.get<BackupHealth>("/api/v1/reliability/backups/health");
 }
 
 export function restorePreview(id: number) {
