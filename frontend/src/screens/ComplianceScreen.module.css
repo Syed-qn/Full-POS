@@ -93,11 +93,14 @@
   font-weight: 700;
 }
 
+/* Top-aligned, not bottom. With align-items:end every cell was pinned to the
+   tallest row, so a field carrying a hint dragged its neighbours down and the
+   labels marched down the page in steps instead of lining up. */
 .row2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 18px;
+  align-items: start;
 }
 
 .col {
@@ -204,7 +207,13 @@
 /* Limits belong beside the field that has them, not in an error after Save. */
 .fieldHint {
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--text-muted);
   max-width: 420px;
+}
+
+/* A right-to-left field still belongs on the left of its box; only its TEXT is
+   RTL. Without this the Arabic name sat flush right under a left-aligned label. */
+.col input[dir="rtl"] {
+  text-align: right;
 }

@@ -328,11 +328,7 @@ export function ComplianceScreen() {
               value={vatPercent}
               onChange={(e) => setVatPercent(e.target.value)}
             />
-            <span className={s.fieldHint}>
-              The UAE standard rate is 5. Use 0 only for genuinely zero-rated
-              items. This applies to every order confirmed from now on; orders
-              already confirmed keep the rate they were charged at.
-            </span>
+            <span className={s.fieldHint}>UAE standard is 5. Applies to new orders.</span>
           </label>
           <label className={s.col}>
             <span className={s.rowName}>Legal name (EN)</span>
@@ -358,8 +354,7 @@ export function ComplianceScreen() {
               onChange={(e) => setRetentionDays(e.target.value)}
             />
             <span className={s.fieldHint}>
-              Between {RETENTION_MIN} and {RETENTION_MAX} days. 2555 is seven years,
-              which is what UAE tax record keeping expects.
+              {RETENTION_MIN} to {RETENTION_MAX}. 2555 is 7 years.
             </span>
           </label>
           <label className={s.checkRow}>
