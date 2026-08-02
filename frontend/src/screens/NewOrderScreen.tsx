@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { logout } from "../lib/auth";
 import { fetchOrderDetail } from "../lib/orderDetailApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
+import { splitVat, useTaxConfig } from "../lib/useTaxConfig";
 import {
   addOrderItems,
   createManualOrder,
@@ -100,6 +101,8 @@ function today(): string {
 
 export function NewOrderScreen() {
   const navigate = useNavigate();
+  /** VAT rate and pricing mode from this restaurant's Tax profile. */
+  const taxCfg = useTaxConfig();
   const [searchParams] = useSearchParams();
   const waiterMode = isWaiterRole();
   const cashierMode = isCashierRole();
@@ -569,7 +572,8 @@ export function NewOrderScreen() {
 
   // ── Cashier full-screen terminal (HANASIS-style single screen) ──────────
   if (cashierMode) {
-    const vat = total - total / 1.05;
+    // Rate and mode come from the restaurant's Tax profile, not a literal 1.05.
+    const { vat } = splitVat(total, taxCfg);
     return (
       <div className={s.term} data-testid="cashier-terminal">
         {/* ============ HEADER — order-type switcher across the top ============ */}
@@ -880,7 +884,11 @@ export function NewOrderScreen() {
               <span>AED {subtotal.toFixed(2)}</span>
             </div>
             <div className={s.tTotRow}>
-              <span>VAT (5% incl.)</span>
+              <span>
+                {taxCfg.ready
+                  ? `VAT (${taxCfg.percent}% ${taxCfg.mode === "inclusive" ? "incl." : "on top"})`
+                  : "VAT"}
+              </span>
               <span>AED {vat.toFixed(2)}</span>
             </div>
             <div className={s.tTotRow}>
@@ -1673,11 +1681,15 @@ export function NewOrderScreen() {
                 <span>{fee === "0.00" || fee === "" ? "Free" : `AED ${fee}`}</span>
               </div>
             )}
-            {/* UAE prices are VAT-inclusive → show the 5% portion for the bill,
-                does not change what's charged. */}
+            {/* Rate and mode from the Tax profile. Shown for the bill; it does
+                not change what is charged in inclusive mode. */}
             <div className={s.summaryLine}>
-              <span>VAT (5% incl.)</span>
-              <span>AED {(total - total / 1.05).toFixed(2)}</span>
+              <span>
+                {taxCfg.ready
+                  ? `VAT (${taxCfg.percent}% ${taxCfg.mode === "inclusive" ? "incl." : "on top"})`
+                  : "VAT"}
+              </span>
+              <span>AED {splitVat(total, taxCfg).vat.toFixed(2)}</span>
             </div>
             <MoneySummary label="TOTAL" amount={total.toFixed(2)} />
           </div>

@@ -19,6 +19,7 @@ import {
 import { effectiveDishPrice, isOnSale } from "../lib/dishPricing";
 import { billName, type TableBill } from "../lib/floorApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
+import { splitVat, useTaxConfig } from "../lib/useTaxConfig";
 import { advanceOrder, applyDiscount, quoteDeliveryFee, setOrderPriority } from "../lib/ordersApi";
 import { chargePayment } from "../lib/paymentsApi";
 import { getStaffSession, isCashierRole } from "../lib/navAccess";
@@ -29,9 +30,10 @@ import { LocationPicker } from "../components/LocationPicker";
 import type { RestaurantOut, StaffMember } from "../lib/types";
 import s from "./WaiterOrderScreen.module.css";
 
-/** VAT is 5% inclusive (AED / UAE) per the platform spec — not the rate on any
- *  reference screenshot. Displayed back out of the inclusive total. */
-const VAT_RATE = 0.05;
+/* VAT rate and pricing mode are per-restaurant settings read through
+   useTaxConfig. They used to be `const VAT_RATE = 0.05` right here, so changing
+   the rate on the Tax profile page moved the tax records while this bill went on
+   printing 5% — one sale with two different VAT figures on it. */
 
 /* The menu now comes from useLiveMenu, which keeps the module-level cache (so a
    table tap paints instantly) AND polls, so a dish marked unavailable in the
@@ -111,6 +113,8 @@ function buildFeeOptions(tiers: FeeTier[]): FeeChoice[] {
  */
 export function WaiterOrderScreen() {
   const navigate = useNavigate();
+  /** VAT rate and pricing mode from this restaurant's Tax profile. */
+  const taxCfg = useTaxConfig();
   // Namespace all in-terminal navigation off the CURRENT path so waiters stay
   // under /waiter/*, cashiers under /cashier/*, and staff on the plain paths.
   const { pathname } = useLocation();
@@ -592,12 +596,20 @@ export function WaiterOrderScreen() {
   // netValue is the full running bill (a pending discount is NOT yet in the order
   // total — persistDiscount only pushes it at KOT/Save/payment, and clears the
   // pending marker at the same time, so this never double-subtracts).
-  const netValue = roundTotal + tabTotal;
-  const vat = netValue - netValue / (1 + VAT_RATE);
-  const subTotal = netValue - vat;
+  const lineTotal = roundTotal + tabTotal;
+  // Rate and mode come from the restaurant's Tax profile, not a constant in this
+  // file. Inclusive: the menu price already contains VAT, so it is extracted and
+  // the customer pays lineTotal. Exclusive: the menu price is net and VAT is
+  // added, so the customer pays more than the line total.
+  const { net: subTotal, vat } = splitVat(lineTotal, taxCfg);
+  // The amount charged stays the line total, which is what the backend stores on
+  // the order. It deliberately does NOT become net+VAT in exclusive mode: the
+  // backend does not add VAT to order.total either, so inflating it here would
+  // make the till collect more than the order record says was owed.
+  const netValue = lineTotal;
 
   const isDelivery = orderType === "delivery";
-  /** Delivery fee applies on delivery only; the food total already includes VAT. */
+  /** Delivery fee applies on delivery only; the food total already carries VAT. */
   const feeNum = isDelivery ? Number(fee || 0) || 0 : 0;
   const grandTotal = netValue + feeNum;
   /** Net after a pending till discount (what the customer actually pays). */
@@ -1667,7 +1679,13 @@ export function WaiterOrderScreen() {
               <span>{money(subTotal)}</span>
             </div>
             <div className={s.totRow}>
-              <span>VAT ({VAT_RATE * 100}% incl.)</span>
+              {/* No percentage until the server has answered. Printing the UAE
+                  default first made a restaurant on 20% read "5%" for a beat. */}
+              <span>
+                {taxCfg.ready
+                  ? `VAT (${taxCfg.percent}% ${taxCfg.mode === "inclusive" ? "incl." : "on top"})`
+                  : "VAT"}
+              </span>
               <span>{money(vat)}</span>
             </div>
             {discountAed > 0 && (

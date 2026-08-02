@@ -1471,6 +1471,30 @@ async def delete_order_endpoint(
         raise HTTPException(status_code=404, detail="Order not found")
 
 
+@router.get("/tax-config")
+async def get_tax_config(
+    restaurant: Restaurant = Depends(current_restaurant_any),
+):
+    """The VAT rate and pricing mode the tills should display.
+
+    Declared BEFORE ``/{order_id}`` or that route would swallow "tax-config".
+
+    The till screens each carried their own ``const VAT_RATE = 0.05`` and divided
+    by a literal 1.05, so the rate on the Tax profile page changed the books
+    while the customer's bill kept saying 5%. Any signed-in staff member can read
+    this: it is two numbers already printed on every receipt, no TRN or keys.
+    """
+    from app.compliance.tax_settings import tax_settings
+
+    cfg = tax_settings(restaurant.settings)
+    rate = cfg["default_vat_rate"]
+    return {
+        "vat_rate": str(rate),
+        "vat_percent": float(rate * 100),
+        "pricing_mode": cfg["tax_pricing_mode"],
+    }
+
+
 @router.get("/{order_id}/detail", response_model=OrderDetailOut)
 async def get_order_detail_endpoint(
     order_id: int,
