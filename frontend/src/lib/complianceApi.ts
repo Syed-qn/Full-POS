@@ -94,12 +94,19 @@ export function getEInvoiceReadiness() {
     asp_credentials_configured: boolean;
     structured_profile: string;
     missing_fields: string[];
+    /** False while the provider is the mock: nothing reaches the FTA. */
+    is_live: boolean;
+    /** What to go and do, one sentence each. Empty when nothing is blocking. */
+    blockers: string[];
+    summary: string;
     notes: string;
   }>("/api/v1/compliance/e-invoice/readiness");
 }
 
+/** Identify the order the way the bill does. `order_id` is the internal row id. */
 export function transmitEInvoice(body: {
-  order_id: number;
+  order_number?: string;
+  order_id?: number;
   document_type?: string;
   buyer_trn?: string;
 }) {

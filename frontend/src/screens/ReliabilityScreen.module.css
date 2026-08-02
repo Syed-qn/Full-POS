@@ -11,36 +11,55 @@
   justify-content: flex-end;
 }
 
-.tabs {
+/* Same tab bar as Inventory and Compliance. Three admin screens in one nav
+   should not each have their own idea of what a tab looks like: pills inside a
+   single surfaced bar, not outlined boxes floating on the canvas. */
+.tabBar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
-  gap: 8px;
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  padding: 8px 0;
-  background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
-  backdrop-filter: blur(6px);
-}
-
-/* 40px to match the md buttons — a tab strip taller than the controls beneath it
-   reads as the heaviest thing on an admin page, which it is not. */
-.tab {
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border-default);
   background: var(--bg-surface);
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 14px);
+  padding: 8px 12px;
+  box-shadow: var(--shadow-card);
 }
 
-.tabActive {
-  background: var(--accent-primary-dim);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+.tabGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  min-height: 44px;
+  padding: 10px 18px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+}
+
+.tabActive,
+.tabActive:hover {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
 }
 
 /* auto-fit, not a fixed 4: four fixed columns cannot shrink below their content

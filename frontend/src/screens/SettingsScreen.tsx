@@ -224,9 +224,6 @@ export function SettingsScreen() {
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [trn, setTrn] = useState("");
-  const [taxPricingMode, setTaxPricingMode] = useState<"exclusive" | "inclusive">("exclusive");
-  const [legalNameAr, setLegalNameAr] = useState("");
   const [mapOpen, setMapOpen] = useState(false);
   const [savingLoc, setSavingLoc] = useState(false);
   const [locAddress, setLocAddress] = useState<string | null>(null);
@@ -346,11 +343,6 @@ export function SettingsScreen() {
       setLat(String(r.lat));
       setLng(String(r.lng));
       const sset = (r.settings ?? {}) as Record<string, unknown>;
-      if (typeof sset.trn === "string") setTrn(sset.trn);
-      if (sset.tax_pricing_mode === "inclusive" || sset.tax_pricing_mode === "exclusive") {
-        setTaxPricingMode(sset.tax_pricing_mode);
-      }
-      if (typeof sset.legal_name_ar === "string") setLegalNameAr(sset.legal_name_ar);
       if (typeof sset.max_orders_per_batch === "number") setOrdersPerBatch(sset.max_orders_per_batch);
       if (typeof sset.max_items_per_order === "number") setItemsPerOrder(sset.max_items_per_order);
       if (typeof sset.max_item_qty === "number") setMaxItemQty(sset.max_item_qty);
@@ -431,12 +423,11 @@ export function SettingsScreen() {
         lat: latNum,
         lng: lngNum,
       });
-      const withTrn = await apiClient.patch<RestaurantOut>("/api/v1/settings", {
-        trn: trn.trim(),
-        tax_pricing_mode: taxPricingMode,
-        legal_name_ar: legalNameAr.trim() || null,
-      });
-      setMe(withTrn);
+      // No second PATCH for tax fields. This form used to write trn,
+      // tax_pricing_mode and legal_name_ar on every General save, silently
+      // overwriting whatever Compliance had set with whatever this screen last
+      // loaded. Compliance owns those three now.
+      setMe(updated);
       setLat(String(updated.lat));
       setLng(String(updated.lng));
       flash();
@@ -784,16 +775,6 @@ export function SettingsScreen() {
               />
             </label>
             <label className={s.col}>
-              <span className={s.rowName}>Legal name (Arabic)</span>
-              <input
-                type="text"
-                value={legalNameAr}
-                onChange={(e) => setLegalNameAr(e.target.value)}
-                className={s.input}
-                dir="rtl"
-              />
-            </label>
-            <label className={s.col}>
               <span className={s.rowName}>Phone (WABA number)</span>
               <input
                 type="text"
@@ -805,32 +786,11 @@ export function SettingsScreen() {
               <span className={s.rowHint}>🔒 WhatsApp Business number, locked.</span>
             </label>
           </div>
-          {/* Row 2 — tax: registration number + pricing mode. */}
-          <div className={`${s.row2} ${s.fieldGrid}`}>
-            <label className={s.col}>
-              <span className={s.rowName}>TRN (Tax Registration Number)</span>
-              <input
-                type="text"
-                value={trn}
-                onChange={(e) => setTrn(e.target.value)}
-                maxLength={32}
-                placeholder="100123456700003"
-                className={s.input}
-              />
-              <span className={s.rowHint}>Printed on tax invoices. Leave blank if not VAT-registered. Full compliance hub: Compliance nav.</span>
-            </label>
-            <label className={s.col}>
-              <span className={s.rowName}>Tax pricing mode</span>
-              <select
-                className={s.input}
-                value={taxPricingMode}
-                onChange={(e) => setTaxPricingMode(e.target.value as "exclusive" | "inclusive")}
-              >
-                <option value="exclusive">Exclusive (VAT added on top)</option>
-                <option value="inclusive">Inclusive (VAT extracted from prices)</option>
-              </select>
-            </label>
-          </div>
+          {/* TRN, Arabic legal name and tax pricing mode used to be editable here
+              as well as on Compliance, writing the same three settings from two
+              screens. Whichever was saved last won, and neither screen showed the
+              other's value, so the pair could disagree on what your VAT setup was.
+              Compliance owns them now. */}
           <div className={s.rowStacked}>
             <div className={s.locHead}>
               <div className={s.rowLabel}>

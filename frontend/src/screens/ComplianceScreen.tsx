@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
@@ -16,6 +17,7 @@ import {
   transmitEInvoice,
   type TaxSettings,
 } from "../lib/complianceApi";
+import { clearTaxConfigCache } from "../lib/useTaxConfig";
 import s from "./ComplianceScreen.module.css";
 
 type ComplianceTab = "tax" | "einvoice" | "refunds" | "retention" | "export";
@@ -27,6 +29,24 @@ function todayISO() {
 function monthStartISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function iso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+/** First day of the previous month. Day 0 of this month is the last of the one
+ *  before, which handles year rollover and month lengths without a table. */
+function lastMonthStartISO() {
+  const d = new Date();
+  return iso(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+}
+
+function lastMonthEndISO() {
+  const d = new Date();
+  return iso(new Date(d.getFullYear(), d.getMonth(), 0));
 }
 
 /** The API's own limits (TaxSettingsPatch: ge=30, le=3650). Mirrored here so the
@@ -42,6 +62,31 @@ function rateToPercent(rate: unknown): string {
 const RETENTION_MIN = 30;
 const RETENTION_MAX = 3650;
 
+/**
+ * Hidden, not deleted.
+ *
+ * The only ASP adapter that exists is the mock, which files nothing with the
+ * Federal Tax Authority, so the tab let you press Send and watch a fabricated
+ * MOCK-AE reference come back looking exactly like a real filing. The screen,
+ * the API, the guard and the transmission table all stay put; flip this to true
+ * the day an accredited provider is contracted.
+ */
+const SHOW_EINVOICE_TAB = false;
+
+/**
+ * Hidden, not deleted.
+ *
+ * Despite the name, the retention purge is not a compliance feature: it deletes
+ * app error logs, idempotency keys and never-confirmed draft carts, and
+ * explicitly leaves every fiscal record alone. That is disk housekeeping, and it
+ * belongs on a nightly schedule, not on a button an owner presses on a screen
+ * about tax law. Nothing calls `run_data_retention` except that button, so today
+ * the tab's only effect is to invite someone to press Purge and wonder what they
+ * just destroyed. The retention DAYS field on Tax profile stays: it is the
+ * 7-year record-keeping window a scheduled job would read.
+ */
+const SHOW_RETENTION_TAB = false;
+
 export function ComplianceScreen() {
   const [tax, setTax] = useState<TaxSettings | null>(null);
   const [readiness, setReadiness] = useState<{
@@ -49,11 +94,22 @@ export function ComplianceScreen() {
     e_invoice_enabled: boolean;
     asp_provider: string;
     missing_fields: string[];
+    is_live: boolean;
+    blockers: string[];
+    summary: string;
     notes: string;
     structured_profile: string;
   } | null>(null);
   const [refunds, setRefunds] = useState<
-    Array<{ id: number; refund_note_number: string; order_id: number; amount_aed: string }>
+    Array<{
+      id: number;
+      refund_note_number: string;
+      order_id: number;
+      amount_aed: string;
+      vat_amount_aed: string;
+      reason: string | null;
+      issued_at: string | null;
+    }>
   >([]);
   const [txns, setTxns] = useState<
     Array<{ id: number; order_id: number; status: string; external_id: string | null }>
@@ -61,8 +117,24 @@ export function ComplianceScreen() {
   const [runs, setRuns] = useState<
     Array<{ id: number; status: string; purged_counts: Record<string, number> }>
   >([]);
-  const [exportSummary, setExportSummary] = useState<string | null>(null);
+  // The whole summary object, not a pre-joined sentence. Six figures run
+  // together in one grey line is the shape of a log message, not of numbers an
+  // accountant is going to read off and reconcile.
+  const [exportSummary, setExportSummary] = useState<{
+    order_count: number;
+    net_total_aed: string;
+    vat_total_aed: string;
+    gross_total_aed: string;
+    refund_note_count: number;
+    credit_note_count: number;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
+  // The form fields are seeded with plausible-looking values (5%, exclusive,
+  // 2555 days) so the inputs are controlled from the first render. Those are
+  // placeholders, not this restaurant's settings, and showing them while the
+  // real ones are still in flight reads as fact: a restaurant on 20% saw "5"
+  // sitting in the VAT box. Nothing renders until the server has answered.
+  const [loaded, setLoaded] = useState(false);
 
   // editable tax fields
   const [trn, setTrn] = useState("");
@@ -83,6 +155,7 @@ export function ComplianceScreen() {
   const [rnOrderId, setRnOrderId] = useState("");
   const [rnAmount, setRnAmount] = useState("");
   const [rnReason, setRnReason] = useState("");
+  const [rnOpen, setRnOpen] = useState(false);
   const [eiOrderId, setEiOrderId] = useState("");
   const [buyerTrn, setBuyerTrn] = useState("");
   const [exportStart, setExportStart] = useState(monthStartISO());
@@ -110,6 +183,7 @@ export function ComplianceScreen() {
       setRefunds(notes);
       setTxns(transmissions);
       setRuns(retention);
+      setLoaded(true);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Load failed", "error");
     }
@@ -150,6 +224,9 @@ export function ComplianceScreen() {
         data_retention_days: days,
       });
       setTax(updated);
+      // The tills cache this. Without the drop, a rate change only reached them
+      // on the next full page load, which on a till is the next shift.
+      clearTaxConfigCache();
       toast("Tax settings saved", "success");
       await reload();
     } catch (e) {
@@ -176,6 +253,9 @@ export function ComplianceScreen() {
       setRnOrderId("");
       setRnAmount("");
       setRnReason("");
+      // Only on success. A failed issue keeps the dialog open with what was
+      // typed still in it, so the number can be corrected instead of re-entered.
+      setRnOpen(false);
       await reload();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Refund note failed", "error");
@@ -185,15 +265,15 @@ export function ComplianceScreen() {
   }
 
   async function onTransmit() {
-    const oid = Number(eiOrderId);
-    if (!oid) {
-      toast("Order id required", "error");
+    const num = eiOrderId.trim();
+    if (!num) {
+      toast("Enter the order number from the bill, for example R1-0007.", "error");
       return;
     }
     setBusy(true);
     try {
       const row = await transmitEInvoice({
-        order_id: oid,
+        order_number: num,
         buyer_trn: buyerTrn.trim() || undefined,
         document_type: buyerTrn.trim() ? "tax_invoice" : undefined,
       });
@@ -225,13 +305,16 @@ export function ComplianceScreen() {
   }
 
   async function onExport(format: "json" | "csv") {
+    // The server rejects an inverted range with a raw 400. Saying so here means
+    // the mistake is named where it was made.
+    if (exportEnd < exportStart) {
+      toast("The end date is before the start date.", "error");
+      return;
+    }
     setBusy(true);
     try {
       const pack = await accountantExport(exportStart, exportEnd, format);
-      const sum = pack.summary;
-      setExportSummary(
-        `${sum.order_count} orders, net AED ${sum.net_total_aed}, VAT AED ${sum.vat_total_aed}, gross AED ${sum.gross_total_aed}`,
-      );
+      setExportSummary(pack.summary);
       if (format === "csv" && pack.csv) {
         const blob = new Blob([pack.csv], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
@@ -240,8 +323,8 @@ export function ComplianceScreen() {
         a.download = `accountant-${exportStart}-${exportEnd}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+        toast("CSV downloaded", "success");
       }
-      toast("Accountant export ready", "success");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Export failed", "error");
     } finally {
@@ -256,49 +339,52 @@ export function ComplianceScreen() {
         subtitle="VAT settings, tax invoices, credit notes, retention and the accountant export"
       />
 
-      <div className={s.healthGrid}>
-        <div className={`${s.healthCard} ${readiness?.ready ? s.healthOk : s.healthWarn}`}>
-          <span>E-invoice ready</span>
-          <strong>{readiness ? (readiness.ready ? "Yes" : "No") : "unknown"}</strong>
-        </div>
-        <div className={s.healthCard}>
-          <span>E-invoicing</span>
-          <strong>{eInv ? "On" : "Off"}</strong>
-        </div>
-        <div className={s.healthCard}>
-          <span>Refund notes</span>
-          <strong>{refunds.length}</strong>
-        </div>
-        <div className={s.healthCard}>
-          <span>Retention runs</span>
-          <strong>{runs.length}</strong>
+      {/* The four status cards are gone. Three of them counted rows that are
+          listed in full one tab away, and "E-invoice ready: No" repeated what
+          the E-invoice tab already says in a sentence with the reason attached.
+          A strip of numbers nobody acts on is not a dashboard. */}
+      <div className={s.tabBar}>
+        <div className={s.tabGroup} role="tablist" aria-label="Compliance sections">
+          {(
+            [
+              ["tax", "Tax profile"],
+              ...(SHOW_EINVOICE_TAB ? ([["einvoice", "E-invoice"]] as const) : []),
+              ["refunds", "Refund notes"],
+              ...(SHOW_RETENTION_TAB ? ([["retention", "Retention"]] as const) : []),
+              ["export", "Accountant export"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              className={`${s.tab} ${tab === key ? s.tabActive : ""}`}
+              onClick={() => setTab(key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className={s.tabs} role="tablist" aria-label="Compliance sections">
-        {(
-          [
-            ["tax", "Tax profile"],
-            ["einvoice", "E-invoice"],
-            ["refunds", "Refund notes"],
-            ["retention", "Retention"],
-            ["export", "Accountant export"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            className={`${s.tab} ${tab === key ? s.tabActive : ""}`}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {tab === "tax" && !loaded && (
+        <section className={s.card} aria-busy="true" aria-label="Loading tax settings">
+          <h3 className={s.cardTitle}>Tax settings and branch TRN</h3>
+          <div className={s.row2}>
+            {["TRN", "Tax pricing mode", "VAT rate (%)", "Legal name (EN)", "Legal name (AR)", "Data retention (days)"].map(
+              (label) => (
+                <div key={label} className={s.col}>
+                  <span className={s.rowName}>{label}</span>
+                  <span className={s.skelInput} />
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+      )}
 
-      {tab === "tax" && (
+      {tab === "tax" && loaded && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Tax settings and branch TRN</h3>
         <div className={s.row2}>
@@ -357,17 +443,19 @@ export function ComplianceScreen() {
               {RETENTION_MIN} to {RETENTION_MAX}. 2555 is 7 years.
             </span>
           </label>
-          <label className={s.checkRow}>
-            <input type="checkbox" checked={eInv} onChange={(e) => setEInv(e.target.checked)} />
-            <span className={s.rowName}>E-invoicing enabled</span>
-          </label>
+          {/* Hidden with the tab it governs. A switch whose feature has no screen
+              is a control that appears to do nothing. The value is still saved
+              and still enforced server-side. */}
+          {SHOW_EINVOICE_TAB && (
+            <label className={s.checkRow}>
+              <input type="checkbox" checked={eInv} onChange={(e) => setEInv(e.target.checked)} />
+              <span className={s.rowName}>E-invoicing enabled</span>
+            </label>
+          )}
         </div>
-        {tax && (
-          <p className={s.rowHint}>
-            Simplified invoice threshold AED {tax.simplified_invoice_threshold_aed},
-            e-invoicing provider {tax.asp_provider}
-          </p>
-        )}
+        {/* Read-only trivia, dropped. The threshold is applied automatically per
+            order and cannot be changed from here, and the provider name only
+            meant anything while the E-invoice tab existed. */}
         <div className={s.stickySave}>
           <Button size="md" onClick={() => void saveTax()} disabled={busy}>
             Save tax settings
@@ -376,31 +464,43 @@ export function ComplianceScreen() {
       </section>
       )}
 
-      {tab === "einvoice" && (
+      {SHOW_EINVOICE_TAB && tab === "einvoice" && (
       <section className={s.card}>
-        <h3 className={s.cardTitle}>E-invoicing readiness (PINT-AE / ASP)</h3>
+        <h3 className={s.cardTitle}>Send invoices to the tax authority</h3>
+        {/* Sentences, not a field dump. "Ready: no / Missing: trn, legal_name"
+            told a manager nothing about what to go and do. */}
         {readiness ? (
-          <ul className={s.list}>
-            <li>Ready: {readiness.ready ? "yes" : "no"}</li>
-            <li>Profile: {readiness.structured_profile}</li>
-            <li>ASP: {readiness.asp_provider}</li>
-            <li>Enabled: {readiness.e_invoice_enabled ? "yes" : "no"}</li>
-            {readiness.missing_fields.length > 0 && (
-              <li>Missing: {readiness.missing_fields.join(", ")}</li>
+          <>
+            <p className={s.rowHint}>{readiness.summary}</p>
+            {(readiness.blockers ?? []).length > 0 && (
+              <ul className={s.list}>
+                {(readiness.blockers ?? []).map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
             )}
-            <li className={s.rowHint}>{readiness.notes}</li>
-          </ul>
+          </>
         ) : (
           <p className={s.rowHint}>Loading…</p>
         )}
         <div className={s.row2}>
           <label className={s.col}>
-            <span className={s.rowName}>Order ID</span>
-            <input className={s.input} value={eiOrderId} onChange={(e) => setEiOrderId(e.target.value)} />
+            <span className={s.rowName}>Order number</span>
+            <input
+              className={s.input}
+              value={eiOrderId}
+              onChange={(e) => setEiOrderId(e.target.value)}
+              placeholder="R1-0007"
+            />
+            <span className={s.fieldHint}>The number printed on the bill.</span>
           </label>
           <label className={s.col}>
-            <span className={s.rowName}>Buyer TRN (B2B → full tax invoice)</span>
+            <span className={s.rowName}>Buyer TRN</span>
             <input className={s.input} value={buyerTrn} onChange={(e) => setBuyerTrn(e.target.value)} />
+            <span className={s.fieldHint}>
+              Only for business customers. Filling it in makes this a full tax invoice
+              instead of a simplified one.
+            </span>
           </label>
         </div>
         {/* Disabled, not hidden. The tab still has to show past transmissions
@@ -417,7 +517,7 @@ export function ComplianceScreen() {
             onClick={() => void onTransmit()}
             disabled={busy || !tax?.e_invoice_enabled}
           >
-            Transmit via {tax?.asp_provider === "mock" ? "Mock ASP" : tax?.asp_provider}
+            {readiness?.is_live ? `Send via ${tax?.asp_provider}` : "Send (test run)"}
           </Button>
         </div>
         {txns.length > 0 ? (
@@ -437,41 +537,97 @@ export function ComplianceScreen() {
 
       {tab === "refunds" && (
       <section className={s.card}>
-        <h3 className={s.cardTitle}>Refund notes (RN-…)</h3>
-        <div className={s.row2}>
-          <label className={s.col}>
-            <span className={s.rowName}>Order ID</span>
-            <input className={s.input} value={rnOrderId} onChange={(e) => setRnOrderId(e.target.value)} />
-          </label>
-          <label className={s.col}>
-            <span className={s.rowName}>Amount AED</span>
-            <input className={s.input} value={rnAmount} onChange={(e) => setRnAmount(e.target.value)} />
-          </label>
-          <label className={s.col}>
-            <span className={s.rowName}>Reason</span>
-            <input className={s.input} value={rnReason} onChange={(e) => setRnReason(e.target.value)} />
-          </label>
-        </div>
-        <div className={s.actions}>
-          <Button size="md" onClick={() => void onRefundNote()} disabled={busy}>
-            Issue refund note
+        {/* The issue form used to sit permanently above the list, so three empty
+            boxes were the first thing on a screen whose job is to show the notes
+            already issued. Issuing is the occasional action; reading the list is
+            the constant one. */}
+        <div className={s.cardHead}>
+          <h3 className={s.cardTitle}>Refund notes</h3>
+          <Button size="md" onClick={() => setRnOpen(true)} disabled={busy}>
+            New refund note
           </Button>
         </div>
         {refunds.length > 0 ? (
-          <ul className={s.list}>
-            {refunds.map((n) => (
-              <li key={n.id}>
-                {n.refund_note_number}, order {n.order_id}, AED {n.amount_aed}
-              </li>
-            ))}
-          </ul>
+          <div className={s.tableWrap}>
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th>Note</th>
+                  <th>Order</th>
+                  <th className={s.num}>Amount</th>
+                  <th className={s.num}>VAT reclaimed</th>
+                  <th className={s.grow}>Reason</th>
+                  <th>Issued</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refunds.map((n) => (
+                  <tr key={n.id}>
+                    <td className={s.mono}>{n.refund_note_number}</td>
+                    <td>{n.order_id}</td>
+                    <td className={s.num}>AED {n.amount_aed}</td>
+                    <td className={s.num}>AED {n.vat_amount_aed ?? "0.00"}</td>
+                    <td>{n.reason || "not stated"}</td>
+                    <td>{n.issued_at ? new Date(n.issued_at).toLocaleDateString() : "n/a"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <EmptyState title="No refund notes" description="Issued credit notes appear here." />
+          <EmptyState
+            title="No refund notes yet"
+            description="Issue one whenever you refund a customer, so the VAT you already declared is reclaimed."
+          />
         )}
       </section>
       )}
 
-      {tab === "retention" && (
+      {rnOpen && (
+        <ConfirmDialog
+          title="Issue a refund note"
+          message="Records a refund against an order and reclaims the VAT you already declared on it. The note number is allocated automatically."
+          confirmLabel="Issue note"
+          size="md"
+          busy={busy}
+          confirmDisabled={!rnOrderId.trim() || !rnAmount.trim()}
+          onCancel={() => setRnOpen(false)}
+          onConfirm={() => void onRefundNote()}
+        >
+          <div className={s.dialogFields}>
+            <label className={s.col}>
+              <span className={s.rowName}>Order ID</span>
+              <input
+                className={s.input}
+                value={rnOrderId}
+                onChange={(e) => setRnOrderId(e.target.value)}
+              />
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Amount refunded (AED)</span>
+              <input
+                className={s.input}
+                inputMode="decimal"
+                value={rnAmount}
+                onChange={(e) => setRnAmount(e.target.value)}
+              />
+              <span className={s.fieldHint}>
+                What the customer actually got back. The VAT portion is worked out from it.
+              </span>
+            </label>
+            <label className={s.col}>
+              <span className={s.rowName}>Reason</span>
+              <input
+                className={s.input}
+                value={rnReason}
+                onChange={(e) => setRnReason(e.target.value)}
+              />
+            </label>
+          </div>
+        </ConfirmDialog>
+      )}
+
+      {SHOW_RETENTION_TAB && tab === "retention" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Data retention</h3>
         <p className={s.rowHint}>
@@ -503,6 +659,34 @@ export function ComplianceScreen() {
       {tab === "export" && (
       <section className={s.card}>
         <h3 className={s.cardTitle}>Accountant export</h3>
+        <p className={s.rowHint}>
+          Every order in the period with its net, VAT and gross, plus the refund and
+          credit notes issued against them. This is what your accountant files the VAT
+          return from.
+        </p>
+        {/* Presets first. Nobody reconciles an arbitrary window: it is always a
+            month, and picking one from two date fields is four clicks. */}
+        <div className={s.presets}>
+          {[
+            ["This month", monthStartISO(), todayISO()],
+            ["Last month", lastMonthStartISO(), lastMonthEndISO()],
+          ].map(([label, from, to]) => (
+            <button
+              key={label}
+              type="button"
+              className={`${s.preset} ${
+                exportStart === from && exportEnd === to ? s.presetActive : ""
+              }`}
+              onClick={() => {
+                setExportStart(from);
+                setExportEnd(to);
+                setExportSummary(null);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className={s.row2}>
           <label className={s.col}>
             <span className={s.rowName}>Start</span>
@@ -510,7 +694,11 @@ export function ComplianceScreen() {
               className={s.input}
               type="date"
               value={exportStart}
-              onChange={(e) => setExportStart(e.target.value)}
+              max={exportEnd}
+              onChange={(e) => {
+                setExportStart(e.target.value);
+                setExportSummary(null);
+              }}
             />
           </label>
           <label className={s.col}>
@@ -519,19 +707,46 @@ export function ComplianceScreen() {
               className={s.input}
               type="date"
               value={exportEnd}
-              onChange={(e) => setExportEnd(e.target.value)}
+              min={exportStart}
+              onChange={(e) => {
+                setExportEnd(e.target.value);
+                setExportSummary(null);
+              }}
             />
           </label>
         </div>
         <div className={s.actions}>
-          <Button size="md" onClick={() => void onExport("json")} disabled={busy}>
-            Export JSON
+          {/* "Export JSON" downloaded nothing: it fetched the pack and updated a
+              line of text. Named for what it does. Only the CSV is a file, so
+              only the CSV is the primary button. */}
+          <Button size="md" variant="ghost" onClick={() => void onExport("json")} disabled={busy}>
+            Show totals
           </Button>
           <Button size="md" onClick={() => void onExport("csv")} disabled={busy}>
             Download CSV
           </Button>
         </div>
-        {exportSummary && <p className={s.rowHint}>{exportSummary}</p>}
+        {exportSummary && (
+          <div className={s.tableWrap}>
+            <table className={s.table}>
+              <tbody>
+                {[
+                  ["Orders", String(exportSummary.order_count)],
+                  ["Net", `AED ${exportSummary.net_total_aed}`],
+                  ["VAT", `AED ${exportSummary.vat_total_aed}`],
+                  ["Gross", `AED ${exportSummary.gross_total_aed}`],
+                  ["Refund notes", String(exportSummary.refund_note_count)],
+                  ["Credit notes", String(exportSummary.credit_note_count)],
+                ].map(([label, value]) => (
+                  <tr key={label}>
+                    <td className={s.grow}>{label}</td>
+                    <td className={s.num}>{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
       )}
     </div>

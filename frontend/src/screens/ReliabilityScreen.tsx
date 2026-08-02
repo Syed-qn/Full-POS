@@ -203,6 +203,30 @@ export function ReliabilityScreen() {
     void reload();
   }, [reload]);
 
+  /**
+   * Poll while the tab is actually being looked at.
+   *
+   * 30s, not faster: a backup listing changes when someone runs one, which is
+   * minutes apart at best. Paused on hidden, so a dashboard left open on a back
+   * office monitor overnight is not making 2,880 round trips before anyone
+   * reads it, and refreshed immediately on becoming visible again so the first
+   * thing you see on returning to the tab is current rather than hours old.
+   */
+  useEffect(() => {
+    // Never repaint underneath an open dialog: a reload while the restore
+    // confirmation is up would swap the list out from under the row it names.
+    if (preview || restoreFor !== null) return;
+    function tick() {
+      if (document.visibilityState === "visible") void reload();
+    }
+    const id = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [reload, preview, restoreFor]);
+
   // Escape closes the Inspect panel. ConfirmDialog brings its own; this one is a
   // plain read-only modal, and a modal you can only dismiss with the mouse is a
   // modal that traps keyboard users.
@@ -230,15 +254,11 @@ export function ReliabilityScreen() {
 
   return (
     <div className={s.screen}>
-      <PageHeader
-        title="Reliability"
-        subtitle="Backups, error log and audit trail"
-        right={
-          <Button size="md" type="button" variant="ghost" onClick={() => void reload()}>
-            Refresh
-          </Button>
-        }
-      />
+      {/* No Refresh button. Asking someone to press it means the page is happy to
+          show stale backup status until they think to, and "is my backup
+          current?" is precisely the question you cannot answer from stale data.
+          It refreshes itself instead. */}
+      <PageHeader title="Reliability" subtitle="Backups, error log and audit trail" />
 
       {/* The four metric tiles are gone. Two counted devices from a registry
           nothing writes to, one counted errors from a log nothing writes to, and
@@ -247,19 +267,21 @@ export function ReliabilityScreen() {
           now lives in the Backups card, where it is real. */}
 
 
-      <div className={s.tabs} role="tablist" aria-label="Reliability sections">
-        {TABS.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            className={`${s.tab} ${tab === key ? s.tabActive : ""}`}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
+      <div className={s.tabBar}>
+        <div className={s.tabGroup} role="tablist" aria-label="Reliability sections">
+          {TABS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              className={`${s.tab} ${tab === key ? s.tabActive : ""}`}
+              onClick={() => setTab(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "backups" && (
@@ -269,15 +291,24 @@ export function ReliabilityScreen() {
             {/* When everything is fine, this is the whole status: one quiet line.
                 Two full-width green panels shouted good news louder than the
                 page shouts bad news, which trains people to ignore the colour. */}
+            {/* The trailing sentence used to render while the destination was
+                still loading, so the line read "Loading destination…. Last
+                backup never" — four dots, and a "never" that was not yet known
+                to be true. Nothing is claimed until the answer is in. */}
             <span data-testid="backup-health">
-              {target
-                ? `${target.backend === "s3" ? "Object storage" : "Local disk"} at ${target.location}`
-                : "Loading destination…"}
-              {target?.durable ? ", durable" : ""}
-              {health?.ok ? ", restorable" : ""}
-              {health?.backed_up_today ? ", backed up today" : ""}
-              {". Last backup "}
-              {readiness?.last_backup_at ?? network?.last_backup_at ?? "never"}
+              {target ? (
+                <>
+                  {target.backend === "s3" ? "Object storage" : "Local disk"} at{" "}
+                  {target.location}
+                  {target.durable ? ", durable" : ""}
+                  {health?.ok ? ", restorable" : ""}
+                  {health?.backed_up_today ? ", backed up today" : ""}
+                  {". Last backup "}
+                  {readiness?.last_backup_at ?? network?.last_backup_at ?? "never"}
+                </>
+              ) : (
+                "Loading destination…"
+              )}
             </span>
           </div>
           {/* Panels are reserved for problems. A backup you cannot retrieve, or

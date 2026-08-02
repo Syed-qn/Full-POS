@@ -4,76 +4,55 @@
   gap: 18px;
 }
 
-.tabs {
+/* Same tab bar as Inventory. Two admin screens in the same nav should not have
+   two different ideas of what a tab looks like: pills inside one surfaced bar,
+   not five outlined boxes floating on the canvas. */
+.tabBar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  padding: 8px 0;
-  background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
-  backdrop-filter: blur(6px);
-}
-
-/* 40px to match the md buttons. A tab strip taller than every control beneath
-   it reads as the heaviest thing on an admin page, which it is not. */
-.tab {
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.tabActive {
-  background: var(--accent-primary-dim);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
-
-.healthGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-}
-
-.healthCard {
-  min-height: 96px;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 14px);
+  padding: 8px 12px;
+  box-shadow: var(--shadow-card);
 }
 
-.healthCard span {
-  font-size: 13px;
+.tabGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  min-height: 44px;
+  padding: 10px 18px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
-.healthCard strong {
-  font-family: var(--font-mono);
-  font-size: 20px;
+.tab:hover {
   color: var(--text-primary);
+  background: var(--bg-surface-inset);
 }
 
-.healthOk {
-  border-color: color-mix(in srgb, var(--sla-safe) 40%, var(--border-subtle));
-  background: color-mix(in srgb, var(--sla-safe) 8%, var(--bg-surface));
-}
-
-.healthWarn {
-  border-color: color-mix(in srgb, var(--sla-warn) 45%, var(--border-subtle));
-  background: color-mix(in srgb, var(--sla-warn) 10%, var(--bg-surface));
+.tabActive,
+.tabActive:hover {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
 }
 
 .card {
@@ -91,6 +70,82 @@
   margin: 0;
   font-size: var(--font-size-title, 18px);
   font-weight: 700;
+}
+
+/* Title left, this card's own action right. */
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+/* One column absorbs the leftover width. Without it every column shares the
+   slack equally, which pushes each figure miles from the heading above it on a
+   wide monitor and makes the row read as unrelated cells. */
+.grow {
+  width: 100%;
+}
+
+.table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Money and counts read down the column, so they are right-aligned and lined up
+   on the decimal point rather than ragged.
+
+   Written as `.table th.num` / `.table td.num`, not a bare `.num`: `.table th`
+   is a class AND an element, which outranks a lone class, so the plain selector
+   lost and the headers stayed left while their figures moved right. */
+.table th.num,
+.table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Fields inside a dialog stack; the grid used on the page would squeeze three
+   inputs into a modal that is not wide enough for them. */
+.dialogFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.dialogFields .input {
+  max-width: none;
 }
 
 /* Top-aligned, not bottom. With align-items:end every cell was pinned to the
@@ -170,6 +225,39 @@
   gap: 10px;
 }
 
+/* Date-range shortcuts. Lighter than buttons because they set the form rather
+   than performing the action. */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset {
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preset:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-inset);
+}
+
+.presetActive,
+.presetActive:hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-dim);
+  color: var(--accent-primary);
+}
+
 /* Tables and wide rows scroll inside their own box. Without this they widen the
    card and push the page sideways, which is how a control ends up off the right
    edge where nobody can reach it. */
@@ -202,6 +290,43 @@
   height: 18px;
   min-height: 0;
   flex: 0 0 auto;
+}
+
+/* Loading placeholders. A form seeded with 5% / exclusive / 2555 days looks
+   exactly like real saved settings, so a restaurant on 20% read "5" as fact for
+   as long as the request took. A grey bar cannot be mistaken for a value. */
+.skelInput {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--border-subtle) 25%,
+    color-mix(in srgb, var(--border-subtle) 45%, transparent) 50%,
+    var(--border-subtle) 75%
+  );
+  background-size: 200% 100%;
+  animation: skelShimmer 1.3s ease-in-out infinite;
+}
+
+.skelInput {
+  height: 44px;
+  max-width: 420px;
+}
+
+@keyframes skelShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Respect a reduced-motion preference; the bar still reads as "not a value". */
+@media (prefers-reduced-motion: reduce) {
+  .skelInput {
+    animation: none;
+  }
 }
 
 /* Limits belong beside the field that has them, not in an error after Save. */
