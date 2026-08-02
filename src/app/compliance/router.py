@@ -6,12 +6,14 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.accountant_export import build_accountant_export
 from app.compliance.einvoice import (
     EInvoiceDisabledError,
+    UnknownASPError,
     einvoice_readiness,
     list_transmissions,
     transmit_order_einvoice,
@@ -54,9 +56,22 @@ class RefundNoteIn(BaseModel):
 
 
 class EInvoiceTransmitIn(BaseModel):
-    order_id: int
+    """Identify the order by its number (what is printed on the bill) or by id.
+
+    Only the internal row id was accepted before, which nobody standing in a
+    restaurant knows. `order_number` is the R1-0007 on the customer's receipt.
+    """
+
+    order_id: int | None = None
+    order_number: str | None = Field(default=None, max_length=32)
     document_type: str | None = None
     buyer_trn: str | None = None
+
+    @model_validator(mode="after")
+    def _one_identifier(self) -> "EInvoiceTransmitIn":
+        if self.order_id is None and not (self.order_number or "").strip():
+            raise ValueError("Give an order number.")
+        return self
 
 
 class RetentionIn(BaseModel):
@@ -205,6 +220,26 @@ async def get_refund_note_doc(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+async def _resolve_order_id(
+    session: AsyncSession, *, restaurant_id: int, body: EInvoiceTransmitIn
+) -> int:
+    """Order number off the bill to the internal row id, within this tenant."""
+    if body.order_id is not None:
+        return body.order_id
+    from app.ordering.models import Order
+
+    raw = (body.order_number or "").strip().lstrip("#")
+    order_id = await session.scalar(
+        select(Order.id).where(
+            Order.restaurant_id == restaurant_id,
+            Order.order_number == raw,
+        )
+    )
+    if order_id is None:
+        raise HTTPException(status_code=404, detail=f"No order {raw} in this restaurant.")
+    return order_id
+
+
 @router.get("/e-invoice/readiness")
 async def get_einvoice_readiness(restaurant=Depends(current_restaurant)):
     return einvoice_readiness(restaurant.settings)
@@ -216,16 +251,20 @@ async def transmit_einvoice(
     restaurant=Depends(require_role("manager")),
     session: AsyncSession = Depends(get_session),
 ):
+    order_id = await _resolve_order_id(session, restaurant_id=restaurant.id, body=body)
     try:
         row = await transmit_order_einvoice(
             session,
             restaurant=restaurant,
-            order_id=body.order_id,
+            order_id=order_id,
             document_type=body.document_type,
             buyer_trn=body.buyer_trn,
         )
     except EInvoiceDisabledError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except UnknownASPError as exc:
+        # 422, not 500: the configuration is wrong, and no filing happened.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()
