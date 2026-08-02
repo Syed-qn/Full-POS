@@ -25,6 +25,30 @@ def _dt_end(d: date) -> datetime:
     return datetime.combine(d, time.max)
 
 
+def _net_and_gross(
+    *, subtotal: Decimal, vat: Decimal, total: Decimal, mode: str
+) -> tuple[Decimal, Decimal]:
+    """Split one order into the net and gross an accountant reports.
+
+    This used to be ``net = subtotal`` and ``gross = total``, which does not
+    reconcile in either pricing mode:
+
+    * inclusive — the menu price ALREADY contains the VAT, so ``subtotal`` is
+      gross. Reporting it as net overstates revenue by exactly the VAT, and the
+      summary showed net 14.00 + VAT 2.33 against a gross of 14.00.
+    * exclusive — VAT is never added to ``order.total`` anywhere in the app, so
+      ``total`` is not gross; it is net plus the delivery fee.
+
+    Net is what the business earned, gross is what the customer owed, and
+    ``gross - net`` must equal the VAT. Both hold below.
+    """
+    if mode == "exclusive":
+        # subtotal is already net of tax; the VAT sits on top of the whole bill.
+        return subtotal, total + vat
+    # Inclusive: strip the tax back out of the tax-bearing part of the bill.
+    return subtotal - vat, total
+
+
 async def build_accountant_export(
     session: AsyncSession,
     *,
@@ -107,9 +131,14 @@ async def build_accountant_export(
         vat = Decimal(str(o.vat_amount_aed or 0))
         sub = Decimal(str(o.subtotal or 0))
         tot = Decimal(str(o.total or 0))
+        # Per order, because tax_pricing_mode is recorded ON the order: a bill
+        # rung up before the setting changed must still be reported the way it
+        # was actually charged.
+        order_mode = getattr(o, "tax_pricing_mode", None) or cfg["tax_pricing_mode"]
+        net, gross = _net_and_gross(subtotal=sub, vat=vat, total=tot, mode=order_mode)
         vat_total += vat
-        net_total += sub
-        gross_total += tot
+        net_total += net
+        gross_total += gross
         line_vat = [
             {
                 "dish_name": it.dish_name,
@@ -129,9 +158,14 @@ async def build_accountant_export(
                 "tax_pricing_mode": getattr(o, "tax_pricing_mode", None),
                 "created_at": o.created_at.isoformat() if o.created_at else None,
                 "subtotal_aed": str(sub),
+                # net + vat == gross on every row. `subtotal_aed` is kept as the
+                # raw figure off the order, but it is NOT net in inclusive mode,
+                # which is what an accountant would otherwise have assumed.
+                "net_aed": str(net),
                 "vat_rate": str(o.vat_rate),
                 "vat_amount_aed": str(vat),
                 "delivery_fee_aed": str(o.delivery_fee_aed or 0),
+                "gross_aed": str(gross),
                 "total_aed": str(tot),
                 "line_items": line_vat,
             }
@@ -182,14 +216,22 @@ async def build_accountant_export(
     if format == "csv":
         buf = io.StringIO()
         w = csv.writer(buf)
+        # net, vat, gross — the three an accountant reconciles, in that order,
+        # and net + vat == gross on every line. subtotal/total stay at the end as
+        # the raw order figures for anyone tying a row back to a bill.
         w.writerow(
             [
                 "order_number",
                 "status",
                 "invoice_kind",
+                "tax_pricing_mode",
                 "created_at",
-                "subtotal_aed",
+                "net_aed",
+                "vat_rate",
                 "vat_amount_aed",
+                "gross_aed",
+                "delivery_fee_aed",
+                "subtotal_aed",
                 "total_aed",
             ]
         )
@@ -199,9 +241,14 @@ async def build_accountant_export(
                     r["order_number"],
                     r["status"],
                     r["invoice_kind"],
+                    r["tax_pricing_mode"],
                     r["created_at"],
-                    r["subtotal_aed"],
+                    r["net_aed"],
+                    r["vat_rate"],
                     r["vat_amount_aed"],
+                    r["gross_aed"],
+                    r["delivery_fee_aed"],
+                    r["subtotal_aed"],
                     r["total_aed"],
                 ]
             )
