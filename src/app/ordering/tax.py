@@ -13,6 +13,14 @@ DEFAULT_UAE_VAT_RATE = DEFAULT_VAT_RATE
 Q = Decimal("0.01")
 
 
+def _first_set(*values):
+    """First value that is not None. Unlike `or`, a real zero survives."""
+    for v in values:
+        if v is not None:
+            return v
+    return Decimal("0")
+
+
 def _q(d: Decimal) -> Decimal:
     return Decimal(str(d)).quantize(Q, rounding=ROUND_HALF_UP)
 
@@ -171,7 +179,14 @@ async def build_tax_invoice(
     rate_buckets: dict[str, dict] = {}
     line_items = []
     for item in items:
-        rate = Decimal(str(getattr(item, "vat_rate", None) or order.vat_rate or cfg["default_vat_rate"]))
+        # `or` treats a genuine 0% rate as missing, because Decimal("0") is
+        # falsy — so a zero-rated item was invoiced at the default 5%. Only a
+        # None means "not set".
+        rate = Decimal(str(_first_set(
+            getattr(item, "vat_rate", None),
+            getattr(order, "vat_rate", None),
+            cfg["default_vat_rate"],
+        )))
         line_total = Decimal(str(item.price_aed)) * int(item.qty)
         vat_amt = Decimal(str(getattr(item, "vat_amount_aed", None) or 0))
         if vat_amt == 0 and line_total > 0:

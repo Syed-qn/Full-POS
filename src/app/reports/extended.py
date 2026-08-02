@@ -601,7 +601,10 @@ async def tax_report(
         lambda: {"vat_rate": "", "order_count": 0, "vat_aed": Decimal("0"), "net_aed": Decimal("0")}
     )
     for o in invoiced:
-        rate = str(o.vat_rate or Decimal("0.05"))
+        # Was `o.vat_rate or Decimal("0.05")`: a zero-rated order reported
+        # itself in the 5% bucket, because Decimal("0") is falsy, and the 5%
+        # itself was hardcoded rather than read from the restaurant's settings.
+        rate = str(o.vat_rate if o.vat_rate is not None else Decimal("0"))
         b = by_rate[rate]
         b["vat_rate"] = rate
         b["order_count"] += 1

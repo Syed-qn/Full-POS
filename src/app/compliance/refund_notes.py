@@ -35,6 +35,47 @@ async def _next_seq(session: AsyncSession, restaurant_id: int) -> int:
     return best + 1
 
 
+async def _vat_portion_of_refund(
+    session: AsyncSession,
+    *,
+    restaurant_id: int,
+    order_id: int,
+    amount_aed: Decimal,
+) -> Decimal:
+    """How much of a refunded amount was tax.
+
+    This was hardcoded as ``amount * 0.05 / 1.05``: a permanent 5%, ignoring both
+    the restaurant's configured rate and any zero-rated sale. Setting VAT to 9%
+    would have left every credit note reclaiming 5%, understating the refund to
+    the FTA on every one of them.
+
+    The rate comes from the ORDER, not from today's settings, because a credit
+    note reverses a specific sale and must use the rate that sale was charged at.
+    Changing the rate this month must not rewrite last month's refunds. Settings
+    are only the fallback for an order that predates VAT stamping.
+    """
+    from app.compliance.tax_settings import tax_settings
+    from app.identity.models import Restaurant
+    from app.ordering.models import Order
+
+    rate: Decimal | None = None
+    order = await session.get(Order, order_id)
+    if order is not None and getattr(order, "vat_rate", None) is not None:
+        rate = Decimal(str(order.vat_rate))
+    if rate is None:
+        restaurant = await session.get(Restaurant, restaurant_id)
+        cfg = tax_settings(restaurant.settings if restaurant else None)
+        rate = Decimal(str(cfg["default_vat_rate"]))
+
+    if rate <= 0:
+        return Decimal("0.00")
+    # amount_aed is money that actually changed hands, so it is gross in both
+    # pricing modes: the tax portion is extracted from it, never added on top.
+    gross = Decimal(str(amount_aed))
+    net = (gross / (Decimal("1") + rate)).quantize(Decimal("0.01"))
+    return (gross - net).quantize(Decimal("0.01"))
+
+
 async def issue_refund_note(
     session: AsyncSession,
     *,
@@ -66,7 +107,12 @@ async def issue_refund_note(
     base = await _next_seq(session, restaurant_id)
     vat = vat_amount_aed
     if vat is None:
-        vat = (amount_aed * Decimal("0.05") / Decimal("1.05")).quantize(Decimal("0.01"))
+        vat = await _vat_portion_of_refund(
+            session,
+            restaurant_id=restaurant_id,
+            order_id=order_id,
+            amount_aed=amount_aed,
+        )
 
     last_error: IntegrityError | None = None
     for attempt in range(5):
