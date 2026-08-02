@@ -43,15 +43,21 @@ const AUDIT_ROWS = [
   {
     id: 252,
     actor: "restaurant:1",
+    actor_name: null,
     entity: "staff_member",
+    entity_id: "7",
     action: "staff_created",
+    changes: [],
     created_at: "2026-07-31T13:11:59",
   },
   {
     id: 251,
     actor: "cashier",
+    actor_name: "Asif",
     entity: "order",
+    entity_id: "4417",
     action: "order_status_transition",
+    changes: [{ field: "status", from: "preparing", to: "ready" }],
     created_at: "2026-07-31T12:58:23",
   },
 ];
@@ -285,9 +291,12 @@ describe("ReliabilityScreen — tabs", () => {
     render(<ReliabilityScreen />);
     expect(await screen.findByRole("tab", { name: "Backups" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Devices" })).not.toBeInTheDocument();
-    for (const label of ["Audit", "Conflicts"]) {
-      expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
-    }
+    // Conflicts is hidden too: it is driven entirely by the Electron posBridge,
+    // so in a browser it showed "open the desktop shell" above an empty state
+    // reading "No conflicts" — a manager reads the second and concludes sync is
+    // healthy, which this page has no way of knowing.
+    expect(screen.queryByRole("tab", { name: "Conflicts" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Audit" })).toBeInTheDocument();
   });
 });
 
@@ -317,9 +326,24 @@ describe("ReliabilityScreen — audit trail", () => {
     expect(screen.getByText("Order status transition")).toBeInTheDocument();
     // "restaurant:1" is an internal caller id, not a person.
     expect(screen.getByText("system")).toBeInTheDocument();
-    expect(screen.getByText("Cashier")).toBeInTheDocument();
     expect(screen.queryByText(/restaurant:1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/staff_created/)).not.toBeInTheDocument();
+  });
+
+  it("names the person, because 'Cashier' does not identify one", async () => {
+    render(<ReliabilityScreen />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Audit" }));
+    expect(await screen.findByText("Asif (cashier)")).toBeInTheDocument();
+  });
+
+  it("shows the values that changed, not just that something did", async () => {
+    // before/after were recorded from the start and never displayed, so the log
+    // said "changed" without ever saying from what to what.
+    render(<ReliabilityScreen />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Audit" }));
+    expect(await screen.findByText(/preparing to ready/)).toBeInTheDocument();
+    // A create has nothing to diff against, and says so rather than lying.
+    expect(screen.getByText("no field changes")).toBeInTheDocument();
   });
 
   it("drops the Error logs panel, which nothing ever wrote to", async () => {

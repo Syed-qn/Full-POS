@@ -41,6 +41,87 @@ async def record_audit(
     return row
 
 
+#: Never surfaced in a diff. Either noise (timestamps that move on every write)
+#: or secrets that have no business being re-displayed on an admin screen.
+_DIFF_SKIP = frozenset(
+    {
+        "updated_at",
+        "created_at",
+        "password",
+        "password_hash",
+        "pin",
+        "pin_hash",
+        "token",
+        "access_token",
+        "api_key",
+        "asp_api_key",
+        "secret",
+    }
+)
+
+
+def _short(value) -> str:
+    """One-line rendering of a JSON value for a table cell."""
+    if value is None:
+        return "empty"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (list, dict)):
+        n = len(value)
+        kind = "items" if isinstance(value, list) else "fields"
+        return f"{n} {kind}"
+    text = str(value)
+    return text if len(text) <= 40 else f"{text[:39]}…"
+
+
+def diff_fields(before: dict | None, after: dict | None) -> list[dict]:
+    """The fields that actually changed, as {field, from, to}.
+
+    `before` and `after` were recorded on every audit row from the start and
+    never sent to any screen, so the log could say "manager changed dish 12" but
+    not "from 26.00 to 18.00" — the half of the row worth reading stayed in the
+    database. Computed server-side so every client renders the same answer.
+
+    A create has no `before` and a delete no `after`; both return an empty list
+    rather than every field marked changed, since "all of them" is not a diff.
+    """
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return []
+    out: list[dict] = []
+    for key in sorted(set(before) | set(after)):
+        if key in _DIFF_SKIP:
+            continue
+        old, new = before.get(key), after.get(key)
+        if old == new:
+            continue
+        out.append({"field": key, "from": _short(old), "to": _short(new)})
+    return out
+
+
+async def staff_names(
+    session: AsyncSession, *, restaurant_id: int, staff_ids: set[int]
+) -> dict[int, str]:
+    """id -> name for the given staff, scoped to the tenant.
+
+    Deliberately tolerant of missing rows: the audit log is append-only and
+    outlives the staff records it references, so a departed employee's id simply
+    has no name rather than breaking the page.
+    """
+    if not staff_ids:
+        return {}
+    from app.staff.models import StaffMember
+
+    rows = (
+        await session.execute(
+            select(StaffMember.id, StaffMember.name).where(
+                StaffMember.restaurant_id == restaurant_id,
+                StaffMember.id.in_(staff_ids),
+            )
+        )
+    ).all()
+    return {sid: name for sid, name in rows}
+
+
 async def list_audit_log(
     session: AsyncSession,
     *,

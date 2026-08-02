@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.backup_status import backup_readiness
-from app.audit.service import list_audit_log
+from app.audit.service import diff_fields, list_audit_log, staff_names
 from app.db import get_session
 from app.staff.deps import require_role
 
@@ -31,17 +31,30 @@ async def audit_log(
         action=action,
         limit=limit,
     )
+    # Resolve staff names in ONE query, not one per row. `actor` alone is a role,
+    # so every row said "Manager" on a floor that has several of them, and the
+    # log could not answer the question it exists for: which manager.
+    names = await staff_names(
+        session,
+        restaurant_id=restaurant.id,
+        staff_ids={r.actor_staff_id for r in rows if r.actor_staff_id},
+    )
     return {
         "rows": [
             {
                 "id": r.id,
                 "actor": r.actor,
+                "actor_staff_id": r.actor_staff_id,
+                # None for owner-token, worker and webhook writes: no human is
+                # attributable there, and inventing one would be worse than null.
+                "actor_name": names.get(r.actor_staff_id) if r.actor_staff_id else None,
                 "restaurant_id": r.restaurant_id,
                 "entity": r.entity,
                 "entity_id": r.entity_id,
                 "action": r.action,
                 "before": r.before,
                 "after": r.after,
+                "changes": diff_fields(r.before, r.after),
                 "created_at": r.created_at.isoformat(),
             }
             for r in rows

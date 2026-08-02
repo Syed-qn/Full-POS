@@ -42,15 +42,6 @@ type RelTab = "backups" | "devices" | "errors" | "conflicts";
  */
 const SHOW_DEVICES_TAB = false;
 
-const TABS = (
-  [
-    ["backups", "Backups"],
-    ["devices", "Devices"],
-    ["errors", "Audit"],
-    ["conflicts", "Conflicts"],
-  ] as const
-).filter(([key]) => key !== "devices" || SHOW_DEVICES_TAB);
-
 type Bridge = {
   networkStatus?: () => Promise<{ online: boolean; last_error: string | null }>;
   listConflicts?: () => Promise<Array<{ id: string; entity: string; path: string }>>;
@@ -61,6 +52,33 @@ type Bridge = {
 function posBridge(): Bridge | undefined {
   return (window as unknown as { posBridge?: Bridge }).posBridge;
 }
+
+/**
+ * Conflicts is hidden.
+ *
+ * The whole tab is driven by `window.posBridge`, the Electron IPC bridge, which
+ * does not exist in a browser. `listConflicts` never runs, so the tab showed two
+ * contradictory lines at once: "Open the Electron desktop shell to manage
+ * offline queue conflicts" above an empty state reading "No conflicts". A
+ * manager reads the second and concludes the sync is healthy, which this page
+ * has no way of knowing.
+ *
+ * The panel below is left intact. Flip this to true in the desktop shell build.
+ */
+const SHOW_CONFLICTS_TAB = false;
+
+const TABS = (
+  [
+    ["backups", "Backups"],
+    ["devices", "Devices"],
+    ["errors", "Audit"],
+    ["conflicts", "Conflicts"],
+  ] as const
+).filter(([key]) => {
+  if (key === "devices") return SHOW_DEVICES_TAB;
+  if (key === "conflicts") return SHOW_CONFLICTS_TAB;
+  return true;
+});
 
 /**
  * The audit trail is the most useful thing on this screen and it was rendered as
@@ -87,6 +105,24 @@ function actorText(actor?: string | null): string {
   // "restaurant:1" is an internal caller id, not a person.
   if (actor.startsWith("restaurant:")) return "system";
   return actor.charAt(0).toUpperCase() + actor.slice(1);
+}
+
+/**
+ * Who did it, by name where a name exists.
+ *
+ * `actor` alone is a ROLE, so every row read "Manager" on a floor that has more
+ * than one, and the log could not answer the question it exists for. The name
+ * comes from the staff row behind the PIN session; system, worker and webhook
+ * writes have no person attached and keep the role.
+ */
+function whoText(row: { actor: string; actor_name?: string | null }): string {
+  const role = actorText(row.actor);
+  return row.actor_name ? `${row.actor_name} (${role.toLowerCase()})` : role;
+}
+
+/** "sale_price_aed" reads as "sale price aed" on screen, not as a column name. */
+function fieldText(field: string): string {
+  return field.replace(/_aed$/, "").replace(/_/g, " ");
 }
 
 function actionText(action?: string | null): string {
@@ -150,7 +186,16 @@ export function ReliabilityScreen() {
   // Per-row verdicts, so pressing Check leaves something on screen.
   const [rowChecks, setRowChecks] = useState<Record<number, { ok: boolean; summary: string }>>({});
   const [audit, setAudit] = useState<
-    Array<{ id: number; actor: string; entity: string; action: string; created_at: string }>
+    Array<{
+      id: number;
+      actor: string;
+      actor_name: string | null;
+      entity: string;
+      entity_id: string;
+      action: string;
+      changes: Array<{ field: string; from: string; to: string }>;
+      created_at: string;
+    }>
   >([]);
   const [readiness, setReadiness] = useState<{
     orders_count: number;
@@ -695,16 +740,42 @@ export function ReliabilityScreen() {
                     <th>When</th>
                     <th>Who</th>
                     <th>What</th>
+                    <th>Changed</th>
                   </tr>
                 </thead>
                 <tbody>
                   {audit.map((a) => (
                     <tr key={a.id}>
                       <td className={s.muted}>{whenText(a.created_at)}</td>
-                      <td>{actorText(a.actor)}</td>
+                      <td>{whoText(a)}</td>
                       <td>
                         {actionText(a.action)}
                         <span className={s.muted}> {entityText(a.entity)}</span>
+                        <span className={s.muted}> #{a.entity_id}</span>
+                      </td>
+                      {/* The values, not just the verb. "Manager changed dish 12"
+                          is not an audit trail; "price 26.00 to 18.00" is. */}
+                      {/* `?? []` because a row cached from before this field
+                          existed, or any response without it, must not blank the
+                          whole audit trail with a render error. */}
+                      <td>
+                        {(a.changes ?? []).length === 0 ? (
+                          <span className={s.muted}>no field changes</span>
+                        ) : (
+                          <ul className={s.changeList}>
+                            {(a.changes ?? []).slice(0, 4).map((c) => (
+                              <li key={c.field}>
+                                <span className={s.muted}>{fieldText(c.field)}</span>{" "}
+                                {c.from} to {c.to}
+                              </li>
+                            ))}
+                            {(a.changes ?? []).length > 4 && (
+                              <li className={s.muted}>
+                                and {(a.changes ?? []).length - 4} more
+                              </li>
+                            )}
+                          </ul>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -715,7 +786,7 @@ export function ReliabilityScreen() {
         </section>
       )}
 
-      {tab === "conflicts" && (
+      {SHOW_CONFLICTS_TAB && tab === "conflicts" && (
         <section className={s.card}>
           <div className={s.cardHead}>
             <h2>Offline conflict resolution</h2>

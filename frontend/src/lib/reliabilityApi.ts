@@ -211,10 +211,16 @@ export function listAuditLog(params?: { limit?: number; entity?: string }) {
   return apiClient.get<{
     rows: Array<{
       id: number;
+      /** The ROLE that acted: manager, cashier, system, customer. */
       actor: string;
+      /** WHICH person, when a staff session did it. Null for system writes. */
+      actor_name: string | null;
+      actor_staff_id: number | null;
       entity: string;
       entity_id: string;
       action: string;
+      /** Only the fields that actually changed, computed server-side. */
+      changes: Array<{ field: string; from: string; to: string }>;
       created_at: string;
     }>;
   }>(`/api/v1/audit-log${qs ? `?${qs}` : ""}`);

@@ -246,6 +246,19 @@
   font-size: 14px;
 }
 
+/* One changed field per line. Comma-separated they run together and you cannot
+   tell where one "from → to" ends and the next begins. */
+.changeList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* Durability of the backup destination is the one thing on this screen that can
    quietly be false, so it gets colour rather than being buried in body text. */
 .noteOk,
