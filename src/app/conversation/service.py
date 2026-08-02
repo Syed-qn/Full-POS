@@ -366,6 +366,8 @@ async def send_manual_message(
         idempotency_key=f"manual:{conversation_id}:{uuid.uuid4().hex}",
         mirror_rider_conversation=False,
     )
+    if outbox is None:
+        return None  # conversation has no phone; nothing to send
     await session.flush()  # assign outbox.id
     msg = await session.scalar(
         select(Message)

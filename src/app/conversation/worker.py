@@ -159,6 +159,8 @@ async def _run_sweep() -> int:
                     payload={"body": body},
                     idempotency_key=f"abandoned-{conv.id}-{draft_id}-{seq}",
                 )
+                if row is None:
+                    continue  # no phone on the conversation; nothing to nudge
                 await session.flush()  # assign row.id before we record it for delivery
                 nudge_ids.append(row.id)
                 conv.state = {

@@ -1,3 +1,4 @@
+import logging
 import re
 
 from sqlalchemy import select
@@ -5,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.outbox.models import OutboxMessage
 from app.whatsapp.port import OutboundMessageType
+
+_logger = logging.getLogger(__name__)
 
 # WhatsApp uses *single* asterisks for bold. LLMs (and any Markdown source) emit
 # **double** asterisks and `#` headers, which render as LITERAL characters on the
@@ -89,7 +92,7 @@ async def enqueue_message(
     idempotency_key: str,
     mirror_rider_conversation: bool = True,
     mirror_customer_conversation: bool = True,
-) -> OutboxMessage:
+) -> OutboxMessage | None:
     """Write an outbox row in the caller's transaction. Commit is the caller's responsibility.
 
     Idempotent on ``idempotency_key``: if a row with that key already exists
@@ -97,7 +100,23 @@ async def enqueue_message(
     one time bucket), return it instead of inserting a duplicate — the DB has a
     UNIQUE constraint on the key, so a blind insert would raise IntegrityError
     and crash the caller.
+
+    Returns None when there is no recipient. ``outbox_messages.to_phone`` is NOT
+    NULL, and the dispatch alerts address ``restaurant.phone``, which is empty
+    until a WhatsApp number is connected. A blank one used to reach the INSERT
+    and raise NotNullViolationError, which poisoned the session and aborted the
+    WHOLE dispatch sweep: a restaurant with no WhatsApp number got no rider
+    assignment at all, every 45 seconds, because an advisory alert could not be
+    queued. There is nowhere to send it, so it is skipped and logged.
     """
+    if not (to_phone or "").strip():
+        _logger.warning(
+            "outbox: no recipient for %s (restaurant_id=%s, key=%s) — message dropped",
+            msg_type,
+            restaurant_id,
+            idempotency_key,
+        )
+        return None
     existing = await session.scalar(
         select(OutboxMessage).where(OutboxMessage.idempotency_key == idempotency_key)
     )

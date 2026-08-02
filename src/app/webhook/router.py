@@ -363,6 +363,8 @@ async def _send_error_apology(*, restaurant_phone: str, to_phone: str, wa_messag
                              "again in a moment and we'll take care of it."},
             idempotency_key=f"err-apology-{wa_message_id}",
         )
+        if row is None:
+            return
         await s.flush()
         await s.commit()
         await deliver_outbox_now(s, [row.id])

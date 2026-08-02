@@ -1120,5 +1120,8 @@ async def low_stock_alert(session: AsyncSession, *, restaurant) -> dict:
         mirror_rider_conversation=False,
         mirror_customer_conversation=False,
     )
+    if msg is None:
+        # No WhatsApp number on the restaurant, so the alert has no recipient.
+        return {"enqueued": False, "reason": "no_whatsapp_number", "outbox_id": None}
     await session.flush()
     return {"enqueued": True, "reason": None, "outbox_id": msg.id}
