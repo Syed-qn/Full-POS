@@ -39,6 +39,10 @@ class MockEInvoiceASP:
         }
 
 
+class EInvoiceDisabledError(RuntimeError):
+    """Transmission attempted while the restaurant has e-invoicing switched off."""
+
+
 def get_asp(provider: str = "mock") -> EInvoiceASPPort:
     # Real ASP adapters (ClearTax, Pagero, etc.) plug in here when credentials exist.
     return MockEInvoiceASP()
@@ -52,6 +56,19 @@ async def transmit_order_einvoice(
     document_type: str | None = None,
     buyer_trn: str | None = None,
 ) -> EInvoiceTransmission:
+    cfg = tax_settings(restaurant.settings)
+    # The switch on Tax profile was read in exactly one place — the readiness
+    # panel — and echoed back for display. Nothing checked it here, so ticking or
+    # unticking it changed nothing about what this endpoint did. Harmless against
+    # the mock provider; once an accredited ASP is contracted a transmission is a
+    # legal filing to the FTA, and an off switch that does not switch anything off
+    # is the kind of control someone relies on during an incident.
+    if not cfg.get("e_invoice_enabled"):
+        raise EInvoiceDisabledError(
+            "E-invoicing is switched off for this restaurant. "
+            "Enable it on the Tax profile tab before transmitting."
+        )
+
     invoice = await build_tax_invoice(
         session,
         order_id=order_id,
@@ -60,7 +77,6 @@ async def transmit_order_einvoice(
         buyer_trn=buyer_trn,
     )
     structured = build_structured_einvoice_payload(invoice)
-    cfg = tax_settings(restaurant.settings)
     provider_name = cfg.get("asp_provider") or "mock"
     asp = get_asp(provider_name)
 

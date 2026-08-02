@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.compliance.accountant_export import build_accountant_export
 from app.compliance.einvoice import (
+    EInvoiceDisabledError,
     einvoice_readiness,
     list_transmissions,
     transmit_order_einvoice,
@@ -223,6 +224,8 @@ async def transmit_einvoice(
             document_type=body.document_type,
             buyer_trn=body.buyer_trn,
         )
+    except EInvoiceDisabledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await session.commit()

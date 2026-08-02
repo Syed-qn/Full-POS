@@ -403,9 +403,21 @@ export function ComplianceScreen() {
             <input className={s.input} value={buyerTrn} onChange={(e) => setBuyerTrn(e.target.value)} />
           </label>
         </div>
+        {/* Disabled, not hidden. The tab still has to show past transmissions
+            and what is missing; it is the ACTION that the switch governs. The
+            server refuses too, so this is a courtesy, not the control. */}
+        {!tax?.e_invoice_enabled && (
+          <p className={s.rowHint}>
+            E-invoicing is switched off. Turn it on under Tax profile to transmit.
+          </p>
+        )}
         <div className={s.actions}>
-          <Button size="md" onClick={() => void onTransmit()} disabled={busy}>
-            Transmit via Mock ASP
+          <Button
+            size="md"
+            onClick={() => void onTransmit()}
+            disabled={busy || !tax?.e_invoice_enabled}
+          >
+            Transmit via {tax?.asp_provider === "mock" ? "Mock ASP" : tax?.asp_provider}
           </Button>
         </div>
         {txns.length > 0 ? (
