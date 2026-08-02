@@ -48,6 +48,13 @@ const LIVE_ROUTES = new Set<string>([
   // /devices all answer — and two banners already link here, so leaving it off
   // this list made those links land on a page the nav called "coming soon".
   "/reliability",
+  // VAT settings, tax invoices, credit notes, retention runs and the accountant
+  // export (owner/manager). Not a preview: ordering/tax.py already reads these
+  // tax settings and stamps vat_rate onto every order, so the rate behind this
+  // "coming soon" pill was live on real bills. All thirteen endpoints answer.
+  // E-invoice transmission is the one unfinished part and says so itself, via a
+  // readiness endpoint that names the missing ASP provider and key.
+  "/compliance",
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,

@@ -18,7 +18,21 @@ export function getTaxSettings() {
   return apiClient.get<TaxSettings>("/api/v1/compliance/tax-settings");
 }
 
-export function patchTaxSettings(body: Partial<TaxSettings> & { asp_api_key?: string }) {
+/**
+ * The API is asymmetric on the money fields: it RETURNS them as strings (so no
+ * precision is lost in JSON) but ACCEPTS them as numbers. Typing the request as
+ * Partial<TaxSettings> forced callers to cast, which is how a wrong type reaches
+ * the server unnoticed. Spelled out instead.
+ */
+export type TaxSettingsPatch = Partial<
+  Omit<TaxSettings, "default_vat_rate" | "simplified_invoice_threshold_aed">
+> & {
+  default_vat_rate?: number;
+  simplified_invoice_threshold_aed?: number;
+  asp_api_key?: string;
+};
+
+export function patchTaxSettings(body: TaxSettingsPatch) {
   return apiClient.patch<TaxSettings>("/api/v1/compliance/tax-settings", body);
 }
 

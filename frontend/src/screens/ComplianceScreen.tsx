@@ -29,6 +29,19 @@ function monthStartISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
+/** The API's own limits (TaxSettingsPatch: ge=30, le=3650). Mirrored here so the
+ *  form can explain them instead of letting the server reject the save. */
+/** The API stores a rate ("0.0500"); the form shows a percentage ("5"). */
+function rateToPercent(rate: unknown): string {
+  const n = Number(rate);
+  if (!Number.isFinite(n)) return "5";
+  // Trim the float noise 0.0825 * 100 would otherwise produce.
+  return String(Number((n * 100).toFixed(4)));
+}
+
+const RETENTION_MIN = 30;
+const RETENTION_MAX = 3650;
+
 export function ComplianceScreen() {
   const [tax, setTax] = useState<TaxSettings | null>(null);
   const [readiness, setReadiness] = useState<{
@@ -56,8 +69,15 @@ export function ComplianceScreen() {
   const [legalName, setLegalName] = useState("");
   const [legalNameAr, setLegalNameAr] = useState("");
   const [mode, setMode] = useState<"exclusive" | "inclusive">("exclusive");
+  // Entered as a PERCENTAGE ("5"), stored by the API as a rate ("0.0500").
+  // Nobody running a restaurant thinks in 0.0500, and the screen previously
+  // printed the raw rate as read-only text with no way to change it at all.
+  const [vatPercent, setVatPercent] = useState("5");
   const [eInv, setEInv] = useState(false);
-  const [retentionDays, setRetentionDays] = useState(2555);
+  // Kept as text, not a number. `Number(e.target.value) || 2555` silently
+  // rewrote an empty box, or a typed "0", back to 2555 while you were still
+  // typing, so the field fought the person using it.
+  const [retentionDays, setRetentionDays] = useState("2555");
 
   // action forms
   const [rnOrderId, setRnOrderId] = useState("");
@@ -84,7 +104,8 @@ export function ComplianceScreen() {
       setLegalNameAr(t.legal_name_ar ?? "");
       setMode((t.tax_pricing_mode as "exclusive" | "inclusive") || "exclusive");
       setEInv(!!t.e_invoice_enabled);
-      setRetentionDays(t.data_retention_days ?? 2555);
+      setVatPercent(rateToPercent(t.default_vat_rate));
+      setRetentionDays(String(t.data_retention_days ?? 2555));
       setReadiness(r);
       setRefunds(notes);
       setTxns(transmissions);
@@ -101,14 +122,33 @@ export function ComplianceScreen() {
   async function saveTax() {
     setBusy(true);
     try {
+      // The API accepts 30..3650 and returns a raw validation blob outside it.
+      // Saying so here means the limit is explained in the form rather than
+      // discovered by pressing Save and reading a 422.
+      const days = Number(retentionDays);
+      if (!Number.isInteger(days) || days < RETENTION_MIN || days > RETENTION_MAX) {
+        toast(
+          `Data retention must be a whole number between ${RETENTION_MIN} and ${RETENTION_MAX} days (about 1 month to 10 years).`,
+          "error",
+        );
+        setBusy(false);
+        return;
+      }
+      const pct = Number(vatPercent);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        toast("VAT rate must be a percentage between 0 and 100.", "error");
+        setBusy(false);
+        return;
+      }
       const updated = await patchTaxSettings({
         trn: trn.trim() || null,
         legal_name: legalName.trim() || null,
         legal_name_ar: legalNameAr.trim() || null,
         tax_pricing_mode: mode,
+        default_vat_rate: pct / 100,
         e_invoice_enabled: eInv,
-        data_retention_days: retentionDays,
-      } as Partial<TaxSettings>);
+        data_retention_days: days,
+      });
       setTax(updated);
       toast("Tax settings saved", "success");
       await reload();
@@ -157,7 +197,7 @@ export function ComplianceScreen() {
         buyer_trn: buyerTrn.trim() || undefined,
         document_type: buyerTrn.trim() ? "tax_invoice" : undefined,
       });
-      toast(`E-invoice ${row.status}${row.external_id ? ` · ${row.external_id}` : ""}`, "success");
+      toast(`E-invoice ${row.status}${row.external_id ? `, ref ${row.external_id}` : ""}`, "success");
       await reload();
     } catch (e) {
       toast(e instanceof Error ? e.message : "Transmit failed", "error");
@@ -169,7 +209,7 @@ export function ComplianceScreen() {
   async function onRetention(dryRun: boolean) {
     setBusy(true);
     try {
-      const run = await runRetention({ dry_run: dryRun, retention_days: retentionDays });
+      const run = await runRetention({ dry_run: dryRun, retention_days: Number(retentionDays) });
       toast(
         dryRun
           ? `Retention dry-run: ${JSON.stringify(run.purged_counts)}`
@@ -190,7 +230,7 @@ export function ComplianceScreen() {
       const pack = await accountantExport(exportStart, exportEnd, format);
       const sum = pack.summary;
       setExportSummary(
-        `${sum.order_count} orders · net AED ${sum.net_total_aed} · VAT AED ${sum.vat_total_aed} · gross AED ${sum.gross_total_aed}`,
+        `${sum.order_count} orders, net AED ${sum.net_total_aed}, VAT AED ${sum.vat_total_aed}, gross AED ${sum.gross_total_aed}`,
       );
       if (format === "csv" && pack.csv) {
         const blob = new Blob([pack.csv], { type: "text/csv" });
@@ -213,13 +253,13 @@ export function ComplianceScreen() {
     <div className={s.page}>
       <PageHeader
         title="Compliance (UAE)"
-        subtitle="VAT invoices · TRN · e-invoicing ASP · refund notes · retention · accountant export"
+        subtitle="VAT settings, tax invoices, credit notes, retention and the accountant export"
       />
 
       <div className={s.healthGrid}>
         <div className={`${s.healthCard} ${readiness?.ready ? s.healthOk : s.healthWarn}`}>
           <span>E-invoice ready</span>
-          <strong>{readiness ? (readiness.ready ? "Yes" : "No") : "—"}</strong>
+          <strong>{readiness ? (readiness.ready ? "Yes" : "No") : "unknown"}</strong>
         </div>
         <div className={s.healthCard}>
           <span>E-invoicing</span>
@@ -260,7 +300,7 @@ export function ComplianceScreen() {
 
       {tab === "tax" && (
       <section className={s.card}>
-        <h3 className={s.cardTitle}>Tax settings · branch TRN</h3>
+        <h3 className={s.cardTitle}>Tax settings and branch TRN</h3>
         <div className={s.row2}>
           <label className={s.col}>
             <span className={s.rowName}>TRN</span>
@@ -276,6 +316,23 @@ export function ComplianceScreen() {
               <option value="exclusive">Tax exclusive (VAT on top)</option>
               <option value="inclusive">Tax inclusive (VAT extracted)</option>
             </select>
+          </label>
+          <label className={s.col}>
+            <span className={s.rowName}>VAT rate (%)</span>
+            <input
+              className={s.input}
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={vatPercent}
+              onChange={(e) => setVatPercent(e.target.value)}
+            />
+            <span className={s.fieldHint}>
+              The UAE standard rate is 5. Use 0 only for genuinely zero-rated
+              items. This applies to every order confirmed from now on; orders
+              already confirmed keep the rate they were charged at.
+            </span>
           </label>
           <label className={s.col}>
             <span className={s.rowName}>Legal name (EN)</span>
@@ -295,24 +352,29 @@ export function ComplianceScreen() {
             <input
               className={s.input}
               type="number"
-              min={30}
+              min={RETENTION_MIN}
+              max={RETENTION_MAX}
               value={retentionDays}
-              onChange={(e) => setRetentionDays(Number(e.target.value) || 2555)}
+              onChange={(e) => setRetentionDays(e.target.value)}
             />
+            <span className={s.fieldHint}>
+              Between {RETENTION_MIN} and {RETENTION_MAX} days. 2555 is seven years,
+              which is what UAE tax record keeping expects.
+            </span>
           </label>
-          <label className={s.col}>
-            <span className={s.rowName}>E-invoicing enabled</span>
+          <label className={s.checkRow}>
             <input type="checkbox" checked={eInv} onChange={(e) => setEInv(e.target.checked)} />
+            <span className={s.rowName}>E-invoicing enabled</span>
           </label>
         </div>
         {tax && (
           <p className={s.rowHint}>
-            Default VAT {tax.default_vat_rate} · simplified threshold AED{" "}
-            {tax.simplified_invoice_threshold_aed} · ASP {tax.asp_provider}
+            Simplified invoice threshold AED {tax.simplified_invoice_threshold_aed},
+            e-invoicing provider {tax.asp_provider}
           </p>
         )}
         <div className={s.stickySave}>
-          <Button onClick={() => void saveTax()} disabled={busy}>
+          <Button size="md" onClick={() => void saveTax()} disabled={busy}>
             Save tax settings
           </Button>
         </div>
@@ -347,7 +409,7 @@ export function ComplianceScreen() {
           </label>
         </div>
         <div className={s.actions}>
-          <Button onClick={() => void onTransmit()} disabled={busy}>
+          <Button size="md" onClick={() => void onTransmit()} disabled={busy}>
             Transmit via Mock ASP
           </Button>
         </div>
@@ -355,8 +417,8 @@ export function ComplianceScreen() {
           <ul className={s.list}>
             {txns.slice(0, 10).map((t) => (
               <li key={t.id}>
-                #{t.id} order {t.order_id} · {t.status}
-                {t.external_id ? ` · ${t.external_id}` : ""}
+                #{t.id} order {t.order_id}, {t.status}
+                {t.external_id ? `, ref ${t.external_id}` : ""}
               </li>
             ))}
           </ul>
@@ -384,7 +446,7 @@ export function ComplianceScreen() {
           </label>
         </div>
         <div className={s.actions}>
-          <Button onClick={() => void onRefundNote()} disabled={busy}>
+          <Button size="md" onClick={() => void onRefundNote()} disabled={busy}>
             Issue refund note
           </Button>
         </div>
@@ -392,7 +454,7 @@ export function ComplianceScreen() {
           <ul className={s.list}>
             {refunds.map((n) => (
               <li key={n.id}>
-                {n.refund_note_number} · order {n.order_id} · AED {n.amount_aed}
+                {n.refund_note_number}, order {n.order_id}, AED {n.amount_aed}
               </li>
             ))}
           </ul>
@@ -410,10 +472,10 @@ export function ComplianceScreen() {
           deleted.
         </p>
         <div className={s.actions}>
-          <Button onClick={() => void onRetention(true)} disabled={busy}>
+          <Button size="md" onClick={() => void onRetention(true)} disabled={busy}>
             Dry-run purge
           </Button>
-          <Button onClick={() => void onRetention(false)} disabled={busy}>
+          <Button size="md" onClick={() => void onRetention(false)} disabled={busy}>
             Run purge
           </Button>
         </div>
@@ -421,7 +483,7 @@ export function ComplianceScreen() {
           <ul className={s.list}>
             {runs.slice(0, 5).map((r) => (
               <li key={r.id}>
-                #{r.id} {r.status} · {JSON.stringify(r.purged_counts)}
+                #{r.id} {r.status}, {JSON.stringify(r.purged_counts)}
               </li>
             ))}
           </ul>
@@ -455,10 +517,10 @@ export function ComplianceScreen() {
           </label>
         </div>
         <div className={s.actions}>
-          <Button onClick={() => void onExport("json")} disabled={busy}>
+          <Button size="md" onClick={() => void onExport("json")} disabled={busy}>
             Export JSON
           </Button>
-          <Button onClick={() => void onExport("csv")} disabled={busy}>
+          <Button size="md" onClick={() => void onExport("csv")} disabled={busy}>
             Download CSV
           </Button>
         </div>

@@ -16,10 +16,12 @@
   backdrop-filter: blur(6px);
 }
 
+/* 40px to match the md buttons. A tab strip taller than every control beneath
+   it reads as the heaviest thing on an admin page, which it is not. */
 .tab {
-  min-height: 48px;
-  padding: 10px 16px;
-  border-radius: 12px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 10px;
   border: 1px solid var(--border-default);
   background: var(--bg-surface);
   color: var(--text-secondary);
@@ -117,8 +119,10 @@
   line-height: 1.4;
 }
 
+/* base.css already floors inputs at 44px, so 48 only ever added height on top.
+   44 sits beside the 40px buttons without a visible step. */
 .input {
-  min-height: 48px;
+  min-height: 44px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
   padding: 10px 12px;
@@ -137,30 +141,70 @@
   color: var(--text-secondary);
 }
 
+/* Not sticky any more. A save bar pinned to the viewport bottom is for a long
+   form you scroll through; this card is six fields, so the bar just hovered over
+   whatever was underneath and followed you down the page. It sits at the end of
+   its own card, where a save button belongs. */
 .stickySave {
-  position: sticky;
-  bottom: 0;
-  z-index: 6;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
-  margin: 8px -18px -18px;
-  padding: 14px 18px;
-  min-height: var(--bottom-bar-height, 80px);
-  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
-  backdrop-filter: blur(8px);
-  border-top: 1px solid var(--border-default);
-  box-shadow: 0 -4px 16px rgba(16, 24, 40, 0.06);
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.stickySave :global(button),
-.actions :global(button) {
-  min-height: var(--touch-min, 56px);
-}
+/* No :global(button) min-height here. This screen used to force every button in
+   the save bar and action rows to the 56px touch minimum, which silently beat
+   the Button component's own size token, so passing size="md" changed nothing on
+   screen. Compliance is an admin surface read on a desktop, not a till operated
+   at arm's length: the button decides its own height. */
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+/* Tables and wide rows scroll inside their own box. Without this they widen the
+   card and push the page sideways, which is how a control ends up off the right
+   edge where nobody can reach it. */
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Fields were laid out edge to edge in a grid, so a 12-character TRN got the
+   same 700px as a legal name. Cap them at a readable measure. */
+.row2 {
+  max-width: 980px;
+}
+
+.col > .input {
+  max-width: 420px;
+}
+
+/* A checkbox in a stretch-aligned flex column rendered as a full-width strip
+   with its label floating above it. It is a toggle: box first, label beside. */
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.checkRow input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+/* Limits belong beside the field that has them, not in an error after Save. */
+.fieldHint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  max-width: 420px;
 }
