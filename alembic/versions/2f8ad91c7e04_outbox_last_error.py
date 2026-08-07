@@ -4,7 +4,7 @@ A row reading status='failed' with no reason is undiagnosable: the provider told
 us exactly what was wrong and we discarded it. partner_webhook_deliveries already
 carries last_error; the outbox now matches.
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 2f8ad91c7e04
 Revises: 9f4a1d8e3b62
 Create Date: 2026-08-07
 """
@@ -14,7 +14,7 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "a1b2c3d4e5f6"
+revision: str = "2f8ad91c7e04"
 down_revision: Union[str, Sequence[str], None] = "9f4a1d8e3b62"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
