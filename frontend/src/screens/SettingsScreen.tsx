@@ -3,7 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { toast } from "../components/Toaster";
 import { ApiError, apiClient } from "../lib/apiClient";
-import { disconnectMeta, fetchMetaConfig, type MetaConfig } from "../lib/onboardingApi";
+import {
+  connectSelectedCatalog,
+  disconnectMeta,
+  fetchMetaConfig,
+  fetchMyCatalogs,
+  type CatalogOption,
+  type MetaConfig,
+} from "../lib/onboardingApi";
 import { useMetaEmbeddedSignup } from "../lib/useMetaEmbeddedSignup";
 import { getStoreIdentity, pairingLink, type StoreIdentity } from "../lib/storeIdentity";
 import { writeCachedOnboardingComplete } from "../lib/onboardingGate";
@@ -264,6 +271,43 @@ export function SettingsScreen() {
   useEffect(() => {
     void loadStoreIdentity();
   }, [loadStoreIdentity]);
+
+  // WhatsApp menu catalog picker. Embedded Signup only SHARES the chosen catalog
+  // with the app — attaching it to the WABA is a separate step that can fail
+  // silently, leaving catalog_id empty and the menu pull disabled with no way to
+  // retry short of reconnecting. This is that retry.
+  // null = not loaded yet; [] = loaded but none / not connected.
+  const [catalogs, setCatalogs] = useState<CatalogOption[] | null>(null);
+  const [selectedCatalog, setSelectedCatalog] = useState("");
+  const [catalogBusy, setCatalogBusy] = useState(false);
+
+  const loadCatalogs = useCallback(async () => {
+    try {
+      const res = await fetchMyCatalogs();
+      setCatalogs(res.catalogs);
+      setSelectedCatalog(res.connected_catalog_id || res.catalogs[0]?.id || "");
+    } catch {
+      setCatalogs([]); // not self-connected (no own WABA/token) or Meta hiccup
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCatalogs();
+  }, [loadCatalogs]);
+
+  async function applyCatalog() {
+    if (!selectedCatalog) return;
+    setCatalogBusy(true);
+    try {
+      await connectSelectedCatalog(selectedCatalog);
+      toast("Catalog connected — it is now live on WhatsApp", "success");
+      await loadCatalogs();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't connect that catalog", "error");
+    } finally {
+      setCatalogBusy(false);
+    }
+  }
 
   async function onDisconnectWhatsApp() {
     setDisconnecting(true);
@@ -860,6 +904,44 @@ export function SettingsScreen() {
                 </Button>
               )}
             </div>
+            {/* Which catalog customers see on WhatsApp. Only rendered when this
+                store has its own WABA + token, since the list comes from Meta. */}
+            {catalogs !== null && catalogs.length > 0 && (
+              <div className={s.rowLabel}>
+                <span className={s.rowName}>WhatsApp menu catalog</span>
+                <span className={s.rowHint}>
+                  Pick which catalog your customers see on WhatsApp. The one you select
+                  goes live and its products are mirrored into your menu.
+                </span>
+                <div className={s.catalogRow}>
+                  <select
+                    className={s.catalogSelect}
+                    value={selectedCatalog}
+                    onChange={(e) => setSelectedCatalog(e.target.value)}
+                    disabled={catalogBusy}
+                    aria-label="WhatsApp menu catalog"
+                  >
+                    {catalogs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.connected ? " (live)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    onClick={() => void applyCatalog()}
+                    disabled={
+                      !selectedCatalog ||
+                      catalogBusy ||
+                      catalogs.find((c) => c.connected)?.id === selectedCatalog
+                    }
+                  >
+                    {catalogBusy ? "Connecting…" : "Make live"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* POS API key minted by connect — shown ONCE and never retrievable,
                 so it gets its own row rather than a toast that can vanish. */}
             {meta.apiKey && (

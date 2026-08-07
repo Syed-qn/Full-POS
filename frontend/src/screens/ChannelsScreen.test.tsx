@@ -48,7 +48,7 @@ const mockChannels = {
       mode: "mock",
     },
   },
-  providers: ["talabat", "deliveroo", "careem", "ubereats", "noon", "zomato", "keeta"],
+  providers: ["talabat", "deliveroo", "careem", "ubereats", "noon", "keeta"],
   public_slug: "demo-cafe",
   tenant_scope: "Credentials are stored per restaurant only and never shared across tenants.",
   order_links: {
@@ -115,23 +115,19 @@ describe("ChannelsScreen", () => {
     });
   });
 
-  it("renders channels, inbox, and reports", async () => {
+  it("renders the channel setup surface", async () => {
     render(<ChannelsScreen />);
     await waitFor(() => {
       expect(screen.getByText("Channels & Aggregators")).toBeInTheDocument();
     });
     expect(await screen.findByTestId("channel-talabat")).toBeInTheDocument();
     expect(screen.getByText("Sync menu")).toBeInTheDocument();
-    expect(screen.getByText("TB-1")).toBeInTheDocument();
-    expect(screen.getByText("Commission report")).toBeInTheDocument();
-    expect(screen.getByText("Profitability by channel")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Marketplaces" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Public slug" })).toBeInTheDocument();
   });
 
-  it("shows multi-tenant credential banner and tenant webhook URL", async () => {
+  it("shows the per-restaurant credential form and tenant webhook URL", async () => {
     render(<ChannelsScreen />);
-    expect(await screen.findByTestId("tenant-credentials-banner")).toHaveTextContent(
-      /per restaurant only/i,
-    );
     expect(await screen.findByTestId("integration-talabat")).toBeInTheDocument();
     expect(screen.getByTestId("credential-hint-talabat")).toHaveTextContent(/DH username/i);
     expect(screen.getByTestId("webhook-url-talabat")).toHaveTextContent(

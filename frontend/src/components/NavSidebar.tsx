@@ -55,6 +55,11 @@ const LIVE_ROUTES = new Set<string>([
   // E-invoice transmission is the one unfinished part and says so itself, via a
   // readiness endpoint that names the missing ASP provider and key.
   "/compliance",
+  // Marketplace credentials, commission, channel inbox, reconciliation and the
+  // per-tenant webhook URL each partner portal needs (owner/manager). The screen
+  // (ChannelsScreen) and its API were both already live — this row read "Soon"
+  // only because the nav pointed at /aggregators, a path nothing served.
+  "/channels",
 ]);
 
 /** Spec main navigation order: daily ops first, then the WhatsApp channel,
@@ -119,6 +124,9 @@ const GROUPS: NavGroup[] = [
     label: "More",
     items: [
       { to: "/payments", label: "Payments", icon: "¤" },
+      // Talabat / Careem / Noon / Deliveroo intake: credentials, commission,
+      // pause-a-channel and the webhook URL to paste into each partner portal.
+      { to: "/channels", label: "Aggregators", icon: "⇄" },
       { to: "/compliance", label: "Compliance", icon: "§" },
       { to: "/analytics", label: "Analytics", icon: "▴" },
       { to: "/forecast", label: "Forecast", icon: "◈" },

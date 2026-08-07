@@ -88,6 +88,78 @@ from app.catalog.tenant_scope import (
 )
 
 
+_CATALOG_ID_REFRESH_TTL_S = 900
+
+
+async def reconcile_catalog_id(session: AsyncSession, *, restaurant_id: int) -> bool:
+    """Self-heal a stale or missing ``catalog_id`` by re-reading what Meta has attached.
+
+    Two cases this covers, both seen in prod:
+      * Embedded Signup linked a catalog but our post-connect attach never stored the id
+        (La Cafe, Aug 2026 — catalog_id sat empty while a catalog WAS attached).
+      * A manager swapped the catalog in Commerce Manager. Meta doesn't tell us, so the
+        stored id goes stale and the native catalogue message starts failing.
+
+    On a TTL we re-fetch the WABA's currently-attached catalog; when it differs we adopt
+    it, re-enable commerce settings, and re-sync the product mirror so the cards are
+    sendable. Returns True when ``catalog_id`` changed. Fully best-effort — any Meta
+    hiccup leaves the current id untouched and never blocks a send. Caller commits.
+    """
+    import time as _time
+
+    from app.identity.models import Restaurant
+
+    rest = await session.get(Restaurant, restaurant_id)
+    if rest is None:
+        return False
+    settings = dict(rest.settings or {})
+    waba_id = (settings.get("wa_business_account_id") or "").strip()
+    token = (settings.get("wa_access_token") or "").strip()
+    if not (waba_id and token):
+        return False  # not self-onboarded (no own WABA/token) → nothing to reconcile
+
+    now = _time.time()
+    last = float(settings.get("catalog_id_checked_at") or 0)
+    if now - last < _CATALOG_ID_REFRESH_TTL_S:
+        return False  # checked recently — don't hammer Meta on every menu send
+
+    from app.identity.meta_embed import fetch_waba_catalog_id
+
+    attached = await fetch_waba_catalog_id(waba_id, token)  # '' on any error, never raises
+    current = (settings.get("catalog_id") or "").strip()
+    settings["catalog_id_checked_at"] = now
+    changed = bool(attached) and attached != current
+    if changed:
+        settings["catalog_id"] = attached
+        logger.info(
+            "reconcile_catalog_id: restaurant %s catalog changed %s -> %s",
+            restaurant_id, current or "(none)", attached,
+        )
+    rest.settings = settings  # reassign so SQLAlchemy tracks the JSON change
+
+    if changed:
+        # Make the new catalog usable + mirror its products so cards can actually send.
+        phone_id = (settings.get("wa_phone_number_id") or "").strip()
+        try:
+            if phone_id:
+                from app.identity.meta_embed import enable_commerce_settings
+
+                await enable_commerce_settings(phone_id, token)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "reconcile_catalog_id enable_commerce failed rid=%s: %s", restaurant_id, exc
+            )
+        try:
+            from app.catalog.sync_service import sync_catalog_from_meta
+
+            await sync_catalog_from_meta(session, restaurant_id=restaurant_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "reconcile_catalog_id resync failed rid=%s: %s", restaurant_id, exc
+            )
+    return changed
+
+
 async def send_catalog(
     session: AsyncSession,
     *,
@@ -106,6 +178,10 @@ async def send_catalog(
     """
     from app.catalog.sync_service import refresh_pending_catalog_sendability
 
+    # Adopt whatever catalog Meta actually has attached before concluding there is
+    # none — otherwise a connect that failed to store the id strands the store on
+    # the text menu forever.
+    await reconcile_catalog_id(session, restaurant_id=restaurant_id)
     await refresh_pending_catalog_sendability(session, restaurant_id=restaurant_id)
     catalog_id, synced = await _load_tenant_catalog_mirror(session, restaurant_id)
     if not catalog_id:

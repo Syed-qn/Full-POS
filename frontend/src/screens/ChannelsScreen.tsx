@@ -3,13 +3,8 @@ import { Button } from "../components/Button";
 import { PageHeader } from "../components/PageHeader";
 import { toast } from "../components/Toaster";
 import {
-  createSettlement,
   ensurePublicSlug,
-  fetchChannelInbox,
   fetchChannels,
-  fetchCommissionReport,
-  fetchProfitReport,
-  fetchReconciliation,
   pauseChannel,
   providerLiveHealth,
   resumeChannel,
@@ -18,11 +13,31 @@ import {
   syncStock,
   updateChannels,
   type ChannelsOut,
-  type CommissionRow,
-  type InboxOrder,
-  type ProfitRow,
 } from "../lib/channelsApi";
 import { useManagerPinGate } from "../lib/requireManagerPin";
+
+/** Operator-facing names. The API keys are snake_case identifiers; showing them
+ *  raw gave the UI titles like "google business" and "call center". */
+const CHANNEL_LABELS: Record<string, string> = {
+  talabat: "Talabat",
+  deliveroo: "Deliveroo",
+  careem: "Careem",
+  ubereats: "Uber Eats",
+  noon: "Noon Food",
+  keeta: "Keeta",
+  whatsapp: "WhatsApp",
+  website: "Website",
+  mobile_app: "Mobile app",
+  instagram: "Instagram",
+  google_business: "Google Business",
+  qr: "QR menu",
+  kiosk: "Kiosk",
+  call_center: "Call centre",
+};
+
+function labelFor(key: string): string {
+  return CHANNEL_LABELS[key] ?? key.replace(/_/g, " ");
+}
 
 const AGGREGATOR_KEYS = new Set([
   "talabat",
@@ -30,62 +45,29 @@ const AGGREGATOR_KEYS = new Set([
   "careem",
   "ubereats",
   "noon",
-  "zomato",
   "keeta",
 ]);
 import s from "./ChannelsScreen.module.css";
 
-function todayYMD() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
-
-function daysAgoYMD(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
-
 export function ChannelsScreen() {
   const [data, setData] = useState<ChannelsOut | null>(null);
-  const [inbox, setInbox] = useState<InboxOrder[]>([]);
-  const [commission, setCommission] = useState<CommissionRow[]>([]);
   const { requestPin, pinGate, pinBusy } = useManagerPinGate();
-  const [profit, setProfit] = useState<ProfitRow[]>([]);
-  const [recon, setRecon] = useState<
-    Record<string, { order_count: number; revenue_aed: string; commission_aed: string; net_aed: string }>
-  >({});
-  const [channelFilter, setChannelFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [startDate, setStartDate] = useState(daysAgoYMD(7));
-  const [endDate, setEndDate] = useState(todayYMD());
   const [slugInput, setSlugInput] = useState("");
-  const [settProvider, setSettProvider] = useState("talabat");
-  const [settOrders, setSettOrders] = useState("0");
-  const [settGross, setSettGross] = useState("0");
-  const [settComm, setSettComm] = useState("0");
 
   const reload = useCallback(async () => {
     setError(null);
     try {
-      const [ch, ib, comm, prof, rc] = await Promise.all([
-        fetchChannels(),
-        fetchChannelInbox(channelFilter || undefined),
-        fetchCommissionReport(startDate, endDate),
-        fetchProfitReport(startDate, endDate),
-        fetchReconciliation(startDate, endDate),
-      ]);
+      // Commission and profitability moved to Reports — this screen is channel
+      // setup, so it no longer pays for those two round trips on every load.
+      const ch = await fetchChannels();
       setData(ch);
-      setInbox(ib.orders ?? []);
-      setCommission(comm.rows ?? []);
-      setProfit(prof.rows ?? []);
-      setRecon(rc ?? {});
       if (ch.public_slug) setSlugInput(ch.public_slug);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load channels");
     }
-  }, [channelFilter, startDate, endDate]);
+  }, []);
 
   useEffect(() => {
     void reload();
@@ -96,9 +78,10 @@ export function ChannelsScreen() {
     return Object.entries(data.channels).sort(([a], [b]) => a.localeCompare(b));
   }, [data]);
 
-  const acceptingCount = channelEntries.filter(([, c]) => c.enabled && c.accepting).length;
-  const enabledCount = channelEntries.filter(([, c]) => c.enabled).length;
-  const inboxOpen = inbox.filter((o) => !["delivered", "cancelled"].includes(o.status)).length;
+  const marketEntries = useMemo(
+    () => channelEntries.filter(([k]) => AGGREGATOR_KEYS.has(k)),
+    [channelEntries],
+  );
 
   function onPause(key: string) {
     requestPin({
@@ -256,25 +239,6 @@ export function ChannelsScreen() {
     }
   }
 
-  async function onRecordSettlement() {
-    setBusy(true);
-    try {
-      await createSettlement({
-        provider: settProvider,
-        period_start: startDate,
-        period_end: endDate,
-        order_count: Number(settOrders) || 0,
-        gross_revenue_aed: settGross || "0",
-        commission_aed: settComm || "0",
-      });
-      toast("Settlement recorded");
-      await reload();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Settlement failed", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className={s.screen}>
@@ -284,39 +248,6 @@ export function ChannelsScreen() {
       />
 
       {error && <p className={s.error}>{error}</p>}
-
-      <div className={s.tenantBanner} data-testid="tenant-credentials-banner" role="note">
-        <strong>Your restaurant only.</strong>{" "}
-        {data?.tenant_scope ??
-          "API keys, secrets, and store IDs are saved on this tenant and never shared with other restaurants."}{" "}
-        Switch mode to <em>Live</em>, paste partner credentials, copy the webhook URL into the partner portal, then
-        Test connectivity.
-        {!data?.public_slug && (
-          <>
-            {" "}
-            Set a <strong>public slug</strong> below so partners get a stable webhook URL.
-          </>
-        )}
-      </div>
-
-      <div className={s.metrics}>
-        <div className={s.metric}>
-          <span className={s.metricLabel}>Enabled channels</span>
-          <strong>{enabledCount}</strong>
-        </div>
-        <div className={s.metric}>
-          <span className={s.metricLabel}>Accepting now</span>
-          <strong>{acceptingCount}</strong>
-        </div>
-        <div className={s.metric}>
-          <span className={s.metricLabel}>Inbox (open)</span>
-          <strong>{inboxOpen}</strong>
-        </div>
-        <div className={s.metric}>
-          <span className={s.metricLabel}>Providers</span>
-          <strong>{data?.providers?.length ?? 0}</strong>
-        </div>
-      </div>
 
       <div className={s.actions}>
         <Button disabled={busy} onClick={() => void onSync("menu")}>
@@ -335,8 +266,8 @@ export function ChannelsScreen() {
 
       <section className={s.card}>
         <div className={s.cardHead}>
-          <h2>Public storefront & social order links</h2>
-          <span>Website, mobile app, Instagram, Google Business, kiosk share the same slug</span>
+          <h2>Public slug</h2>
+          <span>Partner webhook URLs are built from this, so it must be set before a marketplace can call you.</span>
         </div>
         <div className={s.row}>
           <label>
@@ -347,30 +278,18 @@ export function ChannelsScreen() {
             Save slug / generate links
           </Button>
         </div>
-        {data?.order_links && (
-          <div className={s.grid}>
-            {Object.entries(data.order_links)
-              .filter(([k]) => k !== "slug")
-              .map(([k, url]) => (
-                <div key={k} className={s.channelCard}>
-                  <div className={s.channelName}>{k.replace("_", " ")}</div>
-                  <div className={s.link}>{url || "— set slug first —"}</div>
-                </div>
-              ))}
-          </div>
-        )}
       </section>
 
       <section className={s.card}>
         <div className={s.cardHead}>
-          <h2>All channels</h2>
-          <span>Enable, pause, and set commission % (Talabat / Deliveroo / Careem / Uber / Noon / Zomato + direct)</span>
+          <h2>Marketplaces</h2>
+          <span>Talabat, Careem, Noon, Deliveroo and Keeta — credentials, commission and the webhook URL for each partner portal.</span>
         </div>
-        <div className={s.grid}>
-          {channelEntries.map(([key, cfg]) => (
+        <div className={s.marketGrid}>
+          {marketEntries.map(([key, cfg]) => (
             <div key={key} className={s.channelCard} data-testid={`channel-${key}`}>
               <div className={s.channelTop}>
-                <span className={s.channelName}>{key.replace(/_/g, " ")}</span>
+                <span className={s.channelName}>{labelFor(key)}</span>
                 <div className={s.badges}>
                   <span className={`${s.badge} ${cfg.enabled ? s.badgeOn : s.badgeOff}`}>
                     {cfg.enabled ? "enabled" : "off"}
@@ -423,9 +342,8 @@ export function ChannelsScreen() {
                 <div
                   className={s.integrationPanel}
                   data-testid={`integration-${key}`}
-                  style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}
                 >
-                  <div className={s.integrationTitle}>Connect {key} (this restaurant)</div>
+                  <div className={s.integrationTitle}>Connect {labelFor(key)}</div>
                   {cfg.credential_hint && (
                     <p className={s.hint} data-testid={`credential-hint-${key}`}>
                       {cfg.credential_hint}
@@ -580,194 +498,6 @@ export function ChannelsScreen() {
               )}
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className={s.card}>
-        <div className={s.cardHead}>
-          <h2>Centralized order inbox</h2>
-          <span>Filter by channel badge (aggregator + direct)</span>
-        </div>
-        <div className={s.row}>
-          <label>
-            Channel filter
-            <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
-              <option value="">All</option>
-              {channelEntries.map(([k]) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            From
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </label>
-          <label>
-            To
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </label>
-        </div>
-        <table className={s.table}>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Channel</th>
-              <th>Status</th>
-              <th>Total</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inbox.map((o) => (
-              <tr key={o.id}>
-                <td>{o.order_number}</td>
-                <td>
-                  <span className={s.badge}>{o.source_channel}</span>
-                </td>
-                <td>{o.status}</td>
-                <td>{o.total_aed}</td>
-                <td>{o.created_at ? o.created_at.slice(0, 16) : "—"}</td>
-              </tr>
-            ))}
-            {inbox.length === 0 && (
-              <tr>
-                <td colSpan={5}>No orders for this filter</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      <section className={s.card}>
-        <div className={s.cardHead}>
-          <h2>Commission report</h2>
-          <span>Channel-wise fees for the selected range</span>
-        </div>
-        <table className={s.table}>
-          <thead>
-            <tr>
-              <th>Channel</th>
-              <th>Orders</th>
-              <th>Gross</th>
-              <th>Comm %</th>
-              <th>Commission</th>
-              <th>Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            {commission.map((r) => (
-              <tr key={r.channel}>
-                <td>{r.channel}</td>
-                <td>{r.order_count}</td>
-                <td>{r.gross_revenue_aed}</td>
-                <td>{r.commission_pct}</td>
-                <td>{r.commission_aed}</td>
-                <td>{r.net_revenue_aed}</td>
-              </tr>
-            ))}
-            {commission.length === 0 && (
-              <tr>
-                <td colSpan={6}>No commission data</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      <section className={s.card}>
-        <div className={s.cardHead}>
-          <h2>Profitability by channel</h2>
-          <span>Net after commission − estimated food cost (30%)</span>
-        </div>
-        <table className={s.table}>
-          <thead>
-            <tr>
-              <th>Channel</th>
-              <th>Gross</th>
-              <th>Commission</th>
-              <th>Food cost</th>
-              <th>Est. profit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {profit.map((r) => (
-              <tr key={r.channel}>
-                <td>{r.channel}</td>
-                <td>{r.gross_revenue_aed}</td>
-                <td>{r.commission_aed}</td>
-                <td>{r.estimated_food_cost_aed}</td>
-                <td>{r.estimated_profit_aed}</td>
-              </tr>
-            ))}
-            {profit.length === 0 && (
-              <tr>
-                <td colSpan={5}>No profit data</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      <section className={s.card}>
-        <div className={s.cardHead}>
-          <h2>Aggregator reconciliation</h2>
-          <span>Internal marketplace totals + settlement import</span>
-        </div>
-        <table className={s.table}>
-          <thead>
-            <tr>
-              <th>Provider</th>
-              <th>Orders</th>
-              <th>Revenue</th>
-              <th>Commission</th>
-              <th>Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(recon).map(([p, v]) => (
-              <tr key={p}>
-                <td>{p}</td>
-                <td>{v.order_count}</td>
-                <td>{v.revenue_aed}</td>
-                <td>{v.commission_aed}</td>
-                <td>{v.net_aed}</td>
-              </tr>
-            ))}
-            {Object.keys(recon).length === 0 && (
-              <tr>
-                <td colSpan={5}>No aggregator orders in range</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <div className={s.row}>
-          <label>
-            Provider
-            <select value={settProvider} onChange={(e) => setSettProvider(e.target.value)}>
-              {(data?.providers ?? ["talabat"]).map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Orders
-            <input value={settOrders} onChange={(e) => setSettOrders(e.target.value)} />
-          </label>
-          <label>
-            Gross AED
-            <input value={settGross} onChange={(e) => setSettGross(e.target.value)} />
-          </label>
-          <label>
-            Commission AED
-            <input value={settComm} onChange={(e) => setSettComm(e.target.value)} />
-          </label>
-          <Button disabled={busy} onClick={() => void onRecordSettlement()}>
-            Record settlement
-          </Button>
         </div>
       </section>
 

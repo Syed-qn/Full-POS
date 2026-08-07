@@ -79,3 +79,25 @@ export interface MetaConnectPayload {
 export async function connectMetaEmbedded(payload: MetaConnectPayload): Promise<MetaConfig> {
   return apiClient.post<MetaConfig>("/api/v1/onboarding/meta-connect", payload);
 }
+export interface CatalogOption {
+  id: string;
+  name: string;
+  connected: boolean;
+}
+
+export interface CatalogChoices {
+  catalogs: CatalogOption[];
+  connected_catalog_id: string;
+}
+
+/** Catalogs this restaurant's Meta business owns, flagging the live one. */
+export async function fetchMyCatalogs(): Promise<CatalogChoices> {
+  return apiClient.get<CatalogChoices>("/api/v1/onboarding/catalogs");
+}
+
+/** Make the chosen catalog the one connected to WhatsApp — what you pick goes live. */
+export async function connectSelectedCatalog(catalogId: string): Promise<MetaConfig> {
+  return apiClient.post<MetaConfig>("/api/v1/onboarding/catalog/connect", {
+    catalog_id: catalogId,
+  });
+}

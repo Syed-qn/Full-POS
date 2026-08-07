@@ -14,6 +14,9 @@ from app.identity.auth import (
 from app.staff.deps import current_restaurant_any, require_role
 from app.identity.models import Restaurant
 from app.identity.schemas import (
+    CatalogChoicesOut,
+    CatalogConnectIn,
+    CatalogOptionOut,
     LoginIn,
     MetaConfigIn,
     MetaConfigOut,
@@ -250,6 +253,95 @@ async def meta_resubscribe(
             "Meta did not accept the webhook re-subscribe — try again or disconnect "
             "and reconnect.",
         )
+    return _meta_config_out(restaurant)
+
+
+@router.get("/onboarding/catalogs", response_model=CatalogChoicesOut)
+async def list_my_catalogs(
+    restaurant: Restaurant = Depends(require_role("manager")),
+):
+    """List the catalogs this restaurant's Meta business owns, flagging the one currently
+    connected to WhatsApp — so Settings can offer a 'which catalog?' picker.
+
+    The manager creates catalogs in Commerce Manager (Meta forbids apps from creating
+    them); here we only read them and mark which is live. Requires the store's own WABA +
+    token (Embedded Signup); returns empty otherwise.
+    """
+    from app.identity.meta_config import meta_settings
+    from app.identity.meta_embed import (
+        fetch_waba_catalog_id,
+        fetch_waba_owner_business,
+        list_owned_catalogs,
+    )
+
+    cfg = meta_settings(restaurant)
+    waba, token = cfg["wa_business_account_id"], cfg["wa_access_token"]
+    if not (waba and token):
+        return CatalogChoicesOut(catalogs=[], connected_catalog_id="")
+
+    connected = await fetch_waba_catalog_id(waba, token)
+    business_id = await fetch_waba_owner_business(waba, token)
+    owned = await list_owned_catalogs(business_id, token) if business_id else []
+    # Ensure the connected one always appears even if the owned list missed it.
+    if connected and not any(c["id"] == connected for c in owned):
+        owned.insert(0, {"id": connected, "name": "Connected catalog"})
+    return CatalogChoicesOut(
+        catalogs=[
+            CatalogOptionOut(id=c["id"], name=c["name"] or c["id"], connected=(c["id"] == connected))
+            for c in owned
+        ],
+        connected_catalog_id=connected or (cfg["catalog_id"] or ""),
+    )
+
+
+@router.post("/onboarding/catalog/connect", response_model=MetaConfigOut)
+async def connect_selected_catalog(
+    body: CatalogConnectIn,
+    restaurant: Restaurant = Depends(require_role("manager")),
+    session: AsyncSession = Depends(get_session),
+):
+    """Make the chosen catalog THE one connected to WhatsApp — what you select is what
+    goes live. Links it to the WABA (replacing whatever was connected), stores the id,
+    re-enables cart/catalog commerce, and syncs its products into the local mirror.
+
+    This exists because ``ensure_waba_catalog`` only runs during Embedded Signup: when
+    that attach failed, there was previously no way to link a catalog short of redoing
+    the whole connect.
+    """
+    from app.identity.meta_config import apply_meta_settings, meta_settings
+    from app.identity.meta_embed import enable_commerce_settings, switch_waba_catalog
+
+    cfg = meta_settings(restaurant)
+    waba, token, pid = (
+        cfg["wa_business_account_id"], cfg["wa_access_token"], cfg["wa_phone_number_id"],
+    )
+    if not (waba and token):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Connect WhatsApp (Meta) first, then choose a catalog.",
+        )
+    catalog_id = body.catalog_id.strip()
+    # Meta allows one catalog per WABA, so switch = unlink current + link new (with
+    # rollback if the new link fails). Never leaves the store without a catalog.
+    linked = await switch_waba_catalog(waba, catalog_id, token)
+    if not linked:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Meta didn't accept switching to that catalog. Make sure it belongs to the "
+            "same business and try again.",
+        )
+    # Adopt it: store the id, re-enable commerce so 'View catalog' can send, mirror items.
+    apply_meta_settings(restaurant, {"catalog_id": catalog_id})
+    if pid:
+        await enable_commerce_settings(pid, token)
+    try:
+        from app.catalog.sync_service import sync_catalog_from_meta
+
+        await sync_catalog_from_meta(session, restaurant_id=restaurant.id)
+    except Exception as exc:  # noqa: BLE001 — linking succeeded; a sync hiccup isn't fatal
+        _logger.warning("connect_selected_catalog sync failed rid=%s: %s", restaurant.id, exc)
+    await session.commit()
+    await session.refresh(restaurant)
     return _meta_config_out(restaurant)
 
 

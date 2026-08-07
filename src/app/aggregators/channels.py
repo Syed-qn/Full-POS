@@ -19,7 +19,6 @@ CHANNEL_KEYS = (
     "careem",
     "ubereats",
     "noon",
-    "zomato",
     "keeta",
     "website",
     "mobile_app",
@@ -32,7 +31,7 @@ CHANNEL_KEYS = (
 
 # Aggregator subset that use AggregatorPort.
 AGGREGATOR_CHANNELS = frozenset(
-    {"talabat", "deliveroo", "careem", "ubereats", "noon", "zomato", "keeta"}
+    {"talabat", "deliveroo", "careem", "ubereats", "noon", "keeta"}
 )
 
 # Operator-facing credential field guidance (dashboard).
@@ -43,7 +42,6 @@ CREDENTIAL_HINTS: dict[str, str] = {
     "keeta": "appId → API key, appSecret → API secret, accessToken → Access token, shopId → Store ID",
     "careem": "Middleware API key/secret + Store/channel-link ID; Base URL = middleware host",
     "noon": "Middleware API key/secret + Store/channel-link ID; Base URL = middleware host",
-    "zomato": "Partner API key/secret + outlet Store ID (generic live HTTP until brand mapper)",
 }
 
 _DEFAULT_CHANNEL = {
@@ -68,7 +66,6 @@ _DEFAULTS: dict[str, dict] = {
     "careem": {**_DEFAULT_CHANNEL, "commission_pct": 25.0},
     "ubereats": {**_DEFAULT_CHANNEL, "commission_pct": 30.0},
     "noon": {**_DEFAULT_CHANNEL, "commission_pct": 25.0},
-    "zomato": {**_DEFAULT_CHANNEL, "commission_pct": 20.0},
     "keeta": {**_DEFAULT_CHANNEL, "commission_pct": 25.0},
     "website": {**_DEFAULT_CHANNEL, "enabled": True, "accepting": True},
     "mobile_app": {**_DEFAULT_CHANNEL, "enabled": True, "accepting": True},

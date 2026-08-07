@@ -90,6 +90,27 @@ class MetaConfigOut(BaseModel):
     api_key: str | None = None
 
 
+class CatalogOptionOut(BaseModel):
+    """One catalog the manager owns — for the Settings 'which catalog?' picker."""
+
+    id: str
+    name: str
+    connected: bool = False  # True for the one currently linked to the WhatsApp number
+
+
+class CatalogChoicesOut(BaseModel):
+    """The manager's catalogs + which one is live, so the UI can pre-select it."""
+
+    catalogs: list[CatalogOptionOut]
+    connected_catalog_id: str
+
+
+class CatalogConnectIn(BaseModel):
+    """Settings picker → make THIS catalog the one connected to WhatsApp."""
+
+    catalog_id: str = Field(min_length=1, max_length=64)
+
+
 class MetaEmbedConfigOut(BaseModel):
     """Public-to-the-manager config the frontend needs to launch the ES popup."""
 

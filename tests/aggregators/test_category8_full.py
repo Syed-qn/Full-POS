@@ -7,12 +7,15 @@ import pytest
 
 
 @pytest.mark.anyio
-async def test_supported_providers_include_noon_zomato():
+async def test_supported_providers_include_uae_marketplaces():
     from app.aggregators.factory import supported_providers
 
     providers = supported_providers()
-    for p in ("talabat", "deliveroo", "careem", "ubereats", "noon", "zomato"):
+    for p in ("talabat", "deliveroo", "careem", "ubereats", "noon", "keeta"):
         assert p in providers
+    # Zomato exited the UAE (Middle East business sold to Delivery Hero), so it
+    # is no longer offered as a channel.
+    assert "zomato" not in providers
 
 
 @pytest.mark.anyio
@@ -337,10 +340,10 @@ async def test_settlement_and_api_channels(client, auth_headers, restaurant):
 
 
 @pytest.mark.anyio
-async def test_noon_zomato_webhooks(client, auth_headers):
+async def test_noon_keeta_webhooks(client, auth_headers):
     key_resp = await client.post(
         "/api/v1/api-keys",
-        json={"label": "Noon Zomato"},
+        json={"label": "Noon Keeta"},
         headers=auth_headers,
     )
     api_key = key_resp.json()["api_key"]
@@ -351,13 +354,13 @@ async def test_noon_zomato_webhooks(client, auth_headers):
         json={
             "channels": {
                 "noon": {"enabled": True, "accepting": True},
-                "zomato": {"enabled": True, "accepting": True},
+                "keeta": {"enabled": True, "accepting": True},
             }
         },
         headers=auth_headers,
     )
 
-    for provider, oid in (("noon", "NN-1"), ("zomato", "ZM-1")):
+    for provider, oid in (("noon", "NN-1"), ("keeta", "KT-1")):
         resp = await client.post(
             f"/api/v1/aggregators/{provider}/webhook",
             json={

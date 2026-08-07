@@ -123,11 +123,15 @@ async def unsubscribe_app_from_waba(waba_id: str, access_token: str) -> bool:
         return False
 
 
-async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
-    """Return the Commerce catalog connected to the WABA, or '' if none/error.
+async def read_waba_catalog_id(waba_id: str, access_token: str) -> str | None:
+    """The catalog attached to the WABA: an id, '' for confirmed-none, None if we
+    could not tell.
 
-    Best-effort: a store that hasn't linked a catalog yet just yields '' and the
-    manager sets it manually later — never raises.
+    The three-way answer matters. ``fetch_waba_catalog_id`` collapses a failed read
+    into '', which is indistinguishable from "nothing is attached" — and callers that
+    act on that difference will do the wrong thing (prod, La Cafe Aug 2026: a timed-out
+    read looked like an empty WABA, so the switch skipped the unlink and Meta refused
+    the link with 2388027 "maximum one product catalogue").
     """
     if not waba_id:
         return ""
@@ -139,17 +143,63 @@ async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
             )
         if resp.status_code != 200:
             logger.warning(
-                "fetch_waba_catalog_id non-200 waba=%s http=%s body=%s",
+                "read_waba_catalog_id non-200 waba=%s http=%s body=%s",
                 waba_id, resp.status_code, resp.text[:300],
             )
-            return ""
+            return None
         data = (resp.json() or {}).get("data") or []
         if isinstance(data, list) and data:
             return str(data[0].get("id") or "").strip()
+        # The edge listed nothing. That is NOT proof of an empty WABA: prod (La Cafe,
+        # Aug 2026) had this edge return [] while POST refused with 2388027 "maximum
+        # one product catalogue". Ask the node itself as a second opinion.
+        return await _read_catalog_via_node(waba_id, access_token)
+    except httpx.HTTPError as exc:
+        logger.warning("read_waba_catalog_id request failed waba=%s: %s", waba_id, exc)
+        return None
+
+
+async def _read_catalog_via_node(waba_id: str, access_token: str) -> str | None:
+    """Second opinion: GET /{waba_id}?fields=product_catalogs.
+
+    Some WABAs enumerate nothing on the /product_catalogs edge yet still report a
+    linked catalog on the node's field expansion. Returns an id, '' for a confirmed
+    empty node, or None when the call itself fails.
+    """
+    url = f"{_graph_base()}/{waba_id}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                url,
+                params={"fields": "product_catalogs{id,name}"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code != 200:
+            logger.warning(
+                "_read_catalog_via_node non-200 waba=%s http=%s body=%s",
+                waba_id, resp.status_code, resp.text[:300],
+            )
+            return None
+        body = resp.json() or {}
+        data = ((body.get("product_catalogs") or {}).get("data")) or []
+        if isinstance(data, list) and data:
+            cid = str(data[0].get("id") or "").strip()
+            logger.info("_read_catalog_via_node found %s on waba=%s", cid, waba_id)
+            return cid
         return ""
     except httpx.HTTPError as exc:
-        logger.warning("fetch_waba_catalog_id request failed waba=%s: %s", waba_id, exc)
-        return ""
+        logger.warning("_read_catalog_via_node request failed waba=%s: %s", waba_id, exc)
+        return None
+
+
+async def fetch_waba_catalog_id(waba_id: str, access_token: str) -> str:
+    """Return the Commerce catalog connected to the WABA, or '' if none/error.
+
+    Kept for callers that only need "is there one" and treat failure as absent.
+    Anything that MUTATES the link must use :func:`read_waba_catalog_id` instead so
+    it can tell "none" from "unknown".
+    """
+    return await read_waba_catalog_id(waba_id, access_token) or ""
 
 
 async def register_phone_number(
@@ -232,38 +282,58 @@ async def list_owned_catalogs(business_id: str, access_token: str) -> list[dict]
     """
     if not business_id:
         return []
-    url = f"{_graph_base()}/{business_id}/owned_product_catalogs"
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get(
-                url,
-                params={"fields": "id,name"},
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-        if resp.status_code != 200:
+    # A business portfolio can hold catalogs on two different edges: ones it OWNS,
+    # and ones SHARED into it from another business ("client" catalogs). Commerce
+    # Manager lists both together, so querying only owned_product_catalogs made a
+    # shared catalog invisible in the picker even though the manager can see it.
+    cats: list[dict] = []
+    seen: set[str] = set()
+    for edge in ("owned_product_catalogs", "client_product_catalogs"):
+        url = f"{_graph_base()}/{business_id}/{edge}"
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.get(
+                    url,
+                    params={"fields": "id,name", "limit": 100},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+            if resp.status_code != 200:
+                logger.warning(
+                    "list_owned_catalogs non-200 business=%s edge=%s http=%s body=%s",
+                    business_id, edge, resp.status_code, resp.text[:300],
+                )
+                continue
+            for c in (resp.json() or {}).get("data") or []:
+                cid = str(c.get("id") or "")
+                if cid and cid not in seen:
+                    seen.add(cid)
+                    cats.append({"id": cid, "name": c.get("name") or ""})
+        except httpx.HTTPError as exc:
             logger.warning(
-                "list_owned_catalogs non-200 business=%s http=%s body=%s",
-                business_id, resp.status_code, resp.text[:300],
+                "list_owned_catalogs request failed business=%s edge=%s: %s",
+                business_id, edge, exc,
             )
-            return []
-        data = (resp.json() or {}).get("data") or []
-        cats = [{"id": str(c.get("id") or ""), "name": c.get("name") or ""} for c in data if c.get("id")]
-        # Highest numeric id ≈ most recently created — the one the manager just made.
-        cats.sort(key=lambda c: int(c["id"]) if c["id"].isdigit() else 0, reverse=True)
-        return cats
-    except httpx.HTTPError as exc:
-        logger.warning("list_owned_catalogs request failed business=%s: %s", business_id, exc)
-        return []
+    # Highest numeric id ≈ most recently created — the one the manager just made.
+    cats.sort(key=lambda c: int(c["id"]) if c["id"].isdigit() else 0, reverse=True)
+    return cats
 
 
-async def connect_catalog_to_waba(waba_id: str, catalog_id: str, access_token: str) -> bool:
-    """Connect a catalog to the WABA so it's usable for WhatsApp commerce.
+# Meta: "WhatsApp Business account should have maximum one product catalogue".
+# Returned when a catalog is already attached — proof one exists even if our read
+# of the WABA failed.
+_ALREADY_HAS_CATALOG_SUBCODE = 2388027
 
-    Best-effort — POST /{waba_id}/product_catalogs {catalog_id}. Returns True on
-    success, False (logged) otherwise. Never raises.
+
+async def link_catalog_to_waba(
+    waba_id: str, catalog_id: str, access_token: str
+) -> tuple[bool, int | None]:
+    """Attach a catalog, returning (ok, error_subcode).
+
+    The subcode is what lets the caller distinguish "Meta says one is already
+    attached" from any other failure, and recover instead of giving up.
     """
     if not (waba_id and catalog_id):
-        return False
+        return False, None
     url = f"{_graph_base()}/{waba_id}/product_catalogs"
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
@@ -273,16 +343,155 @@ async def connect_catalog_to_waba(waba_id: str, catalog_id: str, access_token: s
                 headers={"Authorization": f"Bearer {access_token}"},
             )
         if resp.status_code == 200 and (resp.json() or {}).get("success", True):
+            return True, None
+        subcode: int | None = None
+        try:
+            subcode = (resp.json() or {}).get("error", {}).get("error_subcode")
+        except Exception:  # noqa: BLE001 — non-JSON error body
+            subcode = None
+        logger.warning(
+            "link_catalog_to_waba non-success waba=%s catalog=%s http=%s body=%s",
+            waba_id, catalog_id, resp.status_code, resp.text[:300],
+        )
+        return False, subcode
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "link_catalog_to_waba request failed waba=%s catalog=%s: %s",
+            waba_id, catalog_id, exc,
+        )
+        return False, None
+
+
+async def connect_catalog_to_waba(waba_id: str, catalog_id: str, access_token: str) -> bool:
+    """Connect a catalog to the WABA so it's usable for WhatsApp commerce.
+
+    Best-effort bool wrapper over :func:`link_catalog_to_waba`. Never raises.
+    """
+    ok, _ = await link_catalog_to_waba(waba_id, catalog_id, access_token)
+    return ok
+
+
+async def disconnect_catalog_from_waba(waba_id: str, catalog_id: str, access_token: str) -> bool:
+    """Unlink a catalog from the WABA — DELETE /{waba_id}/product_catalogs {catalog_id}.
+
+    Required before linking a DIFFERENT catalog (Meta enforces one-catalog-per-WABA).
+    Best-effort: returns True on success, False (logged) otherwise. Never raises.
+    """
+    if not (waba_id and catalog_id):
+        return False
+    url = f"{_graph_base()}/{waba_id}/product_catalogs"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.request(
+                "DELETE",
+                url,
+                params={"catalog_id": catalog_id},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if resp.status_code == 200 and (resp.json() or {}).get("success", True):
             return True
         logger.warning(
-            "connect_catalog_to_waba non-success waba=%s catalog=%s http=%s body=%s",
+            "disconnect_catalog_from_waba non-success waba=%s catalog=%s http=%s body=%s",
             waba_id, catalog_id, resp.status_code, resp.text[:300],
         )
         return False
     except httpx.HTTPError as exc:
         logger.warning(
-            "connect_catalog_to_waba request failed waba=%s catalog=%s: %s",
+            "disconnect_catalog_from_waba request failed waba=%s catalog=%s: %s",
             waba_id, catalog_id, exc,
+        )
+        return False
+
+
+async def switch_waba_catalog(waba_id: str, new_catalog_id: str, access_token: str) -> bool:
+    """Make ``new_catalog_id`` the WABA's connected catalog, replacing whatever is linked.
+
+    Meta rejects linking a second catalog (one-per-WABA), so we UNLINK the current one
+    first, then LINK the new one, verifying the result. If the new link fails we roll back
+    to the old catalog so the store is never left with no menu. Returns True only when the
+    new catalog is confirmed attached. Never raises.
+    """
+    if not (waba_id and new_catalog_id):
+        return False
+    # None = we could not read the WABA. NOT the same as "nothing attached", and
+    # acting as if it were is what broke this before.
+    current = await read_waba_catalog_id(waba_id, access_token)
+    if current == new_catalog_id:
+        return True  # already the connected one — idempotent
+    if current:
+        await disconnect_catalog_from_waba(waba_id, current, access_token)
+
+    linked, subcode = await link_catalog_to_waba(waba_id, new_catalog_id, access_token)
+
+    # Meta says one is already attached — so something IS there even though our read
+    # said otherwise (or failed). Re-read to identify it, unlink it, and try once more.
+    if not linked and subcode == _ALREADY_HAS_CATALOG_SUBCODE:
+        actual = await read_waba_catalog_id(waba_id, access_token)
+        if actual == new_catalog_id:
+            return True  # it was already ours; the first read simply lied
+        if actual:
+            logger.info(
+                "switch_waba_catalog: WABA %s actually had %s attached — unlinking to "
+                "make room for %s", waba_id, actual, new_catalog_id,
+            )
+            await disconnect_catalog_from_waba(waba_id, actual, access_token)
+            current = actual  # so rollback below can restore the right one
+            linked, subcode = await link_catalog_to_waba(
+                waba_id, new_catalog_id, access_token
+            )
+        else:
+            # Still can't identify it. Never delete a link we cannot name.
+            logger.warning(
+                "switch_waba_catalog: WABA %s reports an attached catalog we cannot "
+                "read — refusing to unlink blindly", waba_id,
+            )
+            return False
+
+    attached = await read_waba_catalog_id(waba_id, access_token)
+    if linked and attached == new_catalog_id:
+        return True
+    # Roll back so we don't strand the store with no connected catalog.
+    logger.warning(
+        "switch_waba_catalog: link to %s not confirmed (attached=%s) — rolling back to %s",
+        new_catalog_id, attached or "(none)", current or "(none)",
+    )
+    if current and attached != current:
+        await connect_catalog_to_waba(waba_id, current, access_token)
+    return False
+
+
+async def enable_commerce_settings(phone_number_id: str, access_token: str) -> bool:
+    """Turn on cart + catalog visibility for the phone number.
+
+    WhatsApp's native "View catalog" message (and the cart) only render when the
+    phone number's ``whatsapp_commerce_settings`` has ``is_cart_enabled`` and
+    ``is_catalog_visible`` true. Embedded Signup leaves these UNSET, so a freshly
+    connected store sends the welcome text but the catalog message then FAILS.
+    Best-effort; never blocks connect.
+    """
+    if not phone_number_id:
+        return False
+    url = f"{_graph_base()}/{phone_number_id}/whatsapp_commerce_settings"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                url,
+                params={
+                    "is_cart_enabled": "true",
+                    "is_catalog_visible": "true",
+                    "access_token": access_token,
+                },
+            )
+        if resp.status_code == 200 and (resp.json() or {}).get("success"):
+            return True
+        logger.warning(
+            "enable_commerce_settings non-success pid=%s http=%s body=%s",
+            phone_number_id, resp.status_code, resp.text[:300],
+        )
+        return False
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "enable_commerce_settings request failed pid=%s: %s", phone_number_id, exc
         )
         return False
 

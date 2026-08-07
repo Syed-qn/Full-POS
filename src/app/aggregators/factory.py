@@ -7,7 +7,7 @@ from app.aggregators.mock import MockAggregator
 from app.aggregators.port import AggregatorPort  # noqa: TC001
 
 # Marketplace brands. Real adapters: talabat, deliveroo, keeta, ubereats,
-# careem/noon (middleware POS connector). zomato → generic LiveHttp.
+# careem/noon (middleware POS connector).
 _SUPPORTED = frozenset(
     {
         "talabat",
@@ -15,7 +15,6 @@ _SUPPORTED = frozenset(
         "careem",
         "ubereats",
         "noon",
-        "zomato",
         "keeta",
     }
 )

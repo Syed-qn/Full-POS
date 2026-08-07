@@ -68,15 +68,23 @@
   justify-content: flex-end;
 }
 
+/* This is an admin config screen on a desktop, not the till. The 56px POS touch
+   target made every Enable/Pause/Copy button a slab, and 48px inputs stacked up
+   into a very tall credential form. Desk-sized controls instead. */
 .actions :global(button),
 .card :global(button) {
-  min-height: var(--touch-min, 56px);
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 13px;
+  width: auto;
+  flex: 0 0 auto;
 }
 
 .card input,
 .card select {
-  min-height: 48px;
-  font-size: var(--font-size-body, 16px);
+  min-height: 34px;
+  padding: 5px 9px;
+  font-size: 13px;
 }
 
 .metrics {
@@ -245,4 +253,107 @@
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Marketplaces vs direct channels.
+
+   Both used to share `.grid` (auto-fill, minmax(260px, 1fr)). A marketplace card
+   carries eight credential fields plus a webhook URL; a QR toggle carries one
+   switch. Forcing both into a 260px column squeezed the credential form into a
+   single stack of full-width inputs and left the direct channels as mostly empty
+   boxes. They are different objects and get different layouts.
+--------------------------------------------------------------------------- */
+
+.marketGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+/* Two across once there is genuinely room for two credential forms side by side. */
+@media (min-width: 1400px) {
+  .marketGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.directGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.directRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--bg-surface);
+}
+
+.directRow .channelName {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.directActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The credential form: real columns instead of one tall stack. Replaces the
+   inline style that was overriding .integrationPanel's row direction. */
+.integrationPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.integrationTitle,
+.integrationPanel > .hint,
+.integrationPanel > .webhookBox,
+.integrationPanel > .row {
+  grid-column: 1 / -1;
+}
+
+.integrationPanel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-muted, #6c7a72);
+}
+
+.integrationPanel input,
+.integrationPanel select {
+  width: 100%;
+  min-width: 0;
+}
+
+.webhookBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* A webhook URL is long and must never widen the card into a horizontal scroll. */
+.webhookUrl {
+  flex: 1 1 320px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.channelName {
+  text-transform: none;
+  font-weight: 600;
 }

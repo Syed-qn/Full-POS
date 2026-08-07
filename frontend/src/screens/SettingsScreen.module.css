@@ -738,3 +738,29 @@
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 13px;
 }
+
+/* Catalog picker: select + action sit together on the left. Previously this
+   reused .locHead, whose space-between threw "Make live" to the far right edge
+   with a dead gap between it and the dropdown. */
+.catalogRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.catalogSelect {
+  min-width: 240px;
+  max-width: 360px;
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default, var(--border-subtle));
+  border-radius: var(--radius, 8px);
+}
+
+.catalogRow :global(button) {
+  flex: 0 0 auto;
+}

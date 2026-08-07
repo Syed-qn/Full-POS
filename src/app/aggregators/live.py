@@ -32,7 +32,6 @@ _DEFAULT_BASE: dict[str, str] = {
     "careem": "https://partners.careem.com/v1",
     "ubereats": "https://api.uber.com/v1/eats",
     "noon": "https://api.noon.partners/v1",
-    "zomato": "https://api.zomato.com/partner/v1",
     "keeta": "https://open.mykeeta.com",
 }
 
