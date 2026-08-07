@@ -1209,9 +1209,13 @@ async def _dispatch_ortools(
                     f"SLA with current riders: {numbers}. Add a rider or mark priority now."
                 )
             },
+            # 10-minute bucket, matching the no-rider alert above. A 60-second bucket
+            # meant one alert per minute for as long as an order stayed unassigned —
+            # a single stuck order produced 213 queued messages over two days, which
+            # is noise a manager learns to ignore rather than a warning.
             idempotency_key=(
                 f"slabreach-opt-{restaurant_id}-"
-                f"{min(dropped_ready)}-{int(now.timestamp() // 60)}"
+                f"{min(dropped_ready)}-{int(now.timestamp() // 600)}"
             ),
         )
 

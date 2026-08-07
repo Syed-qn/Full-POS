@@ -35,6 +35,33 @@ def _is_permanent_failure(status_code: int) -> bool:
 _META_PERMANENT_CODES = {131047: "24h_window", 131026: "undeliverable"}
 
 
+_LAST_ERROR_MAX = 512
+
+
+def _describe_failure(exc: Exception) -> str:
+    """A short, storable account of why a send failed.
+
+    Prefers the provider's own error body — Meta says exactly what is wrong (which
+    parameter, which code), and that sentence is the whole diagnosis. Falls back to
+    the exception text when there is no JSON body. Bounded so a pathological error
+    payload can't bloat the row.
+    """
+    response = getattr(exc, "response", None)
+    detail = ""
+    if response is not None:
+        try:
+            err = (response.json() or {}).get("error") or {}
+            parts = [
+                str(err.get(k)) for k in ("code", "error_subcode", "message", "error_data")
+                if err.get(k) not in (None, "")
+            ]
+            detail = " | ".join(parts)
+        except Exception:  # noqa: BLE001 — non-JSON error body
+            detail = (getattr(response, "text", "") or "")[:_LAST_ERROR_MAX]
+    text = detail or f"{type(exc).__name__}: {exc}"
+    return text[:_LAST_ERROR_MAX]
+
+
 def _permanent_meta_failure_reason(exc: Exception) -> str | None:
     """Queryable reason when Meta's error body marks this send permanently dead."""
     response = getattr(exc, "response", None)
@@ -113,9 +140,11 @@ async def _deliver_one(
             row.status = "sent"
             row.wa_message_id = wa_id
             row.attempts += 1
+            row.last_error = None  # a recovered row must not show its old failure
             OUTBOX_DELIVERIES.labels(status="sent").inc()
         except Exception as exc:
             row.attempts += 1
+            row.last_error = _describe_failure(exc)
             reason = _permanent_meta_failure_reason(exc)
             if reason is not None:
                 # Meta rejected this message permanently (e.g. 131047: the 24h
@@ -131,7 +160,9 @@ async def _deliver_one(
                     outbox_id, reason, row.to_phone,
                 )
             else:
-                logger.warning("outbox delivery failed for id=%s: %s", outbox_id, exc)
+                logger.warning(
+                    "outbox delivery failed for id=%s: %s", outbox_id, row.last_error
+                )
                 if row.attempts >= _MAX_ATTEMPTS:
                     row.status = "dead"
                     OUTBOX_DELIVERIES.labels(status="dead").inc()
@@ -211,18 +242,25 @@ def deliver_outbox_message(self, outbox_id: int) -> None:
 _SWEEPER_STALE_MINUTES = 5
 
 
-async def _sweep_stale_pending(session_factory: async_sessionmaker[AsyncSession]) -> list[int]:
-    """Find pending outbox rows stuck for > _SWEEPER_STALE_MINUTES and re-dispatch them.
+# Non-terminal statuses a stale row can be sitting in. 'failed' belongs here as much
+# as 'pending' does: a row that failed once with attempts still under the cap is an
+# orphan too, and until this included it those rows were retried by nobody and simply
+# never sent (prod: 8 stranded rows, the oldest 8 days old).
+_RECOVERABLE_STATUSES = ("pending", "failed")
 
-    Rows matching: status='pending' AND updated_at < NOW()-5min AND attempts < _MAX_ATTEMPTS.
-    Returns list of outbox IDs re-dispatched.
+
+async def _sweep_stale_pending(session_factory: async_sessionmaker[AsyncSession]) -> list[int]:
+    """Find outbox rows stuck for > _SWEEPER_STALE_MINUTES and re-dispatch them.
+
+    Rows matching: status IN ('pending','failed') AND updated_at < NOW()-5min
+    AND attempts < _MAX_ATTEMPTS. Returns list of outbox IDs re-dispatched.
     """
     # DB stores timestamps as UTC naive (TimestampMixin uses server_default=func.now())
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=_SWEEPER_STALE_MINUTES)).replace(tzinfo=None)
     async with session_factory() as session:
         result = await session.execute(
             select(OutboxMessage.id).where(
-                OutboxMessage.status == "pending",
+                OutboxMessage.status.in_(_RECOVERABLE_STATUSES),
                 OutboxMessage.updated_at < cutoff,
                 OutboxMessage.attempts < _MAX_ATTEMPTS,
             )
