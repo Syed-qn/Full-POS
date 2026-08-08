@@ -212,8 +212,13 @@ function DishDetailForm({
 
   async function onPickImage(file: File | undefined) {
     if (!file) return;
-    if (!["image/jpeg", "image/png"].includes(file.type)) {
-      toast("Dish photo must be a JPG or PNG.", "error");
+    // Same allowlist as the API's DISH_IMAGE_MIMES — see DishEditModal. A blank
+    // file.type means the picker didn't report one; the server sniffs the content.
+    if (file.type && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast(
+        `Dish photo must be a JPG, PNG or WebP — that file is ${file.type}.`,
+        "error",
+      );
       return;
     }
     if (file.size > DISH_IMAGE_MAX_BYTES) {
@@ -318,7 +323,7 @@ function DishDetailForm({
             <input
               ref={imageInputRef}
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,image/webp"
               style={{ display: "none" }}
               onChange={(e) => onPickImage(e.target.files?.[0] ?? undefined)}
             />

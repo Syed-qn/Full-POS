@@ -16,6 +16,11 @@ import type { DishOut, PriceRuleOut } from "../lib/types";
 import s from "./DishEditModal.module.css";
 
 const DISH_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+// Must match the server's DISH_IMAGE_MIMES (app/menu/service.py). They drifted:
+// the API accepted WebP while this list didn't, so a WebP photo — what phones and
+// "save image" flows increasingly produce — was refused in the browser and never
+// reached an upload that would have worked.
+const DISH_IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp"];
 
 /** Standard restaurant menu categories offered in the dropdown. */
 const PRESET_CATEGORIES = [
@@ -109,8 +114,14 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
 
   async function onPickImage(file: File | undefined) {
     if (!file) return;
-    if (!["image/jpeg", "image/png"].includes(file.type)) {
-      toast("Dish photo must be a JPG or PNG.", "error");
+    // An empty file.type is common (some pickers and OS share sheets report none),
+    // and rejecting on it turned a perfectly good JPG into "must be a JPG". Let the
+    // server decide those — it sniffs the content and answers with a real reason.
+    if (file.type && !DISH_IMAGE_MIMES.includes(file.type)) {
+      toast(
+        `Dish photo must be a JPG, PNG or WebP — that file is ${file.type}.`,
+        "error",
+      );
       return;
     }
     if (file.size > DISH_IMAGE_MAX_BYTES) {
@@ -388,7 +399,7 @@ export function DishEditModal({ menuId, dish, categories, nextNumber, onClose, o
                   ref={imageInputRef}
                   data-testid="dish-image-input"
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/jpeg,image/png,image/webp"
                   style={{ display: "none" }}
                   onChange={(e) => onPickImage(e.target.files?.[0] ?? undefined)}
                 />
