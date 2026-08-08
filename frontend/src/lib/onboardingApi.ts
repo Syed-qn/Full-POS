@@ -70,6 +70,11 @@ export interface MetaConnectPayload {
   code: string;
   phone_number_id: string;
   waba_id: string;
+  // The catalog picked in the popup, as Meta reports it on FINISH. Reading it back
+  // off the WABA requires Business Solution Provider status, so this message is our
+  // only dependable source — omit it and a chosen catalog is lost.
+  catalog_id?: string;
+  business_id?: string;
   // Partner attribution from the onboarding link (?partner=<slug>). Omit/null =
   // standalone (no POS) — the store uses the platform end-to-end, no webhook/key.
   partner?: string | null;

@@ -352,6 +352,31 @@ async def _send_catalog_text_fallback(
     )
 
 
+async def send_text_menu_after_catalog_failure(
+    session: AsyncSession, *, restaurant_id: int, to_phone: str
+) -> bool:
+    """Rescue a customer whose catalogue card Meta refused to deliver.
+
+    A catalogue send can be perfectly well-formed and still fail at Meta: if the
+    catalog attached to the WABA isn't the one we mirror, every product id we name is
+    a stranger to it and Meta answers 131009 "Products not found in FB Catalog"
+    (prod, La Cafe Aug 2026 — the WABA pointed at a second catalog we had no access
+    to). The customer said "hi", got a greeting, and then silence.
+
+    Enqueuing the plain-text menu costs nothing and keeps them able to order by
+    typing while the catalog link is sorted out. Returns False when there is nothing
+    to send. Caller commits.
+    """
+    _catalog_id, synced = await _load_tenant_catalog_mirror(session, restaurant_id)
+    if not synced:
+        return False
+    _apply_category_map(synced, await _load_category_map(session, restaurant_id))
+    await _send_catalog_text_fallback(
+        session, restaurant_id=restaurant_id, to_phone=to_phone, products=synced
+    )
+    return True
+
+
 async def _order_cart_snapshot(session, order_id: int) -> tuple[str, list[dict]]:
     """Resolve the resulting draft cart into (display_text, structured snapshot).
 

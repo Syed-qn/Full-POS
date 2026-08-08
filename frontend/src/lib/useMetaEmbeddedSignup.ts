@@ -39,7 +39,12 @@ export function useMetaEmbeddedSignup(
   const [apiKey, setApiKey] = useState<string | null>(null);
   // Embedded Signup posts the business's phone_number_id + waba_id via window
   // messages during the popup; we stash the latest here to pair with the code.
-  const sessionInfo = useRef<{ phone_number_id?: string; waba_id?: string }>({});
+  const sessionInfo = useRef<{
+    phone_number_id?: string;
+    waba_id?: string;
+    catalog_id?: string;
+    business_id?: string;
+  }>({});
   // Keep the latest callback without re-subscribing the message listener.
   const onConnectedRef = useRef(onConnected);
   onConnectedRef.current = onConnected;
@@ -65,9 +70,16 @@ export function useMetaEmbeddedSignup(
         const data = JSON.parse(event.data);
         if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
         if (data.event === "FINISH" && data.data) {
+          // Keep the catalog the manager picked. Meta only *shares* it with the app
+          // here — reading it back off the WABA afterwards needs Business Solution
+          // Provider status, and without that the read returns an empty list rather
+          // than an error, so a chosen catalog is indistinguishable from none. This
+          // message is the one moment we are told which one it is.
           sessionInfo.current = {
             phone_number_id: data.data.phone_number_id,
             waba_id: data.data.waba_id,
+            catalog_id: data.data.catalog_id ?? data.data.catalogue_id,
+            business_id: data.data.business_id,
           };
         }
       } catch {
@@ -93,6 +105,8 @@ export function useMetaEmbeddedSignup(
         code,
         phone_number_id: info.phone_number_id,
         waba_id: info.waba_id,
+        catalog_id: info.catalog_id || undefined,
+        business_id: info.business_id || undefined,
         partner: partner || undefined,
       });
       toast("WhatsApp connected ✓");

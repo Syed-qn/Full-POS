@@ -32,7 +32,17 @@ def _is_permanent_failure(status_code: int) -> bool:
 # Meta error codes that can never succeed on retry for THIS message:
 # 131047 re-engagement required (24h customer-service window closed),
 # 131026 recipient cannot receive this message (undeliverable).
-_META_PERMANENT_CODES = {131047: "24h_window", 131026: "undeliverable"}
+_META_PERMANENT_CODES = {
+    131047: "24h_window",
+    131026: "undeliverable",
+    # 131009 on a catalogue send means the product ids we named are not in the catalog
+    # attached to the WABA — retrying sends the same ids to the same catalog forever.
+    131009: "catalog_mismatch",
+}
+
+# Message types whose failure leaves the customer with nothing to order from, so a
+# plain-text menu is queued in their place.
+_CATALOGUE_TYPES = {"catalog_message", "product_list"}
 
 
 _LAST_ERROR_MAX = 512
@@ -159,6 +169,10 @@ async def _deliver_one(
                     "outbox permanent Meta failure id=%s reason=%s to=%s",
                     outbox_id, reason, row.to_phone,
                 )
+                if reason == "catalog_mismatch" and str(
+                    row.payload.get("type") or ""
+                ) in _CATALOGUE_TYPES:
+                    await _queue_text_menu_instead(session, row)
             else:
                 logger.warning(
                     "outbox delivery failed for id=%s: %s", outbox_id, row.last_error
@@ -170,6 +184,26 @@ async def _deliver_one(
                     row.status = "failed"
                     OUTBOX_DELIVERIES.labels(status="retry").inc()
         await session.commit()
+
+
+async def _queue_text_menu_instead(session: AsyncSession, row: OutboxMessage) -> None:
+    """Queue the plain-text menu after a catalogue card Meta refused.
+
+    Best-effort by design: the customer is already worse off, and a failure here must
+    not stop the dead-marking of the original row from committing.
+    """
+    try:
+        from app.catalog.service import send_text_menu_after_catalog_failure
+
+        sent = await send_text_menu_after_catalog_failure(
+            session, restaurant_id=row.restaurant_id, to_phone=row.to_phone
+        )
+        logger.info(
+            "outbox catalog_mismatch id=%s — text menu %s for %s",
+            row.id, "queued" if sent else "unavailable", row.to_phone,
+        )
+    except Exception as exc:  # noqa: BLE001 — never let the rescue break the failure path
+        logger.warning("outbox text-menu fallback failed id=%s: %s", row.id, exc)
 
 
 async def _mark_dead(outbox_id: int, *, session_factory: async_sessionmaker[AsyncSession]) -> None:

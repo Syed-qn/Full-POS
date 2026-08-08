@@ -309,7 +309,11 @@ async def connect_selected_catalog(
     the whole connect.
     """
     from app.identity.meta_config import apply_meta_settings, meta_settings
-    from app.identity.meta_embed import enable_commerce_settings, switch_waba_catalog
+    from app.identity.meta_embed import (
+        catalog_is_readable,
+        enable_commerce_settings,
+        switch_waba_catalog,
+    )
 
     cfg = meta_settings(restaurant)
     waba, token, pid = (
@@ -325,10 +329,23 @@ async def connect_selected_catalog(
     # rollback if the new link fails). Never leaves the store without a catalog.
     linked = await switch_waba_catalog(waba, catalog_id, token)
     if not linked:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            "Meta didn't accept switching to that catalog. Make sure it belongs to the "
-            "same business and try again.",
+        # The WABA link endpoints require Business Solution Provider status, which most
+        # apps don't have — Meta then refuses the write no matter how right the request
+        # is. Failing the whole call there left the manager with an error toast and a
+        # catalog they could see but never select. The link is not what product
+        # messages use; the stored id is. So verify we can actually READ the catalog
+        # and adopt it, and only refuse when we genuinely cannot use it.
+        if not await catalog_is_readable(catalog_id, token):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "That catalog isn't reachable with this connection. Check it belongs to "
+                "the same business and is shared with this app, then try again.",
+            )
+        _logger.warning(
+            "connect_selected_catalog: WABA link refused for rid=%s catalog=%s — adopting "
+            "it anyway (readable). Native catalogue view may still show the WABA's own "
+            "catalog until the link can be changed.",
+            restaurant.id, catalog_id,
         )
     # Adopt it: store the id, re-enable commerce so 'View catalog' can send, mirror items.
     apply_meta_settings(restaurant, {"catalog_id": catalog_id})
@@ -381,6 +398,8 @@ async def meta_connect(
             waba_id=body.waba_id,
             business_name=restaurant.name or "",
             existing_pin=(restaurant.settings or {}).get("wa_2fa_pin", "") or "",
+            picked_catalog_id=(body.catalog_id or "").strip(),
+            business_id=(body.business_id or "").strip(),
         )
     except MetaEmbedError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))

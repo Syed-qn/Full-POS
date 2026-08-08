@@ -496,8 +496,36 @@ async def enable_commerce_settings(phone_number_id: str, access_token: str) -> b
         return False
 
 
+async def catalog_is_readable(catalog_id: str, access_token: str) -> bool:
+    """True when this token can actually see the catalog.
+
+    The honest test of whether a catalog is usable to us. Meta refuses catalogs we
+    have no asset grant on with 100/33 ("does not exist, cannot be loaded due to
+    missing permissions"), so a successful node read means the id is real AND ours to
+    use — which is exactly the precondition for sending product messages from it.
+    """
+    if not (catalog_id and access_token):
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                f"{_graph_base()}/{catalog_id}",
+                params={"fields": "id"},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        return resp.status_code == 200 and bool((resp.json() or {}).get("id"))
+    except httpx.HTTPError as exc:
+        logger.warning("catalog_is_readable failed catalog=%s: %s", catalog_id, exc)
+        return False
+
+
 async def ensure_waba_catalog(
-    waba_id: str, access_token: str, *, business_name: str = ""
+    waba_id: str,
+    access_token: str,
+    *,
+    business_name: str = "",
+    picked_catalog_id: str = "",
+    business_id: str = "",
 ) -> str:
     """Return the catalog id attached to the WABA, attaching a shared one if needed.
 
@@ -518,10 +546,22 @@ async def ensure_waba_catalog(
     longer name a freshly-created catalog).
     """
     _ = business_name
+    # What the manager picked in the popup wins outright. Everything below is
+    # guesswork we only need because Meta won't tell us what's attached, and a read
+    # that returns [] for "you may not look" is worse than no read at all.
+    if picked_catalog_id:
+        # Attaching may well be refused (the link endpoints need BSP status) — that's
+        # fine. Knowing WHICH catalog is what makes product messages work.
+        await link_catalog_to_waba(waba_id, picked_catalog_id, access_token)
+        logger.info(
+            "ensure_waba_catalog: adopting the catalog picked at signup %s (waba=%s)",
+            picked_catalog_id, waba_id,
+        )
+        return picked_catalog_id
     existing = await fetch_waba_catalog_id(waba_id, access_token)
     if existing:
         return existing
-    business_id = await fetch_waba_owner_business(waba_id, access_token)
+    business_id = business_id or await fetch_waba_owner_business(waba_id, access_token)
     if not business_id:
         return ""
     catalogs = await list_owned_catalogs(business_id, access_token)
@@ -566,7 +606,7 @@ async def fetch_display_phone_number(phone_number_id: str, access_token: str) ->
 
 async def connect_embedded_signup(
     *, code: str, phone_number_id: str, waba_id: str, business_name: str = "",
-    existing_pin: str = "",
+    existing_pin: str = "", picked_catalog_id: str = "", business_id: str = "",
 ) -> dict[str, str]:
     """Full Embedded Signup connect: exchange code, subscribe WABA, ensure a Commerce
     catalog exists (auto-create if none), and return creds shaped for
@@ -593,9 +633,18 @@ async def connect_embedded_signup(
     registered = await register_phone_number(phone_number_id, token, pin)
     if registered or existing_pin:
         creds["wa_2fa_pin"] = pin
-    catalog_id = await ensure_waba_catalog(waba_id, token, business_name=business_name)
+    catalog_id = await ensure_waba_catalog(
+        waba_id, token, business_name=business_name,
+        picked_catalog_id=picked_catalog_id, business_id=business_id,
+    )
     if catalog_id:
         creds["catalog_id"] = catalog_id
+        # Cart + catalogue visibility are left UNSET by Embedded Signup, and without
+        # them the native "View catalog" message fails on a freshly connected store.
+        try:
+            await enable_commerce_settings(phone_number_id, token)
+        except Exception as exc:  # noqa: BLE001 — never block the connection
+            logger.warning("enable_commerce_settings failed pid=%s: %s", phone_number_id, exc)
     # The real WhatsApp display number → becomes the restaurant's inbound routing
     # phone. Returned under a non-settings key; the router applies it to the column.
     display = await fetch_display_phone_number(phone_number_id, token)

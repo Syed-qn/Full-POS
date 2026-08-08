@@ -126,6 +126,14 @@ class MetaConnectIn(BaseModel):
     code: str = Field(min_length=1, max_length=2048)
     phone_number_id: str = Field(min_length=1, max_length=64)
     waba_id: str = Field(min_length=1, max_length=64)
+    # The catalog the manager PICKED in the popup, as Meta reports it on the FINISH
+    # message. This is the only reliable way to learn it: reading it back from the
+    # WABA needs Business Solution Provider status, and without that Meta answers the
+    # read with an empty list instead of an error — so a picked catalog looked like no
+    # catalog at all (prod, La Cafe Aug 2026). Absent on older clients / when the
+    # signup config has no catalog step.
+    catalog_id: str | None = Field(default=None, max_length=64)
+    business_id: str | None = Field(default=None, max_length=64)
     # Partner attribution from the onboarding link (?partner=<slug>). None/blank =
     # standalone (no POS): store uses our platform end-to-end, no webhook/key wired.
     partner: str | None = Field(default=None, max_length=32)

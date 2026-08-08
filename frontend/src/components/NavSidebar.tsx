@@ -14,7 +14,16 @@ import { listTickets } from "../lib/ticketsApi";
 import { useOpenTicketsCountQuery } from "../lib/queries/dashboard";
 import s from "./NavSidebar.module.css";
 
-type NavItem = { to: string; label: string; icon: string };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: string;
+  /** Open in a new browser tab instead of navigating this one. For surfaces an
+   *  owner/manager watches ALONGSIDE their work rather than instead of it — the
+   *  kitchen board is a wall display, and swallowing the current screen to show it
+   *  means losing your place every time you glance at the pass. */
+  newTab?: boolean;
+};
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
 /** Routes that are live today. Everything else in the nav renders inert with a
@@ -73,7 +82,7 @@ const GROUPS: NavGroup[] = [
       { to: "/floor", label: "Floor Plan", icon: "▦" },
       { to: "/new-order", label: "New Order", icon: "+" },
       { to: "/orders", label: "Orders", icon: "☰" },
-      { to: "/kds", label: "Live Kitchen Board", icon: "▣" },
+      { to: "/kds", label: "Live Kitchen Board", icon: "▣", newTab: true },
       { to: "/menu", label: "Menu", icon: "◇" },
     ],
   },
@@ -300,6 +309,28 @@ export function NavSidebar({ unread = 0 }: { unread?: number }) {
                         : it.to === "/tickets" && openTickets > 0
                           ? `${it.label}, ${openTickets} open`
                           : it.label;
+                    // Kitchen staff LIVE on the board — it's their only screen, so a
+                    // new tab every time would just pile up windows. Only the roles
+                    // that glance at it from other work get the new tab.
+                    if (it.newTab && (role === "owner" || role === "manager")) {
+                      return (
+                        <a
+                          key={it.to}
+                          href={it.to}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${a11yName} (opens in a new tab)`}
+                          aria-label={`${a11yName} (opens in a new tab)`}
+                          className={s.item}
+                          onMouseEnter={() => prefetchRoute(it.to)}
+                        >
+                          <span className={s.icon} aria-hidden="true">
+                            {it.icon}
+                          </span>
+                          {!collapsed && <span className={s.label}>{it.label}</span>}
+                        </a>
+                      );
+                    }
                     return (
                       <NavLink
                         key={it.to}

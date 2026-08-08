@@ -72,17 +72,20 @@ def _meta_error(code: int, message: str) -> httpx.HTTPStatusError:
 
 
 async def test_failed_send_records_the_reason(db_session, restaurant):
-    """A retryable failure stores Meta's message so the row explains itself."""
+    """A retryable failure stores Meta's message so the row explains itself.
+
+    131000 is a generic send failure — transient, unlike 131009 (wrong catalog) or
+    131047 (window closed), which are permanent and handled separately below."""
     row = await _seed(db_session, restaurant.id, key="lasterr-retryable")
-    exc = _meta_error(131009, "Parameter value is not valid")
+    exc = _meta_error(131000, "Something went wrong")
 
     await _deliver_one(row.id, provider=_Boom(exc), session_factory=_factory(db_session))
     await db_session.refresh(row)
 
     assert row.status == "failed"
     assert row.last_error, "the failure reason must be persisted, not just logged"
-    assert "131009" in row.last_error
-    assert "Parameter value is not valid" in row.last_error
+    assert "131000" in row.last_error
+    assert "Something went wrong" in row.last_error
 
 
 async def test_permanently_dead_send_records_the_reason(db_session, restaurant):
