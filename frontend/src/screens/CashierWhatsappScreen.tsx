@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "../components/Toaster";
 import { WaiterTopBar } from "../components/WaiterTopBar";
-import { advanceOrder, fetchOrders } from "../lib/ordersApi";
+import { advanceOrder, assignOrder, fetchOrders, reassignOrder } from "../lib/ordersApi";
+import { fetchRiders } from "../lib/ridersApi";
 import { usePosTheme } from "../lib/posTheme";
-import type { OrderOut } from "../lib/types";
+import type { OrderOut, RiderOut } from "../lib/types";
 import s from "./CashierTakeawayScreen.module.css";
 
 /**
@@ -109,6 +110,9 @@ export function CashierWhatsappScreen() {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [kotBusy, setKotBusy] = useState(false);
+  const [riders, setRiders] = useState<RiderOut[]>([]);
+  const [assignTo, setAssignTo] = useState<number | "">("");
+  const [assigning, setAssigning] = useState(false);
   const inFlight = useRef(false);
 
   const load = useCallback(async () => {
@@ -187,6 +191,51 @@ export function CashierWhatsappScreen() {
     }
     if (!visible.some((o) => o.id === selectedId)) setSelectedId(visible[0].id);
   }, [visible, selectedId, orders]);
+
+  /** Cooked (or already with a rider) but not yet picked up — the cashier can
+   *  still choose or swap who takes it. Mirrors the Home Delivery till, and
+   *  matches the server: dispatch.service.reassign_order accepts ASSIGNED only,
+   *  because after pickup the original rider physically holds the food. */
+  const canAssign = useMemo(() => {
+    const st = String(selected?.status ?? "");
+    return st === "ready" || st === "assigned";
+  }, [selected]);
+
+  // Pull the rider roster only while an order is waiting on a rider, and sync
+  // the dropdown to whoever is already on it.
+  useEffect(() => {
+    if (!canAssign) {
+      setRiders([]);
+      setAssignTo("");
+      return;
+    }
+    let cancelled = false;
+    fetchRiders()
+      .then((r) => !cancelled && setRiders(Array.isArray(r) ? r : []))
+      .catch(() => !cancelled && setRiders([]));
+    setAssignTo(selected?.rider_id ?? "");
+    return () => {
+      cancelled = true;
+    };
+  }, [canAssign, selected?.id, selected?.rider_id]);
+
+  /** Assign (or reassign) the picked rider — sends the run to their app. */
+  async function assignRider() {
+    if (!selected || assignTo === "") return;
+    setAssigning(true);
+    try {
+      const already = selected.rider_id != null;
+      const updated = already
+        ? await reassignOrder(selected.id, Number(assignTo))
+        : await assignOrder(selected.id, Number(assignTo));
+      toast(`${updated.order_number} assigned to ${updated.rider_name ?? "rider"}.`);
+      await load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not assign rider", "error");
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   async function sendKot() {
     if (!selected || selected.status !== "confirmed") return;
@@ -325,6 +374,58 @@ export function CashierWhatsappScreen() {
                 <span>Order total</span>
                 <strong>AED {selected.total_aed}</strong>
               </div>
+
+              {/* Manual rider assignment. Ready orders auto-dispatch, but the
+                  cashier can pick or swap the rider here — assigning sends the
+                  run to that rider's app. */}
+              {canAssign && (
+                <div className={s.assignRow} data-testid="whatsapp-assign">
+                  <span className={s.assignLabel}>
+                    {selected.rider_name
+                      ? `🛵 Rider: ${selected.rider_name}`
+                      : "🛵 No rider yet"}
+                  </span>
+                  <select
+                    className={s.assignSelect}
+                    value={assignTo}
+                    onChange={(e) =>
+                      setAssignTo(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    disabled={assigning}
+                    aria-label="Assign to rider"
+                  >
+                    <option value="">
+                      {selected.rider_id ? "Reassign rider…" : "Assign rider…"}
+                    </option>
+                    {riders
+                      .filter((r) => r.status !== "deactivated")
+                      .map((r) => {
+                        // Unpaired riders have no app, so they can't receive the
+                        // run — visible but disabled so the cashier sees why.
+                        const unpaired = r.app_paired === false;
+                        return (
+                          <option key={r.id} value={r.id} disabled={unpaired}>
+                            {r.name}{" "}
+                            {unpaired ? "(not paired)" : `(${r.status.replace(/_/g, " ")})`}
+                          </option>
+                        );
+                      })}
+                  </select>
+                  <button
+                    type="button"
+                    className={`${s.act} ${s.actPay}`}
+                    disabled={assigning || assignTo === "" || assignTo === selected.rider_id}
+                    onClick={() => void assignRider()}
+                    data-testid="whatsapp-assign-btn"
+                  >
+                    {assigning
+                      ? "Assigning…"
+                      : selected.rider_id
+                        ? "Reassign"
+                        : "Assign rider"}
+                  </button>
+                </div>
+              )}
 
               <div className={s.detailActions}>
                 {selected.status === "confirmed" ? (
