@@ -481,6 +481,7 @@ function TrackingScreen({
                     </Pressable>
                     <Pressable
                       style={({ pressed }) => [
+                        styles.button,
                         styles.buttonAlt,
                         styles.buttonFlex,
                         pressed && styles.buttonAltPressed,
@@ -489,8 +490,8 @@ function TrackingScreen({
                       disabled={busy}
                       onPress={() => doNotDelivered(s)}
                     >
-                      <Text style={styles.buttonAltText}>
-                        {busy ? "…" : "Not delivered, bring back"}
+                      <Text style={styles.buttonAltText} numberOfLines={1}>
+                        {busy ? "…" : "Not delivered"}
                       </Text>
                     </Pressable>
                   </>
@@ -545,13 +546,17 @@ const styles = StyleSheet.create({
   // No flex here — a flex:1 button stretches to full height in a column layout
   // (esp. on react-native-web). Standalone buttons hug their content (buttonWide
   // gives width); the two side-by-side action buttons opt into flex via buttonFlex.
-  button: { backgroundColor: C.green, borderRadius: 14, paddingVertical: 18, alignItems: "center", marginTop: 14 },
+  // The transparent border keeps this exactly as tall as `buttonAlt`, which needs
+  // a real one — without it the outlined button sits 2px taller side by side.
+  button: { backgroundColor: C.green, borderRadius: 14, paddingVertical: 18, alignItems: "center", justifyContent: "center", marginTop: 14, borderWidth: 1, borderColor: "transparent" },
   buttonWide: { width: "100%" },
   buttonFlex: { flex: 1 },
   buttonPressed: { backgroundColor: C.greenDark },
-  buttonAlt: { flex: 1, backgroundColor: "#1f2937" },
+  // Same pill as `button` — only the colour differs, so the two actions read as
+  // a matched pair. It must be spread AFTER `button` so these win.
+  buttonAlt: { backgroundColor: "#1f2937", borderWidth: 1, borderColor: "#33404f" },
   buttonAltPressed: { backgroundColor: "#2a3647" },
-  buttonAltText: { color: C.text, fontSize: 17, fontWeight: "700" },
+  buttonAltText: { color: C.text, fontSize: 17, fontWeight: "800" },
   buttonDisabled: { backgroundColor: "#33404f" },
   buttonText: { color: "#04130a", fontSize: 17, fontWeight: "800" },
   error: { color: "#f87171", fontWeight: "600" },
