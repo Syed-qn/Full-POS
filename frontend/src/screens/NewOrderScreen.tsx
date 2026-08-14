@@ -19,7 +19,7 @@ import type {
   OrderStatus,
   RestaurantOut,
 } from "../lib/types";
-import { isCashierRole, isWaiterRole } from "../lib/navAccess";
+import { getStaffSession, isCashierRole, isWaiterRole } from "../lib/navAccess";
 import { PageHeader } from "../components/PageHeader";
 import { LocationPicker } from "../components/LocationPicker";
 import { BottomActionBar } from "../components/BottomActionBar";
@@ -27,6 +27,8 @@ import { Button, TouchButton } from "../components/Button";
 import { MoneySummary } from "../components/MoneySummary";
 import { EmptyState } from "../components/EmptyState";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
+import { BillPreviewDialog, type BillLine } from "../components/BillPreviewDialog";
+import { toast } from "../components/Toaster";
 import s from "./NewOrderScreen.module.css";
 
 /** Active tickets a cashier may still collect payment for (not terminal). */
@@ -176,6 +178,11 @@ export function NewOrderScreen() {
     { dish_name: string; qty: number; line_total: string }[]
   >([]);
 
+  // Bill preview: "Print Bill" shows the slip before any paper is used.
+  const [billPreview, setBillPreview] = useState(false);
+  // Header name for the printed slip.
+  const [restaurantName, setRestaurantName] = useState<string | null>(null);
+
   // Highlights the last-touched cart line (kept for the tile/cart focus styling).
   const [focusedDishId, setFocusedDishId] = useState<number | null>(null);
   // Which cart lines have their per-item note field expanded (opened via ✎).
@@ -237,6 +244,7 @@ export function NewOrderScreen() {
     apiClient
       .get<RestaurantOut>("/api/v1/me")
       .then((r) => {
+        setRestaurantName(r.name ?? null);
         const tiers = (r.settings as Record<string, unknown>)?.delivery_fee_tiers;
         if (Array.isArray(tiers) && tiers.length > 0) {
           const opts = buildFeeOptions(tiers as FeeTier[]);
@@ -389,6 +397,46 @@ export function NewOrderScreen() {
   );
   const deliveryFee = needsAddress ? parseFloat(fee) || 0 : 0;
   const total = subtotal + deliveryFee;
+
+  // ── Bill preview ─────────────────────────────────────────────────
+  // The BILL is the whole table, not just the round being keyed in. When another
+  // round is being added to an open tab, the cart holds only the new lines — so
+  // a slip built from the cart alone would under-bill the customer by whatever
+  // they have already eaten. Tab lines come first, in the order they were
+  // ordered, then the new round.
+  const billLines: BillLine[] = useMemo(
+    () => [
+      ...tabItems.map((t) => ({
+        name: t.dish_name,
+        qty: t.qty,
+        // The tab returns a line total only; deriving a unit price by dividing
+        // would print a rate the kitchen never charged when a line carries a
+        // discount or a modifier.
+        unitPrice: null,
+        lineTotal: parseFloat(t.line_total ?? "0") || 0,
+      })),
+      ...selectedItems.map(({ dish, qty }) => {
+        const unit = parseFloat(dish.price_aed ?? "0") || 0;
+        return { name: dish.name, qty, unitPrice: unit, lineTotal: unit * qty };
+      }),
+    ],
+    [tabItems, selectedItems],
+  );
+  const tabTotal = useMemo(
+    () => tabItems.reduce((acc, t) => acc + (parseFloat(t.line_total ?? "0") || 0), 0),
+    [tabItems],
+  );
+  const billSubtotal = tabTotal + subtotal;
+  const billTotal = billSubtotal + deliveryFee;
+
+  function openBillPreview() {
+    if (billLines.length === 0) {
+      // Printing a blank slip wastes paper and reads as a broken till.
+      toast("Nothing on this bill yet — add items first.", "error");
+      return;
+    }
+    setBillPreview(true);
+  }
 
 
   // ── Token / open-ticket navigation ───────────────────────────────
@@ -980,7 +1028,12 @@ export function NewOrderScreen() {
             >
               Delete
             </button>
-            <button type="button" className={s.tBtn} onClick={() => window.print()}>
+            <button
+              type="button"
+              className={s.tBtn}
+              onClick={openBillPreview}
+              data-testid="terminal-print-bill"
+            >
               Print Bill
             </button>
             <button type="button" className={s.tBtn} onClick={() => navigate("/orders")}>
@@ -1167,6 +1220,26 @@ export function NewOrderScreen() {
           <span className={s.tStatusSpacer} />
           <span className={s.tStatusClock}>{today()}</span>
         </div>
+
+        {billPreview && (
+          <BillPreviewDialog
+            lines={billLines}
+            subtotal={billSubtotal}
+            deliveryFee={deliveryFee}
+            total={billTotal}
+            taxCfg={taxCfg}
+            restaurantName={restaurantName}
+            orderTypeLabel={
+              ORDER_TYPE_TABS.find((t) => t.key === orderType)?.label ?? orderType
+            }
+            tokenNumber={browsing ? browsing.daily_token ?? null : nextToken}
+            billNumber={browsing?.order_number ?? "NEW"}
+            tableLabel={selectedTable?.label ?? null}
+            waiterName={getStaffSession()?.name ?? null}
+            customerName={name.trim() || null}
+            onClose={() => setBillPreview(false)}
+          />
+        )}
       </div>
     );
   }

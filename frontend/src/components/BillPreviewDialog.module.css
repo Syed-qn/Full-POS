@@ -1,0 +1,214 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 24px;
+}
+
+.modal {
+  width: min(360px, 94vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--panel, #1e1e1c);
+  border: 1px solid var(--line, #2b2b28);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+/* Paper, not chrome: white and monospaced whatever the till theme is, because
+   this is a preview of a physical slip and the cashier is checking it against
+   one. 80mm is the thermal roll width. */
+.slip {
+  overflow-y: auto;
+  background: #fff;
+  color: #111;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.slipHead {
+  text-align: center;
+  border-bottom: 1px dashed #999;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.shop {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kind {
+  margin-top: 2px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 10px;
+  font-size: 11px;
+}
+.meta > span:nth-child(odd) {
+  color: #555;
+}
+.meta > span:nth-child(even) {
+  text-align: right;
+  font-weight: 700;
+}
+
+.tokenBox {
+  margin: 8px 0;
+  padding: 4px 0;
+  text-align: center;
+  font-size: 13px;
+  border-top: 1px dashed #999;
+  border-bottom: 1px dashed #999;
+}
+.tokenBox strong {
+  font-size: 16px;
+}
+
+.items {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.items th {
+  text-align: left;
+  font-weight: 700;
+  border-bottom: 1px solid #333;
+  padding: 3px 0;
+}
+.items td {
+  padding: 3px 0;
+  vertical-align: top;
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 8px;
+}
+
+.totals {
+  margin-top: 8px;
+  border-top: 1px dashed #999;
+  padding-top: 6px;
+  font-size: 11px;
+}
+.totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.totals > div > span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.grand {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #333;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.foot {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 10px;
+  color: #555;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.print,
+.cancel {
+  flex: 1 1 auto;
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.print {
+  background: var(--green, #12b76a);
+  color: #fff;
+  border: 1px solid transparent;
+}
+
+.cancel {
+  background: transparent;
+  color: var(--ink, #e8e6e1);
+  border: 1px solid var(--line-2, #3a3a35);
+}
+
+/* Print the slip and nothing else.
+   `visibility` rather than `display`, because the slip sits deep inside the app
+   tree: hiding its ancestors with `display: none` would take the slip with them.
+   Hiding everything and then re-showing the slip and its children leaves the
+   ancestors as invisible empty boxes, which is exactly what is wanted. */
+@media print {
+  :global(body) *,
+  .backdrop,
+  .modal {
+    visibility: hidden !important;
+  }
+
+  .backdrop {
+    position: static !important;
+    background: none !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .modal {
+    width: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+  }
+
+  .slip,
+  .slip * {
+    visibility: visible !important;
+  }
+
+  .slip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border-radius: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  /* Buttons are for the operator, not the customer. */
+  .actions {
+    display: none !important;
+  }
+}

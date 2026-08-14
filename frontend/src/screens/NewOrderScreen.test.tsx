@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearStaffSession, setStaffSession } from "../lib/navAccess";
 import { NewOrderScreen } from "./NewOrderScreen";
+import { Toaster } from "../components/Toaster";
 
 // Stub the leaflet map picker (heavy in jsdom) with a button that sets a pin, so
 // tests can satisfy the now-required delivery location deterministically.
@@ -379,5 +380,85 @@ describe("NewOrderScreen role modes", () => {
       target: { value: "rush table 4" },
     });
     expect(screen.getByLabelText(/kitchen notes for entire order/i)).toHaveValue("rush table 4");
+  });
+});
+
+describe("terminal bill preview", () => {
+  beforeEach(() => {
+    clearStaffSession();
+    localStorage.clear();
+    mockFetch();
+    setStaffSession({ role: "cashier", name: "izzu" });
+  });
+  afterEach(() => {
+    clearStaffSession();
+    vi.restoreAllMocks();
+  });
+
+  /** The terminal has no +/- per tile: tapping the dish tile adds one. */
+  async function openTerminalWithOneDish() {
+    renderTerminal();
+    await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Add Chicken Biryani"));
+    return screen.getByTestId("terminal-print-bill");
+  }
+
+  /** Toasts render into a host mounted near the app root, so a screen-only
+      render would silently swallow the "nothing to print" message. */
+  function renderTerminal() {
+    return render(
+      <MemoryRouter>
+        <NewOrderScreen />
+        <Toaster />
+      </MemoryRouter>,
+    );
+  }
+
+  it("Print Bill opens the slip instead of printing the whole screen", async () => {
+    // The old behaviour handed window.print() the entire till — sidebar, keypad
+    // and dish grid — with no chance to check the bill first.
+    const printSpy = vi.fn();
+    vi.stubGlobal("print", printSpy);
+
+    fireEvent.click(await openTerminalWithOneDish());
+
+    const dialog = await screen.findByTestId("bill-preview-dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(printSpy).not.toHaveBeenCalled();
+
+    const slip = screen.getByTestId("bill-preview-slip");
+    expect(slip).toHaveTextContent(/Chicken Biryani/);
+    expect(slip).toHaveTextContent(/Test Restaurant/i);
+    // Waiter name comes from the signed-in staff session, as on the paper slip.
+    expect(slip).toHaveTextContent(/izzu/);
+    expect(screen.getByTestId("bill-preview-total")).toHaveTextContent("22.00");
+
+    // Printing is now a deliberate second action.
+    fireEvent.click(screen.getByTestId("bill-preview-print"));
+    expect(printSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes on the Close button and on Escape", async () => {
+    fireEvent.click(await openTerminalWithOneDish());
+    fireEvent.click(await screen.findByTestId("bill-preview-close"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("bill-preview-dialog")).not.toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByTestId("terminal-print-bill"));
+    await screen.findByTestId("bill-preview-dialog");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByTestId("bill-preview-dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("refuses to open a blank slip", async () => {
+    // A till that prints an empty bill reads as broken and wastes a roll.
+    renderTerminal();
+    await waitFor(() => expect(screen.getByText(/Chicken Biryani/)).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("terminal-print-bill"));
+    expect(screen.queryByTestId("bill-preview-dialog")).not.toBeInTheDocument();
+    expect(await screen.findByText(/nothing on this bill yet/i)).toBeInTheDocument();
   });
 });
