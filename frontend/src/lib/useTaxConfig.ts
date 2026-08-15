@@ -115,3 +115,21 @@ export function splitVat(
   const net = amount / (1 + rate);
   return { net, vat: amount - net, gross: amount };
 }
+
+/**
+ * The VAT contained in an amount that is actually being charged.
+ *
+ * Every till surface states tax this way, whatever the configured pricing mode,
+ * because the amount charged is the one fact all of them share: nothing between
+ * these screens and the customer adds VAT to it (`recompute_order_total` builds
+ * subtotal + fee + charges − discounts and never adds `vat_amount_aed`). A screen
+ * that printed an "on top" figure therefore showed a bill that did not add up —
+ * 84.00 subtotal, 16.80 VAT, 84.00 total — and the arithmetic is the first thing
+ * a guest checks.
+ *
+ * Pass the post-discount amount: tax is due on what was paid, not on the list price.
+ */
+export function vatIncludedIn(amount: number, cfg: TaxConfig): number {
+  if (!(cfg.rate > 0) || !Number.isFinite(amount)) return 0;
+  return amount - amount / (1 + cfg.rate);
+}

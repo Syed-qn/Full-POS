@@ -232,3 +232,11 @@
   color: var(--ink, #e8e6e1);
   border: 1px solid var(--line-2, #3a3a35);
 }
+
+/* The tax declaration sits under the total, smaller: it is a statement about
+   the total, not another thing being added to it. */
+.vatNote {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #555;
+}

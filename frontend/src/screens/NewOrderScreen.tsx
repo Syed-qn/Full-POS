@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { logout } from "../lib/auth";
 import { fetchOrderDetail } from "../lib/orderDetailApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
-import { splitVat, useTaxConfig } from "../lib/useTaxConfig";
+import { useTaxConfig, vatIncludedIn } from "../lib/useTaxConfig";
 import {
   addOrderItems,
   createManualOrder,
@@ -620,8 +620,9 @@ export function NewOrderScreen() {
 
   // ── Cashier full-screen terminal (HANASIS-style single screen) ──────────
   if (cashierMode) {
-    // Rate and mode come from the restaurant's Tax profile, not a literal 1.05.
-    const { vat } = splitVat(total, taxCfg);
+    // Rate comes from the restaurant's Tax profile, not a literal 1.05, and the
+    // figure is the tax INSIDE the amount charged — see vatIncludedIn.
+    const vat = vatIncludedIn(total, taxCfg);
     return (
       <div className={s.term} data-testid="cashier-terminal">
         {/* ============ HEADER — order-type switcher across the top ============ */}
@@ -932,14 +933,6 @@ export function NewOrderScreen() {
               <span>AED {subtotal.toFixed(2)}</span>
             </div>
             <div className={s.tTotRow}>
-              <span>
-                {taxCfg.ready
-                  ? `VAT (${taxCfg.percent}% ${taxCfg.mode === "inclusive" ? "incl." : "on top"})`
-                  : "VAT"}
-              </span>
-              <span>AED {vat.toFixed(2)}</span>
-            </div>
-            <div className={s.tTotRow}>
               <span>Round Off</span>
               <span>AED 0.00</span>
             </div>
@@ -947,6 +940,14 @@ export function NewOrderScreen() {
               <span>Net Value</span>
               <span>AED {total.toFixed(2)}</span>
             </div>
+            {/* Under the total and worded as "of which": the tax is inside the
+                amount charged, not added to it. */}
+            {taxCfg.ready && taxCfg.percent > 0 && (
+              <div className={s.tTotRow}>
+                <span>of which VAT ({taxCfg.percent}% incl.)</span>
+                <span>AED {vat.toFixed(2)}</span>
+              </div>
+            )}
           </div>
 
           {/* item action row */}
@@ -1754,17 +1755,15 @@ export function NewOrderScreen() {
                 <span>{fee === "0.00" || fee === "" ? "Free" : `AED ${fee}`}</span>
               </div>
             )}
-            {/* Rate and mode from the Tax profile. Shown for the bill; it does
-                not change what is charged in inclusive mode. */}
-            <div className={s.summaryLine}>
-              <span>
-                {taxCfg.ready
-                  ? `VAT (${taxCfg.percent}% ${taxCfg.mode === "inclusive" ? "incl." : "on top"})`
-                  : "VAT"}
-              </span>
-              <span>AED {splitVat(total, taxCfg).vat.toFixed(2)}</span>
-            </div>
             <MoneySummary label="TOTAL" amount={total.toFixed(2)} />
+            {/* Rate from the Tax profile, stated as the tax inside the total so
+                the column always adds up. */}
+            {taxCfg.ready && taxCfg.percent > 0 && (
+              <div className={s.summaryLine}>
+                <span>of which VAT ({taxCfg.percent}% incl.)</span>
+                <span>AED {vatIncludedIn(total, taxCfg).toFixed(2)}</span>
+              </div>
+            )}
           </div>
         </aside>
       </div>

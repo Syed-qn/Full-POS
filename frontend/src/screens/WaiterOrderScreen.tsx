@@ -20,7 +20,7 @@ import {
 import { effectiveDishPrice, isOnSale } from "../lib/dishPricing";
 import { billName, type TableBill } from "../lib/floorApi";
 import { useLiveMenu } from "../lib/useLiveMenu";
-import { splitVat, useTaxConfig } from "../lib/useTaxConfig";
+import { useTaxConfig, vatIncludedIn } from "../lib/useTaxConfig";
 import { advanceOrder, applyDiscount, quoteDeliveryFee, setOrderPriority } from "../lib/ordersApi";
 import { chargePayment } from "../lib/paymentsApi";
 import { getStaffSession, isCashierRole } from "../lib/navAccess";
@@ -604,7 +604,11 @@ export function WaiterOrderScreen() {
   // file. Inclusive: the menu price already contains VAT, so it is extracted and
   // the customer pays lineTotal. Exclusive: the menu price is net and VAT is
   // added, so the customer pays more than the line total.
-  const { net: subTotal, vat } = splitVat(lineTotal, taxCfg);
+  // Sub Total is what the lines come to. VAT is NOT taken from it: it is the tax
+  // inside the amount actually charged, computed further down once the discount
+  // and any delivery fee are known. Showing an "on top" figure here printed a
+  // panel that did not add up — 84.00 + 16.80 above a table total of 84.00.
+  const subTotal = lineTotal;
   // The amount charged stays the line total, which is what the backend stores on
   // the order. It deliberately does NOT become net+VAT in exclusive mode: the
   // backend does not add VAT to order.total either, so inflating it here would
@@ -620,6 +624,9 @@ export function WaiterOrderScreen() {
   const grandAfterDiscount = Math.max(0, grandTotal - discountAed);
   /** Cash-collect amount: the saved tab total less any pending discount. */
   const codDue = Math.max(0, tabTotal - discountAed);
+  /** The figure the guest actually pays — the one the tax is inside. */
+  const chargedTotal = isDelivery ? grandAfterDiscount : netAfterDiscount;
+  const vat = vatIncludedIn(chargedTotal, taxCfg);
   /** All the fields a rider needs before a home delivery can leave. */
   const deliverySaved =
     !isDelivery ||
@@ -1686,16 +1693,6 @@ export function WaiterOrderScreen() {
               <span>Sub Total</span>
               <span>{money(subTotal)}</span>
             </div>
-            <div className={s.totRow}>
-              {/* No percentage until the server has answered. Printing the UAE
-                  default first made a restaurant on 20% read "5%" for a beat. */}
-              <span>
-                {taxCfg.ready
-                  ? `VAT (${taxCfg.percent}% ${taxCfg.mode === "inclusive" ? "incl." : "on top"})`
-                  : "VAT"}
-              </span>
-              <span>{money(vat)}</span>
-            </div>
             {discountAed > 0 && (
               <div className={s.totRow} data-testid="waiter-discount-row">
                 <span>Discount</span>
@@ -1710,10 +1707,17 @@ export function WaiterOrderScreen() {
             )}
             <div className={`${s.totRow} ${s.totNet}`}>
               <span>{tabTotal > 0 ? "Table total" : "Net Value"}</span>
-              <span data-testid="waiter-net">
-                {money(isDelivery ? grandAfterDiscount : netAfterDiscount)}
-              </span>
+              <span data-testid="waiter-net">{money(chargedTotal)}</span>
             </div>
+            {/* Under the total, worded as "of which": the tax is inside the
+                amount charged, not added to it. No percentage until the server
+                has answered — a restaurant on 20% used to read "5%" for a beat. */}
+            {taxCfg.ready && taxCfg.percent > 0 && (
+              <div className={s.totRow} data-testid="waiter-vat">
+                <span>of which VAT ({taxCfg.percent}% incl.)</span>
+                <span>{money(vat)}</span>
+              </div>
+            )}
           </div>
 
           {/* keypad */}

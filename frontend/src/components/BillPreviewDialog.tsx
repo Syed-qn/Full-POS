@@ -1,6 +1,5 @@
 import { useEffect } from "react";
-import type { TaxConfig } from "../lib/useTaxConfig";
-import { splitVat } from "../lib/useTaxConfig";
+import { vatIncludedIn, type TaxConfig } from "../lib/useTaxConfig";
 import s from "./BillPreviewDialog.module.css";
 
 export interface BillLine {
@@ -83,7 +82,19 @@ export function BillPreviewDialog({
     minute: "2-digit",
     hour12: true,
   });
-  const { vat } = splitVat(total, taxCfg);
+  // VAT is stated as the tax CONTAINED IN the amount charged, always — never as
+  // a figure added on top.
+  //
+  // The customer is charged `total`, and nothing downstream of this slip adds
+  // VAT to it: the server's order total is subtotal + fee + charges − discounts,
+  // full stop. So printing an "on top" VAT line produced a bill that did not
+  // add up — 29.00 − 9.00 + 4.00 against a total of 20.00 — and the arithmetic
+  // on a bill is the one thing a guest always checks. Extracting it from the
+  // charged total keeps the slip reconciled and still declares the tax.
+  //
+  // It is taken AFTER the discount, because tax is due on what was actually
+  // paid, not on the pre-discount price.
+  const vat = vatIncludedIn(total, taxCfg);
 
   return (
     <div className={s.backdrop} role="presentation" onClick={onClose}>
@@ -175,20 +186,19 @@ export function BillPreviewDialog({
                 <span data-testid="bill-preview-adjustments">{adjustments.toFixed(2)}</span>
               </div>
             )}
-            {/* No rate is printed until the server has confirmed one: a wrong tax
-                figure on a bill is worse than no line at all. */}
-            {taxCfg.ready && (
-              <div>
-                <span>
-                  VAT ({taxCfg.percent}% {taxCfg.mode === "inclusive" ? "incl." : "on top"})
-                </span>
-                <span>{vat.toFixed(2)}</span>
-              </div>
-            )}
             <div className={s.grand}>
               <span>TOTAL AED</span>
               <span data-testid="bill-preview-total">{total.toFixed(2)}</span>
             </div>
+            {/* Below the total, and worded as "of which", because that is what
+                it is. No rate is printed until the server has confirmed one: a
+                wrong tax figure on a bill is worse than no line at all. */}
+            {taxCfg.ready && taxCfg.percent > 0 && (
+              <div className={s.vatNote}>
+                <span>of which VAT ({taxCfg.percent}% incl.)</span>
+                <span data-testid="bill-preview-vat">{vat.toFixed(2)}</span>
+              </div>
+            )}
           </div>
 
           <div className={s.foot}>Thank you · Please come again</div>
