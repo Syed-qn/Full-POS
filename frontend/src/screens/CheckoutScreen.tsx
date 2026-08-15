@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { OfflineLimitsBanner } from "../components/OfflineLimitsBanner";
 import { toast } from "../components/Toaster";
+import { OrderBillDialog } from "../components/OrderBillDialog";
 import { isCashierRole } from "../lib/navAccess";
 import {
   applyOrderDiscount,
@@ -61,6 +62,8 @@ function formatMoney(n: number): string {
 export function CheckoutScreen() {
   const { id: idParam } = useParams<{ id: string }>();
   const orderId = Number(idParam);
+  // Bill preview: the cashier sees the slip before it goes to paper.
+  const [billOpen, setBillOpen] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const splitFromQuery = searchParams.get("split") === "1";
@@ -702,7 +705,8 @@ export function CheckoutScreen() {
         <button
           type="button"
           className={s.act}
-          onClick={() => toast("Receipt print queued (when printer configured).")}
+          onClick={() => setBillOpen(true)}
+          data-testid="checkout-print-bill"
         >
           🖨 Print Bill
         </button>
@@ -723,6 +727,10 @@ export function CheckoutScreen() {
       </div>
 
       {pinGate}
+
+      {billOpen && (
+        <OrderBillDialog orderId={orderId} onClose={() => setBillOpen(false)} />
+      )}
     </div>
   );
 }

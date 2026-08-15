@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "../components/Toaster";
+import { OrderBillDialog } from "../components/OrderBillDialog";
 import { WaiterTopBar, type WaiterSection } from "../components/WaiterTopBar";
 import { apiClient } from "../lib/apiClient";
 import {
@@ -155,6 +156,8 @@ export function WaiterOrderScreen() {
   const [focusedId, setFocusedId] = useState<number | null>(null);
   const [keyBuf, setKeyBuf] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Order whose bill preview is open; null when the dialog is closed.
+  const [billOrderId, setBillOrderId] = useState<number | null>(null);
   /** Per-line kitchen notes, keyed by dish id — the only note the API carries. */
   const [notes, setNotes] = useState<Record<number, string>>({});
   /**
@@ -1085,7 +1088,12 @@ export function WaiterOrderScreen() {
     }
   }
 
-  /** Print the running bill (queues to printer once one is configured). */
+  /** Show the running bill, then print from the preview.
+   *
+   *  The slip is built from the SERVER's copy of the order rather than the cart:
+   *  the tab holds earlier rounds, any till discount and any struck line, none of
+   *  which the cart knows about — a cart-built slip would hand the customer a
+   *  total they are not being charged. */
   async function printBill(orderId?: number | null) {
     // Accept an explicit id so KOT can print the round it just created (the
     // openTabOrderId state hasn't re-rendered yet at that point). Printing before
@@ -1094,11 +1102,11 @@ export function WaiterOrderScreen() {
     if (id == null && lines.length > 0) {
       id = await saveRound(false);
     }
-    toast(
-      id
-        ? "Bill print queued (when printer configured)."
-        : "No open bill to print.",
-    );
+    if (id == null) {
+      toast("No open bill to print.", "error");
+      return;
+    }
+    setBillOrderId(id);
   }
 
   /**
@@ -2591,6 +2599,10 @@ export function WaiterOrderScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {billOrderId != null && (
+        <OrderBillDialog orderId={billOrderId} onClose={() => setBillOrderId(null)} />
       )}
     </div>
   );

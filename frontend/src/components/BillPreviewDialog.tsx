@@ -30,6 +30,7 @@ export function BillPreviewDialog({
   lines,
   subtotal,
   deliveryFee,
+  adjustments = 0,
   total,
   taxCfg,
   restaurantName,
@@ -45,6 +46,11 @@ export function BillPreviewDialog({
   lines: BillLine[];
   subtotal: number;
   deliveryFee: number;
+  /** Whatever the server's total does not explain — a till discount, a service
+   *  or packaging charge. Printed as its own line so the slip always adds up;
+   *  silently absorbing it into the subtotal would print a figure the customer
+   *  can check and find wrong. */
+  adjustments?: number;
   total: number;
   taxCfg: TaxConfig;
   restaurantName: string | null;
@@ -161,6 +167,12 @@ export function BillPreviewDialog({
               <div>
                 <span>Delivery</span>
                 <span>{deliveryFee.toFixed(2)}</span>
+              </div>
+            )}
+            {Math.abs(adjustments) >= 0.005 && (
+              <div>
+                <span>{adjustments < 0 ? "Discount" : "Charges"}</span>
+                <span data-testid="bill-preview-adjustments">{adjustments.toFixed(2)}</span>
               </div>
             )}
             {/* No rate is printed until the server has confirmed one: a wrong tax

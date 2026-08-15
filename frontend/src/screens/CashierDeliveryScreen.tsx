@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "../components/Toaster";
+import { OrderBillDialog } from "../components/OrderBillDialog";
 import { WaiterTopBar } from "../components/WaiterTopBar";
 import { assignOrder, fetchOrders, reassignOrder } from "../lib/ordersApi";
 import { chargePayment } from "../lib/paymentsApi";
@@ -109,6 +110,8 @@ function itemCount(o: OrderOut): number {
 export function CashierDeliveryScreen() {
   const navigate = useNavigate();
   const theme = usePosTheme();
+  // Order whose bill preview is open; null when the dialog is closed.
+  const [billOrderId, setBillOrderId] = useState<number | null>(null);
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -282,11 +285,15 @@ export function CashierDeliveryScreen() {
     navigate("/cashier/new-order?type=delivery");
   }
 
-  /** Same stub as the till — there is no printer integration yet, so say so. */
+  /** Show the bill before any paper is used — the same preview the till gives.
+   *  Built from the SERVER's copy of the order, not this screen's list row,
+   *  because the row carries no discounts or per-line cancellations. */
   function printBill() {
-    toast(
-      selected ? "Bill print queued (when printer configured)." : "Select an order first.",
-    );
+    if (!selected) {
+      toast("Select an order first.", "error");
+      return;
+    }
+    setBillOrderId(selected.id);
   }
 
   /** Card / wallet / split — the full checkout screen handles those. */
@@ -617,6 +624,10 @@ export function CashierDeliveryScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {billOrderId != null && (
+        <OrderBillDialog orderId={billOrderId} onClose={() => setBillOrderId(null)} />
       )}
     </div>
   );
