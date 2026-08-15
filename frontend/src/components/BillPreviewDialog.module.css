@@ -212,3 +212,23 @@
     display: none !important;
   }
 }
+
+/* Loading / failure states of the order-backed dialog. Same shell as the slip
+   so the dialog does not jump when the fetch settles. */
+.state {
+  margin: 4px 0 14px;
+  font-size: 13px;
+  color: var(--ink, #e8e6e1);
+  text-align: center;
+}
+
+.stateClose {
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink, #e8e6e1);
+  border: 1px solid var(--line-2, #3a3a35);
+}

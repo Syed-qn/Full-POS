@@ -4,6 +4,7 @@ import { fetchOrderDetail } from "../lib/orderDetailApi";
 import type { OrderDetailOut, RestaurantOut } from "../lib/types";
 import { useTaxConfig } from "../lib/useTaxConfig";
 import { BillPreviewDialog, type BillLine } from "./BillPreviewDialog";
+import s from "./BillPreviewDialog.module.css";
 
 /* The shop name is the same on every slip of a shift, so it is fetched once per
    session rather than on each preview. */
@@ -82,17 +83,28 @@ export function OrderBillDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  if (error) {
+  // Never render nothing. A button that appears to do nothing is the same
+  // failure to the cashier whether the fetch is slow or has failed — they press
+  // it again, and again, and report the feature as broken.
+  if (error || !detail) {
     return (
-      <div
-        role="alert"
-        data-testid="order-bill-error"
-        style={{ position: "fixed", inset: 0, zIndex: 1200 }}
-        onClick={onClose}
-      />
+      <div className={s.backdrop} role="presentation" onClick={onClose}>
+        <div
+          className={s.modal}
+          role={error ? "alert" : "status"}
+          aria-live="polite"
+          aria-label={error ? "Bill could not be loaded" : "Loading bill"}
+          onClick={(e) => e.stopPropagation()}
+          data-testid={error ? "order-bill-error" : "order-bill-loading"}
+        >
+          <p className={s.state}>{error ? `Could not load this bill — ${error}` : "Loading bill…"}</p>
+          <button type="button" className={s.stateClose} onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     );
   }
-  if (!detail) return null;
 
   const lines: BillLine[] = detail.items.map((i) => {
     const unit = parseFloat(i.price_aed ?? "0") || 0;
